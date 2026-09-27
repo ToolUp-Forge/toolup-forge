@@ -27,7 +27,7 @@ open ProcessedDataTypes
 //      path being taken (GP 12 — efficient where possible).
 //   2. landing-selection — `prepareModules` head-injects the Home module
 //      so the shell lands on `_sdk.home` when `ActiveModule = None`; an
-//      explicit `ActiveModule` still wins; `NoHomeModule` leaves Home
+//      explicit `ActiveModule` still wins; an empty Home slot leaves Home
 //      absent entirely (GP 13 — off by default).
 //   3. overview scope/AI — `GetOverview` counts are scope-correct (a
 //      second scope's objects are not counted, GP 4) and `ActiveAi` is
@@ -182,9 +182,9 @@ let countAffordanceTests =
 
 // ─── Test 2 (landing selection) lives in the Fable harness ───────────
 //
-// The landing-selection test ("`EnabledHomeModule` + `ActiveModule =
+// The landing-selection test ("Home slot Default + `ActiveModule =
 // None` ⇒ shell lands on `_sdk.home`; explicit `ActiveModule` wins;
-// `NoHomeModule` ⇒ Home absent") exercises `Client.prepareModules`,
+// Home slot Empty ⇒ Home absent") exercises `Client.prepareModules`,
 // which requires a `ClientConfig`. Building one in-process is
 // impossible: `ClientConfig.defaults` / `ClientConfig.create` eagerly
 // evaluate `AgGridModuleConfig.community`, whose module init is a Fable

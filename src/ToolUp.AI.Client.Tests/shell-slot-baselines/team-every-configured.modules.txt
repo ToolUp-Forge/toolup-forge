@@ -1,0 +1,23 @@
+_sdk.home | My home | - | - | product | AUTC
+_sdk.DataManager | My uploads | My data | - | product | -UTC
+app.alpha | Alpha | Work | - | product | AUTC
+app.beta | Beta | Work | - | product | AUTC
+_sdk.TeamManager | My teams | Team Management | TeamOwnerAdmin | product | -UTC
+_sdk.TeamConfig | My team config | Team Management | TeamOwnerAdmin | product | -UTC
+_sdk.WebhookAdmin | My webhooks | Team Management | TeamOwnerAdmin | product | -UTC
+_sdk.ServiceAccountAdmin | My service accounts | Team Management | TeamOwnerAdmin | product | -UTC
+_sdk.ExternalContactManager | My contacts | Team Management | TeamOwnerAdmin | product | -UTC
+_sdk.NotificationPreferences | My notifications | Settings | - | product | -UTC
+_sdk.ModuleVisibilityAdmin | My visibility | Team Management | TeamOwnerAdmin | product | -UTC
+_sdk.SessionSecurity | My sessions | - | - | product | -UTC
+_sdk.PermissionsAdmin | My permissions | Team Management | TeamOwnerAdmin | product | -UTC
+_sdk.UsageDashboard | My usage | Team Management | TeamOwnerAdmin | product | -UTC
+_sdk.AuditLog | My audit | Team Management | TeamOwnerAdmin | product | -UTC
+_sdk.DataIngestion | My ingestion | Team Management | TeamOwnerAdmin | product | -UTC
+_sdk.PlatformAdmin | My platform | Platform Management | PlatformAdminOnly | product | -UTC
+_sdk.HealthMonitor | My health | Observability | PlatformAdminOnly | product | -UTC
+_sdk.ServiceStatusBoard | My status | Platform Management | PlatformAdminOnly | product | -UTC
+_sdk.DataSubjectRequests | My DSRs | Platform Management | PlatformAdminOnly | product | -UTC
+_sdk.DataMigrations | My migrations | Platform Management | TeamOwnerAdmin | product | -UTC
+_sdk.TenantLifecycleAdmin | Tenant Lifecycle | Platform Management | PlatformAdminOnly | product | -UTC
+_sdk.CompositionInspector | My composition | Platform Management | TeamOwnerAdmin | product | -UTC

@@ -808,9 +808,15 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = HealthM
 
 // ─── Module creation ─────────────────────────────────────────────────
 
+/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// (`ShellSlot.FilledModuleId`) to know which module fills the slot
+/// without building one; `create` registers the module under it.
+let moduleId = "_sdk.HealthMonitor"
+
 /// Create the built-in health monitor admin as an `ErasedModule`. The
-/// shell's `prepareModules` injects this in any non-Anonymous mode
-/// unless `HealthMonitor = NoHealthMonitor`.
+/// module fills the `HealthMonitor` shell slot (Default / Configured),
+/// which the shell admits on every surface; its `PlatformAdminOnly` nav
+/// role hides it from non-admins.
 ///
 /// **Phase 4b re-gate (commit 4f.1, 2026-05-10).** The server-side
 /// handler now gates on `AccessContext.canModifyPlatformConfig`
@@ -827,7 +833,7 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = HealthM
 /// group joined the platform-admin allow-list in the same change, so
 /// the entry keeps its administration area and a team-less platform
 /// admin still reaches it; the gate itself is the typed `NavRole`.
-let create (config: HealthMonitorConfig option) : ErasedModule =
+let create (config: ModuleLabel option) : ErasedModule =
     let name = config |> Option.map _.Name |> Option.defaultValue "Health Monitor"
 
     let icon =
@@ -841,44 +847,40 @@ let create (config: HealthMonitorConfig option) : ErasedModule =
         Name = name
         Icon = icon
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.HealthMonitor"
+    |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup ToolUp.Platform.SidebarVisibility.ObservabilitySidebarGroup
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.PlatformAdminOnly
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register
 
-/// Phase 573.B — the administration-landing tile this built-in
-/// contributes, declared here rather than in the landing page so the
-/// page never names a module (GP 9). The shell adds it only when the
-/// deployment runs the SDK's own health monitor
-/// (`DefaultHealthMonitor` / `ConfiguredHealthMonitor`):
-/// `NoHealthMonitor` contributes nothing, and an
-/// `ExternalHealthMonitor` replacement owns its own tile — it is a
-/// different module with a different id, and inheriting this one's
-/// click-through would navigate to a module that is not registered.
+/// Phase 573.B — the administration-landing tile of the health-monitor
+/// slot, declared here rather than in the landing page so the page never
+/// names a module (GP 9).
 ///
-/// `Title` / `Icon` follow the same config-or-default derivation
-/// `create` uses, so a branded deployment's tile matches its rail
-/// entry. The headline key is read from the shared
-/// `HomeWidgetContext.Data` bag — supply `"_sdk.admin.health"` from an
-/// `IHomeWidgetDataProvider` to put a live status on the tile.
-let adminTile (config: HealthMonitorConfig option) : AdminTile =
-    let name = config |> Option.map _.Name |> Option.defaultValue "Health Monitor"
-
-    let icon =
-        config |> Option.map _.Icon |> Option.defaultValue ToolUp.Platform.Icons.health
-
-    {
-        OwnerModuleId = "_sdk.HealthMonitor"
-        Widget = {
-            Id = "_sdk.tile.health"
-            Title = name
-            Icon = icon
-            Weight = 30
-            Body =
-                AdminTileBody.summary
-                    "_sdk.admin.health"
-                    "Liveness, readiness and dependency probes for this deployment, plus the startup preflight report."
-        }
+/// Phase 879 — the tile belongs to the SLOT, not to this module: the
+/// shell builds it for whichever module fills the slot (`owner`), so a
+/// deployment that puts its own module in the slot keeps the tile, and
+/// the tile's click-through, name and icon are the replacement's. An
+/// empty slot contributes nothing; a replacement that wires its own tile
+/// through `ClientConfig.Handlers.AdminTileContributors` keeps that one
+/// instead (`ShellSlots.adminTiles`).
+///
+/// `Title` / `Icon` are the owning module's own, so a relabelled
+/// deployment's tile matches its rail entry. The headline key is read
+/// from the shared `HomeWidgetContext.Data` bag — supply
+/// `"_sdk.admin.health"` from an `IHomeWidgetDataProvider` to put a live
+/// status on the tile.
+let adminTile (owner: ModuleDefinition) : AdminTile = {
+    OwnerModuleId = owner.Id
+    Widget = {
+        Id = "_sdk.tile.health"
+        Title = owner.Name
+        Icon = owner.Icon
+        Weight = 30
+        Body =
+            AdminTileBody.summary
+                "_sdk.admin.health"
+                "Liveness, readiness and dependency probes for this deployment, plus the startup preflight report."
     }
+}

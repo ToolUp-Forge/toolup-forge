@@ -24,7 +24,7 @@ module ToolUp.Platform.AdminTiles
 // second predicate that could fall out of step.
 //
 // That also gives 573.B's "mode-off ⇒ no tile" for free, twice over: a
-// deployment with `NoHealthMonitor` contributes no health tile AND has no
+// deployment with an empty health-monitor slot contributes no health tile AND has no
 // health module for a stray tile to own, so the tile is filtered even if
 // something contributed it anyway.
 //

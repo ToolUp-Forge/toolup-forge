@@ -20,8 +20,8 @@ open MyDataManager.SharedTypes
 // infrastructure one (`SourceUnreachable`).
 //
 // Register the connector with the SDK at compose time (DI), and wire
-// the client module below into `ClientConfig.DataManager` with
-// `ExternalDataManager` — see ClientView.fs.
+// the client module below into the data-manager shell slot with
+// `Slots.DataManager = SlotFill.External …` — see ClientView.fs.
 type MyDataSource() =
     interface IDataSource with
         /// Must match the `Kind` of every `DataSourceConfig` this

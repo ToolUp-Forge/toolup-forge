@@ -469,9 +469,14 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
 
 // ─── Module creation ─────────────────────────────────────────────────
 
+/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// (`ShellSlot.FilledModuleId`) to know which module fills the slot
+/// without building one; `create` registers the module under it.
+let moduleId = "_sdk.NotificationPreferences"
+
 /// Create the built-in preference centre as an `ErasedModule`. Visible
 /// to every authenticated person; the server enforces ownership.
-let create (config: NotificationPreferencesConfig option) : ErasedModule =
+let create (config: ModuleLabel option) : ErasedModule =
     let name =
         config |> Option.map _.Name |> Option.defaultValue "Notification Preferences"
 
@@ -486,7 +491,7 @@ let create (config: NotificationPreferencesConfig option) : ErasedModule =
         Name = name
         Icon = icon
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.NotificationPreferences"
+    |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Settings"
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated

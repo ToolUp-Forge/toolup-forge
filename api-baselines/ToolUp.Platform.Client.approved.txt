@@ -27,8 +27,9 @@ AdminHome+Msg+Tags.WidgetDataLoaded : System.Int32 (literal)
 AdminHome+Msg+WidgetDataLoaded (class)
 AdminHome+Msg+WidgetDataLoaded.Item : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 AuditLogUI (class)
-AuditLogUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuditViewerConfig]) : ToolUp.Platform.ErasedModule
+AuditLogUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule
 AuditLogUI.init() : System.Tuple`2[AuditLogUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[AuditLogUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+AuditLogUI.moduleId : System.String { get }
 AuditLogUI.update(AuditLogUI+Msg, AuditLogUI+Model) : System.Tuple`2[AuditLogUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[AuditLogUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 AuditLogUI+Filters (class)
 AuditLogUI+Filters..ctor(System.String, System.String, System.String, System.String)
@@ -195,8 +196,9 @@ Components.SvgTree+TreeNode`1+Tags.Node : System.Int32 (literal)
 Components.ToastCentre (class)
 Components.ToastCentre.ToastCentre() : Fable.React.ReactElement
 CompositionInspectorUI (class)
-CompositionInspectorUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CompositionInspectorConfig]) : ToolUp.Platform.ErasedModule
+CompositionInspectorUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule
 CompositionInspectorUI.init() : System.Tuple`2[CompositionInspectorUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[CompositionInspectorUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+CompositionInspectorUI.moduleId : System.String { get }
 CompositionInspectorUI.update(CompositionInspectorUI+Msg, CompositionInspectorUI+Model) : System.Tuple`2[CompositionInspectorUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[CompositionInspectorUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 CompositionInspectorUI+Model (class)
 CompositionInspectorUI+Model..ctor(CompositionInspectorUI+PanelData`1[ToolUp.Platform.CompositionView], CompositionInspectorUI+PanelData`1[ToolUp.Platform.SurfacesView], CompositionInspectorUI+PanelData`1[ToolUp.Platform.RulesView], CompositionInspectorUI+PanelData`1[ToolUp.Platform.DisclosureView], CompositionInspectorUI+PanelData`1[ToolUp.Platform.ProvenanceView], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.InspectorPanel], Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.InspectorPanel, System.String]])
@@ -264,8 +266,9 @@ CsrfClient.headerPairs() : Microsoft.FSharp.Collections.FSharpList`1[System.Tupl
 CsrfClient.installRequestGuard(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Tuple`2[System.String, System.String][]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.String], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.String], System.Boolean) : System.Void
 CsrfClient.prefetch() : System.Void
 DataIngestionUI (class)
-DataIngestionUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataIngestionAdminConfig]) : ToolUp.Platform.ErasedModule
+DataIngestionUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule
 DataIngestionUI.init() : System.Tuple`2[DataIngestionUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[DataIngestionUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+DataIngestionUI.moduleId : System.String { get }
 DataIngestionUI.update(DataIngestionUI+Msg, DataIngestionUI+Model) : System.Tuple`2[DataIngestionUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[DataIngestionUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 DataIngestionUI+LoadState`1 (class)
 DataIngestionUI+LoadState`1.IsLoadError : System.Boolean { get }
@@ -347,8 +350,9 @@ DataIngestionUI+Msg+TokenStatusLoaded (class)
 DataIngestionUI+Msg+TokenStatusLoaded.Item1 : System.String { get }
 DataIngestionUI+Msg+TokenStatusLoaded.Item2 : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TokenStatus] { get }
 DataSubjectRequestAdminUI (class)
-DataSubjectRequestAdminUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataSubjectRequestAdminConfig]) : ToolUp.Platform.ErasedModule
+DataSubjectRequestAdminUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule
 DataSubjectRequestAdminUI.init() : System.Tuple`2[DataSubjectRequestAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[DataSubjectRequestAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+DataSubjectRequestAdminUI.moduleId : System.String { get }
 DataSubjectRequestAdminUI.update(DataSubjectRequestAdminUI+Msg, DataSubjectRequestAdminUI+Model) : System.Tuple`2[DataSubjectRequestAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[DataSubjectRequestAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 DataSubjectRequestAdminUI+Banner (class)
 DataSubjectRequestAdminUI+Banner.IsErrorBanner : System.Boolean { get }
@@ -549,8 +553,9 @@ DatadogReadbackUI+Tab+Tags.KeyMetricsTab : System.Int32 (literal)
 DatadogReadbackUI+Tab+Tags.MonitorsTab : System.Int32 (literal)
 DatadogReadbackUI+Tab+Tags.RecentErrorsTab : System.Int32 (literal)
 ExternalContactManagerUI (class)
-ExternalContactManagerUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ExternalContactManagerConfig]) : ToolUp.Platform.ErasedModule
+ExternalContactManagerUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule
 ExternalContactManagerUI.init() : System.Tuple`2[ExternalContactManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ExternalContactManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ExternalContactManagerUI.moduleId : System.String { get }
 ExternalContactManagerUI.update(ExternalContactManagerUI+Msg, ExternalContactManagerUI+Model) : System.Tuple`2[ExternalContactManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ExternalContactManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 ExternalContactManagerUI+ContactForm (class)
 ExternalContactManagerUI+ContactForm..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.String, System.String, System.String, System.String)
@@ -665,6 +670,7 @@ ExternalContactManagerUI+View+Tags.ContactList : System.Int32 (literal)
 FileManagerUI (class)
 FileManagerUI.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataTypeDisplay], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataManagerConfig]) : ToolUp.Platform.ErasedModule
 FileManagerUI.init() : System.Tuple`2[FileManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[FileManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+FileManagerUI.moduleId : System.String { get }
 FileManagerUI.update(FileManagerUI+Msg, FileManagerUI+Model) : System.Tuple`2[FileManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[FileManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 FileManagerUI+Model (class)
 FileManagerUI+Model..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[DataManagementTypes+UploadedFileInfo]], ToolUp.Platform.RemoteData`1[DataManagementTypes+UploadedFileInfo], Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedFileEntry], Microsoft.FSharp.Collections.FSharpMap`2[System.String, DataManagementTypes+FileIngestionStatus], DataManagementTypes+IngestionStatusFilter, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean)
@@ -749,9 +755,10 @@ GeneralUITypes+UpdateApp+Tags (class)
 GeneralUITypes+UpdateApp+Tags.UpdateAndRunAnalysis : System.Int32 (literal)
 GeneralUITypes+UpdateApp+Tags.UpdateUIOnly : System.Int32 (literal)
 HealthMonitorUI (class)
-HealthMonitorUI.adminTile(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.HealthMonitorConfig]) : ToolUp.Platform.AdminTile
-HealthMonitorUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.HealthMonitorConfig]) : ToolUp.Platform.ErasedModule
+HealthMonitorUI.adminTile(ToolUp.Platform.ModuleDefinition) : ToolUp.Platform.AdminTile
+HealthMonitorUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule
 HealthMonitorUI.init() : System.Tuple`2[HealthMonitorUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[HealthMonitorUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+HealthMonitorUI.moduleId : System.String { get }
 HealthMonitorUI.update(HealthMonitorUI+Msg, HealthMonitorUI+Model) : System.Tuple`2[HealthMonitorUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[HealthMonitorUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 HealthMonitorUI+LoadState`1 (class)
 HealthMonitorUI+LoadState`1.IsLoadError : System.Boolean { get }
@@ -822,8 +829,9 @@ HealthMonitorUI+Tab+Tags (class)
 HealthMonitorUI+Tab+Tags.LiveHealthTab : System.Int32 (literal)
 HealthMonitorUI+Tab+Tags.PreflightTab : System.Int32 (literal)
 Home (class)
-Home.create(System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.HomeModuleConfig]) : ToolUp.Platform.ErasedModule
+Home.create(System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule
 Home.init(System.Boolean, Microsoft.FSharp.Core.Unit) : System.Tuple`2[Home+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Home+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+Home.moduleId : System.String { get }
 Home.update(Home+Msg, Home+Model) : System.Tuple`2[Home+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Home+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 Home.view(Home+Model, Microsoft.FSharp.Core.FSharpFunc`2[Home+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 Home+LoadState`1 (class)
@@ -871,6 +879,7 @@ Home+Msg+TogglePin.pinned : System.Boolean { get }
 MappingDataManagerUI (class)
 MappingDataManagerUI.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataTypeDisplay], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataManagerConfig]) : ToolUp.Platform.ErasedModule
 MappingDataManagerUI.init() : System.Tuple`2[MappingDataManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[MappingDataManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+MappingDataManagerUI.moduleId : System.String { get }
 MappingDataManagerUI.update(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataTypeDisplay], MappingDataManagerUI+Msg, MappingDataManagerUI+Model) : System.Tuple`2[MappingDataManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[MappingDataManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 MappingDataManagerUI+HeldFile (class)
 MappingDataManagerUI+HeldFile..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]], System.String)
@@ -1071,8 +1080,9 @@ MappingDataManagerUI+WizardStep+Tags.ReviewData : System.Int32 (literal)
 MappingDataManagerUI+WizardStep+Tags.ReviewMapping : System.Int32 (literal)
 MappingDataManagerUI+WizardStep+Tags.ReviewValidation : System.Int32 (literal)
 MigrationStatusUI (class)
-MigrationStatusUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.MigrationAdminConfig]) : ToolUp.Platform.ErasedModule
+MigrationStatusUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule
 MigrationStatusUI.init() : System.Tuple`2[MigrationStatusUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[MigrationStatusUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+MigrationStatusUI.moduleId : System.String { get }
 MigrationStatusUI.update(MigrationStatusUI+Msg, MigrationStatusUI+Model) : System.Tuple`2[MigrationStatusUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[MigrationStatusUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 MigrationStatusUI+LoadState`1 (class)
 MigrationStatusUI+LoadState`1.IsLoadError : System.Boolean { get }
@@ -1129,8 +1139,9 @@ MigrationStatusUI+Msg+TriggerComplete (class)
 MigrationStatusUI+Msg+TriggerComplete.Item1 : System.String { get }
 MigrationStatusUI+Msg+TriggerComplete.Item2 : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.MigrationStatus, System.String] { get }
 ModuleVisibilityAdminUI (class)
-ModuleVisibilityAdminUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleVisibilityAdminConfig]) : ToolUp.Platform.ErasedModule
+ModuleVisibilityAdminUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule
 ModuleVisibilityAdminUI.init() : System.Tuple`2[ModuleVisibilityAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ModuleVisibilityAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ModuleVisibilityAdminUI.moduleId : System.String { get }
 ModuleVisibilityAdminUI.profileInput(System.String, ModuleVisibilityAdminUI+Model) : ToolUp.Platform.ModuleVisibilityProfileInput
 ModuleVisibilityAdminUI.update(ModuleVisibilityAdminUI+Msg, ModuleVisibilityAdminUI+Model) : System.Tuple`2[ModuleVisibilityAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ModuleVisibilityAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 ModuleVisibilityAdminUI+Model (class)
@@ -1204,8 +1215,9 @@ ModuleVisibilityAdminUI+RuleKind+Tags (class)
 ModuleVisibilityAdminUI+RuleKind+Tags.Allow : System.Int32 (literal)
 ModuleVisibilityAdminUI+RuleKind+Tags.Deny : System.Int32 (literal)
 NotificationPreferencesUI (class)
-NotificationPreferencesUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NotificationPreferencesConfig]) : ToolUp.Platform.ErasedModule
+NotificationPreferencesUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule
 NotificationPreferencesUI.init() : System.Tuple`2[NotificationPreferencesUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[NotificationPreferencesUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+NotificationPreferencesUI.moduleId : System.String { get }
 NotificationPreferencesUI.update(NotificationPreferencesUI+Msg, NotificationPreferencesUI+Model) : System.Tuple`2[NotificationPreferencesUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[NotificationPreferencesUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 NotificationPreferencesUI+Model (class)
 NotificationPreferencesUI+Model..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NotificationPreferenceView], ToolUp.Platform.UserNotificationPreferences, System.Boolean, System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String])
@@ -1377,8 +1389,9 @@ ObservabilityUI+Tab+Tags.AlertsTab : System.Int32 (literal)
 ObservabilityUI+Tab+Tags.LogsTab : System.Int32 (literal)
 ObservabilityUI+Tab+Tags.MetricsTab : System.Int32 (literal)
 PermissionsAdminUI (class)
-PermissionsAdminUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PermissionsAdminConfig]) : ToolUp.Platform.ErasedModule
+PermissionsAdminUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule
 PermissionsAdminUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[PermissionsAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PermissionsAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+PermissionsAdminUI.moduleId : System.String { get }
 PermissionsAdminUI.update(PermissionsAdminUI+Msg, PermissionsAdminUI+Model) : System.Tuple`2[PermissionsAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PermissionsAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 PermissionsAdminUI+LoadState`1 (class)
 PermissionsAdminUI+LoadState`1.IsLoadError : System.Boolean { get }
@@ -1501,8 +1514,9 @@ PermissionsAdminUI+TeamView.Members : Microsoft.FSharp.Collections.FSharpList`1[
 PermissionsAdminUI+TeamView.Permissions : ToolUp.Platform.TeamPermissions { get }
 PermissionsAdminUI+TeamView.TeamId : System.String { get }
 PlatformAdminUI (class)
-PlatformAdminUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformAdminConfig], ToolUp.Platform.ClientConfig) : ToolUp.Platform.ErasedModule
+PlatformAdminUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.ClientConfig) : ToolUp.Platform.ErasedModule
 PlatformAdminUI.init() : System.Tuple`2[PlatformAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PlatformAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+PlatformAdminUI.moduleId : System.String { get }
 PlatformAdminUI.update(PlatformAdminUI+Msg, PlatformAdminUI+Model) : System.Tuple`2[PlatformAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PlatformAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 PlatformAdminUI+LoadState`1 (class)
 PlatformAdminUI+LoadState`1.IsLoadError : System.Boolean { get }
@@ -1662,7 +1676,7 @@ PlatformAdminUI+Tab+Tags.AdminsTab : System.Int32 (literal)
 PlatformAdminUI+Tab+Tags.SettingsTab : System.Int32 (literal)
 PlatformAdminUI+Tab+Tags.TeamsTab : System.Int32 (literal)
 PlatformUsersUI (class)
-PlatformUsersUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformUsersConfig]) : ToolUp.Platform.ErasedModule
+PlatformUsersUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule
 PlatformUsersUI.init() : System.Tuple`2[PlatformUsersUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PlatformUsersUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 PlatformUsersUI.update(PlatformUsersUI+Msg, PlatformUsersUI+Model) : System.Tuple`2[PlatformUsersUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[PlatformUsersUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 PlatformUsersUI+Model (class)
@@ -1902,8 +1916,9 @@ ProviderProfileUI+VerificationState+Tags.Passed : System.Int32 (literal)
 ProviderProfileUI+VerificationState+Tags.Refused : System.Int32 (literal)
 ProviderProfileUI+VerificationState+Tags.Running : System.Int32 (literal)
 ServiceAccountUI (class)
-ServiceAccountUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ServiceAccountAdminConfig]) : ToolUp.Platform.ErasedModule
+ServiceAccountUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule
 ServiceAccountUI.init() : System.Tuple`2[ServiceAccountUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ServiceAccountUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ServiceAccountUI.moduleId : System.String { get }
 ServiceAccountUI.update(ServiceAccountUI+Msg, ServiceAccountUI+Model) : System.Tuple`2[ServiceAccountUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ServiceAccountUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 ServiceAccountUI+Model (class)
 ServiceAccountUI+Model..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServiceAccount], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServiceAccountTokenView], Microsoft.FSharp.Core.FSharpOption`1[ServiceAccountUI+PendingSecret], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String])
@@ -1979,9 +1994,10 @@ ServiceAccountUI+PendingSecret..ctor(System.String, ToolUp.Platform.ServiceAccou
 ServiceAccountUI+PendingSecret.Secret : System.String { get }
 ServiceAccountUI+PendingSecret.Token : ToolUp.Platform.ServiceAccountTokenView { get }
 ServiceStatusBoardUI (class)
-ServiceStatusBoardUI.adminTile(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ServiceStatusBoardConfig]) : ToolUp.Platform.AdminTile
-ServiceStatusBoardUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ServiceStatusBoardConfig]) : ToolUp.Platform.ErasedModule
+ServiceStatusBoardUI.adminTile(ToolUp.Platform.ModuleDefinition) : ToolUp.Platform.AdminTile
+ServiceStatusBoardUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule
 ServiceStatusBoardUI.init() : System.Tuple`2[ServiceStatusBoardUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ServiceStatusBoardUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ServiceStatusBoardUI.moduleId : System.String { get }
 ServiceStatusBoardUI.update(ServiceStatusBoardUI+Msg, ServiceStatusBoardUI+Model) : System.Tuple`2[ServiceStatusBoardUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ServiceStatusBoardUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 ServiceStatusBoardUI+LoadState`1 (class)
 ServiceStatusBoardUI+LoadState`1.IsLoadError : System.Boolean { get }
@@ -2030,10 +2046,11 @@ ServiceStatusBoardUI+Msg+Tags.ToggleCollapsed : System.Int32 (literal)
 ServiceStatusBoardUI+Msg+ToggleCollapsed (class)
 ServiceStatusBoardUI+Msg+ToggleCollapsed.section : System.String { get }
 SessionSecurityUI (class)
-SessionSecurityUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SessionSecurityConfig]) : ToolUp.Platform.ErasedModule
+SessionSecurityUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule
 SessionSecurityUI.init() : System.Tuple`2[SessionSecurityUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[SessionSecurityUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 SessionSecurityUI.lastSeenLabel(System.DateTimeOffset, System.DateTimeOffset) : System.String
 SessionSecurityUI.lastSeenLabelWith(ToolUp.Platform.SessionSecurityMessages, System.DateTimeOffset, System.DateTimeOffset) : System.String
+SessionSecurityUI.moduleId : System.String { get }
 SessionSecurityUI.update(SessionSecurityUI+Msg, SessionSecurityUI+Model) : System.Tuple`2[SessionSecurityUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[SessionSecurityUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 SessionSecurityUI.view(SessionSecurityUI+Model, Microsoft.FSharp.Core.FSharpFunc`2[SessionSecurityUI+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 SessionSecurityUI+Model (class)
@@ -2113,8 +2130,9 @@ SidebarPreferences+UserSidebarPreferences.PinnedModuleIds : Microsoft.FSharp.Col
 SidebarPreferences+UserSidebarPreferencesModule (class)
 SidebarPreferences+UserSidebarPreferencesModule.empty : SidebarPreferences+UserSidebarPreferences { get }
 TeamConfigUI (class)
-TeamConfigUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamConfigConfig]) : ToolUp.Platform.ErasedModule
+TeamConfigUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule
 TeamConfigUI.init() : System.Tuple`2[TeamConfigUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[TeamConfigUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+TeamConfigUI.moduleId : System.String { get }
 TeamConfigUI.update(TeamConfigUI+Msg, TeamConfigUI+Model) : System.Tuple`2[TeamConfigUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[TeamConfigUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 TeamConfigUI+FormStatus (class)
 TeamConfigUI+FormStatus.Idle : TeamConfigUI+FormStatus { get }
@@ -2239,9 +2257,10 @@ TeamConfigUI+Tab+Tags (class)
 TeamConfigUI+Tab+Tags.ConfigTab : System.Int32 (literal)
 TeamConfigUI+Tab+Tags.FlagsTab : System.Int32 (literal)
 TeamManagerUI (class)
-TeamManagerUI.adminTile(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamManagerConfig]) : ToolUp.Platform.AdminTile
-TeamManagerUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamManagerConfig]) : ToolUp.Platform.ErasedModule
+TeamManagerUI.adminTile(ToolUp.Platform.ModuleDefinition) : ToolUp.Platform.AdminTile
+TeamManagerUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule
 TeamManagerUI.init(ToolUp.Platform.ClientModuleContext) : System.Tuple`2[TeamManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[TeamManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+TeamManagerUI.moduleId : System.String { get }
 TeamManagerUI.update(TeamManagerUI+Msg, TeamManagerUI+Model) : System.Tuple`2[TeamManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[TeamManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 TeamManagerUI+IssueByEmailModalState (class)
 TeamManagerUI+IssueByEmailModalState..ctor(System.String, System.String, ToolUp.Platform.TeamRole, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean)
@@ -2942,27 +2961,6 @@ ToolUp.Platform.AuditLogMessages.ShowingCount : Microsoft.FSharp.Core.FSharpFunc
 ToolUp.Platform.AuditLogMessages.Subheading : System.String { get }
 ToolUp.Platform.AuditLogMessages.ToLabel : System.String { get }
 ToolUp.Platform.AuditLogMessages.UnattributedActor : System.String { get }
-ToolUp.Platform.AuditViewerConfig (class)
-ToolUp.Platform.AuditViewerConfig..ctor(System.String, Fable.React.ReactElement)
-ToolUp.Platform.AuditViewerConfig.Icon : Fable.React.ReactElement { get }
-ToolUp.Platform.AuditViewerConfig.Name : System.String { get }
-ToolUp.Platform.AuditViewerMode (class)
-ToolUp.Platform.AuditViewerMode.DefaultAuditViewer : ToolUp.Platform.AuditViewerMode { get }
-ToolUp.Platform.AuditViewerMode.IsConfiguredAuditViewer : System.Boolean { get }
-ToolUp.Platform.AuditViewerMode.IsDefaultAuditViewer : System.Boolean { get }
-ToolUp.Platform.AuditViewerMode.IsExternalAuditViewer : System.Boolean { get }
-ToolUp.Platform.AuditViewerMode.IsNoAuditViewer : System.Boolean { get }
-ToolUp.Platform.AuditViewerMode.NoAuditViewer : ToolUp.Platform.AuditViewerMode { get }
-ToolUp.Platform.AuditViewerMode.Tag : System.Int32 { get }
-ToolUp.Platform.AuditViewerMode+ConfiguredAuditViewer (class)
-ToolUp.Platform.AuditViewerMode+ConfiguredAuditViewer.Item : ToolUp.Platform.AuditViewerConfig { get }
-ToolUp.Platform.AuditViewerMode+ExternalAuditViewer (class)
-ToolUp.Platform.AuditViewerMode+ExternalAuditViewer.Item : ToolUp.Platform.ErasedModule { get }
-ToolUp.Platform.AuditViewerMode+Tags (class)
-ToolUp.Platform.AuditViewerMode+Tags.ConfiguredAuditViewer : System.Int32 (literal)
-ToolUp.Platform.AuditViewerMode+Tags.DefaultAuditViewer : System.Int32 (literal)
-ToolUp.Platform.AuditViewerMode+Tags.ExternalAuditViewer : System.Int32 (literal)
-ToolUp.Platform.AuditViewerMode+Tags.NoAuditViewer : System.Int32 (literal)
 ToolUp.Platform.AuthDiagnostics (class)
 ToolUp.Platform.AuthDiagnostics.active() : ToolUp.Platform.AuthDiagnostics+IAuthTracer
 ToolUp.Platform.AuthDiagnostics.consoleTracer : ToolUp.Platform.AuthDiagnostics+IAuthTracer { get }
@@ -3396,50 +3394,37 @@ ToolUp.Platform.ClientBoundHostView.withBoundElementPages`2(ToolUp.Platform.IHos
 ToolUp.Platform.ClientBoundHostView.withBoundElementPanes`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, System.Tuple`2[Fable.React.ReactElement, Fable.React.ReactElement]]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientBoundHostView.withBoundElementView`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, Fable.React.ReactElement]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientConfig (class)
-ToolUp.Platform.ClientConfig..ctor(System.String, System.String, ToolUp.Platform.LoadingIndicatorMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.DataManagerMode, ToolUp.Platform.TeamManagerMode, ToolUp.Platform.TeamConfigMode, ToolUp.Platform.WebhookAdminMode, ToolUp.Platform.ServiceAccountAdminMode, ToolUp.Platform.ExternalContactManagerMode, ToolUp.Platform.NotificationPreferencesMode, ToolUp.Platform.ModuleVisibilityAdminMode, ToolUp.Platform.SessionSecurityMode, ToolUp.Platform.PlatformAdminMode, ToolUp.Platform.PermissionsAdminMode, ToolUp.Platform.HealthMonitorMode, ToolUp.Platform.DatadogReadbackMode, ToolUp.Platform.ObservabilityModuleMode, ToolUp.Platform.PlatformUsersMode, ToolUp.Platform.ServiceStatusBoardMode, ToolUp.Platform.UsageDashboardMode, ToolUp.Platform.AuditViewerMode, ToolUp.Platform.CompositionInspectorMode, ToolUp.Platform.HomeModuleMode, ToolUp.Platform.AdminSurfaceMode, ToolUp.Platform.NotAuthorisedMode, ToolUp.Platform.CommandPaletteMode, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig], ToolUp.Platform.DataIngestionAdminMode, ToolUp.Platform.MigrationAdminMode, ToolUp.Platform.DataSubjectRequestAdminMode, ToolUp.Platform.ToastCentreMode, ToolUp.Platform.AuthUIMode, ToolUp.Platform.AuthTokenStorage, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Feliz.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuthBridge], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]], ToolUp.Platform.ClientHandlerRegistry, ToolUp.Platform.ClientRequestSeam, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute], ToolUp.Platform.ConsentProviderMode, ToolUp.Platform.AdPanelMode, ToolUp.Platform.PremiumModel, ToolUp.Platform.PlatformAdminProfile, ToolUp.Platform.InputsPaneWidth, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], ToolUp.Platform.PresenceMode, ToolUp.Platform.LocaleMode, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.MessageCatalog, ToolUp.Platform.MessageCatalog]], ToolUp.Platform.OfflineMode)
+ToolUp.Platform.ClientConfig..ctor(System.String, System.String, ToolUp.Platform.LoadingIndicatorMode, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.ShellSlotFills, ToolUp.Platform.DatadogReadbackMode, ToolUp.Platform.ObservabilityModuleMode, ToolUp.Platform.PlatformUsersMode, ToolUp.Platform.AdminSurfaceMode, ToolUp.Platform.NotAuthorisedMode, ToolUp.Platform.CommandPaletteMode, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig], ToolUp.Platform.ToastCentreMode, ToolUp.Platform.AuthUIMode, ToolUp.Platform.AuthTokenStorage, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], Feliz.AgGrid+AgGridModuleConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuthBridge], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]], ToolUp.Platform.ClientHandlerRegistry, ToolUp.Platform.ClientRequestSeam, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PrerenderRoute], ToolUp.Platform.ConsentProviderMode, ToolUp.Platform.AdPanelMode, ToolUp.Platform.PremiumModel, ToolUp.Platform.PlatformAdminProfile, ToolUp.Platform.InputsPaneWidth, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], ToolUp.Platform.PresenceMode, ToolUp.Platform.LocaleMode, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.MessageCatalog, ToolUp.Platform.MessageCatalog]], ToolUp.Platform.OfflineMode)
 ToolUp.Platform.ClientConfig.ActiveModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfig.AdPanel : ToolUp.Platform.AdPanelMode { get }
 ToolUp.Platform.ClientConfig.AdminSurface : ToolUp.Platform.AdminSurfaceMode { get }
 ToolUp.Platform.ClientConfig.AppLogo : System.String { get }
 ToolUp.Platform.ClientConfig.AppName : System.String { get }
-ToolUp.Platform.ClientConfig.AuditViewer : ToolUp.Platform.AuditViewerMode { get }
 ToolUp.Platform.ClientConfig.AuthBridge : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuthBridge] { get }
 ToolUp.Platform.ClientConfig.AuthTokenStorage : ToolUp.Platform.AuthTokenStorage { get }
 ToolUp.Platform.ClientConfig.AuthUI : ToolUp.Platform.AuthUIMode { get }
 ToolUp.Platform.ClientConfig.CommandPalette : ToolUp.Platform.CommandPaletteMode { get }
-ToolUp.Platform.ClientConfig.CompositionInspector : ToolUp.Platform.CompositionInspectorMode { get }
 ToolUp.Platform.ClientConfig.ConsentProvider : ToolUp.Platform.ConsentProviderMode { get }
-ToolUp.Platform.ClientConfig.DataIngestionAdmin : ToolUp.Platform.DataIngestionAdminMode { get }
-ToolUp.Platform.ClientConfig.DataManager : ToolUp.Platform.DataManagerMode { get }
-ToolUp.Platform.ClientConfig.DataSubjectRequestAdmin : ToolUp.Platform.DataSubjectRequestAdminMode { get }
 ToolUp.Platform.ClientConfig.DatadogReadback : ToolUp.Platform.DatadogReadbackMode { get }
 ToolUp.Platform.ClientConfig.DevDefaultUserId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfig.EnableElmishConsoleTrace : System.Boolean { get }
 ToolUp.Platform.ClientConfig.ExpectedModules : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
-ToolUp.Platform.ClientConfig.ExternalContactManager : ToolUp.Platform.ExternalContactManagerMode { get }
 ToolUp.Platform.ClientConfig.GlobalOverlays : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]] { get }
 ToolUp.Platform.ClientConfig.GridModules : Feliz.AgGrid+AgGridModuleConfig { get }
 ToolUp.Platform.ClientConfig.Handlers : ToolUp.Platform.ClientHandlerRegistry { get }
-ToolUp.Platform.ClientConfig.HealthMonitor : ToolUp.Platform.HealthMonitorMode { get }
-ToolUp.Platform.ClientConfig.HomeModule : ToolUp.Platform.HomeModuleMode { get }
 ToolUp.Platform.ClientConfig.HomeRecents : System.Boolean { get }
 ToolUp.Platform.ClientConfig.InputsPaneWidth : ToolUp.Platform.InputsPaneWidth { get }
 ToolUp.Platform.ClientConfig.LoadingIndicator : ToolUp.Platform.LoadingIndicatorMode { get }
 ToolUp.Platform.ClientConfig.Locale : ToolUp.Platform.LocaleMode { get }
 ToolUp.Platform.ClientConfig.MessageCatalogOverride : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.MessageCatalog, ToolUp.Platform.MessageCatalog]] { get }
-ToolUp.Platform.ClientConfig.MigrationAdmin : ToolUp.Platform.MigrationAdminMode { get }
 ToolUp.Platform.ClientConfig.ModuleFilter : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
-ToolUp.Platform.ClientConfig.ModuleVisibilityAdmin : ToolUp.Platform.ModuleVisibilityAdminMode { get }
 ToolUp.Platform.ClientConfig.NoActiveTeamLanding : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NoActiveTeamLandingConfig] { get }
 ToolUp.Platform.ClientConfig.NoActiveTeamLandingModuleId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfig.NotAuthorisedView : ToolUp.Platform.NotAuthorisedMode { get }
-ToolUp.Platform.ClientConfig.NotificationPreferences : ToolUp.Platform.NotificationPreferencesMode { get }
 ToolUp.Platform.ClientConfig.Observability : ToolUp.Platform.ObservabilityModuleMode { get }
 ToolUp.Platform.ClientConfig.Offline : ToolUp.Platform.OfflineMode { get }
 ToolUp.Platform.ClientConfig.OnElmishError : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Elmish.ErrorContext, Microsoft.FSharp.Core.Unit]] { get }
 ToolUp.Platform.ClientConfig.OnError : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleErrorReport, Microsoft.FSharp.Core.Unit]] { get }
-ToolUp.Platform.ClientConfig.PermissionsAdmin : ToolUp.Platform.PermissionsAdminMode { get }
-ToolUp.Platform.ClientConfig.PlatformAdmin : ToolUp.Platform.PlatformAdminMode { get }
 ToolUp.Platform.ClientConfig.PlatformAdminProfile : ToolUp.Platform.PlatformAdminProfile { get }
 ToolUp.Platform.ClientConfig.PlatformUsers : ToolUp.Platform.PlatformUsersMode { get }
 ToolUp.Platform.ClientConfig.PremiumModel : ToolUp.Platform.PremiumModel { get }
@@ -3447,16 +3432,10 @@ ToolUp.Platform.ClientConfig.PrerenderRoutes : Microsoft.FSharp.Collections.FSha
 ToolUp.Platform.ClientConfig.Presence : ToolUp.Platform.PresenceMode { get }
 ToolUp.Platform.ClientConfig.PublicEntryDispatchers : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]] { get }
 ToolUp.Platform.ClientConfig.RequestSeam : ToolUp.Platform.ClientRequestSeam { get }
-ToolUp.Platform.ClientConfig.ServiceAccountAdmin : ToolUp.Platform.ServiceAccountAdminMode { get }
-ToolUp.Platform.ClientConfig.ServiceStatusBoard : ToolUp.Platform.ServiceStatusBoardMode { get }
-ToolUp.Platform.ClientConfig.SessionSecurity : ToolUp.Platform.SessionSecurityMode { get }
 ToolUp.Platform.ClientConfig.ShowDebugOnlyModules : System.Boolean { get }
+ToolUp.Platform.ClientConfig.Slots : ToolUp.Platform.ShellSlotFills { get }
 ToolUp.Platform.ClientConfig.Surfaces : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile] { get }
-ToolUp.Platform.ClientConfig.TeamConfig : ToolUp.Platform.TeamConfigMode { get }
-ToolUp.Platform.ClientConfig.TeamManager : ToolUp.Platform.TeamManagerMode { get }
 ToolUp.Platform.ClientConfig.ToastCentre : ToolUp.Platform.ToastCentreMode { get }
-ToolUp.Platform.ClientConfig.UsageDashboard : ToolUp.Platform.UsageDashboardMode { get }
-ToolUp.Platform.ClientConfig.WebhookAdmin : ToolUp.Platform.WebhookAdminMode { get }
 ToolUp.Platform.ClientConfigDefaults (class)
 ToolUp.Platform.ClientConfigDefaults.applyAdminModuleConstants(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, ToolUp.Platform.ClientConfig) : ToolUp.Platform.ClientConfig
 ToolUp.Platform.ClientConfigDefaults.applyHybridClientConstants(System.String, System.String, ToolUp.Platform.ClientConfig) : ToolUp.Platform.ClientConfig
@@ -3466,13 +3445,13 @@ ToolUp.Platform.ClientConfigDefaults.fromBundleConstants(ToolUp.Platform.ClientC
 ToolUp.Platform.ClientConfigDefaults.parseCaseToken`1(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, T]]) : Microsoft.FSharp.Core.FSharpOption`1[T]
 ToolUp.Platform.ClientConfigDefaults.parseNoDefault`1(System.String, T, T) : Microsoft.FSharp.Core.FSharpOption`1[T]
 ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides (class)
-ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuthUIMode], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.WebhookAdminMode], Microsoft.FSharp.Core.FSharpOption`1[Feliz.AgGrid+AgGridModuleConfig], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ClientHandlerRegistry], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataManagerMode], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.UsageDashboardMode], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataIngestionAdminMode])
+ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuthUIMode], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel]], Microsoft.FSharp.Core.FSharpOption`1[Feliz.AgGrid+AgGridModuleConfig], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ClientHandlerRegistry], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.Boolean], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SlotFill`1[ToolUp.Platform.DataManagerChoice]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel]])
 ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.ActiveModule : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.AppLogo : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.AppName : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.AuthUI : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AuthUIMode] { get }
-ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.DataIngestionAdmin : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataIngestionAdminMode] { get }
-ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.DataManager : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataManagerMode] { get }
+ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.DataIngestionAdmin : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel]] { get }
+ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.DataManager : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SlotFill`1[ToolUp.Platform.DataManagerChoice]] { get }
 ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.DevDefaultUserId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.EnableElmishConsoleTrace : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
 ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.GridModules : Microsoft.FSharp.Core.FSharpOption`1[Feliz.AgGrid+AgGridModuleConfig] { get }
@@ -3480,8 +3459,8 @@ ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.Handlers : Microsoft.
 ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.PublicEntryDispatchers : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, System.Boolean]]] { get }
 ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.ShowDebugOnlyModules : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean] { get }
 ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.Surfaces : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile]] { get }
-ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.UsageDashboard : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.UsageDashboardMode] { get }
-ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.WebhookAdmin : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.WebhookAdminMode] { get }
+ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.UsageDashboard : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel]] { get }
+ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides.WebhookAdmin : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel]] { get }
 ToolUp.Platform.ClientConfigDefaults+ClientConfigOverridesModule (class)
 ToolUp.Platform.ClientConfigDefaults+ClientConfigOverridesModule.empty : ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides { get }
 ToolUp.Platform.ClientConfigDefaults+ClientConfigOverridesModule.referenceApp : ToolUp.Platform.ClientConfigDefaults+ClientConfigOverrides { get }
@@ -3651,10 +3630,6 @@ ToolUp.Platform.CommandPaletteNav+PaletteState..ctor(System.Boolean, System.Stri
 ToolUp.Platform.CommandPaletteNav+PaletteState.Highlight : System.Int32 { get }
 ToolUp.Platform.CommandPaletteNav+PaletteState.IsOpen : System.Boolean { get }
 ToolUp.Platform.CommandPaletteNav+PaletteState.Query : System.String { get }
-ToolUp.Platform.CompositionInspectorConfig (class)
-ToolUp.Platform.CompositionInspectorConfig..ctor(System.String, Fable.React.ReactElement)
-ToolUp.Platform.CompositionInspectorConfig.Icon : Fable.React.ReactElement { get }
-ToolUp.Platform.CompositionInspectorConfig.Name : System.String { get }
 ToolUp.Platform.CompositionInspectorMessages (class)
 ToolUp.Platform.CompositionInspectorMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String])
 ToolUp.Platform.CompositionInspectorMessages.AllRulesPassed : System.String { get }
@@ -3704,23 +3679,6 @@ ToolUp.Platform.CompositionInspectorMessages.Subheading : System.String { get }
 ToolUp.Platform.CompositionInspectorMessages.Subjects : System.String { get }
 ToolUp.Platform.CompositionInspectorMessages.SurfacesTitle : System.String { get }
 ToolUp.Platform.CompositionInspectorMessages.Tools : System.String { get }
-ToolUp.Platform.CompositionInspectorMode (class)
-ToolUp.Platform.CompositionInspectorMode.DefaultCompositionInspector : ToolUp.Platform.CompositionInspectorMode { get }
-ToolUp.Platform.CompositionInspectorMode.IsConfiguredCompositionInspector : System.Boolean { get }
-ToolUp.Platform.CompositionInspectorMode.IsDefaultCompositionInspector : System.Boolean { get }
-ToolUp.Platform.CompositionInspectorMode.IsExternalCompositionInspector : System.Boolean { get }
-ToolUp.Platform.CompositionInspectorMode.IsNoCompositionInspector : System.Boolean { get }
-ToolUp.Platform.CompositionInspectorMode.NoCompositionInspector : ToolUp.Platform.CompositionInspectorMode { get }
-ToolUp.Platform.CompositionInspectorMode.Tag : System.Int32 { get }
-ToolUp.Platform.CompositionInspectorMode+ConfiguredCompositionInspector (class)
-ToolUp.Platform.CompositionInspectorMode+ConfiguredCompositionInspector.Item : ToolUp.Platform.CompositionInspectorConfig { get }
-ToolUp.Platform.CompositionInspectorMode+ExternalCompositionInspector (class)
-ToolUp.Platform.CompositionInspectorMode+ExternalCompositionInspector.Item : ToolUp.Platform.ErasedModule { get }
-ToolUp.Platform.CompositionInspectorMode+Tags (class)
-ToolUp.Platform.CompositionInspectorMode+Tags.ConfiguredCompositionInspector : System.Int32 (literal)
-ToolUp.Platform.CompositionInspectorMode+Tags.DefaultCompositionInspector : System.Int32 (literal)
-ToolUp.Platform.CompositionInspectorMode+Tags.ExternalCompositionInspector : System.Int32 (literal)
-ToolUp.Platform.CompositionInspectorMode+Tags.NoCompositionInspector : System.Int32 (literal)
 ToolUp.Platform.Consent.BridgedConsentProvider (class)
 ToolUp.Platform.Consent.BridgedConsentProvider..ctor(ToolUp.Platform.Consent.IConsentManagementBridge)
 ToolUp.Platform.Consent.ConsentBanner (class)
@@ -3819,27 +3777,6 @@ ToolUp.Platform.CrdtSyncClient+IYjs.mergeUpdates(System.Byte[][]) : System.Byte[
 ToolUp.Platform.CustomAuthUI (class)
 ToolUp.Platform.CustomAuthUI..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Fable.React.ReactElement, Fable.React.ReactElement])
 ToolUp.Platform.CustomAuthUI.Wrap : Microsoft.FSharp.Core.FSharpFunc`2[Fable.React.ReactElement, Fable.React.ReactElement] { get }
-ToolUp.Platform.DataIngestionAdminConfig (class)
-ToolUp.Platform.DataIngestionAdminConfig..ctor(System.String, Fable.React.ReactElement)
-ToolUp.Platform.DataIngestionAdminConfig.Icon : Fable.React.ReactElement { get }
-ToolUp.Platform.DataIngestionAdminConfig.Name : System.String { get }
-ToolUp.Platform.DataIngestionAdminMode (class)
-ToolUp.Platform.DataIngestionAdminMode.DefaultDataIngestionAdmin : ToolUp.Platform.DataIngestionAdminMode { get }
-ToolUp.Platform.DataIngestionAdminMode.IsConfiguredDataIngestionAdmin : System.Boolean { get }
-ToolUp.Platform.DataIngestionAdminMode.IsDefaultDataIngestionAdmin : System.Boolean { get }
-ToolUp.Platform.DataIngestionAdminMode.IsExternalDataIngestionAdmin : System.Boolean { get }
-ToolUp.Platform.DataIngestionAdminMode.IsNoDataIngestionAdmin : System.Boolean { get }
-ToolUp.Platform.DataIngestionAdminMode.NoDataIngestionAdmin : ToolUp.Platform.DataIngestionAdminMode { get }
-ToolUp.Platform.DataIngestionAdminMode.Tag : System.Int32 { get }
-ToolUp.Platform.DataIngestionAdminMode+ConfiguredDataIngestionAdmin (class)
-ToolUp.Platform.DataIngestionAdminMode+ConfiguredDataIngestionAdmin.Item : ToolUp.Platform.DataIngestionAdminConfig { get }
-ToolUp.Platform.DataIngestionAdminMode+ExternalDataIngestionAdmin (class)
-ToolUp.Platform.DataIngestionAdminMode+ExternalDataIngestionAdmin.Item : ToolUp.Platform.ErasedModule { get }
-ToolUp.Platform.DataIngestionAdminMode+Tags (class)
-ToolUp.Platform.DataIngestionAdminMode+Tags.ConfiguredDataIngestionAdmin : System.Int32 (literal)
-ToolUp.Platform.DataIngestionAdminMode+Tags.DefaultDataIngestionAdmin : System.Int32 (literal)
-ToolUp.Platform.DataIngestionAdminMode+Tags.ExternalDataIngestionAdmin : System.Int32 (literal)
-ToolUp.Platform.DataIngestionAdminMode+Tags.NoDataIngestionAdmin : System.Int32 (literal)
 ToolUp.Platform.DataIngestionMessages (class)
 ToolUp.Platform.DataIngestionMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.DataIngestionMessages.AddDataSource : System.String { get }
@@ -3877,35 +3814,22 @@ ToolUp.Platform.DataIngestionMessages.StatusConnected : System.String { get }
 ToolUp.Platform.DataIngestionMessages.StatusNeedsAuthorization : System.String { get }
 ToolUp.Platform.DataIngestionMessages.StatusNeedsReauthorization : System.String { get }
 ToolUp.Platform.DataIngestionMessages.StatusNotConfigured : System.String { get }
+ToolUp.Platform.DataManagerChoice (class)
+ToolUp.Platform.DataManagerChoice.IsColumnMapping : System.Boolean { get }
+ToolUp.Platform.DataManagerChoice.IsFileUpload : System.Boolean { get }
+ToolUp.Platform.DataManagerChoice.Tag : System.Int32 { get }
+ToolUp.Platform.DataManagerChoice+ColumnMapping (class)
+ToolUp.Platform.DataManagerChoice+ColumnMapping.Item : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataManagerConfig] { get }
+ToolUp.Platform.DataManagerChoice+FileUpload (class)
+ToolUp.Platform.DataManagerChoice+FileUpload.Item : ToolUp.Platform.DataManagerConfig { get }
+ToolUp.Platform.DataManagerChoice+Tags (class)
+ToolUp.Platform.DataManagerChoice+Tags.ColumnMapping : System.Int32 (literal)
+ToolUp.Platform.DataManagerChoice+Tags.FileUpload : System.Int32 (literal)
 ToolUp.Platform.DataManagerConfig (class)
 ToolUp.Platform.DataManagerConfig..ctor(System.String, Fable.React.ReactElement, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.DataManagerConfig.Group : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.DataManagerConfig.Icon : Fable.React.ReactElement { get }
 ToolUp.Platform.DataManagerConfig.Name : System.String { get }
-ToolUp.Platform.DataManagerMode (class)
-ToolUp.Platform.DataManagerMode.DefaultDataManager : ToolUp.Platform.DataManagerMode { get }
-ToolUp.Platform.DataManagerMode.IsConfiguredDataManager : System.Boolean { get }
-ToolUp.Platform.DataManagerMode.IsConfiguredMappingDataManager : System.Boolean { get }
-ToolUp.Platform.DataManagerMode.IsDefaultDataManager : System.Boolean { get }
-ToolUp.Platform.DataManagerMode.IsExternalDataManager : System.Boolean { get }
-ToolUp.Platform.DataManagerMode.IsMappingDataManager : System.Boolean { get }
-ToolUp.Platform.DataManagerMode.IsNoDataManager : System.Boolean { get }
-ToolUp.Platform.DataManagerMode.MappingDataManager : ToolUp.Platform.DataManagerMode { get }
-ToolUp.Platform.DataManagerMode.NoDataManager : ToolUp.Platform.DataManagerMode { get }
-ToolUp.Platform.DataManagerMode.Tag : System.Int32 { get }
-ToolUp.Platform.DataManagerMode+ConfiguredDataManager (class)
-ToolUp.Platform.DataManagerMode+ConfiguredDataManager.Item : ToolUp.Platform.DataManagerConfig { get }
-ToolUp.Platform.DataManagerMode+ConfiguredMappingDataManager (class)
-ToolUp.Platform.DataManagerMode+ConfiguredMappingDataManager.Item : ToolUp.Platform.DataManagerConfig { get }
-ToolUp.Platform.DataManagerMode+ExternalDataManager (class)
-ToolUp.Platform.DataManagerMode+ExternalDataManager.Item : ToolUp.Platform.ErasedModule { get }
-ToolUp.Platform.DataManagerMode+Tags (class)
-ToolUp.Platform.DataManagerMode+Tags.ConfiguredDataManager : System.Int32 (literal)
-ToolUp.Platform.DataManagerMode+Tags.ConfiguredMappingDataManager : System.Int32 (literal)
-ToolUp.Platform.DataManagerMode+Tags.DefaultDataManager : System.Int32 (literal)
-ToolUp.Platform.DataManagerMode+Tags.ExternalDataManager : System.Int32 (literal)
-ToolUp.Platform.DataManagerMode+Tags.MappingDataManager : System.Int32 (literal)
-ToolUp.Platform.DataManagerMode+Tags.NoDataManager : System.Int32 (literal)
 ToolUp.Platform.DataSourceCredentialUIContext (class)
 ToolUp.Platform.DataSourceCredentialUIContext..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataSourceConfig], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit])
 ToolUp.Platform.DataSourceCredentialUIContext.DataSource : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataSourceConfig] { get }
@@ -3915,10 +3839,6 @@ ToolUp.Platform.DataSourceCredentialUIRegistry.registeredKinds() : Microsoft.FSh
 ToolUp.Platform.DataSourceCredentialUIRegistry.setHandlers(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DataSourceCredentialUIContext, Fable.React.ReactElement]]]) : System.Void
 ToolUp.Platform.DataSourceCredentialUIRegistry.snapshot() : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DataSourceCredentialUIContext, Fable.React.ReactElement]]]
 ToolUp.Platform.DataSourceCredentialUIRegistry.tryGet(System.String) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DataSourceCredentialUIContext, Fable.React.ReactElement]]
-ToolUp.Platform.DataSubjectRequestAdminConfig (class)
-ToolUp.Platform.DataSubjectRequestAdminConfig..ctor(System.String, Fable.React.ReactElement)
-ToolUp.Platform.DataSubjectRequestAdminConfig.Icon : Fable.React.ReactElement { get }
-ToolUp.Platform.DataSubjectRequestAdminConfig.Name : System.String { get }
 ToolUp.Platform.DataSubjectRequestAdminMessages (class)
 ToolUp.Platform.DataSubjectRequestAdminMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int64, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String]]], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String])
 ToolUp.Platform.DataSubjectRequestAdminMessages.AggregatingSegments : System.String { get }
@@ -3981,23 +3901,6 @@ ToolUp.Platform.DataSubjectRequestAdminMessages.TicketReady : Microsoft.FSharp.C
 ToolUp.Platform.DataSubjectRequestAdminMessages.TicketUnknown : System.String { get }
 ToolUp.Platform.DataSubjectRequestAdminMessages.UseDeploymentDefault : System.String { get }
 ToolUp.Platform.DataSubjectRequestAdminMessages.UseDeploymentDefaultDescription : System.String { get }
-ToolUp.Platform.DataSubjectRequestAdminMode (class)
-ToolUp.Platform.DataSubjectRequestAdminMode.DefaultDataSubjectRequestAdmin : ToolUp.Platform.DataSubjectRequestAdminMode { get }
-ToolUp.Platform.DataSubjectRequestAdminMode.IsConfiguredDataSubjectRequestAdmin : System.Boolean { get }
-ToolUp.Platform.DataSubjectRequestAdminMode.IsDefaultDataSubjectRequestAdmin : System.Boolean { get }
-ToolUp.Platform.DataSubjectRequestAdminMode.IsExternalDataSubjectRequestAdmin : System.Boolean { get }
-ToolUp.Platform.DataSubjectRequestAdminMode.IsNoDataSubjectRequestAdmin : System.Boolean { get }
-ToolUp.Platform.DataSubjectRequestAdminMode.NoDataSubjectRequestAdmin : ToolUp.Platform.DataSubjectRequestAdminMode { get }
-ToolUp.Platform.DataSubjectRequestAdminMode.Tag : System.Int32 { get }
-ToolUp.Platform.DataSubjectRequestAdminMode+ConfiguredDataSubjectRequestAdmin (class)
-ToolUp.Platform.DataSubjectRequestAdminMode+ConfiguredDataSubjectRequestAdmin.Item : ToolUp.Platform.DataSubjectRequestAdminConfig { get }
-ToolUp.Platform.DataSubjectRequestAdminMode+ExternalDataSubjectRequestAdmin (class)
-ToolUp.Platform.DataSubjectRequestAdminMode+ExternalDataSubjectRequestAdmin.Item : ToolUp.Platform.ErasedModule { get }
-ToolUp.Platform.DataSubjectRequestAdminMode+Tags (class)
-ToolUp.Platform.DataSubjectRequestAdminMode+Tags.ConfiguredDataSubjectRequestAdmin : System.Int32 (literal)
-ToolUp.Platform.DataSubjectRequestAdminMode+Tags.DefaultDataSubjectRequestAdmin : System.Int32 (literal)
-ToolUp.Platform.DataSubjectRequestAdminMode+Tags.ExternalDataSubjectRequestAdmin : System.Int32 (literal)
-ToolUp.Platform.DataSubjectRequestAdminMode+Tags.NoDataSubjectRequestAdmin : System.Int32 (literal)
 ToolUp.Platform.DataTypeDisplay (class)
 ToolUp.Platform.DataTypeDisplay..ctor(DataManagementTypes+DataTypeInfo, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[ProcessedDataTypes+ProcessedData], Fable.React.ReactElement])
 ToolUp.Platform.DataTypeDisplay.Info : DataManagementTypes+DataTypeInfo { get }
@@ -4092,27 +3995,6 @@ ToolUp.Platform.ErrorCategory+Unknown (class)
 ToolUp.Platform.ErrorCategory+Unknown.raw : System.String { get }
 ToolUp.Platform.ErrorCategoryModule (class)
 ToolUp.Platform.ErrorCategoryModule.ofWire(System.String) : ToolUp.Platform.ErrorCategory
-ToolUp.Platform.ExternalContactManagerConfig (class)
-ToolUp.Platform.ExternalContactManagerConfig..ctor(System.String, Fable.React.ReactElement)
-ToolUp.Platform.ExternalContactManagerConfig.Icon : Fable.React.ReactElement { get }
-ToolUp.Platform.ExternalContactManagerConfig.Name : System.String { get }
-ToolUp.Platform.ExternalContactManagerMode (class)
-ToolUp.Platform.ExternalContactManagerMode.DefaultExternalContactManager : ToolUp.Platform.ExternalContactManagerMode { get }
-ToolUp.Platform.ExternalContactManagerMode.IsConfiguredExternalContactManager : System.Boolean { get }
-ToolUp.Platform.ExternalContactManagerMode.IsDefaultExternalContactManager : System.Boolean { get }
-ToolUp.Platform.ExternalContactManagerMode.IsExternalExternalContactManager : System.Boolean { get }
-ToolUp.Platform.ExternalContactManagerMode.IsNoExternalContactManager : System.Boolean { get }
-ToolUp.Platform.ExternalContactManagerMode.NoExternalContactManager : ToolUp.Platform.ExternalContactManagerMode { get }
-ToolUp.Platform.ExternalContactManagerMode.Tag : System.Int32 { get }
-ToolUp.Platform.ExternalContactManagerMode+ConfiguredExternalContactManager (class)
-ToolUp.Platform.ExternalContactManagerMode+ConfiguredExternalContactManager.Item : ToolUp.Platform.ExternalContactManagerConfig { get }
-ToolUp.Platform.ExternalContactManagerMode+ExternalExternalContactManager (class)
-ToolUp.Platform.ExternalContactManagerMode+ExternalExternalContactManager.Item : ToolUp.Platform.ErasedModule { get }
-ToolUp.Platform.ExternalContactManagerMode+Tags (class)
-ToolUp.Platform.ExternalContactManagerMode+Tags.ConfiguredExternalContactManager : System.Int32 (literal)
-ToolUp.Platform.ExternalContactManagerMode+Tags.DefaultExternalContactManager : System.Int32 (literal)
-ToolUp.Platform.ExternalContactManagerMode+Tags.ExternalExternalContactManager : System.Int32 (literal)
-ToolUp.Platform.ExternalContactManagerMode+Tags.NoExternalContactManager : System.Int32 (literal)
 ToolUp.Platform.ExternalContactMessages (class)
 ToolUp.Platform.ExternalContactMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.ExternalContactMessages.AddContact : System.String { get }
@@ -4216,10 +4098,6 @@ ToolUp.Platform.FileManagerMessages.UploadHint : System.String { get }
 ToolUp.Platform.FileManagerMessages.UploadPanelTitle : System.String { get }
 ToolUp.Platform.FileManagerMessages.UploadSectionTitle : System.String { get }
 ToolUp.Platform.FileManagerMessages.UploadedFilesPanelTitle : System.String { get }
-ToolUp.Platform.HealthMonitorConfig (class)
-ToolUp.Platform.HealthMonitorConfig..ctor(System.String, Fable.React.ReactElement)
-ToolUp.Platform.HealthMonitorConfig.Icon : Fable.React.ReactElement { get }
-ToolUp.Platform.HealthMonitorConfig.Name : System.String { get }
 ToolUp.Platform.HealthMonitorMessages (class)
 ToolUp.Platform.HealthMonitorMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String]])
 ToolUp.Platform.HealthMonitorMessages.AIDenials : Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String] { get }
@@ -4262,23 +4140,6 @@ ToolUp.Platform.HealthMonitorMessages.SchedulerLagHelp : System.String { get }
 ToolUp.Platform.HealthMonitorMessages.SchedulerLastDrift : System.String { get }
 ToolUp.Platform.HealthMonitorMessages.SchedulerLastMissAt : System.String { get }
 ToolUp.Platform.HealthMonitorMessages.SchedulerMissed60m : System.String { get }
-ToolUp.Platform.HealthMonitorMode (class)
-ToolUp.Platform.HealthMonitorMode.DefaultHealthMonitor : ToolUp.Platform.HealthMonitorMode { get }
-ToolUp.Platform.HealthMonitorMode.IsConfiguredHealthMonitor : System.Boolean { get }
-ToolUp.Platform.HealthMonitorMode.IsDefaultHealthMonitor : System.Boolean { get }
-ToolUp.Platform.HealthMonitorMode.IsExternalHealthMonitor : System.Boolean { get }
-ToolUp.Platform.HealthMonitorMode.IsNoHealthMonitor : System.Boolean { get }
-ToolUp.Platform.HealthMonitorMode.NoHealthMonitor : ToolUp.Platform.HealthMonitorMode { get }
-ToolUp.Platform.HealthMonitorMode.Tag : System.Int32 { get }
-ToolUp.Platform.HealthMonitorMode+ConfiguredHealthMonitor (class)
-ToolUp.Platform.HealthMonitorMode+ConfiguredHealthMonitor.Item : ToolUp.Platform.HealthMonitorConfig { get }
-ToolUp.Platform.HealthMonitorMode+ExternalHealthMonitor (class)
-ToolUp.Platform.HealthMonitorMode+ExternalHealthMonitor.Item : ToolUp.Platform.ErasedModule { get }
-ToolUp.Platform.HealthMonitorMode+Tags (class)
-ToolUp.Platform.HealthMonitorMode+Tags.ConfiguredHealthMonitor : System.Int32 (literal)
-ToolUp.Platform.HealthMonitorMode+Tags.DefaultHealthMonitor : System.Int32 (literal)
-ToolUp.Platform.HealthMonitorMode+Tags.ExternalHealthMonitor : System.Int32 (literal)
-ToolUp.Platform.HealthMonitorMode+Tags.NoHealthMonitor : System.Int32 (literal)
 ToolUp.Platform.HomeMessages (class)
 ToolUp.Platform.HomeMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.HomeMessages.ActiveAiHeading : System.String { get }
@@ -4295,27 +4156,6 @@ ToolUp.Platform.HomeMessages.Refresh : System.String { get }
 ToolUp.Platform.HomeMessages.Subheading : System.String { get }
 ToolUp.Platform.HomeMessages.Unpin : System.String { get }
 ToolUp.Platform.HomeMessages.YourTools : System.String { get }
-ToolUp.Platform.HomeModuleConfig (class)
-ToolUp.Platform.HomeModuleConfig..ctor(System.String, Fable.React.ReactElement)
-ToolUp.Platform.HomeModuleConfig.Icon : Fable.React.ReactElement { get }
-ToolUp.Platform.HomeModuleConfig.Name : System.String { get }
-ToolUp.Platform.HomeModuleMode (class)
-ToolUp.Platform.HomeModuleMode.EnabledHomeModule : ToolUp.Platform.HomeModuleMode { get }
-ToolUp.Platform.HomeModuleMode.IsConfiguredHomeModule : System.Boolean { get }
-ToolUp.Platform.HomeModuleMode.IsEnabledHomeModule : System.Boolean { get }
-ToolUp.Platform.HomeModuleMode.IsExternalHomeModule : System.Boolean { get }
-ToolUp.Platform.HomeModuleMode.IsNoHomeModule : System.Boolean { get }
-ToolUp.Platform.HomeModuleMode.NoHomeModule : ToolUp.Platform.HomeModuleMode { get }
-ToolUp.Platform.HomeModuleMode.Tag : System.Int32 { get }
-ToolUp.Platform.HomeModuleMode+ConfiguredHomeModule (class)
-ToolUp.Platform.HomeModuleMode+ConfiguredHomeModule.Item : ToolUp.Platform.HomeModuleConfig { get }
-ToolUp.Platform.HomeModuleMode+ExternalHomeModule (class)
-ToolUp.Platform.HomeModuleMode+ExternalHomeModule.Item : ToolUp.Platform.ErasedModule { get }
-ToolUp.Platform.HomeModuleMode+Tags (class)
-ToolUp.Platform.HomeModuleMode+Tags.ConfiguredHomeModule : System.Int32 (literal)
-ToolUp.Platform.HomeModuleMode+Tags.EnabledHomeModule : System.Int32 (literal)
-ToolUp.Platform.HomeModuleMode+Tags.ExternalHomeModule : System.Int32 (literal)
-ToolUp.Platform.HomeModuleMode+Tags.NoHomeModule : System.Int32 (literal)
 ToolUp.Platform.HomeWidget (class)
 ToolUp.Platform.HomeWidget..ctor(System.String, System.String, Fable.React.ReactElement, System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HomeWidgetContext, Fable.React.ReactElement])
 ToolUp.Platform.HomeWidget.Body : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HomeWidgetContext, Fable.React.ReactElement] { get }
@@ -4893,27 +4733,6 @@ ToolUp.Platform.MessageCatalogProvider.formatNumber(System.String, System.Double
 ToolUp.Platform.MessageCatalogProvider.provider(ToolUp.Platform.MessageCatalog, Fable.React.ReactElement) : Fable.React.ReactElement
 ToolUp.Platform.MessageCatalogProvider.useLocale() : System.String
 ToolUp.Platform.MessageCatalogProvider.useMessages() : ToolUp.Platform.MessageCatalog
-ToolUp.Platform.MigrationAdminConfig (class)
-ToolUp.Platform.MigrationAdminConfig..ctor(System.String, Fable.React.ReactElement)
-ToolUp.Platform.MigrationAdminConfig.Icon : Fable.React.ReactElement { get }
-ToolUp.Platform.MigrationAdminConfig.Name : System.String { get }
-ToolUp.Platform.MigrationAdminMode (class)
-ToolUp.Platform.MigrationAdminMode.DefaultMigrationAdmin : ToolUp.Platform.MigrationAdminMode { get }
-ToolUp.Platform.MigrationAdminMode.IsConfiguredMigrationAdmin : System.Boolean { get }
-ToolUp.Platform.MigrationAdminMode.IsDefaultMigrationAdmin : System.Boolean { get }
-ToolUp.Platform.MigrationAdminMode.IsExternalMigrationAdmin : System.Boolean { get }
-ToolUp.Platform.MigrationAdminMode.IsNoMigrationAdmin : System.Boolean { get }
-ToolUp.Platform.MigrationAdminMode.NoMigrationAdmin : ToolUp.Platform.MigrationAdminMode { get }
-ToolUp.Platform.MigrationAdminMode.Tag : System.Int32 { get }
-ToolUp.Platform.MigrationAdminMode+ConfiguredMigrationAdmin (class)
-ToolUp.Platform.MigrationAdminMode+ConfiguredMigrationAdmin.Item : ToolUp.Platform.MigrationAdminConfig { get }
-ToolUp.Platform.MigrationAdminMode+ExternalMigrationAdmin (class)
-ToolUp.Platform.MigrationAdminMode+ExternalMigrationAdmin.Item : ToolUp.Platform.ErasedModule { get }
-ToolUp.Platform.MigrationAdminMode+Tags (class)
-ToolUp.Platform.MigrationAdminMode+Tags.ConfiguredMigrationAdmin : System.Int32 (literal)
-ToolUp.Platform.MigrationAdminMode+Tags.DefaultMigrationAdmin : System.Int32 (literal)
-ToolUp.Platform.MigrationAdminMode+Tags.ExternalMigrationAdmin : System.Int32 (literal)
-ToolUp.Platform.MigrationAdminMode+Tags.NoMigrationAdmin : System.Int32 (literal)
 ToolUp.Platform.MigrationStatusMessages (class)
 ToolUp.Platform.MigrationStatusMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String]]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String]]]], System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.MigrationStatusMessages.Blocked : System.String { get }
@@ -4987,6 +4806,10 @@ ToolUp.Platform.ModuleEvents.subscribe(Microsoft.FSharp.Core.FSharpFunc`2[System
 ToolUp.Platform.ModuleGroupingValidator (class)
 ToolUp.Platform.ModuleGroupingValidator.result(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
 ToolUp.Platform.ModuleGroupingValidator.validate(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : System.Void
+ToolUp.Platform.ModuleLabel (class)
+ToolUp.Platform.ModuleLabel..ctor(System.String, Fable.React.ReactElement)
+ToolUp.Platform.ModuleLabel.Icon : Fable.React.ReactElement { get }
+ToolUp.Platform.ModuleLabel.Name : System.String { get }
 ToolUp.Platform.ModuleParityValidator (class)
 ToolUp.Platform.ModuleParityValidator.result(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
 ToolUp.Platform.ModuleParityValidator.validate(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : System.Void
@@ -5004,10 +4827,6 @@ ToolUp.Platform.ModuleStateObserver.publish(System.String, System.Object) : Syst
 ToolUp.Platform.ModuleStateObserver.publishState(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, ToolUp.Platform.UiStateReport]], System.String, System.Object) : System.Void
 ToolUp.Platform.ModuleStateObserver.register(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.Unit]]) : System.Void
 ToolUp.Platform.ModuleStateObserver.tryInspect(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.UiStateReport]
-ToolUp.Platform.ModuleVisibilityAdminConfig (class)
-ToolUp.Platform.ModuleVisibilityAdminConfig..ctor(System.String, Fable.React.ReactElement)
-ToolUp.Platform.ModuleVisibilityAdminConfig.Icon : Fable.React.ReactElement { get }
-ToolUp.Platform.ModuleVisibilityAdminConfig.Name : System.String { get }
 ToolUp.Platform.ModuleVisibilityAdminMessages (class)
 ToolUp.Platform.ModuleVisibilityAdminMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.ModuleVisibilityAdminMessages.AllowDescription : System.String { get }
@@ -5039,23 +4858,6 @@ ToolUp.Platform.ModuleVisibilityAdminMessages.VisibleNow : System.String { get }
 ToolUp.Platform.ModuleVisibilityAdminMessages.Working : System.String { get }
 ToolUp.Platform.ModuleVisibilityAdminMessages.YourProfileHeading : System.String { get }
 ToolUp.Platform.ModuleVisibilityAdminMessages.YourProfileHelp : System.String { get }
-ToolUp.Platform.ModuleVisibilityAdminMode (class)
-ToolUp.Platform.ModuleVisibilityAdminMode.DefaultModuleVisibilityAdmin : ToolUp.Platform.ModuleVisibilityAdminMode { get }
-ToolUp.Platform.ModuleVisibilityAdminMode.IsConfiguredModuleVisibilityAdmin : System.Boolean { get }
-ToolUp.Platform.ModuleVisibilityAdminMode.IsDefaultModuleVisibilityAdmin : System.Boolean { get }
-ToolUp.Platform.ModuleVisibilityAdminMode.IsExternalModuleVisibilityAdmin : System.Boolean { get }
-ToolUp.Platform.ModuleVisibilityAdminMode.IsNoModuleVisibilityAdmin : System.Boolean { get }
-ToolUp.Platform.ModuleVisibilityAdminMode.NoModuleVisibilityAdmin : ToolUp.Platform.ModuleVisibilityAdminMode { get }
-ToolUp.Platform.ModuleVisibilityAdminMode.Tag : System.Int32 { get }
-ToolUp.Platform.ModuleVisibilityAdminMode+ConfiguredModuleVisibilityAdmin (class)
-ToolUp.Platform.ModuleVisibilityAdminMode+ConfiguredModuleVisibilityAdmin.Item : ToolUp.Platform.ModuleVisibilityAdminConfig { get }
-ToolUp.Platform.ModuleVisibilityAdminMode+ExternalModuleVisibilityAdmin (class)
-ToolUp.Platform.ModuleVisibilityAdminMode+ExternalModuleVisibilityAdmin.Item : ToolUp.Platform.ErasedModule { get }
-ToolUp.Platform.ModuleVisibilityAdminMode+Tags (class)
-ToolUp.Platform.ModuleVisibilityAdminMode+Tags.ConfiguredModuleVisibilityAdmin : System.Int32 (literal)
-ToolUp.Platform.ModuleVisibilityAdminMode+Tags.DefaultModuleVisibilityAdmin : System.Int32 (literal)
-ToolUp.Platform.ModuleVisibilityAdminMode+Tags.ExternalModuleVisibilityAdmin : System.Int32 (literal)
-ToolUp.Platform.ModuleVisibilityAdminMode+Tags.NoModuleVisibilityAdmin : System.Int32 (literal)
 ToolUp.Platform.NarrativeCommitHandler (class)
 ToolUp.Platform.NarrativeCommitHandler..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Narrative.NarrativeDocument, Microsoft.FSharp.Core.FSharpFunc`2[System.Boolean, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.NarrativeCommitResult]]])
 ToolUp.Platform.NarrativeCommitHandler.Submit : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Narrative.NarrativeDocument, Microsoft.FSharp.Core.FSharpFunc`2[System.Boolean, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.NarrativeCommitResult]]] { get }
@@ -5150,10 +4952,6 @@ ToolUp.Platform.NotificationClient.reset() : System.Void
 ToolUp.Platform.NotificationClient.subscribe(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.NotificationEnvelope, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.NotificationClient+EventSource (interface)
 ToolUp.Platform.NotificationClient+EventSource.close() : System.Void
-ToolUp.Platform.NotificationPreferencesConfig (class)
-ToolUp.Platform.NotificationPreferencesConfig..ctor(System.String, Fable.React.ReactElement)
-ToolUp.Platform.NotificationPreferencesConfig.Icon : Fable.React.ReactElement { get }
-ToolUp.Platform.NotificationPreferencesConfig.Name : System.String { get }
 ToolUp.Platform.NotificationPreferencesMessages (class)
 ToolUp.Platform.NotificationPreferencesMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.NotificationPreferencesMessages.AlwaysDelivered : System.String { get }
@@ -5182,23 +4980,6 @@ ToolUp.Platform.NotificationPreferencesMessages.Save : System.String { get }
 ToolUp.Platform.NotificationPreferencesMessages.Saved : System.String { get }
 ToolUp.Platform.NotificationPreferencesMessages.Saving : System.String { get }
 ToolUp.Platform.NotificationPreferencesMessages.Subheading : System.String { get }
-ToolUp.Platform.NotificationPreferencesMode (class)
-ToolUp.Platform.NotificationPreferencesMode.DefaultNotificationPreferencesUI : ToolUp.Platform.NotificationPreferencesMode { get }
-ToolUp.Platform.NotificationPreferencesMode.IsConfiguredNotificationPreferencesUI : System.Boolean { get }
-ToolUp.Platform.NotificationPreferencesMode.IsDefaultNotificationPreferencesUI : System.Boolean { get }
-ToolUp.Platform.NotificationPreferencesMode.IsExternalNotificationPreferencesUI : System.Boolean { get }
-ToolUp.Platform.NotificationPreferencesMode.IsNoNotificationPreferencesUI : System.Boolean { get }
-ToolUp.Platform.NotificationPreferencesMode.NoNotificationPreferencesUI : ToolUp.Platform.NotificationPreferencesMode { get }
-ToolUp.Platform.NotificationPreferencesMode.Tag : System.Int32 { get }
-ToolUp.Platform.NotificationPreferencesMode+ConfiguredNotificationPreferencesUI (class)
-ToolUp.Platform.NotificationPreferencesMode+ConfiguredNotificationPreferencesUI.Item : ToolUp.Platform.NotificationPreferencesConfig { get }
-ToolUp.Platform.NotificationPreferencesMode+ExternalNotificationPreferencesUI (class)
-ToolUp.Platform.NotificationPreferencesMode+ExternalNotificationPreferencesUI.Item : ToolUp.Platform.ErasedModule { get }
-ToolUp.Platform.NotificationPreferencesMode+Tags (class)
-ToolUp.Platform.NotificationPreferencesMode+Tags.ConfiguredNotificationPreferencesUI : System.Int32 (literal)
-ToolUp.Platform.NotificationPreferencesMode+Tags.DefaultNotificationPreferencesUI : System.Int32 (literal)
-ToolUp.Platform.NotificationPreferencesMode+Tags.ExternalNotificationPreferencesUI : System.Int32 (literal)
-ToolUp.Platform.NotificationPreferencesMode+Tags.NoNotificationPreferencesUI : System.Int32 (literal)
 ToolUp.Platform.OAuth1aCredentialMessages (class)
 ToolUp.Platform.OAuth1aCredentialMessages..ctor(System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.OAuth1aCredentialMessages.Authorize : System.String { get }
@@ -5387,10 +5168,6 @@ ToolUp.Platform.PasskeyUIConfig.AllowRegistration : System.Boolean { get }
 ToolUp.Platform.PasskeyUIConfig.ApiBase : System.String { get }
 ToolUp.Platform.PasskeyUIConfigModule (class)
 ToolUp.Platform.PasskeyUIConfigModule.defaults : ToolUp.Platform.PasskeyUIConfig { get }
-ToolUp.Platform.PermissionsAdminConfig (class)
-ToolUp.Platform.PermissionsAdminConfig..ctor(System.String, Fable.React.ReactElement)
-ToolUp.Platform.PermissionsAdminConfig.Icon : Fable.React.ReactElement { get }
-ToolUp.Platform.PermissionsAdminConfig.Name : System.String { get }
 ToolUp.Platform.PermissionsAdminMessages (class)
 ToolUp.Platform.PermissionsAdminMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], System.String, System.String, System.String)
 ToolUp.Platform.PermissionsAdminMessages.ActiveOverridesOn : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
@@ -5439,23 +5216,6 @@ ToolUp.Platform.PermissionsAdminMessages.TeamDefaultsHeading : System.String { g
 ToolUp.Platform.PermissionsAdminMessages.TeamDefaultsSaved : System.String { get }
 ToolUp.Platform.PermissionsAdminMessages.TeamDefaultsSubheading : System.String { get }
 ToolUp.Platform.PermissionsAdminMessages.Update : System.String { get }
-ToolUp.Platform.PermissionsAdminMode (class)
-ToolUp.Platform.PermissionsAdminMode.DefaultPermissionsAdmin : ToolUp.Platform.PermissionsAdminMode { get }
-ToolUp.Platform.PermissionsAdminMode.IsConfiguredPermissionsAdmin : System.Boolean { get }
-ToolUp.Platform.PermissionsAdminMode.IsDefaultPermissionsAdmin : System.Boolean { get }
-ToolUp.Platform.PermissionsAdminMode.IsExternalPermissionsAdmin : System.Boolean { get }
-ToolUp.Platform.PermissionsAdminMode.IsNoPermissionsAdmin : System.Boolean { get }
-ToolUp.Platform.PermissionsAdminMode.NoPermissionsAdmin : ToolUp.Platform.PermissionsAdminMode { get }
-ToolUp.Platform.PermissionsAdminMode.Tag : System.Int32 { get }
-ToolUp.Platform.PermissionsAdminMode+ConfiguredPermissionsAdmin (class)
-ToolUp.Platform.PermissionsAdminMode+ConfiguredPermissionsAdmin.Item : ToolUp.Platform.PermissionsAdminConfig { get }
-ToolUp.Platform.PermissionsAdminMode+ExternalPermissionsAdmin (class)
-ToolUp.Platform.PermissionsAdminMode+ExternalPermissionsAdmin.Item : ToolUp.Platform.ErasedModule { get }
-ToolUp.Platform.PermissionsAdminMode+Tags (class)
-ToolUp.Platform.PermissionsAdminMode+Tags.ConfiguredPermissionsAdmin : System.Int32 (literal)
-ToolUp.Platform.PermissionsAdminMode+Tags.DefaultPermissionsAdmin : System.Int32 (literal)
-ToolUp.Platform.PermissionsAdminMode+Tags.ExternalPermissionsAdmin : System.Int32 (literal)
-ToolUp.Platform.PermissionsAdminMode+Tags.NoPermissionsAdmin : System.Int32 (literal)
 ToolUp.Platform.PlatformAdmin.PublicUtilityWidgets (class)
 ToolUp.Platform.PlatformAdmin.PublicUtilityWidgets.AdUnitConfigBody(System.String) : Fable.React.ReactElement
 ToolUp.Platform.PlatformAdmin.PublicUtilityWidgets.PremiumUserListBody() : Fable.React.ReactElement
@@ -5469,10 +5229,6 @@ ToolUp.Platform.PlatformAdmin.PublicUtilityWidgets.rateLimitEventLogWith(ToolUp.
 ToolUp.Platform.PlatformAdmin.PublicUtilityWidgets.render(ToolUp.Platform.ClientConfig) : Fable.React.ReactElement
 ToolUp.Platform.PlatformAdmin.PublicUtilityWidgets.trafficDashboard(ToolUp.Platform.ClientConfig) : Fable.React.ReactElement
 ToolUp.Platform.PlatformAdmin.PublicUtilityWidgets.trafficDashboardWith(ToolUp.Platform.TrafficWidgetMessages, ToolUp.Platform.ClientConfig) : Fable.React.ReactElement
-ToolUp.Platform.PlatformAdminConfig (class)
-ToolUp.Platform.PlatformAdminConfig..ctor(System.String, Fable.React.ReactElement)
-ToolUp.Platform.PlatformAdminConfig.Icon : Fable.React.ReactElement { get }
-ToolUp.Platform.PlatformAdminConfig.Name : System.String { get }
 ToolUp.Platform.PlatformAdminMessages (class)
 ToolUp.Platform.PlatformAdminMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.PlatformAdminMessages.AdminsTab : System.String { get }
@@ -5534,27 +5290,6 @@ ToolUp.Platform.PlatformAdminMessages.TeamsTab : System.String { get }
 ToolUp.Platform.PlatformAdminMessages.UserIdLabel : System.String { get }
 ToolUp.Platform.PlatformAdminMessages.UserLabel : System.String { get }
 ToolUp.Platform.PlatformAdminMessages.UserPickerPlaceholder : System.String { get }
-ToolUp.Platform.PlatformAdminMode (class)
-ToolUp.Platform.PlatformAdminMode.DefaultPlatformAdmin : ToolUp.Platform.PlatformAdminMode { get }
-ToolUp.Platform.PlatformAdminMode.IsConfiguredPlatformAdmin : System.Boolean { get }
-ToolUp.Platform.PlatformAdminMode.IsDefaultPlatformAdmin : System.Boolean { get }
-ToolUp.Platform.PlatformAdminMode.IsExternalPlatformAdmin : System.Boolean { get }
-ToolUp.Platform.PlatformAdminMode.IsNoPlatformAdmin : System.Boolean { get }
-ToolUp.Platform.PlatformAdminMode.NoPlatformAdmin : ToolUp.Platform.PlatformAdminMode { get }
-ToolUp.Platform.PlatformAdminMode.Tag : System.Int32 { get }
-ToolUp.Platform.PlatformAdminMode+ConfiguredPlatformAdmin (class)
-ToolUp.Platform.PlatformAdminMode+ConfiguredPlatformAdmin.Item : ToolUp.Platform.PlatformAdminConfig { get }
-ToolUp.Platform.PlatformAdminMode+ExternalPlatformAdmin (class)
-ToolUp.Platform.PlatformAdminMode+ExternalPlatformAdmin.Item : ToolUp.Platform.ErasedModule { get }
-ToolUp.Platform.PlatformAdminMode+Tags (class)
-ToolUp.Platform.PlatformAdminMode+Tags.ConfiguredPlatformAdmin : System.Int32 (literal)
-ToolUp.Platform.PlatformAdminMode+Tags.DefaultPlatformAdmin : System.Int32 (literal)
-ToolUp.Platform.PlatformAdminMode+Tags.ExternalPlatformAdmin : System.Int32 (literal)
-ToolUp.Platform.PlatformAdminMode+Tags.NoPlatformAdmin : System.Int32 (literal)
-ToolUp.Platform.PlatformUsersConfig (class)
-ToolUp.Platform.PlatformUsersConfig..ctor(System.String, Fable.React.ReactElement)
-ToolUp.Platform.PlatformUsersConfig.Icon : Fable.React.ReactElement { get }
-ToolUp.Platform.PlatformUsersConfig.Name : System.String { get }
 ToolUp.Platform.PlatformUsersMessages (class)
 ToolUp.Platform.PlatformUsersMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], System.String, System.String, System.String)
 ToolUp.Platform.PlatformUsersMessages.Cancel : System.String { get }
@@ -5854,27 +5589,6 @@ ToolUp.Platform.ScopeDenialModule.SelectTeamHint : System.String (literal)
 ToolUp.Platform.ScopeDenialModule.TeamRequiredCode : System.String (literal)
 ToolUp.Platform.ScopeDenialModule.ofException(System.Exception) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ScopeDenial]
 ToolUp.Platform.ScopeDenialModule.ofResponseBody(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ScopeDenial]
-ToolUp.Platform.ServiceAccountAdminConfig (class)
-ToolUp.Platform.ServiceAccountAdminConfig..ctor(System.String, Fable.React.ReactElement)
-ToolUp.Platform.ServiceAccountAdminConfig.Icon : Fable.React.ReactElement { get }
-ToolUp.Platform.ServiceAccountAdminConfig.Name : System.String { get }
-ToolUp.Platform.ServiceAccountAdminMode (class)
-ToolUp.Platform.ServiceAccountAdminMode.DefaultServiceAccountAdmin : ToolUp.Platform.ServiceAccountAdminMode { get }
-ToolUp.Platform.ServiceAccountAdminMode.IsConfiguredServiceAccountAdmin : System.Boolean { get }
-ToolUp.Platform.ServiceAccountAdminMode.IsDefaultServiceAccountAdmin : System.Boolean { get }
-ToolUp.Platform.ServiceAccountAdminMode.IsExternalServiceAccountAdmin : System.Boolean { get }
-ToolUp.Platform.ServiceAccountAdminMode.IsNoServiceAccountAdmin : System.Boolean { get }
-ToolUp.Platform.ServiceAccountAdminMode.NoServiceAccountAdmin : ToolUp.Platform.ServiceAccountAdminMode { get }
-ToolUp.Platform.ServiceAccountAdminMode.Tag : System.Int32 { get }
-ToolUp.Platform.ServiceAccountAdminMode+ConfiguredServiceAccountAdmin (class)
-ToolUp.Platform.ServiceAccountAdminMode+ConfiguredServiceAccountAdmin.Item : ToolUp.Platform.ServiceAccountAdminConfig { get }
-ToolUp.Platform.ServiceAccountAdminMode+ExternalServiceAccountAdmin (class)
-ToolUp.Platform.ServiceAccountAdminMode+ExternalServiceAccountAdmin.Item : ToolUp.Platform.ErasedModule { get }
-ToolUp.Platform.ServiceAccountAdminMode+Tags (class)
-ToolUp.Platform.ServiceAccountAdminMode+Tags.ConfiguredServiceAccountAdmin : System.Int32 (literal)
-ToolUp.Platform.ServiceAccountAdminMode+Tags.DefaultServiceAccountAdmin : System.Int32 (literal)
-ToolUp.Platform.ServiceAccountAdminMode+Tags.ExternalServiceAccountAdmin : System.Int32 (literal)
-ToolUp.Platform.ServiceAccountAdminMode+Tags.NoServiceAccountAdmin : System.Int32 (literal)
 ToolUp.Platform.ServiceAccountMessages (class)
 ToolUp.Platform.ServiceAccountMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]]], System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String])
 ToolUp.Platform.ServiceAccountMessages.AcknowledgeSecret : System.String { get }
@@ -5915,10 +5629,6 @@ ToolUp.Platform.ServiceAccountMessages.TokenIssuedSummary : Microsoft.FSharp.Cor
 ToolUp.Platform.ServiceAccountMessages.Tokens : System.String { get }
 ToolUp.Platform.ServiceAccountMessages.TokensForAccount : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
 ToolUp.Platform.ServiceAccountMessages.Working : System.String { get }
-ToolUp.Platform.ServiceStatusBoardConfig (class)
-ToolUp.Platform.ServiceStatusBoardConfig..ctor(System.String, Fable.React.ReactElement)
-ToolUp.Platform.ServiceStatusBoardConfig.Icon : Fable.React.ReactElement { get }
-ToolUp.Platform.ServiceStatusBoardConfig.Name : System.String { get }
 ToolUp.Platform.ServiceStatusBoardMessages (class)
 ToolUp.Platform.ServiceStatusBoardMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String])
 ToolUp.Platform.ServiceStatusBoardMessages.AllSystemsOk : System.String { get }
@@ -5939,23 +5649,6 @@ ToolUp.Platform.ServiceStatusBoardMessages.Subheading : System.String { get }
 ToolUp.Platform.ServiceStatusBoardMessages.UnhealthyBy : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
 ToolUp.Platform.ServiceStatusBoardMessages.UnknownSectionHeadline : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
 ToolUp.Platform.ServiceStatusBoardMessages.UnknownSectionMessage : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
-ToolUp.Platform.ServiceStatusBoardMode (class)
-ToolUp.Platform.ServiceStatusBoardMode.DefaultServiceStatusBoard : ToolUp.Platform.ServiceStatusBoardMode { get }
-ToolUp.Platform.ServiceStatusBoardMode.IsConfiguredServiceStatusBoard : System.Boolean { get }
-ToolUp.Platform.ServiceStatusBoardMode.IsDefaultServiceStatusBoard : System.Boolean { get }
-ToolUp.Platform.ServiceStatusBoardMode.IsExternalServiceStatusBoard : System.Boolean { get }
-ToolUp.Platform.ServiceStatusBoardMode.IsNoServiceStatusBoard : System.Boolean { get }
-ToolUp.Platform.ServiceStatusBoardMode.NoServiceStatusBoard : ToolUp.Platform.ServiceStatusBoardMode { get }
-ToolUp.Platform.ServiceStatusBoardMode.Tag : System.Int32 { get }
-ToolUp.Platform.ServiceStatusBoardMode+ConfiguredServiceStatusBoard (class)
-ToolUp.Platform.ServiceStatusBoardMode+ConfiguredServiceStatusBoard.Item : ToolUp.Platform.ServiceStatusBoardConfig { get }
-ToolUp.Platform.ServiceStatusBoardMode+ExternalServiceStatusBoard (class)
-ToolUp.Platform.ServiceStatusBoardMode+ExternalServiceStatusBoard.Item : ToolUp.Platform.ErasedModule { get }
-ToolUp.Platform.ServiceStatusBoardMode+Tags (class)
-ToolUp.Platform.ServiceStatusBoardMode+Tags.ConfiguredServiceStatusBoard : System.Int32 (literal)
-ToolUp.Platform.ServiceStatusBoardMode+Tags.DefaultServiceStatusBoard : System.Int32 (literal)
-ToolUp.Platform.ServiceStatusBoardMode+Tags.ExternalServiceStatusBoard : System.Int32 (literal)
-ToolUp.Platform.ServiceStatusBoardMode+Tags.NoServiceStatusBoard : System.Int32 (literal)
 ToolUp.Platform.SessionEpoch (class)
 ToolUp.Platform.SessionEpoch.applyServerNotice(ProcessedDataTypes+SessionStoreResetNotification) : System.Void
 ToolUp.Platform.SessionEpoch.applyServerNoticeJson(System.String) : System.Void
@@ -5968,13 +5661,8 @@ ToolUp.Platform.SessionEpoch.reset() : System.Void
 ToolUp.Platform.SessionEpoch.subscribe(Microsoft.FSharp.Core.FSharpFunc`2[ProcessedDataTypes+SessionStoreResetNotification, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.SessionEpoch+SessionStoreResetException (class)
 ToolUp.Platform.SessionEpoch+SessionStoreResetException..ctor()
-ToolUp.Platform.SessionEpoch+SessionStoreResetException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
 ToolUp.Platform.SessionEpoch+SessionStoreResetException..ctor(System.String)
 ToolUp.Platform.SessionEpoch+SessionStoreResetException.Data0 : System.String { get }
-ToolUp.Platform.SessionSecurityConfig (class)
-ToolUp.Platform.SessionSecurityConfig..ctor(System.String, Fable.React.ReactElement)
-ToolUp.Platform.SessionSecurityConfig.Icon : Fable.React.ReactElement { get }
-ToolUp.Platform.SessionSecurityConfig.Name : System.String { get }
 ToolUp.Platform.SessionSecurityMessages (class)
 ToolUp.Platform.SessionSecurityMessages..ctor(System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], System.String)
 ToolUp.Platform.SessionSecurityMessages.Cancel : System.String { get }
@@ -5996,23 +5684,6 @@ ToolUp.Platform.SessionSecurityMessages.SignOut : System.String { get }
 ToolUp.Platform.SessionSecurityMessages.SignOutEverywhere : System.String { get }
 ToolUp.Platform.SessionSecurityMessages.SignOutEverywhereWarning : System.String { get }
 ToolUp.Platform.SessionSecurityMessages.Subheading : System.String { get }
-ToolUp.Platform.SessionSecurityMode (class)
-ToolUp.Platform.SessionSecurityMode.DefaultSessionSecurity : ToolUp.Platform.SessionSecurityMode { get }
-ToolUp.Platform.SessionSecurityMode.IsConfiguredSessionSecurity : System.Boolean { get }
-ToolUp.Platform.SessionSecurityMode.IsDefaultSessionSecurity : System.Boolean { get }
-ToolUp.Platform.SessionSecurityMode.IsExternalSessionSecurity : System.Boolean { get }
-ToolUp.Platform.SessionSecurityMode.IsNoSessionSecurity : System.Boolean { get }
-ToolUp.Platform.SessionSecurityMode.NoSessionSecurity : ToolUp.Platform.SessionSecurityMode { get }
-ToolUp.Platform.SessionSecurityMode.Tag : System.Int32 { get }
-ToolUp.Platform.SessionSecurityMode+ConfiguredSessionSecurity (class)
-ToolUp.Platform.SessionSecurityMode+ConfiguredSessionSecurity.Item : ToolUp.Platform.SessionSecurityConfig { get }
-ToolUp.Platform.SessionSecurityMode+ExternalSessionSecurity (class)
-ToolUp.Platform.SessionSecurityMode+ExternalSessionSecurity.Item : ToolUp.Platform.ErasedModule { get }
-ToolUp.Platform.SessionSecurityMode+Tags (class)
-ToolUp.Platform.SessionSecurityMode+Tags.ConfiguredSessionSecurity : System.Int32 (literal)
-ToolUp.Platform.SessionSecurityMode+Tags.DefaultSessionSecurity : System.Int32 (literal)
-ToolUp.Platform.SessionSecurityMode+Tags.ExternalSessionSecurity : System.Int32 (literal)
-ToolUp.Platform.SessionSecurityMode+Tags.NoSessionSecurity : System.Int32 (literal)
 ToolUp.Platform.ShellMessages (class)
 ToolUp.Platform.ShellMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String)
 ToolUp.Platform.ShellMessages.AdministrationArea : System.String { get }
@@ -6038,6 +5709,74 @@ ToolUp.Platform.ShellMessages.SwitchTeamFailed : System.String { get }
 ToolUp.Platform.ShellMessages.TeamLabel : System.String { get }
 ToolUp.Platform.ShellMessages.TeamNamePlaceholder : System.String { get }
 ToolUp.Platform.ShellMessages.ViewingAllModules : System.String { get }
+ToolUp.Platform.ShellSlot (class)
+ToolUp.Platform.ShellSlot..ctor(System.String, ToolUp.Platform.ShellSlotPosition, ToolUp.Platform.ShellSlotGate, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ShellSlotContext, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ErasedModule]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleDefinition, ToolUp.Platform.AdminTile]])
+ToolUp.Platform.ShellSlot.AdminTile : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ModuleDefinition, ToolUp.Platform.AdminTile]] { get }
+ToolUp.Platform.ShellSlot.Fill : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ShellSlotContext, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ErasedModule]] { get }
+ToolUp.Platform.ShellSlot.FilledModuleId : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String]] { get }
+ToolUp.Platform.ShellSlot.Gate : ToolUp.Platform.ShellSlotGate { get }
+ToolUp.Platform.ShellSlot.Id : System.String { get }
+ToolUp.Platform.ShellSlot.Position : ToolUp.Platform.ShellSlotPosition { get }
+ToolUp.Platform.ShellSlotContext (class)
+ToolUp.Platform.ShellSlotContext..ctor(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataTypeDisplay])
+ToolUp.Platform.ShellSlotContext.Config : ToolUp.Platform.ClientConfig { get }
+ToolUp.Platform.ShellSlotContext.DataTypes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataTypeDisplay] { get }
+ToolUp.Platform.ShellSlotFills (class)
+ToolUp.Platform.ShellSlotFills..ctor(ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.DataManagerChoice], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel])
+ToolUp.Platform.ShellSlotFills.AuditViewer : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
+ToolUp.Platform.ShellSlotFills.CompositionInspector : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
+ToolUp.Platform.ShellSlotFills.DataIngestionAdmin : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
+ToolUp.Platform.ShellSlotFills.DataManager : ToolUp.Platform.SlotFill`1[ToolUp.Platform.DataManagerChoice] { get }
+ToolUp.Platform.ShellSlotFills.DataSubjectRequestAdmin : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
+ToolUp.Platform.ShellSlotFills.ExternalContactManager : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
+ToolUp.Platform.ShellSlotFills.HealthMonitor : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
+ToolUp.Platform.ShellSlotFills.HomeModule : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
+ToolUp.Platform.ShellSlotFills.MigrationAdmin : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
+ToolUp.Platform.ShellSlotFills.ModuleVisibilityAdmin : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
+ToolUp.Platform.ShellSlotFills.NotificationPreferences : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
+ToolUp.Platform.ShellSlotFills.PermissionsAdmin : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
+ToolUp.Platform.ShellSlotFills.PlatformAdmin : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
+ToolUp.Platform.ShellSlotFills.ServiceAccountAdmin : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
+ToolUp.Platform.ShellSlotFills.ServiceStatusBoard : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
+ToolUp.Platform.ShellSlotFills.SessionSecurity : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
+ToolUp.Platform.ShellSlotFills.TeamConfig : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
+ToolUp.Platform.ShellSlotFills.TeamManager : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
+ToolUp.Platform.ShellSlotFills.UsageDashboard : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
+ToolUp.Platform.ShellSlotFills.WebhookAdmin : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
+ToolUp.Platform.ShellSlotFillsModule (class)
+ToolUp.Platform.ShellSlotFillsModule.defaults : ToolUp.Platform.ShellSlotFills { get }
+ToolUp.Platform.ShellSlotGate (class)
+ToolUp.Platform.ShellSlotGate.Always : ToolUp.Platform.ShellSlotGate { get }
+ToolUp.Platform.ShellSlotGate.AnyAuthenticatedSurface : ToolUp.Platform.ShellSlotGate { get }
+ToolUp.Platform.ShellSlotGate.AnyTeamSurface : ToolUp.Platform.ShellSlotGate { get }
+ToolUp.Platform.ShellSlotGate.IsAlways : System.Boolean { get }
+ToolUp.Platform.ShellSlotGate.IsAnyAuthenticatedSurface : System.Boolean { get }
+ToolUp.Platform.ShellSlotGate.IsAnyTeamSurface : System.Boolean { get }
+ToolUp.Platform.ShellSlotGate.Tag : System.Int32 { get }
+ToolUp.Platform.ShellSlotGate+Tags (class)
+ToolUp.Platform.ShellSlotGate+Tags.Always : System.Int32 (literal)
+ToolUp.Platform.ShellSlotGate+Tags.AnyAuthenticatedSurface : System.Int32 (literal)
+ToolUp.Platform.ShellSlotGate+Tags.AnyTeamSurface : System.Int32 (literal)
+ToolUp.Platform.ShellSlotGateModule (class)
+ToolUp.Platform.ShellSlotGateModule.admits(ToolUp.Platform.ShellSlotGate, ToolUp.Platform.ClientConfig) : System.Boolean
+ToolUp.Platform.ShellSlotPosition (class)
+ToolUp.Platform.ShellSlotPosition.Home : ToolUp.Platform.ShellSlotPosition { get }
+ToolUp.Platform.ShellSlotPosition.IsHome : System.Boolean { get }
+ToolUp.Platform.ShellSlotPosition.IsLeading : System.Boolean { get }
+ToolUp.Platform.ShellSlotPosition.IsTrailing : System.Boolean { get }
+ToolUp.Platform.ShellSlotPosition.Leading : ToolUp.Platform.ShellSlotPosition { get }
+ToolUp.Platform.ShellSlotPosition.Tag : System.Int32 { get }
+ToolUp.Platform.ShellSlotPosition.Trailing : ToolUp.Platform.ShellSlotPosition { get }
+ToolUp.Platform.ShellSlotPosition+Tags (class)
+ToolUp.Platform.ShellSlotPosition+Tags.Home : System.Int32 (literal)
+ToolUp.Platform.ShellSlotPosition+Tags.Leading : System.Int32 (literal)
+ToolUp.Platform.ShellSlotPosition+Tags.Trailing : System.Int32 (literal)
+ToolUp.Platform.ShellSlots (class)
+ToolUp.Platform.ShellSlots.adminTiles(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AdminTile]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AdminTile]
+ToolUp.Platform.ShellSlots.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ShellSlot] { get }
+ToolUp.Platform.ShellSlots.composedModuleId(ToolUp.Platform.ShellSlot, ToolUp.Platform.ClientConfig) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.ShellSlots.dataManager : ToolUp.Platform.ShellSlot { get }
+ToolUp.Platform.ShellSlots.modulesAt(ToolUp.Platform.ShellSlotPosition, ToolUp.Platform.ShellSlotContext) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]
 ToolUp.Platform.SidebarMessages (class)
 ToolUp.Platform.SidebarMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.SidebarMessages.AdminAreaEntry : System.String { get }
@@ -6114,10 +5853,23 @@ ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs.PlatformRole : Microso
 ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs.ShowAllModules : System.Boolean { get }
 ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs.SubjectKind : ToolUp.Platform.SubjectKind { get }
 ToolUp.Platform.SidebarVisibility+SidebarVisibilityInputs.VisibilityProfile : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleVisibilityResolution] { get }
-ToolUp.Platform.TeamConfigConfig (class)
-ToolUp.Platform.TeamConfigConfig..ctor(System.String, Fable.React.ReactElement)
-ToolUp.Platform.TeamConfigConfig.Icon : Fable.React.ReactElement { get }
-ToolUp.Platform.TeamConfigConfig.Name : System.String { get }
+ToolUp.Platform.SlotFill`1 (class)
+ToolUp.Platform.SlotFill`1.Default : ToolUp.Platform.SlotFill`1[cfg] { get }
+ToolUp.Platform.SlotFill`1.Empty : ToolUp.Platform.SlotFill`1[cfg] { get }
+ToolUp.Platform.SlotFill`1.IsConfigured : System.Boolean { get }
+ToolUp.Platform.SlotFill`1.IsDefault : System.Boolean { get }
+ToolUp.Platform.SlotFill`1.IsEmpty : System.Boolean { get }
+ToolUp.Platform.SlotFill`1.IsExternal : System.Boolean { get }
+ToolUp.Platform.SlotFill`1.Tag : System.Int32 { get }
+ToolUp.Platform.SlotFill`1+Configured (class)
+ToolUp.Platform.SlotFill`1+Configured.Item : cfg { get }
+ToolUp.Platform.SlotFill`1+External (class)
+ToolUp.Platform.SlotFill`1+External.Item : ToolUp.Platform.ErasedModule { get }
+ToolUp.Platform.SlotFill`1+Tags (class)
+ToolUp.Platform.SlotFill`1+Tags.Configured : System.Int32 (literal)
+ToolUp.Platform.SlotFill`1+Tags.Default : System.Int32 (literal)
+ToolUp.Platform.SlotFill`1+Tags.Empty : System.Int32 (literal)
+ToolUp.Platform.SlotFill`1+Tags.External : System.Int32 (literal)
 ToolUp.Platform.TeamConfigMessages (class)
 ToolUp.Platform.TeamConfigMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String)
 ToolUp.Platform.TeamConfigMessages.ClearAllButton : System.String { get }
@@ -6148,27 +5900,6 @@ ToolUp.Platform.TeamConfigMessages.Saved : System.String { get }
 ToolUp.Platform.TeamConfigMessages.Saving : System.String { get }
 ToolUp.Platform.TeamConfigMessages.SelectModulePrompt : System.String { get }
 ToolUp.Platform.TeamConfigMessages.SidebarLoading : System.String { get }
-ToolUp.Platform.TeamConfigMode (class)
-ToolUp.Platform.TeamConfigMode.DefaultTeamConfig : ToolUp.Platform.TeamConfigMode { get }
-ToolUp.Platform.TeamConfigMode.IsConfiguredTeamConfig : System.Boolean { get }
-ToolUp.Platform.TeamConfigMode.IsDefaultTeamConfig : System.Boolean { get }
-ToolUp.Platform.TeamConfigMode.IsExternalTeamConfig : System.Boolean { get }
-ToolUp.Platform.TeamConfigMode.IsNoTeamConfig : System.Boolean { get }
-ToolUp.Platform.TeamConfigMode.NoTeamConfig : ToolUp.Platform.TeamConfigMode { get }
-ToolUp.Platform.TeamConfigMode.Tag : System.Int32 { get }
-ToolUp.Platform.TeamConfigMode+ConfiguredTeamConfig (class)
-ToolUp.Platform.TeamConfigMode+ConfiguredTeamConfig.Item : ToolUp.Platform.TeamConfigConfig { get }
-ToolUp.Platform.TeamConfigMode+ExternalTeamConfig (class)
-ToolUp.Platform.TeamConfigMode+ExternalTeamConfig.Item : ToolUp.Platform.ErasedModule { get }
-ToolUp.Platform.TeamConfigMode+Tags (class)
-ToolUp.Platform.TeamConfigMode+Tags.ConfiguredTeamConfig : System.Int32 (literal)
-ToolUp.Platform.TeamConfigMode+Tags.DefaultTeamConfig : System.Int32 (literal)
-ToolUp.Platform.TeamConfigMode+Tags.ExternalTeamConfig : System.Int32 (literal)
-ToolUp.Platform.TeamConfigMode+Tags.NoTeamConfig : System.Int32 (literal)
-ToolUp.Platform.TeamManagerConfig (class)
-ToolUp.Platform.TeamManagerConfig..ctor(System.String, Fable.React.ReactElement)
-ToolUp.Platform.TeamManagerConfig.Icon : Fable.React.ReactElement { get }
-ToolUp.Platform.TeamManagerConfig.Name : System.String { get }
 ToolUp.Platform.TeamManagerMessages (class)
 ToolUp.Platform.TeamManagerMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]])
 ToolUp.Platform.TeamManagerMessages.ActiveBadge : System.String { get }
@@ -6223,23 +5954,6 @@ ToolUp.Platform.TeamManagerMessages.TransferOwnershipHelp : Microsoft.FSharp.Cor
 ToolUp.Platform.TeamManagerMessages.TransferRoleExplanation : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
 ToolUp.Platform.TeamManagerMessages.Transferring : System.String { get }
 ToolUp.Platform.TeamManagerMessages.YouSuffix : System.String { get }
-ToolUp.Platform.TeamManagerMode (class)
-ToolUp.Platform.TeamManagerMode.DefaultTeamManager : ToolUp.Platform.TeamManagerMode { get }
-ToolUp.Platform.TeamManagerMode.IsConfiguredTeamManager : System.Boolean { get }
-ToolUp.Platform.TeamManagerMode.IsDefaultTeamManager : System.Boolean { get }
-ToolUp.Platform.TeamManagerMode.IsExternalTeamManager : System.Boolean { get }
-ToolUp.Platform.TeamManagerMode.IsNoTeamManager : System.Boolean { get }
-ToolUp.Platform.TeamManagerMode.NoTeamManager : ToolUp.Platform.TeamManagerMode { get }
-ToolUp.Platform.TeamManagerMode.Tag : System.Int32 { get }
-ToolUp.Platform.TeamManagerMode+ConfiguredTeamManager (class)
-ToolUp.Platform.TeamManagerMode+ConfiguredTeamManager.Item : ToolUp.Platform.TeamManagerConfig { get }
-ToolUp.Platform.TeamManagerMode+ExternalTeamManager (class)
-ToolUp.Platform.TeamManagerMode+ExternalTeamManager.Item : ToolUp.Platform.ErasedModule { get }
-ToolUp.Platform.TeamManagerMode+Tags (class)
-ToolUp.Platform.TeamManagerMode+Tags.ConfiguredTeamManager : System.Int32 (literal)
-ToolUp.Platform.TeamManagerMode+Tags.DefaultTeamManager : System.Int32 (literal)
-ToolUp.Platform.TeamManagerMode+Tags.ExternalTeamManager : System.Int32 (literal)
-ToolUp.Platform.TeamManagerMode+Tags.NoTeamManager : System.Int32 (literal)
 ToolUp.Platform.Telemetry (class)
 ToolUp.Platform.Telemetry.EndpointPath : System.String (literal)
 ToolUp.Platform.Telemetry.isPermitted(ToolUp.Platform.ConsentDecision) : System.Boolean
@@ -6326,10 +6040,6 @@ ToolUp.Platform.UnreducedViewSubtree..ctor(System.String, Microsoft.FSharp.Colle
 ToolUp.Platform.UnreducedViewSubtree.Label : System.String { get }
 ToolUp.Platform.UnreducedViewSubtree.Render : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, Fable.React.ReactElement] { get }
 ToolUp.Platform.UnreducedViewSubtree.RequiredBindings : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
-ToolUp.Platform.UsageDashboardConfig (class)
-ToolUp.Platform.UsageDashboardConfig..ctor(System.String, Fable.React.ReactElement)
-ToolUp.Platform.UsageDashboardConfig.Icon : Fable.React.ReactElement { get }
-ToolUp.Platform.UsageDashboardConfig.Name : System.String { get }
 ToolUp.Platform.UsageDashboardMessages (class)
 ToolUp.Platform.UsageDashboardMessages..ctor(System.String, System.String, System.String, ToolUp.Platform.UsageGroupingMessages, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.UsageDashboardMessages.ClickRefresh : System.String { get }
@@ -6344,23 +6054,6 @@ ToolUp.Platform.UsageDashboardMessages.Loading : System.String { get }
 ToolUp.Platform.UsageDashboardMessages.NoRecords : System.String { get }
 ToolUp.Platform.UsageDashboardMessages.Refresh : System.String { get }
 ToolUp.Platform.UsageDashboardMessages.Subheading : System.String { get }
-ToolUp.Platform.UsageDashboardMode (class)
-ToolUp.Platform.UsageDashboardMode.DefaultUsageDashboard : ToolUp.Platform.UsageDashboardMode { get }
-ToolUp.Platform.UsageDashboardMode.IsConfiguredUsageDashboard : System.Boolean { get }
-ToolUp.Platform.UsageDashboardMode.IsDefaultUsageDashboard : System.Boolean { get }
-ToolUp.Platform.UsageDashboardMode.IsExternalUsageDashboard : System.Boolean { get }
-ToolUp.Platform.UsageDashboardMode.IsNoUsageDashboard : System.Boolean { get }
-ToolUp.Platform.UsageDashboardMode.NoUsageDashboard : ToolUp.Platform.UsageDashboardMode { get }
-ToolUp.Platform.UsageDashboardMode.Tag : System.Int32 { get }
-ToolUp.Platform.UsageDashboardMode+ConfiguredUsageDashboard (class)
-ToolUp.Platform.UsageDashboardMode+ConfiguredUsageDashboard.Item : ToolUp.Platform.UsageDashboardConfig { get }
-ToolUp.Platform.UsageDashboardMode+ExternalUsageDashboard (class)
-ToolUp.Platform.UsageDashboardMode+ExternalUsageDashboard.Item : ToolUp.Platform.ErasedModule { get }
-ToolUp.Platform.UsageDashboardMode+Tags (class)
-ToolUp.Platform.UsageDashboardMode+Tags.ConfiguredUsageDashboard : System.Int32 (literal)
-ToolUp.Platform.UsageDashboardMode+Tags.DefaultUsageDashboard : System.Int32 (literal)
-ToolUp.Platform.UsageDashboardMode+Tags.ExternalUsageDashboard : System.Int32 (literal)
-ToolUp.Platform.UsageDashboardMode+Tags.NoUsageDashboard : System.Int32 (literal)
 ToolUp.Platform.UsageGroupingMessages (class)
 ToolUp.Platform.UsageGroupingMessages..ctor(System.String, System.String, System.String, System.String)
 ToolUp.Platform.UsageGroupingMessages.ByDay : System.String { get }
@@ -6376,10 +6069,6 @@ ToolUp.Platform.Visibility.visibleTo(Microsoft.FSharp.Collections.FSharpList`1[T
 ToolUp.Platform.Visibility.visibleToAll(ToolUp.Platform.SubjectKind) : System.Boolean
 ToolUp.Platform.Visibility.visibleToAnonymous(ToolUp.Platform.SubjectKind) : System.Boolean
 ToolUp.Platform.Visibility.visibleToAuthenticated(ToolUp.Platform.SubjectKind) : System.Boolean
-ToolUp.Platform.WebhookAdminConfig (class)
-ToolUp.Platform.WebhookAdminConfig..ctor(System.String, Fable.React.ReactElement)
-ToolUp.Platform.WebhookAdminConfig.Icon : Fable.React.ReactElement { get }
-ToolUp.Platform.WebhookAdminConfig.Name : System.String { get }
 ToolUp.Platform.WebhookAdminMessages (class)
 ToolUp.Platform.WebhookAdminMessages..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int64, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int64, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int64, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int64, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.WebhookAdminMessages.AllEvents : System.String { get }
@@ -6437,23 +6126,6 @@ ToolUp.Platform.WebhookAdminMessages.TestFired : System.String { get }
 ToolUp.Platform.WebhookAdminMessages.TestFiredFailed : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
 ToolUp.Platform.WebhookAdminMessages.TestFiredHttp : Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int64, System.String]] { get }
 ToolUp.Platform.WebhookAdminMessages.Working : System.String { get }
-ToolUp.Platform.WebhookAdminMode (class)
-ToolUp.Platform.WebhookAdminMode.DefaultWebhookAdmin : ToolUp.Platform.WebhookAdminMode { get }
-ToolUp.Platform.WebhookAdminMode.IsConfiguredWebhookAdmin : System.Boolean { get }
-ToolUp.Platform.WebhookAdminMode.IsDefaultWebhookAdmin : System.Boolean { get }
-ToolUp.Platform.WebhookAdminMode.IsExternalWebhookAdmin : System.Boolean { get }
-ToolUp.Platform.WebhookAdminMode.IsNoWebhookAdmin : System.Boolean { get }
-ToolUp.Platform.WebhookAdminMode.NoWebhookAdmin : ToolUp.Platform.WebhookAdminMode { get }
-ToolUp.Platform.WebhookAdminMode.Tag : System.Int32 { get }
-ToolUp.Platform.WebhookAdminMode+ConfiguredWebhookAdmin (class)
-ToolUp.Platform.WebhookAdminMode+ConfiguredWebhookAdmin.Item : ToolUp.Platform.WebhookAdminConfig { get }
-ToolUp.Platform.WebhookAdminMode+ExternalWebhookAdmin (class)
-ToolUp.Platform.WebhookAdminMode+ExternalWebhookAdmin.Item : ToolUp.Platform.ErasedModule { get }
-ToolUp.Platform.WebhookAdminMode+Tags (class)
-ToolUp.Platform.WebhookAdminMode+Tags.ConfiguredWebhookAdmin : System.Int32 (literal)
-ToolUp.Platform.WebhookAdminMode+Tags.DefaultWebhookAdmin : System.Int32 (literal)
-ToolUp.Platform.WebhookAdminMode+Tags.ExternalWebhookAdmin : System.Int32 (literal)
-ToolUp.Platform.WebhookAdminMode+Tags.NoWebhookAdmin : System.Int32 (literal)
 ToolUp.Remoting.Client.BrowserFileExtensions (class)
 ToolUp.Remoting.Client.BrowserFileExtensions.File.ReadAsByteArray(Browser.Types.File) : Microsoft.FSharp.Control.FSharpAsync`1[System.Byte[]]
 ToolUp.Remoting.Client.BrowserFileExtensions.File.ReadAsDataUrl(Browser.Types.File) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
@@ -7093,9 +6765,10 @@ Toolup.UIToolkit.Layout+Tabs.container(Microsoft.FSharp.Collections.FSharpList`1
 Toolup.UIToolkit.Layout+Tabs.tab(System.String, System.Boolean, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 Toolup.UIToolkit.Layout+Tabs.tabGroup`1(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[T, System.String]], T, Microsoft.FSharp.Core.FSharpFunc`2[T, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 UsageDashboard (class)
-UsageDashboard.adminTile(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.UsageDashboardConfig]) : ToolUp.Platform.AdminTile
-UsageDashboard.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.UsageDashboardConfig]) : ToolUp.Platform.ErasedModule
+UsageDashboard.adminTile(ToolUp.Platform.ModuleDefinition) : ToolUp.Platform.AdminTile
+UsageDashboard.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule
 UsageDashboard.init() : System.Tuple`2[UsageDashboard+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[UsageDashboard+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+UsageDashboard.moduleId : System.String { get }
 UsageDashboard.update(UsageDashboard+Msg, UsageDashboard+Model) : System.Tuple`2[UsageDashboard+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[UsageDashboard+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 UsageDashboard.view(UsageDashboard+Model, Microsoft.FSharp.Core.FSharpFunc`2[UsageDashboard+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 UsageDashboard+LoadState`1 (class)
@@ -7172,8 +6845,9 @@ UserSession.uninstallBridge() : System.Void
 UserSession.userIdHeader : System.String { get }
 UserSession.withRequestHeaders(ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Remoting.Client.RemoteBuilderOptions
 WebhookAdminUI (class)
-WebhookAdminUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.WebhookAdminConfig]) : ToolUp.Platform.ErasedModule
+WebhookAdminUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule
 WebhookAdminUI.init() : System.Tuple`2[WebhookAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[WebhookAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+WebhookAdminUI.moduleId : System.String { get }
 WebhookAdminUI.update(WebhookAdminUI+Msg, WebhookAdminUI+Model) : System.Tuple`2[WebhookAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[WebhookAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 WebhookAdminUI+FormStatus (class)
 WebhookAdminUI+FormStatus.Idle : WebhookAdminUI+FormStatus { get }

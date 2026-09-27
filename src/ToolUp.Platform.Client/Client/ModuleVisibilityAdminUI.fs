@@ -600,13 +600,18 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
 
 // ─── Module creation ─────────────────────────────────────────────────
 
+/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// (`ShellSlot.FilledModuleId`) to know which module fills the slot
+/// without building one; `create` registers the module under it.
+let moduleId = "_sdk.ModuleVisibilityAdmin"
+
 /// Create the built-in module-visibility profile editor as an
 /// `ErasedModule`. Injected by the shell's `prepareModules` when the
 /// deployment opts in via `ClientConfig.ModuleVisibilityAdmin`; the
 /// sidebar role filter hides it from callers below
 /// `NavRole.TeamOwnerAdmin`, which is the same authority the server's
 /// write gate enforces.
-let create (config: ModuleVisibilityAdminConfig option) : ErasedModule =
+let create (config: ModuleLabel option) : ErasedModule =
     let name = config |> Option.map _.Name |> Option.defaultValue "Module Visibility"
 
     let icon =
@@ -624,7 +629,7 @@ let create (config: ModuleVisibilityAdminConfig option) : ErasedModule =
         Name = name
         Icon = icon
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.ModuleVisibilityAdmin"
+    |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Team Management"
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin

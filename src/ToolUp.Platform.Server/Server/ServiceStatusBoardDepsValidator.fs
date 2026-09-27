@@ -8,7 +8,7 @@ open ToolUp.Platform.ConfigValidation
 //
 // Preflight warning when every observability surface the
 // ServiceStatusBoard composes is disabled. The board still auto-mounts
-// (the client default is `DefaultServiceStatusBoard`) but every section
+// (the client default is `SlotFill.Default`) but every section
 // renders the disabled banner — operators see a uniformly empty page.
 // Warning, not Error: the board has the Health + Preflight sections
 // driven by `IHealthCheck` + `IPreflightSnapshot` regardless of these
@@ -37,7 +37,7 @@ type ServiceStatusBoardDepsValidator(config: ServerConfig, ?timeout: TimeSpan) =
             if jobsOff && rateOff && driftOff && smokeOff then
                 return
                     Warning(
-                        "ServiceStatusBoard composes JobQueue, RateLimit, Drift and SmokeTest sections, but ServerConfig disables all four (JobScheduler = NoJobScheduler, RateLimiter = NoRateLimiter, ConfigDriftDetection = NoConfigDriftDetection, SmokeTest = NoSmokeTest). The board will render disabled banners for those four sections; Health and Preflight remain best-effort. Set ClientConfig.ServiceStatusBoard = NoServiceStatusBoard to hide the sidebar entry, or enable at least one underlying substrate."
+                        "ServiceStatusBoard composes JobQueue, RateLimit, Drift and SmokeTest sections, but ServerConfig disables all four (JobScheduler = NoJobScheduler, RateLimiter = NoRateLimiter, ConfigDriftDetection = NoConfigDriftDetection, SmokeTest = NoSmokeTest). The board will render disabled banners for those four sections; Health and Preflight remain best-effort. Set ClientConfig.Slots.ServiceStatusBoard = SlotFill.Empty to hide the sidebar entry, or enable at least one underlying substrate."
                     )
             else
                 return Ok

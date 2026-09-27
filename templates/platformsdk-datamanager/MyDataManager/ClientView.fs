@@ -33,14 +33,18 @@ let view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
     left, right
 
 /// Returns the erased module. To make it the deployment's data
-/// manager, hand the result to `ExternalDataManager` in the app's
+/// manager, fill the data-manager shell slot with it in the app's
 /// Client.fs composition root:
 ///
-///     DataManager = ExternalDataManager(MyDataManager.ClientView.register ())
+///     Slots.DataManager = SlotFill.External(MyDataManager.ClientView.register ())
 ///
-/// `DataManagerMode` is a `ClientConfig` field, not a per-module
-/// setting — the shell can only have one data manager, so the choice
-/// belongs to the composition root rather than to this module.
+/// The slot is a `ClientConfig` setting, not a per-module one — the
+/// shell has one data manager, so the choice belongs to the
+/// composition root rather than to this module. The module takes the
+/// slot's position and becomes the shell's data source: once it has
+/// mounted, data modules see only what it provides, so declare
+/// `ClientModule.withProcessedData` when your manager should feed them
+/// (docs/platform/modules.md, "Replacing a built-in").
 let register () : ErasedModule =
     ClientModule.create {
         Init = init

@@ -8,7 +8,7 @@ open ToolUp.Platform
 
 // ─── Client-only Knowledge Base branding + mode ───────────────────
 //
-// Phase 1e. Mirrors the `DataManagerMode` pattern (four cases: No /
+// Phase 1e. The same four-case shape as the shell's `SlotFill` (Empty /
 // Default / Configured / External) so a deployment can substitute a
 // custom Knowledge Base module — a Confluence sync, a Notion sync,
 // custom dedup rules, a custom permission model — without stripping
@@ -25,8 +25,8 @@ open ToolUp.Platform
 // Server-side wiring stays explicit (the `KnowledgeApi` registration,
 // `makeIngestionStatusObserver` into `composeWithRAG`, the opt-in
 // `standingContextBuilder`): the mode governs *client* auto-injection
-// only, exactly as `DataManagerMode` governs the sidebar module while
-// `fileManagementApi` stays a composition-root concern.
+// only, exactly as the data-manager shell slot governs the sidebar module
+// while `fileManagementApi` stays a composition-root concern.
 
 /// Branding for the built-in Knowledge Base module's sidebar entry.
 /// Mirrors `DataManagerConfig` — a typed `ReactElement` icon so the

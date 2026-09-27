@@ -114,7 +114,7 @@ To remove the knowledge base from a deployment: strip the two props imports + th
 
 ## `KnowledgeBaseMode` — swapping the KB module without removing imports
 
-`KnowledgeBaseMode` (Phase 1e) is a four-case override mode parallel to `DataManagerMode`. It lets a deployment substitute a custom KB module — a Confluence sync, a Notion sync, custom dedup rules, a custom permission model — while leaving the props imports and the project reference in place.
+`KnowledgeBaseMode` (Phase 1e) is a four-case override mode in the same shape as the shell's `SlotFill`. It lets a deployment substitute a custom KB module — a Confluence sync, a Notion sync, custom dedup rules, a custom permission model — while leaving the props imports and the project reference in place.
 
 ```fsharp skip=fragment
 open ToolUp.KnowledgeBase          // KnowledgeBaseMode, KnowledgeBaseConfig
@@ -135,7 +135,7 @@ Client.run clientConfig modules      // or: AIClientConfig.run aiMode clientConf
 
 The DU lives in the companion's client tier, not on `ClientConfig`: `ToolUp.Platform.Client` takes no dependency on a companion, and `DefaultKnowledgeBase` has to construct the companion's own module — the same reason `AIAssistantMode` lives in `ToolUp.AI.Client`. The transform is therefore a companion-owned `ClientConfig * ErasedModule list` function that composes under either entry point.
 
-The mode governs *client* auto-injection only. Server-side wiring — the `KnowledgeApi` registration, `makeIngestionStatusObserver` into `composeWithRAG`, the opt-in `standingContextBuilder` — stays a composition-root concern, mirroring `DataManagerMode`'s relationship to `fileManagementApi`.
+The mode governs *client* auto-injection only. Server-side wiring — the `KnowledgeApi` registration, `makeIngestionStatusObserver` into `composeWithRAG`, the opt-in `standingContextBuilder` — stays a composition-root concern, mirroring the data-manager shell slot's relationship to `fileManagementApi`.
 
 A deployment that never calls `withKnowledgeBase` is unchanged (GP 11): there is no SDK-side default mode, and the direct `KnowledgeBaseView.register ()` registration keeps working. The three integration contracts an `ExternalKnowledgeBase` must honour are documented on the DU case itself and in [`docs/knowledge-base/extending.md`](../../docs/knowledge-base/extending.md).
 

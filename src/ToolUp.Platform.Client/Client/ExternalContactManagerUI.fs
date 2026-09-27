@@ -754,10 +754,15 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement =
 
 // ─── Module creation ─────────────────────────────────────────────────
 
+/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// (`ShellSlot.FilledModuleId`) to know which module fills the slot
+/// without building one; `create` registers the module under it.
+let moduleId = "_sdk.ExternalContactManager"
+
 /// Create the built-in external-contact admin as an `ErasedModule`.
 /// `NavRole.TeamOwnerAdmin` keeps it out of a Member's sidebar; the
 /// server-side handler is the enforcement (see the module preamble).
-let create (config: ExternalContactManagerConfig option) : ErasedModule =
+let create (config: ModuleLabel option) : ErasedModule =
     let name = config |> Option.map _.Name |> Option.defaultValue "Contacts"
 
     let icon =
@@ -769,7 +774,7 @@ let create (config: ExternalContactManagerConfig option) : ErasedModule =
         Name = name
         Icon = icon
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.ExternalContactManager"
+    |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Team Management"
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin

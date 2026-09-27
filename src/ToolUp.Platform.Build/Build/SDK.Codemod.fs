@@ -19,6 +19,10 @@ type CodemodMigration =
     | ApiStability
     /// Phase 815 — the seven 0.x deprecations removed at the 1.0 cut.
     | Deprecations
+    /// Phase 879 — the per-built-in client mode types become one
+    /// `SlotFill`, and `ClientConfig`'s per-built-in fields become the
+    /// `Slots` map.
+    | ShellSlots
 
 /// Helpers over `CodemodMigration`.
 module CodemodMigration =
@@ -29,6 +33,7 @@ module CodemodMigration =
         | CodemodMigration.Surfaces -> "docs/migrations/0.X.0-platform-mode-to-surfaces.md"
         | CodemodMigration.ApiStability -> "docs/migrations/11-C-5-public-api-stability-cluster.md"
         | CodemodMigration.Deprecations -> "docs/migrations/815-remove-open-deprecations.md"
+        | CodemodMigration.ShellSlots -> "docs/migrations/879-shell-slots.md"
 
     /// The phase label the renderings print.
     let label migration =
@@ -37,6 +42,7 @@ module CodemodMigration =
         | CodemodMigration.Surfaces -> "Phase 66"
         | CodemodMigration.ApiStability -> "Phase 11.C.5"
         | CodemodMigration.Deprecations -> "Phase 815"
+        | CodemodMigration.ShellSlots -> "Phase 879"
 
 /// Which files a rule applies to. The Phase 11.C.5 Tier 2 renames are
 /// PACKAGE ids — they live in `.fsproj` / `Directory.Packages.props` —
@@ -237,6 +243,25 @@ module Codemod =
         | "MultiTeam" -> "Surfaces.multiTeam"
         | other -> failwithf "Codemod: no Surfaces mapping for PlatformMode case %s" other
 
+    // ── Phase 879 — the shell-slot tables ─────────────────────────────
+
+    /// The twenty `ClientConfig` fields that became `ClientConfig.Slots`
+    /// fields of the same name. The mode cases of each are the field's
+    /// name behind `No` / `Default` / `Configured` / `External` (`Enabled`
+    /// for the Home module), with a `UI` suffix for the preference centre.
+    let private slotFields =
+        "HomeModule|DataManager|TeamManager|TeamConfig|WebhookAdmin|ServiceAccountAdmin|ExternalContactManager|NotificationPreferences|ModuleVisibilityAdmin|SessionSecurity|PermissionsAdmin|UsageDashboard|AuditViewer|DataIngestionAdmin|PlatformAdmin|HealthMonitor|ServiceStatusBoard|DataSubjectRequestAdmin|MigrationAdmin|CompositionInspector"
+
+    /// The same, less the data manager — whose configured cases take a
+    /// `DataManagerChoice` rather than a label, so they are reported.
+    let private labelledSlotFields =
+        "HomeModule|TeamManager|TeamConfig|WebhookAdmin|ServiceAccountAdmin|ExternalContactManager|NotificationPreferences|ModuleVisibilityAdmin|SessionSecurity|PermissionsAdmin|UsageDashboard|AuditViewer|DataIngestionAdmin|PlatformAdmin|HealthMonitor|ServiceStatusBoard|DataSubjectRequestAdmin|MigrationAdmin|CompositionInspector"
+
+    /// The twenty `{ Name; Icon }` records that became `ModuleLabel` —
+    /// one per labelled slot, plus the platform-users module's.
+    let private labelRecords =
+        "HomeModule|TeamManager|TeamConfig|WebhookAdmin|ServiceAccountAdmin|ExternalContactManager|NotificationPreferences|ModuleVisibilityAdmin|SessionSecurity|PermissionsAdmin|UsageDashboard|AuditViewer|DataIngestionAdmin|PlatformAdmin|HealthMonitor|ServiceStatusBoard|DataSubjectRequestAdmin|MigrationAdmin|CompositionInspector|PlatformUsers"
+
     // ── The deterministic rewrites ────────────────────────────────────
 
     /// Every rewrite rule, in application order. Ordering matters only
@@ -430,6 +455,68 @@ module Codemod =
             @"\bProgram\.withConsoleTrace\b"
             "Program.withTrace (fun msg model _ -> printfn \"New message: %s -> updated state: %s\" (Program.safeMsgRepr msg) (Program.safeMsgRepr model))"
             "`Program.withConsoleTrace` → `Program.withTrace` with a console-logging callback over `Program.safeMsgRepr`"
+        // Phase 879 — a `ClientConfig` field set to one of its own mode
+        // cases moves under `Slots` (a nested copy-and-update). The
+        // lookahead ties the field to ITS cases, so a consumer-owned
+        // field of the same name holding anything else — and the
+        // `ClientConfigOverrides` field, which holds `Some …` — is left
+        // alone. Runs before the case rules below, which then rewrite the
+        // right-hand side.
+        rewrite
+            "879-slot-field"
+            CodemodMigration.ShellSlots
+            CodemodFileClass.Source
+            (@"(?<![\w.])(?<field>"
+             + slotFields
+             + @")(?<eq>\s*=\s*)(?=(?:No|Default|Enabled|Configured|External)\k<field>(?:UI)?\b|(?:Configured)?MappingDataManager\b)")
+            "Slots.${field}${eq}"
+            "`TeamManager = NoTeamManager` → `Slots.TeamManager = NoTeamManager` (then the case rules) — each of the twenty per-built-in `ClientConfig` fields is a `ClientConfig.Slots` field of the same name"
+        {
+            Id = "879-slot-case-nullary"
+            Migration = CodemodMigration.ShellSlots
+            Applies = CodemodFileClass.Source
+            Pattern = rx (@"(?<![\w])(?<case>No|Default|Enabled)(?:" + slotFields + @")(?:UI)?\b")
+            Unless = None
+            Rewrite =
+                fun m ->
+                    match m.Groups["case"].Value with
+                    | "No" -> "SlotFill.Empty"
+                    | _ -> "SlotFill.Default"
+            Summary =
+                "`NoTeamManager` → `SlotFill.Empty`, `DefaultTeamManager` / `EnabledHomeModule` → `SlotFill.Default` (every slot's off and built-in cases)"
+        }
+        rewrite
+            "879-slot-case-configured"
+            CodemodMigration.ShellSlots
+            CodemodFileClass.Source
+            (@"(?<![\w])Configured(?:" + labelledSlotFields + @")(?:UI)?\b")
+            "SlotFill.Configured"
+            "`ConfiguredTeamManager label` → `SlotFill.Configured label` (every labelled slot; the label is the same `{ Name; Icon }` shape, now `ModuleLabel`)"
+        rewrite
+            "879-slot-case-external"
+            CodemodMigration.ShellSlots
+            CodemodFileClass.Source
+            (@"(?<![\w])External(?:" + slotFields + @")(?:UI)?\b")
+            "SlotFill.External"
+            "`ExternalTeamManager myModule` → `SlotFill.External myModule` (every slot, the data manager included)"
+        // The bare mapping case only: `ConfiguredMappingDataManager` is
+        // reported below (its argument moves inside an option), a
+        // qualified read (`catalog.MappingDataManager`) is the message
+        // catalog, and a field assignment is the catalog record's field.
+        rewrite
+            "879-column-mapping"
+            CodemodMigration.ShellSlots
+            CodemodFileClass.Source
+            @"(?<![\w.])MappingDataManager\b(?!\s*=)(?!\.)"
+            "(SlotFill.Configured(DataManagerChoice.ColumnMapping None))"
+            "`MappingDataManager` → `(SlotFill.Configured(DataManagerChoice.ColumnMapping None))` (parenthesised, so it stays one argument after `Some`)"
+        rewrite
+            "879-module-label"
+            CodemodMigration.ShellSlots
+            CodemodFileClass.Source
+            (@"(?<![\w])(?:" + labelRecords + @")Config\b")
+            "ModuleLabel"
+            "`TeamManagerConfig` (and the nineteen other `{ Name; Icon }` records) → `ModuleLabel`"
     ]
 
     // ── The review rules ──────────────────────────────────────────────
@@ -558,6 +645,34 @@ module Codemod =
             CodemodFileClass.Source
             @"\bThemeClass\.(Alpine|AlpineDark|Balham|BalhamDark|Material)\b"
             "the legacy `ThemeClass.*` CSS-class strings are removed: drop the `prop.className` wrapper and the `theme = \"legacy\"` prop, and pass `AgGrid.theme Theme.themeAlpine` / `Theme.themeBalham` / `Theme.themeMaterial` (a `*Dark` class is `|> Theme.withPart Theme.colorSchemeDark`) — no stylesheet import is needed under the Theming API"
+        review
+            "879-configured-data-manager"
+            CodemodMigration.ShellSlots
+            CodemodFileClass.Source
+            @"(?<![\w])Configured(?:Mapping)?DataManager\b"
+            "the data slot's configured cases take a `DataManagerChoice`: `ConfiguredDataManager cfg` is `SlotFill.Configured(DataManagerChoice.FileUpload cfg)` and `ConfiguredMappingDataManager cfg` is `SlotFill.Configured(DataManagerChoice.ColumnMapping(Some cfg))` — the argument moves inside the choice, so the site is left for you (and a `DataManager =` field above it is `Slots.DataManager =`)"
+        review
+            "879-mode-type"
+            CodemodMigration.ShellSlots
+            CodemodFileClass.Source
+            (@"(?<![\w])(?:" + slotFields + @")Mode\b")
+            "the per-built-in mode type is gone: a value of it is a `SlotFill<ModuleLabel>` (`SlotFill<DataManagerChoice>` for the data manager), and a case qualified through the type (`TeamManagerMode.NoTeamManager`) is the bare `SlotFill` case"
+        review
+            "879-slot-read"
+            CodemodMigration.ShellSlots
+            CodemodFileClass.Source
+            (@"\b\w*(?:[Cc]onfig|defaults)\.(?:" + slotFields + @")\b(?!\s*=)")
+            "a read of a per-built-in `ClientConfig` field: it is `config.Slots.<field>` now, and a `match` on it takes the `SlotFill` cases (`Empty` / `Default` / `Configured` / `External`)"
+        // A field whose value starts on the NEXT line (Fantomas splits a
+        // long assignment that way) cannot be tied to its case on the
+        // line, and a message-catalog override uses the same names, so
+        // it is reported rather than moved.
+        review
+            "879-slot-field-split"
+            CodemodMigration.ShellSlots
+            CodemodFileClass.Source
+            (@"^\s*(?:" + slotFields + @")\s*=\s*$")
+            "if this is a `ClientConfig` field, it is `Slots.<field> =` now (a nested copy-and-update) — the codemod moves the field only when its mode case is on the same line; a message-catalog field of the same name stays as it is"
     ]
 
     // ── Per-file decision ─────────────────────────────────────────────

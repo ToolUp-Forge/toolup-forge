@@ -1,0 +1,8 @@
+custom.home | Custom home | Replacements | - | product | AUTC
+custom.dataManager | Custom dataManager | Replacements | - | product | AUTC
+app.alpha | Alpha | Work | - | product | AUTC
+app.beta | Beta | Work | - | product | AUTC
+custom.platformAdmin | Custom platformAdmin | Replacements | - | product | AUTC
+custom.healthMonitor | Custom healthMonitor | Replacements | - | product | AUTC
+custom.serviceStatusBoard | Custom serviceStatusBoard | Replacements | - | product | AUTC
+_sdk.TenantLifecycleAdmin | Tenant Lifecycle | Platform Management | PlatformAdminOnly | product | -UTC

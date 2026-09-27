@@ -3090,7 +3090,7 @@ module ServerApp =
             // A LAZY singleton factory, deliberately (GP 13): the projection
             // and the rule evaluation happen on first resolve, so a deployment
             // whose operators never open the inspector — or which sets
-            // `ClientConfig.CompositionInspector = NoCompositionInspector` —
+            // `ClientConfig.Slots.CompositionInspector = SlotFill.Empty` —
             // pays only the registration. The factory closes over the manifest
             // and reference set the validator already retains, never over
             // `app`, so nothing new is held for the process lifetime. The
@@ -3124,7 +3124,7 @@ module ServerApp =
         // Mounted unconditionally, as `usageQueryApiHandler` and
         // `auditViewApiHandler` are: a proxy that 404s cannot tell an operator
         // "this deployment exposes no inspector" from "this deployment is
-        // broken". `ClientConfig.CompositionInspector = NoCompositionInspector`
+        // broken". `ClientConfig.Slots.CompositionInspector = SlotFill.Empty`
         // removes the module and every call it would make.
         let handlersWithCompositionInspector =
             app.Handlers

@@ -1310,11 +1310,16 @@ let private viewWith (config: ClientConfig) (model: Model) (dispatch: Msg -> uni
 
 // ─── Module creation ─────────────────────────────────────────────────
 
+/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// (`ShellSlot.FilledModuleId`) to know which module fills the slot
+/// without building one; `create` registers the module under it.
+let moduleId = "_sdk.PlatformAdmin"
+
 /// Create the Platform Management module as an `ErasedModule`.
-/// Auto-injected by `SDK.Client.run` in any non-Anonymous mode unless
-/// `PlatformAdmin = NoPlatformAdmin` (config field name retained for
-/// backwards compatibility; the display name + sidebar group both
-/// surface as "Platform Management"). The shell's sidebar filter
+/// Fills the `PlatformAdmin` shell slot (default `SlotFill.Default`,
+/// admitted on every surface; the slot name is retained for backwards
+/// compatibility; the display name + sidebar group both surface as
+/// "Platform Management"). The shell's sidebar filter
 /// (4f.2) hides the "Platform Management" group from non-admin
 /// callers; the module itself does no client-side gating beyond the
 /// standard API-error surface (server-side `canModifyPlatformConfig`
@@ -1324,7 +1329,7 @@ let private viewWith (config: ClientConfig) (model: Model) (dispatch: Msg -> uni
 /// `ServerConfig.ModuleNames` keys (RBAC permission entries) keyed
 /// to it don't have to migrate. The display name and group label
 /// are presentation only.
-let create (config: PlatformAdminConfig option) (clientConfig: ClientConfig) : ErasedModule =
+let create (config: ModuleLabel option) (clientConfig: ClientConfig) : ErasedModule =
     let name = config |> Option.map _.Name |> Option.defaultValue "Platform Management"
 
     let icon =
@@ -1336,7 +1341,7 @@ let create (config: PlatformAdminConfig option) (clientConfig: ClientConfig) : E
         Name = name
         Icon = icon
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.PlatformAdmin"
+    |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withFullWidthView (viewWith clientConfig)
     |> ToolUp.Platform.ClientModule.withGroup "Platform Management"
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.PlatformAdminOnly

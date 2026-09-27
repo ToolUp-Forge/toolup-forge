@@ -447,10 +447,15 @@ let view (model: Model) (dispatch: Msg -> unit) : ReactElement = SessionSecurity
 
 // ─── Module creation ─────────────────────────────────────────────────
 
+/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// (`ShellSlot.FilledModuleId`) to know which module fills the slot
+/// without building one; `create` registers the module under it.
+let moduleId = "_sdk.SessionSecurity"
+
 /// Create the built-in session-security page as an `ErasedModule`.
 /// Injected by the shell's `prepareModules` when the deployment opts in
 /// via `ClientConfig.SessionSecurity`.
-let create (config: SessionSecurityConfig option) : ErasedModule =
+let create (config: ModuleLabel option) : ErasedModule =
     let name = config |> Option.map _.Name |> Option.defaultValue "Session Security"
 
     let icon =
@@ -468,7 +473,7 @@ let create (config: SessionSecurityConfig option) : ErasedModule =
         Name = name
         Icon = icon
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.SessionSecurity"
+    |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register

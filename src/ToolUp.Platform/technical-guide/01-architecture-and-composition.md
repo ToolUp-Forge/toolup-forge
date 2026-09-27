@@ -213,7 +213,7 @@ let run (config: ClientConfig) (modules: ErasedModule list) =
         |> Program.run
 ```
 
-`program` is where the composition happens: it calls `prepareModules`, which folds the consumer's modules together with the SDK built-ins and the data manager selected by `ClientConfig.DataManager` (`NoDataManager` / `DefaultDataManager` / `ConfiguredDataManager` / `ExternalDataManager`), builds the module query bus, and assembles the Elmish program from `init` / `update` / `viewWithSignIn`.
+`program` is where the composition happens: it calls `prepareModules`, which folds the consumer's modules together with the SDK built-ins and every built-in the shell's slot table (`ShellSlots`) admits — the data manager among them, filled per `ClientConfig.Slots.DataManager` (`SlotFill.Empty` / `Default` / `Configured` / `External`), builds the module query bus, and assembles the Elmish program from `init` / `update` / `viewWithSignIn`.
 
 `viewWithSignIn` runs `view` and pipes the result through the `AuthUIProvider` gate. The gate is a pass-through when the deployment's surface admits anonymous callers and when `ClientConfig.AuthUI = NoAuthUI` (the default) — it only wraps when a companion-backed sign-in UI has been selected. See the [Sign-in UI companions](03-authentication-secrets-and-encryption.md#sign-in-ui-companions) section (Chapter 3) for the delegate-registry pattern.
 

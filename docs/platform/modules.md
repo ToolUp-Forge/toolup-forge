@@ -2,7 +2,7 @@
 
 A **module** is the unit of domain composition in a ToolUp app. The shell handles routing, persistence, scope resolution, auth, AI tool registration; modules handle the data and the UI for one capability.
 
-This page covers the 4-file pattern, how to register a module, multi-page modules, data type registration, and how modules expose AI tools.
+This page covers the 4-file pattern, how to register a module, how to replace one of the SDK's built-in modules, multi-page modules, data type registration, and how modules expose AI tools.
 
 ## The 4-file pattern
 
@@ -163,6 +163,65 @@ let registerSalesAnalysis () : ErasedModule =
 - `Visibility.visibleTo [kinds]` — explicit list of admitted kinds. The escape hatch when the three named helpers don't fit.
 
 `Visibility` controls **discovery** — what appears in the sidebar — not authorisation. The server-side `SurfaceRequirement` is the gate; the client predicate removes the surface from the menu for subjects that wouldn't be allowed to reach it anyway. The two declarations move together: a module whose server declares `DefaultSurfaceRequirement = SurfaceRequirement.userOrTeam` carries `Visibility = visibleToAuthenticated` client-side, and so on.
+
+## Replacing a built-in — shell slots
+
+The SDK's own modules that a deployment can switch off, relabel or replace — the data manager, the
+team manager, the Home landing and the administration built-ins — each fill a **shell slot**
+(Phase 879). `ClientConfig.Slots` says what fills each one:
+
+| Fill | Means |
+|---|---|
+| `SlotFill.Empty` | Nothing: no module, no sidebar entry, no tile, no calls (GP 13). |
+| `SlotFill.Default` | The SDK's module under its own name and icon. |
+| `SlotFill.Configured cfg` | The SDK's module configured: a `ModuleLabel` relabels it; for the data manager, a `DataManagerChoice` picks the file-upload or the column-mapping manager. |
+| `SlotFill.External myModule` | Your module, in place of the SDK's. |
+
+```fsharp
+let withMyTeams (myTeams: ErasedModule) = {
+    ClientConfig.defaults with
+        Surfaces = Surfaces.team
+        Slots.TeamManager = SlotFill.External myTeams
+        Slots.UsageDashboard = SlotFill.Empty
+}
+```
+
+The shell places, gates and tiles the **slot**, not the module, so whatever fills it inherits all
+three: it sits where the SDK's module sat (`ShellSlot.Position`), it is admitted in the same
+deployments (`ShellSlot.Gate` — the team manager only on a `Team` surface, most admin built-ins only
+on an authenticated one), and it carries the slot's administration tile, pointed at your module. The
+full table — each slot's field, default, gate and built-in — is in
+[`docs/migrations/879-shell-slots.md`](../migrations/879-shell-slots.md#the-mode-to-slot-table), and
+`ShellSlots.all` is the same table as data.
+
+**The contract a replacement honours:**
+
+1. **The server API behind the slot does not change.** Filling the team-manager slot with your module
+   replaces the client module and nothing else: the SDK's team API is still mounted, still enforces
+   its own authorisation, and is what your module calls (or not — but nothing server-side moves with
+   the client).
+2. **Declare the built-in's session gates if you want its audience.** The slot supplies the position
+   and the configuration gate; the nav role, the visibility over subject kinds and the sidebar group
+   are the module's own, read from what your module declares. To sit in "Team Management" and hide
+   from members who are not owners or admins, declare what the built-in declares
+   (`ClientModule.withGroup "Team Management"`, `withNavRole NavRole.TeamOwnerAdmin`,
+   `withVisibility Visibility.visibleToAuthenticated`) — the migration doc's table lists each
+   built-in's.
+3. **Use your own module id**, never `_sdk.*`. The slot's tile, and the shell's lookups, follow the id
+   of whatever fills the slot. To give your module its own tile rather than the slot's, contribute a
+   tile whose `OwnerModuleId` is your module's id through `ClientConfig.Handlers.AdminTileContributors`;
+   the slot then adds none.
+4. **The data-manager slot is the boot-time data source.** When it is filled, the shell prefetches
+   the file snapshot at boot and serves it to data modules until the filling module mounts; from then
+   on the filling module's own processed data is authoritative. A replacement data manager therefore
+   declares `ClientModule.withProcessedData`, or data modules see nothing once it has mounted.
+5. **A team-manager replacement** calls `ctx.OnTeamSwitched` after a successful switch or create, as
+   the built-in does — otherwise the server-side switch persists while the client keeps the previous
+   team's data.
+
+Shell chrome — the toast centre, auth UI, loading indicator, not-authorised view, command palette,
+admin surface, offline mode, observability module and platform users — is not a slot and keeps its
+own `ClientConfig` setting.
 
 ## Modules vs pages
 

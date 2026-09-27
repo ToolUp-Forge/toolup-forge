@@ -1,0 +1,14 @@
+_sdk.MappingDataManager | My mapping | My data | - | product | -UTC
+app.alpha | Alpha | Work | - | product | AUTC
+app.beta | Beta | Work | - | product | AUTC
+_sdk.TeamManager | Teams | Team Management | TeamOwnerAdmin | product | -UTC
+_sdk.TeamConfig | Configuration | Team Management | TeamOwnerAdmin | product | -UTC
+_sdk.PermissionsAdmin | Permissions | Team Management | TeamOwnerAdmin | product | -UTC
+_sdk.UsageDashboard | Usage | Team Management | TeamOwnerAdmin | product | -UTC
+_sdk.AuditLog | Audit Trail | Team Management | TeamOwnerAdmin | product | -UTC
+_sdk.DataIngestion | Data Sources | Team Management | TeamOwnerAdmin | product | -UTC
+_sdk.PlatformAdmin | Platform Management | Platform Management | PlatformAdminOnly | product | -UTC
+_sdk.HealthMonitor | Health Monitor | Observability | PlatformAdminOnly | product | -UTC
+_sdk.ServiceStatusBoard | Service Status | Platform Management | PlatformAdminOnly | product | -UTC
+_sdk.TenantLifecycleAdmin | Tenant Lifecycle | Platform Management | PlatformAdminOnly | product | -UTC
+_sdk.CompositionInspector | Composition | Platform Management | TeamOwnerAdmin | product | -UTC

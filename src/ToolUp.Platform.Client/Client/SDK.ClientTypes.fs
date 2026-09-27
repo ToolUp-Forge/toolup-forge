@@ -631,9 +631,54 @@ type ClientModule<'Model, 'Msg> = {
 
 // ─── Client configuration ─────────────────────────────────────────
 
-/// Configuration for the built-in file manager's name, icon and group.
+/// Phase 879 — the ONE name-and-icon record a built-in module is
+/// relabelled with. Replaces the twenty byte-identical
+/// `<BuiltIn>Config = { Name; Icon }` records, one per built-in, that
+/// preceded it: every `SlotFill.Configured` of a labelled slot carries
+/// this, and the sidebar entry (and, for a tile-bearing slot, the
+/// administration tile) takes its name and icon from it.
+type ModuleLabel = {
+    /// Display name shown in the sidebar.
+    Name: string
+    /// Icon shown in the sidebar — any typed `ReactElement`, typically
+    /// one of `ToolUp.Platform.Icons`.
+    Icon: ReactElement
+}
+
+/// Phase 879 — how a shell slot is filled. One type for every slot the
+/// shell declares (the data manager, the team manager, the admin
+/// built-ins, the Home landing — see `ShellSlotFills`), where there used
+/// to be one four-case mode type per built-in.
+///
+/// The shell places, gates and tiles the SLOT, not the built-in: a module
+/// filling a slot by `External` sits exactly where the SDK's module
+/// would, behind the same configuration gate, and carries the slot's
+/// administration tile. It is a full replacement, not a module that
+/// happens to share a name.
+[<RequireQualifiedAccess>]
+type SlotFill<'cfg> =
+    /// Nothing fills the slot: no module, no sidebar entry, no tile, and
+    /// no cost (GP 13).
+    | Empty
+    /// The SDK's built-in module, with its own name and icon.
+    | Default
+    /// The SDK's built-in module, configured — relabelled for most slots
+    /// (`ModuleLabel`), a choice of data manager for the data slot
+    /// (`DataManagerChoice`).
+    | Configured of 'cfg
+    /// A deployment's own module in place of the SDK's. It takes the
+    /// slot's position, the slot's configuration gate and the slot's
+    /// administration tile; the server API behind the slot is unchanged.
+    /// See "Replacing a built-in" in `docs/platform/modules.md` for the
+    /// contract a replacement honours.
+    | External of ErasedModule
+
+/// Name, icon and sidebar group for the SDK data manager. The data slot's
+/// label: unlike `ModuleLabel` it can also move the entry to another
+/// sidebar group.
 type DataManagerConfig = {
-    /// Display name shown in the sidebar (default: "File Upload")
+    /// Display name shown in the sidebar (default: "File Upload" for the
+    /// file-upload manager, "Import & Map" for the column-mapping one)
     Name: string
     /// Icon shown in the sidebar — typically `Icons.upload` or any
     /// other typed `ReactElement`. Default: `ToolUp.Platform.Icons.upload`.
@@ -644,47 +689,22 @@ type DataManagerConfig = {
     Group: string option
 }
 
-/// Controls which file/data manager module is shown in the platform.
-type DataManagerMode =
-    /// No data manager — modules provide their own data or none is needed.
-    | NoDataManager
-    /// Use the SDK's built-in file upload/management UI (default).
-    | DefaultDataManager
-    /// Use the SDK's built-in file manager with custom name and icon.
-    | ConfiguredDataManager of DataManagerConfig
-    /// Use the SDK's mapping-aware Data Manager: upload an arbitrary CSV,
-    /// pick a registered (schema-bearing) target type, and map the
-    /// schema's fields to the CSV's columns with smart auto-suggestion +
+/// Phase 879 — which SDK data manager fills the data slot when it is
+/// `SlotFill.Configured`. (`SlotFill.Default` is the file-upload manager
+/// under its own label.)
+[<RequireQualifiedAccess>]
+type DataManagerChoice =
+    /// The file-upload manager, relabelled.
+    | FileUpload of DataManagerConfig
+    /// The mapping-aware data manager: upload an arbitrary CSV, pick a
+    /// registered (schema-bearing) target type, and map the schema's
+    /// fields to the CSV's columns with smart auto-suggestion and
     /// per-field override. The confirmed map is persisted per scope,
-    /// keyed by the CSV's column-structure, and reused on later uploads.
-    /// Requires `ServerConfig.ColumnMapping = EnabledColumnMapping` to
-    /// back the mapping store.
-    | MappingDataManager
-    /// The mapping-aware Data Manager with custom name / icon / group.
-    | ConfiguredMappingDataManager of DataManagerConfig
-    /// Use a custom data manager module provided by the developer.
-    | ExternalDataManager of ErasedModule
-
-/// Branding for the team-management module. Shown in the sidebar
-/// when the deployment runs in `Team` mode.
-type TeamManagerConfig = { Name: string; Icon: ReactElement }
-
-/// Controls the team-management module. Auto-injected only when
-/// `ClientConfig.Surfaces` carries a single-team `Team` surface
-/// (`Switching = NoSwitcher`) — multi-team (`HeaderSwitcher`) and
-/// non-team deployments never show the sidebar entry regardless of
-/// this setting (there are no teams to manage in the former case,
-/// and `TeamSwitcherUI` already covers the latter).
-type TeamManagerMode =
-    /// No team manager in the sidebar — useful for custom workflows
-    /// or apps that expose team management elsewhere.
-    | NoTeamManager
-    /// SDK built-in team manager (default).
-    | DefaultTeamManager
-    /// SDK built-in with custom name/icon.
-    | ConfiguredTeamManager of TeamManagerConfig
-    /// Deployment-provided custom module in place of the SDK default.
-    | ExternalTeamManager of ErasedModule
+    /// keyed by the CSV's column structure, and reused on later uploads.
+    /// `None` keeps its own label. Requires
+    /// `ServerConfig.ColumnMapping = EnabledColumnMapping` to back the
+    /// mapping store.
+    | ColumnMapping of DataManagerConfig option
 
 /// Controls the built-in real-time toast notification renderer that
 /// subscribes to `/api/notifications` and pops transient messages for
@@ -1107,109 +1127,6 @@ type AuthTokenStorage =
     | ClientCookieAndLocalStorage
     | ServerSetHttpOnlyCookie
 
-/// Branding for the team-configuration admin module. Shown in the
-/// sidebar when the deployment runs in any non-Anonymous mode (Anonymous
-/// has no persistent scope to configure).
-type TeamConfigConfig = { Name: string; Icon: ReactElement }
-
-/// Controls the built-in configuration admin. Auto-injected in any
-/// non-Anonymous mode unless `NoTeamConfig` is set. When the
-/// deployment declares no module config schemas (`ServerConfig.ModuleConfigs = []`)
-/// the module renders an empty list — harmless, but apps can opt out
-/// explicitly to hide the sidebar entry entirely.
-type TeamConfigMode =
-    /// No configuration module in the sidebar.
-    | NoTeamConfig
-    /// SDK built-in configuration admin (default).
-    | DefaultTeamConfig
-    /// SDK built-in with custom name/icon.
-    | ConfiguredTeamConfig of TeamConfigConfig
-    /// Deployment-provided custom module in place of the SDK default.
-    | ExternalTeamConfig of ErasedModule
-
-/// Branding for the permissions admin module (Tidy-Up #3 closure of
-/// Phase 4 + Phase 5 residual). Auto-injected in any non-Anonymous
-/// mode unless `NoPermissionsAdmin`.
-type PermissionsAdminConfig = { Name: string; Icon: ReactElement }
-
-/// Controls the built-in permissions admin module. Closes the Phase
-/// 4 / Phase 5 long-standing RBAC admin-UX gap by surfacing the full
-/// `TeamPermissions` document for the caller's active team — team
-/// defaults map, per-member overrides, module summary. Read paths
-/// are available to any team member; write paths gate Owner/Admin
-/// server-side via `PermissionApi`. Auto-injected in any non-Anonymous
-/// mode unless set to `NoPermissionsAdmin` — Anonymous deployments
-/// have no role concept and `PermissionApi.GetTeamPermissions` returns
-/// `Error` for unscoped callers anyway, so the module is omitted there
-/// regardless of this setting.
-type PermissionsAdminMode =
-    /// No permissions admin module in the sidebar.
-    | NoPermissionsAdmin
-    /// SDK built-in permissions admin (default).
-    | DefaultPermissionsAdmin
-    /// SDK built-in with custom name/icon.
-    | ConfiguredPermissionsAdmin of PermissionsAdminConfig
-    /// Deployment-provided custom module in place of the SDK default.
-    | ExternalPermissionsAdmin of ErasedModule
-
-/// Branding for the Platform Admin module (Phase 4b). Auto-injected
-/// in any non-Anonymous mode unless `NoPlatformAdmin`. Client-side
-/// sidebar filter (added in commit 4f.2) hides the module's
-/// "Platform Management" group from non-admin callers regardless of
-/// this setting — the branding here only controls the module's
-/// display when the user has the role.
-type PlatformAdminConfig = { Name: string; Icon: ReactElement }
-
-/// Controls the built-in Platform Admin module (Phase 4b). The module
-/// surfaces `PlatformAdminApi`'s role-management endpoints (assign /
-/// revoke / list admins) plus a placeholder Settings tab for future
-/// runtime-config knobs. Auto-injected in any non-Anonymous mode
-/// unless set to `NoPlatformAdmin` — Anonymous deployments have no
-/// role concept and bootstrapping admins requires the
-/// `TOOLUP_INITIAL_PLATFORM_ADMIN` env var instead.
-type PlatformAdminMode =
-    /// No Platform Admin module in the sidebar. Useful for deployments
-    /// that ship a custom admin surface or that manage admins entirely
-    /// via direct blob manipulation / scripted tooling.
-    | NoPlatformAdmin
-    /// SDK built-in Platform Admin (default).
-    | DefaultPlatformAdmin
-    /// SDK built-in with custom name/icon.
-    | ConfiguredPlatformAdmin of PlatformAdminConfig
-    /// Deployment-provided custom module in place of the SDK default.
-    /// Declare `withNavRole NavRole.PlatformAdminOnly` (Phase 568) so
-    /// the shell's sidebar gate hides it from non-admin callers — the
-    /// group label is then free to be anything.
-    ///
-    /// A module declaring `withGroup "Platform Admin"` /
-    /// `withGroup "Platform Management"` and no `NavRole` is still gated
-    /// by the deprecated group-name fallback (4f.2,
-    /// `ClientConfig.isPlatformAdminSidebarGroup`), which is removed in
-    /// the next major.
-    | ExternalPlatformAdmin of ErasedModule
-
-/// Branding for the health-monitor admin module (Phase 9p). Auto-
-/// injected in any non-Anonymous mode unless `NoHealthMonitor`.
-type HealthMonitorConfig = { Name: string; Icon: ReactElement }
-
-/// Controls the built-in health monitor admin (Phase 9p). The module
-/// surfaces live `IHealthCheck` results (Phase 9k) and the most
-/// recent `IConfigValidator` preflight outcomes (Phase 9m) through a
-/// production-safe Owner/Admin UI. Auto-injected in any non-Anonymous
-/// mode unless set to `NoHealthMonitor` — Anonymous deployments have
-/// no role concept to gate on, so the module is omitted there
-/// regardless of this setting (surfacing deployment dependency state
-/// to every visitor is a reconnaissance gift).
-type HealthMonitorMode =
-    /// No health monitor module in the sidebar.
-    | NoHealthMonitor
-    /// SDK built-in health monitor (default).
-    | DefaultHealthMonitor
-    /// SDK built-in with custom name/icon.
-    | ConfiguredHealthMonitor of HealthMonitorConfig
-    /// Deployment-provided custom module in place of the SDK default.
-    | ExternalHealthMonitor of ErasedModule
-
 /// Controls the built-in self-hosted observability admin (Phase 9x):
 /// Logs / Metrics / Alerts tabs over the Phase 828 log store, the Phase
 /// 829 metrics history and the Phase 178 alert engine. **Opt-in** —
@@ -1228,11 +1145,6 @@ type ObservabilityModuleMode =
     /// SDK built-in observability module.
     | DefaultObservabilityModule
 
-/// Branding for the platform-users admin module (Phase 544). Unlike the
-/// other Platform-Management built-ins this is **opt-in** — a deployment
-/// enables it explicitly (GP 11/13).
-type PlatformUsersConfig = { Name: string; Icon: ReactElement }
-
 /// Controls the built-in platform-users admin (Phase 544). The module
 /// lists every principal the substrate has evidence for
 /// (`IPlatformTenantApi.ListPrincipals`, Phase 543), flags team-less
@@ -1250,164 +1162,6 @@ type PlatformUsersMode =
     | NoPlatformUsers
     /// SDK built-in platform-users admin.
     | DefaultPlatformUsers
-
-/// Branding for the service-status-board admin module (Phase 9p.A).
-/// Auto-injected in any non-Anonymous mode unless `NoServiceStatusBoard`.
-type ServiceStatusBoardConfig = { Name: string; Icon: ReactElement }
-
-/// Controls the built-in service-status-board admin (Phase 9p.A). The
-/// module aggregates every operator-facing observability surface
-/// (Phase 9k HealthCheck, 9m Preflight, 9q ConfigDrift, 9p
-/// HealthMonitor live state, 9v RateLimiter, 9b JobScheduler, 9o
-/// SmokeTest) into a single composite snapshot — one pane of glass
-/// replacing today's per-concern admin tabs. Auto-injected in any
-/// non-Anonymous mode unless set to `NoServiceStatusBoard`. Pair the
-/// underlying substrate modes server-side; each section auto-skips
-/// when its matching `ServerConfig` mode is `No*`, so the board is
-/// useful even on minimal deployments.
-type ServiceStatusBoardMode =
-    /// No service-status-board module in the sidebar.
-    | NoServiceStatusBoard
-    /// SDK built-in service-status-board (default).
-    | DefaultServiceStatusBoard
-    /// SDK built-in with custom name/icon.
-    | ConfiguredServiceStatusBoard of ServiceStatusBoardConfig
-    /// Deployment-provided custom module in place of the SDK default.
-    | ExternalServiceStatusBoard of ErasedModule
-
-/// Branding for the usage dashboard admin module (Phase 9d). Auto-
-/// injected in any non-Anonymous mode unless `NoUsageDashboard`.
-type UsageDashboardConfig = { Name: string; Icon: ReactElement }
-
-/// Controls the built-in usage dashboard admin (Phase 9d). The module
-/// surfaces per-team usage records (AI tokens, storage bytes, etc.)
-/// through the `IUsageQueryApi` Owner/Admin surface. Auto-injected in
-/// any non-Anonymous mode unless set to `NoUsageDashboard` —
-/// Anonymous deployments have no role concept and exposing usage to
-/// every visitor is a reconnaissance gift (cost telemetry leaks tenant
-/// size). Pair with `ServerConfig.UsageMetering = EnabledUsageMetering`
-/// — the dashboard renders an empty table when metering is disabled
-/// server-side, but it is harmless to leave the sidebar entry in
-/// place for future enablement.
-type UsageDashboardMode =
-    /// No usage dashboard module in the sidebar.
-    | NoUsageDashboard
-    /// SDK built-in usage dashboard (default).
-    | DefaultUsageDashboard
-    /// SDK built-in with custom name/icon.
-    | ConfiguredUsageDashboard of UsageDashboardConfig
-    /// Deployment-provided custom module in place of the SDK default.
-    | ExternalUsageDashboard of ErasedModule
-
-/// Branding for the audit-trail viewer admin module (Phase 529). Auto-
-/// injected in any non-Anonymous mode unless `NoAuditViewer`.
-type AuditViewerConfig = { Name: string; Icon: ReactElement }
-
-/// Controls the built-in audit-trail viewer (Phase 529). The module
-/// surfaces the deployment's own audit rows — filterable by time
-/// window, event type and actor, paged, with per-event detail and a CSV
-/// export — through the `IAuditViewApi` Owner/Admin surface.
-///
-/// Auto-injected in any non-Anonymous mode unless set to
-/// `NoAuditViewer`. Anonymous deployments have no role concept to gate
-/// on, so the module is omitted there regardless of this setting: an
-/// audit trail is a map of who did what, and showing it to every
-/// visitor is a reconnaissance gift of exactly the kind
-/// `UsageDashboardMode` describes for spend.
-///
-/// Pair with `ServerConfig.AuditLog = EnabledAuditLog` — the viewer
-/// renders its "no audit events" state when the trail is disabled
-/// server-side (the default), and it is harmless to leave the sidebar
-/// entry in place for future enablement. Same pairing, and the same
-/// rationale, as `UsageDashboardMode` with `ServerConfig.UsageMetering`.
-type AuditViewerMode =
-    /// No audit-trail viewer module in the sidebar.
-    | NoAuditViewer
-    /// SDK built-in audit-trail viewer (default).
-    | DefaultAuditViewer
-    /// SDK built-in with custom name/icon.
-    | ConfiguredAuditViewer of AuditViewerConfig
-    /// Deployment-provided custom module in place of the SDK default.
-    | ExternalAuditViewer of ErasedModule
-
-/// Branding for the composition-inspector admin module (Phase 593).
-/// Auto-injected in any non-Anonymous mode unless
-/// `NoCompositionInspector`.
-type CompositionInspectorConfig = { Name: string; Icon: ReactElement }
-
-/// Controls the built-in composition inspector (Phase 593) — the
-/// governance-legibility surface. Five read-only panels over what this
-/// deployment DECLARED at compose time: the composition manifest, the
-/// surface descriptors, the invariant rule manifest with its preflight
-/// verdict, the grounding / disclosure envelope, and whether the
-/// provenance substrate is composed. Each panel offers its underlying
-/// canonical JSON for export, so a reviewer leaves with the artifact
-/// rather than a screenshot.
-///
-/// Auto-injected in any non-Anonymous mode unless set to
-/// `NoCompositionInspector`. Anonymous deployments have no role concept
-/// to gate on, so the module is omitted there regardless of this
-/// setting — the panels name the deployment's companions, its resolved
-/// config knobs and the purposes it may disclose under, which is a map
-/// of the attack surface and precisely the reconnaissance gift
-/// `AuditViewerMode` and `UsageDashboardMode` describe for their own
-/// content.
-///
-/// **The server-side pairing is composition itself, and there is no
-/// `ServerConfig` knob for it.** The snapshot the panels read is
-/// registered by `ServerApp.run` (and therefore by `AIServerApp.run` /
-/// `RAGServerApp.run`, which delegate to it). A host composed through
-/// the lower-level `compose` entry point registers none, and the
-/// module's panels then say so plainly rather than rendering an empty
-/// composition — which would read as "this deployment composes
-/// nothing".
-///
-/// | `ClientConfig.CompositionInspector` | Composed via | What an Owner/Admin sees |
-/// |---|---|---|
-/// | `NoCompositionInspector` | either | no module, no sidebar entry, no calls |
-/// | `DefaultCompositionInspector` (default) | `ServerApp.run` / `AIServerApp.run` / `RAGServerApp.run` | the five panels over this deployment's declarations |
-/// | `DefaultCompositionInspector` | `compose` directly | the module, each panel stating that no snapshot was recorded at startup |
-type CompositionInspectorMode =
-    /// No composition-inspector module in the sidebar.
-    | NoCompositionInspector
-    /// SDK built-in composition inspector (default).
-    | DefaultCompositionInspector
-    /// SDK built-in with custom name/icon.
-    | ConfiguredCompositionInspector of CompositionInspectorConfig
-    /// Deployment-provided custom module in place of the SDK default.
-    | ExternalCompositionInspector of ErasedModule
-
-/// Branding for the built-in Home / Overview landing module (Phase
-/// 171).
-type HomeModuleConfig = { Name: string; Icon: ReactElement }
-
-/// Controls the optional built-in Home / Overview landing module
-/// (Phase 171). When enabled, the module is injected at the very top
-/// of the sidebar and — unless `ClientConfig.ActiveModule` names a
-/// specific module — becomes the default landing surface (the place
-/// to start, instead of the first registered module). It summarises
-/// the deployment: the data-producing tools with their per-tool
-/// record counts (scoped to the caller), the active AI provider/model,
-/// and light deployment context, via the `IHomeOverviewApi` surface.
-///
-/// **Off by default (GP 13).** Unlike the admin built-ins (Health
-/// Monitor / Usage Dashboard, which default to `Default*` in any
-/// non-Anonymous mode), the Home module defaults to `NoHomeModule` so
-/// an existing deployment that upgrades is byte-for-byte unchanged
-/// until it opts in. The `IHomeOverviewApi` route is auto-mounted
-/// server-side but is never called unless the module is enabled.
-type HomeModuleMode =
-    /// No Home module; the landing surface stays the first registered
-    /// module (the prior behaviour). The default.
-    | NoHomeModule
-    /// SDK built-in Home / Overview landing module.
-    | EnabledHomeModule
-    /// SDK built-in with custom name/icon.
-    | ConfiguredHomeModule of HomeModuleConfig
-    /// Deployment-provided custom module in place of the SDK default
-    /// (still injected at the head of the sidebar + used as the default
-    /// landing surface).
-    | ExternalHomeModule of ErasedModule
 
 // ─── Module-contributed home widgets (Phase 217) ─────────────────
 //
@@ -1479,8 +1233,9 @@ type IHomeWidgetContributor =
 // naming a module (GP 9): the shell admits a tile iff the caller may
 // navigate to its owner (`AdminTiles.visible`, one call to the
 // canonical `SidebarVisibility` decision), and a tile click navigates
-// there. So a deployment with `NoHealthMonitor` has no health module,
-// therefore no health tile — the landing page never learns either name.
+// there. So a deployment whose health-monitor slot is `SlotFill.Empty`
+// has no health module, therefore no health tile — the landing page
+// never learns either name.
 //
 // Default-off by absence (GP 13): no contributor and no tile-
 // contributing built-in ⇒ the landing surface renders its designed
@@ -1512,230 +1267,6 @@ type IAdminTileContributor =
     /// landing. Called once at boot; the result is flattened across
     /// contributors and ordered by `Widget.Weight`.
     abstract Tiles: unit -> AdminTile list
-
-/// Branding for the data-ingestion admin module (Phase 10b). Auto-
-/// injected in any non-Anonymous mode unless `NoDataIngestionAdmin`.
-type DataIngestionAdminConfig = { Name: string; Icon: ReactElement }
-
-/// Controls the built-in data-ingestion admin (Phase 10b). The module
-/// surfaces configured `IDataSource` instances, their credential
-/// status (`NotConfigured` / `NeedsAuthorization` / `Connected` /
-/// `NeedsReauthorization`), and routes Connect / Disconnect actions
-/// through `IDataIngestionApi.BeginOAuth` / `Disconnect`. Per-Kind
-/// credential forms are contributed by connector companions via
-/// `DataSourceCredentialUIRegistry.setHandlers` at module load time.
-///
-/// Auto-injected in any non-Anonymous mode unless `NoDataIngestionAdmin`
-/// — Anonymous deployments have no role concept and exposing data-
-/// source credentials to every visitor is a reconnaissance gift.
-/// Pair with `ServerConfig.DataIngestion = EnabledDataIngestion` —
-/// the dashboard renders an empty list when ingestion is disabled
-/// server-side, but it's harmless to leave the sidebar entry in
-/// place for future enablement.
-type DataIngestionAdminMode =
-    /// No data-ingestion admin module in the sidebar.
-    | NoDataIngestionAdmin
-    /// SDK built-in data-ingestion admin (default).
-    | DefaultDataIngestionAdmin
-    /// SDK built-in with custom name/icon.
-    | ConfiguredDataIngestionAdmin of DataIngestionAdminConfig
-    /// Deployment-provided custom module in place of the SDK default.
-    | ExternalDataIngestionAdmin of ErasedModule
-
-/// Branding for the data-migration admin module (Phase 10a).
-type MigrationAdminConfig = { Name: string; Icon: ReactElement }
-
-/// Controls the built-in data-migration admin (Phase 10a). The module
-/// shows, per data type, the schema version the owning module declares
-/// and the caller's own scope's progress towards it — "Migrating Media
-/// Optimisation V2→V3: 47/120 objects" — gives Owner / Admin a manual
-/// trigger, and lists the per-object failures a pass left behind.
-///
-/// Defaults to `NoMigrationAdmin` because the substrate itself is
-/// opt-in: a deployment on `ServerConfig.DataMigrations =
-/// NoDataMigrations` mounts no route for this module to call, so a
-/// sidebar entry would be a dead end rather than a feature (GP 11 /
-/// GP 13). Turn it on alongside `EnabledDataMigrations` or
-/// `ManualDataMigrations` — and under `ManualDataMigrations` this
-/// module is the only way a pass ever starts.
-type MigrationAdminMode =
-    /// No data-migration admin module in the sidebar (default).
-    | NoMigrationAdmin
-    /// SDK built-in data-migration admin.
-    | DefaultMigrationAdmin
-    /// SDK built-in with custom name/icon.
-    | ConfiguredMigrationAdmin of MigrationAdminConfig
-    /// Deployment-provided custom module in place of the SDK default.
-    | ExternalMigrationAdmin of ErasedModule
-
-/// Branding for the data-subject-request admin module (Phase 9h).
-type DataSubjectRequestAdminConfig = { Name: string; Icon: ReactElement }
-
-/// Controls the built-in data-subject-request admin (Phase 9h —
-/// GDPR Article 15 export + Article 17 erasure). Defaults to
-/// `NoDataSubjectRequestAdmin` because the substrate is opt-in
-/// server-side (`ServerConfig.DataSubjectRequests = Disabled` by
-/// default): apps without GDPR / CCPA / DPDPA exposure pay nothing.
-/// Apps that need DSR set `ServerConfig.DataSubjectRequests = Enabled
-/// policy` AND this to `DefaultDataSubjectRequestAdmin` (or a branded
-/// variant). Anonymous deployments have no persistent scope to attach
-/// the request to, so the API surface short-circuits to an error there
-/// — the module is omitted regardless of this setting.
-type DataSubjectRequestAdminMode =
-    /// No DSR admin module in the sidebar (default).
-    | NoDataSubjectRequestAdmin
-    /// SDK built-in DSR admin.
-    | DefaultDataSubjectRequestAdmin
-    /// SDK built-in with custom name/icon.
-    | ConfiguredDataSubjectRequestAdmin of DataSubjectRequestAdminConfig
-    /// Deployment-provided custom module in place of the SDK default.
-    | ExternalDataSubjectRequestAdmin of ErasedModule
-
-/// Branding for the webhook admin module.
-type WebhookAdminConfig = { Name: string; Icon: ReactElement }
-
-/// Controls the built-in webhook admin. Default flipped in Phase 1g
-/// (lightweight composition profile): the admin UI is no longer auto-
-/// injected. Apps that want webhooks set `Webhooks = EnabledWebhooks`
-/// server-side AND `WebhookAdmin = DefaultWebhookAdmin` (or one of the
-/// branded variants) on the client. Anonymous deployments have no
-/// persistent scope to attach subscriptions to, so the API surface
-/// short-circuits to an error there — the module is omitted regardless
-/// of this setting.
-type WebhookAdminMode =
-    /// No webhook admin module in the sidebar (default).
-    | NoWebhookAdmin
-    /// SDK built-in webhook admin.
-    | DefaultWebhookAdmin
-    /// SDK built-in with custom name/icon.
-    | ConfiguredWebhookAdmin of WebhookAdminConfig
-    /// Deployment-provided custom module in place of the SDK default.
-    | ExternalWebhookAdmin of ErasedModule
-
-/// Phase 527 — branding for the service-account admin module.
-type ServiceAccountAdminConfig = { Name: string; Icon: ReactElement }
-
-/// Phase 527 — controls the built-in service-account admin (list /
-/// create / disable machine principals, mint / revoke their scoped API
-/// tokens). Default `NoServiceAccountAdmin`: the module is not injected,
-/// so a deployment that has not opted in gains no sidebar entry and no
-/// client-side proxy (GP 11 / GP 13).
-///
-/// Pairs with the SERVER-side `ServerConfig.ServiceAccounts`. Setting
-/// only this one does not enable the substrate — the API it calls is not
-/// mounted unless the server side is opted in too, and the module then
-/// renders its error banner rather than a working screen. Both halves
-/// are deliberate acts, matching the `Webhooks` / `WebhookAdmin` pairing
-/// directly above.
-type ServiceAccountAdminMode =
-    /// No service-account admin module in the sidebar (default).
-    | NoServiceAccountAdmin
-    /// SDK built-in service-account admin.
-    | DefaultServiceAccountAdmin
-    /// SDK built-in with custom name/icon.
-    | ConfiguredServiceAccountAdmin of ServiceAccountAdminConfig
-    /// Deployment-provided custom module in place of the SDK default.
-    | ExternalServiceAccountAdmin of ErasedModule
-
-/// Phase 6f.A — branding for the external-contact admin module.
-type ExternalContactManagerConfig = { Name: string; Icon: ReactElement }
-
-/// Phase 6f.A — controls the built-in external-contact admin (the
-/// address book of people with no account here, and the per-channel
-/// consent that is the only thing making them reachable). Default
-/// `NoExternalContactManager`: the module is not injected, so a
-/// deployment that has not opted in gains no sidebar entry and no
-/// client-side proxy (GP 11 / GP 13).
-///
-/// Pairs with the SERVER-side `ServerConfig.ExternalContactStore`.
-/// Setting only this one does not enable the substrate — the API it
-/// calls is not mounted unless the server side is opted in too, and the
-/// module then renders its error banner rather than a working screen.
-/// Both halves are deliberate acts, matching the `ServiceAccountAdmin`
-/// pairing above.
-type ExternalContactManagerMode =
-    /// No external-contact admin module in the sidebar (default).
-    | NoExternalContactManager
-    /// SDK built-in external-contact admin.
-    | DefaultExternalContactManager
-    /// SDK built-in with custom name/icon.
-    | ConfiguredExternalContactManager of ExternalContactManagerConfig
-    /// Deployment-provided custom module in place of the SDK default.
-    | ExternalExternalContactManager of ErasedModule
-
-/// Phase 441 — branding for the notification preference centre.
-type NotificationPreferencesConfig = { Name: string; Icon: ReactElement }
-
-/// Phase 441 — controls the built-in notification preference centre
-/// (the category × channel matrix, digest frequency and quiet hours a
-/// signed-in person sets for themselves). Default
-/// `NoNotificationPreferencesUI`: the module is not injected, so a
-/// deployment that has not opted in gains no sidebar entry and no
-/// client-side proxy (GP 11 / GP 13).
-///
-/// Pairs with the SERVER-side `ServerConfig.NotificationPreferences`.
-/// Setting only this one does not enable the substrate — the API it
-/// calls is not mounted unless the server side is opted in too, and the
-/// module then renders its error banner rather than a working screen.
-/// Both halves are deliberate acts, matching the `ServiceAccountAdmin`
-/// pairing above.
-type NotificationPreferencesMode =
-    /// No preference centre in the sidebar (default).
-    | NoNotificationPreferencesUI
-    /// SDK built-in preference centre.
-    | DefaultNotificationPreferencesUI
-    /// SDK built-in with custom name/icon.
-    | ConfiguredNotificationPreferencesUI of NotificationPreferencesConfig
-    /// Deployment-provided custom module in place of the SDK default.
-    | ExternalNotificationPreferencesUI of ErasedModule
-
-/// Branding for the module-visibility profile editor.
-type ModuleVisibilityAdminConfig = { Name: string; Icon: ReactElement }
-
-/// Controls the built-in module-visibility profile editor — the admin
-/// surface over `IModuleVisibilityApi`.
-///
-/// Default `NoModuleVisibilityAdmin`, and deliberately not inferable from
-/// anything the client already knows: the substrate is selected
-/// server-side by `ServerConfig.ModuleVisibility`, and on the default
-/// `NoModuleVisibility` the API's routes 404, so a client that mounted the
-/// editor speculatively would render a surface whose every call fails.
-/// Pair the two — `SurfacingModuleVisibility` (or `Enforced…`) server-side
-/// AND `DefaultModuleVisibilityAdmin` here (GP 13).
-type ModuleVisibilityAdminMode =
-    /// No module-visibility editor in the sidebar (default).
-    | NoModuleVisibilityAdmin
-    /// SDK built-in profile editor.
-    | DefaultModuleVisibilityAdmin
-    /// SDK built-in with custom name/icon.
-    | ConfiguredModuleVisibilityAdmin of ModuleVisibilityAdminConfig
-    /// Deployment-provided custom module in place of the SDK default.
-    | ExternalModuleVisibilityAdmin of ErasedModule
-
-/// Branding for the session-security page.
-type SessionSecurityConfig = { Name: string; Icon: ReactElement }
-
-/// Phase 528 — controls the built-in session-security page: the caller's
-/// active sessions, revoke-one, and sign-out-everywhere over `ISessionApi`.
-///
-/// Default `NoSessionSecurity`, and deliberately not inferred from
-/// anything the client already knows, for the same reason
-/// `ModuleVisibilityAdminMode` is not: the registry is selected
-/// server-side by `ServerConfig.SessionRegistry`, and on the default
-/// `NoSessionRegistry` the API's routes 404 — so a client that mounted the
-/// page speculatively would render a security surface whose every call
-/// fails, which is a worse outcome than not offering it. A page that
-/// cannot list your sessions cannot be distinguished, by the person
-/// reading it, from a page saying you have none. Pair the two (GP 13).
-type SessionSecurityMode =
-    /// No session-security page in the sidebar (default).
-    | NoSessionSecurity
-    /// SDK built-in session-security page.
-    | DefaultSessionSecurity
-    /// SDK built-in with custom name/icon.
-    | ConfiguredSessionSecurity of SessionSecurityConfig
-    /// Deployment-provided custom module in place of the SDK default.
-    | ExternalSessionSecurity of ErasedModule
 
 /// Phase 12c — payload delivered to `ClientConfig.OnError` when a module's
 /// view tree throws. `ComponentStack` carries the React component-stack
@@ -1886,8 +1417,10 @@ type ClientHandlerRegistry = {
     /// Each contributor declares the tiles it surfaces on the
     /// administration area's landing page, each naming the module it
     /// fronts; the SDK never names a contributing module (GP 9). The
-    /// SDK's own tile-contributing built-ins are added to this list at
-    /// boot, gated on their own `ClientConfig` modes. Default: empty —
+    /// shell slots' tiles are added ahead of this list at boot, one per
+    /// filled tile-bearing slot (`ShellSlots.adminTiles`); a tile here
+    /// owned by the module filling such a slot replaces the slot's.
+    /// Default: empty —
     /// with no contributor the landing renders its designed empty
     /// state, and under `AdminSurface = InlineGroups` there is no
     /// landing surface at all (GP 13).
@@ -2157,6 +1690,174 @@ type OfflineMode =
     /// disconnected.
     | EnabledOffline of OfflineConfig
 
+/// Phase 879 — the slot map: what fills each shell slot the SDK declares.
+/// `ClientConfig.Slots` carries it, in place of the one mode field per
+/// built-in that `ClientConfig` used to carry.
+///
+/// Set a slot with a nested copy-and-update from the defaults:
+///
+///     { ClientConfig.defaults with
+///         Slots.TeamManager = SlotFill.External myTeamModule
+///         Slots.UsageDashboard = SlotFill.Empty }
+///
+/// Where each slot sits in the sidebar, the configuration gate that
+/// admits it, and the administration tile it carries are declared once,
+/// by the slot (`ShellSlots.all`), and apply to whatever fills it. The
+/// session-time gates — the nav role, the visibility over subject kinds,
+/// the sidebar group — belong to the module that fills the slot; each
+/// built-in's are listed in `docs/migrations/879-shell-slots.md`, and a
+/// replacement declares its own.
+///
+/// "Gated on any authenticated surface" below means the slot is admitted
+/// only when `ClientConfig.requiresAnyAuth` holds: an Anonymous-only
+/// deployment has no persistent scope and no role concept, so the
+/// module's API would refuse every call (and, for the admin surfaces,
+/// showing the page to every visitor would be a reconnaissance gift).
+type ShellSlotFills = {
+    /// The Home / Overview landing module (Phase 171) — injected at the
+    /// very top of the sidebar and, unless `ClientConfig.ActiveModule`
+    /// names a module, the surface the shell lands on. It summarises the
+    /// deployment through `IHomeOverviewApi` (auto-mounted server-side,
+    /// never called unless the module is on). **Default `Empty`** — off,
+    /// so an existing deployment lands where it always did (GP 13).
+    HomeModule: SlotFill<ModuleLabel>
+    /// The data manager — prepended ahead of the app's own modules as the
+    /// "where you add data" entry, and the source of the boot-time file
+    /// snapshot that lets data modules see uploaded data before the page
+    /// is first opened. **Default `Default`** (the file-upload manager).
+    /// `Configured (DataManagerChoice.ColumnMapping None)` selects the
+    /// mapping-aware manager.
+    DataManager: SlotFill<DataManagerChoice>
+    /// The team manager (create / join / settings / members). Admitted
+    /// on any `Team` surface — single-team and multi-team alike (a fresh
+    /// multi-team user with no team has no other way to create one).
+    /// **Default `Default`.** Carries the "Teams" administration tile.
+    TeamManager: SlotFill<ModuleLabel>
+    /// The configuration admin over the module config schemas. Gated on
+    /// any authenticated surface. **Default `Default`**; renders an empty
+    /// list when the deployment declares no schemas.
+    TeamConfig: SlotFill<ModuleLabel>
+    /// The webhook admin. Gated on any authenticated surface. **Default
+    /// `Empty`** — pair with `ServerConfig.Webhooks = EnabledWebhooks`.
+    WebhookAdmin: SlotFill<ModuleLabel>
+    /// Phase 527 — the service-account admin (machine principals and
+    /// their scoped API tokens). Gated on any authenticated surface.
+    /// **Default `Empty`** — pair with `ServerConfig.ServiceAccounts`;
+    /// setting one half gives a module with no API behind it.
+    ServiceAccountAdmin: SlotFill<ModuleLabel>
+    /// Phase 6f.A — the external-contact admin (people with no account
+    /// here, and the per-channel consent that makes them reachable).
+    /// Gated on any authenticated surface. **Default `Empty`** — pair
+    /// with `ServerConfig.ExternalContactStore`.
+    ExternalContactManager: SlotFill<ModuleLabel>
+    /// Phase 441 — the notification preference centre (category x channel
+    /// matrix, digest frequency, quiet hours). Gated on any authenticated
+    /// surface. **Default `Empty`** — pair with
+    /// `ServerConfig.NotificationPreferences`.
+    NotificationPreferences: SlotFill<ModuleLabel>
+    /// The module-visibility profile editor over `IModuleVisibilityApi`.
+    /// Gated on any authenticated surface. **Default `Empty`**, and not
+    /// inferable client-side: pair with a `ServerConfig.ModuleVisibility`
+    /// other than `NoModuleVisibility`, whose routes 404 otherwise.
+    ModuleVisibilityAdmin: SlotFill<ModuleLabel>
+    /// Phase 528 — the session-security page (the caller's active
+    /// sessions, revoke-one, sign-out-everywhere over `ISessionApi`).
+    /// Gated on any authenticated surface. **Default `Empty`** — pair
+    /// with a `ServerConfig.SessionRegistry` other than
+    /// `NoSessionRegistry`: a page that cannot list your sessions reads,
+    /// to the person holding them, like a page saying you have none.
+    SessionSecurity: SlotFill<ModuleLabel>
+    /// The permissions admin over the active team's `TeamPermissions`
+    /// document. Gated on any authenticated surface. **Default
+    /// `Default`.** Reads are open to any team member; writes are
+    /// Owner / Admin, enforced server-side by `PermissionApi`.
+    PermissionsAdmin: SlotFill<ModuleLabel>
+    /// Phase 9d — the usage dashboard over `IUsageQueryApi`. Gated on any
+    /// authenticated surface (cost telemetry leaks tenant size).
+    /// **Default `Default`** — pair with `ServerConfig.UsageMetering`;
+    /// the table is empty otherwise. Carries the "Usage" administration
+    /// tile.
+    UsageDashboard: SlotFill<ModuleLabel>
+    /// Phase 529 — the audit-trail viewer over `IAuditViewApi`. Gated on
+    /// any authenticated surface. **Default `Default`** — pair with
+    /// `ServerConfig.AuditLog = EnabledAuditLog`; the viewer shows its
+    /// "no audit events" state otherwise.
+    AuditViewer: SlotFill<ModuleLabel>
+    /// Phase 10b — the data-ingestion admin (configured `IDataSource`
+    /// instances, their credential status, Connect / Disconnect). Gated
+    /// on any authenticated surface. **Default `Default`** — pair with
+    /// `ServerConfig.DataIngestion`; per-Kind credential forms come from
+    /// connector companions.
+    DataIngestionAdmin: SlotFill<ModuleLabel>
+    /// Phase 4b — the Platform Admin module (assign / revoke / list
+    /// platform admins). Admitted on every surface: a bootstrapped admin
+    /// holds the role in any mode, and the module's `PlatformAdminOnly`
+    /// nav role hides it from everyone else. **Default `Default`.** The
+    /// server-side `PlatformAdminApi` is mounted independently.
+    PlatformAdmin: SlotFill<ModuleLabel>
+    /// Phase 9p — the health monitor (live `IHealthCheck` results and the
+    /// latest preflight outcomes). Admitted on every surface, like the
+    /// Platform Admin module. **Default `Default`.** Carries the "Health
+    /// Monitor" administration tile.
+    HealthMonitor: SlotFill<ModuleLabel>
+    /// Phase 9p.A — the service-status board: every operator-facing
+    /// observability surface in one composite snapshot, each section
+    /// skipping itself when its `ServerConfig` substrate is off. Admitted
+    /// on every surface. **Default `Default`.** Carries the "Service
+    /// Status" administration tile.
+    ServiceStatusBoard: SlotFill<ModuleLabel>
+    /// Phase 9h — the data-subject-request admin (GDPR Article 15 export,
+    /// Article 17 erasure). Gated on any authenticated surface. **Default
+    /// `Empty`** — pair with `ServerConfig.DataSubjectRequests = Enabled
+    /// policy`.
+    DataSubjectRequestAdmin: SlotFill<ModuleLabel>
+    /// Phase 10a — the data-migration admin (per-type schema version and
+    /// progress, a manual trigger, per-object failures). Gated on any
+    /// authenticated surface. **Default `Empty`** — pair with
+    /// `ServerConfig.DataMigrations = EnabledDataMigrations` or
+    /// `ManualDataMigrations` (under which this module is the only way a
+    /// pass starts).
+    MigrationAdmin: SlotFill<ModuleLabel>
+    /// Phase 593 — the composition inspector: five read-only panels over
+    /// what the deployment declared at compose time, each exportable as
+    /// canonical JSON. Gated on any authenticated surface. **Default
+    /// `Default`.** Its server-side pairing is composition itself:
+    /// `ServerApp.run` (and the AI / RAG roots that delegate to it)
+    /// registers the snapshot; a host composed through `compose` directly
+    /// registers none, and each panel says so.
+    CompositionInspector: SlotFill<ModuleLabel>
+}
+
+/// Phase 879 — the slot map's defaults.
+module ShellSlotFills =
+    /// What fills each slot when a deployment configures nothing — the
+    /// shape `ClientConfig.defaults` carries. The admin built-ins that
+    /// only read are on; every slot whose server-side substrate is
+    /// opt-in is `Empty`, because a module with no API behind it is a
+    /// dead end rather than a feature (GP 11 / GP 13).
+    let defaults: ShellSlotFills = {
+        HomeModule = SlotFill.Empty
+        DataManager = SlotFill.Default
+        TeamManager = SlotFill.Default
+        TeamConfig = SlotFill.Default
+        WebhookAdmin = SlotFill.Empty
+        ServiceAccountAdmin = SlotFill.Empty
+        ExternalContactManager = SlotFill.Empty
+        NotificationPreferences = SlotFill.Empty
+        ModuleVisibilityAdmin = SlotFill.Empty
+        SessionSecurity = SlotFill.Empty
+        PermissionsAdmin = SlotFill.Default
+        UsageDashboard = SlotFill.Default
+        AuditViewer = SlotFill.Default
+        DataIngestionAdmin = SlotFill.Default
+        PlatformAdmin = SlotFill.Default
+        HealthMonitor = SlotFill.Default
+        ServiceStatusBoard = SlotFill.Default
+        DataSubjectRequestAdmin = SlotFill.Empty
+        MigrationAdmin = SlotFill.Empty
+        CompositionInspector = SlotFill.Default
+    }
+
 type ClientConfig = {
     AppName: string
     AppLogo: string
@@ -2168,75 +1869,14 @@ type ClientConfig = {
     LoadingIndicator: LoadingIndicatorMode
     /// Name of the module to show on startup. Falls back to the first module if None or not found.
     ActiveModule: string option
-    /// Controls the data manager. Default: SDK built-in file manager.
-    DataManager: DataManagerMode
-    /// Controls the team manager. Only active when `Mode = Team`.
-    /// Default: SDK built-in.
-    TeamManager: TeamManagerMode
-    /// Controls the configuration admin. Active in every non-Anonymous
-    /// mode; `NoTeamConfig` opts out explicitly. Default: SDK built-in.
-    TeamConfig: TeamConfigMode
-    /// Controls the webhook admin. Default: `NoWebhookAdmin` —
-    /// pair with `ServerConfig.Webhooks = EnabledWebhooks` and set
-    /// this to `DefaultWebhookAdmin` (or one of the branded variants)
-    /// to surface the admin UI.
-    WebhookAdmin: WebhookAdminMode
-    /// Phase 527 — controls the service-account admin. Default:
-    /// `NoServiceAccountAdmin` — pair with
-    /// `ServerConfig.ServiceAccounts = EnabledServiceAccounts` and set
-    /// this to `DefaultServiceAccountAdmin` (or one of the branded
-    /// variants) to surface the admin UI.
-    ServiceAccountAdmin: ServiceAccountAdminMode
-
-    /// Phase 6f.A — the built-in external-contact admin. Default
-    /// `NoExternalContactManager` — pair with
-    /// `ServerConfig.ExternalContactStore = EnabledExternalContactStore`
-    /// on the server side; setting only one half gives a module with no
-    /// API behind it.
-    ExternalContactManager: ExternalContactManagerMode
-    /// Phase 441 — controls the notification preference centre. Default:
-    /// `NoNotificationPreferencesUI` — pair with
-    /// `ServerConfig.NotificationPreferences = EnabledNotificationPreferences _`
-    /// and set this to `DefaultNotificationPreferencesUI` (or one of the
-    /// branded variants) to surface the settings UI.
-    NotificationPreferences: NotificationPreferencesMode
-    /// Controls the module-visibility profile editor. Default:
-    /// `NoModuleVisibilityAdmin` — pair with a server-side
-    /// `ServerConfig.ModuleVisibility` other than `NoModuleVisibility`
-    /// and set this to `DefaultModuleVisibilityAdmin` (or one of the
-    /// branded variants) to surface the editor.
-    ModuleVisibilityAdmin: ModuleVisibilityAdminMode
-    /// Phase 528 — controls the session-security page. Default:
-    /// `NoSessionSecurity` — pair with a server-side
-    /// `ServerConfig.SessionRegistry` other than `NoSessionRegistry` and
-    /// set this to `DefaultSessionSecurity` (or one of the branded
-    /// variants) to surface the active-sessions view.
-    SessionSecurity: SessionSecurityMode
-    /// Controls the Platform Admin module (Phase 4b). Active in every
-    /// non-Anonymous mode unless set to `NoPlatformAdmin`. The shell
-    /// sidebar filter hides the module's "Platform Management" group
-    /// from callers without `PlatformRole.PlatformAdmin` regardless of this setting
-    /// — the mode controls module *registration*, the role gates
-    /// *visibility*. Default: SDK built-in. Server-side
-    /// `PlatformAdminApi` is auto-injected by `compose` independently;
-    /// a deployment shipping only a custom client can still query the
-    /// API directly.
-    PlatformAdmin: PlatformAdminMode
-    /// Controls the permissions admin module (Tidy-Up #3 closure of
-    /// Phase 4 + Phase 5 residual). Active in every non-Anonymous
-    /// mode; `NoPermissionsAdmin` opts out explicitly. Default: SDK
-    /// built-in. Anonymous mode skips the module by construction (no
-    /// role concept; server-side `PermissionApi` returns `Error` for
-    /// unscoped callers). The read surface is available to any team
-    /// member; write paths gate Owner/Admin server-side via
-    /// `PermissionApi`.
-    PermissionsAdmin: PermissionsAdminMode
-    /// Controls the health monitor admin (Phase 9p). Active in every
-    /// non-Anonymous mode; `NoHealthMonitor` opts out explicitly.
-    /// Default: SDK built-in. Server-side surface auto-mounts whenever
-    /// the SDK composes — a deployment that ships only a custom client
-    /// can still query the API directly.
-    HealthMonitor: HealthMonitorMode
+    /// Phase 879 — what fills each shell slot: the data manager, the team
+    /// manager, the Home landing and the admin built-ins a deployment can
+    /// replace. One field in place of the twenty per-built-in mode fields
+    /// it replaces. Default `ShellSlotFills.defaults`; set a slot with a
+    /// nested copy-and-update (`{ c with Slots.TeamManager = SlotFill.Empty }`).
+    /// See `ShellSlotFills` for each slot, and `ShellSlots.all` for where
+    /// each sits, what gates it and which carry an administration tile.
+    Slots: ShellSlotFills
     /// Controls the built-in Datadog readback module (Phase 9w).
     /// **Opt-in** — default `NoDatadogReadback`, so an existing
     /// deployment's sidebar is unchanged until it sets
@@ -2263,41 +1903,6 @@ type ClientConfig = {
     /// server-side for the offboard actions (the list still renders under
     /// `NoTenantLifecycle`, the per-row offboard degrades gracefully).
     PlatformUsers: PlatformUsersMode
-    /// Controls the service-status-board admin (Phase 9p.A). Active in
-    /// every non-Anonymous mode; `NoServiceStatusBoard` opts out
-    /// explicitly. Default: SDK built-in. Server-side surface auto-
-    /// mounts whenever the SDK composes. The board aggregates every
-    /// operator-facing observability surface into one composite
-    /// snapshot; each section auto-skips when its matching
-    /// `ServerConfig` mode is `No*` (e.g. `JobScheduler = NoJobScheduler`
-    /// hides the JobQueue section), so the board is useful even on
-    /// minimal deployments.
-    ServiceStatusBoard: ServiceStatusBoardMode
-    /// Controls the usage dashboard admin (Phase 9d). Active in every
-    /// non-Anonymous mode; `NoUsageDashboard` opts out explicitly.
-    /// Default: SDK built-in. Pair with `ServerConfig.UsageMetering =
-    /// EnabledUsageMetering` server-side — the dashboard renders empty
-    /// otherwise.
-    UsageDashboard: UsageDashboardMode
-    /// Controls the audit-trail viewer admin (Phase 529). Active in
-    /// every non-Anonymous mode; `NoAuditViewer` opts out explicitly.
-    /// Default: SDK built-in. Pair with `ServerConfig.AuditLog =
-    /// EnabledAuditLog` server-side — the viewer renders its empty
-    /// state otherwise.
-    AuditViewer: AuditViewerMode
-    /// Controls the composition inspector admin (Phase 593) — the
-    /// governance-legibility panels. Active in every non-Anonymous mode;
-    /// `NoCompositionInspector` opts out explicitly. Default: SDK
-    /// built-in. The server-side pairing is composition itself — see
-    /// `CompositionInspectorMode` for the two-knob table.
-    CompositionInspector: CompositionInspectorMode
-    /// Controls the optional Home / Overview landing module (Phase 171).
-    /// **Default: `NoHomeModule`** (off — unlike the admin built-ins) so
-    /// existing deployments are unchanged until they opt in (GP 13).
-    /// When `EnabledHomeModule`, the module is injected at the head of
-    /// the sidebar and becomes the default landing surface unless
-    /// `ActiveModule` names a specific module.
-    HomeModule: HomeModuleMode
     /// Phase 567 — how the admin built-ins are presented in the sidebar.
     /// **Default `InlineGroups`** (byte-identical to pre-567: admin modules
     /// render as inline "Platform/Team Management" groups). `SeparateArea`
@@ -2369,29 +1974,6 @@ type ClientConfig = {
     /// **Default `None`** — no built-in landing (GP 13). Inert on non-team
     /// surfaces even when set.
     NoActiveTeamLanding: NoActiveTeamLandingConfig option
-    /// Controls the data-ingestion admin (Phase 10b). Active in every
-    /// non-Anonymous mode; `NoDataIngestionAdmin` opts out explicitly.
-    /// Default: SDK built-in. Pair with `ServerConfig.DataIngestion =
-    /// EnabledDataIngestion` server-side — the admin renders an empty
-    /// list otherwise. Per-Kind credential forms are contributed by
-    /// connector companion packages.
-    DataIngestionAdmin: DataIngestionAdminMode
-    /// Controls the data-migration admin (Phase 10a). Default
-    /// `NoMigrationAdmin` — the substrate is opt-in server-side, so a
-    /// sidebar entry with no route behind it would be a dead end.
-    /// Pair with `ServerConfig.DataMigrations = EnabledDataMigrations`
-    /// or `ManualDataMigrations`.
-    MigrationAdmin: MigrationAdminMode
-    /// Controls the data-subject-request admin (Phase 9h — GDPR Article
-    /// 15 export + Article 17 erasure). Default `NoDataSubjectRequestAdmin`
-    /// — apps without GDPR / CCPA / DPDPA exposure pay nothing. Pair with
-    /// `ServerConfig.DataSubjectRequests = Enabled policy` server-side
-    /// and flip this to `DefaultDataSubjectRequestAdmin` (or a branded
-    /// variant) to surface the admin UI. Owner / Admin gating is enforced
-    /// upstream by the API handler; the sidebar entry is rendered for
-    /// every authenticated caller in non-Anonymous mode and the API
-    /// itself refuses non-admin writes.
-    DataSubjectRequestAdmin: DataSubjectRequestAdminMode
     /// Controls the real-time toast renderer. Default: SDK built-in.
     ToastCentre: ToastCentreMode
     /// Sign-in / sign-out UI. Companion-delegated:
@@ -2730,23 +2312,7 @@ module ClientConfig =
         AppLogo = "favicon.png"
         LoadingIndicator = SkeletonLoader
         ActiveModule = None
-        DataManager = DefaultDataManager
-        TeamManager = DefaultTeamManager
-        TeamConfig = DefaultTeamConfig
-        WebhookAdmin = NoWebhookAdmin
-        ServiceAccountAdmin = NoServiceAccountAdmin
-        ExternalContactManager = NoExternalContactManager
-        NotificationPreferences = NoNotificationPreferencesUI
-        // Opt-in (GP 11/13) — the server-side substrate is itself opt-in,
-        // and the editor's API 404s until it is enabled.
-        ModuleVisibilityAdmin = NoModuleVisibilityAdmin
-        // Phase 528 — no session-security page; the server-side registry
-        // is opt-in too, and an unpaired page would 404 on every call
-        // (GP 11 / GP 13).
-        SessionSecurity = NoSessionSecurity
-        PlatformAdmin = DefaultPlatformAdmin
-        PermissionsAdmin = DefaultPermissionsAdmin
-        HealthMonitor = DefaultHealthMonitor
+        Slots = ShellSlotFills.defaults
         // Phase 9w — opt-in (GP 11/13): no Datadog readback module until
         // a deployment names a region and a tag filter.
         DatadogReadback = NoDatadogReadback
@@ -2756,26 +2322,6 @@ module ClientConfig =
         // Phase 544 — opt-in (GP 11/13); existing deployments keep no
         // platform-users module until they set DefaultPlatformUsers.
         PlatformUsers = NoPlatformUsers
-        ServiceStatusBoard = DefaultServiceStatusBoard
-        UsageDashboard = DefaultUsageDashboard
-        // Phase 529 — on by default, like the other read-only admin
-        // built-ins. The trail it reads is off by default
-        // (`ServerConfig.AuditLog = NoAuditLog`), so a deployment that
-        // has not opted in sees the module's "no audit events" state
-        // rather than data — the same shape UsageDashboard has with
-        // NoUsageMetering.
-        AuditViewer = DefaultAuditViewer
-        // Phase 593 — on by default, like the other read-only admin
-        // built-ins. Every panel it renders is a projection of what the
-        // deployment already declared at compose time, so on a plain
-        // composition it shows a short, true story rather than nothing;
-        // and the snapshot behind it is a lazy DI singleton, so a
-        // deployment whose operators never open it pays only the
-        // registration.
-        CompositionInspector = DefaultCompositionInspector
-        // Phase 171 — off by default (GP 13); existing deployments
-        // keep their first-registered module as the landing surface.
-        HomeModule = NoHomeModule
         // Phase 567 — inline admin groups by default (byte-identical to
         // pre-567); SeparateArea is the opt-in two-area sidebar.
         AdminSurface = InlineGroups
@@ -2791,11 +2337,6 @@ module ClientConfig =
         NoActiveTeamLandingModuleId = None
         // Opt-in parameterized landing; off by default (GP 13).
         NoActiveTeamLanding = None
-        DataIngestionAdmin = DefaultDataIngestionAdmin
-        // Phase 10a — off by default; the server substrate it calls is
-        // itself opt-in (GP 11 / GP 13).
-        MigrationAdmin = NoMigrationAdmin
-        DataSubjectRequestAdmin = NoDataSubjectRequestAdmin
         ToastCentre = DefaultToastCentre
         AuthUI = NoAuthUI
         AuthTokenStorage = ClientCookieAndLocalStorage

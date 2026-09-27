@@ -323,7 +323,7 @@ Client surface:
 - `Client/SDK.ClientTypes.fs` carries `ClientModule.Config : ModuleConfigSchema option` alongside every other module attribute. `ClientModuleContext` is threaded into `Init`; `ClientModule.withUnitInit` preserves the existing `unit -> _` signature for modules that don't need config.
 - `SDK.Client.run` prefetches every registered module's values on startup and dispatches `ConfigsLoaded`. That message evicts the active module's state and re-inits it with the fresh `ClientModuleContext`. Inactive modules re-init lazily on next selection.
 - `Client/TeamConfigUI.fs` is the built-in admin form. One tab per registered module, one input per field (checkbox / number / text / select). Draft values live in `React.useState` (no per-keystroke Elmish dispatch); explicit Save and Clear buttons. Reserved `_sdk.TeamConfig` Id so it can never collide with an app-declared module.
-- `ClientConfig.TeamConfig : TeamConfigMode` controls injection — `DefaultTeamConfig` (default), `ConfiguredTeamConfig { Name; Icon }`, `ExternalTeamConfig of ErasedModule`, or `NoTeamConfig`. The admin UI is auto-injected in every non-Anonymous mode; Anonymous has no persistent scope so the form would fail every read.
+- `ClientConfig.Slots.TeamConfig : SlotFill<ModuleLabel>` controls injection — `SlotFill.Default` (default), `SlotFill.Configured { Name; Icon }`, `SlotFill.External of ErasedModule`, or `SlotFill.Empty`. The admin UI is auto-injected in every non-Anonymous mode; Anonymous has no persistent scope so the form would fail every read.
 
 The `_platform` key carries deployment-wide display defaults (currency, date format, locale). The SDK ships its own default `_platform` schema declaring `currencySymbol: String (max 4 chars, default "£")` — `mergePlatformSchema` in `SDK.Server.fs` joins the SDK's schema with any app-supplied `_platform` entry at compose time so the admin UI always exposes the platform tab. Apps extend the schema by registering their own `_platform` entry in `ServerConfig.ModuleConfigs`; SDK fields the app didn't redeclare are appended (app wins on field-key collision). The typed accessor lives in `Shared/Visualisation.fs` (`Visualisation.PlatformDefaults` + `fromConfig` for client/server, `Server/SDK.Server.fs` `PlatformDefaultsResolver.resolve` for server-side reads). Modules read the resolved record at `Init` time from `ClientModuleContext.PlatformConfig` and store the fields they care about on their own `Model`.
 
@@ -505,16 +505,16 @@ All Enterprise imports and module registration calls are at module top level in 
 | `ToolUp.Platform.UI/Toolkit/*.fs` | Design system, in the standalone `ToolUp.Platform.UI` package since Phase 307 (`OutputFormatting`, `Tokens`, `Typography`, `Forms`, `Data`, `StateViews`, `Kpi`), alongside `ToolUp.Platform.{Icon,Icons}` and the `{Svg,Data,Aria}Prop` helpers. All under `namespace Toolup.UIToolkit`; `ToolUp.Platform.Client` depends on the package, so they arrive transitively for an existing consumer |
 | `Client/UI/Toolkit/Layout.fs` | The shell half of the same namespace — `AppShell` / `Panel` / `Tabs` / `renderPageContent` / `loadingIndicator`. Stayed in the client tier at Phase 307: it composes `Toolup.Sidebar` and is written against `SDK.ClientTypes` |
 | `Client/UserSession.fs` | User-ID + auth-token storage, mode-aware Remoting headers |
-| `Client/SDK.ClientTypes.fs` | `ErasedModule`, `ClientModule.register` / `withUnitInit`, `ClientConfig`, `DataManagerMode`, `TeamManagerMode`, `TeamConfigMode`, `ToastCentreMode`, `AuthUIMode` (+ `OidcUIConfig` / `ClerkUIConfig` / `CustomAuthUI`), `ClientModuleContext` |
+| `Client/SDK.ClientTypes.fs` | `ErasedModule`, `ClientModule.register` / `withUnitInit`, `ClientConfig`, `ShellSlotFills` / `SlotFill` / `ModuleLabel` / `DataManagerChoice`, `ToastCentreMode`, `AuthUIMode` (+ `OidcUIConfig` / `ClerkUIConfig` / `CustomAuthUI`), `ClientModuleContext` |
 | `Client/AuthUIProvider.fs` | Delegate registry for companion-supplied sign-in UI (`OidcClient`, `ClerkUI`); `register tag handler` + `gate authUI mode shell` dispatch |
 | `Client/GeneralUITypes.fs` | Small shared UI helpers (`Toggle`, `UpdateApp`, `CommonComponents`) |
 | `Client/ProcessedDataContext.fs` | React context + `ProcessedData.forType` hook — shell-distributed `ProcessedFileEntry list` consumed by module view `[<ReactComponent>]`s |
 | `Components/Modal.fs` | Modal dialog component |
 | `Components/ToastCentre.fs` | Built-in toast renderer — subscribes to `NotificationClient`, filters `SystemMessage`, auto-dismiss for Info/Warning |
 | `Client/NotificationClient.fs` | Single `EventSource` router over `/api/notifications` — named-event dispatch, returns dispose thunk |
-| `Client/FileManagerUI.fs` | Built-in file upload/management module (auto-injected per `DataManagerMode`) |
-| `Client/TeamManagerUI.fs` | Built-in team-management module (auto-injected in Team mode per `TeamManagerMode`) |
-| `Client/TeamConfigUI.fs` | Built-in config admin module (auto-injected in non-Anonymous modes per `TeamConfigMode`, Id `_sdk.TeamConfig`) |
+| `Client/FileManagerUI.fs` | Built-in file upload/management module (fills the data-manager shell slot) |
+| `Client/TeamManagerUI.fs` | Built-in team-management module (fills the team-manager shell slot, admitted on Team surfaces) |
+| `Client/TeamConfigUI.fs` | Built-in config admin module (fills the `TeamConfig` shell slot, admitted in non-Anonymous modes, Id `_sdk.TeamConfig`) |
 | `Client/SDK.Client.fs` | Shell MVU, sidebar filter, `prepareModules`, config prefetch + re-init, `Client.run` |
 
 **Build pipeline:**

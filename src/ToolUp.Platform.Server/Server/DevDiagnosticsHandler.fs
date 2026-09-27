@@ -1127,7 +1127,7 @@ let private renderHtml (report: DevDiagnosticsReport) : string =
     // per-probe data, accessible to Owner/Admin without enabling
     // `EnableDevEndpoints` in production.
     sb.AppendLine
-        """<p class="muted"><em>Production operators with Owner/Admin role can view the same data at <code>Health Monitor</code> in the sidebar (when <code>ClientConfig.HealthMonitor &ne; NoHealthMonitor</code>).</em></p>"""
+        """<p class="muted"><em>Production operators with Owner/Admin role can view the same data at <code>Health Monitor</code> in the sidebar (when <code>ClientConfig.Slots.HealthMonitor &ne; SlotFill.Empty</code>).</em></p>"""
     |> ignore
 
     if report.HealthChecks.IsEmpty then
@@ -1177,7 +1177,7 @@ let private renderHtml (report: DevDiagnosticsReport) : string =
     // Same snapshot, accessible to Owner/Admin without enabling
     // `EnableDevEndpoints` in production.
     sb.AppendLine
-        """<p class="muted"><em>Production operators with Owner/Admin role can view the same snapshot at <code>Health Monitor &gt; Preflight</code> in the sidebar (when <code>ClientConfig.HealthMonitor &ne; NoHealthMonitor</code>).</em></p>"""
+        """<p class="muted"><em>Production operators with Owner/Admin role can view the same snapshot at <code>Health Monitor &gt; Preflight</code> in the sidebar (when <code>ClientConfig.Slots.HealthMonitor &ne; SlotFill.Empty</code>).</em></p>"""
     |> ignore
 
     if report.Validators.IsEmpty then

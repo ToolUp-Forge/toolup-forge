@@ -1,4 +1,4 @@
-Codemod: 21 site(s) in 5 file(s) need human review (not rewritten):
+Codemod: 25 site(s) in 6 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -13,6 +13,15 @@ Codemod: 21 site(s) in 5 file(s) need human review (not rewritten):
       -> Phase 815: the legacy `ThemeClass.*` CSS-class strings are removed: drop the `prop.className` wrapper and the `theme = "legacy"` prop, and pass `AgGrid.theme Theme.themeAlpine` / `Theme.themeBalham` / `Theme.themeMaterial` (a `*Dark` class is `|> Theme.withPart Theme.colorSchemeDark`) — no stylesheet import is needed under the Theming API
     L25 [815-elmish-error-handler-inline] |> Program.withErrorHandler (fun (text, ex) -> printfn "%s: %A" text ex)
       -> Phase 815: `Program.withErrorHandler` is removed: wrap the upstream-shape callback as `Program.withErrorReporter (fun ctx -> onError (ctx.Message, ctx.Exception))` — a named callback in pipeline position is rewritten; an inline lambda or a call with the program applied on the same line is left for you to reshape
+  src/Client/Shell.fs
+    L24 [879-slot-field-split] DataManager =
+      -> Phase 879: if this is a `ClientConfig` field, it is `Slots.<field> =` now (a nested copy-and-update) — the codemod moves the field only when its mode case is on the same line; a message-catalog field of the same name stays as it is
+    L25 [879-configured-data-manager] ConfiguredDataManager {
+      -> Phase 879: the data slot's configured cases take a `DataManagerChoice`: `ConfiguredDataManager cfg` is `SlotFill.Configured(DataManagerChoice.FileUpload cfg)` and `ConfiguredMappingDataManager cfg` is `SlotFill.Configured(DataManagerChoice.ColumnMapping(Some cfg))` — the argument moves inside the choice, so the site is left for you (and a `DataManager =` field above it is `Slots.DataManager =`)
+    L38 [879-mode-type] let teamManagerOn (mode: TeamManagerMode) =
+      -> Phase 879: the per-built-in mode type is gone: a value of it is a `SlotFill<ModuleLabel>` (`SlotFill<DataManagerChoice>` for the data manager), and a case qualified through the type (`TeamManagerMode.NoTeamManager`) is the bare `SlotFill` case
+    L43 [879-slot-read] let usageOn = config.UsageDashboard <> SlotFill.Empty
+      -> Phase 879: a read of a per-built-in `ClientConfig` field: it is `config.Slots.<field>` now, and a `match` on it takes the `SlotFill` cases (`Empty` / `Default` / `Configured` / `External`)
   src/Server/Guarded.fs
     L12 [815-remoting-permission-guarded-api] let handler = RemotingHelpers.makePermissionGuardedApi "SkuAnalysis" apiFactory
       -> Phase 815: `RemotingHelpers.makePermissionGuardedApi name factory` is removed: compose the module as `ServerModule.create name |> ServerModule.withGuardedApi factory` (the same module-access gate) and declare method-level authorisation with `[<RequiresRole>]` / `[<TenantScoped>]` / `[<AllowAnonymous>]` per docs/migrations/69d-authorization-metadata.md
@@ -51,3 +60,4 @@ Codemod: 21 site(s) in 5 file(s) need human review (not rewritten):
     Phase 66 — docs/migrations/0.X.0-platform-mode-to-surfaces.md
     Phase 73 — docs/migrations/73-namespace-rename-to-toolup-remoting-and-toolup-elmish.md
     Phase 815 — docs/migrations/815-remove-open-deprecations.md
+    Phase 879 — docs/migrations/879-shell-slots.md

@@ -11,7 +11,7 @@ open ProcessedDataTypes
 // ─── Phase 171 — Home / Overview landing module (client) ─────────
 //
 // Optional SDK-built-in landing surface. When a deployment opts in
-// via `ClientConfig.HomeModule = EnabledHomeModule`, the shell injects
+// via `ClientConfig.Slots.HomeModule = SlotFill.Default`, the shell injects
 // this module at the head of the sidebar and lands on it by default
 // (unless `ActiveModule` names a specific module). It calls
 // `IHomeOverviewApi.GetOverview` and renders, scope-correct + RBAC-
@@ -428,16 +428,21 @@ let view (model: Model) (dispatch: Msg -> unit) : ReactElement = HomeBody model 
 
 // ─── Module creation ─────────────────────────────────────────────
 
+/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// (`ShellSlot.FilledModuleId`) to know which module fills the slot
+/// without building one; `create` registers the module under it.
+let moduleId = "_sdk.home"
+
 /// Create the built-in Home / Overview landing module as an
 /// `ErasedModule`. The shell's `prepareModules` injects this at the
-/// head of the sidebar when `ClientConfig.HomeModule` is
-/// `EnabledHomeModule` / `ConfiguredHomeModule`, and lands on it by
+/// head of the sidebar when the `HomeModule` shell slot is filled by it
+/// (`SlotFill.Default` / `Configured`), and lands on it by
 /// default (unless `ActiveModule` names another module). Ungrouped so
 /// it renders as the leading sidebar entry. `recents` is
 /// `ClientConfig.HomeRecents` — captured here and threaded into `init`
 /// so the per-user recents/pinning fetch + widget only activate when
 /// opted in (GP 13).
-let create (recents: bool) (config: HomeModuleConfig option) : ErasedModule =
+let create (recents: bool) (config: ModuleLabel option) : ErasedModule =
     let name = config |> Option.map _.Name |> Option.defaultValue "Home"
 
     let icon =
@@ -449,7 +454,7 @@ let create (recents: bool) (config: HomeModuleConfig option) : ErasedModule =
         Name = name
         Icon = icon
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.home"
+    |> ToolUp.Platform.ClientModule.withId moduleId
     // Phase 611 — the landing declares its rail slot rather than being
     // recognised by id inside `buildSections`. Ungrouped no longer implies
     // a position, so "renders as the leading sidebar entry" is now said

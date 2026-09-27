@@ -1251,17 +1251,13 @@ module Client =
                 | None -> []
             | None -> [])
 
-    /// The configured DataManager's module Id, if any. Used to decide when
-    /// the boot-prefetched snapshot is still the source (DataManager not yet
-    /// mounted) vs the live module state.
+    /// The id of the module filling the data-manager slot, if any — the
+    /// SDK's or a deployment's own. Used to decide when the boot-prefetched
+    /// snapshot is still the source (the data manager not yet mounted) vs
+    /// its live module state. Read from the slot without building the
+    /// module: this runs on every message.
     let private dataManagerModuleId (config: ClientConfig) : string option =
-        match config.DataManager with
-        | NoDataManager -> None
-        | DefaultDataManager
-        | ConfiguredDataManager _ -> Some "_sdk.DataManager"
-        | MappingDataManager
-        | ConfiguredMappingDataManager _ -> Some "_sdk.MappingDataManager"
-        | ExternalDataManager custom -> Some custom.Definition.Id
+        ShellSlots.composedModuleId ShellSlots.dataManager config
 
     /// Module-derived processed data, plus the boot-prefetched snapshot while
     /// the DataManager module hasn't been mounted yet — so data modules see
@@ -1313,14 +1309,15 @@ module Client =
             else
                 []
 
-        // When a DataManager is configured, prefetch its file snapshot at boot
-        // so data modules see uploaded data immediately, without the user
-        // first opening the Data Manager page (best-effort — a failed fetch
-        // routes to `BootLoadFailed` and `PrefetchedProcessedData` stays empty).
+        // When the data-manager slot is filled — by the SDK's module or a
+        // deployment's own — prefetch its file snapshot at boot so data
+        // modules see uploaded data immediately, without the user first
+        // opening the data manager (best-effort — a failed fetch routes to
+        // `BootLoadFailed` and `PrefetchedProcessedData` stays empty).
         let dataLoaders =
-            match config.DataManager with
-            | NoDataManager -> []
-            | _ -> [
+            match dataManagerModuleId config with
+            | None -> []
+            | Some _ -> [
                 bootLoadCmd "data-snapshot" loadFileSnapshot DataSnapshotPrefetched
                 // Phase 6p — seed the session epoch alongside the
                 // snapshot it describes. The one call a healthy session
@@ -3786,12 +3783,15 @@ module Client =
         modules |> moduleIdentityTable |> ModuleIdentity.render
 
     /// Inject the SDK built-in modules around the app's own list. The
-    /// data manager is prepended so it sits near the top of the sidebar
-    /// — the natural "where you add data" entry point. Every
-    /// Admin-grouped built-in (team manager, team config, webhook
-    /// admin, health monitor, usage dashboard) is appended so the
-    /// Admin section's first-occurrence position lands AFTER the app's
-    /// work groups, putting Admin near the bottom of the sidebar.
+    /// shell composes from its slot table (`ShellSlots`), never from a
+    /// built-in's name: the Home slot heads the list (so, with no
+    /// `ActiveModule`, it is where the shell lands), the Leading rows
+    /// — the data manager, the "where you add data" entry — precede the
+    /// app's modules, and the Trailing rows — every administration
+    /// built-in, Team Management before Platform Management — follow
+    /// them, so the admin groups render near the bottom of the sidebar.
+    /// Whatever fills a slot (`ClientConfig.Slots`) takes the slot's
+    /// position and gate, the SDK's module and a deployment's own alike.
     /// `DebugOnly` modules are then partitioned to the very end of the
     /// list so their group renders below Admin — a fresh sidebar
     /// surfaces production work first, with experimental / scratch
@@ -3825,451 +3825,23 @@ module Client =
         // the partition were absent.
         let workApp, debugApp = modules |> List.partition (fun m -> m.Availability = Always)
 
-        let allDataTypeDisplays = modules |> List.collect _.DataTypes
+        // Phase 879 — every built-in comes from the slot table. What each
+        // slot holds, what admits it and the order the rows run in are
+        // declared once there (`ShellSlots.fs`); this function names none
+        // of them.
+        let ctx: ShellSlotContext = {
+            Config = config
+            DataTypes = modules |> List.collect _.DataTypes
+        }
 
-        // Phase 171 — optional Home / Overview landing module. Prepended
-        // ahead of `leading` so it becomes `modules[0]` — the shell's
-        // `init` lands on `modules[0]` when `ActiveModule = None`, so
-        // enabling Home makes it the default start surface for free (an
-        // explicit `ActiveModule` still wins). Off by default
-        // (`NoHomeModule`) so existing deployments are unchanged (GP 13).
-        let home =
-            match config.HomeModule with
-            | NoHomeModule -> []
-            | EnabledHomeModule -> [ Home.create config.HomeRecents None ]
-            | ConfiguredHomeModule cfg -> [ Home.create config.HomeRecents (Some cfg) ]
-            | ExternalHomeModule custom -> [ custom ]
+        let at position = ShellSlots.modulesAt position ctx
 
-        // Leading SDK module — DataManager (Knowledge group). Prepended
-        // so the "add data" entry sits near the top of the sidebar.
-        let leading =
-            match config.DataManager with
-            | NoDataManager -> []
-            | DefaultDataManager -> [ FileManagerUI.create allDataTypeDisplays None ]
-            | ConfiguredDataManager dmConfig -> [ FileManagerUI.create allDataTypeDisplays (Some dmConfig) ]
-            | MappingDataManager -> [ MappingDataManagerUI.create allDataTypeDisplays None ]
-            | ConfiguredMappingDataManager dmConfig -> [
-                MappingDataManagerUI.create allDataTypeDisplays (Some dmConfig)
-              ]
-            | ExternalDataManager custom -> [ custom ]
-
-        // Trailing SDK modules — Admin-grouped built-ins. Appended after
-        // the app's modules so the Admin section's first-occurrence
-        // position lands at the bottom of the sidebar.
-
-        // Team manager is injected for ANY `Team` surface (both
-        // `NoSwitcher` single-team and `HeaderSwitcher` multi-team).
-        //
-        // 0.5.3 — broadened from "single-team only" to "any team surface".
-        // The previous gate left multi-team deployments without a team
-        // manager UI on the theory that the header switcher handled team
-        // selection, but the switcher only renders when `MyTeams.Length
-        // >= 2` (line ~1269), so a freshly-signed-in multi-team user
-        // with 0 teams had no UI to CREATE a first team — and the
-        // team-mode-no-active-team filter blanket-hid every other module,
-        // leaving them with only the Platform Admin group visible. The
-        // manager handles create / join / settings; the switcher adds
-        // the in-session swap-active-team affordance on top. Both
-        // surfaces coexist cleanly for multi-team.
-        //
-        // Opt-out remains `TeamManager = NoTeamManager` in ClientConfig;
-        // explicit swap is `ExternalTeamManager m`.
-        let hasTeamSurface =
-            config.Surfaces
-            |> List.exists (function
-                | SurfaceProfile.Team _ -> true
-                | _ -> false)
-
-        let teamManager =
-            match hasTeamSurface, config.TeamManager with
-            | true, DefaultTeamManager -> [ TeamManagerUI.create None ]
-            | true, ConfiguredTeamManager tmConfig -> [ TeamManagerUI.create (Some tmConfig) ]
-            | true, ExternalTeamManager custom -> [ custom ]
-            | true, NoTeamManager
-            | _, _ -> []
-
-        // Parameterized SDK built-in no-active-team landing module. Injected
-        // only when (a) the deployment declares a `Team` surface, (b) the
-        // consumer set `ClientConfig.NoActiveTeamLanding` (the copy), and
-        // (c) did NOT supply its own custom module via
-        // `NoActiveTeamLandingModuleId` (which takes precedence and means the
-        // consumer owns the landing). Prepended ahead of `leading` (below)
-        // so its sidebar group sits at the top. The gate
-        // (`effectiveNoActiveTeamLandingId`) resolves to this module's stable
-        // id; `Visibility.visibleTo [ UserKind ]` hides the entry once a team
-        // is active. Off by default (GP 13).
-        let noActiveTeamLanding =
-            match hasTeamSurface, config.NoActiveTeamLandingModuleId, config.NoActiveTeamLanding with
-            | true, None, Some landingCfg -> [ NoActiveTeamLandingUI.create landingCfg ]
-            | _ -> []
-
-        // Configuration admin is meaningful when the deployment
-        // declares any authenticated surface — Anonymous-only
-        // deployments have no persistent scope so every read / write
-        // would fail. Opt-out per config; explicit swap via
-        // `ExternalTeamConfig`.
-        let teamConfig =
-            match ClientConfig.requiresAnyAuth config, config.TeamConfig with
-            | false, _
-            | _, NoTeamConfig -> []
-            | _, DefaultTeamConfig -> [ TeamConfigUI.create None ]
-            | _, ConfiguredTeamConfig cfg -> [ TeamConfigUI.create (Some cfg) ]
-            | _, ExternalTeamConfig custom -> [ custom ]
-
-        // Webhook admin: same scope rule as TeamConfig — Anonymous-only
-        // deployments have no persistent scope to attach subscriptions
-        // to, so the module is omitted there regardless of
-        // `WebhookAdmin` setting.
-        let webhookAdmin =
-            match ClientConfig.requiresAnyAuth config, config.WebhookAdmin with
-            | false, _
-            | _, NoWebhookAdmin -> []
-            | _, DefaultWebhookAdmin -> [ WebhookAdminUI.create None ]
-            | _, ConfiguredWebhookAdmin cfg -> [ WebhookAdminUI.create (Some cfg) ]
-            | _, ExternalWebhookAdmin custom -> [ custom ]
-
-        // Phase 527 — service-account admin. Same scope rule as the
-        // webhook admin above and for the same reason: an account and its
-        // tokens are owned by a persistent scope, and an Anonymous-only
-        // deployment has none, so every call would fail. Omitted whatever
-        // the setting says in that case.
-        let serviceAccountAdmin =
-            match ClientConfig.requiresAnyAuth config, config.ServiceAccountAdmin with
-            | false, _
-            | _, NoServiceAccountAdmin -> []
-            | _, DefaultServiceAccountAdmin -> [ ServiceAccountUI.create None ]
-            | _, ConfiguredServiceAccountAdmin cfg -> [ ServiceAccountUI.create (Some cfg) ]
-            | _, ExternalServiceAccountAdmin custom -> [ custom ]
-
-        // Phase 6f.A — external-contact admin. Same scope rule as the
-        // service-account admin above: an address book belongs to a
-        // persistent scope, and an Anonymous-only deployment has none,
-        // so every call would fail. Omitted whatever the setting says in
-        // that case.
-        let externalContactManager =
-            match ClientConfig.requiresAnyAuth config, config.ExternalContactManager with
-            | false, _
-            | _, NoExternalContactManager -> []
-            | _, DefaultExternalContactManager -> [ ExternalContactManagerUI.create None ]
-            | _, ConfiguredExternalContactManager cfg -> [ ExternalContactManagerUI.create (Some cfg) ]
-            | _, ExternalExternalContactManager custom -> [ custom ]
-
-        // Phase 441 — notification preference centre. Same scope rule as
-        // the service-account admin above: a preference record is stored
-        // per persistent scope for a signed-in person, and an
-        // Anonymous-only deployment has neither, so every call would fail.
-        // Omitted whatever the setting says in that case.
-        let notificationPreferences =
-            match ClientConfig.requiresAnyAuth config, config.NotificationPreferences with
-            | false, _
-            | _, NoNotificationPreferencesUI -> []
-            | _, DefaultNotificationPreferencesUI -> [ NotificationPreferencesUI.create None ]
-            | _, ConfiguredNotificationPreferencesUI cfg -> [ NotificationPreferencesUI.create (Some cfg) ]
-            | _, ExternalNotificationPreferencesUI custom -> [ custom ]
-
-        // Module-visibility profile editor: same scope rule again — a
-        // profile is stored per admin scope, and an Anonymous-only
-        // deployment has none, so every read / write would fail. The
-        // server-side substrate is separately opt-in
-        // (`ServerConfig.ModuleVisibility`); when it is off the API 404s
-        // and this config is expected to stay `NoModuleVisibilityAdmin`.
-        let moduleVisibilityAdmin =
-            match ClientConfig.requiresAnyAuth config, config.ModuleVisibilityAdmin with
-            | false, _
-            | _, NoModuleVisibilityAdmin -> []
-            | _, DefaultModuleVisibilityAdmin -> [ ModuleVisibilityAdminUI.create None ]
-            | _, ConfiguredModuleVisibilityAdmin cfg -> [ ModuleVisibilityAdminUI.create (Some cfg) ]
-            | _, ExternalModuleVisibilityAdmin custom -> [ custom ]
-
-        // Phase 528 — session-security page. Same scope rule again, for a
-        // sharper reason than the two above: the page lists sessions
-        // recorded against the CALLER's identity, and an Anonymous-only
-        // deployment's identity is the session itself, so the page would
-        // show one row describing the browser reading it and offer to
-        // sign it out of nothing. The server-side registry is separately
-        // opt-in (`ServerConfig.SessionRegistry`); when it is off the API
-        // 404s and this config is expected to stay `NoSessionSecurity`.
-        let sessionSecurity =
-            match ClientConfig.requiresAnyAuth config, config.SessionSecurity with
-            | false, _
-            | _, NoSessionSecurity -> []
-            | _, DefaultSessionSecurity -> [ SessionSecurityUI.create None ]
-            | _, ConfiguredSessionSecurity cfg -> [ SessionSecurityUI.create (Some cfg) ]
-            | _, ExternalSessionSecurity custom -> [ custom ]
-
-        // Phase 4b — Platform Admin module. Mode-agnostic: registered
-        // unconditionally and gated by the shell's sidebar filter
-        // (commit 4f.2) on `PlatformRole.PlatformAdmin`. Anonymous-mode
-        // suppression dropped post-smoke-test (2026-05-10): a
-        // bootstrapped admin in Anonymous mode legitimately holds the
-        // role (via TOOLUP_INITIAL_PLATFORM_ADMIN or AutoBootstrapDevAdmin)
-        // and should reach the admin surface. Non-admins never see the
-        // entry because the role filter hides the entire "Platform
-        // Management" group (the module's declared group) when
-        // `PlatformRole = None`.
-        let platformAdmin =
-            match config.PlatformAdmin with
-            | NoPlatformAdmin -> []
-            | DefaultPlatformAdmin -> [ PlatformAdminUI.create None config ]
-            | ConfiguredPlatformAdmin cfg -> [ PlatformAdminUI.create (Some cfg) config ]
-            | ExternalPlatformAdmin custom -> [ custom ]
-
-        // Permissions admin (Tidy-Up #3 closure of Phase 4 + Phase 5).
-        // Anonymous mode skipped by construction — the server-side
-        // `PermissionApi.GetTeamPermissions` returns `Error` for
-        // unscoped callers, so the module would render an empty
-        // error pane. Suppress at the sidebar level instead. Sits
-        // in the standard "Admin" group alongside TeamConfig /
-        // WebhookAdmin / DataIngestion; Owner/Admin gating on the
-        // write paths is enforced server-side via PermissionApi.
-        let permissionsAdmin =
-            match ClientConfig.requiresAnyAuth config, config.PermissionsAdmin with
-            | false, _
-            | _, NoPermissionsAdmin -> []
-            | _, DefaultPermissionsAdmin -> [ PermissionsAdminUI.create None ]
-            | _, ConfiguredPermissionsAdmin cfg -> [ PermissionsAdminUI.create (Some cfg) ]
-            | _, ExternalPermissionsAdmin custom -> [ custom ]
-
-        // Health monitor admin (Phase 9p): role re-gated to
-        // `canModifyPlatformConfig` in commit 4f.1 + 4f.3; it declares
-        // `NavRole.PlatformAdminOnly` and, since Phase 9x, the
-        // "Observability" group. Mode-agnostic post-Phase-4b — same
-        // reasoning as the Platform Admin module above. Bootstrapped
-        // admin in any mode (including Anonymous dev) reaches the
-        // panels; non-admins are hidden by the sidebar role filter.
-        let healthMonitor =
-            match config.HealthMonitor with
-            | NoHealthMonitor -> []
-            | DefaultHealthMonitor -> [ HealthMonitorUI.create None ]
-            | ConfiguredHealthMonitor cfg -> [ HealthMonitorUI.create (Some cfg) ]
-            | ExternalHealthMonitor custom -> [ custom ]
-
-        // Phase 9w — the Datadog readback admin. Opt-in (the default is
-        // `NoDatadogReadback`), and gated the same way HealthMonitor is:
-        // monitor state and error logs are deployment-wide data, so the
-        // module declares `NavRole.PlatformAdminOnly` and the endpoints
-        // enforce the same predicate server-side. Mode-agnostic for the
-        // same reason as the built-ins above — a bootstrapped admin in
-        // any mode reaches it, and non-admins never see the entry.
-        //
-        // It coined the "Observability" sidebar group, which Phase 9x
-        // added to the platform-admin allow-list and moved
-        // `HealthMonitorUI` into.
-        let datadogReadback =
-            match config.DatadogReadback with
-            | NoDatadogReadback -> []
-            | EnabledDatadogReadback readbackConfig -> [ DatadogReadbackUI.create readbackConfig ]
-
-        // Phase 9x — the self-hosted observability admin (Logs / Metrics /
-        // Alerts over the log store, the metrics history and the alert
-        // engine). Opt-in (`NoObservabilityModule` is the default), gated
-        // like the two observability modules above, and in their group.
-        // The module reads `/api/observability/sources` first and shows
-        // only the tabs whose source the server composed, so one client
-        // setting serves every server-side combination.
-        let observability =
-            match config.Observability with
-            | NoObservabilityModule -> []
-            | DefaultObservabilityModule -> [ ObservabilityUI.create () ]
-
-        // Phase 9p.A — service-status-board admin. Same Platform-Admin
-        // gating as HealthMonitor: composes deployment-wide observability
-        // surfaces (Health, Preflight, Drift, RateLimit, JobQueue,
-        // SmokeTest) into one snapshot. Mode-agnostic by the same
-        // reasoning — a bootstrapped admin in any mode (including
-        // Anonymous dev) reaches the board; non-admins are hidden by
-        // the sidebar role filter.
-        let serviceStatusBoard =
-            match config.ServiceStatusBoard with
-            | NoServiceStatusBoard -> []
-            | DefaultServiceStatusBoard -> [ ServiceStatusBoardUI.create None ]
-            | ConfiguredServiceStatusBoard cfg -> [ ServiceStatusBoardUI.create (Some cfg) ]
-            | ExternalServiceStatusBoard custom -> [ custom ]
-
-        // Phase 9d — usage dashboard. Same Anonymous suppression as
-        // HealthMonitor: Anonymous deployments have no role concept and
-        // exposing tenant cost telemetry to every visitor is a
-        // reconnaissance gift. Server-side handler short-circuits
-        // Anonymous independently. Owner/Admin gate is enforced
-        // server-side; Member-role users see the sidebar entry but the
-        // table renders an "only owners and admins" error message.
-        let usageDashboard =
-            match ClientConfig.requiresAnyAuth config, config.UsageDashboard with
-            | false, _
-            | _, NoUsageDashboard -> []
-            | _, DefaultUsageDashboard -> [ UsageDashboard.create None ]
-            | _, ConfiguredUsageDashboard cfg -> [ UsageDashboard.create (Some cfg) ]
-            | _, ExternalUsageDashboard custom -> [ custom ]
-
-        // Phase 529 — audit-trail viewer. Same Anonymous suppression as
-        // UsageDashboard above and for a sharper version of the same
-        // reason: an audit trail names who did what, and a deployment
-        // with no role concept has nobody it can safely be shown to.
-        // Pair with `ServerConfig.AuditLog = EnabledAuditLog` — the
-        // viewer renders its "no audit events" state when the trail is
-        // off server-side (the default), which is harmless to leave in
-        // place for future enablement. Owner/Admin gating is enforced
-        // server-side; a Member sees the sidebar entry and the table
-        // renders the handler's "only owners and admins" message.
-        let auditViewer =
-            match ClientConfig.requiresAnyAuth config, config.AuditViewer with
-            | false, _
-            | _, NoAuditViewer -> []
-            | _, DefaultAuditViewer -> [ AuditLogUI.create None ]
-            | _, ConfiguredAuditViewer cfg -> [ AuditLogUI.create (Some cfg) ]
-            | _, ExternalAuditViewer custom -> [ custom ]
-
-        // Phase 593 — composition inspector. Same Anonymous suppression
-        // as AuditViewer above, for the same class of reason: the panels
-        // enumerate this deployment's companions, its resolved config
-        // knobs and the purposes it may disclose under, which is a map
-        // of the attack surface. Owner/Admin gating is enforced
-        // server-side; a Member sees the sidebar entry and each panel
-        // renders the handler's "only owners and admins" message.
-        //
-        // No `ServerConfig` pairing to state here — the snapshot the
-        // panels read is registered by `ServerApp.run` itself, so a
-        // deployment composed through the fluent root always has one.
-        let compositionInspector =
-            match ClientConfig.requiresAnyAuth config, config.CompositionInspector with
-            | false, _
-            | _, NoCompositionInspector -> []
-            | _, DefaultCompositionInspector -> [ CompositionInspectorUI.create None ]
-            | _, ConfiguredCompositionInspector cfg -> [ CompositionInspectorUI.create (Some cfg) ]
-            | _, ExternalCompositionInspector custom -> [ custom ]
-
-        // Phase 10b — data-ingestion admin. Same Anonymous suppression
-        // as TeamConfig / WebhookAdmin / HealthMonitor / UsageDashboard:
-        // Anonymous deployments have no role concept and exposing data-
-        // source credentials to every visitor is a reconnaissance gift.
-        // Pair with `ServerConfig.DataIngestion = EnabledDataIngestion`
-        // — the admin renders an empty list when ingestion is disabled
-        // server-side, but it's harmless to leave the sidebar entry in
-        // place for future enablement.
-        let dataIngestionAdmin =
-            match ClientConfig.requiresAnyAuth config, config.DataIngestionAdmin with
-            | false, _
-            | _, NoDataIngestionAdmin -> []
-            | _, DefaultDataIngestionAdmin -> [ DataIngestionUI.create None ]
-            | _, ConfiguredDataIngestionAdmin cfg -> [ DataIngestionUI.create (Some cfg) ]
-            | _, ExternalDataIngestionAdmin custom -> [ custom ]
-
-        // Phase 10a — data-migration admin. Same Anonymous suppression
-        // as the blocks around it: an Anonymous deployment has no role
-        // concept, and the manual trigger is an Owner / Admin act.
-        // Default `NoMigrationAdmin` — opt in by setting
-        // `ClientConfig.MigrationAdmin` AND `ServerConfig.DataMigrations`
-        // to one of the enabled modes; without the server substrate the
-        // route is not mounted and the module would be a dead end.
-        let migrationAdmin =
-            match ClientConfig.requiresAnyAuth config, config.MigrationAdmin with
-            | false, _
-            | _, NoMigrationAdmin -> []
-            | _, DefaultMigrationAdmin -> [ MigrationStatusUI.create None ]
-            | _, ConfiguredMigrationAdmin cfg -> [ MigrationStatusUI.create (Some cfg) ]
-            | _, ExternalMigrationAdmin custom -> [ custom ]
-
-        // Phase 9h — data-subject-request admin. Same Anonymous
-        // suppression: Anonymous deployments have no persistent scope
-        // for a request to attach to. Default `NoDataSubjectRequestAdmin`
-        // — opt in by setting `ClientConfig.DataSubjectRequestAdmin`
-        // AND `ServerConfig.DataSubjectRequests = Enabled policy` on
-        // the server (the API endpoint short-circuits otherwise).
-        // Owner / Admin gating is enforced server-side by the handler;
-        // the sidebar entry renders for every authenticated caller in
-        // non-Anonymous modes.
-        let dataSubjectRequestAdmin =
-            match ClientConfig.requiresAnyAuth config, config.DataSubjectRequestAdmin with
-            | false, _
-            | _, NoDataSubjectRequestAdmin -> []
-            | _, DefaultDataSubjectRequestAdmin -> [ DataSubjectRequestAdminUI.create None ]
-            | _, ConfiguredDataSubjectRequestAdmin cfg -> [ DataSubjectRequestAdminUI.create (Some cfg) ]
-            | _, ExternalDataSubjectRequestAdmin custom -> [ custom ]
-
-        // Phase 54e — tenant-lifecycle diagnostics admin. Mode-agnostic,
-        // same reasoning as PlatformAdmin / HealthMonitor: a bootstrapped
-        // admin in any mode reaches the panel; non-admins are hidden by
-        // the sidebar role filter on the "Platform Management" group.
-        // Zero-cost on `NoTenantLifecycle` deployments (GP 13): the API
-        // surface 404s and the panel renders its empty state.
-        let tenantLifecycleAdmin = [ TenantLifecycleAdminUI.create () ]
-
-        // Phase 544 — platform user-management admin. Opt-in (GP 11/13):
-        // default `NoPlatformUsers` omits it, so an existing deployment's
-        // sidebar is byte-for-byte unchanged. Same Platform-Management
-        // gating as TenantLifecycleAdmin — the sidebar role filter hides
-        // the group from non-admins, and every IPlatformTenantApi method
-        // is admin-gated server-side. Zero-cost on `NoTenantLifecycle`
-        // deployments: the offboard endpoints 404 and the per-row actions
-        // degrade to an error banner; the list itself still renders.
-        let platformUsers =
-            match config.PlatformUsers with
-            | NoPlatformUsers -> []
-            | DefaultPlatformUsers -> [ PlatformUsersUI.create None ]
-
-        // Phase 573.A — the Administration area's landing module. Only
-        // registered under `AdminSurface = SeparateArea`: under the
-        // default `InlineGroups` there are no areas, nothing to flip
-        // between, and therefore nothing to land on — the composed list
-        // is byte-for-byte pre-573 (GP 11). Listed first in `trailing`
-        // so it leads the administration partition; the sidebar
-        // additionally lifts it into its always-visible leading section
-        // (`Toolup.Sidebar.AdminHomeId`), which is what actually pins it
-        // to the top of the admin rail.
-        let adminHome =
-            match config.AdminSurface with
-            | InlineGroups -> []
-            | SeparateArea -> [ AdminHome.create () ]
-
-        // Trailing order is load-bearing: the sidebar renders groups
-        // in first-occurrence order across the full module list, so
-        // whichever group is named first in `trailing` lands earlier in
-        // the sidebar. We list every "Team Management" module first
-        // (so the group appears under the workApp area), then every
-        // "Platform Management" module (so the group sits at the
-        // bottom of the sidebar). Within each group the per-module
-        // order is the listing order here; the sidebar's per-user
-        // `SidebarPreferences.ModuleOrder` overlay still applies on
-        // top for operators who reorder.
-        let trailing =
-            // Phase 573 — the administration landing leads the admin
-            // partition (and is absent entirely under `InlineGroups`).
-            adminHome
-            // Team Management group — appears first in trailing.
-            @ teamManager
-            @ teamConfig
-            @ webhookAdmin
-            @ serviceAccountAdmin
-            @ externalContactManager
-            @ notificationPreferences
-            @ moduleVisibilityAdmin
-            @ sessionSecurity
-            @ permissionsAdmin
-            @ usageDashboard
-            @ auditViewer
-            @ dataIngestionAdmin
-            // Platform Management group — appears last in trailing,
-            // so its first-occurrence lands at the bottom of the sidebar.
-            @ platformAdmin
-            @ healthMonitor
-            @ datadogReadback
-            @ observability
-            @ serviceStatusBoard
-            @ dataSubjectRequestAdmin
-            @ migrationAdmin
-            @ tenantLifecycleAdmin
-            @ platformUsers
-            // Phase 593 — appended at the END of the Platform Management
-            // block, not beside `auditViewer` where it was first written.
-            // The sidebar renders groups in FIRST-OCCURRENCE order across
-            // the composed list, so a "Platform Management" module listed
-            // up in the Team Management region would pull the whole
-            // Platform Management group above Team Management for every
-            // existing deployment (GP 11). Last in the block also keeps
-            // the per-module order additive.
-            @ compositionInspector
-
-        let composed = home @ noActiveTeamLanding @ leading @ workApp @ trailing @ debugApp
+        let composed =
+            at ShellSlotPosition.Home
+            @ at ShellSlotPosition.Leading
+            @ workApp
+            @ at ShellSlotPosition.Trailing
+            @ debugApp
 
         // Phase 580 — refuse a composition where two modules resolve to
         // the same id before the shell keys any state by it. Runs on the
@@ -4283,62 +3855,27 @@ module Client =
 
         composed
 
-    /// Phase 573.B — the administration-landing tiles the SDK's own
-    /// built-ins contribute, each gated on the SAME `ClientConfig` mode
-    /// that decides whether its module is registered at all (the four
-    /// matches mirror `prepareModules`' injection blocks line for line,
-    /// so the two can be read side by side).
-    ///
-    /// Only the SDK-owned modes contribute. `No…` contributes nothing —
-    /// the module does not exist, so neither does its tile — and an
-    /// `External…` replacement contributes nothing either: it is a
-    /// different module with a different id, and a tile inheriting this
-    /// one's click-through would navigate to something unregistered. A
-    /// replacement wires its own tile through
-    /// `ClientConfig.Handlers.AdminTileContributors`, the same seam a
-    /// consumer module uses.
+    /// Phase 879 — every administration tile the shell registers: the
+    /// slots' tiles, each built for whichever module fills its slot
+    /// (`ShellSlots.adminTiles`), then the deployment's own
+    /// (`ClientConfig.Handlers.AdminTileContributors`). A slot tile steps
+    /// aside for a module that supplies its own tile, so a replacement
+    /// that wires one keeps it and a replacement that does not still has
+    /// the slot's. Each consumer contributor is called exactly once.
     ///
     /// Note this gate is belt AND braces: a tile is rendered only when
     /// the caller may navigate to its owning module
-    /// (`AdminTiles.visible`), so a mode-off built-in has no tile on the
-    /// landing page even if something contributed one anyway.
-    let private builtInAdminTiles (config: ClientConfig) : AdminTile list =
-        let teams =
-            match config.TeamManager with
-            | DefaultTeamManager -> [ TeamManagerUI.adminTile None ]
-            | ConfiguredTeamManager cfg -> [ TeamManagerUI.adminTile (Some cfg) ]
-            | NoTeamManager
-            | ExternalTeamManager _ -> []
-
-        let usage =
-            match config.UsageDashboard with
-            | DefaultUsageDashboard -> [ UsageDashboard.adminTile None ]
-            | ConfiguredUsageDashboard cfg -> [ UsageDashboard.adminTile (Some cfg) ]
-            | NoUsageDashboard
-            | ExternalUsageDashboard _ -> []
-
-        let health =
-            match config.HealthMonitor with
-            | DefaultHealthMonitor -> [ HealthMonitorUI.adminTile None ]
-            | ConfiguredHealthMonitor cfg -> [ HealthMonitorUI.adminTile (Some cfg) ]
-            | NoHealthMonitor
-            | ExternalHealthMonitor _ -> []
-
-        let serviceStatus =
-            match config.ServiceStatusBoard with
-            | DefaultServiceStatusBoard -> [ ServiceStatusBoardUI.adminTile None ]
-            | ConfiguredServiceStatusBoard cfg -> [ ServiceStatusBoardUI.adminTile (Some cfg) ]
-            | NoServiceStatusBoard
-            | ExternalServiceStatusBoard _ -> []
-
-        teams @ usage @ health @ serviceStatus
-
-    /// The SDK built-ins as an `IAdminTileContributor`, so they enter the
-    /// registry through the same seam a consumer module does — the
-    /// registry has one kind of input, not two.
-    let private builtInAdminTileContributor (config: ClientConfig) : IAdminTileContributor =
+    /// (`AdminTiles.visible`), so a tile whose module the shell did not
+    /// compose has no place on the landing page even though it counts
+    /// as contributed.
+    let private shellAdminTileContributor (config: ClientConfig) : IAdminTileContributor =
         { new IAdminTileContributor with
-            member _.Tiles() = builtInAdminTiles config
+            member _.Tiles() =
+                let supplied =
+                    config.Handlers.AdminTileContributors
+                    |> List.collect (fun contributor -> contributor.Tiles())
+
+                ShellSlots.adminTiles config supplied @ supplied
         }
 
     /// Aggregate every module's `ClientQueryHandlers` into the per-module
@@ -4713,9 +4250,10 @@ module Client =
         // Phase 217 — collect module-contributed Home widgets once.
         HomeWidgetRegistry.setContributors config.Handlers.HomeWidgetContributors
         // Phase 573 — the same, for administration-landing tiles: the
-        // SDK's own mode-gated built-in tiles first (so they lead the
-        // grid at equal weight), then whatever the consumer wired.
-        AdminTileRegistry.setContributors (builtInAdminTileContributor config :: config.Handlers.AdminTileContributors)
+        // shell slots' tiles first (so they lead the grid at equal
+        // weight), then whatever the consumer wired (Phase 879 — one
+        // contributor, so a slot tile can step aside for a module's own).
+        AdminTileRegistry.setContributors [ shellAdminTileContributor config ]
         Toolup.NarrativeCommit.setHandler config.Handlers.NarrativeCommitHandler
 
         // Phase 13a — validate explicit composition against declared

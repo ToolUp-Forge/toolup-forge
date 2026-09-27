@@ -6,7 +6,7 @@
   "groupIdentity": "ToolUp.Templates.DataManager",
   "name": "ToolUp Platform SDK External Data Manager",
   "shortName": "platformsdk-datamanager",
-  "description": "Four-file module replacing FileManagerUI: registers with ExternalDataManager mode and includes an IDataSource skeleton + file-upload UI patterns.",
+  "description": "Four-file module replacing FileManagerUI: fills the data-manager shell slot (SlotFill.External) and includes an IDataSource skeleton + file-upload UI patterns.",
   "tags": {
     "language": "F#",
     "type": "item"
@@ -30,7 +30,7 @@
       "manualInstructions": [
         { "text": "Add the new project to your .sln (dotnet sln add path/to/MyDataManager.fsproj)." },
         { "text": "Add <ProjectReference> + <Import .Client.props> to the target server / client fsprojs." },
-        { "text": "Register the data manager in the target Server.fs and Client.fs entry points using ExternalDataManager mode." }
+        { "text": "Register the data manager in the target Server.fs and Client.fs entry points, filling the data-manager shell slot with Slots.DataManager = SlotFill.External." }
       ],
       "actionId": "AC1156F7-BB77-4DB8-B28F-24EEBCCA1E5C",
       "continueOnError": true

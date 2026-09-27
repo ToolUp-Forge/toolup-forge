@@ -226,12 +226,12 @@ type DataIngestionMode =
 /// that backs the mapping-aware Data Manager (`DataManager =
 /// MappingDataManager` on the client). Default: `NoColumnMapping` — no
 /// `IColumnMappingStore`, no `IColumnMappingApi` route. Pairs with the
-/// client `DataManagerMode`, mirroring the `DataIngestion` (server) /
+/// client data-manager shell slot, mirroring the `DataIngestion` (server) /
 /// `DataManager` (client) split: the client mode renders the wizard,
 /// this server flag persists the reusable maps and mounts the API.
 type ColumnMappingMode =
     /// No column-mapping infrastructure. Default — the built-in Data
-    /// Manager (`DefaultDataManager`) needs no per-CSV mapping store.
+    /// Manager (the data slot's `SlotFill.Default`) needs no per-CSV mapping store.
     | NoColumnMapping
     /// `IColumnMappingStore` (default `IDataObjectStore`-backed) in DI
     /// and `IColumnMappingApi` auto-mounted. Enable alongside

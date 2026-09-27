@@ -571,13 +571,18 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement = AuditLo
 
 // ─── Module creation ─────────────────────────────────────────────────
 
+/// Phase 879 — this built-in's module id. Its shell slot reads it
+/// (`ShellSlot.FilledModuleId`) to know which module fills the slot
+/// without building one; `create` registers the module under it.
+let moduleId = "_sdk.AuditLog"
+
 /// Create the built-in audit-trail viewer as an `ErasedModule`. The
-/// shell's `prepareModules` injects this in any non-Anonymous mode
-/// unless `AuditViewer = NoAuditViewer`. The server-side handler
+/// module fills the `AuditViewer` shell slot (Default / Configured),
+/// admitted on any authenticated surface. The server-side handler
 /// enforces the Owner/Admin gate and the caller-scope isolation
 /// independently — the `NavRole` below hides the sidebar entry, which
 /// is an affordance, never the boundary.
-let create (config: AuditViewerConfig option) : ErasedModule =
+let create (config: ModuleLabel option) : ErasedModule =
     let name = config |> Option.map _.Name |> Option.defaultValue "Audit Trail"
 
     // No dedicated audit glyph ships in `Icons`; `lock` is the closest
@@ -594,7 +599,7 @@ let create (config: AuditViewerConfig option) : ErasedModule =
         Name = name
         Icon = icon
     }
-    |> ToolUp.Platform.ClientModule.withId "_sdk.AuditLog"
+    |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withFullWidthView view
     |> ToolUp.Platform.ClientModule.withGroup "Team Management"
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin

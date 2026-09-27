@@ -77,7 +77,7 @@ let private adminHome = {
 /// A deployment running all four tile-contributing built-ins.
 let private allRegistered = [ adminHome; teamManager; usageDashboard; healthMonitor; serviceStatusBoard ]
 
-/// The same deployment with `HealthMonitor = NoHealthMonitor` — the
+/// The same deployment with `Slots.HealthMonitor = SlotFill.Empty` — the
 /// module is simply not composed, which is the whole of what "mode off"
 /// means downstream of `prepareModules`.
 let private withoutHealthMonitor =
@@ -90,7 +90,7 @@ let private tile (id: string) (owner: string) (weight: int) : AdminTiles.AdminTi
 }
 
 // The tiles the four built-ins contribute, at their shipped weights and
-// in contribution order (`SDK.Client.builtInAdminTiles`).
+// in contribution order (`ShellSlots.adminTiles`).
 let private teamsTile = tile "_sdk.tile.teams" "_sdk.TeamManager" 10
 let private usageTile = tile "_sdk.tile.usage" "_sdk.UsageDashboard" 20
 let private healthTile = tile "_sdk.tile.health" "_sdk.HealthMonitor" 30
@@ -177,7 +177,7 @@ let compositionTests =
         }
 
         test "a mode-off built-in has no tile" {
-            // `NoHealthMonitor` means the module is never composed, so
+            // An empty slot means the module is never composed, so
             // even a stray contribution has no reachable owner. This is
             // the second of the two gates 573.B relies on — the first is
             // that the shell does not contribute the tile at all.

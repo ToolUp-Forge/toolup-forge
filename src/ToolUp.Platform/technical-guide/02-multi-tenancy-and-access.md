@@ -118,7 +118,7 @@ The dictionary is **unbounded by design**. `userId` cardinality is bounded by re
 
 The built-in `TeamManagerUI` invokes `ctx.OnTeamSwitched` from `ActiveTeamSwitched(_, Ok())` and `TeamCreated(Ok _)`. The header switcher dispatches `TeamSwitched` directly after `teamApi.SetActiveTeam` succeeds. Both routes converge on the same shell handler.
 
-**Custom team-management UIs.** Apps that replace `TeamManagerUI` via `ExternalTeamManager` must invoke `ctx.OnTeamSwitched |> Option.iter (fun f -> f teamId)` after a successful switch / create — the built-in pattern. Otherwise the server-side switch persists but the client UI keeps the previous team's data, exactly the bug `MultiTeam` is designed to avoid.
+**Custom team-management UIs.** Apps that replace `TeamManagerUI` via `Slots.TeamManager = SlotFill.External m` must invoke `ctx.OnTeamSwitched |> Option.iter (fun f -> f teamId)` after a successful switch / create — the built-in pattern. Otherwise the server-side switch persists but the client UI keeps the previous team's data, exactly the bug `MultiTeam` is designed to avoid.
 
 **Module re-init handles the per-module state.** `ModuleStates = Map.empty` evicts the prior team's state across every module. After re-init, each module's `init` runs against the new `ClientModuleContext` and re-fetches its own data: `FileManagerUI.ListFiles`, AI assistant's `ListConversations`, KnowledgeBase's `GetDocuments`, every analytical module's pristine state. `ProcessedDataContext` is re-derived by `computeProcessedData` on the next render against empty module state. No module-level handling required.
 
@@ -249,7 +249,7 @@ ConfigsLoaded ─► evict active module's state ─► re-init with fresh Clien
 
 ### TeamConfigUI admin form
 
-The built-in admin UI lives in `Client/TeamConfigUI.fs`. It is auto-injected in every non-Anonymous mode via `TeamConfigMode` (mirrors `DataManagerMode` / `TeamManagerMode`). Key implementation notes:
+The built-in admin UI lives in `Client/TeamConfigUI.fs`. It fills the `TeamConfig` shell slot (`ClientConfig.Slots.TeamConfig`), admitted in every non-Anonymous mode, like every other replaceable built-in. Key implementation notes:
 
 - **Local React state for draft values.** Each field's working value is held in `React.useState`, not the Elmish model. Typing in a text input does not dispatch. Save and Clear are the only entry points to Elmish — matches the pattern documented in `UIToolkit.Forms.Input` and `AIAssistantUI.MessageInput`.
 - **Per-field JSON encoding in `jsonFromDisplay`.** Bool gets literal `"true"` / `"false"`; Int/Float pass through as trimmed numeric literals; String/Choice get wrapped via `Fable.Core.JS.JSON.stringify` so quotes and escapes round-trip cleanly.
@@ -343,7 +343,7 @@ let clientConfig = {
     ClientConfig.defaults with
         AdPanel = EnabledAdPanel { DefaultAdClientId = "ca-pub-XXXXXXXX" }
         PremiumModel = AnonymousFirst
-        PlatformAdmin = DefaultPlatformAdmin
+        Slots.PlatformAdmin = SlotFill.Default
         PlatformAdminProfile = PublicUtilityPlatformAdminProfile
 }
 
