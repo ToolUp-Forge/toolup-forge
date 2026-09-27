@@ -264,7 +264,7 @@ let tests =
 
                 fun () ->
                     Expect.isFalse
-                        (JsonDecoders.isRegistered typeof<LedgerLineViaReflection>)
+                        (JsonDecoders.isRegistered None typeof<LedgerLineViaReflection>)
                         "the twin type must be unregistered for this case to mean anything"
 
                     match outcome () with

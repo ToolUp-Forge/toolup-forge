@@ -427,7 +427,7 @@ module Proxy =
                         // lookup is per call, as the binary branch's is:
                         // registration happens at composition and need not
                         // precede the proxy's construction.
-                        match ToolUp.Remoting.Json.JsonDecoders.tryGet returnClrType with
+                        match ToolUp.Remoting.Json.JsonDecoders.tryGet None returnClrType with
                         | Some decoder ->
                             match
                                 ToolUp.Remoting.Json.JsonText.tryParse response.ResponseBody
