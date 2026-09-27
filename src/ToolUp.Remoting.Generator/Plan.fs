@@ -63,7 +63,10 @@ type FieldPlan = {
     /// The field's index in `FSharpType.GetRecordFields` order, which IS
     /// the order `Write.writeRecord` emits.
     Position: int
-    /// The rendered decoder expression for the field's type.
+    /// The rendered decoder expression for the field's type. Phase 841 —
+    /// on the JSON wire (`Plan.forJsonTypes`) it is the field's whole
+    /// member read instead: `JsonDecode.field` / `optionalField` by name,
+    /// or `JsonDecode.index` by position inside a union case.
     Decoder: string
     /// The F# source spelling of the field's type, for the emitted
     /// construction lambda's readability only.
@@ -411,8 +414,64 @@ module Plan =
             typeof<DateTimeOffset>, "Decode.asDateTimeOffset"
         ]
 
+    /// Phase 841 — the JSON wire's primitives: `JsonDecode`'s arms, which
+    /// are the MessagePack set's twins plus `DateOnly` / `TimeOnly`
+    /// (the STJ converter set writes both; the MessagePack writer does
+    /// not, so that wire keeps refusing them).
+    let private jsonPrimitiveDecoders =
+        dict [
+            typeof<bool>, "JsonDecode.asBool"
+            typeof<unit>, "JsonDecode.asUnit"
+            typeof<string>, "JsonDecode.asString"
+            typeof<char>, "JsonDecode.asChar"
+            typeof<int>, "JsonDecode.asInt32"
+            typeof<int64>, "JsonDecode.asInt64"
+            typeof<int16>, "JsonDecode.asInt16"
+            typeof<sbyte>, "JsonDecode.asSByte"
+            typeof<byte>, "JsonDecode.asByte"
+            typeof<uint16>, "JsonDecode.asUInt16"
+            typeof<uint32>, "JsonDecode.asUInt32"
+            typeof<uint64>, "JsonDecode.asUInt64"
+            typeof<float>, "JsonDecode.asFloat"
+            typeof<float32>, "JsonDecode.asFloat32"
+            typeof<decimal>, "JsonDecode.asDecimal"
+            typeof<Guid>, "JsonDecode.asGuid"
+            typeof<TimeSpan>, "JsonDecode.asTimeSpan"
+            typeof<DateTime>, "JsonDecode.asDateTime"
+            typeof<DateTimeOffset>, "JsonDecode.asDateTimeOffset"
+            typeof<DateOnly>, "JsonDecode.asDateOnly"
+            typeof<TimeOnly>, "JsonDecode.asTimeOnly"
+        ]
+
+    /// Phase 841 — the map keys the JSON wire can read back: the writer
+    /// emits a map as an object whose member NAMES are the keys, a
+    /// non-string key as its own JSON text, and `JsonDecode.Key` parses
+    /// exactly these four.
+    let private jsonKeyDecoders =
+        dict [
+            typeof<string>, "JsonDecode.Key.string"
+            typeof<int>, "JsonDecode.Key.int32"
+            typeof<int64>, "JsonDecode.Key.int64"
+            typeof<Guid>, "JsonDecode.Key.guid"
+        ]
+
+    /// Phase 841 — which wire a planning run renders combinators for.
+    /// The type walk, the naming, the ordering and the cycle grouping are
+    /// one algorithm; only the combinator each shape takes differs, so
+    /// the wire is an axis of the one planner rather than a second one
+    /// that could drift from it.
+    type private Wire =
+        /// `Decode` over `MsgPack.Value` — positional records, tagged
+        /// unions (Phases 69k–817).
+        | MessagePack
+        /// `JsonDecode` over `JsonValue` — NAMED records, unions on the
+        /// case name (Phase 799), the argument side's wire (Phase 841).
+        | Json
+
     /// Mutable planning state, private to one `plan` call.
     type private State = {
+        /// The wire this run plans for.
+        Wire: Wire
         mutable Ordered: (Type * TypePlan) list // reverse order
         Bound: Collections.Generic.HashSet<Type>
         InProgress: Collections.Generic.HashSet<Type>
@@ -481,6 +540,13 @@ module Plan =
     /// along the way. `None` means refused — the refusal is recorded on
     /// `state`, so a caller never has to invent a reason.
     let rec private decoderFor (state: State) (t: Type) : string option =
+        match state.Wire with
+        | MessagePack -> messagePackDecoderFor state t
+        | Json -> jsonDecoderFor state t
+
+    /// The MessagePack wire's decoder expression for `t` — Phases 69k–817,
+    /// unchanged by Phase 841's wire axis.
+    and private messagePackDecoderFor (state: State) (t: Type) : string option =
         match primitiveDecoders.TryGetValue t with
         | true, d -> Some d
         | _ ->
@@ -556,6 +622,127 @@ module Plan =
             else
                 refuse state t "no combinator in the closed algebra decodes this type"
 
+    /// Phase 841 — the JSON wire's decoder expression for `t`: the
+    /// `JsonDecode` twin of each MessagePack arm, and two refusals this
+    /// wire has that the binary one does not.
+    and private jsonDecoderFor (state: State) (t: Type) : string option =
+        match jsonPrimitiveDecoders.TryGetValue t with
+        | true, d -> Some d
+        | _ ->
+
+            if t = typeof<byte[]> then
+                Some "JsonDecode.asBytes"
+            elif t.IsArray then
+                jsonDecoderFor state (t.GetElementType())
+                |> Option.map (fun e -> sprintf "JsonDecode.array %s" (arg e))
+            elif isGenericOf optionDef t then
+                let inner = t.GetGenericArguments()[0]
+
+                if isGenericOf optionDef inner then
+                    // `JsonDecode.option` documents it: the writer
+                    // flattens `Some None` to `null`, so the wire cannot
+                    // carry the distinction the type makes.
+                    refuse
+                        state
+                        t
+                        "an option of an option — the JSON writer flattens `Some None` to `null`, so the wire cannot carry what the type distinguishes"
+                else
+                    jsonDecoderFor state inner
+                    |> Option.map (fun e -> sprintf "JsonDecode.option %s" (arg e))
+            elif isGenericOf listDef t then
+                jsonDecoderFor state (t.GetGenericArguments()[0])
+                |> Option.map (fun e -> sprintf "JsonDecode.list %s" (arg e))
+            elif isGenericOf setDef t then
+                jsonDecoderFor state (t.GetGenericArguments()[0])
+                |> Option.map (fun e -> sprintf "JsonDecode.asSet %s" (arg e))
+            elif isGenericOf mapDef t then
+                let args = t.GetGenericArguments()
+
+                match jsonKeyDecoders.TryGetValue args[0] with
+                | true, key ->
+                    jsonDecoderFor state args[1]
+                    |> Option.map (fun v -> sprintf "JsonDecode.asMap %s %s" key (arg v))
+                | _ ->
+                    refuse
+                        state
+                        t
+                        (sprintf
+                            "a map keyed by %s — the JSON writer emits a key as an object member NAME, and `JsonDecode.Key` reads string, int32, int64 and Guid names"
+                            (typeSpelling args[0]))
+            elif isGenericOf resultDef t then
+                let args = t.GetGenericArguments()
+
+                match jsonDecoderFor state args[0], jsonDecoderFor state args[1] with
+                | Some ok, Some err -> Some(sprintf "JsonDecode.result %s %s" (arg ok) (arg err))
+                | _ -> None
+            elif isReferenceTuple t then
+                // A tuple is an array of its elements on this wire too
+                // (`FSharpTupleConverter`).
+                let elements = FSharpType.GetTupleElements t
+
+                if elements.Length > widestTuple then
+                    refuse
+                        state
+                        t
+                        (sprintf
+                            "a tuple of %d elements — the algebra's tuple combinators reach arity %d"
+                            elements.Length
+                            widestTuple)
+                else
+                    let planned = elements |> Array.map (jsonDecoderFor state)
+
+                    if planned |> Array.forall Option.isSome then
+                        let arguments = planned |> Array.map (Option.get >> arg) |> String.concat " "
+                        Some(sprintf "JsonDecode.tuple%d %s" elements.Length arguments)
+                    else
+                        None
+            elif FSharpType.IsTuple t then
+                refuse state t "a struct tuple — the tuple combinators construct reference tuples"
+            elif isRecord t then
+                bindNamed state t
+            elif isPlainUnion t then
+                if isStringEnumUnion t then
+                    // The MessagePack arm's reason holds on this wire too:
+                    // `JsonDecode.stringEnum` takes the wire names from its
+                    // caller, and Fable's casing rule plus any
+                    // `[<CompiledName>]` is not recoverable from metadata.
+                    refuse
+                        state
+                        t
+                        "a [<StringEnum>] union — its wire spelling is Fable's casing rule, not recoverable from .NET metadata"
+                else
+                    bindNamed state t
+            else
+                refuse state t "no combinator in the closed algebra decodes this type"
+
+    /// Phase 841 — how a planned field is READ, as the expression the
+    /// emitted pipeline applies. On MessagePack that is the field's type
+    /// decoder (the emitter wraps it in the positional `Decode.field`); on
+    /// the JSON wire the combinator depends on the field's DECLARATION,
+    /// not only its type — a record member is read by NAME, with
+    /// `optionalField` for a member declared `option` (the writer's `None`
+    /// is `null` and an older client's omission must read the same way),
+    /// and a union case's several fields by POSITION in the payload array
+    /// (`index`). The plan decides that choice, so it is carried here.
+    and private fieldRead (state: State) (inUnionCase: bool) (position: int) (f: PropertyInfo) : string option =
+        match state.Wire with
+        | MessagePack -> decoderFor state f.PropertyType
+        | Json when inUnionCase ->
+            jsonDecoderFor state f.PropertyType
+            |> Option.map (fun d -> sprintf "JsonDecode.index %d %s" position (arg d))
+        | Json ->
+            let t = f.PropertyType
+
+            if
+                isGenericOf optionDef t
+                && not (isGenericOf optionDef (t.GetGenericArguments()[0]))
+            then
+                jsonDecoderFor state (t.GetGenericArguments()[0])
+                |> Option.map (fun d -> sprintf "JsonDecode.optionalField \"%s\" %s" f.Name (arg d))
+            else
+                jsonDecoderFor state t
+                |> Option.map (fun d -> sprintf "JsonDecode.field \"%s\" %s" f.Name (arg d))
+
     /// Ensure `t` has a named binding, planning it if it does not, and
     /// return the binding name.
     and private bindNamed (state: State) (t: Type) : string option =
@@ -590,7 +777,7 @@ module Plan =
                     let planned =
                         fields
                         |> Array.mapi (fun i (f: PropertyInfo) ->
-                            decoderFor state f.PropertyType
+                            fieldRead state false i f
                             |> Option.map (fun d -> {
                                 FieldName = f.Name
                                 Position = i
@@ -641,7 +828,7 @@ module Plan =
                                 let fields =
                                     several
                                     |> Array.mapi (fun i (f: PropertyInfo) ->
-                                        decoderFor state f.PropertyType
+                                        fieldRead state true i f
                                         |> Option.map (fun d -> {
                                             FieldName = f.Name
                                             Position = i
@@ -775,13 +962,10 @@ module Plan =
 
         bindings, groups
 
-    /// Plan decoders for `roots` — the wire types to be registered.
-    ///
-    /// Total: a root the algebra cannot express appears in `Refusals` and
-    /// nowhere else, and the run still returns a plan for every root that
-    /// could be expressed.
-    let forTypes (roots: Type seq) : GenerationPlan =
+    /// One planning run over `roots`, for `wire`.
+    let private forTypesOn (wire: Wire) (roots: Type seq) : GenerationPlan =
         let state = {
+            Wire = wire
             Ordered = []
             Bound = Collections.Generic.HashSet<Type>(HashIdentity.Reference)
             Names = Collections.Generic.Dictionary<Type, string>(HashIdentity.Reference)
@@ -817,6 +1001,25 @@ module Plan =
             RecursiveGroups = groups
         }
 
+    /// Plan decoders for `roots` — the wire types to be registered.
+    ///
+    /// Total: a root the algebra cannot express appears in `Refusals` and
+    /// nowhere else, and the run still returns a plan for every root that
+    /// could be expressed.
+    let forTypes (roots: Type seq) : GenerationPlan = forTypesOn MessagePack roots
+
+    /// Phase 841 — `forTypes` for the JSON wire: the same walk, naming,
+    /// ordering, cycle grouping and refusal discipline, rendering
+    /// `JsonDecode` combinators (Phase 799's surface) instead of `Decode`
+    /// ones. A record field's `FieldPlan.Decoder` is its whole member read
+    /// on this wire (`JsonDecode.field` / `optionalField` by name, or
+    /// `JsonDecode.index` for a union case's several fields), because the
+    /// combinator depends on how the field is declared, not only on its
+    /// type. Refused beyond the MessagePack set: an option of an option
+    /// (the writer flattens `Some None`) and a map whose key `JsonDecode.Key`
+    /// cannot parse.
+    let forJsonTypes (roots: Type seq) : GenerationPlan = forTypesOn Json roots
+
     // ─── API records ─────────────────────────────────────────────────
 
     /// A Remoting API contract: a record with ≥1 field, every field a
@@ -849,6 +1052,37 @@ module Plan =
         FSharpType.GetRecordFields(apiRecord, true)
         |> Array.toList
         |> List.choose (fun f -> returnTypeOf f.PropertyType)
+        |> List.distinct
+
+    /// Phase 841 — the ARGUMENT types a method's field takes: walk the
+    /// curried function chain to its `Async<_>` result, collecting every
+    /// DOMAIN on the way. `unit` contributes nothing — a `unit -> Async<_>`
+    /// method decodes no argument at all. A tupled parameter is ONE domain
+    /// (the tuple), exactly as the server's argument seam reads it.
+    ///
+    /// `None` when the field does not end in an `Async<_>` — which is not
+    /// a Remoting method shape, so nothing is registered for it (the same
+    /// rule `returnTypeOf` applies).
+    let argumentTypesOf (fieldType: Type) : Type list option =
+        let rec walk (t: Type) (acc: Type list) =
+            if FSharpType.IsFunction t then
+                let domain, range = FSharpType.GetFunctionElements t
+                walk range (domain :: acc)
+            elif isGenericOf asyncDef t then
+                Some(acc |> List.rev |> List.filter (fun d -> d <> typeof<unit>))
+            else
+                None
+
+        walk fieldType []
+
+    /// Phase 841 — every wire type an API record's methods TAKE, in
+    /// declaration order, deduplicated: the argument side's roots, the
+    /// keys the server's argument seam looks a decoder up under (scoped to
+    /// this record, Phase 839).
+    let argumentTypes (apiRecord: Type) : Type list =
+        FSharpType.GetRecordFields(apiRecord, true)
+        |> Array.toList
+        |> List.collect (fun f -> argumentTypesOf f.PropertyType |> Option.defaultValue [])
         |> List.distinct
 
     /// Every API record an assembly declares, ordered by name.

@@ -184,6 +184,131 @@ let private reachableFrom (roots: Type list) : Type list =
     roots |> List.iter walk
     List.ofSeq seen
 
+// ─── Phase 841 — the argument side ──────────────────────────────────────
+//
+// `src/ToolUp.Platform.Core/Shared/Remoting/Json/PlatformJsonDecoders.fs` is
+// the generator's JSON emission over the ARGUMENT types of every API record
+// `ToolUp.Platform.Core` declares — Phase 801's adoption, transposed onto the
+// argument wire. The cases below hold: the argument walk (841.A), the
+// emission's shape (841.B), the committed file against the emission with a
+// regeneration switch (841.C), a doc comment on every generated binding
+// (841.D), and the census against a DECLARED expressible set (841.E).
+
+/// A probe API record: every method shape the argument walk distinguishes.
+type private ArgumentProbeApi = {
+    /// `unit` contributes nothing.
+    NoArgument: unit -> Async<int>
+    /// One domain.
+    One: string -> Async<unit>
+    /// Curried: every domain, in order.
+    Curried: int -> Guid -> Async<string>
+    /// Tupled: ONE domain, the tuple — what the argument seam reads.
+    Tupled: string * int -> Async<unit>
+    /// A repeated domain is registered once.
+    Again: string -> Async<bool>
+}
+
+/// A member the JSON wire cannot carry faithfully: `Some None` flattens to
+/// `null`.
+type private NestedOptionArgument = { Maybe: int option option }
+
+/// A map keyed by something `JsonDecode.Key` does not parse.
+type private ProbeKey =
+    | KeyA
+    | KeyB
+
+/// A record declaring an `option` member, a union member and a map member —
+/// the three member reads the JSON plan must choose between.
+type private JsonShapeArgument = {
+    Name: string
+    Note: string option
+    Kind: ProbeKey
+    Tags: Map<string, int>
+}
+
+/// The expressible-set DECLARATION the census is held to (841.E): every
+/// platform API record whose arguments the JSON algebra cannot yet take,
+/// with the reason. Empty since Phase 841 — every one of them is
+/// expressible. A record that becomes expressible (or stops being) without
+/// this list moving turns the census case red, naming it.
+let private declaredArgumentInexpressible: (string * string) list = []
+
+/// The census comparison, as a value so its go-red can be demonstrated
+/// without a real record changing shape: every record whose expressibility
+/// disagrees with the declaration, both directions.
+let private censusDrift (declared: string list) (inexpressible: string list) : string list =
+    let declared = Set.ofList declared
+    let computed = Set.ofList inexpressible
+
+    [
+        for r in Set.difference computed declared do
+            yield sprintf "%s takes an argument the JSON algebra cannot express, and is not declared so" r
+        for r in Set.difference declared computed do
+            yield sprintf "%s is declared inexpressible, but every argument it takes is expressible now" r
+    ]
+
+let private jsonRepoRoot () =
+    let assemblyDir =
+        IO.Path.GetDirectoryName(Reflection.Assembly.GetExecutingAssembly().Location)
+
+    IO.Path.GetFullPath(IO.Path.Combine(assemblyDir, "..", "..", "..", "..", ".."))
+
+let private committedJsonPath () =
+    IO.Path.Combine(
+        jsonRepoRoot (),
+        "src",
+        "ToolUp.Platform.Core",
+        "Shared",
+        "Remoting",
+        "Json",
+        "PlatformJsonDecoders.fs"
+    )
+
+let private platformCoreAssembly = typeof<IHealthMonitorApi>.Assembly
+
+/// Every API record the platform declares, and the argument types each takes.
+let private platformArgumentRecords () =
+    Plan.apiRecordsIn platformCoreAssembly
+    |> List.map (fun record -> record, Plan.argumentTypes record)
+
+/// The namespaces the argument roots reach, for the emitted `open` lines —
+/// namespaces only; the generator module-qualifies nested types itself.
+let private argumentNamespaces (roots: Type list) : string list =
+    let found = Collections.Generic.HashSet<string>()
+
+    for t in reachableFrom roots do
+        if not (isNull t.Namespace) then
+            found.Add t.Namespace |> ignore
+
+    found
+    |> Seq.filter (fun ns ->
+        ns <> "System"
+        && ns <> "ToolUp.Remoting"
+        && ns <> "ToolUp.Remoting.Json"
+        && not (ns.StartsWith "Microsoft.FSharp")
+        && not (ns.StartsWith "System."))
+    |> Seq.sort
+    |> List.ofSeq
+
+let private jsonOptionsFor (records: (Type * Type list) list) (roots: Type list) : JsonEmitOptions = {
+    JsonNamespace = "ToolUp.Remoting.Json"
+    JsonModuleName = "PlatformJsonDecoders"
+    JsonOpens = argumentNamespaces roots
+    ArgumentRecords =
+        records
+        |> List.map (fun (record, arguments) -> record.Name, arguments |> List.map Plan.typeSpelling)
+}
+
+/// What the generator emits for the platform's arguments today.
+let private jsonEmission () : string * GenerationPlan * JsonEmitOptions =
+    let records = platformArgumentRecords ()
+    let roots = records |> List.collect snd |> List.distinct
+    let plan = Plan.forJsonTypes roots
+    let options = jsonOptionsFor records roots
+    Emit.jsonCompilationUnit options plan, plan, options
+
+let private normaliseSource (text: string) = text.Replace("\r\n", "\n").TrimEnd()
+
 [<Tests>]
 let tests =
     testList "Phase 69k — the source generator" [
@@ -778,5 +903,284 @@ let tests =
                     source
                     "SPDX-License-Identifier: Apache-2.0"
                     "every source file in this repository carries the SPDX header, generated ones included"
+        ]
+
+        testList "Phase 841 — the generator emits argument decoders" [
+
+            testCase "841.A — the argument walk takes each method to its domains, and unit contributes nothing"
+            <| fun () ->
+                Expect.equal
+                    (Plan.argumentTypes typeof<ArgumentProbeApi>)
+                    [ typeof<string>; typeof<int>; typeof<Guid>; typeof<string * int> ]
+                    "every domain in declaration order, a tupled parameter as ONE domain, unit dropped, repeats once"
+
+                Expect.equal
+                    (Plan.argumentTypesOf typeof<int -> string>)
+                    None
+                    "a field that does not end in Async is no Remoting method"
+
+                Expect.equal
+                    (Plan.argumentTypesOf typeof<unit -> Async<int>>)
+                    (Some [])
+                    "a unit -> Async<_> method takes no argument"
+
+            testCase "841.A — a type the JSON algebra cannot express is a named refusal, never a silent omission"
+            <| fun () ->
+                let plan =
+                    Plan.forJsonTypes [
+                        typeof<NestedOptionArgument>
+                        typeof<Map<ProbeKey, int>>
+                        typeof<obj>
+                        typeof<JsonShapeArgument>
+                    ]
+
+                let refused =
+                    plan.Refusals |> List.map (fun r -> r.RefusedType, r.Why) |> Map.ofList
+
+                let why (t: Type) =
+                    Map.tryFind (RemotingDecoders.keyFor t) refused
+                    |> Option.defaultWith (fun () -> failtestf "%s was not refused by name" t.Name)
+
+                Expect.stringContains (why typeof<int option option>) "Some None" "the nested option's reason"
+                Expect.stringContains (why typeof<Map<ProbeKey, int>>) "member NAME" "the unparseable key's reason"
+                Expect.stringContains (why typeof<obj>) "no combinator" "an open type's reason"
+
+                Expect.stringContains
+                    (why typeof<NestedOptionArgument>)
+                    "field"
+                    "a record over a refused member is refused itself"
+
+                Expect.equal
+                    (plan.Roots |> List.map _.RootFullName)
+                    [ typeof<JsonShapeArgument>.FullName ]
+                    "only the expressible root is planned — the rest are refusals, with nothing emitted for them"
+
+                Expect.stringContains
+                    (Emit.refusalReport plan)
+                    "4 wire type(s) kept the reflection path"
+                    "the report names every refusal at generation time"
+
+            testCase "841.B — the JSON plan reads members by name, option members optionally, unions by case name"
+            <| fun () ->
+                let plan = Plan.forJsonTypes [ typeof<JsonShapeArgument> ]
+                let shape = Plan.typeSpelling typeof<JsonShapeArgument>
+                let key = Plan.typeSpelling typeof<ProbeKey>
+
+                let fields =
+                    plan.Bindings
+                    |> List.pick (function
+                        | RecordDecoder(_, spelling, fields) when spelling = shape -> Some fields
+                        | _ -> None)
+
+                Expect.equal
+                    (fields |> List.map _.Decoder)
+                    [
+                        "JsonDecode.field \"Name\" JsonDecode.asString"
+                        "JsonDecode.optionalField \"Note\" JsonDecode.asString"
+                        "JsonDecode.field \"Kind\" probeKey"
+                        "JsonDecode.field \"Tags\" (JsonDecode.asMap JsonDecode.Key.string JsonDecode.asInt32)"
+                    ]
+                    "one member read per declared field, by name"
+
+                let source =
+                    Emit.jsonCompilationUnit
+                        {
+                            JsonNamespace = "ToolUp.Remoting.Json"
+                            JsonModuleName = "ProbeJsonDecoders"
+                            JsonOpens = []
+                            ArgumentRecords = [ "IProbeApi", [ shape; "string" ] ]
+                        }
+                        (Plan.forJsonTypes [ typeof<JsonShapeArgument>; typeof<string> ])
+
+                Expect.stringContains
+                    source
+                    (sprintf "| \"KeyA\" -> Some(JsonDecode.case0 %s.KeyA)" key)
+                    "case-name dispatch"
+
+                Expect.stringContains
+                    source
+                    (sprintf "JsonDecoders.registerFor<%s> \"IProbeApi\" jsonShapeArgument" shape)
+                    "registrations are scoped to their record (Phase 839)"
+
+                Expect.stringContains
+                    source
+                    "JsonDecoders.registerFor<string> \"IProbeApi\" JsonDecode.asString"
+                    "a bare argument type is registered for its record alone"
+
+                Expect.stringContains
+                    source
+                    (sprintf "JsonDecoders.verifyWith<%s> oracle draws seed jsonShapeArgument" shape)
+                    "every registration has its Phase 840 verification beside it"
+
+                Expect.stringContains source "let registerAllVerified" "the gated registration is emitted"
+                Expect.isFalse (source.Contains "Version=") "no type key is baked in as a literal"
+
+            testCase
+                "841.B — the generated registrations pass Phase 840's gate, and the gated form registers all or nothing"
+            <| fun () ->
+                let oracle = ToolUp.Remoting.Json.SystemTextJson.FableConverters.decoderOracle
+
+                ToolUp.Remoting.Json.JsonDecoders.resetForTests ()
+
+                match
+                    ToolUp.Remoting.Json.PlatformJsonDecoders.registerAllVerified
+                        oracle
+                        RemotingDecoders.DefaultDraws
+                        RemotingDecoders.DefaultSeed
+                with
+                | Ok verifications ->
+                    Expect.equal
+                        (List.length verifications)
+                        (List.length ToolUp.Remoting.Json.PlatformJsonDecoders.covered)
+                        "one verification per registration"
+
+                    Expect.equal
+                        (ToolUp.Remoting.Json.JsonDecoders.registered () |> Set.ofList)
+                        (Set.ofList ToolUp.Remoting.Json.PlatformJsonDecoders.covered)
+                        "on agreement, exactly the covered set is registered"
+                | Error refusals ->
+                    failtestf
+                        "a generated argument decoder disagrees with the converter set:\n  %s"
+                        (refusals
+                         |> List.map ToolUp.Remoting.Json.JsonDecoders.describeRefusal
+                         |> String.concat "\n  ")
+
+                // An oracle that decodes nothing: every draw diverges, so the
+                // gated form must register NOTHING.
+                ToolUp.Remoting.Json.JsonDecoders.resetForTests ()
+
+                let refusing = {
+                    oracle with
+                        Decode = fun target _ -> Error(DecodeError.create target.Name "refused by the probe oracle")
+                }
+
+                match
+                    ToolUp.Remoting.Json.PlatformJsonDecoders.registerAllVerified
+                        refusing
+                        RemotingDecoders.DefaultDraws
+                        RemotingDecoders.DefaultSeed
+                with
+                | Ok _ -> failtest "an oracle that decodes nothing cannot be agreed with"
+                | Error refusals -> Expect.isNonEmpty refusals "the refusals are named"
+
+                Expect.equal (ToolUp.Remoting.Json.JsonDecoders.count ()) 0 "a refused gate leaves the table untouched"
+
+                ToolUp.Remoting.Json.JsonDecoders.resetForTests ()
+
+            testCase "841.C — the committed PlatformJsonDecoders.fs is what the generator emits"
+            <| fun () ->
+                let expected, _, _ = jsonEmission ()
+                let path = committedJsonPath ()
+
+                if Environment.GetEnvironmentVariable "TOOLUP_REGEN_PLATFORM_JSON_DECODERS" = "1" then
+                    IO.File.WriteAllText(path, expected.Replace("\r\n", "\n"))
+
+                let committed = IO.File.ReadAllText path
+
+                if normaliseSource committed <> normaliseSource expected then
+                    let expectedLines = (normaliseSource expected).Split '\n'
+                    let committedLines = (normaliseSource committed).Split '\n'
+
+                    let firstDiff =
+                        Seq.zip expectedLines committedLines
+                        |> Seq.tryFindIndex (fun (e, c) -> e <> c)
+                        |> Option.defaultValue (min expectedLines.Length committedLines.Length)
+
+                    failtestf
+                        "src/ToolUp.Platform.Core/Shared/Remoting/Json/PlatformJsonDecoders.fs is not what the generator emits (first difference at line %d; %d committed lines vs %d expected). An argument type moved, an API record was added, or the emitter changed. Regenerate and commit the file with your change:\n  $env:TOOLUP_REGEN_PLATFORM_JSON_DECODERS = \"1\"\n  dotnet run --project src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj -- --filter-test-case \"841.C\"\n  $env:TOOLUP_REGEN_PLATFORM_JSON_DECODERS = $null\nthen rebuild ToolUp.Platform.Core and re-run this pack WITHOUT the variable."
+                        (firstDiff + 1)
+                        committedLines.Length
+                        expectedLines.Length
+
+            testCase "841.C — no decoder in the module is kept by hand"
+            <| fun () ->
+                let committed = IO.File.ReadAllText(committedJsonPath ())
+
+                Expect.stringContains committed "<auto-generated>" "the module is the generator's"
+
+                Expect.isFalse
+                    (committed.Contains "kept by hand")
+                    "a hand-kept decoder needs its own recorded reason; none exists today"
+
+            testCase "841.D — every generated binding carries a doc comment"
+            <| fun () ->
+                let source, _, _ = jsonEmission ()
+                let lines = (normaliseSource source).Split '\n'
+
+                let undocumented = [
+                    for i in 1 .. lines.Length - 1 do
+                        let line = lines[i]
+
+                        if
+                            line.StartsWith "    let "
+                            || line.StartsWith "    let rec "
+                            || line.StartsWith "    and "
+                        then
+                            if not (lines[i - 1].TrimStart().StartsWith "///") then
+                                yield line.Trim()
+                ]
+
+                Expect.isEmpty undocumented "each generated binding is tracked public surface and needs its doc line"
+
+            testCase
+                "841.E — the census: every expressible record takes every argument through the algebra, and equals the declaration"
+            <| fun () ->
+                let _, plan, options = jsonEmission ()
+                let records = platformArgumentRecords ()
+                let covered = Emit.jsonCoveredApiRecords options plan
+
+                let inexpressible =
+                    records
+                    |> List.map (fun (r, _) -> r.Name)
+                    |> List.filter (fun r -> not (List.contains r covered))
+
+                let drift =
+                    censusDrift (declaredArgumentInexpressible |> List.map fst) inexpressible
+
+                Expect.isEmpty
+                    drift
+                    (sprintf
+                        "the argument census moved without its declaration (`declaredArgumentInexpressible`):\n  %s\n%s"
+                        (String.concat "\n  " drift)
+                        (Emit.refusalReport plan))
+
+                Expect.equal
+                    (List.length covered)
+                    (List.length records - List.length declaredArgumentInexpressible)
+                    "the census equals the expressible set"
+
+                Expect.equal
+                    ToolUp.Remoting.Json.PlatformJsonDecoders.coveredApiRecords
+                    covered
+                    "the committed module declares exactly the census"
+
+                Expect.isGreaterThan (List.length records) 30 "the census reaches the platform's API records"
+
+                // Every covered record's every argument is registered for it.
+                let registered = ToolUp.Remoting.Json.PlatformJsonDecoders.covered |> Set.ofList
+
+                for (record, arguments) in records do
+                    if List.contains record.Name covered then
+                        for a in arguments do
+                            Expect.isTrue
+                                (registered.Contains(Some record.Name, RemotingDecoders.keyFor a))
+                                (sprintf "%s's argument %s is registered for it" record.Name a.Name)
+
+            testCase
+                "841.E — the census comparison goes red when a record's expressibility moves without its declaration"
+            <| fun () ->
+                Expect.equal
+                    (censusDrift [ "IRecordApi" ] [])
+                    [
+                        "IRecordApi is declared inexpressible, but every argument it takes is expressible now"
+                    ]
+                    "a record that BECAME expressible without being declared is named"
+
+                Expect.equal
+                    (censusDrift [] [ "IRecordApi" ])
+                    [
+                        "IRecordApi takes an argument the JSON algebra cannot express, and is not declared so"
+                    ]
+                    "a record that stopped being expressible is named"
         ]
     ]

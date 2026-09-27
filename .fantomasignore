@@ -18,6 +18,9 @@ proofs/oracle/RemotingDecode.fs
 # API record ToolUp.Platform.Core declares, held byte-for-byte to it by
 # Remoting/PlatformDecodersGenerationTests. Same class as the AOT sample's generated files below.
 src/ToolUp.Platform.Core/Shared/Remoting/PlatformDecoders.fs
+# Phase 841 — the argument side's twin: the generator's JSON emission over every API
+# record's ARGUMENT types, held byte-for-byte to it by Remoting/GeneratorFidelityTests (841.C).
+src/ToolUp.Platform.Core/Shared/Remoting/Json/PlatformJsonDecoders.fs
 proofs/oracle/DisclosureFold.fs
 proofs/oracle/ToolGate.fs
 proofs/oracle/ModelInput.fs
