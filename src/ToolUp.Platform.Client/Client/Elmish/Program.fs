@@ -300,7 +300,18 @@ module Program =
     type private EffectRegistry<'msg>() =
         let live = Dictionary<string, EffectLifetime * IDisposable>()
 
-        member _.Register (handle: EffectHandle<'msg>) (dispatch: Dispatch<'msg>) (reportError: exn -> unit) =
+        /// `terminated` is read AFTER the start function returns: a start
+        /// that terminated the program (through `IDispatcher.Terminate`) ran
+        /// the teardown while it was still running, so `DisposeAll` has
+        /// already emptied the registry and nothing will ever dispose what
+        /// the start returned. It is disposed here instead of registered
+        /// (Phase 871; `gated` in `proofs/ElmishLoop.fst`).
+        member _.Register
+            (handle: EffectHandle<'msg>)
+            (dispatch: Dispatch<'msg>)
+            (reportError: exn -> unit)
+            (terminated: unit -> bool)
+            =
             // Dispose any prior handle with the same id (HMR re-registration).
             match live.TryGetValue handle.Id with
             | true, (_, disposable) ->
@@ -314,7 +325,11 @@ module Program =
 
             try
                 let disposable = handle.Start dispatch
-                live.[handle.Id] <- (handle.Lifetime, disposable)
+
+                if terminated () then
+                    disposable.Dispose()
+                else
+                    live.[handle.Id] <- (handle.Lifetime, disposable)
             with ex ->
                 reportError ex
 
@@ -377,6 +392,13 @@ module Program =
     /// processed again. And nothing the program supplied runs with the
     /// latch clear at boot: the latch is set before the sinks and the
     /// effects' start functions are called (`boot_paints_init_model`).
+    ///
+    /// And termination is total (Phase 871). Both routes to it run one
+    /// `teardown`, which cannot be left half-done by a handler that raises
+    /// or re-entered by one that calls `Terminate`; and once the program is
+    /// terminated the boot starts nothing further, and releases what a
+    /// start that terminated it returned (`terminated_holds_nothing`,
+    /// `terminated_starts_nothing`).
     let runWithDispatch
         (syncDispatch: Dispatch<'msg> -> Dispatch<'msg>)
         (arg: 'arg)
@@ -439,6 +461,43 @@ module Program =
         // The init model is unpainted until the boot paints it below.
         let mutable dirty = true
 
+        // F*: `terminate` — the ONE teardown, run by a message the
+        // termination predicate takes and by `IDispatcher.Terminate` alike
+        // (Phase 871). It is total, in three ways. The loop's flag is set
+        // FIRST, so nothing the callees below do can re-enter it (a handler
+        // that calls `Terminate` finds it set) or reach `update` (a dispatch
+        // they make is refused by `dispatch`'s own guard). Each callee runs
+        // under its own guard, so a subscription, an effect or the handler
+        // that raises is reported and the next step still runs. And
+        // `MarkTerminated` is in a `finally`, so `IsActive` goes false
+        // whatever happened above it — it still goes false LAST, so a
+        // handler that reads `IsActive` sees what it always saw. Until 871
+        // the message arm ran the handler inside its own `try` with both
+        // flags after it: a handler that raised left the program active,
+        // handing messages to `update` with every subscription stopped and
+        // every effect disposed.
+        let teardown () =
+            if not terminated then
+                terminated <- true
+
+                try
+                    try
+                        Subs.Fx.stop onError activeSubs
+                    with ex ->
+                        reportRaw ex
+
+                    try
+                        effectRegistry.DisposeAll reportRaw
+                    with ex ->
+                        reportRaw ex
+
+                    try
+                        terminate state
+                    with ex ->
+                        reportException ErrorPhase.Termination "The terminate handler raised" ex
+                finally
+                    dispatcherCore.MarkTerminated()
+
         let rec dispatch msg =
             if not terminated then
                 rb.Push msg
@@ -480,11 +539,7 @@ module Program =
                 | Some msg ->
                     try
                         if toTerminate msg then
-                            Subs.Fx.stop onError activeSubs
-                            effectRegistry.DisposeAll reportRaw
-                            terminate state
-                            terminated <- true
-                            dispatcherCore.MarkTerminated()
+                            teardown ()
                         else
                             // Dirty BEFORE the callees run: the model's `step`
                             // marks every message it hands `update`, and an
@@ -519,27 +574,11 @@ module Program =
         // callbacks captured during init can dispatch safely.
         dispatcherCore.Wire dispatch'
 
-        // Wire the terminate callback so `IDispatcher.Terminate()` can
-        // trigger the same teardown path the termination-message
-        // predicate does (subs stopped + effects disposed + IsActive flipped).
-        // Idempotent: a second call to `Terminate` is a no-op because the
-        // first call set `terminated <- true`.
-        dispatcherCore.SetTerminateCallback(fun () ->
-            if not terminated then
-                try
-                    Subs.Fx.stop onError activeSubs
-                with ex ->
-                    reportRaw ex
-
-                effectRegistry.DisposeAll reportRaw
-
-                try
-                    terminate state
-                with ex ->
-                    reportRaw ex
-
-                terminated <- true
-                dispatcherCore.MarkTerminated())
+        // Wire the terminate callback so `IDispatcher.Terminate()` runs the
+        // same teardown the termination predicate does — the one function,
+        // not a copy of it. Idempotent: `teardown` does nothing once the
+        // flag is set.
+        dispatcherCore.SetTerminateCallback teardown
 
         let dispatcher = dispatcherCore.AsInterface reportRaw
 
@@ -579,9 +618,21 @@ module Program =
             with ex ->
                 reportException ErrorPhase.Init "EffectControllerHandle sink raised" ex
 
-        // Register all configured effects.
+        // F*: `gated` — Phase 871. A terminated program starts nothing: the
+        // boot checks the flag before every effect's registration, before
+        // the subscription start and before `init`'s command, because a
+        // sink or an effect's start function may already have called
+        // `Terminate`, and the teardown that ran then will never run again
+        // to dispose what a later start acquires. A start that terminates
+        // the program ITSELF has what it returned released as soon as it
+        // returns (`Register`'s check; the `Subs.Fx.stop` below), for the
+        // same reason. The sinks are not gated: they are handed handles and
+        // start nothing.
+        let isTerminated () = terminated
+
         for effect in program.effects do
-            effectRegistry.Register effect dispatch' reportRaw
+            if not terminated then
+                effectRegistry.Register effect dispatch' reportRaw isTerminated
 
         // F*: `boot_paint`, then the rest of `boot`. The boot paint is
         // unconditional and runs BEFORE `init`'s command: a hydrating
@@ -591,10 +642,20 @@ module Program =
         // are drained — and painted once — by `processMsgs` below.
         paint ()
 
-        activeSubs <- Subs.diff activeSubs sub |> Subs.Fx.change onError dispatch'
+        if not terminated then
+            // `activeSubs` is empty here, so what `change` returns is
+            // exactly what it started — and if one of those starts
+            // terminated the program, the teardown stopped the empty set.
+            let started = Subs.diff activeSubs sub |> Subs.Fx.change onError dispatch'
 
-        cmd
-        |> Cmd.exec (fun ex -> reportException ErrorPhase.Init "Error initialising" ex) dispatch'
+            if terminated then
+                Subs.Fx.stop onError started
+            else
+                activeSubs <- started
+
+        if not terminated then
+            cmd
+            |> Cmd.exec (fun ex -> reportException ErrorPhase.Init "Error initialising" ex) dispatch'
 
         processMsgs ()
         reentered <- false

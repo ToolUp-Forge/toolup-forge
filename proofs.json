@@ -112,7 +112,23 @@
     "`boot_paints_init_model`. The differential scripts a sink and an effect that dispatch and compares the boot paint",
     "too. Separately the error reporter is made TOTAL by construction (every call goes through a guard that catches",
     "what the reporter raises), because a reporter that threw escaped the drain with the latch set and wedged the",
-    "loop; the model has no transition for it and the host pins that production has none (`elmish-loop-reporter-total`)."
+    "loop; the model has no transition for it and the host pins that production has none (`elmish-loop-reporter-total`).",
+    "",
+    "Phase 871 AMENDED the dispatch-loop model, APPENDED three entries and moved no rung of an existing one.",
+    "Termination is TOTAL: both routes run one `teardown` in Program.fs that sets `terminated` first, stops the",
+    "subscriptions, disposes the effects and calls the handler each under its own guard, and marks the dispatcher",
+    "terminated in a `finally` - so a handler that raises still terminates (it used to leave the program active",
+    "with everything torn down) and a handler that calls Terminate cannot re-enter it. And a terminated program",
+    "STARTS nothing: the boot checks the flag before every effect's registration, the subscription start and",
+    "init's command, and a start that terminated the program itself has what it returned released at once.",
+    "ElmishLoop.fst gains `started` and `held` observables, a `start` record, the `gated` transition and a held",
+    "clause in the invariant; the boot takes the sinks' events, the effects, the subscription start and the",
+    "command. Every theorem was re-proved on the pinned prover with no flag change; added are",
+    "`terminated_holds_nothing` and `terminated_starts_nothing` (proved), `elmish-loop-teardown-total` (tested:",
+    "the handler's outcome is not a parameter of the model, as the reporter is not), and the assumed row",
+    "`elmish-loop-teardown-abstracted`, which names what the model still leaves out - including the one known",
+    "gap it does not close: a subscription a MESSAGE's diff starts after an earlier one in the same diff called",
+    "Terminate."
   ],
   "kind": "proofs",
   "version": 1,
@@ -1386,7 +1402,7 @@
     {
       "id": "elmish-loop-terminated-absorbing",
       "level": "proved",
-      "claim": "Once `terminated`, no event from inside or outside changes what `update` saw, what was accepted, the model, or what was painted (Phase 851: `painted` and `renders` are frozen too - a terminated loop paints nothing further), and nothing clears the flag - the guards at the head of `dispatch` and of `processMsgs`'s while loop, as a theorem; from any idle state a Terminate from outside means nothing after it is ever processed or painted; a boot drain on a machine terminated before it ran - or terminated by a sink or an effect's start function before the boot paint - still makes its unconditional boot paint and processes nothing.",
+      "claim": "Once `terminated`, no event from inside or outside changes what `update` saw, what was accepted, the model, or what was painted (Phase 851: `painted` and `renders` are frozen too - a terminated loop paints nothing further), and nothing clears the flag - the guards at the head of `dispatch` and of `processMsgs`'s while loop, as a theorem; from any idle state a Terminate from outside means nothing after it is ever processed or painted; a boot drain on a machine terminated before it ran - or terminated by a sink or an effect's start function before the boot paint - still makes its unconditional boot paint and processes nothing. Since Phase 871 what was started and what is held are frozen too: a terminated machine makes no start and acquires no handle.",
       "evidence": {
         "theorem": "terminated_absorbing",
         "model": "proofs/ElmishLoop.fst",
@@ -1401,7 +1417,7 @@
     {
       "id": "elmish-loop-boot-drain-equiv",
       "level": "proved",
-      "claim": "The boot drain - the hand-duplicated `reentered <- true; sinks and effect starts; boot paint; init effects through dispatch'; processMsgs (); reentered <- false` at the tail of `runWithDispatch` - transcribed literally, IS the steady-state critical section run over the events raised before the boot paint, the boot paint, and then the events init's effects raised, all under the latch; for a single message it is the boot paint followed by `dispatch` itself (`booted s`, the paint with the latch released, is where `dispatch` starts). Proved equivalent; the source is not unified.",
+      "claim": "The boot drain - the hand-duplicated `reentered <- true; sinks and effect starts; boot paint; init effects through dispatch'; processMsgs (); reentered <- false` at the tail of `runWithDispatch` - transcribed literally, IS the steady-state critical section run over everything the boot does under the latch before its drain (since Phase 871: the sinks' events, the effects' gated starts, the boot paint, the gated subscription start and the gated command); for a single message it is the boot paint followed by `dispatch` itself (`booted s`, the paint with the latch released, is where `dispatch` starts). Proved equivalent; the source is not unified.",
       "evidence": {
         "theorem": "boot_drain_equiv",
         "model": "proofs/ElmishLoop.fst",
@@ -1471,6 +1487,38 @@
       }
     },
     {
+      "id": "elmish-loop-terminated-holds-nothing",
+      "level": "proved",
+      "claim": "Phase 871. In every state a program reaches, a terminated program holds nothing: every handle the boot's starts acquired - an effect's IDisposable, the init model's subscriptions - has been released, by the teardown or, for a start that terminated the program from its own start function, as soon as that start returned. It is the invariant's new clause (`terminated ==> held == 0`). Until 871 production stored such an effect's handle in the registry `DisposeAll` had just emptied, and assigned such subscriptions to the set the teardown had already stopped, and nothing ever disposed either. `held` counts what the BOOT acquired; see the assumed row `elmish-loop-teardown-abstracted` for what it does not count.",
+      "evidence": {
+        "theorem": "terminated_holds_nothing",
+        "model": "proofs/ElmishLoop.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
+          "program_inv",
+          "terminate_spec",
+          "gated_spec",
+          "start_terminating_releases"
+        ]
+      }
+    },
+    {
+      "id": "elmish-loop-terminated-starts-nothing",
+      "level": "proved",
+      "claim": "Phase 871. A terminated program starts nothing. The guard (`gated_terminated`): a start the boot reaches once the program is terminated - an effect's start function, the subscription start, init's command - is not made, and the state is unchanged. So a dispatcher-handle or effect-controller sink that calls Terminate at boot means no effect starts, no subscription starts and init's command does not run (`terminated_starts_nothing`: `started` does not move and nothing is held), an effect that terminates from its own start function stops every start after it by the same guard, and a boot on a machine terminated before it ran starts nothing (`terminated_absorbing_boot`). The boot paint is not gated: it is made once, with the init model, as a hydrating renderer needs. Until 871 production made all three starts after the teardown had run.",
+      "evidence": {
+        "theorem": "terminated_starts_nothing",
+        "model": "proofs/ElmishLoop.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
+          "gated_terminated",
+          "gated_all_terminated",
+          "terminated_absorbing_boot",
+          "apply_evs_has_term"
+        ]
+      }
+    },
+    {
       "id": "elmish-loop-reporter-total",
       "level": "tested",
       "claim": "An error reporter that THROWS does not escape the loop. Every call `runWithDispatch` makes to the program's reporter - from the message arm, from a command, from the render hook, from a sink, an effect's start or dispose, a subscription's start or stop, and from the terminate callback - goes through a guard that catches what the reporter itself raises and falls back to the console, so the drain always returns and the latch is always released. Measured on production at each of those sites with a reporter that raises on every call: no dispatch raises into its caller, every message is still handed to `update` in order, the boot returns, and Terminate still tears down.",
@@ -1486,9 +1534,24 @@
       }
     },
     {
+      "id": "elmish-loop-teardown-total",
+      "level": "tested",
+      "claim": "Phase 871. Termination is TOTAL, and the terminate handler's outcome is not a parameter of the model because production makes it irrelevant by construction: both routes - a message the predicate takes and IDispatcher.Terminate - run ONE teardown that sets the loop's flag first, stops the subscriptions, disposes the effects and calls the handler each under its own guard (a raising handler reports as ErrorPhase.Termination), and marks the dispatcher terminated in a `finally`. Measured on production: a handler that raises on the message route still terminates - IsActive false, a later dispatch reaches `update` zero times, the subscription and the effect disposed once in the teardown's order; a handler that calls Terminate runs once on either route (it recursed before: bounded in the case, it ran five times); and over the whole campaign a raising handler and a returning one produce the same run.",
+      "evidence": {
+        "family": "Phase 789 - the proved dispatch loop as oracle",
+        "host": "src/ToolUp.Platform.Tests/InProcess/ElmishLoopProofOracleTests.fs",
+        "cases": [
+          "a terminating message whose handler raises still terminates - teardown is total, run",
+          "a handler that calls Terminate tears down once, on either route - teardown is not re-entered",
+          "a terminate handler that raises changes nothing the loop does - teardown is total, run"
+        ],
+        "runner": "proofs/check.ps1 step 7, which asserts a CASE COUNT because a filter matching nothing reports success"
+      }
+    },
+    {
       "id": "elmish-loop-model-agrees-with-shipped-code-dotnet",
       "level": "tested",
-      "claim": "The extracted machine agrees with the real `Program.runWithDispatch` over generated reentrancy scripts - which messages a dispatcher-handle sink and an effect's start function raise before the boot paint, which messages init's command raises during the boot drain, which each message's command raises (including Terminate), which messages the render hook raises when handed a given model (Phase 851: the post-drain setState dispatch), which messages terminate, and what the outside world dispatches afterwards through IDispatcher - on the messages `update` saw in order, the messages `dispatch` accepted (recorded on production through IsActive, so the two-flag encoding is measured), the final model, IsActive, the number of times the render hook was called, the model it was last handed, and the boot paint - the model it was handed and what `update` had seen by then. A faithful hand-transcribed skeleton agrees too; the same skeleton with the latch released before the drain, with the paint made after every message (the pre-851 loop), with one paint after the while and no pop after it, and with the latch set after the sinks and effects ran (the boot as it was until it was restated), are each caught.",
+      "claim": "The extracted machine agrees with the real `Program.runWithDispatch` over generated reentrancy scripts - which messages a dispatcher-handle sink and an effect's start function raise before the boot paint, which messages init's command raises during the boot drain, which each message's command raises (including Terminate), which messages the render hook raises when handed a given model (Phase 851: the post-drain setState dispatch), which messages terminate, and what the outside world dispatches afterwards through IDispatcher - on the messages `update` saw in order, the messages `dispatch` accepted (recorded on production through IsActive, so the two-flag encoding is measured), the final model, IsActive, the number of times the render hook was called, the model it was last handed, and the boot paint - the model it was handed and what `update` had seen by then. Since Phase 871 the scripts also say whether the init model subscribes and what the subscription's start raises (including Terminate) and whether the terminate handler raises, and the two are compared on how many of the boot's gated starts ran and how many handles are still held. A faithful hand-transcribed skeleton agrees too; the same skeleton with the latch released before the drain, with the paint made after every message (the pre-851 loop), with one paint after the while and no pop after it, with the latch set after the sinks and effects ran (the boot as it was until it was restated), with every start made after Terminate (the boot before 871), and with a terminating start's handle kept (the registry before 871), are each caught. Five production cases pin Phase 871's three faults directly and were each shown red on the tree before it.",
       "evidence": {
         "family": "Phase 789 - the proved dispatch loop as oracle",
         "host": "src/ToolUp.Platform.Tests/InProcess/ElmishLoopProofOracleTests.fs",
@@ -1509,7 +1572,14 @@
           "a drain of N messages calls the render hook once - render_once_per_drain, run",
           "the model on screen is the model whenever the loop is idle - painted_is_model, run",
           "a terminating dispatch paints nothing - render_once_per_drain, the terminated arm, run",
-          "the fallback arm drives the two flags apart - the encoding's one exception"
+          "the fallback arm drives the two flags apart - the encoding's one exception",
+          "the campaign terminated from a sink, an effect's start and a subscription's start, and with a raising handler",
+          "a terminated program holds nothing - terminated_holds_nothing, run",
+          "a boot that starts after Terminate is caught - go-red, Phase 871",
+          "a registry that keeps a terminating start's handle is caught - go-red, Phase 871",
+          "a sink that terminates at boot starts no effect, no subscription and no command - run",
+          "an effect that terminates from its own start function has its handle disposed - run",
+          "a subscription that terminates from its own start function is stopped - run"
         ],
         "runner": "proofs/check.ps1 step 7, which asserts a CASE COUNT because a filter matching nothing reports success"
       }
@@ -1517,7 +1587,7 @@
     {
       "id": "elmish-loop-two-flag-encoding-sites",
       "level": "assumed",
-      "claim": "The model sets `active` and `terminated` together because `MarkTerminated` accompanies both `terminated <- true` assignments in Program.fs and `Wire` precedes every dispatch. A third site added to either cell without the other would leave the theorem true of the model and false of the code; the fallback arm in Dispatcher.fs is the one known exception, stated in the proved row above.",
+      "claim": "The model sets `active` and `terminated` together because the one `terminated <- true` in Program.fs - `teardown`, since Phase 871 the only site - is followed by `MarkTerminated` in a `finally`, and `Wire` precedes every dispatch. Between the two, while the teardown's own callees run, production has `terminated` set and `active` still set: that transient is visible only to those callees, and what they could do with it is refused (a dispatch meets `dispatch`'s guard, a Terminate finds the teardown under way). A second site added to either cell without the other would leave the theorem true of the model and false of the code; the fallback arm in Dispatcher.fs is the one known exception, stated in the proved row above.",
       "evidence": {
         "assumption": "every site that sets `terminated` or wires dispatch also moves `active`, as the model's single step does"
       },
@@ -1526,11 +1596,20 @@
     {
       "id": "elmish-loop-oracle-abstracts-callees",
       "level": "assumed",
-      "claim": "`update`, `setState`, `Subs.Fx.change` and `Cmd.exec` are one oracle returning a model and the events raised before control returns. An exception from any of them is an oracle reply whose model is the old one carrying whatever was dispatched before the throw - admitted by the abstraction, not scripted by the differential. That reply presumes the exception was REPORTED AND THE LOOP WENT ON, which is true only of a reporter that returns; production makes the reporter total by construction and the tested row `elmish-loop-reporter-total` pins it. The teardown callbacks on the terminating path are assumed not to dispatch.",
+      "claim": "`update`, `setState`, `Subs.Fx.change` and `Cmd.exec` are one oracle returning a model and the events raised before control returns. An exception from any of them is an oracle reply whose model is the old one carrying whatever was dispatched before the throw - admitted by the abstraction, not scripted by the differential. That reply presumes the exception was REPORTED AND THE LOOP WENT ON, which is true only of a reporter that returns; production makes the reporter total by construction and the tested row `elmish-loop-reporter-total` pins it. What the teardown's callees raise is no longer assumed (Phase 871): the flag is set before they run, so it is refused by construction; what remains abstracted about teardown is the row `elmish-loop-teardown-abstracted`.",
       "evidence": {
         "assumption": "update, subscribe, Subs.Fx.change and Cmd.exec behave as one oracle returning a model and the events raised before control returns; since Phase 851 setState is a second oracle, a pure function of the model it is handed to the events it raises synchronously"
       },
-      "mitigation": "a dispatch a teardown callback made would land in the ring and never be processed, which terminated_absorbing covers; the exception shape is expressible as an oracle reply and could be scripted"
+      "mitigation": "the exception shape is expressible as an oracle reply and could be scripted"
+    },
+    {
+      "id": "elmish-loop-teardown-abstracted",
+      "level": "assumed",
+      "claim": "Phase 871. What the model still abstracts about teardown and the starts. WHAT a released handle does when disposed - an effect's Dispose, a subscription's stop - is the effect's contract; the model counts handles and does not look inside them. The gate is at the BLOCK: `Subs.Fx.change` starts the init model's subscriptions together and `Cmd.exec` runs init's command's effects together, so the model has one start for each block, and a Terminate raised by one subscription does not stop the next in the same block from starting (it is then released with the rest). And `held` counts what the BOOT acquired: a message's subscription diff runs inside the `update` oracle, so a subscription that a message's diff starts AFTER an earlier subscription in the same diff called Terminate - which production still assigns to the stopped set, and never disposes - is NOT covered by `terminated_holds_nothing`, and the message's command still runs after it. Closing that needs the gate inside Sub.fs and the step oracle split at the diff; it is not claimed.",
+      "evidence": {
+        "assumption": "a disposed handle releases what it holds; within one subscription block or one command a Terminate raised by an element does not gate the elements after it; the step oracle's subscription diff is not observed by `started` or `held`"
+      },
+      "mitigation": "the differential compares production's live handle count with the model's on every script - an effect and a subscription that terminate from their own start, a sink that terminates first - and a production case pins each of the three faults; the step-level gap is named here and in the README's Rung 4 rather than implied closed"
     },
     {
       "id": "elmish-loop-render-oracle-quiet",

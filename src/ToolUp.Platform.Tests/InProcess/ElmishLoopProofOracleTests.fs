@@ -45,7 +45,15 @@ open ToolUp.Platform.Tests.Client.ElmishProofDifferential
 // final model, on `IsActive`, on how many times the hook was called, on
 // the model it was last handed, and on the BOOT paint: the model it was
 // handed and what `update` had seen by then (`boot_paints_init_model` —
-// nothing, whatever the sinks and effects dispatched).
+// nothing, whatever the sinks and effects dispatched). Since Phase 871 the
+// script also says whether the init model subscribes (and what the
+// subscription's start raises) and whether the terminate handler RAISES,
+// and the two are compared on how many of the boot's gated starts ran —
+// the effect's start function, the subscription start, `init`'s command —
+// and on how many handles the loop still holds (`terminated_holds_nothing`,
+// `terminated_starts_nothing`). The model has no parameter for the handler
+// raising: the comparison is what says production behaves the same either
+// way.
 //
 // The `log` comparison is what holds the two-flag encoding: production's
 // log is recorded through `IDispatcher.IsActive`, the model's through
@@ -58,8 +66,11 @@ open ToolUp.Platform.Tests.Client.ElmishProofDifferential
 // `while` with no pop after it, so a hook that dispatches leaves its
 // message in the ring; the latch set AFTER the sinks and effects ran, as
 // it was until the boot was restated, so an effect that dispatches from
-// its start function runs a drain ahead of the boot paint — run over the
-// same campaign and asserted CAUGHT;
+// its start function runs a drain ahead of the boot paint; the boot as it
+// was until Phase 871, starting every effect, the subscriptions and
+// `init`'s command after a sink or an effect had called `Terminate`; and a
+// registry that stores the handle of a start that terminated the program
+// itself — run over the same campaign and asserted CAUGHT;
 // the same skeleton, faithful, is asserted to agree, so the difference
 // each go-red measures is the one line.
 
@@ -99,6 +110,13 @@ type Script = {
     /// The termination predicate's set.
     Terminating: Set<int>
     Exts: Ext list
+    /// Phase 871 — the init model's subscription: absent, or one whose
+    /// start function raises these events. Its key never changes, so no
+    /// later message's diff starts or stops it.
+    Sub: Ev list option
+    /// Phase 871 — the terminate handler raises. The model has no
+    /// transition for this: teardown is the same either way.
+    HandlerRaises: bool
 }
 
 let private replies (script: Script) (msg: int) : Ev list =
@@ -131,6 +149,12 @@ type Outcome = {
     /// The model's drain finished (its latch is clear). Production
     /// cannot say otherwise — it would not have returned.
     Finished: bool
+    /// Phase 871 — how many of the boot's gated starts ran: the effect's
+    /// start function, the subscription's, `init`'s command.
+    Started: int
+    /// Phase 871 — how many handles those starts returned that nothing has
+    /// disposed yet.
+    Held: int
 }
 
 // ─── The generator ───────────────────────────────────────────────────
@@ -139,7 +163,9 @@ type Outcome = {
 /// `preRng` is a SECOND generator, drawn from only for `Pre`, so the
 /// scripts the campaign held before `Pre` existed are the same scripts
 /// with a `Pre` added — the shapes the coverage case counts did not move.
-let private genScript (rng: Lcg) (preRng: Lcg) : Script =
+/// `startRng` is a THIRD, drawn from only for Phase 871's `Sub` and
+/// `HandlerRaises`, for the same reason.
+let private genScript (rng: Lcg) (preRng: Lcg) (startRng: Lcg) : Script =
     let n = 3 + rng.Next 6
     let capacity = 2 + rng.Next 4
 
@@ -197,6 +223,20 @@ let private genScript (rng: Lcg) (preRng: Lcg) : Script =
         else
             []
 
+    let sub =
+        if startRng.Next 100 < 50 then
+            Some [
+                for _ in 1 .. 1 + startRng.Next 2 ->
+                    if startRng.Next 100 < 10 then
+                        ETerm
+                    else
+                        EMsg(startRng.Next n)
+            ]
+        else
+            None
+
+    let handlerRaises = startRng.Next 100 < 50
+
     {
         Capacity = capacity
         Pre = pre
@@ -206,13 +246,16 @@ let private genScript (rng: Lcg) (preRng: Lcg) : Script =
         BootPaint = bootPaint
         Terminating = terminating
         Exts = exts
+        Sub = sub
+        HandlerRaises = handlerRaises
     }
 
 let private campaign: Lazy<Script list> =
     lazy
         (let rng = Lcg 789_001
          let preRng = Lcg 789_002
-         [ for _ in 1..400 -> genScript rng preRng ])
+         let startRng = Lcg 789_003
+         [ for _ in 1..400 -> genScript rng preRng startRng ])
 
 // ─── Production ──────────────────────────────────────────────────────
 
@@ -231,6 +274,17 @@ let private productionRun (script: Script) : Outcome =
     let mutable bootPainted: int list option = None
     let mutable bootTrace: int list = []
     let mutable dispatcher: IDispatcher<int> option = None
+    let mutable started = 0
+    let mutable held = 0
+
+    // A start's handle: counted held when the start returns it, released
+    // when anything disposes it.
+    let holding () =
+        held <- held + 1
+
+        { new System.IDisposable with
+            member _.Dispose() = held <- held - 1
+        }
 
     let handle () =
         match dispatcher with
@@ -256,7 +310,23 @@ let private productionRun (script: Script) : Outcome =
             | ETerm -> (handle ()).Terminate()
 
     let init () =
-        [], Cmd.ofEffect (fun dispatch -> raise dispatch script.Init)
+        [],
+        Cmd.ofEffect (fun dispatch ->
+            started <- started + 1
+            raise dispatch script.Init)
+
+    // The init model's subscription, and every later model's: one key, so
+    // the diff after each message keeps it running rather than restarting it.
+    let subscribe (_: int list) : Sub<int> =
+        match script.Sub with
+        | None -> []
+        | Some evs -> [
+            [ "scripted-sub" ],
+            (fun dispatch ->
+                started <- started + 1
+                raise dispatch evs
+                holding ())
+          ]
 
     // The model cell is what `update` produces — `state <- model'` in the
     // loop. Until 851 the bridge read it off `setState`, which ran after
@@ -277,19 +347,25 @@ let private productionRun (script: Script) : Outcome =
         painted <- Some m
         raise dispatch (paints script m)
 
+    // A handler that raises is reported, and the reporter here swallows it:
+    // the loop's behaviour is what is compared, not the report.
+    let onTerminate (_: int list) =
+        if script.HandlerRaises then
+            failwith "the scripted terminate handler raised"
+
     Program.mkProgram init update (fun _ _ -> ())
     |> Program.withSetState setState
-    |> Program.withTermination (fun msg -> script.Terminating.Contains msg) ignore
+    |> Program.withSubscription subscribe
+    |> Program.withTermination (fun msg -> script.Terminating.Contains msg) onTerminate
+    |> Program.withErrorReporter ignore
     |> Program.withRingBufferCapacity script.Capacity
     |> Program.withDispatcherHandle (fun d -> dispatcher <- Some d)
     |> Program.withDispatcherHandle (fun d -> raise d.Dispatch preFromSink)
     |> Program.withEffect (
         EffectHandle.programLifetime "scripted-pre-boot" (fun dispatch ->
+            started <- started + 1
             raise dispatch preFromEffect
-
-            { new System.IDisposable with
-                member _.Dispose() = ()
-            })
+            holding ())
     )
     |> Program.runWithDispatch id ()
 
@@ -312,6 +388,8 @@ let private productionRun (script: Script) : Outcome =
         BootPainted = bootPainted
         BootTrace = bootTrace
         Finished = true
+        Started = started
+        Held = held
     }
 
 // ─── The extracted machine ───────────────────────────────────────────
@@ -328,6 +406,12 @@ let private toModelExt (ext: Ext) : ElmishLoop.ext<int> =
     | XDispatch m -> ElmishLoop.XDispatch m
     | XTerminate -> ElmishLoop.XTerminate
 
+/// A start the script makes: the events it raises, and a handle returned.
+let private toModelStart (evs: Ev list) : ElmishLoop.start<int> = {
+    ElmishLoop.raised = List.map toModelEv evs
+    ElmishLoop.holds = true
+}
+
 /// Enough for any script the generator produces; `Finished` says
 /// whether it was.
 let private fuel = big 100_000
@@ -340,7 +424,20 @@ let private modelRun (script: Script) : Outcome =
         paints script model |> List.map toModelEv
 
     let toTerminate (msg: int) = script.Terminating.Contains msg
-    let pre = List.map toModelEv script.Pre
+
+    // The head of `Pre` is the sink's; the rest the effect's start
+    // function's, and the effect always returns a handle.
+    let sinks, fx =
+        match script.Pre with
+        | [] -> [], [ toModelStart [] ]
+        | first :: rest -> [ toModelEv first ], [ toModelStart rest ]
+
+    let subs =
+        match script.Sub with
+        | None -> ElmishRing.ONone
+        | Some evs -> ElmishRing.OSome(toModelStart evs)
+
+    let cmd = ElmishRing.OSome(List.map toModelEv script.Init)
 
     let s =
         ElmishLoop.program
@@ -350,15 +447,17 @@ let private modelRun (script: Script) : Outcome =
             render
             (big script.Capacity)
             []
-            pre
-            (List.map toModelEv script.Init)
+            sinks
+            fx
+            subs
+            cmd
             (List.map toModelExt script.Exts)
 
     // The model's own account of the boot paint: the state `boot` passes
     // through on its way to the drain, which `boot_paints_init_model` is
     // stated over.
     let atBootPaint =
-        ElmishLoop.boot_paint fuel update toTerminate render (ElmishLoop.initial (big script.Capacity) []) pre
+        ElmishLoop.boot_paint fuel update toTerminate render (ElmishLoop.initial (big script.Capacity) []) sinks fx
 
     let painted (st: ElmishLoop.st<int, int list>) =
         match st.painted with
@@ -375,6 +474,8 @@ let private modelRun (script: Script) : Outcome =
         BootPainted = painted atBootPaint
         BootTrace = atBootPaint.trace
         Finished = not s.reentered
+        Started = int s.started
+        Held = int s.held
     }
 
 // ─── The skeleton, and its go-reds ───────────────────────────────────
@@ -400,6 +501,13 @@ type private Variant =
     /// one of them makes finds it clear and runs a whole drain — `update`,
     /// the command, a paint — ahead of the boot paint.
     | LatchesAfterEffects
+    /// The boot as it was until Phase 871: every start is made whether or
+    /// not a sink or an earlier start has called `Terminate`.
+    | StartsAfterTerminate
+    /// The registry as it was until Phase 871: a start that terminated the
+    /// program itself has its handle stored after the teardown emptied the
+    /// registry, and held for good.
+    | KeepsATerminatingStartsHandle
 
 /// `runWithDispatch`'s scheduling skeleton, transcribed by hand with the
 /// callees replaced by the script — the same abstraction the model
@@ -417,10 +525,13 @@ let private skeletonRun (variant: Variant) (script: Script) : Outcome =
     let mutable painted: int list option = None
     let mutable bootPainted: int list option = None
     let mutable bootTrace: int list = []
+    let mutable started = 0
+    let mutable held = 0
 
     let terminate () =
         if not terminated then
             terminated <- true
+            held <- 0
 
     let rec dispatch msg =
         if not terminated then
@@ -435,7 +546,9 @@ let private skeletonRun (variant: Variant) (script: Script) : Outcome =
                 | Faithful
                 | PaintsPerMessage
                 | PaintsWithoutRedrain
-                | LatchesAfterEffects ->
+                | LatchesAfterEffects
+                | StartsAfterTerminate
+                | KeepsATerminatingStartsHandle ->
                     reentered <- true
                     processMsgs ()
                     reentered <- false
@@ -463,7 +576,7 @@ let private skeletonRun (variant: Variant) (script: Script) : Outcome =
 
     and stepMsg (msg: int) =
         if script.Terminating.Contains msg then
-            terminated <- true
+            terminate ()
         else
             dirty <- true
             trace.Add msg
@@ -481,7 +594,9 @@ let private skeletonRun (variant: Variant) (script: Script) : Outcome =
         match variant with
         | Faithful
         | ClearsLatchBeforeDrain
-        | LatchesAfterEffects ->
+        | LatchesAfterEffects
+        | StartsAfterTerminate
+        | KeepsATerminatingStartsHandle ->
             while not terminated && (Option.isSome nextMsg || dirty) do
                 match nextMsg with
                 | None ->
@@ -502,19 +617,45 @@ let private skeletonRun (variant: Variant) (script: Script) : Outcome =
             if not terminated && dirty then
                 paint ()
 
+    // Phase 871 — a gated start: made only while the program runs, and
+    // holding its handle only if it did not terminate the program itself.
+    let gated (evs: Ev list) (holds: bool) =
+        if not terminated || variant = StartsAfterTerminate then
+            started <- started + 1
+            raise evs
+
+            if holds && (not terminated || variant = KeepsATerminatingStartsHandle) then
+                held <- held + 1
+
+    let sinks, effect =
+        match script.Pre with
+        | [] -> [], []
+        | first :: rest -> [ first ], rest
+
+    let preboot () =
+        raise sinks
+        gated effect true
+
     match variant with
     | LatchesAfterEffects ->
-        raise script.Pre
+        preboot ()
         reentered <- true
     | Faithful
     | ClearsLatchBeforeDrain
     | PaintsPerMessage
-    | PaintsWithoutRedrain ->
+    | PaintsWithoutRedrain
+    | StartsAfterTerminate
+    | KeepsATerminatingStartsHandle ->
         reentered <- true
-        raise script.Pre
+        preboot ()
 
     paint ()
-    raise script.Init
+
+    match script.Sub with
+    | Some evs -> gated evs true
+    | None -> ()
+
+    gated script.Init false
     processMsgs ()
     reentered <- false
 
@@ -537,6 +678,8 @@ let private skeletonRun (variant: Variant) (script: Script) : Outcome =
         BootPainted = bootPainted
         BootTrace = bootTrace
         Finished = true
+        Started = started
+        Held = held
     }
 
 // ─── Reporting ───────────────────────────────────────────────────────
@@ -692,7 +835,10 @@ let tests =
                 40
                 $"only {terminatedByPredicate} scripts reached the termination predicate"
 
-            Expect.isGreaterThan stillActive 100 $"only {stillActive} scripts ended still active"
+            // 80, not 100, since Phase 871: about thirty scripts now end
+            // terminated by a subscription's start at boot (measured 99 of
+            // 400 still active; the other shapes did not move).
+            Expect.isGreaterThan stillActive 80 $"only {stillActive} scripts ended still active"
             Expect.isGreaterThan paintFired 80 $"only {paintFired} scripts had the render hook dispatch into the loop"
             Expect.isGreaterThan quietScripts 60 $"only {quietScripts} scripts kept the render hook quiet"
             Expect.isGreaterThan termFromPaint 15 $"only {termFromPaint} scripts raise Terminate from the render hook"
@@ -771,10 +917,11 @@ let tests =
                     match candidate with
                     | None -> None
                     | Some m ->
-                        // …and nothing raised before the boot paint, the
-                        // theorem's other premise: an effect's message
-                        // would be one more message in the boot drain and
-                        // a drain of its own ahead of the dispatch.
+                        // …and nothing raised before the boot paint and no
+                        // subscription, the theorem's other premises: an
+                        // effect's or a subscription's message would be one
+                        // more message in the boot drain, ahead of the one
+                        // the dispatch would process.
                         let viaBoot =
                             productionRun {
                                 script with
@@ -782,6 +929,7 @@ let tests =
                                     Init = [ EMsg m ]
                                     BootPaint = []
                                     Exts = []
+                                    Sub = None
                             }
 
                         let viaDispatch =
@@ -791,6 +939,7 @@ let tests =
                                     Init = []
                                     BootPaint = []
                                     Exts = [ XDispatch m ]
+                                    Sub = None
                             }
 
                         describe script viaBoot viaDispatch)
@@ -973,6 +1122,101 @@ let tests =
                 caught
                 80
                 "a loop whose sinks and effects run before the latch is set was not caught by the boot-paint comparison"
+        }
+
+        // ─── Termination is total, over the campaign (Phase 871) ─────────
+
+        test
+            "the campaign terminated from a sink, an effect's start and a subscription's start, and with a raising handler" {
+            // The same rule as the coverage cases above, for the clauses
+            // Phase 871 adds: an agreement over scripts that never
+            // terminate at boot, or never raise from the handler, says
+            // nothing about them.
+            let scripts = campaign.Force()
+            let count p = scripts |> List.filter p |> List.length
+
+            let fromSink = count (fun s -> List.tryHead s.Pre = Some ETerm)
+
+            let fromEffect =
+                count (fun s -> s.Pre |> List.skip (min 1 (List.length s.Pre)) |> List.contains ETerm)
+
+            let fromSub = count (fun s -> s.Sub |> Option.exists (List.contains ETerm))
+            let subscribed = count (fun s -> Option.isSome s.Sub)
+
+            let raisingHandlerReached =
+                count (fun s ->
+                    s.HandlerRaises
+                    && (let o = productionRun s in
+                        not o.Active && Set.intersect s.Terminating (Set.ofList o.Log) <> Set.empty))
+
+            // Measured 9, 13, 29, 208 and 52; the sink and effect shapes are
+            // `Pre`'s, whose generator predates the phase and is not moved.
+            Expect.isGreaterThan fromSink 5 $"only {fromSink} scripts terminate from a dispatcher-handle sink"
+            Expect.isGreaterThan fromEffect 8 $"only {fromEffect} scripts terminate from an effect's start function"
+            Expect.isGreaterThan fromSub 20 $"only {fromSub} scripts terminate from a subscription's start"
+            Expect.isGreaterThan subscribed 150 $"only {subscribed} scripts subscribe at boot"
+
+            Expect.isGreaterThan
+                raisingHandlerReached
+                30
+                $"only {raisingHandlerReached} scripts reach the termination predicate with a handler that raises"
+        }
+
+        test "a terminated program holds nothing - terminated_holds_nothing, run" {
+            // Over the whole campaign, on production: whenever the program
+            // ends terminated, every handle the boot's starts returned has
+            // been disposed.
+            let violations =
+                campaign.Force()
+                |> List.choose (fun script ->
+                    let o = productionRun script
+
+                    if not o.Active && o.Held <> 0 then
+                        Some(sprintf "script %A\n  terminated, still holding %d" script o.Held)
+                    else
+                        None)
+
+            Expect.isEmpty violations (String.concat "\n" (List.truncate 5 violations))
+        }
+
+        test "a terminate handler that raises changes nothing the loop does - teardown is total, run" {
+            // The model has no parameter for the handler raising, so this is
+            // the claim that it needs none: over the whole campaign,
+            // production with a handler that raises and with one that returns
+            // are the same run.
+            let differing =
+                campaign.Force()
+                |> List.choose (fun script ->
+                    describe
+                        script
+                        (productionRun { script with HandlerRaises = true })
+                        (productionRun { script with HandlerRaises = false }))
+
+            Expect.isEmpty differing (String.concat "\n" (List.truncate 5 differing))
+        }
+
+        test "a boot that starts after Terminate is caught - go-red, Phase 871" {
+            // The boot as it was: the effect, the subscription and `init`'s
+            // command all start after a sink or an earlier start called
+            // `Terminate`. Caught on the start count.
+            let caught = mismatches (skeletonRun StartsAfterTerminate) |> List.length
+
+            Expect.isGreaterThan
+                caught
+                20
+                "a boot that starts things after Terminate was not caught by the start-count comparison"
+        }
+
+        test "a registry that keeps a terminating start's handle is caught - go-red, Phase 871" {
+            // The registry as it was: an effect (or a subscription) that
+            // terminated the program from its own start function has its
+            // handle stored after the teardown ran, and nothing disposes it.
+            let caught = mismatches (skeletonRun KeepsATerminatingStartsHandle) |> List.length
+
+            Expect.isGreaterThan
+                caught
+                20
+                "a start whose handle outlives the teardown was not caught by the held-handle comparison"
         }
 
         test
@@ -1196,5 +1440,220 @@ let tests =
             Expect.equal (List.ofSeq disposed) [ "sub"; "effect" ] "the subscription and the effect were both disposed"
             Expect.equal (occurrences ReporterRaised written) 2 "the guard said so, once per failure"
             Expect.isFalse handle.Value.IsActive "…and the program terminated"
+        }
+
+        // ─── Termination is total (Phase 871) ────────────────────────────
+        //
+        // Both routes to termination — a message the predicate takes, and
+        // `IDispatcher.Terminate` — run ONE teardown: the loop's flag first,
+        // then the subscriptions stopped, the effects disposed and the handler
+        // called, each under its own guard, and `MarkTerminated` in a
+        // `finally`. And the boot starts nothing once the program is
+        // terminated: it checks before every effect's registration, before the
+        // subscription start and before `init`'s command, and a start that
+        // terminated the program has what it returned released at once.
+        // `terminated_holds_nothing` and `terminated_starts_nothing` are those
+        // rules on the model; these are the production arms, each shown red on
+        // the tree before the phase.
+
+        test "a terminating message whose handler raises still terminates - teardown is total, run" {
+            let seen = ResizeArray<int>()
+            let reported = ResizeArray<ErrorContext>()
+            let disposed = ResizeArray<string>()
+            let mutable handle: IDispatcher<int> option = None
+
+            let disposable (name: string) =
+                { new System.IDisposable with
+                    member _.Dispose() = disposed.Add name
+                }
+
+            let update (msg: int) (model: int list) =
+                seen.Add msg
+                model @ [ msg ], Cmd.none
+
+            Program.mkProgram (fun () -> [], Cmd.none) update (fun _ _ -> ())
+            |> Program.withTermination ((=) 9) (fun _ -> failwith "the terminate handler raised")
+            |> Program.withSubscription (fun _ -> [ [ "sub" ], (fun _ -> disposable "sub") ])
+            |> Program.withErrorReporter reported.Add
+            |> Program.withDispatcherHandle (fun d -> handle <- Some d)
+            |> Program.withEffect (EffectHandle.programLifetime "effect" (fun _ -> disposable "effect"))
+            |> Program.runWithDispatch id ()
+
+            handle.Value.Dispatch 1
+            handle.Value.Dispatch 9
+            Expect.isFalse handle.Value.IsActive "the handler raised, and the program terminated anyway"
+            handle.Value.Dispatch 2
+            Expect.equal (List.ofSeq seen) [ 1 ] "a dispatch after the terminating message reached `update` zero times"
+
+            Expect.equal
+                (List.ofSeq disposed)
+                [ "sub"; "effect" ]
+                "the subscription and the effect were disposed, in the teardown's order"
+
+            Expect.equal reported.Count 1 "the handler's exception was reported, once"
+            handle.Value.Terminate()
+            Expect.equal (List.ofSeq disposed) [ "sub"; "effect" ] "a second Terminate tore nothing down twice"
+        }
+
+        test "a sink that terminates at boot starts no effect, no subscription and no command - run" {
+            let started = ResizeArray<string>()
+            let disposed = ResizeArray<string>()
+            let renders = ResizeArray<int list>()
+            let mutable handle: IDispatcher<int> option = None
+
+            let disposable (name: string) =
+                { new System.IDisposable with
+                    member _.Dispose() = disposed.Add name
+                }
+
+            Program.mkProgram
+                (fun () -> [], Cmd.ofEffect (fun _ -> started.Add "init's command"))
+                (fun msg model -> model @ [ msg ], Cmd.none)
+                (fun _ _ -> ())
+            |> Program.withSetState (fun m _ -> renders.Add m)
+            |> Program.withSubscription (fun _ -> [
+                [ "sub" ],
+                (fun _ ->
+                    started.Add "sub"
+                    disposable "sub")
+            ])
+            |> Program.withDispatcherHandle (fun d ->
+                handle <- Some d
+                d.Terminate())
+            |> Program.withEffect (
+                EffectHandle.programLifetime "effect" (fun _ ->
+                    started.Add "effect"
+                    disposable "effect")
+            )
+            |> Program.runWithDispatch id ()
+
+            Expect.isEmpty started "nothing was started once a sink had terminated the program"
+            Expect.isEmpty disposed "…so nothing was left to dispose"
+            Expect.equal (List.ofSeq renders) [ [] ] "the boot paint is unconditional: the init model, once"
+            Expect.isFalse handle.Value.IsActive "terminated"
+        }
+
+        test "an effect that terminates from its own start function has its handle disposed - run" {
+            let started = ResizeArray<string>()
+            let disposed = ResizeArray<string>()
+            let mutable handle: IDispatcher<int> option = None
+
+            let disposable (name: string) =
+                { new System.IDisposable with
+                    member _.Dispose() = disposed.Add name
+                }
+
+            // Effects start in the reverse of the order they were attached,
+            // so `terminates` (attached last) starts first and `after` would
+            // start second.
+            Program.mkProgram
+                (fun () -> [], Cmd.ofEffect (fun _ -> started.Add "init's command"))
+                (fun msg model -> model @ [ msg ], Cmd.none)
+                (fun _ _ -> ())
+            |> Program.withSubscription (fun _ -> [
+                [ "sub" ],
+                (fun _ ->
+                    started.Add "sub"
+                    disposable "sub")
+            ])
+            |> Program.withDispatcherHandle (fun d -> handle <- Some d)
+            |> Program.withEffect (
+                EffectHandle.programLifetime "after" (fun _ ->
+                    started.Add "after"
+                    disposable "after")
+            )
+            |> Program.withEffect (
+                EffectHandle.programLifetime "terminates" (fun _ ->
+                    started.Add "terminates"
+                    handle.Value.Terminate()
+                    disposable "terminates")
+            )
+            |> Program.runWithDispatch id ()
+
+            Expect.equal
+                (List.ofSeq started)
+                [ "terminates" ]
+                "the effect that terminated ran; no effect, subscription or command started after it"
+
+            Expect.equal
+                (List.ofSeq disposed)
+                [ "terminates" ]
+                "the handle it returned after the teardown had run was disposed at once, not registered"
+
+            Expect.isFalse handle.Value.IsActive "terminated"
+        }
+
+        test "a subscription that terminates from its own start function is stopped - run" {
+            let started = ResizeArray<string>()
+            let disposed = ResizeArray<string>()
+            let mutable handle: IDispatcher<int> option = None
+
+            let disposable (name: string) =
+                { new System.IDisposable with
+                    member _.Dispose() = disposed.Add name
+                }
+
+            Program.mkProgram
+                (fun () -> [], Cmd.ofEffect (fun _ -> started.Add "init's command"))
+                (fun msg model -> model @ [ msg ], Cmd.none)
+                (fun _ _ -> ())
+            |> Program.withSubscription (fun _ -> [
+                [ "terminates" ],
+                (fun _ ->
+                    started.Add "terminates"
+                    handle.Value.Terminate()
+                    disposable "terminates")
+            ])
+            |> Program.withDispatcherHandle (fun d -> handle <- Some d)
+            |> Program.runWithDispatch id ()
+
+            Expect.equal (List.ofSeq started) [ "terminates" ] "the subscription ran; init's command did not"
+
+            Expect.equal
+                (List.ofSeq disposed)
+                [ "terminates" ]
+                "the subscription the teardown could not yet see was stopped once its start returned"
+
+            Expect.isFalse handle.Value.IsActive "terminated"
+        }
+
+        test "a handler that calls Terminate tears down once, on either route - teardown is not re-entered" {
+            // Bounded, so the tree before the phase shows red rather than
+            // overflowing the stack: there the handler's `Terminate` found
+            // the flag still clear and ran the whole teardown again.
+            for viaMessage in [ true; false ] do
+                let mutable calls = 0
+                let disposed = ResizeArray<string>()
+                let mutable handle: IDispatcher<int> option = None
+
+                Program.mkProgram (fun () -> [], Cmd.none) (fun msg model -> model @ [ msg ], Cmd.none) (fun _ _ -> ())
+                |> Program.withTermination ((=) 9) (fun _ ->
+                    calls <- calls + 1
+
+                    if calls < 5 then
+                        handle.Value.Terminate())
+                |> Program.withDispatcherHandle (fun d -> handle <- Some d)
+                |> Program.withEffect (
+                    EffectHandle.programLifetime "effect" (fun _ ->
+                        { new System.IDisposable with
+                            member _.Dispose() = disposed.Add "effect"
+                        })
+                )
+                |> Program.runWithDispatch id ()
+
+                if viaMessage then
+                    handle.Value.Dispatch 9
+                else
+                    handle.Value.Terminate()
+
+                let route =
+                    if viaMessage then
+                        "the message route"
+                    else
+                        "the callback route"
+
+                Expect.equal calls 1 $"the handler ran once ({route})"
+                Expect.equal (List.ofSeq disposed) [ "effect" ] $"the effect was disposed once ({route})"
+                Expect.isFalse handle.Value.IsActive $"terminated ({route})"
         }
     ]
