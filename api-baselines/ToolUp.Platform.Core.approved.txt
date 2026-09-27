@@ -14023,6 +14023,11 @@ ToolUp.Remoting.Json.JsonDecoders.register`1(Microsoft.FSharp.Core.FSharpFunc`2[
 ToolUp.Remoting.Json.JsonDecoders.registered() : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Remoting.Json.JsonDecoders.resetForTests() : System.Void
 ToolUp.Remoting.Json.JsonDecoders.tryGet(System.Type) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]]
+ToolUp.Remoting.Json.JsonText (class)
+ToolUp.Remoting.Json.JsonText.DefaultMaxDepth : System.Int32 (literal)
+ToolUp.Remoting.Json.JsonText.DefaultMaxMembers : System.Int32 (literal)
+ToolUp.Remoting.Json.JsonText.tryParse(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonValue, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonText.tryParseWith(System.Int32, System.Int32, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonValue, ToolUp.Remoting.DecodeError]
 ToolUp.Remoting.Json.JsonValue (class)
 ToolUp.Remoting.Json.JsonValue.IsArray : System.Boolean { get }
 ToolUp.Remoting.Json.JsonValue.IsBool : System.Boolean { get }

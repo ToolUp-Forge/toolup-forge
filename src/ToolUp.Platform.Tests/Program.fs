@@ -2372,6 +2372,9 @@ let private registeredTests =
         // refuse-path mutations per shape, the bounded pass, the IL pin,
         // and the argument seam consulting the registry first.
         JsonDecoderAlgebraTests.tests
+        // Phase 843 - JsonText, the client's JSON reader, differential
+        // against JsonRead, plus the .NET half of the pinned payload.
+        JsonTextTests.tests
         // Phase 69k — the source generator, held to the decoders Phase 785
         // hand-wrote: the covered set, the per-field decode of the shapes a
         // generator could plausibly get wrong, the union tags, and a
