@@ -14,7 +14,7 @@ ToolUp.AI.McpHost 142/247
 ToolUp.AI.SampleClientTool.Client 1/2
 ToolUp.AI.SampleClientTool.Core 4/12
 ToolUp.AI.SampleClientTool.Server 3/4
-ToolUp.AI.Server 614/1018
+ToolUp.AI.Server 642/1058
 ToolUp.AI.UiAwareness.Client 6/8
 ToolUp.AI.UiAwareness.Core 6/7
 ToolUp.AI.UiAwareness.Server 6/9

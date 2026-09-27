@@ -333,12 +333,66 @@ let private optionalTypingSnapshot: AIFieldSnapshot = {
 let private config =
     FastPathTriageConfig.create (StubFieldRegistry(Some snapshot) :> IAIFieldRegistry)
 
+// Phase 664 — navigation fixtures. A surface declares navigation through
+// the reserved `_navigation` descriptor; its aliases map spoken names onto
+// the canonical targets the module's decoder accepts.
+let private navigationDescriptor: AIFieldDescriptor = {
+    FieldId = NavigationFieldId
+    Description = "the page of the sales module shown"
+    ValueType = "enum"
+    InstructionPatterns = [ "go to {value}"; "open the {value} page" ]
+    ValueAliases = [
+        "reports", "/reports"
+        "the reports page", "/reports"
+        "dashboard", "/dashboard"
+    ]
+}
+
+let private navSnapshot: AIFieldSnapshot = {
+    snapshot with
+        Fields = [ countryField; periodField; navigationDescriptor ]
+}
+
+let private navConfig =
+    FastPathTriageConfig.create (StubFieldRegistry(Some navSnapshot) :> IAIFieldRegistry)
+
+// The surface the exemplar pack's illustrative ids live on, so each
+// action exemplar can be checked to PLAN to a hit, not merely parse.
+let private plainField (id: string) (valueType: string) : AIFieldDescriptor = {
+    FieldId = id
+    Description = id
+    ValueType = valueType
+    InstructionPatterns = []
+    ValueAliases = []
+}
+
+let private exemplarSnapshot: AIFieldSnapshot = {
+    ModuleId = "demo"
+    Page = None
+    Fields = [
+        plainField "region" "string"
+        plainField "units" "string"
+        plainField "country" "string-option"
+        plainField "showComparisons" "boolean"
+        {
+            navigationDescriptor with
+                ValueAliases = []
+        }
+    ]
+    StateSummary = ""
+}
+
+let private exemplarConfig =
+    FastPathTriageConfig.create (StubFieldRegistry(Some exemplarSnapshot) :> IAIFieldRegistry)
+
 let private decision (d: string) (fieldId: string option) (value: string option) (confidence: float) = {
     Decision = d
     FieldId = fieldId
     Value = value
     Confidence = confidence
     Reason = ""
+    Target = None
+    Fields = []
 }
 
 // ─── Harness ─────────────────────────────────────────────────────
@@ -418,6 +472,7 @@ let private pureTests =
                 Expect.equal field.FieldId "country" "resolves to the declared field"
                 Expect.equal value (Some "UK") "carries the value"
             | TriageFallThrough o -> failtestf "expected a hit, fell through as %s" o
+            | other -> failtestf "expected a single-field hit, got %A" other
 
         testCase "needs_full_agent falls through, however confident"
         <| fun _ ->
@@ -533,6 +588,41 @@ let private pureTests =
                 (isEligibleInstruction max (String.replicate 40 "long instruction "))
                 "and prose is over the length ceiling"
 
+        testCase "Phase 666 — a question-shaped instruction produces the read-shaped reason"
+        <| fun _ ->
+            // `ineligibilityReason` must agree with `isEligibleInstruction` on
+            // every verdict — it only adds a name for the ones that refuse.
+            let max = FastPathTriageConfig.DefaultMaxInstructionChars
+
+            Expect.equal
+                (ineligibilityReason max "what is the country filter set to?")
+                (Some IneligibleReadShaped)
+                "a literal '?' is read-shaped"
+
+            Expect.equal
+                (ineligibilityReason max "why did revenue drop")
+                (Some IneligibleReadShaped)
+                "a leading question-opener is read-shaped too — same reason, no '?' needed"
+
+            Expect.equal
+                (ineligibilityReason max "explain the period column")
+                (Some IneligibleReadShaped)
+                "every question-opener class in the pre-filter reads as the one token"
+
+        testCase "Phase 666 — the other ineligibility reasons are unchanged"
+        <| fun _ ->
+            let max = FastPathTriageConfig.DefaultMaxInstructionChars
+
+            Expect.equal (ineligibilityReason max "") (Some IneligibleEmpty) "empty is still empty"
+            Expect.equal (ineligibilityReason max "   ") (Some IneligibleEmpty) "whitespace-only is still empty"
+
+            Expect.equal
+                (ineligibilityReason max (String.replicate 40 "long instruction "))
+                (Some IneligibleTooLong)
+                "over the length ceiling is still too-long"
+
+            Expect.equal (ineligibilityReason max "set country to UK") None "a plain command is still eligible"
+
         testCase "only a plain trailing user turn is a triage candidate"
         <| fun _ ->
             Expect.equal
@@ -582,17 +672,30 @@ let private pureTests =
                 "ends in `-option`"
                 "the general optional-typed clearing rule, not a single literal type name"
 
-        testCase "Phase 665 — every exemplar's verdict parses verbatim, and the prompt carries all six"
+        testCase "Phase 665/664 — every exemplar's verdict parses verbatim, and the prompt carries each that applies"
         <| fun _ ->
-            Expect.equal (List.length triageExemplars) 6 "the pack is exactly six exemplars"
+            Expect.equal (List.length triageExemplars) 8 "the pack is six 665 exemplars plus one per 664 verdict"
 
             for instruction, verdict in triageExemplars do
                 match parseTriageDecision verdict with
                 | None -> failtestf "exemplar for %A does not parse: %s" instruction verdict
                 | Some d ->
                     Expect.isTrue
-                        (d.Decision = "set_field" || d.Decision = "needs_full_agent")
+                        (List.contains d.Decision [
+                            VerdictSetField
+                            VerdictSetFields
+                            VerdictNavigate
+                            VerdictNeedsFullAgent
+                        ])
                         $"exemplar for {instruction} decodes to a real decision, got {d.Decision}"
+
+                    // Parsing is not enough: every action exemplar must also
+                    // PLAN to a hit on a surface declaring its ids, or the pack
+                    // teaches a verdict the resolver would refuse.
+                    if d.Decision <> VerdictNeedsFullAgent then
+                        match planTriage exemplarConfig exemplarSnapshot d with
+                        | TriageFallThrough o -> failtestf "exemplar for %A plans to a fall-through: %s" instruction o
+                        | _ -> ()
 
                     if d.Decision = "needs_full_agent" then
                         Expect.isFalse
@@ -609,11 +712,39 @@ let private pureTests =
 
             Expect.isTrue (declineCount >= 2) "at least two exemplars demonstrate the decline form"
 
-            let prompt = buildTriagePrompt snapshot
+            Expect.isTrue
+                (triageExemplars
+                 |> List.exists (fun (_, v) -> v.Contains "\"decision\":\"set_fields\""))
+                "the pack demonstrates the ordered list verdict"
+
+            // A surface declaring navigation carries the whole pack; one that
+            // does not carries all of it except the navigate exemplar.
+            let navPrompt = buildTriagePrompt exemplarSnapshot
 
             for instruction, verdict in triageExemplars do
-                Expect.stringContains prompt instruction "every exemplar instruction reaches the prompt"
-                Expect.stringContains prompt verdict "every exemplar verdict reaches the prompt verbatim"
+                Expect.stringContains navPrompt instruction "every exemplar instruction reaches the prompt"
+                Expect.stringContains navPrompt verdict "every exemplar verdict reaches the prompt verbatim"
+
+            let plainPrompt = buildTriagePrompt snapshot
+
+            for instruction, verdict in triageExemplars do
+                if verdict.Contains "\"decision\":\"navigate\"" then
+                    Expect.isFalse (plainPrompt.Contains verdict) "no navigate exemplar on a surface without navigation"
+                else
+                    Expect.stringContains plainPrompt verdict "every other exemplar still reaches the prompt"
+
+        testCase "Phase 664 — the exemplar block stays within the measured size budget"
+        <| fun _ ->
+            // 665 measured its six-exemplar block at 1,058 chars (~264
+            // tokens) — the baseline this phase's additions are judged
+            // against. Pin the two blocks this phase ships (a surface
+            // without and with navigation) so growth is a visible decision.
+            let block (snap: AIFieldSnapshot) =
+                triageExemplarsFor snap
+                |> List.sumBy (fun (i: string, v: string) -> i.Length + v.Length)
+
+            Expect.isLessThanOrEqual (block snapshot) 1400 "the no-navigation block (665 + one list exemplar)"
+            Expect.isLessThanOrEqual (block exemplarSnapshot) 1500 "the navigation block (+ one navigate exemplar)"
     ]
 
 // ─── Loop-intercept tests ────────────────────────────────────────
@@ -728,14 +859,15 @@ let private interceptTests =
             | None -> failtest "triage must send a system prompt — without it the model has no field vocabulary"
         }
 
-        testCaseAsync "Phase 665 — all six exemplars reach the model, not just buildTriagePrompt's own return value"
+        testCaseAsync
+            "Phase 665 — every exemplar for the surface reaches the model, not just buildTriagePrompt's own return value"
         <| async {
             let provider = ScriptedProvider(true, hitReply, "agent answered")
             let! _ = runLoop (Some config) (provider :> IAIProvider) "set country to UK"
 
             match provider.LastStructuredSystemPrompt with
             | Some p ->
-                for instruction, verdict in triageExemplars do
+                for instruction, verdict in triageExemplarsFor snapshot do
                     Expect.stringContains p instruction "the exemplar instruction reached the wire prompt"
                     Expect.stringContains p verdict "the exemplar verdict reached the wire prompt verbatim"
             | None -> failtest "triage must send a system prompt — without it there is no exemplar pack to check"
@@ -824,6 +956,344 @@ let private interceptTests =
             Expect.stringContains row.Payload OutcomeHit "carrying the outcome"
             Expect.stringContains row.Payload "\"FieldId\":\"country\"" "the resolved field"
             Expect.stringContains row.Payload "test-cheap-model" "and the declared triage model id"
+            Expect.stringContains row.Payload "\"VerdictShape\":\"single\"" "and, since Phase 664, the verdict shape"
+        }
+    ]
+
+// ─── Phase 664 — the verdict-grammar extensions ──────────────────
+//
+// Two new verdicts — an ordered `set_fields` list and a `navigate` — and
+// one property that matters more than either: a list that is not wholly
+// valid applies NOTHING. Every refusal below is asserted both at the
+// stage that refuses it and, for the loop, against the actions that
+// actually reached the notification channel.
+
+let private parsed (json: string) : TriageModelDecision =
+    match parseTriageDecision json with
+    | Some d -> d
+    | None -> failtestf "expected %s to parse" json
+
+let private grammarTests =
+    testList "Phase 664 — navigate and ordered multi-field verdicts" [
+        testCase "a set_fields verdict plans every clause, in the order given, aliases resolved"
+        <| fun _ ->
+            let d =
+                parsed
+                    """{"decision":"set_fields","fields":[{"fieldId":"period","value":"2024-Q2"},{"fieldId":"Country","value":"britain"}],"confidence":0.95}"""
+
+            let plan = planTriage config snapshot d
+
+            match plan with
+            | TriageSetFields(clauses, confidence) ->
+                Expect.equal
+                    (clauses |> List.map (fun (f, v) -> f.FieldId, v))
+                    [ "period", Some "2024-Q2"; "country", Some "UK" ]
+                    "declared ids, canonical values, the model's order"
+
+                Expect.equal confidence 0.95 "the verdict's confidence"
+            | other -> failtestf "expected TriageSetFields, got %A" other
+
+            Expect.equal
+                (planActions plan)
+                [
+                    SetFieldActionKey, """{"field":"period","value":"2024-Q2","source":"triage"}"""
+                    SetFieldActionKey, """{"field":"country","value":"UK","source":"triage"}"""
+                ]
+                "one _ui.set-field per clause, in dispatch order"
+
+            Expect.equal
+                (syntheticPlanReply snapshot plan)
+                (Some "Set **period** to `2024-Q2`, then set **country** to `UK` on sales.")
+                "the recap records the whole sequence"
+
+        testCase "a clause may clear an optional field, under the single-field rule"
+        <| fun _ ->
+            let d =
+                parsed
+                    """{"decision":"set_fields","fields":[{"fieldId":"period","value":"2024-Q3"},{"fieldId":"country","value":null}],"confidence":0.9}"""
+
+            match planTriage config snapshot d with
+            | TriageSetFields([ _; (field, None) ], _) as plan ->
+                Expect.equal field.FieldId "country" "the optional field is cleared"
+
+                Expect.stringContains
+                    (syntheticPlanReply snapshot plan |> Option.defaultValue "")
+                    "cleared **country**"
+                    "and the recap says so"
+            | other -> failtestf "expected a clear in the list, got %A" other
+
+        testCase "a navigate verdict resolves a paraphrased target through the declared aliases"
+        <| fun _ ->
+            let d =
+                parsed """{"decision":"navigate","target":"the reports page","confidence":0.93}"""
+
+            let plan = planTriage navConfig navSnapshot d
+
+            match plan with
+            | TriageNavigate(navigation, target, _) ->
+                Expect.equal navigation.FieldId NavigationFieldId "planned against the declared navigation descriptor"
+                Expect.equal target "/reports" "the canonical target, not the spoken one"
+            | other -> failtestf "expected TriageNavigate, got %A" other
+
+            Expect.equal
+                (planActions plan)
+                [ NavigateActionKey, """{"target":"/reports","source":"triage"}""" ]
+                "one _ui.navigate action"
+
+            Expect.equal
+                (syntheticPlanReply navSnapshot plan)
+                (Some "Navigated to `/reports` on sales.")
+                "and a recap naming it"
+
+        testCase "navigate on a surface that declares no navigation is refused"
+        <| fun _ ->
+            let d = parsed """{"decision":"navigate","target":"reports","confidence":0.99}"""
+
+            Expect.equal
+                (planTriage config snapshot d)
+                (TriageFallThrough OutcomeUnknownField)
+                "nothing declared, nothing honoured"
+
+        testCase "all-or-nothing: one failing clause fails the whole list, with that clause's outcome"
+        <| fun _ ->
+            let undeclared =
+                parsed
+                    """{"decision":"set_fields","fields":[{"fieldId":"country","value":"UK"},{"fieldId":"region","value":"EMEA"}],"confidence":0.99}"""
+
+            let plan = planTriage config snapshot undeclared
+            Expect.equal plan (TriageFallThrough OutcomeUnknownField) "an undeclared clause refuses every clause"
+            Expect.isEmpty (planActions plan) "and a fall-through emits nothing — not even the valid first clause"
+
+            let requiredClear =
+                parsed
+                    """{"decision":"set_fields","fields":[{"fieldId":"country","value":"UK"},{"fieldId":"period","value":null}],"confidence":0.99}"""
+
+            Expect.equal
+                (planTriage config snapshot requiredClear)
+                (TriageFallThrough OutcomeClearUnsupported)
+                "clearing a required field in a list is refused exactly as it is alone"
+
+            let lowConfidence =
+                parsed
+                    """{"decision":"set_fields","fields":[{"fieldId":"country","value":"UK"},{"fieldId":"period","value":"2024-Q2"}],"confidence":0.5}"""
+
+            Expect.equal
+                (planTriage config snapshot lowConfidence)
+                (TriageFallThrough OutcomeLowConfidence)
+                "the floor applies to the verdict as a whole"
+
+        testCase "the navigation descriptor is never a settable field"
+        <| fun _ ->
+            Expect.equal
+                (planTriage
+                    navConfig
+                    navSnapshot
+                    (decision VerdictSetField (Some NavigationFieldId) (Some "/reports") 0.99))
+                (TriageFallThrough OutcomeUnknownField)
+                "set_field cannot name it"
+
+            let viaList =
+                parsed
+                    """{"decision":"set_fields","fields":[{"fieldId":"country","value":"UK"},{"fieldId":"_navigation","value":"/reports"}],"confidence":0.99}"""
+
+            Expect.equal
+                (planTriage navConfig navSnapshot viaList)
+                (TriageFallThrough OutcomeUnknownField)
+                "nor can a clause of set_fields"
+
+        testCase "a malformed list is refused whole at parse — no partial verdict survives"
+        <| fun _ ->
+            let clause (id: string) =
+                "{\"fieldId\":\"" + id + "\",\"value\":\"x\"}"
+
+            let list (items: string list) =
+                "{\"decision\":\"set_fields\",\"fields\":["
+                + (items |> String.concat ",")
+                + "],\"confidence\":0.99}"
+
+            let cases = [
+                "a single clause (that is set_field)", list [ clause "country" ]
+                "an empty list", list []
+                "more than MaxFieldClauses clauses", list [ for i in 1 .. MaxFieldClauses + 1 -> clause $"f{i}" ]
+                "a clause with no value", list [ clause "country"; """{"fieldId":"period"}""" ]
+                "a clause with a non-string value", list [ clause "country"; """{"fieldId":"period","value":2024}""" ]
+                "a clause with an unknown member",
+                list [ clause "country"; """{"fieldId":"period","value":"x","confidence":1}""" ]
+                "a clause that is not an object", list [ clause "country"; "\"period\"" ]
+                "a blank fieldId", list [ clause "country"; """{"fieldId":" ","value":"x"}""" ]
+                "the same field twice, however cased", list [ clause "country"; clause "COUNTRY" ]
+                "fields that is not an array",
+                """{"decision":"set_fields","fields":{"fieldId":"country","value":"x"},"confidence":0.99}"""
+                "no fields at all", """{"decision":"set_fields","confidence":0.99}"""
+                "a navigate with no target", """{"decision":"navigate","confidence":0.99}"""
+                "a navigate with a blank target", """{"decision":"navigate","target":"  ","confidence":0.99}"""
+            ]
+
+            for name, json in cases do
+                Expect.isNone (parseTriageDecision json) $"refused: {name}"
+
+            // The control: the same builders DO produce a verdict that parses,
+            // so the refusals above are about their defects, not the builder.
+            Expect.isSome
+                (parseTriageDecision (list [ clause "country"; clause "period" ]))
+                "a well-formed two-clause list parses"
+
+        testCase "a mixed verdict is refused whole; schema-honouring nulls are not mixed"
+        <| fun _ ->
+            let mixed = [
+                """{"decision":"set_field","fieldId":"country","value":"UK","fields":[{"fieldId":"period","value":"x"},{"fieldId":"country","value":"y"}],"confidence":0.99}"""
+                """{"decision":"set_field","fieldId":"country","value":"UK","target":"reports","confidence":0.99}"""
+                """{"decision":"navigate","target":"reports","fieldId":"country","confidence":0.99}"""
+                """{"decision":"navigate","target":"reports","value":"UK","confidence":0.99}"""
+                """{"decision":"set_fields","fields":[{"fieldId":"period","value":"x"},{"fieldId":"country","value":"y"}],"target":"reports","confidence":0.99}"""
+                """{"decision":"set_fields","fields":[{"fieldId":"period","value":"x"},{"fieldId":"country","value":"y"}],"fieldId":"country","confidence":0.99}"""
+            ]
+
+            for json in mixed do
+                Expect.isNone (parseTriageDecision json) $"mixed: {json}"
+
+            let withNulls =
+                """{"decision":"navigate","target":"reports","fieldId":null,"value":null,"fields":null,"confidence":0.9}"""
+
+            match parseTriageDecision withNulls with
+            | Some d -> Expect.equal d.Target (Some "reports") "null members of other shapes are absent, not mixed"
+            | None -> failtest "a verdict whose other-shape members are JSON null must still parse"
+
+        testCase "planTriage holds a hand-built decision to the same no-mixing rule"
+        <| fun _ ->
+            let smuggled = {
+                (decision VerdictSetField (Some "country") (Some "UK") 0.99) with
+                    Fields = [
+                        ({ FieldId = "period"; Value = Some "x" }: TriageFieldClause)
+                        ({
+                            FieldId = "country"
+                            Value = Some "y"
+                        }
+                        : TriageFieldClause)
+                    ]
+            }
+
+            Expect.equal
+                (planTriage config snapshot smuggled)
+                (TriageFallThrough OutcomeUnparseable)
+                "no second shape rides a first"
+
+        testCase "verdictShape names the three action shapes and nothing else"
+        <| fun _ ->
+            Expect.equal (verdictShape VerdictSetField) VerdictShapeSingle "single"
+            Expect.equal (verdictShape VerdictSetFields) VerdictShapeMulti "multi"
+            Expect.equal (verdictShape VerdictNavigate) VerdictShapeNavigate "navigate"
+            Expect.equal (verdictShape VerdictNeedsFullAgent) "" "a decline has no shape"
+            Expect.equal verdictShapes [ VerdictShapeSingle; VerdictShapeMulti; VerdictShapeNavigate ] "the vocabulary"
+
+        testCase "the prompt documents both new verdicts; navigation only where it is declared"
+        <| fun _ ->
+            let plain = buildTriagePrompt snapshot
+            Expect.stringContains plain "`set_fields`" "the list verdict is documented on every surface"
+            Expect.stringContains plain "for the whole instruction" "with its all-or-nothing rule"
+            Expect.isFalse (plain.Contains "Answer `navigate`") "no navigation rule where none is declared"
+
+            let nav = buildTriagePrompt navSnapshot
+            Expect.stringContains nav "Answer `navigate`" "the navigation rule where it is declared"
+            Expect.stringContains nav "go to {value}" "with the declared navigation phrasings"
+            Expect.stringContains nav "the reports page->/reports" "and the declared targets"
+
+            let occurrences = nav.Split("- id: _navigation").Length - 1
+
+            Expect.equal occurrences 1 "the navigation descriptor is listed once, in its own section — never as a field"
+    ]
+
+let private grammarLoopTests =
+    testList "Phase 664 — the new verdicts end to end through runAgentLoop" [
+        testCaseAsync "a two-clause set instruction resolves through triage, both actions in order"
+        <| async {
+            let reply =
+                """{"decision":"set_fields","fields":[{"fieldId":"country","value":"britain"},{"fieldId":"period","value":"2024-Q2"}],"confidence":0.94}"""
+
+            let provider = ScriptedProvider(true, reply, "agent answered")
+            let! r = runLoop (Some config) (provider :> IAIProvider) "set country to britain and period to 2024-Q2"
+
+            Expect.equal provider.StructuredCalls 1 "triage ran"
+            Expect.equal provider.SendCalls 0 "and the full agent loop did NOT"
+
+            Expect.equal
+                r.Actions
+                [
+                    "sales", SetFieldActionKey, """{"field":"country","value":"UK","source":"triage"}"""
+                    "sales", SetFieldActionKey, """{"field":"period","value":"2024-Q2","source":"triage"}"""
+                ]
+                "one ModuleAction per clause, addressed to the active module, in the verdict's order"
+
+            Expect.equal (List.length r.Final) 2 "the synthetic history pair"
+            Expect.stringContains (r.Final[1].Content) "**country** to `UK`" "the recap names the first step"
+            Expect.stringContains (r.Final[1].Content) "**period** to `2024-Q2`" "and the second"
+
+            let row = r.TriageRows.Head.Payload
+            Expect.stringContains row OutcomeHit "a hit"
+            Expect.stringContains row "\"VerdictShape\":\"multi\"" "attributed to the list verdict"
+            Expect.stringContains row "\"FieldId\":\"country,period\"" "naming every resolved field, in order"
+        }
+
+        testCaseAsync "a paraphrased navigation instruction resolves through triage"
+        <| async {
+            let reply =
+                """{"decision":"navigate","target":"the reports page","confidence":0.91}"""
+
+            let provider = ScriptedProvider(true, reply, "agent answered")
+            let! r = runLoop (Some navConfig) (provider :> IAIProvider) "take me over to the reports page"
+
+            Expect.equal provider.SendCalls 0 "the full agent loop did NOT run"
+
+            Expect.equal
+                r.Actions
+                [ "sales", NavigateActionKey, """{"target":"/reports","source":"triage"}""" ]
+                "one _ui.navigate ModuleAction to the active module"
+
+            Expect.stringContains (r.Final[1].Content) "Navigated to `/reports`" "the recap"
+
+            let row = r.TriageRows.Head.Payload
+            Expect.stringContains row "\"VerdictShape\":\"navigate\"" "attributed to the navigate verdict"
+            Expect.stringContains row "\"FieldId\":\"_navigation\"" "under the navigation descriptor's id"
+        }
+
+        testCaseAsync "a sequence with one invalid clause falls through whole — nothing is applied"
+        <| async {
+            let reply =
+                """{"decision":"set_fields","fields":[{"fieldId":"country","value":"UK"},{"fieldId":"region","value":"EMEA"}],"confidence":0.97}"""
+
+            let provider = ScriptedProvider(true, reply, "agent answered")
+            let! r = runLoop (Some config) (provider :> IAIProvider) "set country to UK and region to EMEA"
+
+            Expect.equal provider.SendCalls 1 "the full agent loop heard the whole instruction"
+            Expect.isEmpty r.Actions "not even the valid first clause was dispatched"
+
+            let row = r.TriageRows.Head.Payload
+            Expect.stringContains row OutcomeUnknownField "recorded under the failing clause's stratum"
+            Expect.stringContains row "\"VerdictShape\":\"multi\"" "and still attributed to the list verdict"
+        }
+
+        testCaseAsync "a malformed list is unparseable and falls through exactly as before"
+        <| async {
+            let reply =
+                """{"decision":"set_fields","fields":[{"fieldId":"country","value":"UK"}],"confidence":0.97}"""
+
+            let provider = ScriptedProvider(true, reply, "agent answered")
+            let! r = runLoop (Some config) (provider :> IAIProvider) "set country to UK"
+
+            Expect.equal provider.SendCalls 1 "the full loop ran"
+            Expect.isEmpty r.Actions "nothing was dispatched"
+
+            let row = r.TriageRows.Head.Payload
+            Expect.stringContains row OutcomeUnparseable "the unparseable stratum"
+            Expect.stringContains row "\"VerdictShape\":\"\"" "with no shape: nothing parsed"
+
+            let errors =
+                r.Events
+                |> List.filter (function
+                    | StreamError _ -> true
+                    | _ -> false)
+
+            Expect.isEmpty errors "never an error to the user"
         }
     ]
 
@@ -934,16 +1404,28 @@ let private routeTests =
                 LatencyMs = 1.0
                 TimeoutBudgetMs = 0
                 InstructionChars = 17
+                VerdictShape = null
             }
 
             let coerced = TriageEventPayload.coerceLegacy legacy
             Expect.equal coerced.Route TriageRouteTurnProvider "the only route that existed"
             Expect.equal coerced.ServedModel "test-model" "the recorded provider model served"
+            Expect.equal coerced.VerdictShape VerdictShapeSingle "Phase 664 — a pre-664 hit was a single-field hit"
+
+            Expect.equal
+                (TriageEventPayload.coerceLegacy {
+                    legacy with
+                        Outcome = OutcomeNeedsFullAgent
+                })
+                    .VerdictShape
+                ""
+                "and a pre-664 fall-through carries no shape"
 
             let current = {
                 legacy with
                     Route = "override"
                     ServedModel = "cheap"
+                    VerdictShape = VerdictShapeMulti
             }
 
             Expect.equal (TriageEventPayload.coerceLegacy current) current "a current row is untouched"
@@ -969,6 +1451,7 @@ let private rollupTests =
                 LatencyMs = latency
                 TimeoutBudgetMs = 3_000
                 InstructionChars = 17
+                VerdictShape = ""
             }
 
             let rollup =
@@ -1005,4 +1488,11 @@ let private rollupTests =
     ]
 
 let tests =
-    testList "Phase 6j.B — Tier-3 fast-path triage" [ pureTests; interceptTests; routeTests; rollupTests ]
+    testList "Phase 6j.B — Tier-3 fast-path triage" [
+        pureTests
+        interceptTests
+        routeTests
+        rollupTests
+        grammarTests
+        grammarLoopTests
+    ]
