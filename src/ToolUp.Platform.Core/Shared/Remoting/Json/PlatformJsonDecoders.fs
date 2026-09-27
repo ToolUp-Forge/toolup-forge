@@ -11,15 +11,20 @@ open ToolUp.Platform
 /// consults before System.Text.Json.
 ///
 /// Hand-written, in the shape the generator will emit once it learns
-/// this wire (69k.B), and chosen so that four platform records take
-/// every argument through the algebra: `IPresenceApi`, `IAuditViewApi`,
-/// `IProvenanceQueryApi` and `ITeamInviteApi`. Deliberately NOT
-/// registered: `string`, `Guid` and the primitive tuples, which are
-/// shared with every consumer's own API records — registering a decoder
-/// for `string` here would change how a consumer's string arguments are
-/// read on upgrade (a `null` string would refuse by name rather than
-/// arrive as `null`), and a platform-set registration must stay a
-/// statement about the platform's records (GP 11).
+/// this wire (69k.B), and chosen so that six platform records take
+/// their own arguments through the algebra: `IPresenceApi`,
+/// `IAuditViewApi`, `IProvenanceQueryApi`, `ITeamInviteApi`,
+/// `IHomeOverviewApi` and `TeamApi`.
+///
+/// Phase 839 — every registration below is now scoped to its owning
+/// record (`JsonDecoders.registerFor`), not global: a decoder
+/// registered for `IPresenceApi`'s arguments is never consulted for
+/// another record's arguments of the same wire type, so this module's
+/// registrations are a statement about the platform's OWN records
+/// again, and stop being a statement about every consumer's types by
+/// construction rather than by convention alone. Deliberately still NOT
+/// registered for ANY record: `string`, `Guid` and the primitive
+/// tuples — see `PlatformPrimitiveJsonDecoders` below.
 ///
 /// Every decoder here is held beside the STJ converter set over drawn
 /// values by `JsonDecoderAlgebraTests`, the same way `PlatformDecoders`
@@ -128,7 +133,7 @@ module PlatformJsonDecoders =
         |> JsonDecode.apply (JsonDecode.field "ModuleId" JsonDecode.asString)
         |> JsonDecode.apply (JsonDecode.field "Pinned" JsonDecode.asBool)
 
-    /// `CreateTeamRequest` — the `CreateTeamWithOwner` argument.
+    /// `CreateTeamRequest` — the `TeamApi.CreateTeamWithOwner` argument.
     let createTeamRequest: JsonDecoder<CreateTeamRequest> =
         JsonDecode.succeed (fun name owner ->
             ({
@@ -139,30 +144,96 @@ module PlatformJsonDecoders =
         |> JsonDecode.apply (JsonDecode.field "Name" JsonDecode.asString)
         |> JsonDecode.apply (JsonDecode.field "InitialOwnerUserId" JsonDecode.asString)
 
-    /// The argument types this module covers, in registration order.
-    let covered: string list = [
-        typeof<TeamRole>.FullName
-        typeof<PresenceLocation>.FullName
-        typeof<EntityLockRef>.FullName
-        typeof<AuditTrailQuery>.FullName
-        typeof<WireProvenanceRef>.FullName
-        typeof<WireProvenanceDirection>.FullName
-        typeof<WireProvenanceChainRequest>.FullName
-        typeof<TeamInviteIssueRequest>.FullName
-        typeof<PinRequest>.FullName
-        typeof<CreateTeamRequest>.FullName
+    /// `PendingInviteIssueRequest` — the `ITeamInviteApi.IssuePendingInviteByEmail`
+    /// argument; the same shape as `teamInviteIssueRequest` minus the
+    /// link-flow-only `EmailHint` / `MaxUses` members.
+    let pendingInviteIssueRequest: JsonDecoder<PendingInviteIssueRequest> =
+        JsonDecode.succeed (fun teamId email role expiresIn ->
+            ({
+                TeamId = teamId
+                Email = email
+                Role = role
+                ExpiresIn = expiresIn
+            }
+            : PendingInviteIssueRequest))
+        |> JsonDecode.apply (JsonDecode.field "TeamId" JsonDecode.asString)
+        |> JsonDecode.apply (JsonDecode.field "Email" JsonDecode.asString)
+        |> JsonDecode.apply (JsonDecode.field "Role" teamRole)
+        |> JsonDecode.apply (JsonDecode.optionalField "ExpiresIn" JsonDecode.asTimeSpan)
+
+    /// Phase 839 — `ITeamInviteApi`'s many string-only arguments
+    /// (`AcceptInvite`, `RevokeInvite`, `ListPendingInvites`,
+    /// `ListPendingInvitesByEmail`, `RevokePendingInviteByEmail`,
+    /// `ListRecentlyExpiredInvites`) share this one decoder, registered
+    /// scoped to `ITeamInviteApi` alone — see `registerAll`.
+    let teamInviteApiString: JsonDecoder<string> = JsonDecode.asString
+
+    /// Phase 839 — `IHomeOverviewApi.RecordVisit`'s bare `string` argument,
+    /// registered scoped to `IHomeOverviewApi` alone.
+    let homeOverviewApiString: JsonDecoder<string> = JsonDecode.asString
+
+    /// Phase 839 — `TeamApi`'s bare `string` arguments (`CreateTeam`,
+    /// `GetTeamMembers`, `SetActiveTeam`, `ArchiveTeam`, `RestoreTeam`,
+    /// `DeleteTeamHard`), registered scoped to `TeamApi` alone.
+    let teamApiString: JsonDecoder<string> = JsonDecode.asString
+
+    /// Phase 839 — `TeamApi.RemoveTeamMember` / `TransferOwnership`'s
+    /// `(string * string)` tuple argument.
+    let teamApiStringPair: JsonDecoder<string * string> =
+        JsonDecode.tuple2 JsonDecode.asString JsonDecode.asString
+
+    /// Phase 839 — `TeamApi.AddTeamMember` / `ChangeMemberRole`'s
+    /// `(string * string * TeamRole)` tuple argument.
+    let teamApiStringStringRole: JsonDecoder<string * string * TeamRole> =
+        JsonDecode.tuple3 JsonDecode.asString JsonDecode.asString teamRole
+
+    /// The `(owning record, argument type)` pairs this module covers, in
+    /// registration order. Phase 839 — every entry names the ONE record
+    /// its decoder is scoped to (`None` would mean unscoped, and nothing
+    /// here is); `PinRequest` and `CreateTeamRequest` are no longer a
+    /// blanket statement about every consumer's own `IHomeOverviewApi`-
+    /// or `TeamApi`-shaped record, because they are not registered for
+    /// one.
+    let covered: (string option * string) list = [
+        Some "ITeamInviteApi", typeof<TeamRole>.FullName
+        Some "IPresenceApi", typeof<PresenceLocation>.FullName
+        Some "IPresenceApi", typeof<EntityLockRef>.FullName
+        Some "IAuditViewApi", typeof<AuditTrailQuery>.FullName
+        Some "IProvenanceQueryApi", typeof<WireProvenanceRef>.FullName
+        Some "IProvenanceQueryApi", typeof<WireProvenanceDirection>.FullName
+        Some "IProvenanceQueryApi", typeof<WireProvenanceChainRequest>.FullName
+        Some "ITeamInviteApi", typeof<TeamInviteIssueRequest>.FullName
+        Some "IHomeOverviewApi", typeof<PinRequest>.FullName
+        Some "TeamApi", typeof<CreateTeamRequest>.FullName
+        Some "ITeamInviteApi", typeof<PendingInviteIssueRequest>.FullName
+        Some "ITeamInviteApi", typeof<string>.FullName
+        Some "IHomeOverviewApi", typeof<string>.FullName
+        Some "TeamApi", typeof<string>.FullName
+        Some "TeamApi", typeof<string * string>.FullName
+        Some "TeamApi", typeof<string * string * TeamRole>.FullName
     ]
 
-    /// Register every decoder above. Idempotent and explicit — called
-    /// by `ServerApp.run` beside `PlatformDecoders.registerAll`.
+    /// Register every decoder above, each scoped to the one API record it
+    /// covers (`JsonDecoders.registerFor`) — Phase 839 widened every
+    /// registration this module makes from unscoped to record-scoped, so
+    /// the platform's own registrations are a statement about the
+    /// platform's own records again, not about every consumer's types of
+    /// the same shape. Idempotent and explicit — called by `ServerApp.run`
+    /// beside `PlatformDecoders.registerAll`.
     let registerAll () : unit =
-        JsonDecoders.register<TeamRole> teamRole
-        JsonDecoders.register<PresenceLocation> presenceLocation
-        JsonDecoders.register<EntityLockRef> entityLockRef
-        JsonDecoders.register<AuditTrailQuery> auditTrailQuery
-        JsonDecoders.register<WireProvenanceRef> wireProvenanceRef
-        JsonDecoders.register<WireProvenanceDirection> wireProvenanceDirection
-        JsonDecoders.register<WireProvenanceChainRequest> wireProvenanceChainRequest
-        JsonDecoders.register<TeamInviteIssueRequest> teamInviteIssueRequest
-        JsonDecoders.register<PinRequest> pinRequest
-        JsonDecoders.register<CreateTeamRequest> createTeamRequest
+        JsonDecoders.registerFor<TeamRole> "ITeamInviteApi" teamRole
+        JsonDecoders.registerFor<PresenceLocation> "IPresenceApi" presenceLocation
+        JsonDecoders.registerFor<EntityLockRef> "IPresenceApi" entityLockRef
+        JsonDecoders.registerFor<AuditTrailQuery> "IAuditViewApi" auditTrailQuery
+        JsonDecoders.registerFor<WireProvenanceRef> "IProvenanceQueryApi" wireProvenanceRef
+        JsonDecoders.registerFor<WireProvenanceDirection> "IProvenanceQueryApi" wireProvenanceDirection
+        JsonDecoders.registerFor<WireProvenanceChainRequest> "IProvenanceQueryApi" wireProvenanceChainRequest
+        JsonDecoders.registerFor<TeamInviteIssueRequest> "ITeamInviteApi" teamInviteIssueRequest
+        JsonDecoders.registerFor<PinRequest> "IHomeOverviewApi" pinRequest
+        JsonDecoders.registerFor<CreateTeamRequest> "TeamApi" createTeamRequest
+        JsonDecoders.registerFor<PendingInviteIssueRequest> "ITeamInviteApi" pendingInviteIssueRequest
+        JsonDecoders.registerFor<string> "ITeamInviteApi" teamInviteApiString
+        JsonDecoders.registerFor<string> "IHomeOverviewApi" homeOverviewApiString
+        JsonDecoders.registerFor<string> "TeamApi" teamApiString
+        JsonDecoders.registerFor<string * string> "TeamApi" teamApiStringPair
+        JsonDecoders.registerFor<string * string * TeamRole> "TeamApi" teamApiStringStringRole

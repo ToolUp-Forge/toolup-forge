@@ -110,13 +110,19 @@ let private parseArgumentArrayBytes
 /// exception System.Text.Json or the converter set can raise arrives here
 /// as a `DecodeError` naming the argument's path, its expected type and
 /// what the wire actually held.
+///
+/// Phase 839 — `recordName` is the owning API record's name
+/// (`makeProps.RecordName`), passed through to `FableConverters.tryDeserialiseFor`
+/// so a decoder registered for THIS record wins over one registered
+/// unscoped for the same argument type.
 let private tryDeserialiseArgWithBackend<'inp>
+    (recordName: string option)
     (backend: JsonSerializerBackend)
     (argElement: JsonElement)
     : Result<'inp, DecodeError> =
     match backend with
     | SystemTextJson stjOptions ->
-        ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialise<'inp> argElement stjOptions
+        ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseFor<'inp> recordName argElement stjOptions
 
 type private MsgPackSerializer<'a> =
     static let serializer = MsgPack.Write.makeSerializer<'a> ()
@@ -357,7 +363,12 @@ let rec private makeEndpointProxy<'fieldPart>
                             // never applied. The happy path is unchanged.
                             let argIndex = makeProps.FlattenedTypes.Length - 1 - props.Arguments.Length
 
-                            match tryDeserialiseArgWithBackend<'inp> makeProps.JsonSerializer argElement with
+                            match
+                                tryDeserialiseArgWithBackend<'inp>
+                                    (Some makeProps.RecordName)
+                                    makeProps.JsonSerializer
+                                    argElement
+                            with
                             | Ok inp -> outp (f inp) { props with Arguments = t }
                             | Error error ->
                                 error

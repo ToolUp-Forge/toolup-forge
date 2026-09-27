@@ -1249,6 +1249,7 @@ let classifyJson (target: Type) (text: string) : RefusalOutcome * string =
 
         match
             ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseElement
+                None
                 document.RootElement
                 target
                 jsonOptions

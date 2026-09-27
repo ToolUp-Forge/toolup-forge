@@ -1536,6 +1536,13 @@ module RemotingDecoderFacet =
     /// types against the JSON algebra registry. Corpus coverage is
     /// `false` throughout: the wire corpus draws the corpus's own types,
     /// and no platform argument type is among them yet.
+    ///
+    /// Phase 839 — the registry key widened to `(record option) * (wire
+    /// key)`, so a record's argument is covered when EITHER its own
+    /// record-scoped registration exists, OR an unscoped one does —
+    /// exactly the same two-step lookup `JsonDecoders.tryGet` does at the
+    /// seam, read here off the process-wide table instead of a live
+    /// per-request call.
     let inspectServedArguments (profile: CompositionProfile) : RemotingDecoderFacet =
         let registered = ToolUp.Remoting.Json.JsonDecoders.registered () |> Set.ofList
 
@@ -1544,11 +1551,15 @@ module RemotingDecoderFacet =
             |> List.filter (fun t ->
                 Reflection.FSharpType.IsRecord(t, Reflection.BindingFlags.Public ||| Reflection.BindingFlags.NonPublic))
             |> List.map (fun t ->
-                let uncovered =
-                    argumentTypesOf t |> List.filter (fun name -> not (registered.Contains name))
+                let recName = recordName t
+
+                let isCovered (key: string) =
+                    registered.Contains(Some recName, key) || registered.Contains(None, key)
+
+                let uncovered = argumentTypesOf t |> List.filter (isCovered >> not)
 
                 {
-                    DecoderApiRecord = recordName t
+                    DecoderApiRecord = recName
                     DecoderClass =
                         if List.isEmpty uncovered then
                             RemotingDecoderClass.Algebra

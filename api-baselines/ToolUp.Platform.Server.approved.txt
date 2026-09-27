@@ -2285,7 +2285,6 @@ ToolUp.Platform.ConfigProfiles.selectFrom(Microsoft.FSharp.Core.FSharpOption`1[S
 ToolUp.Platform.ConfigProfiles.tryFind(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ConfigKeys+ConfigProfile]
 ToolUp.Platform.ConfigProfiles+ConfigProfileException (class)
 ToolUp.Platform.ConfigProfiles+ConfigProfileException..ctor()
-ToolUp.Platform.ConfigProfiles+ConfigProfileException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
 ToolUp.Platform.ConfigProfiles+ConfigProfileException..ctor(System.String)
 ToolUp.Platform.ConfigProfiles+ConfigProfileException.message : System.String { get }
 ToolUp.Platform.ConfigResolver (class)
@@ -2303,7 +2302,6 @@ ToolUp.Platform.ConfigResolver.parseBytes(System.String, System.Byte[]) : Micros
 ToolUp.Platform.ConfigResolver.reset() : System.Void
 ToolUp.Platform.ConfigResolver+ConfigManifestException (class)
 ToolUp.Platform.ConfigResolver+ConfigManifestException..ctor()
-ToolUp.Platform.ConfigResolver+ConfigManifestException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
 ToolUp.Platform.ConfigResolver+ConfigManifestException..ctor(System.String)
 ToolUp.Platform.ConfigResolver+ConfigManifestException.message : System.String { get }
 ToolUp.Platform.ConfigResolver+ManifestLoad (class)
@@ -4406,7 +4404,6 @@ ToolUp.Platform.FileManagement+FileManagementRuntimeModule (class)
 ToolUp.Platform.FileManagement+FileManagementRuntimeModule.empty : ToolUp.Platform.FileManagement+FileManagementRuntime { get }
 ToolUp.Platform.FileManagement+FileNotFoundInSessionException (class)
 ToolUp.Platform.FileManagement+FileNotFoundInSessionException..ctor()
-ToolUp.Platform.FileManagement+FileNotFoundInSessionException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
 ToolUp.Platform.FileManagement+FileNotFoundInSessionException..ctor(System.String)
 ToolUp.Platform.FileManagement+FileNotFoundInSessionException.Data0 : System.String { get }
 ToolUp.Platform.FileManagement+ProcessedEntryStore (class)
@@ -5449,19 +5446,16 @@ ToolUp.Platform.IEmbeddingProvider+EmbedderRetryPolicyModule.jitter(ToolUp.Platf
 ToolUp.Platform.IEmbeddingProvider+EmbedderRetryPolicyModule.noRetry : ToolUp.Platform.IEmbeddingProvider+EmbedderRetryPolicy { get }
 ToolUp.Platform.IEmbeddingProvider+EmbeddingProviderCircuitOpenException (class)
 ToolUp.Platform.IEmbeddingProvider+EmbeddingProviderCircuitOpenException..ctor()
-ToolUp.Platform.IEmbeddingProvider+EmbeddingProviderCircuitOpenException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
 ToolUp.Platform.IEmbeddingProvider+EmbeddingProviderCircuitOpenException..ctor(System.String)
 ToolUp.Platform.IEmbeddingProvider+EmbeddingProviderCircuitOpenException.message : System.String { get }
 ToolUp.Platform.IEmbeddingProvider+EmbeddingProviderRetriesExhaustedException (class)
 ToolUp.Platform.IEmbeddingProvider+EmbeddingProviderRetriesExhaustedException..ctor()
 ToolUp.Platform.IEmbeddingProvider+EmbeddingProviderRetriesExhaustedException..ctor(System.Int32, System.String)
-ToolUp.Platform.IEmbeddingProvider+EmbeddingProviderRetriesExhaustedException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
 ToolUp.Platform.IEmbeddingProvider+EmbeddingProviderRetriesExhaustedException.attempts : System.Int32 { get }
 ToolUp.Platform.IEmbeddingProvider+EmbeddingProviderRetriesExhaustedException.lastError : System.String { get }
 ToolUp.Platform.IEmbeddingProvider+EmbeddingProviderUnavailableException (class)
 ToolUp.Platform.IEmbeddingProvider+EmbeddingProviderUnavailableException..ctor()
 ToolUp.Platform.IEmbeddingProvider+EmbeddingProviderUnavailableException..ctor(System.Int32, System.String)
-ToolUp.Platform.IEmbeddingProvider+EmbeddingProviderUnavailableException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
 ToolUp.Platform.IEmbeddingProvider+EmbeddingProviderUnavailableException.body : System.String { get }
 ToolUp.Platform.IEmbeddingProvider+EmbeddingProviderUnavailableException.statusCode : System.Int32 { get }
 ToolUp.Platform.IEmbeddingProvider+EmbeddingVersion (class)
@@ -8017,7 +8011,6 @@ ToolUp.Platform.PermissionStore+PermissionStore (class)
 ToolUp.Platform.PermissionStore+PermissionStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])
 ToolUp.Platform.PermissionStore+PermissionStoreUnavailableException (class)
 ToolUp.Platform.PermissionStore+PermissionStoreUnavailableException..ctor()
-ToolUp.Platform.PermissionStore+PermissionStoreUnavailableException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
 ToolUp.Platform.PermissionStore+PermissionStoreUnavailableException..ctor(System.String)
 ToolUp.Platform.PermissionStore+PermissionStoreUnavailableException.Data0 : System.String { get }
 ToolUp.Platform.PermissionStoreActionAuthorizer (class)
@@ -10062,7 +10055,6 @@ ToolUp.Platform.Teams.PendingInviteStoreInstanceValidator+PendingInviteStoreInst
 ToolUp.Platform.Teams.PendingInviteStoreInstanceValidator+PendingInviteStoreInstanceValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IPendingInviteStore], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.Teams.PendingInvitesBlobCorrupt (class)
 ToolUp.Platform.Teams.PendingInvitesBlobCorrupt..ctor()
-ToolUp.Platform.Teams.PendingInvitesBlobCorrupt..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
 ToolUp.Platform.Teams.PendingInvitesBlobCorrupt..ctor(System.String, System.String)
 ToolUp.Platform.Teams.PendingInvitesBlobCorrupt.quarantinePath : System.String { get }
 ToolUp.Platform.Teams.PendingInvitesBlobCorrupt.reason : System.String { get }
@@ -10293,7 +10285,6 @@ ToolUp.Platform.TransientFault+BreakerPolicy+Threshold.cooldown : System.TimeSpa
 ToolUp.Platform.TransientFault+BreakerPolicy+Threshold.failures : System.Int32 { get }
 ToolUp.Platform.TransientFault+CircuitOpenException (class)
 ToolUp.Platform.TransientFault+CircuitOpenException..ctor()
-ToolUp.Platform.TransientFault+CircuitOpenException..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
 ToolUp.Platform.TransientFault+CircuitOpenException..ctor(System.TimeSpan)
 ToolUp.Platform.TransientFault+CircuitOpenException.cooldownRemaining : System.TimeSpan { get }
 ToolUp.Platform.TransientFault+ResilienceMode (class)
@@ -10881,7 +10872,8 @@ ToolUp.Remoting.Json.SystemTextJson.FableConverters (class)
 ToolUp.Remoting.Json.SystemTextJson.FableConverters.addTo(System.Text.Json.JsonSerializerOptions) : System.Void
 ToolUp.Remoting.Json.SystemTextJson.FableConverters.create() : System.Text.Json.JsonSerializerOptions
 ToolUp.Remoting.Json.SystemTextJson.FableConverters.shared : System.Text.Json.JsonSerializerOptions { get }
-ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseElement(System.Text.Json.JsonElement, System.Type, System.Text.Json.JsonSerializerOptions) : Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseElement(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Text.Json.JsonElement, System.Type, System.Text.Json.JsonSerializerOptions) : Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseFor`1(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Text.Json.JsonElement, System.Text.Json.JsonSerializerOptions) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]
 ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialise`1(System.Text.Json.JsonElement, System.Text.Json.JsonSerializerOptions) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]
 ToolUp.Remoting.Json.SystemTextJson.Int64Converter (class)
 ToolUp.Remoting.Json.SystemTextJson.Int64Converter..ctor()

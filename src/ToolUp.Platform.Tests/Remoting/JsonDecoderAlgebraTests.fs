@@ -28,6 +28,14 @@ open ToolUp.Remoting
 open ToolUp.Remoting.Json
 open ToolUp.Platform.Tests.Remoting.WireCorpus
 
+/// Phase 839 — a minimal test-local "served API record" with one bare,
+/// deliberately unregistered `string` argument. Used by the served
+/// argument facet tests below to demonstrate genuine partial coverage
+/// without depending on a REAL platform API record staying uncovered —
+/// `PlatformJsonDecoders` covers all six of ITS records fully as of this
+/// phase, so a real API is the wrong fixture for "still uncovered".
+type private ProbeApi = { DoThing: string -> Async<unit> }
+
 // ─── The corpus types' decoders ──────────────────────────────────────
 
 let private priority: JsonDecoder<Priority> =
@@ -907,7 +915,13 @@ let tests =
                 JsonDecoders.resetForTests ()
                 PlatformJsonDecoders.registerAll ()
                 ToolUp.Platform.ServedApiRecords.record typeof<ToolUp.Platform.IPresenceApi>
-                ToolUp.Platform.ServedApiRecords.record typeof<ToolUp.Platform.IHomeOverviewApi>
+                // Phase 839 fully covers every one of `PlatformJsonDecoders`'
+                // six scoped records now, so a genuinely-uncovered second
+                // record for this test is a local probe type rather than a
+                // real platform API — one that is registered NOWHERE, under
+                // any name, so its bare `string` argument stays uncovered
+                // regardless of what the platform set later adds.
+                ToolUp.Platform.ServedApiRecords.record typeof<ProbeApi>
 
                 let facet =
                     ToolUp.Platform.RemotingDecoderFacet.inspectServedArguments
@@ -916,13 +930,12 @@ let tests =
                 Expect.equal
                     (ToolUp.Platform.RemotingDecoderFacet.coverage facet)
                     (1, 2)
-                    "the presence API's arguments are all covered; the home API takes a bare string"
+                    "the presence API's arguments are all covered; the probe API takes a bare, unregistered string"
 
-                let home =
-                    facet.FacetBindings
-                    |> List.find (fun b -> b.DecoderApiRecord = "IHomeOverviewApi")
+                let probe =
+                    facet.FacetBindings |> List.find (fun b -> b.DecoderApiRecord = "ProbeApi")
 
-                Expect.equal home.DecoderUncovered [ typeof<string>.FullName ] "the uncovered argument type is named"
+                Expect.equal probe.DecoderUncovered [ typeof<string>.FullName ] "the uncovered argument type is named"
                 Expect.isFalse facet.FacetRequired "advisory even under Verified — see the facet's own note"
 
                 Expect.isOk
@@ -933,6 +946,35 @@ let tests =
                     (ToolUp.Platform.RemotingDecoderFacet.describeArguments facet)
                     "1 of 2 served API record(s)"
                     "the boot line carries the ratio"
+
+                ToolUp.Platform.ServedApiRecords.resetForTests ()
+                JsonDecoders.resetForTests ()
+
+            testCase "Phase 839 — the platform's own scoped records are now fully covered, not just partially"
+            <| fun () ->
+                ToolUp.Platform.ServedApiRecords.resetForTests ()
+                JsonDecoders.resetForTests ()
+                PlatformJsonDecoders.registerAll ()
+                ToolUp.Platform.ServedApiRecords.record typeof<ToolUp.Platform.IPresenceApi>
+                ToolUp.Platform.ServedApiRecords.record typeof<ToolUp.Platform.IAuditViewApi>
+                ToolUp.Platform.ServedApiRecords.record typeof<ToolUp.Platform.IProvenanceQueryApi>
+                ToolUp.Platform.ServedApiRecords.record typeof<ToolUp.Platform.ITeamInviteApi>
+                ToolUp.Platform.ServedApiRecords.record typeof<ToolUp.Platform.IHomeOverviewApi>
+                ToolUp.Platform.ServedApiRecords.record typeof<ToolUp.Platform.TeamApi>
+
+                let facet =
+                    ToolUp.Platform.RemotingDecoderFacet.inspectServedArguments
+                        ToolUp.Platform.CompositionProfile.Verified
+
+                Expect.equal
+                    (ToolUp.Platform.RemotingDecoderFacet.coverage facet)
+                    (6, 6)
+                    "every one of the six records Phase 839 scoped decoders for is now fully Algebra-covered"
+
+                for binding in facet.FacetBindings do
+                    Expect.isEmpty
+                        binding.DecoderUncovered
+                        (sprintf "%s should have nothing left uncovered" binding.DecoderApiRecord)
 
                 ToolUp.Platform.ServedApiRecords.resetForTests ()
                 JsonDecoders.resetForTests ()
@@ -955,7 +997,7 @@ let tests =
                 | Ok a -> Expect.isNull (box a.Postcode) "STJ read the absent member as null"
                 | Error e -> failtestf "STJ refused: %s" (DecodeError.render e)
 
-                // Registered: the algebra refuses by name, with a path.
+                // Registered (unscoped): the algebra refuses by name, with a path.
                 JsonDecoders.register<Address> address
 
                 match
@@ -985,9 +1027,12 @@ let tests =
                         "decoded through the algebra"
                 | Error e -> failtestf "refused: %s" (DecodeError.render e)
 
-                // The erased twin takes the same route.
+                // The erased twin takes the same route — `None` is a
+                // caller with no record to name, which is exactly what
+                // `tryDeserialise` above passes internally.
                 match
                     ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseElement
+                        None
                         missing.RootElement
                         typeof<Address>
                         jsonOptions
@@ -997,43 +1042,200 @@ let tests =
 
                 JsonDecoders.resetForTests ()
 
-            testCase "the platform's first set registers, and every decoder in it agrees with STJ over a drawn value"
+            // ─── Phase 839 — record-scoped registration isolation ─────
+
+            testCase "a record-scoped registration is isolated: it decodes ITS OWN record's arguments and no other's"
+            <| fun () ->
+                JsonDecoders.resetForTests ()
+
+                // A strict decoder for `Address`, registered ONLY for record "A".
+                JsonDecoders.registerFor<Address> "A" address
+
+                use missing = JsonDocument.Parse """{"Line1":"a"}"""
+
+                // Record "A": its own registration is consulted and refuses by name.
+                match
+                    ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseElement
+                        (Some "A")
+                        missing.RootElement
+                        typeof<Address>
+                        jsonOptions
+                with
+                | Ok _ -> failtest "record A's own registration was not consulted"
+                | Error e -> Expect.equal e.Path [ "Postcode" ] "record A's decoder refuses the missing member"
+
+                // Record "B": A's registration never reaches it — STJ's
+                // leniency applies, exactly as if nothing were registered.
+                match
+                    ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseElement
+                        (Some "B")
+                        missing.RootElement
+                        typeof<Address>
+                        jsonOptions
+                with
+                | Ok a -> Expect.isNull (box (unbox<Address> a).Postcode) "record B falls through to STJ untouched"
+                | Error e -> failtestf "record B's decode should not have been refused: %s" (DecodeError.render e)
+
+                // No record at all: the same — a caller with no record to
+                // name gets exactly the bare-type (unscoped) behaviour,
+                // which here is nothing registered.
+                match
+                    ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseElement
+                        None
+                        missing.RootElement
+                        typeof<Address>
+                        jsonOptions
+                with
+                | Ok a ->
+                    Expect.isNull
+                        (box (unbox<Address> a).Postcode)
+                        "an unscoped caller is unaffected by A's registration"
+                | Error e -> failtestf "an unscoped caller should not have been refused: %s" (DecodeError.render e)
+
+                JsonDecoders.resetForTests ()
+
+            testCase
+                "an unscoped registration still applies to every record, and a record's own registration wins over it there"
+            <| fun () ->
+                JsonDecoders.resetForTests ()
+
+                // Unscoped: every record sees it, including a caller that
+                // names no record.
+                JsonDecoders.register<Address> address
+
+                use missing = JsonDocument.Parse """{"Line1":"a"}"""
+
+                for recordName in [ None; Some "A"; Some "B" ] do
+                    match
+                        ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseElement
+                            recordName
+                            missing.RootElement
+                            typeof<Address>
+                            jsonOptions
+                    with
+                    | Ok _ -> failtestf "%A: the unscoped registration was not consulted" recordName
+                    | Error e ->
+                        Expect.equal e.Path [ "Postcode" ] (sprintf "%A: the unscoped decoder refuses" recordName)
+
+                // A DIFFERENT (lenient) decoder registered for "A" only:
+                // record A must see ITS OWN decoder rather than the
+                // unscoped one; every other record is unaffected. Only
+                // `Postcode` is missing here — `Country` is present, so a
+                // successful decode is unambiguous evidence that A's own
+                // (lenient-on-Postcode) registration, not the unscoped
+                // strict one, was consulted.
+                use missingPostcodeOnly = JsonDocument.Parse """{"Line1":"a","Country":"c"}"""
+
+                let lenientAddress: JsonDecoder<Address> =
+                    JsonDecode.succeed (fun line1 postcode country -> {
+                        Line1 = line1
+                        Postcode = postcode |> Option.defaultValue ""
+                        Country = country
+                    })
+                    |> JsonDecode.apply (JsonDecode.field "Line1" JsonDecode.asString)
+                    |> JsonDecode.apply (JsonDecode.optionalField "Postcode" JsonDecode.asString)
+                    |> JsonDecode.apply (JsonDecode.field "Country" JsonDecode.asString)
+
+                JsonDecoders.registerFor<Address> "A" lenientAddress
+
+                match
+                    ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseElement
+                        (Some "A")
+                        missingPostcodeOnly.RootElement
+                        typeof<Address>
+                        jsonOptions
+                with
+                | Ok a ->
+                    Expect.equal (unbox<Address> a).Postcode "" "record A's OWN registration wins over the unscoped one"
+                | Error e ->
+                    failtestf "record A should have decoded through its own registration: %s" (DecodeError.render e)
+
+                match
+                    ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseElement
+                        (Some "B")
+                        missingPostcodeOnly.RootElement
+                        typeof<Address>
+                        jsonOptions
+                with
+                | Ok _ -> failtest "record B should still fall to the unscoped (strict) decoder and refuse"
+                | Error e -> Expect.equal e.Path [ "Postcode" ] "record B is still bound by the unscoped decoder"
+
+                JsonDecoders.resetForTests ()
+
+            testCase "a consumer that registers nothing is byte-for-byte unchanged"
+            <| fun () ->
+                JsonDecoders.resetForTests ()
+
+                use wellFormed = JsonDocument.Parse """{"Line1":"a","Postcode":"b","Country":"c"}"""
+
+                for recordName in [ None; Some "AnyRecord" ] do
+                    match
+                        ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseElement
+                            recordName
+                            wellFormed.RootElement
+                            typeof<Address>
+                            jsonOptions
+                    with
+                    | Ok a ->
+                        Expect.equal
+                            (unbox<Address> a)
+                            {
+                                Line1 = "a"
+                                Postcode = "b"
+                                Country = "c"
+                            }
+                            (sprintf "%A: falls straight through to STJ, unchanged" recordName)
+                    | Error _ -> failtestf "%A: should not refuse — nothing is registered" recordName
+
+                JsonDecoders.resetForTests ()
+
+            testCase
+                "the platform's first set registers scoped to its own record, and every decoder agrees with STJ over a drawn value"
             <| fun () ->
                 JsonDecoders.resetForTests ()
                 PlatformJsonDecoders.registerAll ()
 
-                for key in PlatformJsonDecoders.covered do
-                    Expect.contains (JsonDecoders.registered ()) key (sprintf "%s is not registered" key)
+                for (recordName, key) in PlatformJsonDecoders.covered do
+                    Expect.contains
+                        (JsonDecoders.registered ())
+                        (recordName, key)
+                        (sprintf "%A/%s is not registered" recordName key)
 
                 Expect.equal (JsonDecoders.count ()) (List.length PlatformJsonDecoders.covered) "nothing else is"
 
-                // One drawn value per type, written by the shipped
-                // converter set, read back both ways.
-                let agree (value: 'T) =
+                // One drawn value per (record, type), written by the
+                // shipped converter set, read back both ways THROUGH THE
+                // SAME RECORD SCOPE it is registered under.
+                let agreeFor (recordName: string) (value: 'T) =
                     let text = JsonSerializer.Serialize(value, jsonOptions)
                     let viaStj = JsonSerializer.Deserialize<'T>(text, jsonOptions)
 
-                    match JsonRead.tryParse text |> Result.bind (JsonDecoders.tryGet typeof<'T>).Value with
+                    match
+                        JsonRead.tryParse text
+                        |> Result.bind (JsonDecoders.tryGet (Some recordName) typeof<'T>).Value
+                    with
                     | Ok viaAlgebra ->
                         Expect.equal
                             (unbox<'T> viaAlgebra)
                             viaStj
-                            (sprintf "%s: the two paths differ\n  json: %s" typeof<'T>.Name text)
+                            (sprintf "%s/%s: the two paths differ\n  json: %s" recordName typeof<'T>.Name text)
                     | Error e ->
                         failtestf
-                            "%s: the algebra refused the writer's own text: %s\n  json: %s"
+                            "%s/%s: the algebra refused the writer's own text: %s\n  json: %s"
+                            recordName
                             typeof<'T>.Name
                             (DecodeError.render e)
                             text
 
-                agree ToolUp.Platform.TeamRole.Admin
-                agree ({ Module = "m"; Page = Some "p" }: ToolUp.Platform.PresenceLocation)
-                agree ({ Module = "m"; Page = None }: ToolUp.Platform.PresenceLocation)
+                agreeFor "ITeamInviteApi" ToolUp.Platform.TeamRole.Admin
+                agreeFor "IPresenceApi" ({ Module = "m"; Page = Some "p" }: ToolUp.Platform.PresenceLocation)
+                agreeFor "IPresenceApi" ({ Module = "m"; Page = None }: ToolUp.Platform.PresenceLocation)
 
-                agree ({ EntityType = "doc"; EntityId = "42" }: ToolUp.Platform.EntityLockRef)
+                agreeFor "IPresenceApi" ({ EntityType = "doc"; EntityId = "42" }: ToolUp.Platform.EntityLockRef)
 
-                agree (
-                    {
+                agreeFor
+                    "IAuditViewApi"
+                    ({
                         From = Some(DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc))
                         To = None
                         EventType = Some "login"
@@ -1041,34 +1243,50 @@ let tests =
                         Cursor = Some "c"
                         PageSize = 50
                     }
-                    : ToolUp.Platform.AuditTrailQuery
-                )
+                    : ToolUp.Platform.AuditTrailQuery)
 
-                agree (ToolUp.Platform.WireProvenanceRef.FactRef "f1")
+                agreeFor "IProvenanceQueryApi" (ToolUp.Platform.WireProvenanceRef.FactRef "f1")
+                agreeFor "IProvenanceQueryApi" ToolUp.Platform.WireProvenanceDirection.Upstream
 
-                agree (
-                    {
+                agreeFor
+                    "IProvenanceQueryApi"
+                    ({
                         Root = ToolUp.Platform.WireProvenanceRef.ResultRef "r"
                         Direction = ToolUp.Platform.WireProvenanceDirection.Downstream
                         Depth = 3
                     }
-                    : ToolUp.Platform.WireProvenanceChainRequest
-                )
+                    : ToolUp.Platform.WireProvenanceChainRequest)
 
-                agree (
-                    {
+                agreeFor
+                    "ITeamInviteApi"
+                    ({
                         TeamId = "t"
                         Role = ToolUp.Platform.TeamRole.Member
                         ExpiresIn = Some(TimeSpan.FromMinutes 90.0)
                         EmailHint = None
                         MaxUses = Some 3
                     }
-                    : ToolUp.Platform.TeamInviteIssueRequest
-                )
+                    : ToolUp.Platform.TeamInviteIssueRequest)
 
-                agree ({ ModuleId = "home"; Pinned = true }: ToolUp.Platform.PinRequest)
+                agreeFor "IHomeOverviewApi" ({ ModuleId = "home"; Pinned = true }: ToolUp.Platform.PinRequest)
 
-                agree ({ Name = "n"; InitialOwnerUserId = "u" }: ToolUp.Platform.CreateTeamRequest)
+                agreeFor "TeamApi" ({ Name = "n"; InitialOwnerUserId = "u" }: ToolUp.Platform.CreateTeamRequest)
+
+                agreeFor
+                    "ITeamInviteApi"
+                    ({
+                        TeamId = "t"
+                        Email = "e@example.com"
+                        Role = ToolUp.Platform.TeamRole.Member
+                        ExpiresIn = None
+                    }
+                    : ToolUp.Platform.PendingInviteIssueRequest)
+
+                agreeFor "ITeamInviteApi" "a-token"
+                agreeFor "IHomeOverviewApi" "home-tool"
+                agreeFor "TeamApi" "team-1"
+                agreeFor "TeamApi" ("u1", "u2")
+                agreeFor "TeamApi" ("u1", "u2", ToolUp.Platform.TeamRole.Admin)
 
                 JsonDecoders.resetForTests ()
         ]
