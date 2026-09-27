@@ -547,10 +547,21 @@ let private reportTests =
         }
 
         test "the section is APPENDED after the remoting-decoder section" {
+            // Phase 842 appended a twelfth section (the argument-side
+            // remoting-decoder twin) after this one, so egress is no
+            // longer the LAST section — but it is still the one directly
+            // after `RemotingDecoderSection`, which is the ordering this
+            // case pins. Read from the tail rather than assuming egress
+            // is the tail.
             let report, _ = sectionFor None
             let ids = report.Sections |> List.map _.Id
-            Expect.equal (List.last ids) EgressSection "last"
-            Expect.equal ids[ids.Length - 2] RemotingDecoderSection "after the tenth"
+            Expect.equal (List.last ids) RemotingArgumentDecoderSection "the twelfth section is now last"
+            Expect.equal ids[ids.Length - 2] EgressSection "egress is second-to-last"
+
+            Expect.equal
+                ids[ids.Length - 3]
+                RemotingDecoderSection
+                "and directly precedes egress, unchanged since Phase 772"
         }
     ]
 
