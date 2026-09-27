@@ -29,6 +29,8 @@ let allTests =
         // request, Cacheable reads are served stale-while-revalidate, and
         // the interceptor chain counts one request once.
         ReadPolicyTests.tests
+        // Phase 855 - the fetch transport, and same-tick calls as one request.
+        RemoteBatchingTests.tests
         // Phase 217 — module-contributed Home-widget seam: the
         // HomeWidgetRegistry contract (flatten + weight-sort) in
         // Platform.Client.

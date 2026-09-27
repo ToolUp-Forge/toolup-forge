@@ -340,6 +340,10 @@
              equal to the declaration the Fable pack registers (shared fixture). -->
         <Compile Include="Remoting\ReadPolicyFixture.fs" />
         <Compile Include="Remoting\ReadPolicyAttributeTests.fs" />
+        <!-- Phase 855 - the remoting batch route: each element through the
+             ordinary per-call pipeline (auth, rate limit, audit, downstream
+             middleware); refusals whole and per element. -->
+        <Compile Include="Remoting\RemotingBatchTests.fs" />
         <!-- Phase 69k — the source generator's contract pack. AFTER
              DecoderAlgebraTests.fs, because its fidelity claim is a link in
              that pack's chain rather than a claim of its own: 785 proved the

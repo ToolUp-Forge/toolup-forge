@@ -10,10 +10,14 @@ open ToolUp.Platform
 // ─── Phase 9j / Phase 13a — client-side request-header seam ──────────
 //
 // This module owns the SINGLE place the client attaches per-request
-// dynamic headers. `installRequestGuard` wraps both the
-// `XMLHttpRequest` transport (ToolUp.Remoting's only transport) AND
-// `window.fetch` (used by the AI client-tool-result / cancel /
-// audit-beacon POSTs), reading the live caches at *send* time. It is
+// dynamic headers. `installRequestGuard` wraps both `window.fetch`
+// (ToolUp.Remoting's default transport since Phase 855, its batch
+// envelopes, streaming, and the AI client-tool-result / cancel /
+// audit-beacon POSTs) AND the `XMLHttpRequest` transport (the Remoting
+// opt-out, `Http.useTransport Http.Transport.Xhr`), reading the live
+// caches at *send* time. On the `fetch` path the headers are set on the
+// request's own `Headers` object — no prototype patch is involved; the
+// `XMLHttpRequest.prototype` wrap below serves only the XHR opt-out. It is
 // therefore correct no matter how — or whether — the calling proxy or
 // closure was constructed.
 //
@@ -313,9 +317,8 @@ let private ensureTokenForGuard () : JS.Promise<string> =
               // fast click after paint can beat the boot prefetch).
               // Await the SHARED in-flight token fetch — multicast, so
               // this never issues a second round-trip — capped at 2s,
-              // then dispatch with whatever resolved. The XHR branch
-              // cannot wait (send() is synchronous by contract), so
-              // this protection is fetch-path only.
+              // then dispatch with whatever resolved. (The XHR branch
+              // above defers its send the same way.)
               var waited;
               try { waited = getEnsure(); } catch(e){ waited = null; }
               if (waited && typeof waited.then === 'function') {

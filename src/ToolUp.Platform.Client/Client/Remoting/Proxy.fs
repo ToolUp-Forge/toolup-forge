@@ -618,6 +618,278 @@ module ReadPolicies =
     ]
 #endif
 
+/// Phase 855 — same-tick calls travel as one request.
+///
+/// Opt-in, page-wide (GP 11): `enable` names the route the server's
+/// `RemotingBatch` middleware serves (`ServerApp.withRemotingBatching`
+/// composes it at `DefaultRoute`). From then on a proxy call does not go
+/// to the wire when it is made; it is queued, and at the next microtask
+/// boundary every queued call is sent — one plain request when a call is
+/// alone, one ENVELOPE (`POST <route>`, a JSON array of `{ route, body }`)
+/// when more than one is pending. The server runs each element through
+/// its ordinary per-call pipeline and answers `{ status, body }` per
+/// element, in order; each call's own response pipeline (decode, error
+/// categorisation, `ProxyRequestException`) then reads its element
+/// exactly as it would have read a response of its own.
+///
+/// **What is never batched.** Streaming methods (`RemoteStream` sends
+/// with its own `fetch`), multipart uploads, and binary
+/// (`withBinarySerialization` / `byte[]`-returning) methods travel alone,
+/// as before. Calls whose proxies send different headers, credentials or
+/// base URLs never share an envelope.
+///
+/// **Composition with Phase 854.** The read-policy table sits ABOVE this
+/// queue: identical in-flight reads are shared before anything is queued,
+/// so an envelope never carries a duplicate, and a stale-while-revalidate
+/// refresh is an ordinary queued call.
+///
+/// **Refusal.** The server refuses a whole envelope that names a
+/// streaming or long-running route, or exceeds its element bound, with
+/// `400` + `remoting_batch_refused` before running any element; the
+/// calls are then re-sent one request each, so enabling batching never
+/// changes a call's outcome.
+module RemoteBatching =
+
+    open System.Collections.Generic
+    open Fable.Core
+
+    /// The route `RemotingBatch` serves unless composed otherwise.
+    [<Literal>]
+    let DefaultRoute = "/api/_batch"
+
+    /// The most calls one envelope carries — the server's default bound.
+    /// A larger tick is sent as several envelopes.
+    [<Literal>]
+    let DefaultMaxElements = 32
+
+    /// The error code the server answers a refused envelope with.
+    [<Literal>]
+    let RefusalCode = "remoting_batch_refused"
+
+    type private Pending = {
+        Route: string
+        Url: string
+        Body: string option
+        Cancelled: bool ref
+        Resolve: HttpResponse -> unit
+        Reject: exn -> unit
+    }
+
+    type private Group = {
+        BaseUrl: string option
+        Headers: (string * string) list
+        WithCredentials: bool
+        Calls: List<Pending>
+    }
+
+    let mutable private batchRoute: string option = None
+    let mutable private maxElements = DefaultMaxElements
+    let private groups = Dictionary<string, Group>()
+    let private groupOrder = List<Group>()
+    let mutable private flushScheduled = false
+
+    /// Batch same-tick calls through the envelope route `route` (usually
+    /// `DefaultRoute`), at most `DefaultMaxElements` per envelope.
+    let enable (route: string) : unit =
+        batchRoute <- Some route
+        maxElements <- DefaultMaxElements
+
+    /// `enable`, with the element bound set explicitly (at least 2). Keep it
+    /// at or under the server's `RemotingBatchOptions.MaxElements`.
+    let enableWith (route: string) (maxPerEnvelope: int) : unit =
+        if maxPerEnvelope < 2 then
+            invalidArg (nameof maxPerEnvelope) "an envelope carries at least two calls"
+
+        batchRoute <- Some route
+        maxElements <- maxPerEnvelope
+
+    /// Stop batching: every call from the next one on is sent on its own.
+    let disable () : unit = batchRoute <- None
+
+    /// Whether proxy calls are being batched.
+    let isEnabled () : bool = batchRoute.IsSome
+
+    [<Emit("Promise.resolve().then(function () { $0(); })")>]
+    let private atMicrotaskBoundary (work: unit -> unit) : unit = jsNative
+
+    [<Emit("JSON.stringify($0)")>]
+    let private jsonString (text: string) : string = jsNative
+
+    // `[status, body][]` when `text` is an envelope answer of `count`
+    // elements, else `null`.
+    [<Emit("""(function (text, count) { try { var v = JSON.parse(text); if (!Array.isArray(v) || v.length !== count) { return null; } var out = []; for (var i = 0; i < v.length; i++) { var e = v[i]; if (!e || typeof e.status !== 'number' || typeof e.body !== 'string') { return null; } out.push([e.status, e.body]); } return out; } catch (x) { return null; } })($0, $1)""")>]
+    let private decodeAnswer (text: string) (count: int) : (int * string)[] = jsNative
+
+    let private withBase (baseUrl: string option) (route: string) =
+        match baseUrl with
+        | None -> route
+        | Some url -> url.TrimEnd('/') + route
+
+    let private start (request: HttpRequest) (onResponse: HttpResponse -> unit) (onError: exn -> unit) =
+        Async.StartWithContinuations(Http.send request, onResponse, onError, (fun cancelled -> onError cancelled))
+
+    let private prepare (group: Group) (request: HttpRequest) =
+        request
+        |> Http.withHeaders group.Headers
+        |> Http.withCredentials group.WithCredentials
+
+    /// A call sent on its own — exactly the request the proxy would have
+    /// sent without batching.
+    let private sendAlone (group: Group) (call: Pending) =
+        let request =
+            match call.Body with
+            | Some body -> Http.post call.Url |> Http.withBody (RequestBody.Json body)
+            | None -> Http.get call.Url
+
+        start (prepare group request) call.Resolve call.Reject
+
+    let private sendEnvelope (group: Group) (route: string) (calls: Pending[]) =
+        let body =
+            calls
+            |> Array.map (fun call ->
+                "{\"route\":"
+                + jsonString call.Route
+                + ",\"body\":"
+                + (match call.Body with
+                   | Some text -> jsonString text
+                   | None -> "null")
+                + "}")
+            |> String.concat ","
+
+        let request =
+            Http.post (withBase group.BaseUrl route)
+            |> Http.withBody (RequestBody.Json("[" + body + "]"))
+            |> prepare group
+
+        start
+            request
+            (fun response ->
+                if response.StatusCode = 200 then
+                    match decodeAnswer response.ResponseBody calls.Length with
+                    | null ->
+                        let error =
+                            exn (
+                                sprintf
+                                    "The batch envelope answer from %s is not an array of %d { status, body } elements"
+                                    route
+                                    calls.Length
+                            )
+
+                        for call in calls do
+                            call.Reject error
+                    | answers ->
+                        for i in 0 .. calls.Length - 1 do
+                            let status, text = answers.[i]
+
+                            calls.[i].Resolve {
+                                StatusCode = status
+                                ResponseBody = text
+                            }
+                elif response.StatusCode = 400 && response.ResponseBody.Contains RefusalCode then
+                    // Nothing ran: send each call as it would have gone.
+                    for call in calls do
+                        sendAlone group call
+                else
+                    // The envelope itself failed (network, CSRF, auth, a
+                    // server without the route): every call fails with it,
+                    // as each would have failed alone.
+                    for call in calls do
+                        call.Resolve response)
+            (fun error ->
+                for call in calls do
+                    call.Reject error)
+
+    let private flush () =
+        flushScheduled <- false
+        let pending = groupOrder.ToArray()
+        groups.Clear()
+        groupOrder.Clear()
+
+        for group in pending do
+            let calls =
+                group.Calls |> Seq.filter (fun call -> not call.Cancelled.Value) |> Array.ofSeq
+
+            match batchRoute with
+            | Some route when calls.Length > 1 ->
+                for chunk in Array.chunkBySize maxElements calls do
+                    if chunk.Length = 1 then
+                        sendAlone group chunk.[0]
+                    else
+                        sendEnvelope group route chunk
+            | _ ->
+                for call in calls do
+                    sendAlone group call
+
+    /// The proxy's half: queue one JSON call (`body = None` for a
+    /// parameterless GET) until the microtask boundary.
+    let internal send
+        (baseUrl: string option)
+        (route: string)
+        (url: string)
+        (headers: (string * string) list)
+        (withCredentials: bool)
+        (body: string option)
+        : Async<HttpResponse> =
+        async {
+            let! token = Async.CancellationToken
+
+            return!
+                Async.FromContinuations(fun (resolve, reject, cancel) ->
+                    let settled = ref false
+                    let cancelled = ref false
+
+                    let settle (continuation: unit -> unit) =
+                        if not settled.Value then
+                            settled.Value <- true
+                            continuation ()
+
+                    let call = {
+                        Route = route
+                        Url = url
+                        Body = body
+                        Cancelled = cancelled
+                        Resolve = fun response -> settle (fun () -> resolve response)
+                        Reject = fun error -> settle (fun () -> reject error)
+                    }
+
+                    token.Register(fun _ ->
+                        cancelled.Value <- true
+                        settle (fun () -> cancel (System.OperationCanceledException(token))))
+                    |> ignore
+
+                    let key =
+                        (match baseUrl with
+                         | Some url -> url
+                         | None -> "")
+                        + "\n"
+                        + string withCredentials
+                        + "\n"
+                        + (headers
+                           |> List.map (fun (name, value) -> name + ": " + value)
+                           |> String.concat "\n")
+
+                    let group =
+                        match groups.TryGetValue key with
+                        | true, group -> group
+                        | _ ->
+                            let group = {
+                                BaseUrl = baseUrl
+                                Headers = headers
+                                WithCredentials = withCredentials
+                                Calls = List<Pending>()
+                            }
+
+                            groups.[key] <- group
+                            groupOrder.Add group
+                            group
+
+                    group.Calls.Add call
+
+                    if not flushScheduled then
+                        flushScheduled <- true
+                        atMicrotaskBoundary flush)
+        }
+
 module Proxy =
     /// Phase 783 — recover the server's decode refusal from an error
     /// response body, so `ProxyRequestException.DecodeError` is populated
@@ -858,7 +1130,17 @@ module Proxy =
                 fun requestBody -> async {
                     // make plain RPC request and let it go through the deserialization pipeline
                     let! response =
-                        if funcNeedParameters then
+                        // Phase 855 — with batching enabled the call joins
+                        // this tick's envelope; its element comes back as the
+                        // response the lines below read, unchanged.
+                        if RemoteBatching.isEnabled () && not isMultipart then
+                            let body =
+                                match requestBody with
+                                | RequestBody.Json text when funcNeedParameters -> Some text
+                                | _ -> None
+
+                            RemoteBatching.send options.BaseUrl route url headers options.WithCredentials body
+                        elif funcNeedParameters then
                             Http.post url
                             |> Http.withBody requestBody
                             |> Http.withHeaders headers
