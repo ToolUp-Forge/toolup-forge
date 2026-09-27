@@ -1,0 +1,51 @@
+module MyApp.Shell
+
+open Feliz
+open ToolUp.Platform
+
+// Phase 879 — the per-built-in modes a deployment set before the slots.
+let myTeams: ErasedModule = Modules.teams
+
+let brandedHealth: ModuleLabel = { Name = "Health"; Icon = Html.none }
+
+let config = {
+    ClientConfig.defaults with
+        Slots.HomeModule = SlotFill.Default
+        Slots.DataManager = (SlotFill.Configured(DataManagerChoice.ColumnMapping None))
+        Slots.TeamManager = SlotFill.External myTeams
+        Slots.UsageDashboard = SlotFill.Empty
+        Slots.HealthMonitor = SlotFill.Configured brandedHealth
+        Slots.NotificationPreferences = SlotFill.Default
+        Slots.ExternalContactManager = SlotFill.External Modules.contacts
+}
+
+let uploads = {
+    config with
+        DataManager =
+            ConfiguredDataManager {
+                Name = "Uploads"
+                Icon = Html.none
+                Group = None
+            }
+}
+
+let overrides = {
+    ClientConfigOverrides.empty with
+        DataManager = Some (SlotFill.Configured(DataManagerChoice.ColumnMapping None))
+        WebhookAdmin = Some SlotFill.Default
+}
+
+let teamManagerOn (mode: TeamManagerMode) =
+    match mode with
+    | SlotFill.Empty -> false
+    | _ -> true
+
+let usageOn = config.UsageDashboard <> SlotFill.Empty
+
+// The message catalog's fields share names with the slots and are not slots.
+let catalog (c: MessageCatalog) = {
+    c with
+        MappingDataManager = { c.MappingDataManager with ResetConfirm = "Reset?" }
+}
+
+let teamsHeading (msgs: MessageCatalog) = msgs.TeamManager.Heading

@@ -61,6 +61,65 @@
 @@ L21 [815-elmish-error-handler]
 -    |> Program.withErrorHandler onError
 +    |> Program.withErrorReporter (fun ctx -> onError (ctx.Message, ctx.Exception))
+--- a/src/Client/Shell.fs
++++ b/src/Client/Shell.fs
+@@ L9 [879-module-label]
+-let brandedHealth: HealthMonitorConfig = { Name = "Health"; Icon = Html.none }
++let brandedHealth: ModuleLabel = { Name = "Health"; Icon = Html.none }
+@@ L13 [879-slot-field]
+-        HomeModule = EnabledHomeModule
++        Slots.HomeModule = EnabledHomeModule
+@@ L13 [879-slot-case-nullary]
+-        Slots.HomeModule = EnabledHomeModule
++        Slots.HomeModule = SlotFill.Default
+@@ L14 [879-slot-field]
+-        DataManager = MappingDataManager
++        Slots.DataManager = MappingDataManager
+@@ L14 [879-column-mapping]
+-        Slots.DataManager = MappingDataManager
++        Slots.DataManager = (SlotFill.Configured(DataManagerChoice.ColumnMapping None))
+@@ L15 [879-slot-field]
+-        TeamManager = ExternalTeamManager myTeams
++        Slots.TeamManager = ExternalTeamManager myTeams
+@@ L15 [879-slot-case-external]
+-        Slots.TeamManager = ExternalTeamManager myTeams
++        Slots.TeamManager = SlotFill.External myTeams
+@@ L16 [879-slot-field]
+-        UsageDashboard = NoUsageDashboard
++        Slots.UsageDashboard = NoUsageDashboard
+@@ L16 [879-slot-case-nullary]
+-        Slots.UsageDashboard = NoUsageDashboard
++        Slots.UsageDashboard = SlotFill.Empty
+@@ L17 [879-slot-field]
+-        HealthMonitor = ConfiguredHealthMonitor brandedHealth
++        Slots.HealthMonitor = ConfiguredHealthMonitor brandedHealth
+@@ L17 [879-slot-case-configured]
+-        Slots.HealthMonitor = ConfiguredHealthMonitor brandedHealth
++        Slots.HealthMonitor = SlotFill.Configured brandedHealth
+@@ L18 [879-slot-field]
+-        NotificationPreferences = DefaultNotificationPreferencesUI
++        Slots.NotificationPreferences = DefaultNotificationPreferencesUI
+@@ L18 [879-slot-case-nullary]
+-        Slots.NotificationPreferences = DefaultNotificationPreferencesUI
++        Slots.NotificationPreferences = SlotFill.Default
+@@ L19 [879-slot-field]
+-        ExternalContactManager = ExternalExternalContactManager Modules.contacts
++        Slots.ExternalContactManager = ExternalExternalContactManager Modules.contacts
+@@ L19 [879-slot-case-external]
+-        Slots.ExternalContactManager = ExternalExternalContactManager Modules.contacts
++        Slots.ExternalContactManager = SlotFill.External Modules.contacts
+@@ L34 [879-column-mapping]
+-        DataManager = Some MappingDataManager
++        DataManager = Some (SlotFill.Configured(DataManagerChoice.ColumnMapping None))
+@@ L35 [879-slot-case-nullary]
+-        WebhookAdmin = Some DefaultWebhookAdmin
++        WebhookAdmin = Some SlotFill.Default
+@@ L40 [879-slot-case-nullary]
+-    | NoTeamManager -> false
++    | SlotFill.Empty -> false
+@@ L43 [879-slot-case-nullary]
+-let usageOn = config.UsageDashboard <> NoUsageDashboard
++let usageOn = config.UsageDashboard <> SlotFill.Empty
 --- a/src/Server/Program.fs
 +++ b/src/Server/Program.fs
 @@ L5 [73-remoting-namespace]
@@ -112,4 +171,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 34 rewrite(s) across 6 file(s) pending.
+Codemod: 53 rewrite(s) across 7 file(s) pending.
