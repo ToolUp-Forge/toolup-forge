@@ -936,6 +936,12 @@ let compose
     // `AuditFailurePolicy = DegradeToFile` with audit enabled.
     registerAuditFallbackReplay services config eventStore resolvedLogger
 
+    // Phase 856.C — the remoting audit queue + its drain (extracted to
+    // `ComposeRuntimeServices.registerRemotingAuditQueue`). No-op unless an
+    // audit log is enabled under a non-refusing policy on a Kestrel host
+    // serving HTTP.
+    registerRemotingAuditQueue services config resolvedLogger
+
     // Phase 9g — audit replicator hosted service (extracted to
     // `ComposeAudit.registerAuditReplicatorHosting`).
     // Phase 16 — pass `config` so `ServerlessHost = ServerlessHost`

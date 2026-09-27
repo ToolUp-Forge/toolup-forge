@@ -578,6 +578,70 @@ let private probe (rounds: int) =
     for label, op in stages do
         Console.Out.WriteLine("| " + label + " | " + us (measure rounds n op) + " |")
 
+// ─── Phase 856.E — wide-record decode ───────────────────────────────────
+
+/// A record of `width` fields as the writer puts it on the wire: one
+/// MessagePack array, fields positionally, each a positive fixint. Built
+/// as BYTES and read through the one-pass reader, so the fixture does not
+/// depend on how `Value.Arr` spells its carrier — the same source measured
+/// the list-backed model before Phase 856 and the array-backed one after.
+let private wideRecordBytes (width: int) : byte[] =
+    let header =
+        if width <= 15 then
+            [| byte (0x90 ||| width) |]
+        else
+            [| 0xdcuy; byte (width >>> 8); byte (width &&& 0xff) |]
+
+    Array.append header (Array.init width (fun i -> byte (i % 128)))
+
+/// The decode a generated record decoder performs: one `Decode.field` per
+/// field, each addressing its own position in the same array. The shape
+/// that was quadratic while `field` reached its element through
+/// `List.tryItem` — field `i` walked `i` cells — and is linear once the
+/// access is indexed.
+let private wideRecordDecoders (width: int) : Decoder<int> list =
+    List.init width (fun i -> Decode.field ("F" + string i) i Decode.asInt32)
+
+let private decodeWide (decoders: Decoder<int> list) (value: Value) : unit =
+    for decoder in decoders do
+        match decoder value with
+        | Ok _ -> ()
+        | Error error -> failwith (DecodeError.render error)
+
+/// Per-record and per-field decode cost across widths. LINEAR cost reads
+/// as a flat per-field column; quadratic cost as a per-field column that
+/// grows with the width. The falsifier is that column: if the per-field
+/// figure at 256 fields is not materially above the one at 8, there was
+/// no quadratic term to remove.
+let private wide (rounds: int) =
+    let widths = [ 8; 32; 64; 128; 256 ]
+
+    Console.Out.WriteLine "| Wide record (fields) | whole record, min / median | per field, min / median |"
+    Console.Out.WriteLine "|---|---|---|"
+
+    for width in widths do
+        let value =
+            match Read.Reader(wideRecordBytes width).TryReadValue() with
+            | Ok value -> value
+            | Error error -> failwith (DecodeError.render error)
+
+        let decoders = wideRecordDecoders width
+        // Checked once before timing: a fixture that refuses measures the refusal.
+        decodeWide decoders value
+        let ops = max 200 (200_000 / width)
+
+        for _ in 1..ops do
+            decodeWide decoders value
+
+        let s = measure rounds ops (fun () -> decodeWide decoders value)
+
+        let perField = {
+            MinUs = s.MinUs / float width
+            MedianUs = s.MedianUs / float width
+        }
+
+        Console.Out.WriteLine("| " + string width + " | " + us s + " | " + us perField + " |")
+
 [<EntryPoint>]
 let main argv =
     match List.ofArray argv with
@@ -587,12 +651,19 @@ let main argv =
     | [ "--probe" ] ->
         probe 9
         0
+    | [ "--wide" ] ->
+        wide 9
+        0
     | [] ->
         report 5 9
+        Console.Out.WriteLine ""
+        wide 9
         0
     | [ "--boots"; b; "--rounds"; r ] ->
         report (int b) (int r)
+        Console.Out.WriteLine ""
+        wide (int r)
         0
     | _ ->
-        Console.Error.WriteLine "usage: ToolUp.Remoting.Benchmarks [--boots N --rounds N]"
+        Console.Error.WriteLine "usage: ToolUp.Remoting.Benchmarks [--boots N --rounds N] | --probe | --wide"
         2

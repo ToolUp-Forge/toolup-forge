@@ -12,9 +12,8 @@ open System.Threading.Tasks
 //   * `IGeneratedDispatchTable<'impl>` — the contract a source-generator
 //     emits one implementation of per API record type.
 //   * `GeneratedDispatchRegistry` — the runtime registry where consumers
-//     (or the generator's emitted `[<ModuleInitializer>]`) register the
-//     emitted tables; the Giraffe adapter consults this registry to
-//     short-circuit reflection when a generated table is present.
+//     (or a generator) register emitted tables. NO adapter consults it:
+//     see "Phase 856.A, refuted" below before wiring one.
 //   * `[<DispatcherTarget>]` marker attribute the source-generator would
 //     scan for when emitting tables.
 //
@@ -28,6 +27,45 @@ open System.Threading.Tasks
 // (the table emits direct compile-time-typed dispatch code). v0 reuses the
 // existing proxy for the actual invocation; a later phase swaps in the
 // generator's emitted invocation thunks for the per-method hot path.
+//
+// ─── Phase 856.A, refuted: there is no table for the adapter to consult ───
+//
+// Phase 856 asked for `buildDispatcherTable` to consult this registry for
+// the records the generator covers, to realise the ~30 % cold-start gain
+// Phase 804 measured. Checked against the tree before building it, the
+// premise does not hold, in two independent ways:
+//
+//   1. NOTHING PRODUCES AN `IGeneratedDispatchTable`. The Phase 804
+//      generator (`ToolUp.Remoting.Generator`, `ToolUpRemotingDispatch`)
+//      emits a `methods` manifest and one typed ARGUMENT PARSE per method
+//      (`decode<Method>Args`); it deliberately emits no handler invocation
+//      and no result serialisation (docs/migrations/69k-source-generator-
+//      dispatcher.md, "What the generator emits"). The only registration in
+//      the tree is a hand-written table in the remoting harness's tests. A
+//      consumer in the adapter would be a branch no deployment can reach.
+//
+//   2. THE MEASURED GAIN IS NOT A REGISTRY LOOKUP. 804's generated dispatch
+//      arm (src/ToolUp.Remoting.Benchmarks) skips `Proxy.makeApiProxy`
+//      entirely and calls the handler DIRECTLY, with the invocation and the
+//      serialise written by hand in the benchmark. The cold-start delta is
+//      the reflective proxy's build over every method of the record —
+//      re-measured for Phase 856 on 2026-09-27 (Release, min of five fresh
+//      boots, a loaded machine): 106.9 ms generated against 158.7 ms
+//      reflection for the same five methods. The adapter cannot drop that
+//      build by consulting a registry: its pre-flight chain (auth, rate
+//      limit, validation, idempotency, audit, telemetry) is keyed off the
+//      proxy's `InvocationResult`, and a `'TContext -> 'TImpl -> Task` route
+//      handler that writes its own response would run OUTSIDE that chain —
+//      an authorisation bypass, not an optimisation. 69k.C recorded the
+//      same boundary and decided the walk stays.
+//
+// So realising the gain needs, first, a generator that emits invocation
+// returning the proxy's `InvocationResult` shape (a surface 69k declined to
+// widen), and then the adapter composing it inside the chain. That is a
+// phase of its own, not a wiring step; until it exists this registry stays
+// unconsumed, and `FromContextAsyncBuildOnceTests` carries a tripwire that
+// goes red the day the generator starts emitting tables, so the wiring is
+// not forgotten when it becomes possible.
 
 /// Phase 69k — marker attribute on an API record type. The source-
 /// generator (when it ships) scans for this attribute and emits an
@@ -62,9 +100,9 @@ type IGeneratedDispatchTable<'TContext, 'TImpl> =
 
 /// Phase 69k — process-wide registry of generated dispatch tables.
 /// Consumers (or the generator's emitted `[<ModuleInitializer>]`) call
-/// `Register` once per emitted table; the Giraffe adapter calls
-/// `TryGet<'TImpl>()` at `buildHttpHandler` time to decide whether the
-/// generated path is available.
+/// `register` once per emitted table. No adapter reads it today (see the
+/// Phase 856.A finding above); an adapter composing a generated table
+/// would call `tryGet<'TImpl>()` once, at compose time.
 ///
 /// Thread-safe; registrations are typically once-per-process at startup.
 /// Re-registration replaces the existing entry (idempotent for hot-reload
@@ -89,8 +127,8 @@ module GeneratedDispatchRegistry =
         | true, table -> Some table
         | false, _ -> None
 
-    /// True if a generated table is registered for `'TImpl`. The Giraffe
-    /// adapter uses this at `buildHttpHandler` to log / branch.
+    /// True if a generated table is registered for `'TImpl`. Read by the
+    /// harness tests; no adapter branches on it today.
     let isRegistered<'TImpl> () : bool = tables.ContainsKey(typeof<'TImpl>)
 
     /// Test-only: clear all registrations. Production code never calls

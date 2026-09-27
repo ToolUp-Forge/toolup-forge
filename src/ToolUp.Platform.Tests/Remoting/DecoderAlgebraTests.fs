@@ -54,6 +54,10 @@ open ToolUp.Platform.Tests.Remoting.WireCorpus
 /// attributed `[<StringEnum>]`, which this is not — so `union` with
 /// `case0` arms is the right combinator and `stringEnum` would refuse
 /// every payload.
+/// Phase 856 — `Value.Arr` carries an array; the fixtures below read as
+/// lists, so they build through this.
+let private arr (items: Value list) : Value = Value.Arr(Array.ofList items)
+
 let private priority: Decoder<Priority> =
     Decode.union "Priority" (function
         | 0 -> Some(Decode.case0 Low)
@@ -669,7 +673,7 @@ let tests =
 
             testCase "a tuple decodes from the positional array the writer emits"
             <| fun () ->
-                let pair = Value.Arr [ Value.Int(7L, IntegerWidth.Fixnum); Value.Str "seven" ]
+                let pair = arr [ Value.Int(7L, IntegerWidth.Fixnum); Value.Str "seven" ]
 
                 Expect.equal
                     (Decode.tuple2 Decode.asInt32 Decode.asString pair)
@@ -677,7 +681,7 @@ let tests =
                     "a two-element array is a pair"
 
                 let triple =
-                    Value.Arr [ Value.Int(7L, IntegerWidth.Fixnum); Value.Str "seven"; Value.Bool true ]
+                    arr [ Value.Int(7L, IntegerWidth.Fixnum); Value.Str "seven"; Value.Bool true ]
 
                 Expect.equal
                     (Decode.tuple3 Decode.asInt32 Decode.asString Decode.asBool triple)
@@ -685,7 +689,7 @@ let tests =
                     "a three-element array is a triple"
 
                 let quad =
-                    Value.Arr [
+                    arr [
                         Value.Int(7L, IntegerWidth.Fixnum)
                         Value.Str "seven"
                         Value.Bool true
@@ -700,7 +704,7 @@ let tests =
             testCase "a tuple of the wrong arity is refused by name, never sliced"
             <| fun () ->
                 let three =
-                    Value.Arr [ Value.Int(7L, IntegerWidth.Fixnum); Value.Str "seven"; Value.Bool true ]
+                    arr [ Value.Int(7L, IntegerWidth.Fixnum); Value.Str "seven"; Value.Bool true ]
 
                 match Decode.tuple2 Decode.asInt32 Decode.asString three with
                 | Ok _ -> failtest "a three-element array read as a pair would silently drop an element"
@@ -716,7 +720,7 @@ let tests =
 
             testCase "a refusal beneath a tuple element carries its position"
             <| fun () ->
-                let pair = Value.Arr [ Value.Int(7L, IntegerWidth.Fixnum); Value.Nil ]
+                let pair = arr [ Value.Int(7L, IntegerWidth.Fixnum); Value.Nil ]
 
                 match Decode.tuple2 Decode.asInt32 Decode.asString pair with
                 | Ok _ -> failtest "nil is not a string"
@@ -730,10 +734,7 @@ let tests =
                 // produces, and the one `payload` could read but the
                 // generator could not emit.
                 let term =
-                    Value.Arr [
-                        Value.Int(0L, IntegerWidth.Fixnum)
-                        Value.Arr [ Value.Str "a"; Value.Str "b" ]
-                    ]
+                    arr [ Value.Int(0L, IntegerWidth.Fixnum); arr [ Value.Str "a"; Value.Str "b" ] ]
 
                 let twoFields =
                     Decode.union "U" (fun _ ->
@@ -775,11 +776,11 @@ let tests =
                     | Ok _ -> failtestf "%s must refuse" (Value.describe value)
                     | Error e -> e
 
-                let short = refusal (Value.Arr [ tag; Value.Arr [ Value.Str "a" ] ])
+                let short = refusal (arr [ tag; arr [ Value.Str "a" ] ])
                 Expect.equal short.Expected "a union case carrying 2 fields" "the expected text names the case's arity"
                 Expect.equal short.Found "an array of 1 element(s)" "the found text names the inner array's width"
 
-                let bare = refusal (Value.Arr [ tag; Value.Str "a" ])
+                let bare = refusal (arr [ tag; Value.Str "a" ])
                 Expect.equal bare.Expected "a union case carrying 2 fields" "a bare payload is not several fields"
 
                 Expect.equal
@@ -787,7 +788,7 @@ let tests =
                     (Value.describe (Value.Str "a"))
                     "and the found text is the value's own description"
 
-                let none = refusal (Value.Arr [ tag ])
+                let none = refusal (arr [ tag ])
                 Expect.equal none.Expected "a union case carrying 2 fields" "a `[tag]` term carries no fields at all"
                 Expect.equal none.Found "a union case with no payload" "which is what the found text says"
 
@@ -804,7 +805,7 @@ let tests =
                         ))
 
                 let term =
-                    Value.Arr [ Value.Int(0L, IntegerWidth.Fixnum); Value.Arr [ Value.Str "a"; Value.Nil ] ]
+                    arr [ Value.Int(0L, IntegerWidth.Fixnum); arr [ Value.Str "a"; Value.Nil ] ]
 
                 match twoFields term with
                 | Ok _ -> failtest "nil is not a string"
@@ -857,10 +858,10 @@ let tests =
                 // `Branch("root", [ Leaf "a"; Branch(<nil>, []) ])` — the
                 // second child's label is not a string.
                 let leaf s =
-                    Value.Arr [ Value.Int(0L, IntegerWidth.Fixnum); Value.Str s ]
+                    arr [ Value.Int(0L, IntegerWidth.Fixnum); Value.Str s ]
 
                 let branch label children =
-                    Value.Arr [ Value.Int(1L, IntegerWidth.Fixnum); Value.Arr [ label; Value.Arr children ] ]
+                    arr [ Value.Int(1L, IntegerWidth.Fixnum); arr [ label; arr children ] ]
 
                 match tree (branch (Value.Str "root") [ leaf "a"; branch Value.Nil [] ]) with
                 | Ok _ -> failtest "a nil label is not a string"
@@ -887,7 +888,7 @@ let tests =
                     Value.Float(1.5, FloatWidth.Double)
                     Value.Str "x"
                     Value.Bin [| 1uy |]
-                    Value.Arr [ Value.Nil; Value.Str "x" ]
+                    arr [ Value.Nil; Value.Str "x" ]
                     Value.Map [ Value.Str "k", Value.Nil ]
                 ]
 

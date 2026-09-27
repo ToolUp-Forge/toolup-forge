@@ -132,15 +132,26 @@ type Value =
     | UInt of value: uint64 * width: IntegerWidth
     | Float of value: float * width: FloatWidth
     | Str of string
-    /// The `bin` family. The payload is a `byte[]` — the one mutable
-    /// carrier in the model, because there is no immutable byte sequence
-    /// in FSharp.Core that both hosts share. Treated as immutable by
-    /// every combinator: nothing in `Decode` writes to one.
+    /// The `bin` family. The payload is a `byte[]` — a mutable carrier,
+    /// because there is no immutable byte sequence in FSharp.Core that
+    /// both hosts share. Treated as immutable by every combinator:
+    /// nothing in `Decode` writes to one.
     | Bin of byte[]
     /// The `array` family, and every shape this transport writes through
     /// it: records (positionally), unions (tag first), tuples, lists,
     /// arrays, sets, `DateTime`, `DateTimeOffset` and `decimal`.
-    | Arr of Value list
+    ///
+    /// **An array since Phase 856, and for one reason: positional access.**
+    /// A record goes onto this wire as the array of its fields, and
+    /// `Decode.field` reads field `i` by position, once per field — so over
+    /// the F# list this case used to carry, field `i` walked `i` cells and
+    /// an n-field record decoded in time quadratic in n (measured by
+    /// `ToolUp.Remoting.Benchmarks --wide`). Indexed, it is linear. The
+    /// second mutable carrier beside `Bin`, and held to the same rule:
+    /// the one-pass reader builds it, nothing in `Decode` writes to it.
+    /// Structural equality is unchanged — F# compares array payloads of a
+    /// union case element-wise.
+    | Arr of Value[]
     /// The `map` family — `Map<_,_>` and `Dictionary<_,_>`. Entries are
     /// carried in wire order, not sorted, so a value round-trips to the
     /// bytes it came from.
@@ -176,7 +187,7 @@ module Value =
         | Value.Float _
         | Value.Str _
         | Value.Bin _ -> 1
-        | Value.Arr items -> items |> List.fold (fun total item -> total + size item) 1
+        | Value.Arr items -> items |> Array.fold (fun total item -> total + size item) 1
         | Value.Map entries -> entries |> List.fold (fun total (key, entry) -> total + size key + size entry) 1
 
     /// What a refusal's `Found` field says about this value.
@@ -197,7 +208,7 @@ module Value =
         | Value.Float(n, FloatWidth.Double) -> sprintf "float64 %s" (string n)
         | Value.Str text -> sprintf "string of %d character(s)" text.Length
         | Value.Bin bytes -> sprintf "bin of %d byte(s)" bytes.Length
-        | Value.Arr items -> sprintf "array of %d element(s)" (List.length items)
+        | Value.Arr items -> sprintf "array of %d element(s)" items.Length
         | Value.Map entries -> sprintf "map of %d entry(ies)" (List.length entries)
 
     /// Phase 786's information rule, over this model's width classes.

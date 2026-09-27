@@ -176,6 +176,12 @@ type internal InvocationPropsInt = {
     /// arm was raw JSON text and the per-argument deserialise re-parsed
     /// each slice into its own JsonDocument — N+1 parses per call.
     Arguments: Choice<byte[], JsonElement> list
+    /// Phase 856.B — the FIRST JSON argument, already decoded by the
+    /// adapter's validation stage through this proxy's own argument
+    /// decode (`ApiProxy.ParseFirst`). When present, the first
+    /// `Choice2Of2` element is taken from here instead of being
+    /// deserialised a second time; consumed (cleared) as it is used.
+    FirstArgument: obj voption
     IsProxyHeaderPresent: bool
     Output: Stream
 }

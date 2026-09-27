@@ -211,7 +211,7 @@ let tests =
                 contents
                 "InputBytes = None"
                 "Initial props record must declare InputBytes = None. The cache-populated \
-                 version is built just before `proxy propsWithCache` is invoked."
+                 version is built just before `apiProxy.Invoke propsWithCache` is invoked."
         }
 
         test "AspNetCore middleware adapter defaults InputBytes to None" {
@@ -262,6 +262,35 @@ let tests =
                 "Audit emission must consult the cache before calling parseFirstArgFromBody \
                  a second time. Without this the regression is silent — audit-and-validate \
                  armed methods do the same parse twice per request."
+        }
+
+        // Phase 856.B — the fastpath extended to a VALIDATED method: the
+        // arguments the validation stage parsed (through the proxy's own
+        // decode) are what dispatch runs on. The behavioural pin — one
+        // decode per request, counted — is `ServerRemotingTailTests`.
+        test "a validated method's parsed arguments are handed to dispatch (Phase 856.B)" {
+            let adapterPath =
+                Path.Combine(
+                    repoRoot (),
+                    "src",
+                    "ToolUp.Platform.Server",
+                    "Server",
+                    "Remoting",
+                    "Giraffe",
+                    "GiraffeAdapter.fs"
+                )
+
+            let contents = File.ReadAllText adapterPath
+
+            Expect.stringContains
+                contents
+                "apiProxy.ParseFirst endpointName bodyBytes"
+                "the validation stage must decode through the proxy's own argument path"
+
+            Expect.stringContains
+                contents
+                "apiProxy.Invoke propsWithCache validationParsedArguments.Value"
+                "dispatch must receive what validation parsed, or the body is deserialised twice"
         }
 
         test "Exception path materialises body text from cached bytes when needed" {

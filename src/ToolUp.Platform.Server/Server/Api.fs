@@ -87,6 +87,74 @@ type ForgeAuthContext =
     abstract IsAnonymous: unit -> bool
     abstract SubjectId: string
 
+/// Phase 856.C — one remoting audit record, bound at emission time.
+///
+/// Everything the write needs is captured WHILE the request is still in
+/// scope — the `IAuditLog` and the recording scope both come from
+/// request-scoped `AsyncLocal`s that do not flow to the drain — so the
+/// drain replays a write the request fully determined.
+type internal RemotingAuditWork = {
+    AuditLog: IAuditLog
+    ScopeId: string
+    Event: ToolUp.Platform.AuditEvent
+}
+
+/// Phase 856.C — the bounded queue that takes the default remoting audit
+/// write OFF the response path.
+///
+/// Until 856 the default `IAuditEmitter` awaited `IAuditLog.Record` inline
+/// after a successful audited call, so a storage-backed log put its write
+/// latency on every audited response. With this queue composed, `Emit`
+/// enqueues and returns; `RemotingAuditDrainService` (a hosted service)
+/// performs the write. Three rules keep that from ever LOSING a record:
+///
+///   * **Full is back-pressure, not a drop.** `TryEnqueue` answers `false`
+///     when the queue is at capacity (or completed at shutdown), and the
+///     emitter then writes INLINE — the pre-856 path, with its failure
+///     classification unchanged. A saturated queue costs latency, never
+///     a record.
+///   * **A failed write is classified, not swallowed.** The drain gives a
+///     write the log itself did not classify the audit log's own shape:
+///     the `toolup.audit.write_failures_total` counter plus the same Warn.
+///   * **Shutdown drains.** The drain stops on writer COMPLETION, not on
+///     the host's stop signal, so every accepted record is written; one
+///     still queued when the host's shutdown timeout expires is logged at
+///     Error with the count.
+///
+/// NOT composed — so the emitter writes inline exactly as before — under
+/// `AuditFailurePolicy = RefuseAction` (its contract is that the CALLER
+/// sees the audit failure, which a write after the response cannot give),
+/// under `ServerlessHost` (no host keeps a drain alive), and where no HTTP
+/// pipeline is mounted. The one observable change where it IS composed:
+/// the audit entry may land after the response.
+type internal RemotingAuditQueue(capacity: int) =
+    let channel =
+        System.Threading.Channels.Channel.CreateBounded<RemotingAuditWork>(
+            System.Threading.Channels.BoundedChannelOptions(
+                capacity,
+                FullMode = System.Threading.Channels.BoundedChannelFullMode.Wait,
+                SingleReader = true,
+                SingleWriter = false
+            )
+        )
+
+    /// The default capacity. Sized for a burst of audited calls against a
+    /// stalled store, not for throughput: past it the emitter degrades to
+    /// the inline write, which is the correct behaviour under a store that
+    /// cannot keep up.
+    static member DefaultCapacity = 1024
+
+    /// `false` when full or completed — the caller writes inline.
+    member _.TryEnqueue(work: RemotingAuditWork) : bool = channel.Writer.TryWrite work
+
+    member _.Reader = channel.Reader
+
+    /// Records accepted and not yet written.
+    member _.Count = channel.Reader.Count
+
+    /// No further records are accepted; the drain finishes what it holds.
+    member _.Complete() = channel.Writer.TryComplete() |> ignore
+
 /// Phase 69b.tail — internal seams for the `Api.make` wrapper's
 /// default-on composition of the Phase 69b platform seams. Module is
 /// `internal` to keep the public surface unchanged; the AsyncLocal
@@ -285,6 +353,11 @@ module internal ApiSeams =
     /// wrapper) or when `IAuditLog` is unregistered. The recording scope
     /// comes from `requestScopeId` (stashed per request by the wrapped
     /// api builder), falling back to `_platform`.
+    ///
+    /// Phase 856.C — when compose registered a `RemotingAuditQueue`, the
+    /// record is enqueued and `Emit` returns without awaiting the write;
+    /// when it did not, or the queue is full, the write is inline as it
+    /// always was. See `RemotingAuditQueue` for when each applies.
     let defaultAuditEmitter: IAuditEmitter =
         { new IAuditEmitter with
             member _.Emit evt = async {
@@ -312,7 +385,20 @@ module internal ApiSeams =
                             Payload = evt.Payload
                         }
 
-                        do! auditLog.Record(scopeId, ToolUp.Platform.AuditEvent.RemotingMethodAudited payload)
+                        let event = ToolUp.Platform.AuditEvent.RemotingMethodAudited payload
+
+                        let queued =
+                            match services.GetService(typeof<RemotingAuditQueue>) with
+                            | :? RemotingAuditQueue as queue ->
+                                queue.TryEnqueue {
+                                    AuditLog = auditLog
+                                    ScopeId = scopeId
+                                    Event = event
+                                }
+                            | _ -> false
+
+                        if not queued then
+                            do! auditLog.Record(scopeId, event)
                     | _ -> ()
             }
         }

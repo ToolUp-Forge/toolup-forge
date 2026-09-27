@@ -940,7 +940,7 @@ type Reader(data: byte[], maxDepth: int) =
             elements.Add(x.ReadValue())
 
         x.ExitContainer()
-        Value.Arr(List.ofSeq elements)
+        Value.Arr(elements.ToArray())
 
     /// Phase 785 — a map term. Entries stay in WIRE ORDER: sorting here
     /// would make the value model lossy about the bytes it came from,

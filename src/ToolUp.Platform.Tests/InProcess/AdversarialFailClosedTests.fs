@@ -207,14 +207,15 @@ let tests =
             // No TestServer scaffold in this runner; pin the ordering in the
             // adapter source instead. The deny branch (`if denyReason.IsSome
             // then`) builds an `ErrorCategory.Auth` envelope and `return!`s —
-            // it sits textually before `match! proxy propsWithCache`, the
+            // it sits textually before `match! apiProxy.Invoke propsWithCache` (Phase
+            // 856.B renamed the call site from `proxy propsWithCache`), the
             // single site the handler body runs. So a denied call can never
             // reach the handler: fail-closed before dispatch.
             let adapter = serverSource [ "Remoting"; "Giraffe"; "GiraffeAdapter.fs" ]
 
             let denyIdx = adapter.IndexOf "if denyReason.IsSome then"
             let authEnvelopeIdx = adapter.IndexOf "ErrorCategory.Auth"
-            let proxyIdx = adapter.IndexOf "match! proxy propsWithCache"
+            let proxyIdx = adapter.IndexOf "match! apiProxy.Invoke propsWithCache"
 
             Expect.isGreaterThan denyIdx -1 "the deny branch must exist"
             Expect.isGreaterThan authEnvelopeIdx -1 "the Auth envelope must exist"

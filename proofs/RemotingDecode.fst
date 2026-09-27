@@ -556,24 +556,66 @@ let exactly (#raw #flt: Type0) (arity: nat) : decoder raw flt (list (value raw f
           ("an array of " ^ string_of_int (count elements) ^ " element(s)")
     | _ -> refuse expected v
 
-/// F#: `List.tryItem`.
-let rec try_item (#raw #flt: Type0) (position: nat) (xs: list (value raw flt))
-  : Tot (opt (value raw flt)) (decreases xs) =
-  match xs with
-  | [] -> ONone
-  | head :: tail -> if position = 0 then OSome head else try_item (position - 1) tail
+(* Phase 856 — the accessor is INDEXED. `Value.Arr` carries an array
+   since that phase, and the F# reads a record's field `i` as
+   `elements[i]` under a bounds test, where it used to walk `i` cells of
+   a list through `List.tryItem` — which made an n-field record decode
+   quadratic in n. The model follows the implementation's SHAPE: a read
+   that is defined only at a position the caller has already bounded
+   (`item_at`'s refinement), and a bounds test that decides presence
+   (`element_of`), rather than a walk whose running out of spine
+   decides it.
 
-[@@ noextract_to "FSharp"]
-let rec lemma_try_item_smaller (#raw #flt: Type0) (position: nat) (xs: list (value raw flt))
-  : Lemma
-      (ensures
-        (match try_item position xs with
-         | OSome x -> size x <= size_items xs
-         | ONone -> True))
-      (decreases xs) =
+   The carrier stays an F* `list`. That is a statement about this
+   toolchain, not a loose end, and both alternatives were measured
+   against the pin (v2026.09.06) rather than assumed:
+     * `FStar.Seq.seq` is strictly positive, so `VArr` over it would be
+       admitted — but `seq` is an abstract `new val`, and the pinned
+       ulib gives no `Seq.index s i << s`. The well-founded `size`
+       below recurs into every element, so over a `seq` it has no
+       decreasing argument, and supplying one would be an `assume`
+       that `--report_assumes error` rightly refuses.
+     * And it would buy nothing: `FStar.Seq.Base` IS `MkSeq of list`,
+       and the F# backend extracts it as exactly that (Phase 850).
+   So the list here is the mathematical sequence of the array's
+   elements, and the refinement tie — the differential host bridging
+   each shipped `Value[]` to this list element for element — is what
+   holds the array to it. The measure is unchanged in kind and now
+   stated where it belongs: over `size`, not over the spine the read
+   no longer walks. *)
+
+/// F#: `elements[position]` — the indexed read, at a position already
+/// known to be in bounds. The recursion is how F* spells positional
+/// access into its list; it is the specification of the read, not a
+/// model of its cost.
+let rec item_at (#raw #flt: Type0) (xs: list (value raw flt)) (position: nat{position < count xs})
+  : Tot (value raw flt) (decreases xs) =
   match xs with
-  | [] -> ()
-  | _ :: tail -> if position = 0 then () else lemma_try_item_smaller (position - 1) tail
+  | head :: tail -> if position = 0 then head else item_at tail (position - 1)
+
+/// F#: `Decode.elementAt` — present exactly when the position is inside
+/// the array's length. (The F# also answers a NEGATIVE position absent;
+/// a `nat` cannot be one, so that arm has no model counterpart.)
+let element_of (#raw #flt: Type0) (position: nat) (xs: list (value raw flt)) : opt (value raw flt) =
+  if position < count xs then OSome (item_at xs position) else ONone
+
+/// The measure, over the value model's size: an element read by index
+/// is no larger than all the elements together.
+[@@ noextract_to "FSharp"]
+let rec lemma_item_at_smaller
+  (#raw #flt: Type0)
+  (xs: list (value raw flt))
+  (position: nat{position < count xs})
+  : Lemma (ensures size (item_at xs position) <= size_items xs) (decreases xs) =
+  match xs with
+  | _ :: tail -> if position = 0 then () else lemma_item_at_smaller tail (position - 1)
+
+/// Presence is the bounds test and nothing else — the characterisation
+/// the list walk left implicit in where its spine ran out.
+let lemma_element_of_characterised (#raw #flt: Type0) (position: nat) (xs: list (value raw flt))
+  : Lemma
+      ((position < count xs ==> element_of position xs == OSome (item_at xs position))
+       /\ (count xs <= position ==> element_of position xs == ONone)) = ()
 
 /// **The termination measure IS the theorem.** The accessor that
 /// `index` and `field` are both built from carries, in its RETURN
@@ -591,8 +633,9 @@ let element_at (#raw #flt: Type0) (position: nat) (v: value raw flt)
   : r: opt (value raw flt) { OSome? r ==> size (OSome?.item r) < size v } =
   match v with
   | VArr elements ->
-    lemma_try_item_smaller position elements;
-    try_item position elements
+    if position < count elements
+    then (lemma_item_at_smaller elements position; OSome (item_at elements position))
+    else ONone
   | _ -> ONone
 
 /// F#: `Decode.index` — decode element `position` of an array,
@@ -602,7 +645,7 @@ let index (#raw #flt #a: Type0) (position: nat) (d: decoder raw flt a) : decoder
     let expected = "an array with an element at index " ^ string_of_int position in
     match v with
     | VArr elements ->
-      (match try_item position elements with
+      (match element_of position elements with
        | OSome element ->
          (match d element with
           | Accepted x -> Accepted x
@@ -627,7 +670,7 @@ let field (#raw #flt #a: Type0) (name: string) (position: nat) (d: decoder raw f
     in
     match v with
     | VArr elements ->
-      (match try_item position elements with
+      (match element_of position elements with
        | OSome element ->
          (match d element with
           | Accepted x -> Accepted x
@@ -1006,7 +1049,7 @@ let lemma_field_refuses_short_array
   (v: value raw flt)
   : Lemma
       (requires (match v with
-                 | VArr elements -> ONone? (try_item position elements)
+                 | VArr elements -> count elements <= position
                  | _ -> true))
       (ensures Refused? (field name position d v)) = ()
 

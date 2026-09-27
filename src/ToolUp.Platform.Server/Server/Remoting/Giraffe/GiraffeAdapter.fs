@@ -146,7 +146,12 @@ module internal GiraffeUtil =
     /// dispatch many) AND restores the `fromContextAsync` contract to
     /// build-once / read-per-call.
     let buildDispatcherTable<'impl> (options: RemotingOptions<HttpContext, 'impl>) =
-        let proxy = makeApiProxy options
+        // Phase 856.B — the proxy with its argument parse exposed, so the
+        // validation pre-flight decodes the first argument through the
+        // dispatch path's own decode and hands the result on (see
+        // `Proxy.ApiProxy`): one parse, one decode, and validation sees the
+        // value the handler receives.
+        let apiProxy = makeApiProxyWithParse options
         let rmsManager = getRecyclableMemoryStreamManager options
 
         // Fail-fast: every attribute-driven seam reflects over F# record
@@ -1259,16 +1264,29 @@ module internal GiraffeUtil =
                         // call per request on dual-armed methods.
                         let validationParsedFirstArg: obj option ref = ref None
 
+                        // Phase 856.B — the arguments validation parsed, handed
+                        // to the proxy at dispatch so the body is parsed and
+                        // the first argument decoded ONCE per request.
+                        let validationParsedArguments: ParsedArguments voption ref = ref ValueNone
+
                         // 0.1.16 — lazy body read: validation only forces
                         // the cache when its method actually has validation
                         // attributes AND the STJ backend is composed.
                         let! validationViolations = task {
                             match validationInputType, options.JsonSerializer with
-                            | Some inputT, SystemTextJson stjOptions ->
-                                let! bodyText = readCachedBodyText ()
+                            | Some inputT, SystemTextJson _ ->
+                                let! bodyBytes = readCachedBodyBytes ()
 
-                                match Validation.parseFirstArgFromBody bodyText inputT stjOptions with
-                                | Some inputValue ->
+                                // Phase 856.B — the dispatch path's own parse and
+                                // first-argument decode, run here. `ValueNone`
+                                // (unparseable, or refused by the decode) skips
+                                // validation and leaves the refusal to the
+                                // proxy, exactly as `parseFirstArgFromBody`'s
+                                // `None` did.
+                                match apiProxy.ParseFirst endpointName bodyBytes with
+                                | ValueSome parsed ->
+                                    let inputValue = parsed.First
+                                    validationParsedArguments.Value <- ValueSome parsed
                                     validationParsedFirstArg.Value <- Some inputValue
 
                                     // Phase 69e — hand the per-request context to
@@ -1290,7 +1308,7 @@ module internal GiraffeUtil =
                                             validationContext
                                             inputT
                                             inputValue
-                                | None -> return []
+                                | ValueNone -> return []
                             | _ -> return []
                         }
 
@@ -1654,7 +1672,7 @@ module internal GiraffeUtil =
                                             InputBytes = cachedBodyBytesCell.Value
                                     }
 
-                                    match! proxy propsWithCache with
+                                    match! apiProxy.Invoke propsWithCache validationParsedArguments.Value with
                                     | Success isBinaryOutput ->
                                         ctx.Response.StatusCode <- 200
 

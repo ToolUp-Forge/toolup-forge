@@ -25,7 +25,7 @@ this phase changes no deployment's behaviour until it registers something (GP 11
 ## 1. The value model
 
 `ToolUp.Remoting.MsgPack.Value` (`src/ToolUp.Platform.Core/Shared/Remoting/MsgPack/Value.fs`) —
-nine cases, immutable, with no `null`:
+nine cases, immutable in use (the `byte[]` and `Value[]` carriers are built once by the reader and never written after), with no `null`:
 
 | Case | Carries |
 |---|---|
@@ -36,7 +36,7 @@ nine cases, immutable, with no `null`:
 | `Value.Float` | `float` × `FloatWidth` (`Single` \| `Double`) |
 | `Value.Str` | `string` |
 | `Value.Bin` | `byte[]` |
-| `Value.Arr` | `Value list` |
+| `Value.Arr` | `Value[]` — an array since Phase 856, so `Decode.field` / `Decode.index` read by index and an n-field record decodes in linear time; never written after the reader builds it |
 | `Value.Map` | `(Value * Value) list`, in wire order |
 
 Three properties are load-bearing, and all three are properties of the DECLARATION rather than of
