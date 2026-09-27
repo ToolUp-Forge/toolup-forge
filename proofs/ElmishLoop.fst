@@ -17,7 +17,10 @@
 /// Phase 789 — the Elmish dispatch loop, modelled in F* as a step
 /// machine and proved to process every message exactly once, in
 /// dispatch order, with termination absorbing. Phase 851 moved the
-/// render hook to the END of the drain and re-proved the machine.
+/// render hook to the END of the drain and re-proved the machine. The
+/// boot was then restated so the latch is set BEFORE the sinks and the
+/// effects' start functions run, which is what `boot_paints_init_model`
+/// is about.
 ///
 /// # What this module is
 ///
@@ -51,8 +54,9 @@
 /// The differential host (`ElmishLoopProofOracleTests.fs` on .NET) runs
 /// the EXTRACTION of this module beside the production loop with a
 /// scripted `update` and a scripted `render` that re-dispatch chosen
-/// messages at chosen points — from `update`'s command, from the boot
-/// drain, from the post-drain `setState`, after `Terminate` — and
+/// messages at chosen points — from an effect's start function before
+/// the boot paint, from `update`'s command, from the boot drain, from
+/// the post-drain `setState`, after `Terminate` — and
 /// requires the two to hand `update` the same messages in the same
 /// order, to end on the same model, to have painted the same model, and
 /// to have painted the same number of times. That host is the only thing
@@ -112,6 +116,11 @@
 /// is; a `setState` that dispatches re-opens the drain and paints again,
 /// and the differential scripts exactly that case).
 ///
+/// And one about the boot. `boot_paints_init_model`: whatever the
+/// dispatcher-handle sinks, the effect-controller sinks and the effects'
+/// start functions dispatch, the boot paint hands the render hook the
+/// model `init` returned, and nothing was handed to `update` before it.
+///
 /// # What is abstracted, and stated as such
 ///
 /// Every parameter of the model is an assumption. `update` is the
@@ -126,9 +135,18 @@
 /// predicate, a pure function of the message. `fuel` is a bound the
 /// model imposes on itself, never a claim about production. `capacity`
 /// is any integer — `create_wf` says the ring is well-formed whatever was
-/// asked for. `init_evs` are the events `Subs.Fx.change` and `init`'s
+/// asked for. `pre_evs` are the events the dispatcher-handle sinks, the
+/// effect-controller sinks and the effects' start functions raise at
+/// boot, BEFORE the boot paint and under the latch. `init_evs` are the
+/// events `Subs.Fx.change` and `init`'s
 /// `Cmd.exec` raise at boot, after the boot paint; the boot paint's own
-/// events come from `render`. The teardown callbacks on the terminating
+/// events come from `render`. The ERROR REPORTER is not a parameter: an
+/// exception from a callee is reported and the loop goes on, which is
+/// only true of a reporter that returns. Production makes it so by
+/// construction — every call to the program's reporter goes through a
+/// guard that catches what the reporter itself raises — so the model
+/// has no transition for a reporter that throws, and the host pins that
+/// production has none either. The teardown callbacks on the terminating
 /// path (`Subs.Fx.stop`, `terminate`) are assumed not to dispatch; a
 /// dispatch they made would land in the ring and never be processed,
 /// which is what `terminated_absorbing` says of any message after the
@@ -183,6 +201,8 @@ noeq type st (m: Type0) (md: Type0) = {
 /// ran — the first moment anything can dispatch, and BEFORE the boot
 /// paint: the init model is unpainted, so `dirty` is set. `Wire` is what
 /// sets `active`; before it nothing holds a reference to `dispatch`.
+/// Nothing the program supplied runs between `Wire` and the latch being
+/// set (`boot`), so no dispatch ever finds this state's latch clear.
 let initial (#m #md: Type0) (capacity: int) (model: md) : st m md = {
   ring = create capacity;
   reentered = false;
@@ -362,19 +382,50 @@ let rec boot_evs (#m #md: Type0)
   | [] -> s
   | e :: rest -> boot_evs fuel update to_terminate render (boot_ev fuel update to_terminate render s e) rest
 
-/// F#: the tail of `runWithDispatch` — `reentered <- true`, then the
-/// boot paint `dirty <- false; setState model dispatch'` (unconditional,
-/// and BEFORE `init`'s command runs: a hydrating renderer must see the
-/// model the server rendered), then `Subs.Fx.change … dispatch'` and
-/// `Cmd.exec … dispatch' cmd` (the events `init`'s effects raise, each
-/// through `dispatch'`), then `processMsgs ()`, then `reentered <- false`.
+/// F#: the head of the boot — `reentered <- true` FIRST, before anything
+/// the program supplied is called; then the dispatcher-handle sinks, the
+/// effect-controller sinks and the effects' start functions run UNDER
+/// the latch (`pre`: the events they raise, each through `dispatch'`, so
+/// a dispatch only enqueues; a `Terminate` through the callback).
+///
+/// Until this was restated the latch was set AFTER the sinks and the
+/// effects ran, so an effect that dispatched from its start function
+/// found the latch clear and ran a whole drain — `update`, the
+/// subscription diff, the command, and a paint — before the boot paint,
+/// on a model the boot paint was then handed second.
+/// `boot_paints_init_model` is what the order buys.
+let preboot (#m #md: Type0)
+            (fuel: nat)
+            (update: m -> md -> pair md (list (ev m)))
+            (to_terminate: m -> bool)
+            (render: md -> list (ev m))
+            (s: st m md) (pre: list (ev m)) : st m md =
+  boot_evs fuel update to_terminate render { s with reentered = true } pre
+
+/// F#: the boot paint — `dirty <- false; setState model dispatch'`,
+/// unconditional, after the sinks and the effects and BEFORE `init`'s
+/// command runs: a hydrating renderer must see the model the server
+/// rendered.
+let boot_paint (#m #md: Type0)
+               (fuel: nat)
+               (update: m -> md -> pair md (list (ev m)))
+               (to_terminate: m -> bool)
+               (render: md -> list (ev m))
+               (s: st m md) (pre: list (ev m)) : st m md =
+  paint render (preboot fuel update to_terminate render s pre)
+
+/// F#: the tail of `runWithDispatch` — the latch and the sinks and
+/// effects (`preboot`), the boot paint (`boot_paint`), then
+/// `Subs.Fx.change … dispatch'` and `Cmd.exec … dispatch' cmd` (`evs`:
+/// the events `init`'s effects raise, each through `dispatch'`), then
+/// `processMsgs ()`, then `reentered <- false`.
 let boot (#m #md: Type0)
          (fuel: nat)
          (update: m -> md -> pair md (list (ev m)))
          (to_terminate: m -> bool)
          (render: md -> list (ev m))
-         (s: st m md) (evs: list (ev m)) : st m md =
-  let s1 = paint render { s with reentered = true } in
+         (s: st m md) (pre: list (ev m)) (evs: list (ev m)) : st m md =
+  let s1 = boot_paint fuel update to_terminate render s pre in
   let s2 = boot_evs fuel update to_terminate render s1 evs in
   let Pair s3 finished = process_msgs fuel update to_terminate render s2 in
   if finished then { s3 with reentered = false } else s3
@@ -400,15 +451,19 @@ let rec run (#m #md: Type0)
     | XDispatch msg :: rest -> run fuel update to_terminate render (dispatch fuel update to_terminate render s msg) rest
     | XTerminate :: rest -> run fuel update to_terminate render (terminate s) rest
 
-/// A whole program: `init` (its model and the events its effects raise),
-/// the boot drain, then the outside world.
+/// A whole program: `init` (its model), the events the sinks and the
+/// effects' start functions raise before the boot paint, the events
+/// `init`'s effects raise after it, the boot drain, then the outside
+/// world.
 let program (#m #md: Type0)
             (fuel: nat)
             (update: m -> md -> pair md (list (ev m)))
             (to_terminate: m -> bool)
             (render: md -> list (ev m))
-            (capacity: int) (model: md) (init_evs: list (ev m)) (exts: list (ext m)) : st m md =
-  run fuel update to_terminate render (boot fuel update to_terminate render (initial capacity model) init_evs) exts
+            (capacity: int) (model: md)
+            (pre_evs: list (ev m)) (init_evs: list (ev m)) (exts: list (ext m)) : st m md =
+  run fuel update to_terminate render
+      (boot fuel update to_terminate render (initial capacity model) pre_evs init_evs) exts
 
 /// F#: `Dispatcher.fs`'s fallback arm — `IDispatcher.Terminate` with no
 /// callback wired: `active <- false` and nothing else. Not a transition
@@ -740,21 +795,52 @@ let rec boot_evs_are_apply_evs (#m #md: Type0)
       boot_evs_are_apply_evs fuel update to_terminate render (terminate s) rest
 
 /// **`boot_inv`.** The boot drain establishes the invariant from a state
-/// with the core — the unpainted state `initial` builds is one.
+/// with the core — the unpainted state `initial` builds is one —
+/// whatever was raised before the boot paint and after it.
 let boot_inv (#m #md: Type0)
              (fuel: nat)
              (update: m -> md -> pair md (list (ev m)))
              (to_terminate: m -> bool)
              (render: md -> list (ev m))
-             (s: st m md) (evs: list (ev m))
+             (s: st m md) (pre: list (ev m)) (evs: list (ev m))
   : Lemma (requires inv_core s)
-          (ensures inv (boot fuel update to_terminate render s evs)) =
+          (ensures inv (boot fuel update to_terminate render s pre evs)) =
   let s0 = { s with reentered = true } in
-  paint_spec render s0;
-  let s1 = paint render s0 in
+  boot_evs_are_apply_evs fuel update to_terminate render s0 pre;
+  apply_evs_spec s0 pre;
+  let sp = apply_evs s0 pre in
+  paint_spec render sp;
+  let s1 = paint render sp in
   boot_evs_are_apply_evs fuel update to_terminate render s1 evs;
   apply_evs_spec s1 evs;
   process_msgs_spec fuel update to_terminate render (apply_evs s1 evs)
+
+/// **`boot_paints_init_model`.** Whatever the dispatcher-handle sinks, the
+/// effect-controller sinks and the effects' start functions dispatch
+/// before the boot paint — any number of messages, a `Terminate`, both —
+/// none of it is handed to `update`, none of it moves the model, none of
+/// it paints; and the boot paint then hands the render hook THE MODEL
+/// `init` RETURNED, once. This is the property a hydrating renderer
+/// depends on and the reason the latch is set before the sinks run: with
+/// the latch clear, the first such dispatch would have run a drain and
+/// painted a model the server never rendered.
+let boot_paints_init_model (#m #md: Type0)
+                           (fuel: nat)
+                           (update: m -> md -> pair md (list (ev m)))
+                           (to_terminate: m -> bool)
+                           (render: md -> list (ev m))
+                           (s: st m md) (pre: list (ev m))
+  : Lemma (requires inv_core s)
+          (ensures (let sp = preboot fuel update to_terminate render s pre in
+                    let s1 = boot_paint fuel update to_terminate render s pre in
+                    sp.model == s.model /\ sp.trace == s.trace
+                    /\ sp.painted == s.painted /\ sp.renders == s.renders
+                    /\ s1.model == s.model /\ s1.trace == s.trace
+                    /\ s1.painted == OSome s.model /\ s1.renders == s.renders + 1)) =
+  let s0 = { s with reentered = true } in
+  boot_evs_are_apply_evs fuel update to_terminate render s0 pre;
+  apply_evs_spec s0 pre;
+  paint_spec render (apply_evs s0 pre)
 
 /// **`run_inv`.** The outside world preserves the invariant.
 let rec run_inv (#m #md: Type0)
@@ -792,11 +878,13 @@ let program_inv (#m #md: Type0)
                 (update: m -> md -> pair md (list (ev m)))
                 (to_terminate: m -> bool)
                 (render: md -> list (ev m))
-                (capacity: int) (model: md) (init_evs: list (ev m)) (exts: list (ext m))
-  : Lemma (ensures inv (program fuel update to_terminate render capacity model init_evs exts)) =
+                (capacity: int) (model: md)
+                (pre_evs: list (ev m)) (init_evs: list (ev m)) (exts: list (ext m))
+  : Lemma (ensures inv (program fuel update to_terminate render capacity model pre_evs init_evs exts)) =
   initial_inv #m capacity model;
-  boot_inv fuel update to_terminate render (initial capacity model) init_evs;
-  run_inv fuel update to_terminate render (boot fuel update to_terminate render (initial capacity model) init_evs) exts
+  boot_inv fuel update to_terminate render (initial capacity model) pre_evs init_evs;
+  run_inv fuel update to_terminate render
+          (boot fuel update to_terminate render (initial capacity model) pre_evs init_evs) exts
 
 (* ───────────────────────────────────────────────────────────────────
    The theorems — the phase's six, as named corollaries, and Phase
@@ -813,11 +901,12 @@ let exactly_once (#m #md: Type0)
                  (update: m -> md -> pair md (list (ev m)))
                  (to_terminate: m -> bool)
                  (render: md -> list (ev m))
-                 (capacity: int) (model: md) (init_evs: list (ev m)) (exts: list (ext m))
-  : Lemma (ensures (let s = program fuel update to_terminate render capacity model init_evs exts in
+                 (capacity: int) (model: md)
+                 (pre_evs: list (ev m)) (init_evs: list (ev m)) (exts: list (ext m))
+  : Lemma (ensures (let s = program fuel update to_terminate render capacity model pre_evs init_evs exts in
                     not s.reentered /\ not s.terminated ==> s.log == s.trace)) =
-  program_inv fuel update to_terminate render capacity model init_evs exts;
-  let s = program fuel update to_terminate render capacity model init_evs exts in
+  program_inv fuel update to_terminate render capacity model pre_evs init_evs exts;
+  let s = program fuel update to_terminate render capacity model pre_evs init_evs exts in
   if not s.reentered && not s.terminated then append_nil s.trace
 
 /// **`in_order`.** In EVERY state a program reaches — mid-drain,
@@ -829,11 +918,12 @@ let in_order (#m #md: Type0)
              (update: m -> md -> pair md (list (ev m)))
              (to_terminate: m -> bool)
              (render: md -> list (ev m))
-             (capacity: int) (model: md) (init_evs: list (ev m)) (exts: list (ext m))
-  : Lemma (ensures (let s = program fuel update to_terminate render capacity model init_evs exts in
+             (capacity: int) (model: md)
+             (pre_evs: list (ev m)) (init_evs: list (ev m)) (exts: list (ext m))
+  : Lemma (ensures (let s = program fuel update to_terminate render capacity model pre_evs init_evs exts in
                     is_prefix s.trace s.log)) =
-  program_inv fuel update to_terminate render capacity model init_evs exts;
-  let s = program fuel update to_terminate render capacity model init_evs exts in
+  program_inv fuel update to_terminate render capacity model pre_evs init_evs exts;
+  let s = program fuel update to_terminate render capacity model pre_evs init_evs exts in
   if s.terminated then () else prefix_append s.trace (pending s)
 
 /// **`reentrant_no_loss`.** A `dispatch` made while the latch is set —
@@ -898,22 +988,26 @@ let rec terminated_absorbing (#m #md: Type0)
     | XDispatch msg :: rest -> terminated_absorbing fuel update to_terminate render s rest
     | XTerminate :: rest -> terminated_absorbing fuel update to_terminate render s rest
 
-/// …and the boot drain on a machine terminated before it ran (a
-/// dispatcher-handle sink that called `Terminate`): the boot paint still
-/// hands the hook the init model — production paints unconditionally at
-/// boot — but the drain pops at most one slot and processes nothing.
+/// …and the boot drain on a machine terminated before it ran: the boot
+/// paint still hands the hook the init model — production paints
+/// unconditionally at boot — but the drain pops at most one slot and
+/// processes nothing. (A dispatcher-handle sink that calls `Terminate`
+/// is now a `Term` in `pre`, which reaches the same state one step
+/// later; the lemma is stated over ANY terminated entry state.)
 let terminated_absorbing_boot (#m #md: Type0)
                               (fuel: nat)
                               (update: m -> md -> pair md (list (ev m)))
                               (to_terminate: m -> bool)
                               (render: md -> list (ev m))
-                              (s: st m md) (evs: list (ev m))
+                              (s: st m md) (pre: list (ev m)) (evs: list (ev m))
   : Lemma (requires s.terminated)
-          (ensures (let s' = boot fuel update to_terminate render s evs in
+          (ensures (let s' = boot fuel update to_terminate render s pre evs in
                     s'.terminated /\ s'.trace == s.trace /\ s'.log == s.log
                     /\ s'.model == s.model /\ s'.active == s.active
                     /\ s'.painted == OSome s.model /\ s'.renders == s.renders + 1)) =
   let s0 = { s with reentered = true } in
+  boot_evs_are_apply_evs fuel update to_terminate render s0 pre;
+  terminated_stays_terminated s0 pre;
   let p = { s0 with dirty = false; painted = OSome s0.model; renders = s0.renders + 1 } in
   terminated_stays_terminated p (render s0.model);
   boot_evs_are_apply_evs fuel update to_terminate render p evs;
@@ -934,22 +1028,26 @@ let terminate_then_nothing (#m #md: Type0)
   terminated_absorbing fuel update to_terminate render (terminate s) exts
 
 /// **`boot_drain_equiv`.** The boot drain IS the steady-state critical
-/// section, run over the boot paint and then the events `init`'s
-/// effects raised under the latch — the hand-duplicated
-/// `reentered <- true; paint; …; processMsgs (); reentered <- false` and
-/// `dispatch`'s are one function.
+/// section, run over the events raised before the boot paint, the boot
+/// paint, and then the events `init`'s effects raised — all under the
+/// latch. The hand-duplicated
+/// `reentered <- true; …; paint; …; processMsgs (); reentered <- false`
+/// and `dispatch`'s are one function.
 let boot_drain_equiv (#m #md: Type0)
                      (fuel: nat)
                      (update: m -> md -> pair md (list (ev m)))
                      (to_terminate: m -> bool)
                      (render: md -> list (ev m))
-                     (s: st m md) (evs: list (ev m))
-  : Lemma (ensures boot fuel update to_terminate render s evs
+                     (s: st m md) (pre: list (ev m)) (evs: list (ev m))
+  : Lemma (ensures boot fuel update to_terminate render s pre evs
                    == critical fuel update to_terminate render
-                        (apply_evs (paint render { s with reentered = true }) evs)) =
+                        (apply_evs (paint render (apply_evs { s with reentered = true } pre)) evs)) =
   let s0 = { s with reentered = true } in
-  paint_reentered render s0;
-  let s1 = paint render s0 in
+  boot_evs_are_apply_evs fuel update to_terminate render s0 pre;
+  apply_evs_reentered s0 pre;
+  let sp = apply_evs s0 pre in
+  paint_reentered render sp;
+  let s1 = paint render sp in
   boot_evs_are_apply_evs fuel update to_terminate render s1 evs;
   apply_evs_reentered s1 evs
 
@@ -960,9 +1058,10 @@ let boot_drain_equiv (#m #md: Type0)
 let booted (#m #md: Type0) (render: md -> list (ev m)) (s: st m md) : st m md =
   { paint render { s with reentered = true } with reentered = false }
 
-/// **`boot_single_is_dispatch`.** For one message, the boot drain is the
-/// boot paint followed by `dispatch` itself, from any idle non-terminated
-/// state the paint does not terminate.
+/// **`boot_single_is_dispatch`.** For one message raised by `init`'s
+/// command and nothing raised before the boot paint, the boot drain is
+/// the boot paint followed by `dispatch` itself, from any idle
+/// non-terminated state the paint does not terminate.
 let boot_single_is_dispatch (#m #md: Type0)
                             (fuel: nat)
                             (update: m -> md -> pair md (list (ev m)))
@@ -970,7 +1069,7 @@ let boot_single_is_dispatch (#m #md: Type0)
                             (render: md -> list (ev m))
                             (s: st m md) (msg: m)
   : Lemma (requires not s.reentered /\ not s.terminated /\ not (booted render s).terminated)
-          (ensures boot fuel update to_terminate render s [Msg msg]
+          (ensures boot fuel update to_terminate render s [] [Msg msg]
                    == dispatch fuel update to_terminate render (booted render s) msg) =
   let s0 = { s with reentered = true } in
   paint_reentered render s0;
@@ -988,10 +1087,11 @@ let active_iff_not_terminated (#m #md: Type0)
                               (update: m -> md -> pair md (list (ev m)))
                               (to_terminate: m -> bool)
                               (render: md -> list (ev m))
-                              (capacity: int) (model: md) (init_evs: list (ev m)) (exts: list (ext m))
-  : Lemma (ensures (let s = program fuel update to_terminate render capacity model init_evs exts in
+                              (capacity: int) (model: md)
+                              (pre_evs: list (ev m)) (init_evs: list (ev m)) (exts: list (ext m))
+  : Lemma (ensures (let s = program fuel update to_terminate render capacity model pre_evs init_evs exts in
                     s.active = not s.terminated)) =
-  program_inv fuel update to_terminate render capacity model init_evs exts
+  program_inv fuel update to_terminate render capacity model pre_evs init_evs exts
 
 /// **`fallback_breaks_encoding`.** The one arm that drives the two
 /// flags apart, computed: `Dispatcher.fs`'s fallback for an unwired
@@ -1014,10 +1114,11 @@ let painted_is_model (#m #md: Type0)
                      (update: m -> md -> pair md (list (ev m)))
                      (to_terminate: m -> bool)
                      (render: md -> list (ev m))
-                     (capacity: int) (model: md) (init_evs: list (ev m)) (exts: list (ext m))
-  : Lemma (ensures (let s = program fuel update to_terminate render capacity model init_evs exts in
+                     (capacity: int) (model: md)
+                     (pre_evs: list (ev m)) (init_evs: list (ev m)) (exts: list (ext m))
+  : Lemma (ensures (let s = program fuel update to_terminate render capacity model pre_evs init_evs exts in
                     not s.reentered /\ not s.terminated ==> not s.dirty /\ s.painted == OSome s.model)) =
-  program_inv fuel update to_terminate render capacity model init_evs exts
+  program_inv fuel update to_terminate render capacity model pre_evs init_evs exts
 
 /// Under a quiet render the loop paints at most once, as its last act:
 /// a paint is made only on an empty ring, a quiet hook leaves it empty,

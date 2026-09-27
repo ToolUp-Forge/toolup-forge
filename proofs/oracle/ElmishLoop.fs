@@ -191,9 +191,13 @@ let rec boot_evs =
           | [] -> (s)
           | (e) ::rest -> ((boot_evs fuel update to_terminate render (boot_ev fuel update to_terminate render s e) rest))))
 
+let preboot = (fun (fuel : Prims.nat) (update : 'm -> 'md -> ElmishRing.pair<'md, Prims.list<ev<'m>>>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (pre : Prims.list<ev<'m>>) -> (boot_evs fuel update to_terminate render {ring = s.ring; reentered = true; terminated = s.terminated; active = s.active; model = s.model; dirty = s.dirty; trace = s.trace; log = s.log; painted = s.painted; renders = s.renders} pre))
+
+let boot_paint = (fun (fuel : Prims.nat) (update : 'm -> 'md -> ElmishRing.pair<'md, Prims.list<ev<'m>>>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (pre : Prims.list<ev<'m>>) -> (paint render (preboot fuel update to_terminate render s pre)))
+
 let boot =
-    (fun (fuel : Prims.nat) (update : 'm -> 'md -> ElmishRing.pair<'md, Prims.list<ev<'m>>>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (evs : Prims.list<ev<'m>>) ->
-         (let s1 = (paint render {ring = s.ring; reentered = true; terminated = s.terminated; active = s.active; model = s.model; dirty = s.dirty; trace = s.trace; log = s.log; painted = s.painted; renders = s.renders}) in
+    (fun (fuel : Prims.nat) (update : 'm -> 'md -> ElmishRing.pair<'md, Prims.list<ev<'m>>>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (pre : Prims.list<ev<'m>>) (evs : Prims.list<ev<'m>>) ->
+         (let s1 = (boot_paint fuel update to_terminate render s pre) in
           (let s2 = (boot_evs fuel update to_terminate render s1 evs) in
            (let uu___ = (process_msgs fuel update to_terminate render s2) in
             (match (uu___) with
@@ -209,6 +213,6 @@ let rec run =
                | (XDispatch (msg)) ::rest -> ((run fuel update to_terminate render (dispatch fuel update to_terminate render s msg) rest))
                | (XTerminate) ::rest -> ((run fuel update to_terminate render (terminate s) rest)))))
 
-let program = (fun (fuel : Prims.nat) (update : 'm -> 'md -> ElmishRing.pair<'md, Prims.list<ev<'m>>>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (capacity : Prims.int) (model : 'md) (init_evs : Prims.list<ev<'m>>) (exts : Prims.list<ext<'m>>) -> (run fuel update to_terminate render (boot fuel update to_terminate render (initial capacity model) init_evs) exts))
+let program = (fun (fuel : Prims.nat) (update : 'm -> 'md -> ElmishRing.pair<'md, Prims.list<ev<'m>>>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (capacity : Prims.int) (model : 'md) (pre_evs : Prims.list<ev<'m>>) (init_evs : Prims.list<ev<'m>>) (exts : Prims.list<ext<'m>>) -> (run fuel update to_terminate render (boot fuel update to_terminate render (initial capacity model) pre_evs init_evs) exts))
 
 let fallback_terminate = (fun (s : st<'m, 'md>) -> {ring = s.ring; reentered = s.reentered; terminated = s.terminated; active = false; model = s.model; dirty = s.dirty; trace = s.trace; log = s.log; painted = s.painted; renders = s.renders})
