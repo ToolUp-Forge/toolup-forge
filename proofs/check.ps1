@@ -11,9 +11,9 @@
 
         pwsh ./proofs/check.ps1
 
-    Six steps, in this order, each refusing rather than warning. Steps
-    2–4 and 6 run once PER MODULE in `$modules` below; step 5 builds the
-    one oracle project every extraction compiles into.
+    Seven steps, in this order, each refusing rather than warning. Steps
+    2–5 and 7 run once PER MODULE in `$modules` below; step 6 builds the
+    two oracle projects every extraction compiles into.
 
       1. Resolve the pinned F* release named in `fstar-pin.json` — an
          existing $env:FSTAR_HOME first, then a previous download under
@@ -23,14 +23,30 @@
          `assume` or an `admit` fails the leg rather than quietly
          weakening a theorem.
       3. EXTRACT each to F# from the checked cache.
-      4. BYTE-DIFF each extraction against its committed `oracle/*.fs`.
-         This is the step that makes the committed file trustworthy:
-         the repository builds and tests against a copy, and this says
-         the copy is what the prover produced.
-      5. BUILD the oracle project, so a committed extraction that no
-         longer compiles is caught here rather than in someone else's
-         `VerifyAll`.
-      6. RUN each module's differential host — an Expecto list inside
+      4. NORMALISE each extraction's layout (Phase 850). The F# backend
+         prints a verbose, OCaml-shaped dialect — `begin … end`, match
+         arms at column 0 whatever their nesting — that F# 8 rejects
+         (FS0058) and F# 10 cannot be told to accept (`#light "off"` is
+         refused outright, FS1205). `normalise-extraction.fsx` is a
+         deterministic re-layout of exactly that dialect into
+         indentation-clean F#: parentheses for `begin … end`, every
+         block on its own line at its depth, nothing else touched. It
+         parses the dialect rather than patching it, and REFUSES a shape
+         it does not know, so a future extraction that reaches one fails
+         here loudly rather than compiling into something else.
+      5. BYTE-DIFF each normalised extraction against its committed
+         `oracle/*.fs`. This is the step that makes the committed file
+         trustworthy: the repository builds and tests against a copy,
+         and this says the copy is what the prover produced, laid out by
+         the one script this leg runs.
+      6. BUILD the oracle projects — the .NET one every extraction
+         compiles into, and the Fable-host one (`oracle/fable/`) that
+         compiles the Elmish ring extraction over a machine-integer
+         `Prims`, so a committed extraction that no longer compiles is
+         caught here rather than in someone else's `VerifyAll`. Both are
+         built on .NET here; the Fable compile of the second is
+         `VerifyFable`'s, through `ToolUp.AI.Client.Tests`.
+      7. RUN each module's differential host — an Expecto list inside
          `ToolUp.Platform.Tests` that runs the extracted model beside
          production and requires them to agree. Skippable with
          `-SkipHost`, because it needs the whole solution built and the
@@ -67,8 +83,8 @@
     `--quake 3`. Default 1. The CI job runs 3.
 
 .PARAMETER SkipHost
-    Skip step 6 (the differential hosts). The proofs, the extractions,
-    the byte-diffs and the oracle build still run.
+    Skip step 7 (the differential hosts). The proofs, the extractions,
+    the normalisation, the byte-diffs and the oracle builds still run.
 
 .PARAMETER FStarHome
     An F* installation to use instead of resolving the pin. Overrides
@@ -194,7 +210,7 @@ function Fail {
 
 # ─── 1. Resolve the pinned prover ────────────────────────────────────
 
-Write-Step "1/6  Resolving the pinned prover ($($pin.version), Z3 $($pin.z3version))"
+Write-Step "1/7  Resolving the pinned prover ($($pin.version), Z3 $($pin.z3version))"
 
 # Windows only for now, and that is declared rather than assumed: the
 # pin's linux-x64 entry carries an EMPTY sha256 because nothing has run
@@ -275,7 +291,7 @@ if ($reported -notmatch [regex]::Escape($pin.version.TrimStart("v"))) {
     Write-Host "    WARNING: this is NOT the pinned release ($($pin.version)). A green run here is a claim about THIS prover." -ForegroundColor Yellow
 }
 
-# ─── 2..4. Check, extract, byte-diff — per module ────────────────────
+# ─── 2..5. Check, extract, normalise, byte-diff — per module ─────────
 
 $cacheDir = Join-Path $PSScriptRoot ".cache"
 $extractDir = Join-Path $PSScriptRoot ".extract"
@@ -287,7 +303,7 @@ $quakeFlags = @($pin.flags.quake)
 $moduleNames = ($modules | ForEach-Object { $_.Name }) -join ", "
 
 for ($run = 1; $run -le $Runs; $run++) {
-    Write-Step "2/6  Checking $moduleNames (run $run of $Runs, COLD cache$(if ($Runs -gt 1) { ', --quake 3' }))"
+    Write-Step "2/7  Checking $moduleNames (run $run of $Runs, COLD cache$(if ($Runs -gt 1) { ', --quake 3' }))"
 
     # Cold every run, deliberately. A warm `.checked` file is F* telling
     # you it already believed this, which is exactly the thing a repeat
@@ -310,7 +326,7 @@ for ($run = 1; $run -le $Runs; $run++) {
     }
 }
 
-Write-Step "3/6  Extracting $moduleNames to F#"
+Write-Step "3/7  Extracting $moduleNames to F#"
 
 Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
@@ -326,13 +342,30 @@ foreach ($module in $modules) {
     if ($LASTEXITCODE -ne 0) { Fail "extraction of $($module.Source) failed (exit $LASTEXITCODE)." }
 }
 
-Write-Step "4/6  Byte-diffing each extraction against its committed oracle"
+Write-Step "4/7  Normalising each extraction's layout (normalise-extraction.fsx)"
+
+# In place, over the fresh extractions only. The script accepts the
+# extractor's dialect and nothing else — it refuses its own output (the
+# header comment it writes is not a token it knows), which is deliberate:
+# a normalised file is never an input, so a double pass cannot happen
+# quietly.
+$freshFiles = @()
+
+foreach ($module in $modules) {
+    $fresh = Join-Path $extractDir "$($module.Name).fs"
+    if (-not (Test-Path $fresh)) { Fail "the extractor produced no $($module.Name).fs." }
+    $freshFiles += $fresh
+}
+
+& dotnet fsi (Join-Path $PSScriptRoot "normalise-extraction.fsx") @freshFiles
+if ($LASTEXITCODE -ne 0) { Fail "the layout normaliser refused an extraction (exit $LASTEXITCODE) — a shape it does not know. Teach it the shape, or reshape the model; never hand-edit the extraction." }
+
+Write-Step "5/7  Byte-diffing each normalised extraction against its committed oracle"
 
 foreach ($module in $modules) {
     $fresh = Join-Path $extractDir "$($module.Name).fs"
     $committed = Join-Path $PSScriptRoot $module.Oracle
 
-    if (-not (Test-Path $fresh)) { Fail "the extractor produced no $($module.Name).fs." }
     if (-not (Test-Path $committed)) { Fail "no committed oracle at $($module.Oracle). Copy the fresh extraction there and commit it:  Copy-Item '$fresh' '$committed'" }
 
     $freshHash = (Get-FileHash $fresh -Algorithm SHA256).Hash.ToLower()
@@ -351,26 +384,33 @@ foreach ($module in $modules) {
             Out-String |
             Write-Host
 
-        Fail "$($module.Oracle) is stale. Copy the fresh extraction over it and commit the two together:  Copy-Item '$fresh' '$committed'"
+        Fail "$($module.Oracle) is stale. Copy the fresh (normalised) extraction over it and commit the two together:  Copy-Item '$fresh' '$committed'"
     }
 
     Write-Host "    identical" -ForegroundColor Green
 }
 
-# ─── 5. Build the oracle ─────────────────────────────────────────────
+# ─── 6. Build the oracles ────────────────────────────────────────────
 
-Write-Step "5/6  Building the oracle project"
+Write-Step "6/7  Building the oracle projects (.NET host, then the Fable host on .NET)"
 
 & dotnet build (Join-Path $PSScriptRoot "oracle/ToolUp.Remoting.Proofs.Oracle.fsproj") --nologo -v q
 if ($LASTEXITCODE -ne 0) { Fail "a committed extraction does not compile (exit $LASTEXITCODE)." }
 
-# ─── 6. The differential hosts ───────────────────────────────────────
+# The Fable-host oracle: the ring extraction over the machine-integer
+# `Prims`. Built on .NET here — the same source compiles on both hosts,
+# which is half of what Phase 850 established — and compiled by Fable in
+# `VerifyFable`, which is the other half.
+& dotnet build (Join-Path $PSScriptRoot "oracle/fable/ToolUp.Remoting.Proofs.Oracle.Fable.fsproj") --nologo -v q
+if ($LASTEXITCODE -ne 0) { Fail "the Fable-host oracle does not compile on .NET (exit $LASTEXITCODE)." }
+
+# ─── 7. The differential hosts ───────────────────────────────────────
 
 if ($SkipHost) {
-    Write-Step "6/6  Differential hosts SKIPPED (-SkipHost)"
+    Write-Step "7/7  Differential hosts SKIPPED (-SkipHost)"
 }
 else {
-    Write-Step "6/6  Running the differential hosts"
+    Write-Step "7/7  Running the differential hosts"
 
     $testProject = Join-Path $repoRoot "src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj"
     & dotnet build $testProject --nologo -v q
@@ -389,7 +429,8 @@ else {
         # A filter that matches nothing prints `0 tests run ... Success!`
         # and exits 0. So the COUNT is asserted, never the exit code alone
         # — the one shape in which this whole leg could report a green
-        # over a suite that did not run.
+        # over a suite that did not run. (Step 7's case floors are the
+        # ones `HostMinCases` carries above.)
         #
         # **Strip ANSI first, and the reason is the same trap one level
         # down.** Expecto colourises the count, so the bytes are

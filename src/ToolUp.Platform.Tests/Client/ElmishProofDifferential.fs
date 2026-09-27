@@ -22,19 +22,18 @@
 /// and into `ToolUp.AI.Client.Tests` (`node:test`), the `WireCorpus.fs`
 /// precedent.
 ///
-/// **Where the model runs, and why the corpus exists.** The extracted
-/// model compiles on .NET only: the F* extractor emits pre-F#-8 layout
-/// that needs `--strict-indentation-`, and Fable reads no `OtherFlags`
-/// from an fsproj (checked against the 5.0.0 CLI), so the Fable pack
-/// cannot compile the oracle without pinning its `LangVersion` back to
-/// 7, which the workspace baseline forbids. So the .NET host runs the
-/// model LIVE beside production over the generated sequences, and also
-/// writes the model's verdicts for those same sequences to
+/// **Where the model runs, and why the corpus exists.** The .NET host
+/// runs the models LIVE beside production over the generated sequences,
+/// and also writes the models' verdicts for those same sequences to
 /// `tests/elmish-proof-corpus/` as a self-describing corpus — each case
 /// carries its inputs and the outputs the proved model produced. The
-/// Fable host replays that corpus against the transpiled runtime. Both
-/// hosts therefore hold the shipped code to the proved model's answer;
-/// only one of them computes it.
+/// Fable host replays that corpus against the transpiled runtime, and —
+/// since Phase 850, for the ring — ALSO compiles the extraction itself
+/// (laid out by `proofs/normalise-extraction.fsx` into F# both hosts
+/// accept, over a machine-integer `Prims`) and runs it live: the corpus
+/// then doubles as the check that the two shims agree. Until 850 the
+/// extraction compiled on .NET only, because the F* backend's layout
+/// needed a flag Fable does not read; the corpus was the whole bridge.
 ///
 /// Every comparison here returns MISMATCHES (empty is agreement) so
 /// either host can assert on it. The generator is a small LCG rather

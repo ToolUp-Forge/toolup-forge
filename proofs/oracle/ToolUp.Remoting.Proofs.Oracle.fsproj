@@ -5,7 +5,8 @@
          production over the Phase 784 corpus.
 
          `RemotingDecode.fs` is GENERATED: `proofs/check.ps1` re-extracts it
-         from `proofs/RemotingDecode.fst` and byte-compares the result
+         from `proofs/RemotingDecode.fst`, lays it out through
+         `proofs/normalise-extraction.fsx`, and byte-compares the result
          against the committed copy, so editing it by hand is a change the
          proof leg refuses rather than one it absorbs. It is committed
          nonetheless, and deliberately: the F* toolchain is a 198 MB
@@ -15,18 +16,20 @@
          `VerifyAll` compiles it like any other source, and the proofs job
          is what holds it honest.
 
-         Two compiler settings are forced by the extractor's output shape
-         rather than chosen:
+         No layout flag. Until Phase 850 this project carried the
+         strict-indentation opt-out in `OtherFlags` (and FS0058 in `NoWarn`)
+         because the F# backend emits pre-F#-8 layout; Fable reads no such flag from an
+         fsproj, F# 10 refuses the verbose-syntax directive that would have
+         been the other route (FS1205), and Fantomas cannot parse the raw
+         output. The normaliser is the answer to all three at once: the
+         committed extractions are indentation-clean F# that this project,
+         the Fable host beside it (`fable/`) and any future host compile
+         with nothing relaxed. What remains forced by the extractor:
 
-           * The strict-indentation opt-out in `OtherFlags` below. The F#
-             backend emits pre-F#-8 layout (`if … then begin` blocks
-             indented to their own column, a `let … in` opening after a
-             blank line). F# 8 made that an error; the flag restores it to
-             a warning, and the warning is silenced below. Scoped to THIS
-             project, so nothing hand-written in the repo relaxes.
-           * `FS0058` (possible incorrect indentation) and `FS0064` (a type
-             instantiated less generally than its annotation) off, for the
-             same reason and in the same scope.
+           * `FS0064` (a type instantiated less generally than its
+             annotation) off, in this scope only — the extractor annotates
+             every parameter and some of those annotations are narrower than
+             the inferred type.
 
          The incomplete-match warnings the extractor's field projectors
          produce are NOT suppressed here — naming FS0025 in `NoWarn` is
@@ -37,8 +40,7 @@
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
         <IsPackable>false</IsPackable>
-        <OtherFlags>$(OtherFlags) --strict-indentation-</OtherFlags>
-        <NoWarn>$(NoWarn);58;64</NoWarn>
+        <NoWarn>$(NoWarn);64</NoWarn>
         <GenerateDocumentationFile>false</GenerateDocumentationFile>
     </PropertyGroup>
     <ItemGroup>
@@ -66,10 +68,11 @@
         <!-- Phase 788 — GENERATED from ../ElmishRing.fst and ../ElmishSub.fst
              — do not edit. Independent of every extraction above (each owns
              its own opt/pair). The runtime they model also ships to the
-             browser; the Fable pack cannot compile an extraction (its
-             layout needs the strict-indentation opt-out, which Fable does not read),
-             so it replays the model's verdicts from tests/elmish-proof-corpus/
-             instead — written and held to these two by the .NET host. -->
+             browser: since Phase 850 the Fable pack compiles ElmishRing.fs
+             DIRECTLY (through `fable/ToolUp.Remoting.Proofs.Oracle.Fable.fsproj`,
+             over a machine-integer Prims) and runs it live beside the
+             transpiled runtime, as well as replaying the corpus under
+             tests/elmish-proof-corpus/ that the .NET host writes. -->
         <Compile Include="ElmishRing.fs" />
         <Compile Include="ElmishSub.fs" />
         <!-- Phase 789 — GENERATED from ../ElmishLoop.fst — do not edit. The

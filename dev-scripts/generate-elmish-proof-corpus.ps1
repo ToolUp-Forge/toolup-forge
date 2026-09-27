@@ -14,9 +14,9 @@
 # The .NET pack (ToolUp.Platform.Tests, "Phase 788 - the proved Elmish runtime as
 # oracle") runs the models LIVE beside production and holds these files to the
 # model on every run; the Fable pack (ToolUp.AI.Client.Tests) replays them
-# against the transpiled runtime, because the extraction cannot compile under
-# Fable (its layout needs the strict-indentation opt-out, which Fable does not
-# read from an fsproj). This script drives the two golden-file tests in
+# against the transpiled runtime and, since Phase 850, also runs the ring
+# extraction live beside them (the corpus is then also the check that the two
+# hosts' Prims shims agree). This script drives the two golden-file tests in
 # regeneration mode: with TOOLUP_REGEN_ELMISH_PROOF_CORPUS=1 set they write their
 # artefact instead of comparing. Run it after changing a model, the generator
 # or the seed, then commit the updated corpus alongside that change.

@@ -28,14 +28,15 @@ open ToolUp.Platform.Tests.Client.ElmishProofDifferential
 // popped values in order, and on all four diff lists with the IDENTITY
 // of every handle and start function carried through.
 //
-// The runtime ships to two hosts, and only this one can compile the
-// extraction (see the header of `Client/ElmishProofDifferential.fs`).
-// So this pack ALSO writes the model's verdicts for the campaign to
-// `tests/elmish-proof-corpus/` as a self-describing corpus, holds that
-// file to the live model on every run (regenerable under
-// `TOOLUP_REGEN_ELMISH_PROOF_CORPUS=1`), and the Fable pack replays it
-// against the transpiled runtime. Two hosts hold the shipped code to
-// the proved model's answer; one computes it.
+// The runtime ships to two hosts. This pack ALSO writes the model's
+// verdicts for the campaign to `tests/elmish-proof-corpus/` as a
+// self-describing corpus, holds that file to the live model on every
+// run (regenerable under `TOOLUP_REGEN_ELMISH_PROOF_CORPUS=1`), and the
+// Fable pack replays it against the transpiled runtime. Until Phase 850
+// only this host could compile the extraction (see the header of
+// `Client/ElmishProofDifferential.fs`); since 850 the Fable pack compiles
+// the ring extraction too and runs it live, and the corpus doubles as the
+// check that the two hosts' `Prims` shims compute the same model.
 //
 // The go-red cases are committed and asserted CAUGHT, and the campaign
 // asserts it reached the grow step and the shortcut — a differential
@@ -332,5 +333,44 @@ let tests =
                 (corpusLines "# header\r\nline one\n\nline two\n")
                 [ "line one"; "line two" ]
                 "the reader drops the header, blank lines and CR"
+        }
+
+        // ─── Phase 850 — the spike's measurement, .NET half ──────────
+
+        test "Phase 850 - the extracted ring against the shipped ring, measured (informational)" {
+            // A local stopwatch, not Phase 849's harness (in flight when
+            // this was written). Asserts only that both ran the same
+            // sequence to the same answer; the numbers are printed for the
+            // record in proofs/README.md's Phase 850 section, where their
+            // falsifier is stated. The Fable pack runs the same
+            // measurement on node. 4,000 ops at 65% pushes grows the ring
+            // through several doublings.
+            let capacity = 10
+            let opCount = 4_000
+            let ops = genRingOps (Lcg 850_001) opCount 65
+            let produced = productionRing capacity ops
+            let modelled = fst (modelRing capacity ops)
+            Expect.equal modelled produced "the measured runs must still agree"
+
+            let perOpNs (rounds: int) (body: unit -> unit) =
+                let watch = Diagnostics.Stopwatch.StartNew()
+
+                for _ in 1..rounds do
+                    body ()
+
+                float watch.Elapsed.TotalMilliseconds * 1_000_000.0 / float (rounds * opCount)
+
+            let productionNs = perOpNs 100 (fun () -> productionRing capacity ops |> ignore)
+            let modelNs = perOpNs 3 (fun () -> modelRing capacity ops |> ignore)
+
+            printfn
+                "Phase 850 measurement (.NET, capacity %d, %d ops, 65%% pushes): shipped Ring.fs %.0f ns/op; extracted model %.0f ns/op; ratio %.0fx"
+                capacity
+                opCount
+                productionNs
+                modelNs
+                (modelNs / productionNs)
+
+            Expect.isTrue (productionNs > 0.0 && modelNs > 0.0) "both measurements ran"
         }
     ]

@@ -64,7 +64,21 @@
     "`proved` on a second prover, `fsharp-typed` - the F# type system, whose claim is only that a construction",
     "the compiler refuses cannot happen. The entry names the type, the mint, the read, and the host cases that",
     "pin the visibility; its `residual` names what is still assumed (a caller assembling outside the doors),",
-    "which is the assembly entry's shape and is stated there. Nothing the F* model proves moved."
+    "which is the assembly entry's shape and is stated there. Nothing the F* model proves moved.",
+    "",
+    "Phase 850 - the verified-implementation spike - APPENDED three entries and AMENDED two. The",
+    "question was whether the code the prover checked can be the code that runs, on both hosts; the",
+    "answer is the `policy` entry `verified-implementation-road`: NO on the pinned toolchain, with the",
+    "blocker named (FStar.Seq extracts as a list; the pinned ulib ships no mutable array), so the road",
+    "runs on the refinement tie. The two legs that DID stand are recorded where they land: the Fable",
+    "host now compiles the ring extraction and runs it live, so `elmish-model-agrees-with-shipped-code-fable`",
+    "gains its cases and loses the sentence that said an extraction cannot compile under Fable; the",
+    "machine-integer shim that makes it Fable-clean is the `assumed` entry",
+    "`elmish-fable-shim-machine-integers`, with the corpus cross-check as its mitigation; and the",
+    "measurement of the extraction that CAN be built, on both hosts, is the `tested` entry",
+    "`elmish-ring-extraction-measured`, which asserts agreement and prints figures, never a threshold.",
+    "`elmish-loop-fable-out` stays a policy entry with its reason corrected: the route that was closed",
+    "is open now, and not taken."
   ],
   "kind": "proofs",
   "version": 1,
@@ -186,7 +200,7 @@
           "the model never throws, on any corpus payload, at any covered type",
           "the reference vocabulary round-trips through the extracted encoder and decoder"
         ],
-        "runner": "proofs/check.ps1 step 6, which asserts a CASE COUNT because a filter matching nothing reports success"
+        "runner": "proofs/check.ps1 step 7, which asserts a CASE COUNT because a filter matching nothing reports success"
       }
     },
     {
@@ -423,7 +437,7 @@
           "the extracted fold agrees with production over generated rankings with generated verdicts",
           "the model never throws, on any ranking, through any of the three functions"
         ],
-        "runner": "proofs/check.ps1 step 6, which asserts a CASE COUNT per module because a filter matching nothing reports success"
+        "runner": "proofs/check.ps1 step 7, which asserts a CASE COUNT per module because a filter matching nothing reports success"
       }
     },
     {
@@ -552,7 +566,7 @@
           "the extracted dispatch check agrees with FindByName-then-decide, by authored name, by alias, and for an unknown name",
           "the model never throws, on any tool, under any policy, caller or grant predicate"
         ],
-        "runner": "proofs/check.ps1 step 6, which asserts a CASE COUNT per module because a filter matching nothing reports success"
+        "runner": "proofs/check.ps1 step 7, which asserts a CASE COUNT per module because a filter matching nothing reports success"
       }
     },
     {
@@ -771,7 +785,7 @@
           "the model never throws, on any case, through any of its functions"
         ],
         "companion-host": "src/ToolUp.Platform.Tests/InProcess/PopulationQueryToolTests.fs - the live agent-loop probe, which asserts the transcript half of the same claim and now the rendering half beside it",
-        "runner": "proofs/check.ps1 step 6, which asserts a CASE COUNT per module because a filter matching nothing reports success"
+        "runner": "proofs/check.ps1 step 7, which asserts a CASE COUNT per module because a filter matching nothing reports success"
       }
     },
     {
@@ -937,7 +951,7 @@
           "the extracted derivation walk agrees with production's inherited label",
           "the model never throws, on any pipeline, walk or room"
         ],
-        "runner": "proofs/check.ps1 step 6, which asserts a CASE COUNT per module because a filter matching nothing reports success"
+        "runner": "proofs/check.ps1 step 7, which asserts a CASE COUNT per module because a filter matching nothing reports success"
       }
     },
     {
@@ -1245,16 +1259,25 @@
           "the floor is one number, and the model's precondition covers it",
           "at capacity one the model loses an item - why the floor exists"
         ],
-        "runner": "proofs/check.ps1 step 6, which asserts a CASE COUNT because a filter matching nothing reports success"
+        "runner": "proofs/check.ps1 step 7, which asserts a CASE COUNT because a filter matching nothing reports success"
       }
     },
     {
       "id": "elmish-model-agrees-with-shipped-code-fable",
       "level": "tested",
-      "claim": "The same drivers, from the same shared module, replay the models' recorded verdicts (tests/elmish-proof-corpus/, written by the .NET host and held to the live model on every .NET run) against the Fable transpilation of `Ring.fs` / `Sub.fs` - the runtime every browser client actually executes. The extraction itself is not compiled under Fable: its layout needs the strict-indentation opt-out, which Fable reads from no fsproj, and pinning LangVersion back is forbidden.",
+      "claim": "The same drivers, from the same shared module, replay the models' recorded verdicts (tests/elmish-proof-corpus/, written by the .NET host and held to the live model on every .NET run) against the Fable transpilation of `Ring.fs` / `Sub.fs` - the runtime every browser client actually executes. Since Phase 850 the RING extraction is also compiled under Fable (proofs/oracle/ElmishRing.fs, laid out by proofs/normalise-extraction.fsx, over the machine-integer Prims in proofs/oracle/fable/) and run live: it reproduces the corpus's verdicts, agrees with the transpiled ring on a second campaign the corpus never recorded, and catches the broken ring. Until 850 the extraction compiled on .NET only, because its layout needed a flag Fable reads from no fsproj.",
       "evidence": {
         "family": "Phase 788 - the proved Elmish runtime as oracle (Fable)",
         "host": "src/ToolUp.AI.Client.Tests/ElmishProofOracleTests.fs",
+        "cases": [
+          "the transpiled ring agrees with the proved model over the corpus sequences",
+          "the transpiled diff and change agree with the proved model over the corpus inputs",
+          "a ring that skips the wrap check is caught - go-red",
+          "a diff that starts a key it also keeps is caught - go-red",
+          "Phase 850 - the extracted ring runs directly under Fable and reproduces the verdicts the .NET host recorded",
+          "Phase 850 - the transpiled ring agrees with the extracted model computed live, on sequences the corpus never had",
+          "Phase 850 - the ring that skips the wrap check is caught by the live model - go-red"
+        ],
         "runner": "dotnet run --project Build.fsproj -- VerifyFable (the fable-tier CI job)"
       }
     },
@@ -1384,7 +1407,7 @@
           "after Terminate nothing is processed and IsActive is false - terminated_absorbing, run",
           "the fallback arm drives the two flags apart - the encoding's one exception"
         ],
-        "runner": "proofs/check.ps1 step 6, which asserts a CASE COUNT because a filter matching nothing reports success"
+        "runner": "proofs/check.ps1 step 7, which asserts a CASE COUNT because a filter matching nothing reports success"
       }
     },
     {
@@ -1439,7 +1462,7 @@
       "evidence": {
         "document": "proofs/README.md"
       },
-      "reason": "the extraction compiles on .NET only, and the loop differential drives Program.runWithDispatch itself rather than replaying recorded verdicts, so the Phase 788 corpus route was not taken. The browser's copy of the loop is not differentially tested by this phase."
+      "reason": "the loop differential drives Program.runWithDispatch itself rather than replaying recorded verdicts, so the Phase 788 corpus route was not taken; and although since Phase 850 an extraction CAN compile under Fable (the ring's does, and ElmishLoop.fs opens only ElmishRing), compiling the loop model into the Fable pack and driving it live is not done. The browser's copy of the loop is not differentially tested."
     },
     {
       "id": "decoder-tuple-characterisation",
@@ -1490,7 +1513,38 @@
           "the extracted model agrees with production over every Phase 800 refusal shape",
           "the widened reference vocabulary round-trips through the extracted encoder and decoder"
         ],
-        "runner": "proofs/check.ps1 step 6, whose HostMinCases for RemotingDecode rose from 7 to 9 with these"
+        "runner": "proofs/check.ps1 step 7, whose HostMinCases for RemotingDecode rose from 7 to 9 with these"
+      }
+    },
+    {
+      "id": "verified-implementation-road",
+      "level": "policy",
+      "claim": "The road to a verified runtime runs on the REFINEMENT TIE - the F* model is the specification, the shipped code is the implementation, and a rewrite is held to the model by the differential on both hosts - NOT on verified implementations, where the extraction would be the shipped code.",
+      "evidence": {
+        "document": "proofs/README.md"
+      },
+      "reason": "Phase 850 took the ring through the three things between an extraction and production on the pinned release (v2026.09.06). Layout stood: proofs/normalise-extraction.fsx re-lays the F# backend's output into F# both hosts compile with no flag (F# 10 refuses the verbose-syntax escape, FS1205). Representation stood: the machine-integer Prims in proofs/oracle/fable/ compiles the ring extraction under Fable, which runs it live. The array-backed ring did NOT stand, and the blocker is a toolchain fact, not a proof one: FStar.Seq.Base is `MkSeq of list` and the F# backend extracts it as exactly that (a Seq-backed ring is the list ring respelled - correct and slow), the pinned ulib ships no FStar.ST / FStar.Ref / FStar.Array / HyperStack / LowStar.Buffer at all, FStar.ImmutableArray is an OCaml-realised interface with no upd, and the F# backend has no runtime for any of them. Measured on both hosts, the extraction that can be built is 1,000-1,300x (.NET) and ~2,600x (Fable/node) slower per op than the shipped Ring.fs. What would reopen this is an F* release with a stateful array the F# backend can realise, or an axiomatised array realised by hand per host - which is the refinement tie in a different coat."
+    },
+    {
+      "id": "elmish-fable-shim-machine-integers",
+      "level": "assumed",
+      "claim": "The Fable host's Prims shim (proofs/oracle/fable/Prims.fs) carries Prims.int and Prims.nat as System.Int32, where the ring theorems are about mathematical integers. They hold of the compiled model exactly as long as no index or length in any ring exceeds Int32.MaxValue.",
+      "evidence": {
+        "assumption": "no ring's backing array reaches 2^31 slots - the grow step doubles an array of a few dozen slots, and a ring that large would have exhausted the browser first"
+      },
+      "mitigation": "the Fable host's first Phase 850 case runs the machine-integer model over the corpus the .NET host wrote with the BigInteger shim and requires the verdicts identical on every sequence, so the two shims are held to each other on every VerifyFable run; the overflow itself is unreachable in practice and unmodelled on purpose"
+    },
+    {
+      "id": "elmish-ring-extraction-measured",
+      "level": "tested",
+      "claim": "The extraction that CAN be built - the list-backed ring model - runs the same 4,000-op sequence (capacity 10, 65% pushes, through several doublings) as the shipped Ring.fs on both hosts, to the same popped values, and its per-op cost is printed beside production's: on .NET 177-187 us/op against 141-175 ns/op (1,000-1,300x), under Fable on node 2.62 ms/op against 994 ns/op (~2,600x), measured 2026-09-27 with a local stopwatch. Both arms assert agreement; neither asserts a threshold.",
+      "evidence": {
+        "family": "Phase 788 - the proved Elmish runtime as oracle",
+        "host": "src/ToolUp.Platform.Tests/InProcess/ElmishProofOracleTests.fs and src/ToolUp.AI.Client.Tests/ElmishProofOracleTests.fs",
+        "cases": [
+          "Phase 850 - the extracted ring against the shipped ring, measured (informational)"
+        ],
+        "runner": "proofs/check.ps1 step 7 on .NET; dotnet run --project Build.fsproj -- VerifyFable under Fable"
       }
     }
   ]
