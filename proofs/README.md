@@ -951,10 +951,12 @@ model * ev list` (update, subscribe, the subscription diff and the command, per 
 `ElmishRing.fst` — `push`, `pop`, `wf`, `unread` and the 788 lemmas — and nothing about it is
 restated; this proof is about the two latches and the paint.
 
-The model carries four observables beside the cells: `trace`, the messages `update` was handed;
+The model carries six observables beside the cells: `trace`, the messages `update` was handed;
 `log`, the messages `dispatch` accepted (pushed) — external and reentrant alike, in order; `painted`,
-the model the render hook was last handed; and `renders`, how many times it was handed one. Every
-theorem is a statement about those, and the differential compares exactly them.
+the model the render hook was last handed; `renders`, how many times it was handed one; and since
+Phase 871 `started`, how many of the boot's gated starts were made, and `held`, how many handles the
+loop holds for them. Every theorem is a statement about those, and the differential compares exactly
+them.
 
 **Phase 851 moved the render hook.** Until 851 `setState` ran after every `update`, so a drain of N
 messages built the view N times; 851 calls it once when the ring is empty, with the model the drain
@@ -978,6 +980,23 @@ could dispatch and gone straight to the boot. The latch is now set before anythi
 supplied is called. The model gains `pre_evs` — the events raised before the boot paint, applied
 under the latch — as a parameter of `boot` and `program`; the eight theorems were re-proved over it
 and `boot_paints_init_model` is added.
+
+**Phase 871 made termination total.** Two faults, one subject. A terminating *message* ran the
+consumer's handler inside the message arm's `try`, with both flags set after it: a handler that
+raised was reported and the program stayed active, handing messages to `update` with every
+subscription stopped and every effect disposed (the other route, `IDispatcher.Terminate`, already
+guarded the handler — the two were meant to be one). And termination was not absorbing at boot: a
+sink or an effect's start function that called `Terminate` was followed by the remaining effects,
+the init model's subscriptions and `init`'s command all starting — after the teardown that should
+have disposed them had run — and an effect that terminated from inside its own start function was
+stored in the registry *after* `DisposeAll` had emptied it. The model said a terminated machine
+*processes* nothing and, with the teardown's calls abstracted, nothing about what it *starts*. Both
+routes now run one `teardown` (the flag first, each callee under its own guard, `MarkTerminated` in a
+`finally`); the boot checks the flag before every effect, the subscription start and the command; and
+a start that terminated the program has what it returned released at once. The model gains the
+`started` and `held` observables, a `start` record and the `gated` transition; the boot now takes the
+sinks' events, the effects, the subscription start and the command; teardown releases every handle;
+and the invariant gains `terminated ==> held == 0`. Every theorem was re-proved and two are added.
 
 ### Rung 1 — Proved
 
@@ -1010,7 +1029,8 @@ families alone:**
   nothing further), and nothing clears the flag — the two guards at the head of `dispatch` and of
   `processMsgs`'s `while`, as a theorem. From any idle state, a `Terminate` from outside means
   nothing after it is ever processed or painted. The boot on a machine terminated before it ran
-  still makes its unconditional boot paint, and processes nothing.
+  still makes its unconditional boot paint, and processes nothing — and, since Phase 871, starts
+  nothing and acquires nothing: `started` and `held` are frozen too.
 * **`boot_drain_equiv`**, with `boot_single_is_dispatch`. The tail of `runWithDispatch` —
   `reentered <- true`, the sinks and the effects' start functions, the boot paint, the init effects
   through `dispatch'`, `processMsgs ()`, `reentered <- false` — is transcribed literally and then
@@ -1028,9 +1048,28 @@ families alone:**
   stated over `preboot` and `boot_paint`, the two functions `boot` is built from, so it is a fact
   about the boot and not about a paraphrase of it. The prover's go-red is the old order: apply the
   pre-boot events with the latch clear and the boot's invariant no longer checks.
+* **`terminated_holds_nothing`** (Phase 871), with `start_terminating_releases`. In every state a
+  program reaches, a terminated program holds nothing: every handle the boot's starts acquired — an
+  effect's `IDisposable`, the init model's subscriptions — has been released, by the teardown or, for
+  a start that terminated the program from inside its own start function, as soon as that start
+  returned. It is the invariant's new clause, so every single-transition lemma carries it:
+  `terminate_spec` releases everything, and `gated_spec` holds a start's handle only if the program is
+  still running when the start returns. The prover's go-reds are the two lines that fixed production:
+  store the handle regardless (the registry before 871) and `gated_spec` no longer checks; leave
+  `held` alone in `terminate` and `terminate_spec` no longer checks.
+* **`terminated_starts_nothing`** (Phase 871), with `gated_terminated`. A terminated program starts
+  nothing. `gated_terminated` is the guard: a start the boot reaches once the program is terminated —
+  an effect's start function, the subscription start, `init`'s command — is not made and the state
+  is unchanged. `terminated_starts_nothing` is the boot a sink terminated: no effect starts, no
+  subscription starts, `init`'s command does not run, `started` does not move, nothing is held — and
+  the boot paint is still made, once, with the init model, because it is unconditional. An effect that
+  terminates from its own start function stops every start after it by the same guard. The go-red is
+  the boot before 871 — the start made whatever the flag says — and it fails `gated_terminated`,
+  `terminated_starts_nothing` and `terminated_absorbing_boot`, each checked on its own.
 * **`active_iff_not_terminated`**, with `fallback_breaks_encoding`. In every reachable state
-  `DispatcherCore.active = not terminated`. Both sites that set `terminated` call `MarkTerminated`
-  and `Wire` set `active` before anything could dispatch; the model carries the two cells in
+  `DispatcherCore.active = not terminated`. The one site that sets `terminated` — since Phase 871 the
+  single `teardown` — calls `MarkTerminated` in a `finally`, and `Wire` set `active` before anything
+  could dispatch; the model carries the two cells in
   lockstep and the lemma says the lockstep is an invariant. The one production arm that drives them
   apart — `Dispatcher.fs`'s fallback for a `Terminate` with no callback wired, which clears `active`
   alone — is modelled as `fallback_terminate` and its result *computed*: `active` false, `terminated`
@@ -1081,7 +1120,11 @@ Not proved. *Measured*, on every run of the gate.
   what `update` had seen by then, which the model reads off `boot_paint`. Four hundred scripts over
   ids `0..8`, replies and paints pointing forward only so every drain finishes. The pre-boot events
   are drawn from a second generator, so the scripts the campaign held before they existed are the
-  same scripts with a `Pre` added.
+  same scripts with a `Pre` added. Since Phase 871 a third generator says whether the init model
+  subscribes (about half the campaign) and what the subscription's start raises — `Terminate`
+  included — and whether the terminate handler raises; and the two sides are compared on how many
+  of the boot's gated starts ran (the effect's start function, the subscription's, `init`'s command)
+  and on how many handles are still held (production counts each handle returned and each dispose).
 * **The `log` comparison is what holds the two-flag encoding.** Production's log is recorded through
   `IDispatcher.IsActive` at the moment of each dispatch; the model's through its `terminated` cell.
   A state in which the two disagreed would log differently on the next dispatch, so
@@ -1092,7 +1135,21 @@ Not proved. *Measured*, on every run of the gate.
   dispatch from outside after a `Terminate`, reach the termination predicate, and end still active —
   and that no drain stalled, so the fuel bound never decided an agreement. A second counted case
   does the same for the restated boot: scripts that dispatch from a sink, from an effect's start
-  function, that raise `Terminate` before the boot paint, and that raise nothing before it.
+  function, that raise `Terminate` before the boot paint, and that raise nothing before it. A third
+  does it for Phase 871: scripts that terminate from a sink, from an effect's start, from a
+  subscription's start, that subscribe at all, and that reach the termination predicate with a
+  handler that raises.
+* **Termination is total, on production (Phase 871).** Five cases pin the phase's faults directly,
+  and each was run red on the tree before it: a terminating message whose handler raises leaves
+  `IsActive` false, a later dispatch reaches `update` zero times, and the subscription and the effect
+  were disposed once, in the teardown's order; a sink that calls `Terminate` at boot means no effect,
+  no subscription and no command starts, and the boot paint is still made once; an effect that calls
+  `Terminate` from its own start function has its handle disposed and nothing after it starts; a
+  subscription that does the same is stopped; and a handler that calls `Terminate` runs once on
+  either route (bounded in the case; before the phase it recursed). Over the whole campaign, whenever
+  production ends terminated it holds nothing (`terminated_holds_nothing`, run), and a handler that
+  raises and one that returns produce the same run — which is what lets the model have no parameter
+  for it.
 * **Six of the theorems are also run on production directly.** `boot_paints_init_model`: a sink
   and an effect that each dispatch at boot, and an `init` command that does too, produce exactly two
   paints — the init model, then the model one drain built from all three messages in the order they
@@ -1116,7 +1173,7 @@ Not proved. *Measured*, on every run of the gate.
   handed to `update` in order, the boot returns with the latch released, and `Terminate` still
   disposes everything and terminates. Each of these escaped the drain with the latch set before the
   guard existed, after which every dispatch queued and nothing was ever processed again.
-* **One faithful loop skeleton, four go-reds.** The loop's scheduling skeleton is transcribed by
+* **One faithful loop skeleton, six go-reds.** The loop's scheduling skeleton is transcribed by
   hand over the production ring with the callees replaced by the script — the same abstraction the
   model makes, in F#. Faithful, it is asserted to *agree* with the model over the campaign. With one
   line moved each, it is asserted *caught*: the latch released *before* the drain instead of after
@@ -1127,8 +1184,10 @@ Not proved. *Measured*, on every run of the gate.
   the `while` with no pop after it, so a hook that dispatches leaves its message in the ring until
   some later external dispatch happens to drain it (caught on the trace); and the latch set after
   the sinks and the effects ran, which is the boot as it shipped until it was restated (caught on
-  the boot paint, on every script that dispatches before it). The difference each go-red
-  measures is its one line. A differential that has never been shown to fail agrees with whatever
+  the boot paint, on every script that dispatches before it); every start made whatever the flag
+  says, which is the boot before Phase 871 (caught on the start count); and the handle of a start
+  that terminated the program kept, which is the registry before 871 (caught on the held count). The
+  difference each go-red measures is its one line. A differential that has never been shown to fail agrees with whatever
   it is shown.
 * **The fallback arm, on production.** A `DispatcherCore` exposed without its terminate callback is
   driven through `Terminate`: `IsActive` goes false, the wiring defect is reported, the interface
@@ -1137,10 +1196,13 @@ Not proved. *Measured*, on every run of the gate.
 ### Rung 3 — Assumed, and stated
 
 * **The two-flag encoding is faithful to production only where the model's sites are production's
-  sites.** The model sets `active` and `terminated` together because `MarkTerminated` accompanies
-  both `terminated <- true` assignments in `Program.fs` and `Wire` precedes every dispatch. A third
-  site added to either cell without the other would leave the theorem true of the model and false of
-  the code. Mitigation: the `log` comparison above measures the encoding on production on every
+  sites.** The model sets `active` and `terminated` together because the one `terminated <- true`
+  in `Program.fs` — `teardown`'s, since Phase 871 — is followed by `MarkTerminated` in a `finally`,
+  and `Wire` precedes every dispatch. While the teardown's own callees run, production has
+  `terminated` set and `active` still set; only those callees can see it, and what they could do
+  with it is refused (a dispatch meets `dispatch`'s guard; a `Terminate` finds the teardown under
+  way). A second site added to either cell without the other would leave the theorem true of the
+  model and false of the code. Mitigation: the `log` comparison above measures the encoding on production on every
   script; a divergence surfaces as a mismatch on the next dispatch after it.
 * **The oracles abstract the callees, including their exceptions.** `update`, `subscribe`,
   `Subs.Fx.change` and `Cmd.exec` are one function returning a model and the events raised before
@@ -1153,10 +1215,19 @@ Not proved. *Measured*, on every run of the gate.
   That reply presumes the exception was *reported and the loop went on*, which is true only of a
   reporter that returns. The reporter is not a parameter of the model; production makes it total by
   construction — `runWithDispatch` calls the program's reporter only through a guard that catches
-  what the reporter raises — and Rung 2 pins that at every site.
-  The teardown callbacks on the terminating path (`Subs.Fx.stop`, `terminate`) are assumed not to
-  dispatch; a dispatch they made would land in the ring and never be processed, which
-  `terminated_absorbing` covers.
+  what the reporter raises — and Rung 2 pins that at every site. The terminate handler's outcome is
+  not a parameter either, for the same reason (Phase 871): the teardown calls it under its own guard
+  and sets the flags regardless, and Rung 2 measures that a raising handler changes nothing. Nor is
+  what the teardown's callees raise: the flag is set before any of them runs, so a dispatch they make
+  is refused and a `Terminate` they call finds the teardown under way.
+* **What the model abstracts about teardown and the starts (Phase 871).** What a released handle
+  *does* when disposed — an effect's `Dispose`, a subscription's stop — is the effect's contract; the
+  model counts handles and does not look inside them. The gate is at the *block*: `Subs.Fx.change`
+  starts the init model's subscriptions together and `Cmd.exec` runs `init`'s command's effects
+  together, so each is one start in the model, and a `Terminate` raised by one subscription does not
+  stop the next in the same block from starting — it is released with the rest as soon as the block
+  returns. And `held` counts what the *boot* acquired; a message's subscription diff is inside the
+  `update` oracle and is not counted (Rung 4 names the gap that leaves).
 * **The render hook is quiet — for `render_once_per_drain` only.** The theorem is stated under the
   hypothesis that the hook dispatches nothing synchronously; the shipped React adapter (`React.fs`)
   hands the view to React and returns, and React 18 commits asynchronously. Every other theorem
@@ -1182,6 +1253,14 @@ Named because an unstated exclusion reads, to anyone who finds it later, as a cl
   the recheck and the dispatch, can slip a message through is an *interleaving* question over two
   observations of one cell. This is the synchronous machine; the async path needs an interleaving
   model and is deferred to a later phase.
+* **A subscription a message's diff starts after a `Terminate` in the same diff (Phase 871).** When
+  a message's subscription diff starts two subscriptions and the first calls `Terminate` from its start
+  function, the teardown stops the set as it stood, `Subs.Fx.change` then starts the second anyway,
+  and the loop assigns both to the stopped set — nothing disposes them — and runs the message's
+  command after. `terminated_holds_nothing` does not cover it: `held` counts the boot's starts, and
+  the step's diff is inside the `update` oracle. Closing it needs the gate inside `Sub.fs` (between
+  the subscriptions one `change` starts) and the step oracle split at the diff; it is outside Phase
+  871's files and is not claimed.
 * **Liveness of the drain.** That `processMsgs` returns at all depends on `update` eventually
   re-dispatching nothing. The model reports a drain that did not finish; it does not prove that any
   drain does, and production does not either.
