@@ -220,7 +220,7 @@ module Decode =
     /// The elements of an array value.
     let items: Decoder<Value list> =
         function
-        | Value.Arr elements -> Ok elements
+        | Value.Arr elements -> Ok(List.ofArray elements)
         | value -> refuse "array" value
 
     /// An array of exactly `arity` elements. The arity check is what
@@ -229,12 +229,25 @@ module Decode =
     /// element read as absent.
     let exactly (arity: int) : Decoder<Value list> =
         function
-        | Value.Arr elements when List.length elements = arity -> Ok elements
+        | Value.Arr elements when elements.Length = arity -> Ok(List.ofArray elements)
         | Value.Arr elements ->
-            refuseWith
-                (sprintf "an array of %d element(s)" arity)
-                (sprintf "an array of %d element(s)" (List.length elements))
+            refuseWith (sprintf "an array of %d element(s)" arity) (sprintf "an array of %d element(s)" elements.Length)
         | value -> refuse (sprintf "an array of %d element(s)" arity) value
+
+    /// Phase 856 — element `position` of an array, by INDEX. The accessor
+    /// `index` and `field` are both built from, and the one place the
+    /// array-backed carrier is read positionally: constant time, where the
+    /// list it replaced walked `position` cells, which made an n-field
+    /// record decode quadratic in n. `RemotingDecode.fst`'s `element_at`
+    /// is its model — an indexed read under an explicit bounds test, with
+    /// the well-founded measure stated over `Value.size` rather than over
+    /// the carrier's spine. A negative position is absent, exactly as
+    /// `List.tryItem` answered it.
+    let private elementAt (position: int) (elements: Value[]) : Value voption =
+        if position >= 0 && position < elements.Length then
+            ValueSome(elements[position])
+        else
+            ValueNone
 
     /// Decode element `index` of an array, annotating any refusal
     /// beneath it with `[index]`.
@@ -242,8 +255,8 @@ module Decode =
         fun value ->
             match value with
             | Value.Arr elements ->
-                match List.tryItem position elements with
-                | Some element ->
+                match elementAt position elements with
+                | ValueSome element ->
                     // Phase 804 — the path segment is built ONLY on the refusal
                     // branch, as `list` and `entries` already do. It used to be
                     // the eagerly-evaluated argument of the `Result.mapError`
@@ -256,10 +269,10 @@ module Decode =
                     match decoder element with
                     | Ok decoded -> Ok decoded
                     | Error error -> Error(DecodeError.under (sprintf "[%d]" position) error)
-                | None ->
+                | ValueNone ->
                     refuseWith
                         (sprintf "an array with an element at index %d" position)
-                        (sprintf "an array of %d element(s)" (List.length elements))
+                        (sprintf "an array of %d element(s)" elements.Length)
             | _ -> refuse (sprintf "an array with an element at index %d" position) value
 
     /// Decode element `position` of an array, annotating any refusal
@@ -269,12 +282,12 @@ module Decode =
         fun value ->
             match value with
             | Value.Arr elements ->
-                match List.tryItem position elements with
-                | Some element -> decoder element |> Result.mapError (DecodeError.under name)
-                | None ->
+                match elementAt position elements with
+                | ValueSome element -> decoder element |> Result.mapError (DecodeError.under name)
+                | ValueNone ->
                     refuseWith
                         (sprintf "a record with a `%s` field at index %d" name position)
-                        (sprintf "an array of %d element(s)" (List.length elements))
+                        (sprintf "an array of %d element(s)" elements.Length)
             | _ -> refuse (sprintf "a record with a `%s` field at index %d" name position) value
 
     /// Every element of an array, in order, through one element decoder.
@@ -287,15 +300,17 @@ module Decode =
         fun value ->
             match value with
             | Value.Arr elements ->
-                let rec walk position remaining accumulated =
-                    match remaining with
-                    | [] -> Ok(List.rev accumulated)
-                    | head :: tail ->
-                        match element head with
-                        | Ok decoded -> walk (position + 1) tail (decoded :: accumulated)
+                // Forward, by index, so the refusal reported is the FIRST
+                // failing element — the order the list walk reported in.
+                let rec walk position accumulated =
+                    if position = elements.Length then
+                        Ok(List.rev accumulated)
+                    else
+                        match element (elements[position]) with
+                        | Ok decoded -> walk (position + 1) (decoded :: accumulated)
                         | Error error -> Error(DecodeError.under (sprintf "[%d]" position) error)
 
-                walk 0 elements []
+                walk 0 []
             | _ -> refuse "array" value
 
     /// The array form of `list`.
@@ -354,8 +369,8 @@ module Decode =
         let expected = sprintf "a tuple of %d element(s)" arity
 
         function
-        | Value.Arr elements when List.length elements = arity -> Ok()
-        | Value.Arr elements -> refuseWith expected (sprintf "an array of %d element(s)" (List.length elements))
+        | Value.Arr elements when elements.Length = arity -> Ok()
+        | Value.Arr elements -> refuseWith expected (sprintf "an array of %d element(s)" elements.Length)
         | value -> refuse expected value
 
     /// A pair, from the positional array the writer emits.
@@ -443,8 +458,8 @@ module Decode =
         let expected = sprintf "a union case carrying %d fields" arity
 
         function
-        | Some(Value.Arr inner as value) when List.length inner = arity -> decoder value
-        | Some(Value.Arr inner) -> refuseWith expected (sprintf "an array of %d element(s)" (List.length inner))
+        | Some(Value.Arr inner as value) when inner.Length = arity -> decoder value
+        | Some(Value.Arr inner) -> refuseWith expected (sprintf "an array of %d element(s)" inner.Length)
         | Some value -> refuse expected value
         | None -> refuseWith expected "a union case with no payload"
 
@@ -467,8 +482,8 @@ module Decode =
                 | None -> refuseWith typeName (sprintf "union tag %d, which names no case" tag)
 
             match value with
-            | Value.Arr [ tag ] -> asInt32 tag |> Result.bind (fun tag -> dispatch tag None)
-            | Value.Arr [ tag; carried ] -> asInt32 tag |> Result.bind (fun tag -> dispatch tag (Some carried))
+            | Value.Arr [| tag |] -> asInt32 tag |> Result.bind (fun tag -> dispatch tag None)
+            | Value.Arr [| tag; carried |] -> asInt32 tag |> Result.bind (fun tag -> dispatch tag (Some carried))
             | _ -> refuse (sprintf "%s (a union term of [tag] or [tag; payload])" typeName) value
 
     /// A union carrying `[<StringEnum>]` is written as its CASE NAME, a

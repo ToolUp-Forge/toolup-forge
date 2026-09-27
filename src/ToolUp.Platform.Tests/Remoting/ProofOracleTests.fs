@@ -59,6 +59,10 @@ let inline private (|>>) (fn: ModelDecoder<'a -> 'b>) (arg: ModelDecoder<'a>) : 
     RemotingDecode.op_Bar_Greater_Greater fn arg
 
 /// The model's `nat` positions and arities.
+/// Phase 856 — `Value.Arr` carries an array; the fixtures below read as
+/// lists, so they build through this.
+let private arr (items: Value list) : Value = Value.Arr(Array.ofList items)
+
 let private ix (n: int) : BigInteger = BigInteger n
 
 // ─── The bridge ──────────────────────────────────────────────────────
@@ -94,7 +98,7 @@ let rec private bridge (value: Value) : ModelValue =
     | Value.Float(n, width) -> RemotingDecode.VFloat(n, modelFloatWidth width, string n)
     | Value.Str text -> RemotingDecode.VStr(text, ix text.Length)
     | Value.Bin bytes -> RemotingDecode.VBin(bytes, ix bytes.Length)
-    | Value.Arr items -> RemotingDecode.VArr(items |> List.map bridge)
+    | Value.Arr items -> RemotingDecode.VArr(items |> List.ofArray |> List.map bridge)
     | Value.Map entries ->
         RemotingDecode.VMap(entries |> List.map (fun (k, v) -> RemotingDecode.Pair(bridge k, bridge v)))
 
@@ -108,7 +112,7 @@ let rec private blindBridge (value: Value) : ModelValue =
     match value with
     | Value.Int(n, _) -> RemotingDecode.VInt(BigInteger n, RemotingDecode.Bits64)
     | Value.UInt(n, _) -> RemotingDecode.VUInt(BigInteger n, RemotingDecode.Bits64)
-    | Value.Arr items -> RemotingDecode.VArr(items |> List.map blindBridge)
+    | Value.Arr items -> RemotingDecode.VArr(items |> List.ofArray |> List.map blindBridge)
     | Value.Map entries ->
         RemotingDecode.VMap(
             entries
@@ -738,26 +742,24 @@ let tests =
             let tripleType = typeof<int * string * bool>
 
             let shapes: (string * Type * Value) list = [
-                "tuple-short", pairType, Value.Arr [ tag 1L ]
-                "tuple-long", pairType, Value.Arr [ tag 1L; Value.Str "a"; Value.Bool true ]
+                "tuple-short", pairType, arr [ tag 1L ]
+                "tuple-long", pairType, arr [ tag 1L; Value.Str "a"; Value.Bool true ]
                 "tuple-not-array", pairType, Value.Str "a"
-                "tuple-element-refuses", pairType, Value.Arr [ tag 1L; Value.Nil ]
-                "tuple-element-narrows",
-                pairType,
-                Value.Arr [ Value.Int(5000000000L, IntegerWidth.Bits64); Value.Str "a" ]
-                "triple-short", tripleType, Value.Arr [ tag 1L; Value.Str "a" ]
-                "triple-element-refuses", tripleType, Value.Arr [ tag 1L; Value.Str "a"; Value.Nil ]
-                "fields-short", typeof<Outcome>, Value.Arr [ tag 0L; Value.Arr [ Value.Bin(Array.zeroCreate 16) ] ]
+                "tuple-element-refuses", pairType, arr [ tag 1L; Value.Nil ]
+                "tuple-element-narrows", pairType, arr [ Value.Int(5000000000L, IntegerWidth.Bits64); Value.Str "a" ]
+                "triple-short", tripleType, arr [ tag 1L; Value.Str "a" ]
+                "triple-element-refuses", tripleType, arr [ tag 1L; Value.Str "a"; Value.Nil ]
+                "fields-short", typeof<Outcome>, arr [ tag 0L; arr [ Value.Bin(Array.zeroCreate 16) ] ]
                 "fields-long",
                 typeof<Outcome>,
-                Value.Arr [
+                arr [
                     tag 0L
-                    Value.Arr [ Value.Bin(Array.zeroCreate 16); Value.Arr [ tag 0L; tag 0L ]; Value.Nil ]
+                    arr [ Value.Bin(Array.zeroCreate 16); arr [ tag 0L; tag 0L ]; Value.Nil ]
                 ]
-                "fields-bare-payload", typeof<Outcome>, Value.Arr [ tag 0L; Value.Str "a" ]
-                "fields-no-payload", typeof<Outcome>, Value.Arr [ tag 0L ]
-                "fields-field-refuses", typeof<Outcome>, Value.Arr [ tag 0L; Value.Arr [ Value.Nil; Value.Nil ] ]
-                "fields-unknown-tag", typeof<Outcome>, Value.Arr [ tag 9L; Value.Arr [ Value.Nil; Value.Nil ] ]
+                "fields-bare-payload", typeof<Outcome>, arr [ tag 0L; Value.Str "a" ]
+                "fields-no-payload", typeof<Outcome>, arr [ tag 0L ]
+                "fields-field-refuses", typeof<Outcome>, arr [ tag 0L; arr [ Value.Nil; Value.Nil ] ]
+                "fields-unknown-tag", typeof<Outcome>, arr [ tag 9L; arr [ Value.Nil; Value.Nil ] ]
             ]
 
             let found = disagreementsOver bridge shapes

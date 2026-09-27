@@ -14204,7 +14204,7 @@ ToolUp.Remoting.MsgPack.Value.IsUInt : System.Boolean { get }
 ToolUp.Remoting.MsgPack.Value.Nil : ToolUp.Remoting.MsgPack.Value { get }
 ToolUp.Remoting.MsgPack.Value.Tag : System.Int32 { get }
 ToolUp.Remoting.MsgPack.Value+Arr (class)
-ToolUp.Remoting.MsgPack.Value+Arr.Item : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.MsgPack.Value] { get }
+ToolUp.Remoting.MsgPack.Value+Arr.Item : ToolUp.Remoting.MsgPack.Value[] { get }
 ToolUp.Remoting.MsgPack.Value+Bin (class)
 ToolUp.Remoting.MsgPack.Value+Bin.Item : System.Byte[] { get }
 ToolUp.Remoting.MsgPack.Value+Bool (class)

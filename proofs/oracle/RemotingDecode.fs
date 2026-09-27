@@ -486,16 +486,17 @@ let exactly =
            | VArr (elements) -> (if (Prims.op_Equals (count elements) arity) then (Accepted (elements)) else ((refuse_with expected (Prims.strcat "an array of " (Prims.strcat (Prims.string_of_int (count elements)) " element(s)")))))
            | uu___ -> ((refuse expected v)))))
 
-let rec try_item =
-    (fun (position : Prims.nat) (xs : Prims.list<value<'raw, 'flt>>) ->
+let rec item_at =
+    (fun (xs : Prims.list<value<'raw, 'flt>>) (position : Prims.nat) ->
          (match (xs) with
-          | [] -> (ONone)
-          | (head) ::tail -> (if (Prims.op_Equals position (Prims.parse_int "0")) then (OSome (head)) else ((try_item (position - (Prims.parse_int "1")) tail)))))
+          | (head) ::tail -> (if (Prims.op_Equals position (Prims.parse_int "0")) then (head) else ((item_at tail (position - (Prims.parse_int "1")))))))
+
+let element_of = (fun (position : Prims.nat) (xs : Prims.list<value<'raw, 'flt>>) -> if (position < (count xs)) then (OSome ((item_at xs position))) else (ONone))
 
 let element_at =
     (fun (position : Prims.nat) (v : value<'raw, 'flt>) ->
          (match (v) with
-          | VArr (elements) -> ((try_item position elements))
+          | VArr (elements) -> (if (position < (count elements)) then (OSome ((item_at elements position))) else (ONone))
           | uu___ -> (ONone)))
 
 let index =
@@ -503,7 +504,7 @@ let index =
          (let expected = (Prims.strcat "an array with an element at index " (Prims.string_of_int position)) in
           (match (v) with
            | VArr (elements) ->
-               ((match ((try_item position elements)) with
+               ((match ((element_of position elements)) with
                  | OSome (element) ->
                      ((match ((d element)) with
                        | Accepted (x) -> (Accepted (x))
@@ -516,7 +517,7 @@ let field =
          (let expected = (Prims.strcat "a record with a `" (Prims.strcat name (Prims.strcat "` field at index " (Prims.string_of_int position)))) in
           (match (v) with
            | VArr (elements) ->
-               ((match ((try_item position elements)) with
+               ((match ((element_of position elements)) with
                  | OSome (element) ->
                      ((match ((d element)) with
                        | Accepted (x) -> (Accepted (x))

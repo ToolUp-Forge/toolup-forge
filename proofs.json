@@ -78,7 +78,20 @@
     "measurement of the extraction that CAN be built, on both hosts, is the `tested` entry",
     "`elmish-ring-extraction-measured`, which asserts agreement and prints figures, never a threshold.",
     "`elmish-loop-fable-out` stays a policy entry with its reason corrected: the route that was closed",
-    "is open now, and not taken."
+    "is open now, and not taken.",
+    "",
+    "Phase 856 AMENDED the decoder model and moved no rung. `Value.Arr` carries an array, and `Decode.field` /",
+    "`Decode.index` read by index under a bounds test, where they walked a list through `List.tryItem` (an n-field",
+    "record decoded in time quadratic in n). RemotingDecode.fst follows the SHAPE: `try_item`, a spine walk whose",
+    "running out decided presence, is replaced by `item_at` (a read refined to an in-bounds position) and",
+    "`element_of` (presence IS the bounds test, `lemma_element_of_characterised`); the measure is",
+    "`lemma_item_at_smaller`, stated over `size`. The model's carrier stays an F* list, the mathematical sequence of",
+    "the array's elements, for a toolchain reason checked against the pin: `FStar.Seq.seq` is admitted in the",
+    "inductive (strictly positive) but is an abstract `new val` with no `index s i << s`, so the well-founded `size`",
+    "would need an `assume` the leg refuses, and it extracts as a list regardless (Phase 850). Every theorem was",
+    "re-checked on the pinned prover with no flag change - totality, characterisation, the tuple and several-field",
+    "lemmas, the width rule and the reference round trip - and the oracle re-emitted; the Phase 784 corpus",
+    "differential holds the shipped array reader to the list model element for element."
   ],
   "kind": "proofs",
   "version": 1,
@@ -138,9 +151,10 @@
         "model": "proofs/RemotingDecode.fst",
         "supporting": [
           "size",
-          "lemma_try_item_smaller"
+          "lemma_item_at_smaller",
+          "lemma_element_of_characterised"
         ],
-        "note": "carried in element_at's REFINED RETURN TYPE, so every descent consumes it at the call site"
+        "note": "carried in element_at's REFINED RETURN TYPE, so every descent consumes it at the call site. Since Phase 856 the accessor is INDEXED (item_at under a bounds test, element_of deciding presence) to match the array-backed Value.Arr, and the measure is stated over size rather than over the list spine the read no longer walks"
       }
     },
     {
