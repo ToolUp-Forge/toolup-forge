@@ -1685,4 +1685,83 @@ let tests =
                 ToolUp.Platform.ServedApiRecords.resetForTests ()
                 JsonDecoders.resetForTests ()
         ]
+        // ─── Phase 845 — decide the Fable `Long` object form on `asInt64` ──
+        //
+        // The decision (see `docs/migrations/799-json-wire-decoder-algebra.md`):
+        // ADMIT the Fable/Long.js runtime shape `{"high","low","unsigned"}` in
+        // `asInt64` / `asUInt64`, matching what the pre-existing STJ
+        // `Int64Converter` / `UInt64Converter` already reconstructed a value
+        // from. The rejected alternative was to leave the algebra narrower
+        // than the converter set it replaces — a consumer whose hand-built
+        // request currently works against STJ would silently start being
+        // refused the moment its argument type moved onto the algebra, which
+        // is a regression the algebra opts a consumer INTO rather than one it
+        // asked for.
+        testList "Phase 845 — decide the Fable `Long` object form on `asInt64`" [
+            let longObjectJson (low: int32) (high: int32) (isUnsigned: bool) =
+                sprintf """{"high":%d,"low":%d,"unsigned":%b}""" high low isUnsigned
+
+            let bitsOfInt64 (value: int64) : int32 * int32 =
+                let bits = uint64 value
+                int32 (uint32 bits), int32 (uint32 (bits >>> 32))
+
+            let bitsOfUInt64 (value: uint64) : int32 * int32 =
+                int32 (uint32 value), int32 (uint32 (value >>> 32))
+
+            let signedString (value: int64) =
+                (if value >= 0L then "+" else "") + string value
+
+            testCase
+                "845.A/B/C — the object form decodes `asInt64` to the same value as the number and signed-string forms, over the same population"
+            <| fun () ->
+                let population = [ 0L; 1L; -1L; 42L; -42L; 9007199254740993L; Int64.MinValue; Int64.MaxValue ]
+
+                for value in population do
+                    let low, high = bitsOfInt64 value
+                    let objectText = longObjectJson low high (value >= 0L)
+
+                    match JsonRead.tryParse objectText |> Result.bind JsonDecode.asInt64 with
+                    | Ok decoded -> Expect.equal decoded value (sprintf "object form decodes %d" value)
+                    | Error e -> failtestf "object form for %d was refused: %s" value (DecodeError.render e)
+
+                    Expect.equal
+                        (JsonRead.tryParse (string value) |> Result.bind JsonDecode.asInt64)
+                        (Ok value)
+                        "agrees with the number form"
+
+                    Expect.equal
+                        (JsonRead.tryParse (sprintf "\"%s\"" (signedString value))
+                         |> Result.bind JsonDecode.asInt64)
+                        (Ok value)
+                        "agrees with the signed-string form"
+
+            testCase "845.B — the reciprocal `asUInt64` admits the object form identically"
+            <| fun () ->
+                let population = [ 0UL; 1UL; 42UL; 9007199254740993UL; UInt64.MaxValue ]
+
+                for value in population do
+                    let low, high = bitsOfUInt64 value
+                    let objectText = longObjectJson low high true
+
+                    match JsonRead.tryParse objectText |> Result.bind JsonDecode.asUInt64 with
+                    | Ok decoded -> Expect.equal decoded value (sprintf "object form decodes %d" value)
+                    | Error e -> failtestf "object form for %d was refused: %s" value (DecodeError.render e)
+
+                    Expect.equal
+                        (JsonRead.tryParse (string value) |> Result.bind JsonDecode.asUInt64)
+                        (Ok value)
+                        "agrees with the number form"
+
+                    Expect.equal
+                        (JsonRead.tryParse (sprintf "\"%d\"" value) |> Result.bind JsonDecode.asUInt64)
+                        (Ok value)
+                        "agrees with the digit-string form"
+
+            testCase "845 — a malformed object form (missing / non-numeric `low` or `high`) is refused, never thrown"
+            <| fun () ->
+                for text in [ """{"high":1}"""; """{"low":1}"""; """{"low":"x","high":1}"""; "{}" ] do
+                    match JsonRead.tryParse text |> Result.bind JsonDecode.asInt64 with
+                    | Error _ -> ()
+                    | Ok decoded -> failtestf "`%s` should have been refused, decoded to %d" text decoded
+        ]
     ]

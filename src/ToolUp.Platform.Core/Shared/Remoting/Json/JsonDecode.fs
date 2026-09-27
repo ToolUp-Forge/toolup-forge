@@ -171,8 +171,44 @@ module JsonDecode =
     /// A non-negative integral token that fits `uint32`.
     let asUInt32: JsonDecoder<uint32> = unsigned "UInt32" 4294967295UL uint32
 
-    /// `int64` — a number token, or the STRING the writer emits (a
-    /// leading `+` or `-` sign; `Int64Converter.Write`).
+    /// Phase 845 — the Fable/Long.js RUNTIME shape a raw `JSON.stringify`
+    /// of a Fable `Long` produces: `{"high": <int32>, "low": <int32>,
+    /// "unsigned": <bool>}`. Neither wire writer emits it on the happy
+    /// path (`Int64Converter.Write` / `UInt64Converter.Write` write the
+    /// signed/digit string; `Fable.SimpleJson`'s writer does the same —
+    /// see `docs/migrations/799-json-wire-decoder-algebra.md`), but the
+    /// server's PRE-EXISTING `Int64Converter` / `UInt64Converter` (STJ)
+    /// already reconstructs a value from it, for a consumer that
+    /// serialises an `int64` argument by hand (`JSON.stringify` over a
+    /// plain object carrying a `Long`) rather than through the SDK's own
+    /// writer. Phase 845's decision: ADMIT it here too, so a client that
+    /// works against the STJ path keeps working when its argument type is
+    /// switched onto the algebra — refusing a shape the converter set
+    /// already accepts would be a regression the algebra opts a consumer
+    /// INTO, not one it asked for (the shard's own bias). `unsigned` is
+    /// read by neither reconstruction below, matching the STJ converters:
+    /// the low/high bit pattern is the same 64 bits regardless of the
+    /// tag, which says only how Long.js itself would interpret them.
+    let private tryLongObjectBits (members: (string * JsonValue) list) : uint64 option =
+        let find name =
+            members |> List.tryPick (fun (k, v) -> if k = name then Some v else None)
+
+        let tryInt32Token (text: string) =
+            match JsonValue.tryInt64 text with
+            | Some n when n >= -2147483648L && n <= 2147483647L -> Some(int32 n)
+            | _ -> None
+
+        match find "low", find "high" with
+        | Some(JsonValue.Number lowText), Some(JsonValue.Number highText) ->
+            match tryInt32Token lowText, tryInt32Token highText with
+            | Some low, Some high -> Some((uint64 (uint32 high) <<< 32) ||| uint64 (uint32 low))
+            | _ -> None
+        | _ -> None
+
+    /// `int64` — a number token, the STRING the writer emits (a leading
+    /// `+` or `-` sign; `Int64Converter.Write`), or the Fable/Long.js
+    /// `{high,low,unsigned}` object form (Phase 845 — see
+    /// `tryLongObjectBits` above).
     let asInt64: JsonDecoder<int64> =
         function
         | JsonValue.Number text as value ->
@@ -187,9 +223,16 @@ module JsonDecode =
             match JsonValue.tryInt64 unsigned' with
             | Some n -> Ok n
             | None -> refuseWith "Int64" (sprintf "string `%s`, which is not a signed integer" text)
+        | JsonValue.Object members as value ->
+            match tryLongObjectBits members with
+            | Some bits -> Ok(int64 bits)
+            | None -> refuse "Int64" value
         | value -> refuse "Int64" value
 
-    /// `uint64` — a number token, or the digit string the writer emits.
+    /// `uint64` — a number token, the digit string the writer emits, or
+    /// the Fable/Long.js `{high,low,unsigned}` object form (Phase 845 —
+    /// the reciprocal of `asInt64`'s arm, admitted identically: a split
+    /// decision between the two would be arbitrary).
     let asUInt64: JsonDecoder<uint64> =
         function
         | JsonValue.Number text as value ->
@@ -202,6 +245,10 @@ module JsonDecode =
             match JsonValue.tryUInt64 text with
             | Some n -> Ok n
             | None -> refuseWith "UInt64" (sprintf "string `%s`, which is not an unsigned integer" text)
+        | JsonValue.Object members as value ->
+            match tryLongObjectBits members with
+            | Some bits -> Ok bits
+            | None -> refuse "UInt64" value
         | value -> refuse "UInt64" value
 
     /// A number token, correctly rounded to double precision.
