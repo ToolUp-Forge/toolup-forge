@@ -38,6 +38,21 @@
         <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
     </ItemGroup>
     <ItemGroup>
+        <!-- Phase 880 — what only a server can run, moved out of
+             ToolUp.Platform.Core, where each file shipped to every Fable
+             consumer behind a `#if !FABLE_COMPILER` guard. Namespaces and
+             module paths are preserved: JwtCrypto and ConfigResolution moved
+             whole; ServerConfig, DataVocabulary and BlobStorage are split, the
+             Fable-safe half staying in Core and this tier declaring a module
+             of the same name beside it, which F# resolves as one. First in
+             the compile order, so every server file sees them. -->
+        <Compile Include="Server\JwtCrypto.fs" />
+        <Compile Include="Server\Config\ConfigResolution.fs" />
+        <Compile Include="Server\Config\ServerConfigFromEnv.fs" />
+        <Compile Include="Server\DataVocabularyPins.fs" />
+        <Compile Include="Server\BlobStorageSignedUrl.fs" />
+    </ItemGroup>
+    <ItemGroup>
         <!-- 0.4.4 — ToolUp.Remoting.{Json,Server,Giraffe,AspNetCore}
              folded in from a formerly-separate repository. The
              transport is a forge implementation detail; one package

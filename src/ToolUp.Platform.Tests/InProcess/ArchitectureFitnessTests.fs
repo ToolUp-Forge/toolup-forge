@@ -590,6 +590,174 @@ let private phase635Tests =
         }
     ]
 
+// ─── Phase 880 — no server-only region in the packed fable/ project ───
+
+/// `lines` lines of filler, so a fixture's arm size is stated, not counted.
+let private filler (lines: int) : string =
+    String.replicate lines "    let x = 1\n"
+
+let private coreDir () =
+    Path.Combine(repoRoot (), "src", "ToolUp.Platform.Core")
+
+let private coreListed () : string list =
+    File.ReadAllText(Path.Combine(coreDir (), "ToolUp.Platform.Core.fsproj"))
+    |> compileIncludes
+
+let private coreArmsOf (file: string) : NetOnlyArm list =
+    netOnlyArms file (File.ReadAllText(Path.Combine(coreDir (), file)))
+
+let private phase880Tests =
+    testList "Phase 880 — no server-only region in the packed fable/ project" [
+
+        test "Core's packed project carries no .NET-only arm above the limit, beyond its pinned exceptions" {
+            let listed = coreListed ()
+
+            // Floor: a parse that found nothing would pass vacuously.
+            Expect.isGreaterThan
+                listed.Length
+                150
+                "Core's compile list parsed to almost nothing — the parse is broken, not the tree clean"
+
+            let findings =
+                fableGuardFindings FableGuardArmLimit coreFableGuardPins listed coreArmsOf
+
+            Expect.isEmpty
+                findings
+                (sprintf
+                    "ToolUp.Platform.Core ships every listed file to Fable consumers under fable/:\n%s"
+                    (String.concat "\n" findings))
+        }
+
+        test "the moved server-only files are not listed in Core" {
+            let listed = coreListed ()
+
+            for moved in
+                [
+                    "Shared/JwtCrypto.fs"
+                    "Shared/Types/ConfigResolution.fs"
+                    "Shared/Config/ServerConfigFromEnv.fs"
+                ] do
+                Expect.isFalse
+                    (List.contains moved listed)
+                    (sprintf "%s moved to ToolUp.Platform.Server in Phase 880" moved)
+        }
+
+        test "the arm Fable skips is measured on both spellings, conjoined too" {
+            let source =
+                String.concat "" [
+                    "module M\n"
+                    "#if !FABLE_COMPILER\n"
+                    filler 3
+                    "#else\n"
+                    filler 9
+                    "#endif\n"
+                    "#if FABLE_COMPILER\n"
+                    filler 2
+                    "#else\n"
+                    filler 5
+                    "#endif\n"
+                    "#if !FABLE_COMPILER && NETCOREAPP2_1_OR_GREATER\n"
+                    filler 4
+                    "#endif\n"
+                    "#if NET6_0_OR_GREATER\n"
+                    filler 7
+                    "#endif\n"
+                    "#if FABLE_COMPILER || DEBUG\n"
+                    filler 6
+                    "#else\n"
+                    filler 6
+                    "#endif\n"
+                ]
+
+            let arms = netOnlyArms "M.fs" source |> List.map (fun a -> a.Line, a.Lines)
+
+            // The IF arm of the negation (3, not the Fable arm's 9), the ELSE arm of the bare
+            // symbol (5), the conjunction's IF arm (4); nothing for a symbol that is not
+            // FABLE_COMPILER, and nothing for a disjunction, which Fable may take either way.
+            Expect.equal arms [ 2, 3; 17, 5; 27, 4 ] "each .NET-only arm, once, at its opening line"
+        }
+
+        test "a conditional nested in a counted arm is part of it, not a second arm" {
+            let source =
+                String.concat "" [
+                    "#if !FABLE_COMPILER\n"
+                    filler 2
+                    "#if !FABLE_COMPILER\n"
+                    filler 2
+                    "#endif\n"
+                    "#if NET6_0_OR_GREATER\n"
+                    filler 2
+                    "#endif\n"
+                    "#endif\n"
+                ]
+
+            Expect.equal
+                (netOnlyArms "N.fs" source |> List.map _.Lines)
+                [ 10 ]
+                "one arm, whose lines include its nested directives"
+        }
+
+        test "the compile list ignores items named inside XML comments" {
+            let project =
+                """<Project><ItemGroup>
+                     <!-- moved: <Compile Include="Shared\Old.fs" /> -->
+                     <Compile Include="Shared\A.fs" />
+                     <Compile Include="Shared\B.fs" />
+                   </ItemGroup></Project>"""
+
+            Expect.equal
+                (compileIncludes project)
+                [ "Shared/A.fs"; "Shared/B.fs" ]
+                "only live items, forward-slashed, in order"
+        }
+
+        test "a planted server-only module above the limit fails; one at the limit passes" {
+            let arms =
+                Map.ofList [
+                    "Big.fs", netOnlyArms "Big.fs" ("#if !FABLE_COMPILER\n" + filler 31 + "#endif\n")
+                    "Edge.fs", netOnlyArms "Edge.fs" ("#if FABLE_COMPILER\n#else\n" + filler 30 + "#endif\n")
+                ]
+
+            let findings = fableGuardFindings 30 [] [ "Big.fs"; "Edge.fs" ] (fun f -> arms[f])
+
+            Expect.equal findings.Length 1 "exactly the file over the limit"
+
+            Expect.stringContains
+                findings.Head
+                "Big.fs:1 — a 31-line .NET-only arm"
+                "the finding names the file, the line and the size"
+        }
+
+        test "a pin is a ceiling that fails on growth and on staleness, never on shrinking" {
+            let pin = {
+                File = "P.fs"
+                LargestArm = 100
+                Reason = "fixture"
+            }
+
+            let armsOf size =
+                fun (_: string) -> netOnlyArms "P.fs" ("#if !FABLE_COMPILER\n" + filler size + "#endif\n")
+
+            Expect.isEmpty (fableGuardFindings 30 [ pin ] [ "P.fs" ] (armsOf 100)) "at the pin"
+            Expect.isEmpty (fableGuardFindings 30 [ pin ] [ "P.fs" ] (armsOf 60)) "shrinking never fails"
+
+            Expect.stringContains
+                (fableGuardFindings 30 [ pin ] [ "P.fs" ] (armsOf 101)).Head
+                "grew to 101"
+                "growth past the pin"
+
+            Expect.stringContains
+                (fableGuardFindings 30 [ pin ] [ "P.fs" ] (armsOf 30)).Head
+                "Delete the stale pin"
+                "a pin within the limit is stale"
+
+            Expect.stringContains
+                (fableGuardFindings 30 [ pin ] [] (armsOf 100)).Head
+                "no longer lists it"
+                "a pin on an unlisted file is stale"
+        }
+    ]
+
 [<Tests>]
 let tests =
     testList "Phase 174 — architecture-fitness gate" [
@@ -598,4 +766,5 @@ let tests =
         failClosedTests
         fs0025Tests
         phase635Tests
+        phase880Tests
     ]

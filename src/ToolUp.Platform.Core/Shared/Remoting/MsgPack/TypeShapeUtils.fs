@@ -2,14 +2,10 @@
 // Copyright (c) Zaid Ajaj and Fable.Remoting contributors
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-#if TYPESHAPE_EXPOSE
-module TypeShape.Core.Utils
-#else
 // NB we don't want to leak the `TypeShape` namespace
 // to the public API of the assembly
 // so we use a top-level internal module
 module internal TypeShape_Utils
-#endif
 
 #if !FABLE_COMPILER
 

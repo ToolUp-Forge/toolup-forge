@@ -619,6 +619,250 @@ let policyDeclaresFs0025AsError () : bool =
         Regex.Matches(text, @"<WarningsAsErrors[^>]*>([^<]*)</WarningsAsErrors>", RegexOptions.IgnoreCase)
         |> Seq.exists (fun m -> listSuppressesFs0025 m.Groups[1].Value)
 
+// ─── Phase 880 — the packed fable/ project carries no server-only region ──
+//
+// ToolUp.Platform.Core packs its own .fsproj under `fable/`, so every
+// `<Compile>` item it lists is a file every Fable consumer transpiles. For
+// years the way to keep server-only code in Core was to guard it: a whole
+// file, or a whole module, behind `#if !FABLE_COMPILER`, shipped to every
+// client as dead text. Phase 880 moved that code to the server tier; this
+// detector keeps it from coming back.
+//
+// A FABLE_COMPILER conditional has an arm Fable never compiles — the IF arm
+// of `#if !FABLE_COMPILER` (alone or `&&`-conjoined with other symbols), the
+// ELSE arm of `#if FABLE_COMPILER`. That arm is measured in lines. A small
+// arm is a dual implementation of one function (the MsgPack reader's .NET
+// fast path beside its Fable path); a large one is a module that belongs in
+// the tier that runs it. The limit is the line between the two, and a file
+// over it is either moved or pinned below with its reason.
+
+/// A FABLE_COMPILER conditional's .NET-only arm: the lines Fable skips.
+type NetOnlyArm = {
+    /// The file, exactly as the caller named it.
+    File: string
+    /// 1-indexed line of the opening `#if`.
+    Line: int
+    /// Lines strictly inside the arm (its bounding directives excluded).
+    Lines: int
+}
+
+/// The `<Compile Include>` paths an .fsproj lists, in order, forward-
+/// slashed. XML comments are stripped first, so an item named in a comment
+/// (these project files narrate their own history) is not an item.
+let compileIncludes (fsprojText: string) : string list =
+    let uncommented =
+        Regex.Replace(fsprojText, "<!--.*?-->", "", RegexOptions.Singleline)
+
+    [
+        for m in Regex.Matches(uncommented, "<Compile\\s+Include=\"([^\"]+)\"") do
+            yield m.Groups[1].Value.Replace('\\', '/')
+    ]
+
+/// Which arm of `#if <condition>` Fable never compiles: `Some true` for the
+/// IF arm (`!FABLE_COMPILER`, alone or `&&`-conjoined), `Some false` for the
+/// ELSE arm (bare `FABLE_COMPILER`), `None` when the condition does not
+/// decide on FABLE_COMPILER alone. Conservative: a disjunction, or
+/// `FABLE_COMPILER && X`, has no arm Fable skips outright.
+let netOnlyArmOf (condition: string) : bool option =
+    let expr =
+        match condition.IndexOf "//" with
+        | -1 -> condition.Trim()
+        | i -> condition.Substring(0, i).Trim()
+
+    let terms = expr.Split([| "&&" |], StringSplitOptions.None) |> Array.map _.Trim()
+
+    if expr = "FABLE_COMPILER" then
+        Some false
+    elif expr.Contains "||" then
+        None
+    elif terms |> Array.contains "!FABLE_COMPILER" then
+        Some true
+    else
+        None
+
+/// One open conditional while `netOnlyArms` walks a file.
+type private OpenConditional = {
+    OpenLine: int
+    Decision: bool option
+    mutable ElseLine: int
+    /// An enclosing arm is already counting this conditional's lines.
+    Enclosed: bool
+}
+
+/// Every .NET-only arm in `source` that is not already inside one (a nested
+/// conditional in a counted arm is part of that arm's lines, not a second
+/// arm). Unbalanced directives are the compiler's to report; an arm left
+/// open at end of file is measured to the end.
+let netOnlyArms (file: string) (source: string) : NetOnlyArm list =
+    let lines = source.Replace("\r\n", "\n").Split('\n')
+    let stack = Collections.Generic.Stack<OpenConditional>()
+    let arms = ResizeArray<NetOnlyArm>()
+
+    let counting (c: OpenConditional) =
+        not c.Enclosed
+        && match c.Decision with
+           | Some true -> c.ElseLine = 0
+           | Some false -> c.ElseLine <> 0
+           | None -> false
+
+    let record (c: OpenConditional) (endLine: int) =
+        let first, last =
+            match c.Decision, c.ElseLine with
+            | Some true, 0 -> c.OpenLine + 1, endLine - 1
+            | Some true, e -> c.OpenLine + 1, e - 1
+            | Some false, e when e <> 0 -> e + 1, endLine - 1
+            | _ -> 1, 0
+
+        if not c.Enclosed && last >= first then
+            arms.Add {
+                File = file
+                Line = c.OpenLine
+                Lines = last - first + 1
+            }
+
+    lines
+    |> Array.iteri (fun i raw ->
+        let line = raw.Trim()
+
+        if line.StartsWith "#if" then
+            stack.Push {
+                OpenLine = i + 1
+                Decision = netOnlyArmOf (line.Substring 3)
+                ElseLine = 0
+                Enclosed = stack |> Seq.exists counting
+            }
+        elif line.StartsWith "#else" && stack.Count > 0 then
+            stack.Peek().ElseLine <- i + 1
+        elif line.StartsWith "#endif" && stack.Count > 0 then
+            record (stack.Pop()) (i + 1))
+
+    while stack.Count > 0 do
+        record (stack.Pop()) (lines.Length + 1)
+
+    arms |> List.ofSeq |> List.sortBy (fun a -> a.File, a.Line)
+
+/// The largest .NET-only arm a file of a `fable/`-packed project may carry
+/// unpinned. Thirty lines holds every dual implementation Core ships (the
+/// largest unpinned one, `JsonDecode`'s .NET number reader, is 24) and
+/// nothing a module's worth of server code fits in.
+[<Literal>]
+let FableGuardArmLimit = 30
+
+/// A file allowed a .NET-only arm above the limit, and how large. The pin
+/// is a ceiling: an arm that grows past it fails, one that shrinks does
+/// not (improving never fails), and a pin whose file is no longer listed or
+/// no longer exceeds the limit fails as stale, so the list only shrinks.
+type FableGuardPin = {
+    /// Path relative to the project directory, forward-slashed.
+    File: string
+    /// The largest .NET-only arm the file may carry.
+    LargestArm: int
+    /// Why it is still here. `dual` = a .NET arm beside a Fable arm of the
+    /// same function, which both tiers need; `deferred` = server-only code
+    /// whose move is carried by a successor phase.
+    Reason: string
+}
+
+/// Core's pinned exceptions, as Phase 880 left them. Every `deferred` entry
+/// is the reflection engine and its verify arms: the TypeShape-backed
+/// MsgPack writer is what `RemotingDecoders.verify` and the generator's
+/// emitted `verifyAll` call, so none of it moves until the verify gate takes
+/// its reflective writer as an argument (as the JSON wire's `verifyWith`
+/// already takes its oracle) and the generator emits against that.
+let coreFableGuardPins: FableGuardPin list = [
+    {
+        File = "Shared/Remoting/MsgPack/TypeShape.fs"
+        LargestArm = 1635
+        Reason = "deferred: the reflection engine behind the .NET MsgPack writer"
+    }
+    {
+        File = "Shared/Remoting/MsgPack/TypeShapeUtils.fs"
+        LargestArm = 506
+        Reason = "deferred: the reflection engine's utilities"
+    }
+    {
+        File = "Shared/Remoting/MsgPack/Write.fs"
+        LargestArm = 612
+        Reason = "deferred: the TypeShape-backed .NET MsgPack writer"
+    }
+    {
+        File = "Shared/Remoting/MsgPack/Read.fs"
+        LargestArm = 76
+        Reason = "dual: the .NET arms of the MsgPack reader both tiers run"
+    }
+    {
+        File = "Shared/Remoting/DecoderRegistry.fs"
+        LargestArm = 308
+        Reason = "deferred: the Phase 801 verify arm and its shape generator"
+    }
+    {
+        File = "Shared/Remoting/Json/JsonDecoderRegistry.fs"
+        LargestArm = 229
+        Reason = "deferred: the Phase 840 verify arm"
+    }
+    {
+        File = "Shared/Remoting/PlatformDecoders.fs"
+        LargestArm = 351
+        Reason = "deferred: the generator's emitted verifyAll / registerAllVerified"
+    }
+    {
+        File = "Shared/Remoting/Json/PlatformJsonDecoders.fs"
+        LargestArm = 127
+        Reason = "deferred: the generator's emitted verifyAll / registerAllVerified"
+    }
+]
+
+/// The gate, pure over its inputs: `listed` is the project's compile list
+/// (project-relative), `armsOf` the arms of one listed file. One finding per
+/// violation, each naming the file and the remedy.
+let fableGuardFindings
+    (limit: int)
+    (pins: FableGuardPin list)
+    (listed: string list)
+    (armsOf: string -> NetOnlyArm list)
+    : string list =
+    let largest (arms: NetOnlyArm list) =
+        arms |> List.fold (fun acc a -> max acc a.Lines) 0
+
+    [
+        for file in listed do
+            let arms = armsOf file
+            let biggest = largest arms
+
+            match pins |> List.tryFind (fun p -> p.File = file) with
+            | None when biggest > limit ->
+                let arm = arms |> List.maxBy _.Lines
+
+                yield
+                    sprintf
+                        "%s:%d — a %d-line .NET-only arm (limit %d). Code only a server runs belongs in the server tier (Phase 880); a dual implementation this large should be split. Pin it only with a reason."
+                        file
+                        arm.Line
+                        arm.Lines
+                        limit
+            | Some pin when biggest > pin.LargestArm ->
+                yield
+                    sprintf
+                        "%s — its largest .NET-only arm grew to %d lines, past its pin of %d (%s). Move the growth to the server tier, or raise the pin with a reason."
+                        file
+                        biggest
+                        pin.LargestArm
+                        pin.Reason
+            | Some pin when biggest <= limit ->
+                yield
+                    sprintf
+                        "%s — pinned at %d, but its largest .NET-only arm is now %d, within the limit of %d. Delete the stale pin."
+                        file
+                        pin.LargestArm
+                        biggest
+                        limit
+            | _ -> ()
+
+        for pin in pins do
+            if not (List.contains pin.File listed) then
+                yield sprintf "%s — pinned, but the project no longer lists it. Delete the stale pin." pin.File
+    ]
+
 // ─── Formatting ───────────────────────────────────────────────────────
 
 let formatEdge (e: ReferenceEdge) : string = sprintf "  %s → %s" e.From e.To

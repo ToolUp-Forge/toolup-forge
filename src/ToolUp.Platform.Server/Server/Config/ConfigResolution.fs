@@ -15,9 +15,15 @@ module ToolUp.Platform.ConfigResolution
 // canonical env-var names, bound through the central config-key registry.
 //
 // This module is the resolution seam that layer arrives through. It is
-// deliberately tiny and dependency-free (no file IO — see below), so it
-// can sit in Core beside the registry and be consulted by
-// `ServerConfig.fromEnv`, which is the largest single reader in the SDK.
+// deliberately tiny and dependency-free (no file IO — the loader that
+// discovers, parses and hashes the manifest file is elsewhere in this
+// tier), and it is consulted by `ServerConfig.fromEnv`, which is the
+// largest single reader in the SDK.
+//
+// Phase 880 moved it from ToolUp.Platform.Core to the server tier with its
+// largest reader: nothing a Fable client compiles ever read it, and a
+// process-wide mutable seam is not something the shared floor should
+// carry. The module path is unchanged.
 //
 // Precedence (the documented chain, one rung longer than before):
 //
@@ -34,10 +40,9 @@ module ToolUp.Platform.ConfigResolution
 // for an existing deployment until it writes the file.
 //
 // **Why the loader is not here.** Discovering and parsing the file is
-// file IO plus hashing, and Core ships its source in the nupkg for Fable
-// consumers — `System.IO` cannot appear in it. The loader therefore lives
-// in `ToolUp.Platform.Server` (`ConfigResolver`) and installs its result
-// through this seam.
+// file IO plus hashing; the seam stays a pure lookup over what was
+// installed. The loader is `ConfigResolver`, beside this module in the
+// server tier, and it installs its result through this seam.
 
 // ─── Phase 700 — the profile rung, one below the manifest ────────────
 //
@@ -233,22 +238,11 @@ let clear () : unit =
 
 /// Read the raw environment variable, treating null / empty as unset —
 /// the long-standing convention every `*FromEnv` reader already applies.
-///
-/// Fable cannot compile `System.Environment`, and a Fable client has no
-/// environment to read, so under Fable this arm resolves to "unset" and
-/// the whole seam degrades to the manifest layer alone (which a client
-/// never installs either). `FABLE_COMPILER` is the one compile-time gate
-/// permitted in packed source — Fable defines it itself.
 let private readEnv (name: string) : string option =
-#if FABLE_COMPILER
-    ignore name
-    None
-#else
     match System.Environment.GetEnvironmentVariable name with
     | null
     | "" -> None
     | v -> Some v
-#endif
 
 /// The manifest's value for `name`, if the manifest supplies one. An
 /// empty string is treated as unset, exactly as an empty environment

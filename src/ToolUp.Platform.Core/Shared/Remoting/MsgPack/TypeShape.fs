@@ -2,15 +2,10 @@
 // Copyright (c) Zaid Ajaj and Fable.Remoting contributors
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-#if TYPESHAPE_EXPOSE
-[<AutoOpen>]
-module TypeShape.Core.Core
-#else
 // NB we don't want to leak the `TypeShape` namespace
 // to the public API of the assembly
 // so we use a top-level internal module
 module internal TypeShape
-#endif
 
 #if !FABLE_COMPILER
 
@@ -616,81 +611,6 @@ module private MemberUtils =
             setValue obj path.[n - 1] value
             instance
 
-#if TYPESHAPE_EXPR
-
-    let getDefaultValueExpr (t: Type) =
-        TypeShape.Create(t).Accept
-            { new ITypeVisitor<Expr> with
-                member _.Visit<'T>() = <@ Unchecked.defaultof<'T> @> :> _
-            }
-
-    let private castFor (m: MemberInfo) (e: Expr) =
-        if m.DeclaringType = e.Type then
-            e
-        elif e.Type.IsAssignableFrom m.DeclaringType then
-            Expr.Coerce(e, m.DeclaringType)
-        else
-            invalidOp "TypeShape: internal error, cannot cast to member declaring type."
-
-    let projectExpr<'Record, 'Member> (path: MemberInfo[]) (expr: Expr<'Record>) =
-        let rec aux expr (m: MemberInfo) =
-            match m with
-            | :? FieldInfo as fI -> Expr.FieldGet(castFor fI expr, fI)
-            | :? PropertyInfo as pI -> Expr.PropertyGet(castFor pI expr, pI)
-            | _ -> invalidMember m
-
-        Expr.Cast<'Member>(Array.fold aux (expr :> _) path)
-
-    let injectExpr (path: MemberInfo[]) (r: Expr<'TRecord>) (value: Expr<'MemberType>) =
-
-        if typeof<'TRecord>.IsValueType then
-            // this should use Expr.AddressOf, but most quotation libs don't support it
-            let rec aux i expr =
-                if i = path.Length - 1 then
-                    match path.[i] with
-                    | :? FieldInfo as fI -> Expr.FieldSet(castFor fI expr, fI, value)
-                    | :? PropertyInfo as pI -> Expr.PropertySet(castFor pI expr, pI, value)
-                    | m -> invalidMember m
-                else
-                    let mkVar n t = Var(n, t, isMutable = true)
-
-                    match path.[i] with
-                    | :? FieldInfo as fI ->
-                        let v = mkVar fI.Name fI.FieldType
-                        let getter = Expr.FieldGet(castFor fI expr, fI)
-                        let nestedSetter = aux (i + 1) (Expr.Var v)
-                        let setter = Expr.FieldSet(castFor fI expr, fI, Expr.Var v)
-                        Expr.Let(v, getter, Expr.Sequential(nestedSetter, setter))
-                    | :? PropertyInfo as pI ->
-                        let v = mkVar pI.Name pI.PropertyType
-                        let getter = Expr.PropertyGet(castFor pI expr, pI)
-                        let nestedSetter = aux (i + 1) (Expr.Var v)
-                        let setter = Expr.PropertySet(castFor pI expr, pI, Expr.Var v)
-                        Expr.Let(v, getter, Expr.Sequential(nestedSetter, setter))
-                    | m -> invalidMember m
-
-            <@
-                (%Expr.Cast<_>(aux 0 r))
-                %r
-            @>
-        else
-            let rec aux i expr =
-                if i = path.Length - 1 then
-                    match path.[i] with
-                    | :? FieldInfo as fI -> Expr.FieldSet(castFor fI expr, fI, value)
-                    | :? PropertyInfo as pI -> Expr.PropertySet(castFor pI expr, pI, value)
-                    | m -> invalidMember m
-                else
-                    match path.[i] with
-                    | :? FieldInfo as fI -> aux (i + 1) (Expr.FieldGet(castFor fI expr, fI))
-                    | :? PropertyInfo as pI -> aux (i + 1) (Expr.PropertyGet(castFor pI expr, pI))
-                    | m -> invalidMember m
-
-            <@
-                (%Expr.Cast<_>(aux 0 r))
-                %r
-            @>
-#endif
 
 //-------------------------
 // Member Shape Definitions
@@ -736,11 +656,6 @@ and ReadOnlyMember<'DeclaringType, 'MemberType> internal (label: string, memberI
     [<Obsolete("Deprecated, please use the 'Get' method instead")>]
     member m.Project(instance: 'DeclaringType) : 'MemberType = m.Get instance
 
-#if TYPESHAPE_EXPR
-    /// Projects an instance to member of given value
-    member _.GetExpr(instance: Expr<'DeclaringType>) =
-        projectExpr<'DeclaringType, 'MemberType> path instance
-#endif
 
     interface IShapeReadOnlyMember<'DeclaringType> with
         member s.Label = label
@@ -778,10 +693,6 @@ and [<Sealed>] ShapeMember<'DeclaringType, 'MemberType>
     [<Obsolete("Deprecated, please use the 'Set' method instead")>]
     member m.Inject (instance: 'DeclaringType) (field: 'MemberType) : 'DeclaringType = m.Set instance field
 
-#if TYPESHAPE_EXPR
-    /// Injects a value to member of given instance
-    member _.SetExpr (instance: Expr<'DeclaringType>) (field: Expr<'MemberType>) = injectExpr path instance field
-#endif
 
     interface IShapeMember<'DeclaringType> with
         member s.Accept(v: IMemberVisitor<'DeclaringType, 'R>) = v.Visit s
@@ -821,16 +732,6 @@ and [<Sealed>] ShapeConstructor<'DeclaringType, 'CtorArgs> private (ctorInfo: Co
         let args = valueReader args
         ctorInfo.Invoke args :?> 'DeclaringType
 
-#if TYPESHAPE_EXPR
-    /// Creates an instance of declaring type with supplied constructor args
-    member _.InvokeExpr(args: Expr<'CtorArgs>) : Expr<'DeclaringType> =
-        let exprArgs =
-            match arity with
-            | 1 -> [ args :> Expr ]
-            | _ -> [ for i in 0 .. arity - 1 -> Expr.TupleGet(args, i) ]
-
-        Expr.Cast<'DeclaringType>(Expr.NewObject(ctorInfo, exprArgs))
-#endif
 
     interface IShapeConstructor<'DeclaringType> with
         member _.IsPublic = ctorInfo.IsPublic
@@ -1007,16 +908,6 @@ and [<Sealed>] ShapeTuple<'Tuple> private () =
 
             obj :?> 'Tuple
 
-#if TYPESHAPE_EXPR
-    member _.CreateUninitializedExpr() : Expr<'Tuple> =
-        if isStructTuple then
-            Expr.Cast<'Tuple>(Expr.DefaultValue typeof<'Tuple>)
-        else
-            let values =
-                tupleElems |> Seq.map (fun e -> getDefaultValueExpr e.Member.Type) |> Seq.toList
-
-            Expr.Cast<'Tuple>(Expr.NewTuple(values))
-#endif
 
     interface IShapeTuple with
         member _.Elements = tupleElems |> Array.map (fun e -> e :> _)
@@ -1070,14 +961,6 @@ and [<Sealed>] ShapeFSharpRecord<'Record> private () =
         else
             ctorInfo.Invoke ctorParams :?> 'Record
 
-#if TYPESHAPE_EXPR
-    member _.CreateUninitializedExpr() : Expr<'Record> =
-        if isStructRecord then
-            <@ Unchecked.defaultof<'Record> @>
-        else
-            let values = props |> Seq.map (fun p -> getDefaultValueExpr p.PropertyType)
-            Expr.Cast<'Record>(Expr.NewObject(ctorInfo, Seq.toList values))
-#endif
 
     interface IShapeFSharpRecord with
         member _.IsStructRecord = isStructRecord
@@ -1135,11 +1018,6 @@ type ShapeFSharpUnionCase<'Union> private (uci: UnionCaseInfo) =
     member _.CreateUninitialized() : 'Union =
         ctorInfo.Invoke(null, ctorParams) :?> 'Union
 
-#if TYPESHAPE_EXPR
-    member _.CreateUninitializedExpr() : Expr<'Union> =
-        let fieldsExpr = properties |> Seq.map (fun p -> getDefaultValueExpr p.PropertyType)
-        Expr.Cast<'Union>(Expr.Call(ctorInfo, Seq.toList fieldsExpr))
-#endif
 
     interface IShapeFSharpUnionCase with
         member _.CaseInfo = uci
@@ -1160,9 +1038,6 @@ and [<Sealed>] ShapeFSharpUnion<'U> private () =
         |> Array.map (fun uci ->
             Activator.CreateInstanceGeneric<ShapeFSharpUnionCase<'U>>([||], [| uci |]) :?> ShapeFSharpUnionCase<'U>)
 
-#if TYPESHAPE_EXPR
-    let tagReaderInfo = FSharpValue.PreComputeUnionTagMemberInfo(typeof<'U>, AllMembers)
-#endif
     let tagReader = FSharpValue.PreComputeUnionTagReader(typeof<'U>, AllMembers)
 
     let caseNames = ucis |> Array.map _.CaseInfo.Name
@@ -1192,17 +1067,6 @@ and [<Sealed>] ShapeFSharpUnion<'U> private () =
 
         i
 
-#if TYPESHAPE_EXPR
-    member _.GetTagExpr(union: Expr<'U>) : Expr<int> =
-        let expr =
-            match tagReaderInfo with
-            | :? MethodInfo as m when m.IsStatic -> Expr.Call(m, [ union ])
-            | :? MethodInfo as m -> Expr.Call(union, m, [])
-            | :? PropertyInfo as p -> Expr.PropertyGet(union, p)
-            | _ -> invalidOp <| sprintf "Unexpected tag reader info %O" tagReaderInfo
-
-        Expr.Cast<int> expr
-#endif
 
 
     interface IShapeFSharpUnion with
@@ -1234,11 +1098,6 @@ and [<Sealed>] ShapeCliMutable<'Record> private (defaultCtor: ConstructorInfo) =
     /// Creates an uninitialized instance for given C# record
     member _.CreateUninitialized() : 'Record = defaultCtor.Invoke [||] :?> 'Record
 
-#if TYPESHAPE_EXPR
-    /// Creates an uninitialized instance for given C# record
-    member _.CreateUninitializedExpr() =
-        Expr.Cast<'Record>(Expr.NewObject(defaultCtor, []))
-#endif
 
     /// Property shapes for C# record
     member _.Properties = properties
@@ -1321,11 +1180,6 @@ and [<Sealed>] ShapePoco<'Poco> private () =
     member inline _.CreateUninitialized() : 'Poco =
         System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof<'Poco>) :?> 'Poco
 
-#if TYPESHAPE_EXPR
-    /// Creates an uninitialized instance for POCO
-    member inline _.CreateUninitializedExpr() : Expr<'Poco> =
-        <@ System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof<'Poco>) :?> 'Poco @>
-#endif
 
     interface IShapePoco with
         member _.Constructors = ctors |> Array.map (fun c -> c :> _)
@@ -1364,13 +1218,6 @@ and ShapeISerializable<'T when 'T :> ISerializable> private () =
     member _.Create(serializationInfo: SerializationInfo, streamingContext: StreamingContext) : 'T =
         getCtorInfo().Invoke [| serializationInfo; streamingContext |] :?> 'T
 
-#if TYPESHAPE_EXPR
-    member _.CreateExpr
-        (serializationInfo: Expr<SerializationInfo>)
-        (streamingContext: Expr<StreamingContext>)
-        : Expr<'T> =
-        Expr.Cast<'T>(Expr.NewObject(getCtorInfo (), [ serializationInfo; streamingContext ]))
-#endif
 
     interface IShapeISerializable with
         member _.CtorInfo = ctorInfo
@@ -1410,9 +1257,7 @@ module Shape =
     let (|Primitive|_|) (s: TypeShape) =
         if s.Type.IsPrimitive then SomeU else None
 
-#if !TYPESHAPE_DISABLE_BIGINT
     let (|BigInt|_|) s = test<bigint> s
-#endif
 
     let (|String|_|) s = test<string> s
     let (|Guid|_|) s = test<Guid> s
