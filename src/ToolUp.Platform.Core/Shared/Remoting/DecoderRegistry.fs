@@ -440,7 +440,12 @@ module RemotingDecoders =
     /// a value that is equal-looking at every representation but its
     /// type is a disagreement. Never throws: a throw from either side is
     /// a finding the gate reports, not a crash it takes.
-    let private renderDecode (decode: unit -> Result<obj, DecodeError>) : string =
+    ///
+    /// Phase 840 — `internal` rather than private so the JSON wire's gate
+    /// (`JsonDecoders.verifyWith`) renders its two decodes in exactly
+    /// this shape: one rendering, so "the same" means the same thing on
+    /// both wires.
+    let internal renderDecode (decode: unit -> Result<obj, DecodeError>) : string =
         try
             match decode () with
             | Ok value ->

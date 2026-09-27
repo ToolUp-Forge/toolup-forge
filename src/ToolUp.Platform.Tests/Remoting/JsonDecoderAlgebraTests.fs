@@ -461,6 +461,98 @@ let private allMethods (t: Type) =
 // ─── The tests ───────────────────────────────────────────────────────
 
 [<Tests>]
+// ─── Phase 840 — the registration gate ───────────────────────────────
+
+/// The shipped converter set as the gate's oracle, and the MessagePack
+/// gate's draw count and seed — the pair `registerVerified` uses.
+let private gateOracle =
+    ToolUp.Remoting.Json.SystemTextJson.FableConverters.decoderOracle
+
+let private gateDraws = RemotingDecoders.DefaultDraws
+let private gateSeed = RemotingDecoders.DefaultSeed
+
+/// 840.C — every registration `PlatformJsonDecoders.registerAll` makes,
+/// by its `(record, type)` key, beside its recorded verification run. A
+/// registration added to `registerAll` without a line here fails the
+/// key-set comparison below, so the committed set cannot outgrow its run.
+let private platformVerifications
+    ()
+    : ((string option * string) * Result<JsonDecoderVerification, DecoderRefusal>) list =
+    let verify (record: string) (decoder: JsonDecoder<'T>) =
+        (Some record, RemotingDecoders.keyFor typeof<'T>),
+        JsonDecoders.verifyWith<'T> gateOracle gateDraws gateSeed decoder
+
+    [
+        verify "ITeamInviteApi" PlatformJsonDecoders.teamRole
+        verify "IPresenceApi" PlatformJsonDecoders.presenceLocation
+        verify "IPresenceApi" PlatformJsonDecoders.entityLockRef
+        verify "IAuditViewApi" PlatformJsonDecoders.auditTrailQuery
+        verify "IProvenanceQueryApi" PlatformJsonDecoders.wireProvenanceRef
+        verify "IProvenanceQueryApi" PlatformJsonDecoders.wireProvenanceDirection
+        verify "IProvenanceQueryApi" PlatformJsonDecoders.wireProvenanceChainRequest
+        verify "ITeamInviteApi" PlatformJsonDecoders.teamInviteIssueRequest
+        verify "IHomeOverviewApi" PlatformJsonDecoders.pinRequest
+        verify "TeamApi" PlatformJsonDecoders.createTeamRequest
+        verify "ITeamInviteApi" PlatformJsonDecoders.pendingInviteIssueRequest
+        verify "ITeamInviteApi" PlatformJsonDecoders.teamInviteApiString
+        verify "IHomeOverviewApi" PlatformJsonDecoders.homeOverviewApiString
+        verify "TeamApi" PlatformJsonDecoders.teamApiString
+        verify "TeamApi" PlatformJsonDecoders.teamApiStringPair
+        verify "TeamApi" PlatformJsonDecoders.teamApiStringStringRole
+    ]
+
+/// 840.D — the go-red: total, correct-looking, and WRONG. Two same-typed
+/// fields read in each other's place, so every text is accepted and the
+/// value is well-typed and not what the client sent.
+let private swappedAddress: JsonDecoder<Address> =
+    JsonDecode.succeed (fun line1 postcode country -> {
+        Line1 = line1
+        Postcode = postcode
+        Country = country
+    })
+    |> JsonDecode.apply (JsonDecode.field "Postcode" JsonDecode.asString)
+    |> JsonDecode.apply (JsonDecode.field "Line1" JsonDecode.asString)
+    |> JsonDecode.apply (JsonDecode.field "Country" JsonDecode.asString)
+
+/// 840.D — the same failure on a union: a case name read as its
+/// neighbour.
+let private rotatedPriority: JsonDecoder<Priority> =
+    JsonDecode.union "Priority" (function
+        | "Low" -> Some(JsonDecode.case0 Low)
+        | "Normal" -> Some(JsonDecode.case0 High)
+        | "High" -> Some(JsonDecode.case0 Normal)
+        | _ -> None)
+
+/// The draw index a wrong decoder must be refused at, computed from the
+/// draws themselves rather than trusted from the gate: the first draw of
+/// `'T` (same seed, same depth) on which `differs` holds.
+let private firstDrawWhere<'T> (differs: 'T -> bool) : int =
+    let rng = Random gateSeed
+
+    let rec go i =
+        if i >= gateDraws then
+            failtestf "no draw of %s in %d distinguishes the wrong decoder" typeof<'T>.Name gateDraws
+        else
+            match DecoderShapes.draw rng DecoderShapes.DefaultDepth typeof<'T> with
+            | Error reason -> failtestf "%s is undrawable: %s" typeof<'T>.Name reason
+            | Ok drawn -> if differs (unbox<'T> drawn) then i else go (i + 1)
+
+    go 0
+
+/// 840.E — the lenient inputs: the Phase 784 mutations the converter set
+/// ACCEPTS and the algebra REFUSES, each already declared in
+/// `algebraOutcomes` above. The writer never produces any of them.
+let private declaredStrictness = [
+    // STJ hands back a null reference; the algebra has no null record.
+    "wrong-tag-nil-for-record"
+    // A quoted `"7"` at int32 (`AllowReadingFromString`); the algebra
+    // takes no string at a width the writer emits bare.
+    "wrong-width-string-into-int"
+    // An absent member read back as null; the algebra's `field` requires
+    // it.
+    "missing-field-record"
+]
+
 let tests =
     testList "Phase 799 — the JSON wire joins the decoder algebra" [
 
@@ -1289,5 +1381,216 @@ let tests =
                 agreeFor "TeamApi" ("u1", "u2", ToolUp.Platform.TeamRole.Admin)
 
                 JsonDecoders.resetForTests ()
+        ]
+        testList "Phase 840 — the registration gate" [
+            testCase "840.C — the platform's set agrees with the converter set over every registration"
+            <| fun () ->
+                let runs = platformVerifications ()
+
+                for key, result in runs do
+                    match result with
+                    | Ok verification ->
+                        Expect.equal verification.Verification.Draws gateDraws (sprintf "%A was drawn in full" key)
+                        Expect.isNone verification.Verification.Divergence (sprintf "%A agrees" key)
+
+                        // A difference is admitted only as the converter
+                        // set's ONE declared loss, and only on a type whose
+                        // shape reaches it.
+                        for d in verification.DeclaredDifferences do
+                            Expect.equal d.Loss.Type typeof<TimeSpan> (sprintf "%A: draw %d" key d.Draw)
+                    | Error refusal -> failtestf "%A: %s" key (JsonDecoders.describeRefusal refusal)
+
+                Expect.equal
+                    (runs |> List.map fst |> Set.ofList)
+                    (Set.ofList PlatformJsonDecoders.covered)
+                    "the recorded run covers exactly the registrations `registerAll` makes"
+
+            testCase "every corpus decoder the algebra covers agrees with the converter set"
+            <| fun () ->
+                let refusals =
+                    covered
+                    |> List.choose (fun (target, decoder) ->
+                        match JsonDecoders.verifyByTypeWith gateOracle gateDraws gateSeed target decoder with
+                        | Ok _ -> None
+                        | Error refusal -> Some(JsonDecoders.describeRefusal refusal))
+
+                Expect.isEmpty refusals (String.Join("\n", refusals))
+
+            testCase "840.E — the converter set's TimeSpan loss is declared and SAID, never refused and never silent"
+            <| fun () ->
+                match JsonDecoders.verifyWith gateOracle gateDraws gateSeed JsonDecode.asTimeSpan with
+                | Ok verification ->
+                    Expect.isNone verification.Verification.Divergence "the exact decoder agrees"
+
+                    Expect.isNonEmpty
+                        verification.DeclaredDifferences
+                        "the seeded draws include values the converter set reads a tick off"
+
+                    for d in verification.DeclaredDifferences do
+                        Expect.equal d.Loss.Type typeof<TimeSpan> "attributed to the declared loss"
+                        Expect.notEqual d.Candidate d.Oracle "and both decodes are recorded"
+                | Error refusal -> failtest (JsonDecoders.describeRefusal refusal)
+
+                // Without the declaration the same exact decoder is a
+                // divergence: the declaration is what admits it.
+                match
+                    JsonDecoders.verifyWith { gateOracle with Losses = [] } gateDraws gateSeed JsonDecode.asTimeSpan
+                with
+                | Error(DecoderDiverges _) -> ()
+                | other -> failtestf "an undeclared loss was not reported as a divergence: %A" other
+
+            testCase "840.E — a declared loss never excuses a candidate that differs from the written value"
+            <| fun () ->
+                let aTickLate: JsonDecoder<TimeSpan> =
+                    JsonDecode.asTimeSpan |> JsonDecode.map (fun t -> t + TimeSpan.FromTicks 1L)
+
+                match JsonDecoders.verifyWith gateOracle gateDraws gateSeed aTickLate with
+                | Error(DecoderDiverges { Divergence = Some _ }) -> ()
+                | other -> failtestf "a tick-late decoder was admitted under the declared loss: %A" other
+
+            testCase "840.D — two same-typed fields swapped are refused by name and by draw"
+            <| fun () ->
+                let expectedDraw = firstDrawWhere<Address> (fun a -> a.Line1 <> a.Postcode)
+
+                match JsonDecoders.verifyWith gateOracle gateDraws gateSeed swappedAddress with
+                | Error(DecoderDiverges verification as refusal) ->
+                    Expect.equal verification.WireType (RemotingDecoders.keyFor typeof<Address>) "refused by name"
+
+                    match verification.Divergence with
+                    | Some divergence ->
+                        Expect.equal divergence.Draw expectedDraw "refused at the first draw that tells them apart"
+                        Expect.notEqual divergence.Candidate divergence.Reflection "both decodes are rendered"
+                    | None -> failtest "a divergence names its draw"
+
+                    let described = JsonDecoders.describeRefusal refusal
+                    Expect.stringContains described "Address" "the description names the type"
+                    Expect.stringContains described (sprintf "draw %d" expectedDraw) "and the draw"
+                | other -> failtestf "the swapped decoder was not refused as a divergence: %A" other
+
+            testCase "840.D — a union case read as its neighbour is refused at its first draw"
+            <| fun () ->
+                let expectedDraw = firstDrawWhere<Priority> (fun p -> p <> Low)
+
+                match JsonDecoders.verifyWith gateOracle gateDraws gateSeed rotatedPriority with
+                | Error(DecoderDiverges { Divergence = Some divergence }) ->
+                    Expect.equal divergence.Draw expectedDraw "refused at the first Normal or High"
+                | other -> failtestf "the rotated decoder was not refused: %A" other
+
+            testCase "840.B/D — `registerVerified` registers only on agreement and leaves the table untouched otherwise"
+            <| fun () ->
+                JsonDecoders.resetForTests ()
+
+                let registerVerified =
+                    ToolUp.Remoting.Json.SystemTextJson.FableConverters.registerVerified
+
+                let registerVerifiedFor =
+                    ToolUp.Remoting.Json.SystemTextJson.FableConverters.registerVerifiedFor
+
+                match registerVerified swappedAddress with
+                | Error(DecoderDiverges _) -> ()
+                | other -> failtestf "unscoped: the swapped decoder was not refused: %A" other
+
+                match registerVerifiedFor "IProbeApi" swappedAddress with
+                | Error(DecoderDiverges _) -> ()
+                | other -> failtestf "scoped: the swapped decoder was not refused: %A" other
+
+                Expect.equal (JsonDecoders.count ()) 0 "a refusal registers nothing, scoped or not"
+
+                match registerVerified address with
+                | Ok verification -> Expect.isNone verification.Verification.Divergence "the right decoder agrees"
+                | Error refusal -> failtest (JsonDecoders.describeRefusal refusal)
+
+                match registerVerifiedFor "IProbeApi" address with
+                | Ok _ -> ()
+                | Error refusal -> failtest (JsonDecoders.describeRefusal refusal)
+
+                Expect.isTrue (JsonDecoders.isRegistered None typeof<Address>) "registered unscoped on agreement"
+
+                Expect.equal
+                    (JsonDecoders.registered ())
+                    [
+                        None, RemotingDecoders.keyFor typeof<Address>
+                        Some "IProbeApi", RemotingDecoders.keyFor typeof<Address>
+                    ]
+                    "and scoped"
+
+                // A refused re-registration over a standing one leaves the
+                // standing decoder in place — the table is untouched, not
+                // emptied.
+                match registerVerified swappedAddress with
+                | Error _ -> ()
+                | Ok _ -> failtest "the swapped decoder was accepted over a standing one"
+
+                let sample = """{"Line1":"a","Postcode":"b","Country":"c"}"""
+
+                match JsonDecoders.tryGet None typeof<Address> with
+                | Some decoder ->
+                    match JsonRead.tryParse sample |> Result.bind decoder with
+                    | Ok value ->
+                        Expect.equal
+                            (unbox<Address> value)
+                            {
+                                Line1 = "a"
+                                Postcode = "b"
+                                Country = "c"
+                            }
+                            "the standing, verified decoder still answers"
+                    | Error e -> failtest (DecodeError.render e)
+                | None -> failtest "the standing registration was lost"
+
+                // Plain `register` stays unverified and unchanged: it is
+                // the Fable client's path, which has no oracle.
+                JsonDecoders.resetForTests ()
+                JsonDecoders.register swappedAddress
+                Expect.equal (JsonDecoders.count ()) 1 "plain `register` does not consult the oracle"
+                JsonDecoders.resetForTests ()
+
+            testCase "an undrawable type is a named refusal, never a silent pass or a throw"
+            <| fun () ->
+                let anything: JsonDecoder<obj> = fun _ -> Ok(box 1)
+
+                match JsonDecoders.verifyWith gateOracle gateDraws gateSeed anything with
+                | Error(DecoderUndrawable(wireType, reason)) ->
+                    Expect.equal wireType (RemotingDecoders.keyFor typeof<obj>) "named"
+                    Expect.isNonEmpty reason "with a reason"
+                | other -> failtestf "`obj` was not refused as undrawable: %A" other
+
+            testCase "840.E — deliberate strictness is declared, and the gate does not report it as divergence"
+            <| fun () ->
+                for name in declaredStrictness do
+                    let m =
+                        match mutations () |> List.tryFind (fun m -> m.Name = name) with
+                        | Some m -> m
+                        | None -> failtestf "mutation `%s` no longer exists in the Phase 784 corpus" name
+
+                    let text =
+                        match m.Json with
+                        | Some text -> text
+                        | None -> failtestf "mutation `%s` carries no JSON payload" name
+
+                    // The declared difference: the converter set accepts
+                    // the lenient input, the algebra refuses it.
+                    match classifyJson m.Target text with
+                    | Accepted _, _ -> ()
+                    | other, detail -> failtestf "`%s`: STJ no longer accepts it (%A: %s)" name other detail
+
+                    match classifyAlgebra m.Target text with
+                    | Refused, _ -> ()
+                    | other, detail -> failtestf "`%s`: the algebra no longer refuses it (%A: %s)" name other detail
+
+                    Expect.equal
+                        (algebraOutcomes |> List.tryFind (fun (n, _) -> n = name) |> Option.map snd)
+                        (Some Refused)
+                        (sprintf "`%s` is declared in the refuse-path table" name)
+
+                    // And the gate over that SAME decoder is green: the
+                    // writer never produces the lenient input, so the
+                    // strictness is unreachable from a draw.
+                    match tryAlgebra m.Target with
+                    | None -> failtestf "`%s`: no corpus decoder for %s" name m.Target.FullName
+                    | Some decoder ->
+                        match JsonDecoders.verifyByTypeWith gateOracle gateDraws gateSeed m.Target decoder with
+                        | Ok verification -> Expect.isNone verification.Verification.Divergence name
+                        | Error refusal -> failtestf "`%s`: %s" name (JsonDecoders.describeRefusal refusal)
         ]
     ]

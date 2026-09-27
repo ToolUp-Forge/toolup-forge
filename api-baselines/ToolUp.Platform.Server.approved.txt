@@ -10871,10 +10871,14 @@ ToolUp.Remoting.Json.SystemTextJson.FSharpUnionConverter`1.Write(System.Text.Jso
 ToolUp.Remoting.Json.SystemTextJson.FableConverters (class)
 ToolUp.Remoting.Json.SystemTextJson.FableConverters.addTo(System.Text.Json.JsonSerializerOptions) : System.Void
 ToolUp.Remoting.Json.SystemTextJson.FableConverters.create() : System.Text.Json.JsonSerializerOptions
+ToolUp.Remoting.Json.SystemTextJson.FableConverters.decoderOracle : ToolUp.Remoting.Json.JsonDecoderOracle { get }
+ToolUp.Remoting.Json.SystemTextJson.FableConverters.registerVerifiedFor`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonDecoderVerification, ToolUp.Remoting.DecoderRefusal]
+ToolUp.Remoting.Json.SystemTextJson.FableConverters.registerVerified`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonDecoderVerification, ToolUp.Remoting.DecoderRefusal]
 ToolUp.Remoting.Json.SystemTextJson.FableConverters.shared : System.Text.Json.JsonSerializerOptions { get }
 ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseElement(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Text.Json.JsonElement, System.Type, System.Text.Json.JsonSerializerOptions) : Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]
 ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseFor`1(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Text.Json.JsonElement, System.Text.Json.JsonSerializerOptions) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]
 ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialise`1(System.Text.Json.JsonElement, System.Text.Json.JsonSerializerOptions) : Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.SystemTextJson.FableConverters.verifyDecoder`1(System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonDecoderVerification, ToolUp.Remoting.DecoderRefusal]
 ToolUp.Remoting.Json.SystemTextJson.Int64Converter (class)
 ToolUp.Remoting.Json.SystemTextJson.Int64Converter..ctor()
 ToolUp.Remoting.Json.SystemTextJson.Int64Converter.Read(System.Text.Json.Utf8JsonReader&, System.Type, System.Text.Json.JsonSerializerOptions) : System.Int64
