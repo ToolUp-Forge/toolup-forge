@@ -162,6 +162,14 @@ let private registeredTests =
         FactStoreTests.surfacePopulationRegistryTests
         FactStoreTests.metricSurfaceTests
         FactStoreTests.metricSurfaceScaleTests
+        // Phase 890 — the blob fact store's point-read index: the IFactStore
+        // contract with the index forced on, the indexed and enumerating reads
+        // compared across a query matrix, the read counts at two scope sizes,
+        // index deletion / failed writes / out-of-band facts / rebuild and
+        // consistency, the threshold, and the fan-out bound.
+        FactStoreTests.indexTests
+        FactStoreTests.indexPopulationRegistryTests
+        FactStoreTests.pointReadIndexTests
         // Phase 566 — canonical-method selection for competing facts: selector
         // matching, canonical query default, explicit override, undeclared
         // parity, competition indicator.

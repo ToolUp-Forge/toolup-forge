@@ -171,6 +171,54 @@ resolution, the ranking and the statistics fold) live in
 `PopulationQueryTypes` and are shared, so an indexed implementation is
 equivalent by construction rather than by a second reading of this page.
 
+### How the blob store serves a point read (Phase 890)
+
+Below a threshold, `BlobFactStore` answers a point read the way it always
+has: list the scope's `_facts/` prefix, download every fact, filter. At or
+above it (`FactIndexOptions.defaults`: 512 facts), a point read, the
+lineage-head lookup inside `Assert` / `AssertBatch`, and
+`QuerySupersessionChain` read the facts they concern and no others. Measured
+over a 10,000-fact scope, counting downloads rather than timing them:
+
+| Operation | Before | After (warm) |
+|---|---|---|
+| Point read — one subject, metric and period | 10,000 | 1 |
+| `QuerySupersessionChain` of a one-fact lineage | 10,001 | 2 |
+| `Assert` superseding one fact | 10,001 | 2 (the head it confirms, and the metric surface's own probe) |
+| `Assert` of a new lineage | — | 1 (the surface probe; no fact is read) |
+
+The same counts hold at 1,000 facts: an indexed read's cost follows the
+facts it returns, not the scope it searches.
+
+**The index.** One empty leaf per fact, in the Phase 9f blob-index layout,
+under `_factindex/{subject-metric}/{lineage}/{asOf}_{factId}.ref` — so one
+leaf set is both the by-subject-and-metric index (the first segment) and
+the by-lineage index (the first two). It holds no fact data: the fact blobs
+are the truth, and deleting every leaf loses nothing.
+
+**When it answers.** Every consulting read lists the census (`_facts/`) and
+the leaves, and the index answers only when every fact in the census has a
+leaf. Anything else — a failed leaf write, a fact written behind the store's
+back, a scope that has just crossed the threshold, an index someone deleted
+— makes that one read enumerate, which is always right, and write the
+missing leaves from the facts it just read. A failed index write therefore
+costs one slower read and never a different answer; the listings are two
+calls that fetch names, never blobs.
+
+**What still enumerates.** A query naming neither a subject nor a metric
+(`FactQuery.all`) is the whole-store walk by definition — its answer is every
+fact. A query naming only one of the two enumerates too; a metric across
+subjects is the population read's job, served by the metric surface.
+
+**Operating it.** `RebuildIndex(scope)` on the `BlobFactStore` rewrites every
+leaf, and `IndexConsistencyCheck(scope, sampleSize)` reports the Phase 9f
+`IndexConsistencyEntry` (a fact with no leaf, a leaf whose fact is gone) —
+the same two members the event and job stores expose. Neither is needed for
+correctness. Choose the policy with `BlobFactStore.createWithIndex`:
+`FactIndexOptions.disabled` for the pre-890 behaviour exactly, `always` to
+index at every size. Every parallel blob read or write in the store runs at
+most 16 at a time.
+
 ## Fact vs result vs model artifact
 
 The fact store sits **above** the analysis-result and model-artifact
@@ -222,8 +270,10 @@ the resolved fact-store kind. Compose the store today via
 `BlobFactStore.create` (over any `IBlobStorage`, auditing to `IEventStore`). The default
 is blob-backed, append-only, and stateless between calls — distributed-ready
 by construction (the content-addressed id makes concurrent writes
-idempotent); a large deployment swaps in an indexed implementation behind
-the same six-rule-audited `IFactStore` contract.
+idempotent), and it indexes its own point reads above a threshold (see
+[How the blob store serves a point read](#how-the-blob-store-serves-a-point-read-phase-890)).
+A large deployment can still swap in another implementation behind the same
+six-rule-audited `IFactStore` contract.
 
 ### Facts reach the model two ways, and only one needs the model's consent
 
