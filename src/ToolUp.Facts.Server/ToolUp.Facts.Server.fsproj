@@ -102,6 +102,9 @@
         <Compile Include="Server\RecomputeJobHandler.fs" />
         <Compile Include="Server\ReactiveDataChange.fs" />
         <Compile Include="Server\CoherenceCheck.fs" />
+        <!-- Phase 887 — the fact-table writer seam + its default over
+             IFactStore. Before FactsCompose.fs, which composes it. -->
+        <Compile Include="Server\IFactTableWriter.fs" />
         <Compile Include="Server\FactsCompose.fs" />
     </ItemGroup>
     <!-- PackageReferences flow transitively from ToolUp.Platform.Server.

@@ -1055,3 +1055,53 @@ module FactsCompose =
     /// by the `/ready` health probe.
     let withCoherenceChecks (cadence: Trigger) (app: ServerApp) : ServerApp =
         withCoherenceChecksConfig CoherenceConfig.defaults cadence [] app
+
+    // ─── Phase 887 — the default fact-table writer (opt-in) ───────────
+    //
+    // Declared fact tables (`ServerModule.declareFactTables`) are written
+    // through `IFactTableWriter`. This registers the default writer — over
+    // the composed `IFactStore`, so a declared table is usable before any
+    // dedicated table store is composed — and binds every declared table to
+    // it. A separate opt-in on top of the fact store: a deployment that only
+    // wants the store is byte-for-byte unchanged (GP 11 / GP 13).
+
+    /// Compose the default `IFactTableWriter` and bind every declared fact
+    /// table to it (`BindAllFactTables DefaultFactTableWriter.Destination`).
+    ///
+    /// Requires the fact store (`ServerConfig.FactStore = EnabledFactStore`,
+    /// composed with `withFactStore`). Under `NoFactStore` this returns the
+    /// app unchanged and binds nothing, exactly as `withFactStore` does — so
+    /// a composition declaring a `Required` table then refuses to start at
+    /// the fact-table preflight, naming the table, rather than failing here.
+    ///
+    /// The writer resolves the table registry and the metric registry from
+    /// DI when first used, so modules may be added before or after this call.
+    let withFactTableWriter (app: ServerApp) : ServerApp =
+        match app.Config.FactStore with
+        | NoFactStore -> app
+        | EnabledFactStore ->
+            let register (s: IServiceCollection) =
+                s.AddSingleton<IFactTableWriter>(
+                    Func<IServiceProvider, IFactTableWriter>(fun sp ->
+                        DefaultFactTableWriter.create
+                            (sp.GetRequiredService<IFactStore>())
+                            (sp.GetRequiredService<IBlobStorage>())
+                            (sp.GetRequiredService<IEventStore>())
+                            (tryService<Grounding.IFactTableRegistry> sp
+                             |> Option.defaultValue Grounding.FactTableRegistry.empty)
+                            (tryService<Grounding.IMetricRegistry> sp))
+                )
+
+            let serviceConfig =
+                match app.Extensions.ServiceConfig with
+                | None -> Some register
+                | Some existing -> Some(fun s -> register (existing s))
+
+            {
+                app with
+                    Extensions = {
+                        app.Extensions with
+                            ServiceConfig = serviceConfig
+                    }
+            }
+            |> ServerApp.bindFactTables (Grounding.BindAllFactTables DefaultFactTableWriter.Destination)
