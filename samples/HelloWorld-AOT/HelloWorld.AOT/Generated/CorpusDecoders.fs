@@ -129,8 +129,8 @@ module CorpusDecoders =
         typeof<Map<int, string>>.FullName
         typeof<Set<string>>.FullName
         typeof<Set<int>>.FullName
-        typeof<Tuple<int, string>>.FullName
-        typeof<Tuple<int, string, bool>>.FullName
+        typeof<int * string>.FullName
+        typeof<int * string * bool>.FullName
     ]
 
     /// Register every decoder above. Idempotent, and explicit —
@@ -171,8 +171,8 @@ module CorpusDecoders =
         RemotingDecoders.register<Map<int, string>> (Decode.asMap Decode.asInt32 Decode.asString)
         RemotingDecoders.register<Set<string>> (Decode.asSet Decode.asString)
         RemotingDecoders.register<Set<int>> (Decode.asSet Decode.asInt32)
-        RemotingDecoders.register<Tuple<int, string>> (Decode.tuple2 Decode.asInt32 Decode.asString)
-        RemotingDecoders.register<Tuple<int, string, bool>> (Decode.tuple3 Decode.asInt32 Decode.asString Decode.asBool)
+        RemotingDecoders.register<int * string> (Decode.tuple2 Decode.asInt32 Decode.asString)
+        RemotingDecoders.register<int * string * bool> (Decode.tuple3 Decode.asInt32 Decode.asString Decode.asBool)
 
 #if !FABLE_COMPILER
     /// Phase 801 — every decoder above beside the reflection reader,
@@ -214,8 +214,8 @@ module CorpusDecoders =
         RemotingDecoders.verify<Map<int, string>> draws seed (Decode.asMap Decode.asInt32 Decode.asString)
         RemotingDecoders.verify<Set<string>> draws seed (Decode.asSet Decode.asString)
         RemotingDecoders.verify<Set<int>> draws seed (Decode.asSet Decode.asInt32)
-        RemotingDecoders.verify<Tuple<int, string>> draws seed (Decode.tuple2 Decode.asInt32 Decode.asString)
-        RemotingDecoders.verify<Tuple<int, string, bool>> draws seed (Decode.tuple3 Decode.asInt32 Decode.asString Decode.asBool)
+        RemotingDecoders.verify<int * string> draws seed (Decode.tuple2 Decode.asInt32 Decode.asString)
+        RemotingDecoders.verify<int * string * bool> draws seed (Decode.tuple3 Decode.asInt32 Decode.asString Decode.asBool)
     ]
 
     /// Phase 801 — `registerAll`, gated: registers every decoder above

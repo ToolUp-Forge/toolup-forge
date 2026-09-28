@@ -3175,7 +3175,7 @@ module PlatformDecoders =
         typeof<LockLease option>.FullName
         typeof<Result<WireProvenanceChainPage, ProvenanceQueryError>>.FullName
         typeof<Result<ProviderProfileView, string>>.FullName
-        typeof<Result<(Tuple<string, ProviderHealth>) list, string>>.FullName
+        typeof<Result<(string * ProviderHealth) list, string>>.FullName
         typeof<Result<ServiceAccount list, string>>.FullName
         typeof<Result<ServiceAccount, string>>.FullName
         typeof<Result<ServiceAccountTokenView list, string>>.FullName
@@ -3186,7 +3186,7 @@ module PlatformDecoders =
         typeof<Result<TeamInviteIssueResult, string>>.FullName
         typeof<Result<TeamInviteAcceptResult, string>>.FullName
         typeof<Result<TeamInviteSummary list, string>>.FullName
-        typeof<Result<(Tuple<string, PendingInviteByEmail>) list, string>>.FullName
+        typeof<Result<(string * PendingInviteByEmail) list, string>>.FullName
         typeof<Result<TeamInviteExpiredPayload list, string>>.FullName
         typeof<Result<TeamInfo option, string>>.FullName
         typeof<Result<UserSummary list, string>>.FullName
@@ -3502,7 +3502,7 @@ module PlatformDecoders =
         RemotingDecoders.register<LockLease option> (Decode.option lockLease)
         RemotingDecoders.register<Result<WireProvenanceChainPage, ProvenanceQueryError>> (Decode.result wireProvenanceChainPage provenanceQueryError)
         RemotingDecoders.register<Result<ProviderProfileView, string>> (Decode.result providerProfileView Decode.asString)
-        RemotingDecoders.register<Result<(Tuple<string, ProviderHealth>) list, string>> (Decode.result (Decode.list (Decode.tuple2 Decode.asString providerHealth)) Decode.asString)
+        RemotingDecoders.register<Result<(string * ProviderHealth) list, string>> (Decode.result (Decode.list (Decode.tuple2 Decode.asString providerHealth)) Decode.asString)
         RemotingDecoders.register<Result<ServiceAccount list, string>> (Decode.result (Decode.list serviceAccount) Decode.asString)
         RemotingDecoders.register<Result<ServiceAccount, string>> (Decode.result serviceAccount Decode.asString)
         RemotingDecoders.register<Result<ServiceAccountTokenView list, string>> (Decode.result (Decode.list serviceAccountTokenView) Decode.asString)
@@ -3513,7 +3513,7 @@ module PlatformDecoders =
         RemotingDecoders.register<Result<TeamInviteIssueResult, string>> (Decode.result teamInviteIssueResult Decode.asString)
         RemotingDecoders.register<Result<TeamInviteAcceptResult, string>> (Decode.result teamInviteAcceptResult Decode.asString)
         RemotingDecoders.register<Result<TeamInviteSummary list, string>> (Decode.result (Decode.list teamInviteSummary) Decode.asString)
-        RemotingDecoders.register<Result<(Tuple<string, PendingInviteByEmail>) list, string>> (Decode.result (Decode.list (Decode.tuple2 Decode.asString pendingInviteByEmail)) Decode.asString)
+        RemotingDecoders.register<Result<(string * PendingInviteByEmail) list, string>> (Decode.result (Decode.list (Decode.tuple2 Decode.asString pendingInviteByEmail)) Decode.asString)
         RemotingDecoders.register<Result<TeamInviteExpiredPayload list, string>> (Decode.result (Decode.list teamInviteExpiredPayload) Decode.asString)
         RemotingDecoders.register<Result<TeamInfo option, string>> (Decode.result (Decode.option teamInfo) Decode.asString)
         RemotingDecoders.register<Result<UserSummary list, string>> (Decode.result (Decode.list userSummary) Decode.asString)
@@ -3830,7 +3830,7 @@ module PlatformDecoders =
         RemotingDecoders.verify<LockLease option> draws seed (Decode.option lockLease)
         RemotingDecoders.verify<Result<WireProvenanceChainPage, ProvenanceQueryError>> draws seed (Decode.result wireProvenanceChainPage provenanceQueryError)
         RemotingDecoders.verify<Result<ProviderProfileView, string>> draws seed (Decode.result providerProfileView Decode.asString)
-        RemotingDecoders.verify<Result<(Tuple<string, ProviderHealth>) list, string>> draws seed (Decode.result (Decode.list (Decode.tuple2 Decode.asString providerHealth)) Decode.asString)
+        RemotingDecoders.verify<Result<(string * ProviderHealth) list, string>> draws seed (Decode.result (Decode.list (Decode.tuple2 Decode.asString providerHealth)) Decode.asString)
         RemotingDecoders.verify<Result<ServiceAccount list, string>> draws seed (Decode.result (Decode.list serviceAccount) Decode.asString)
         RemotingDecoders.verify<Result<ServiceAccount, string>> draws seed (Decode.result serviceAccount Decode.asString)
         RemotingDecoders.verify<Result<ServiceAccountTokenView list, string>> draws seed (Decode.result (Decode.list serviceAccountTokenView) Decode.asString)
@@ -3841,7 +3841,7 @@ module PlatformDecoders =
         RemotingDecoders.verify<Result<TeamInviteIssueResult, string>> draws seed (Decode.result teamInviteIssueResult Decode.asString)
         RemotingDecoders.verify<Result<TeamInviteAcceptResult, string>> draws seed (Decode.result teamInviteAcceptResult Decode.asString)
         RemotingDecoders.verify<Result<TeamInviteSummary list, string>> draws seed (Decode.result (Decode.list teamInviteSummary) Decode.asString)
-        RemotingDecoders.verify<Result<(Tuple<string, PendingInviteByEmail>) list, string>> draws seed (Decode.result (Decode.list (Decode.tuple2 Decode.asString pendingInviteByEmail)) Decode.asString)
+        RemotingDecoders.verify<Result<(string * PendingInviteByEmail) list, string>> draws seed (Decode.result (Decode.list (Decode.tuple2 Decode.asString pendingInviteByEmail)) Decode.asString)
         RemotingDecoders.verify<Result<TeamInviteExpiredPayload list, string>> draws seed (Decode.result (Decode.list teamInviteExpiredPayload) Decode.asString)
         RemotingDecoders.verify<Result<TeamInfo option, string>> draws seed (Decode.result (Decode.option teamInfo) Decode.asString)
         RemotingDecoders.verify<Result<UserSummary list, string>> draws seed (Decode.result (Decode.list userSummary) Decode.asString)
@@ -3925,11 +3925,11 @@ module PlatformDecoders =
         "IPlatformTenantApi", [ typeof<Result<LifecycleSummary, string>>.FullName; typeof<Result<LifecycleSummary option, string>>.FullName; typeof<Result<LifecycleJobHandle, string>>.FullName; typeof<Result<LifecyclePreview, string>>.FullName; typeof<Result<ExportThenDeprovisionResult, string>>.FullName; typeof<Result<OffboardConfirmation, string>>.FullName; typeof<Result<ScheduledDeprovision, string>>.FullName; typeof<Result<unit, string>>.FullName; typeof<Result<ScheduledDeprovision option, string>>.FullName; typeof<Result<PrincipalSummary list, string>>.FullName ], true
         "IPresenceApi", [ typeof<PresencePeer list>.FullName; typeof<unit>.FullName; typeof<LockOutcome>.FullName; typeof<LockLease option>.FullName ], true
         "IProvenanceQueryApi", [ typeof<WireProvenanceCaps>.FullName; typeof<WireProvenanceNodeAnswer>.FullName; typeof<WireProvenanceEdgeSet>.FullName; typeof<Result<WireProvenanceChainPage, ProvenanceQueryError>>.FullName ], true
-        "IProviderProfileApi", [ typeof<Result<ProviderProfileView, string>>.FullName; typeof<Result<unit, string>>.FullName; typeof<Result<(Tuple<string, ProviderHealth>) list, string>>.FullName ], true
+        "IProviderProfileApi", [ typeof<Result<ProviderProfileView, string>>.FullName; typeof<Result<unit, string>>.FullName; typeof<Result<(string * ProviderHealth) list, string>>.FullName ], true
         "IServiceAccountApi", [ typeof<Result<ServiceAccount list, string>>.FullName; typeof<Result<ServiceAccount, string>>.FullName; typeof<Result<ServiceAccountTokenView list, string>>.FullName; typeof<Result<MintedServiceAccountTokenView, string>>.FullName; typeof<Result<unit, string>>.FullName ], true
         "IServiceStatusBoardApi", [ typeof<Result<ServiceStatusSnapshot, string>>.FullName; typeof<Result<SectionSummary, string>>.FullName ], true
         "ISessionApi", [ typeof<Result<SessionRecord list, string>>.FullName; typeof<Result<unit, string>>.FullName; typeof<Result<int, string>>.FullName ], true
-        "ITeamInviteApi", [ typeof<Result<TeamInviteIssueResult, string>>.FullName; typeof<Result<TeamInviteAcceptResult, string>>.FullName; typeof<Result<unit, string>>.FullName; typeof<Result<TeamInviteSummary list, string>>.FullName; typeof<Result<(Tuple<string, PendingInviteByEmail>) list, string>>.FullName; typeof<Result<TeamInviteExpiredPayload list, string>>.FullName; typeof<Result<TeamInfo option, string>>.FullName ], true
+        "ITeamInviteApi", [ typeof<Result<TeamInviteIssueResult, string>>.FullName; typeof<Result<TeamInviteAcceptResult, string>>.FullName; typeof<Result<unit, string>>.FullName; typeof<Result<TeamInviteSummary list, string>>.FullName; typeof<Result<(string * PendingInviteByEmail) list, string>>.FullName; typeof<Result<TeamInviteExpiredPayload list, string>>.FullName; typeof<Result<TeamInfo option, string>>.FullName ], true
         "IUserDirectoryApi", [ typeof<Result<UserSummary list, string>>.FullName ], true
         "IUserSchemaApi", [ typeof<Result<UserAuthoredSchema list, UserSchemaError>>.FullName; typeof<Result<UserAuthoredSchema, UserSchemaError>>.FullName; typeof<Result<MigrationOutcome, UserSchemaError>>.FullName; typeof<Result<unit, UserSchemaError>>.FullName ], true
         "IWebhookApi", [ typeof<Result<WebhookSubscription, string>>.FullName; typeof<Result<WebhookSubscription list, string>>.FullName; typeof<Result<unit, string>>.FullName; typeof<Result<WebhookTestResult, string>>.FullName; typeof<Result<WebhookDelivery list, string>>.FullName ], true

@@ -437,6 +437,16 @@ module Plan =
             elif isGenericOf resultDef t then
                 let args = t.GetGenericArguments()
                 sprintf "Result<%s, %s>" (typeSpelling args[0]) (typeSpelling args[1])
+            elif isReferenceTuple t then
+                // F# tuple syntax, not the CLR generic `Tuple<…>` name. Each
+                // element goes through `parenthesised`, the same helper
+                // `option`/`list` use for their inner argument — which is
+                // exactly what a NESTED tuple element needs too: `a * b` is a
+                // flat 2-tuple, so a tuple-valued element must render as
+                // `(b * c)` to keep `a * (b * c)` distinct from the flat
+                // 3-tuple `a * b * c`. `parenthesised` wraps on any spelling
+                // containing a space, which a nested tuple's always does.
+                FSharpType.GetTupleElements t |> Array.map parenthesised |> String.concat " * "
             elif t.IsGenericType then
                 let args = t.GetGenericArguments() |> Array.map typeSpelling |> String.concat ", "
                 sprintf "%s<%s>" (qualifiedName t) args

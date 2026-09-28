@@ -3797,7 +3797,7 @@ module PlatformClientProxies =
         let callSetRoute = Proxy.generatedMethod<Result<unit, string>> api "SetRoute" true (JsonDecode.result JsonDecode.asUnit JsonDecode.asString)
         let callClearRoute = Proxy.generatedMethod<Result<unit, string>> api "ClearRoute" true (JsonDecode.result JsonDecode.asUnit JsonDecode.asString)
         let callSetFallback = Proxy.generatedMethod<Result<unit, string>> api "SetFallback" true (JsonDecode.result JsonDecode.asUnit JsonDecode.asString)
-        let callGetHealth = Proxy.generatedMethod<Result<(Tuple<string, ProviderHealth>) list, string>> api "GetHealth" false (JsonDecode.result (JsonDecode.list (JsonDecode.tuple2 JsonDecode.asString decodeProviderHealth)) JsonDecode.asString)
+        let callGetHealth = Proxy.generatedMethod<Result<(string * ProviderHealth) list, string>> api "GetHealth" false (JsonDecode.result (JsonDecode.list (JsonDecode.tuple2 JsonDecode.asString decodeProviderHealth)) JsonDecode.asString)
         let callRecordVerification = Proxy.generatedMethod<Result<unit, string>> api "RecordVerification" true (JsonDecode.result JsonDecode.asUnit JsonDecode.asString)
 
         {
@@ -3880,7 +3880,7 @@ module PlatformClientProxies =
         let callRevokeInvite = Proxy.generatedMethod<Result<unit, string>> api "RevokeInvite" true (JsonDecode.result JsonDecode.asUnit JsonDecode.asString)
         let callListPendingInvites = Proxy.generatedMethod<Result<TeamInviteSummary list, string>> api "ListPendingInvites" true (JsonDecode.result (JsonDecode.list decodeTeamInviteSummary) JsonDecode.asString)
         let callIssuePendingInviteByEmail = Proxy.generatedMethod<Result<unit, string>> api "IssuePendingInviteByEmail" true (JsonDecode.result JsonDecode.asUnit JsonDecode.asString)
-        let callListPendingInvitesByEmail = Proxy.generatedMethod<Result<(Tuple<string, PendingInviteByEmail>) list, string>> api "ListPendingInvitesByEmail" true (JsonDecode.result (JsonDecode.list (JsonDecode.tuple2 JsonDecode.asString decodePendingInviteByEmail)) JsonDecode.asString)
+        let callListPendingInvitesByEmail = Proxy.generatedMethod<Result<(string * PendingInviteByEmail) list, string>> api "ListPendingInvitesByEmail" true (JsonDecode.result (JsonDecode.list (JsonDecode.tuple2 JsonDecode.asString decodePendingInviteByEmail)) JsonDecode.asString)
         let callRevokePendingInviteByEmail = Proxy.generatedMethod<Result<unit, string>> api "RevokePendingInviteByEmail" true (JsonDecode.result JsonDecode.asUnit JsonDecode.asString)
         let callListRecentlyExpiredInvites = Proxy.generatedMethod<Result<TeamInviteExpiredPayload list, string>> api "ListRecentlyExpiredInvites" true (JsonDecode.result (JsonDecode.list decodeTeamInviteExpiredPayload) JsonDecode.asString)
         let callCheckMyInvites = Proxy.generatedMethod<Result<TeamInfo option, string>> api "CheckMyInvites" false (JsonDecode.result (JsonDecode.option decodeTeamInfo) JsonDecode.asString)
