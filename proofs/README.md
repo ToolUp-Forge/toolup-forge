@@ -108,7 +108,7 @@ breaks the encoding computed as the exception. Its ladder is
 | `oracle/ElmishRing.fs`, `oracle/ElmishSub.fs` | **generated** — the two Elmish models extracted to F#, committed for the same reason |
 | [`../tests/elmish-proof-corpus/`](../tests/elmish-proof-corpus/) | **generated** — the two Elmish models' verdicts over the seeded campaign, written by the .NET host and replayed by the **Fable** host against the transpiled runtime; since Phase 850 also the check that the two hosts' `Prims` shims compute the same ring |
 | `oracle/Prims.fs` | the nine-name runtime the extractions need, because F\*'s F# backend ships none; every later model references a subset of the same nine |
-| `oracle/fable/Prims.fs`, `oracle/fable/ToolUp.Remoting.Proofs.Oracle.Fable.fsproj` | **Phase 850** — the same shim over machine integers, and the project that compiles the committed `oracle/ElmishRing.fs` against it for the **Fable** host; `ToolUp.AI.Client.Tests` references it and runs the ring model live beside the transpiled runtime |
+| `oracle/fable/Prims.fs`, `oracle/fable/ToolUp.Remoting.Proofs.Oracle.Fable.fsproj` | **Phase 850** — the same shim over machine integers, and the project that compiles the committed `oracle/ElmishRing.fs` — and since Phase 884 `oracle/ElmishLoop.fs` — against it for the **Fable** host; `ToolUp.AI.Client.Tests` references it and runs the ring model and the dispatch-loop model live beside the transpiled runtime |
 | [`../proofs.json`](../proofs.json) | both ladders below, declared as **data** — hand-authored, never generated, so a registry can read what a human decided rather than parse this prose |
 
 ```powershell
@@ -897,7 +897,13 @@ one every client executes.
   agrees with the transpiled ring on a second campaign the corpus never recorded, and it catches the
   broken ring. Both hosts hold the shipped ring to the proved model's answer, and both compute it;
   the diff is still replayed. The generator is a small LCG rather than `System.Random`, so the
-  sequences are the same by seed on either host.
+  sequences are the same by seed on either host — **true only since Phase 884.** Fable transpiled
+  the LCG's `uint32` step as a plain JavaScript `a * b + c` with no reduction modulo 2^32, so the
+  state lost its low bits within two draws and every draw after the first few was 0; the live
+  campaign above was, until then, almost entirely capacity-2, one-push sequences. Nothing compared
+  the two hosts' draws, so nothing noticed. The step is now widened to `uint64` and narrowed back,
+  which is the value the wrapping `uint32` step always produced on .NET (no corpus moved), and the
+  dispatch-loop differential pins a fingerprint of a draw that both hosts assert.
 * **The campaign is known to have reached the grow step.** The .NET host asserts the largest backing
   array the model reached is past several doublings, and that the diff campaign hit both the shortcut
   and the duplicate path — a campaign that only ever exercised the steady state would pass every
@@ -1125,6 +1131,22 @@ Not proved. *Measured*, on every run of the gate.
   included — and whether the terminate handler raises; and the two sides are compared on how many
   of the boot's gated starts ran (the effect's start function, the subscription's, `init`'s command)
   and on how many handles are still held (production counts each handle returned and each dispose).
+  Since Phase 884 all of it is compared **per step** — the state after the boot and after every
+  external event — and not only where the script ends.
+* **…and under Fable (Phase 884).** The loop every browser client runs is the Fable transpilation
+  of `Program.runWithDispatch`, and it is now held to the model the same way. The script, its
+  generator, both drivers, the skeleton and every comparison over the campaign are one host-neutral
+  module (`src/ToolUp.Platform.Tests/Client/ElmishLoopDifferential.fs`) compiled into both packs,
+  each comparison a ROW that each host turns into one case — so a new shape of script is a field
+  and a draw, a new property is a row, and neither host can run a row the other does not. The Fable
+  pack drives the transpiled loop beside `oracle/ElmishLoop.fs` compiled by Fable over the
+  machine-integer `Prims` and run live; no verdicts are replayed. That it is the **same** corpus is
+  asserted: the campaign's canonical rendering is pinned, and both hosts check the pin; the model's
+  verdicts over it are pinned too, which holds the `int` shim to the `BigInteger` one over the loop
+  model as Phase 850's corpus does for the ring. Shown red on the shipped code: with the paint made
+  after every message in `Program.fs` (the pre-851 loop), the Fable agreement row failed on 259 of
+  the 400 scripts. What does not run there is what is not the campaign — the hand-written production
+  scenarios below, several of which read the process-wide `Console.Error`; they run on .NET.
 * **The `log` comparison is what holds the two-flag encoding.** Production's log is recorded through
   `IDispatcher.IsActive` at the moment of each dispatch; the model's through its `terminated` cell.
   A state in which the two disagreed would log differently on the next dispatch, so
@@ -1274,13 +1296,6 @@ Named because an unstated exclusion reads, to anyone who finds it later, as a cl
   handed `dispatch` and returning — `Cmd.OfAsync`, `Cmd.map`, `Cmd.batch` ordering — and what a
   subscription's start does, are the callees the oracle abstracts. The theorem is about what the
   loop does with what they raise, not about what they raise.
-* **Under Fable.** 788's answer — the .NET host writing the model's verdicts to a corpus the Fable
-  pack replays — was not taken here: the loop differential drives `Program.runWithDispatch` itself,
-  which would need the script driver in the shared host-neutral module and a corpus of script
-  verdicts. Since Phase 850 an extraction CAN compile under Fable (the ring's does, and `ElmishLoop.fs`
-  opens only `ElmishRing`), so the cheaper route now is to compile the loop model into the Fable
-  pack beside the ring and drive it live, but that is not done. The transpiled loop is the one every
-  browser client executes, and it is not differentially tested by this phase.
 
 ---
 
@@ -1358,7 +1373,12 @@ different coat.
 hosts, with a local stopwatch (Phase 849's harness was in flight): capacity 10, the same 4,000-op
 sequence at 65 % pushes (the ring grows through several doublings), outputs asserted equal before
 timing. On .NET, `Ring.fs` 141–175 ns/op against the model's 177–187 µs/op — a ratio of
-1,000–1,300×; under Fable on node, 994 ns/op against 2.62 ms/op — 2,600×. The falsifier is stated
+1,000–1,300×; under Fable on node, 466–480 ns/op against 366–377 µs/op — about 785× (two runs,
+2026-09-28). **Corrected by Phase 884:** the figure first recorded here, 994 ns/op against 2.62 ms/op
+(2,600×), was not over the same sequence — the Fable host's LCG drew 0 after its first few draws (see
+Rung 2 of the Elmish runtime ladder), so that arm ran nearly 4,000 pushes and almost no pops and grew
+the ring to thousands of slots, and its agreement assertion compared two all-but-empty lists. The
+falsifier below said the arms ran "the same sequence"; it was not checked, and it was false. The falsifier is stated
 because a measurement without one is not a measurement: both arms assert the same popped values
 from the same sequence, so neither skipped its work; the per-op figures scale with the sequence
 length and are dominated by the model's O(n) `set` / `nth` over a list of a few hundred slots, so a
