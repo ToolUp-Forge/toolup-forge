@@ -10,7 +10,12 @@
          into F# both hosts accept with no flag, byte-held by
          `proofs/check.ps1` — so the model the Fable pack runs is, byte for
          byte, the model the prover produced and the .NET differential
-         runs. `ToolUp.AI.Client.Tests` references this project and Fable
+         runs. Since Phase 884 a third file rides the same shim: the
+         dispatch loop's extraction `../ElmishLoop.fs`, a step machine over
+         that ring, which the Fable pack runs beside the transpiled
+         `Program.runWithDispatch`.
+
+         `ToolUp.AI.Client.Tests` references this project and Fable
          transpiles both files with the rest of the client tier;
          `check.ps1` also builds it on .NET, which is the cheap half of
          "compiles on both hosts".
@@ -38,6 +43,11 @@
         <!-- GENERATED from ../../ElmishRing.fst — the committed, normalised
              extraction, shared with the .NET oracle. Do not edit. -->
         <Compile Include="../ElmishRing.fs" />
+        <!-- Phase 884 - GENERATED from ../../ElmishLoop.fst, the dispatch
+             loop's step machine over the ring above: the same committed
+             bytes the .NET oracle compiles. It needs nothing of Prims the
+             ring does not, so the shim is unchanged. Do not edit. -->
+        <Compile Include="../ElmishLoop.fs" />
     </ItemGroup>
     <ItemGroup>
         <!-- Explicit, as every Fable-compiled project in the tree: the

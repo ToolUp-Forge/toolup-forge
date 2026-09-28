@@ -128,7 +128,20 @@
     "the handler's outcome is not a parameter of the model, as the reporter is not), and the assumed row",
     "`elmish-loop-teardown-abstracted`, which names what the model still leaves out - including the one known",
     "gap it does not close: a subscription a MESSAGE's diff starts after an earlier one in the same diff called",
-    "Terminate."
+    "Terminate.",
+    "",
+    "Phase 884 APPENDED one entry, REMOVED one and AMENDED five, and moved no rung of an existing claim. The loop's",
+    "differential now runs under Fable: the script, its generator, both drivers, the skeleton and every comparison",
+    "over the campaign moved into the host-neutral src/ToolUp.Platform.Tests/Client/ElmishLoopDifferential.fs,",
+    "compiled into both packs, and the Fable oracle project compiles proofs/oracle/ElmishLoop.fs beside the ring, so",
+    "`elmish-loop-model-agrees-with-shipped-code-fable` is the tested row and the policy row `elmish-loop-fable-out`",
+    "is gone. The comparison became per STEP (after the boot and after every external event) on both hosts. Its",
+    "load-bearing premise - that both hosts draw the same campaign - was FALSE before the phase: the shared LCG",
+    "transpiled without its modulo-2^32 reduction, so under Fable every draw after the first few was 0. That also",
+    "made the Phase 850 Fable arms run different, degenerate sequences, so `elmish-ring-extraction-measured` and",
+    "`verified-implementation-road` carry corrected Fable figures and `elmish-model-agrees-with-shipped-code-fable`",
+    "says what its live campaign was until now; `elmish-fable-shim-machine-integers` gains the loop verdict pin as a",
+    "second mitigation."
   ],
   "kind": "proofs",
   "version": 1,
@@ -1316,7 +1329,7 @@
     {
       "id": "elmish-model-agrees-with-shipped-code-fable",
       "level": "tested",
-      "claim": "The same drivers, from the same shared module, replay the models' recorded verdicts (tests/elmish-proof-corpus/, written by the .NET host and held to the live model on every .NET run) against the Fable transpilation of `Ring.fs` / `Sub.fs` - the runtime every browser client actually executes. Since Phase 850 the RING extraction is also compiled under Fable (proofs/oracle/ElmishRing.fs, laid out by proofs/normalise-extraction.fsx, over the machine-integer Prims in proofs/oracle/fable/) and run live: it reproduces the corpus's verdicts, agrees with the transpiled ring on a second campaign the corpus never recorded, and catches the broken ring. Until 850 the extraction compiled on .NET only, because its layout needed a flag Fable reads from no fsproj.",
+      "claim": "The same drivers, from the same shared module, replay the models' recorded verdicts (tests/elmish-proof-corpus/, written by the .NET host and held to the live model on every .NET run) against the Fable transpilation of `Ring.fs` / `Sub.fs` - the runtime every browser client actually executes. Since Phase 850 the RING extraction is also compiled under Fable (proofs/oracle/ElmishRing.fs, laid out by proofs/normalise-extraction.fsx, over the machine-integer Prims in proofs/oracle/fable/) and run live: it reproduces the corpus's verdicts, agrees with the transpiled ring on a second campaign the corpus never recorded, and catches the broken ring. (Until Phase 884 that second campaign was degenerate under Fable: the shared LCG transpiled without its modulo-2^32 reduction and drew 0 after its first few draws, so it was nearly all capacity-2, one-op sequences; the LCG is now exact on both hosts and the loop differential pins a draw from it.) Until 850 the extraction compiled on .NET only, because its layout needed a flag Fable reads from no fsproj.",
       "evidence": {
         "family": "Phase 788 - the proved Elmish runtime as oracle (Fable)",
         "host": "src/ToolUp.AI.Client.Tests/ElmishProofOracleTests.fs",
@@ -1551,11 +1564,13 @@
     {
       "id": "elmish-loop-model-agrees-with-shipped-code-dotnet",
       "level": "tested",
-      "claim": "The extracted machine agrees with the real `Program.runWithDispatch` over generated reentrancy scripts - which messages a dispatcher-handle sink and an effect's start function raise before the boot paint, which messages init's command raises during the boot drain, which each message's command raises (including Terminate), which messages the render hook raises when handed a given model (Phase 851: the post-drain setState dispatch), which messages terminate, and what the outside world dispatches afterwards through IDispatcher - on the messages `update` saw in order, the messages `dispatch` accepted (recorded on production through IsActive, so the two-flag encoding is measured), the final model, IsActive, the number of times the render hook was called, the model it was last handed, and the boot paint - the model it was handed and what `update` had seen by then. Since Phase 871 the scripts also say whether the init model subscribes and what the subscription's start raises (including Terminate) and whether the terminate handler raises, and the two are compared on how many of the boot's gated starts ran and how many handles are still held. A faithful hand-transcribed skeleton agrees too; the same skeleton with the latch released before the drain, with the paint made after every message (the pre-851 loop), with one paint after the while and no pop after it, with the latch set after the sinks and effects ran (the boot as it was until it was restated), with every start made after Terminate (the boot before 871), and with a terminating start's handle kept (the registry before 871), are each caught. Five production cases pin Phase 871's three faults directly and were each shown red on the tree before it.",
+      "claim": "The extracted machine agrees with the real `Program.runWithDispatch` over generated reentrancy scripts - which messages a dispatcher-handle sink and an effect's start function raise before the boot paint, which messages init's command raises during the boot drain, which each message's command raises (including Terminate), which messages the render hook raises when handed a given model (Phase 851: the post-drain setState dispatch), which messages terminate, and what the outside world dispatches afterwards through IDispatcher - on the messages `update` saw in order, the messages `dispatch` accepted (recorded on production through IsActive, so the two-flag encoding is measured), the final model, IsActive, the number of times the render hook was called, the model it was last handed, and the boot paint - the model it was handed and what `update` had seen by then. Since Phase 871 the scripts also say whether the init model subscribes and what the subscription's start raises (including Terminate) and whether the terminate handler raises, and the two are compared on how many of the boot's gated starts ran and how many handles are still held. A faithful hand-transcribed skeleton agrees too; the same skeleton with the latch released before the drain, with the paint made after every message (the pre-851 loop), with one paint after the while and no pop after it, with the latch set after the sinks and effects ran (the boot as it was until it was restated), with every start made after Terminate (the boot before 871), and with a terminating start's handle kept (the registry before 871), are each caught. Five production cases pin Phase 871's three faults directly and were each shown red on the tree before it. Since Phase 884 the campaign rows live in the host-neutral src/ToolUp.Platform.Tests/Client/ElmishLoopDifferential.fs, the comparison is per STEP - the state after the boot and after every external event, not only the final one - and the campaign's canonical rendering and the model's verdicts over it are pinned by fingerprint, so the Fable row below provably runs the same four hundred scripts.",
       "evidence": {
         "family": "Phase 789 - the proved dispatch loop as oracle",
         "host": "src/ToolUp.Platform.Tests/InProcess/ElmishLoopProofOracleTests.fs",
         "cases": [
+          "the campaign is the corpus both hosts run - its fingerprint is pinned",
+          "the extracted machine's verdicts are the same on both hosts - its fingerprint is pinned",
           "the extracted machine agrees with the production loop over generated reentrancy scripts",
           "every drain in the campaign finished - the fuel bound never decided an agreement",
           "the campaign re-dispatched from update, from the boot drain, from the paint, and after Terminate",
@@ -1582,6 +1597,37 @@
           "a subscription that terminates from its own start function is stopped - run"
         ],
         "runner": "proofs/check.ps1 step 7, which asserts a CASE COUNT because a filter matching nothing reports success"
+      }
+    },
+    {
+      "id": "elmish-loop-model-agrees-with-shipped-code-fable",
+      "level": "tested",
+      "claim": "Phase 884. The same comparison runs under Fable, against the loop every browser client executes: the Fable transpilation of Program.runWithDispatch, driven by the same scripted update and setState, beside the dispatch-loop extraction proofs/oracle/ElmishLoop.fs compiled by Fable over the machine-integer Prims in proofs/oracle/fable/ and run LIVE (no recorded verdicts are replayed). Every campaign row of the .NET host runs here too, from the one host-neutral module: the per-step agreement over four hundred generated scripts - pre-boot sink and effect dispatches, boot and message terminations, post-drain setState dispatches, subscriptions that terminate from their start, raising terminate handlers - the fuel check, the three coverage floors, the faithful skeleton and its six go-reds, and the five loop properties run on production (boot_drain_equiv, terminated_absorbing, painted_is_model, terminated_holds_nothing, a raising handler changes nothing). That it is the SAME corpus is asserted, not assumed: the campaign's canonical rendering is pinned and both hosts check the pin. Shown red on the shipped loop: with the paint made after every message in Program.fs (the pre-851 loop), the Fable agreement row failed on 259 of the 400 scripts. Not in this row: the .NET host's thirteen hand-written production scenarios (the reporter-totality and teardown cases, several of which read the process-wide Console.Error, the fallback arm, and the single-shape boot and render cases) run on .NET only; they are not the campaign.",
+      "evidence": {
+        "family": "Phase 884 - the proved dispatch loop as oracle (Fable)",
+        "host": "src/ToolUp.AI.Client.Tests/ElmishProofOracleTests.fs",
+        "cases": [
+          "the campaign is the corpus both hosts run - its fingerprint is pinned",
+          "the extracted machine's verdicts are the same on both hosts - its fingerprint is pinned",
+          "the extracted machine agrees with the production loop over generated reentrancy scripts",
+          "every drain in the campaign finished - the fuel bound never decided an agreement",
+          "the campaign re-dispatched from update, from the boot drain, from the paint, and after Terminate",
+          "the hand-transcribed skeleton agrees with the model",
+          "a loop that releases the latch before draining is caught - go-red",
+          "a loop that paints after every message is caught - go-red, Phase 851",
+          "a loop that paints once but never re-pops is caught - go-red, Phase 851",
+          "a single-message boot drain and a steady-state dispatch process the same trace - boot_drain_equiv, run",
+          "after Terminate nothing is processed or painted and IsActive is false - terminated_absorbing, run",
+          "the model on screen is the model whenever the loop is idle - painted_is_model, run",
+          "the campaign dispatched from a sink and from an effect's start function before the boot paint",
+          "a loop that sets the latch after the effects ran is caught - go-red",
+          "the campaign terminated from a sink, an effect's start and a subscription's start, and with a raising handler",
+          "a terminated program holds nothing - terminated_holds_nothing, run",
+          "a terminate handler that raises changes nothing the loop does - teardown is total, run",
+          "a boot that starts after Terminate is caught - go-red, Phase 871",
+          "a registry that keeps a terminating start's handle is caught - go-red, Phase 871"
+        ],
+        "runner": "dotnet run --project Build.fsproj -- VerifyFable (the fable-tier CI job, and the Fable leg of VerifyAll)"
       }
     },
     {
@@ -1648,15 +1694,6 @@
       "reason": "the outside world is modelled as a sequence of IDispatcher calls between drains; that no external dispatch arrives while a synchronous drain has not returned is the single-threaded host's contract, assumed by the model's `run` and proved by nothing here."
     },
     {
-      "id": "elmish-loop-fable-out",
-      "level": "policy",
-      "claim": "The transpiled loop under Fable is OUT.",
-      "evidence": {
-        "document": "proofs/README.md"
-      },
-      "reason": "the loop differential drives Program.runWithDispatch itself rather than replaying recorded verdicts, so the Phase 788 corpus route was not taken; and although since Phase 850 an extraction CAN compile under Fable (the ring's does, and ElmishLoop.fs opens only ElmishRing), compiling the loop model into the Fable pack and driving it live is not done. The browser's copy of the loop is not differentially tested."
-    },
-    {
       "id": "decoder-tuple-characterisation",
       "level": "proved",
       "claim": "A tuple combinator (Phase 800) accepts a positional array of exactly its arity and refuses every other value naming both arities - never a slice - and on an array of the wrong width the refusal is the arity check's refusal verbatim, so an element decoder is never reached. The element path is `[n]`, because a tuple element has no name to carry.",
@@ -1715,7 +1752,7 @@
       "evidence": {
         "document": "proofs/README.md"
       },
-      "reason": "Phase 850 took the ring through the three things between an extraction and production on the pinned release (v2026.09.06). Layout stood: proofs/normalise-extraction.fsx re-lays the F# backend's output into F# both hosts compile with no flag (F# 10 refuses the verbose-syntax escape, FS1205). Representation stood: the machine-integer Prims in proofs/oracle/fable/ compiles the ring extraction under Fable, which runs it live. The array-backed ring did NOT stand, and the blocker is a toolchain fact, not a proof one: FStar.Seq.Base is `MkSeq of list` and the F# backend extracts it as exactly that (a Seq-backed ring is the list ring respelled - correct and slow), the pinned ulib ships no FStar.ST / FStar.Ref / FStar.Array / HyperStack / LowStar.Buffer at all, FStar.ImmutableArray is an OCaml-realised interface with no upd, and the F# backend has no runtime for any of them. Measured on both hosts, the extraction that can be built is 1,000-1,300x (.NET) and ~2,600x (Fable/node) slower per op than the shipped Ring.fs. What would reopen this is an F* release with a stateful array the F# backend can realise, or an axiomatised array realised by hand per host - which is the refinement tie in a different coat."
+      "reason": "Phase 850 took the ring through the three things between an extraction and production on the pinned release (v2026.09.06). Layout stood: proofs/normalise-extraction.fsx re-lays the F# backend's output into F# both hosts compile with no flag (F# 10 refuses the verbose-syntax escape, FS1205). Representation stood: the machine-integer Prims in proofs/oracle/fable/ compiles the ring extraction under Fable, which runs it live. The array-backed ring did NOT stand, and the blocker is a toolchain fact, not a proof one: FStar.Seq.Base is `MkSeq of list` and the F# backend extracts it as exactly that (a Seq-backed ring is the list ring respelled - correct and slow), the pinned ulib ships no FStar.ST / FStar.Ref / FStar.Array / HyperStack / LowStar.Buffer at all, FStar.ImmutableArray is an OCaml-realised interface with no upd, and the F# backend has no runtime for any of them. Measured on both hosts, the extraction that can be built is 1,000-1,300x (.NET) and ~785x (Fable/node; the ~2,600x first recorded was over a different, all-push sequence, corrected by Phase 884) slower per op than the shipped Ring.fs. What would reopen this is an F* release with a stateful array the F# backend can realise, or an axiomatised array realised by hand per host - which is the refinement tie in a different coat."
     },
     {
       "id": "elmish-fable-shim-machine-integers",
@@ -1724,12 +1761,12 @@
       "evidence": {
         "assumption": "no ring's backing array reaches 2^31 slots - the grow step doubles an array of a few dozen slots, and a ring that large would have exhausted the browser first"
       },
-      "mitigation": "the Fable host's first Phase 850 case runs the machine-integer model over the corpus the .NET host wrote with the BigInteger shim and requires the verdicts identical on every sequence, so the two shims are held to each other on every VerifyFable run; the overflow itself is unreachable in practice and unmodelled on purpose"
+      "mitigation": "the Fable host's first Phase 850 case runs the machine-integer model over the corpus the .NET host wrote with the BigInteger shim and requires the verdicts identical on every sequence, so the two shims are held to each other on every VerifyFable run; since Phase 884 the dispatch-loop model is held the same way, by the pinned fingerprint of its verdicts over the loop campaign, which both hosts assert; the overflow itself is unreachable in practice and unmodelled on purpose"
     },
     {
       "id": "elmish-ring-extraction-measured",
       "level": "tested",
-      "claim": "The extraction that CAN be built - the list-backed ring model - runs the same 4,000-op sequence (capacity 10, 65% pushes, through several doublings) as the shipped Ring.fs on both hosts, to the same popped values, and its per-op cost is printed beside production's: on .NET 177-187 us/op against 141-175 ns/op (1,000-1,300x), under Fable on node 2.62 ms/op against 994 ns/op (~2,600x), measured 2026-09-27 with a local stopwatch. Both arms assert agreement; neither asserts a threshold.",
+      "claim": "The extraction that CAN be built - the list-backed ring model - runs the same 4,000-op sequence (capacity 10, 65% pushes, through several doublings) as the shipped Ring.fs on both hosts, to the same popped values, and its per-op cost is printed beside production's: on .NET 177-187 us/op against 141-175 ns/op (1,000-1,300x), under Fable on node 2.62 ms/op against 994 ns/op (~2,600x), measured 2026-09-27 with a local stopwatch. Both arms assert agreement; neither asserts a threshold. CORRECTED by Phase 884: the Fable figure was not over the same sequence - the shared LCG drew 0 after its first few draws under Fable, so that arm ran ~4,000 pushes and almost no pops, growing the ring to thousands of slots; with the LCG exact the Fable arm runs the sequence the .NET arm runs, and measured 366-377 us/op against 466-480 ns/op (~785x) in two runs on 2026-09-28.",
       "evidence": {
         "family": "Phase 788 - the proved Elmish runtime as oracle",
         "host": "src/ToolUp.Platform.Tests/InProcess/ElmishProofOracleTests.fs and src/ToolUp.AI.Client.Tests/ElmishProofOracleTests.fs",

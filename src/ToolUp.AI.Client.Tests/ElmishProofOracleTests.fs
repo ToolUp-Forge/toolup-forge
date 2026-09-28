@@ -46,6 +46,7 @@ module ToolUp.AI.Client.Tests.ElmishProofOracleTests
 open Fable.Core
 open Fable.Core.JsInterop
 open ToolUp.AI.Client.Tests.NodeTest
+open ToolUp.Platform.Tests.Client
 open ToolUp.Platform.Tests.Client.ElmishProofDifferential
 
 [<Import("readFileSync", from = "node:fs")>]
@@ -118,6 +119,32 @@ let private perOpNs (rounds: int) (ops: int) (body: unit -> unit) : float =
         body ()
 
     (now () - started) * 1_000_000.0 / float (rounds * ops)
+
+// ─── Phase 884 — the dispatch loop, on this host ─────────────────────
+//
+// The loop every browser client runs is the transpilation of
+// `Program.runWithDispatch`; until Phase 884 its differential ran on .NET
+// only. Every row of the host-neutral `ElmishLoopDifferential` — the
+// production/model agreement over the campaign, per step; the coverage
+// floors; the faithful skeleton and its six go-reds; the loop properties
+// run on production — is one case here, over the SAME campaign (the
+// first row asserts the pinned fingerprint the .NET pack asserts too),
+// with the extraction `proofs/oracle/ElmishLoop.fs` compiled by Fable
+// over the machine-integer shim (the second row holds its verdicts to
+// the ones the `BigInteger` shim computes). Nothing is replayed from a
+// file: the model runs live, as the ring's does since 850.
+//
+// What does NOT run here is what is not the campaign: the .NET pack's
+// hand-written production scenarios, which read the process-wide
+// `Console.Error` or pin one-off shapes (see that file's header).
+
+let private loopTests =
+    testList "Phase 884 - the proved dispatch loop as oracle (Fable)" [
+        for check in ElmishLoopDifferential.corpusChecks ->
+            testCase check.Name (fun () ->
+                let violations = check.Violations()
+                Expect.isEmpty violations (ElmishLoopDifferential.report check violations))
+    ]
 
 let tests =
     testList "Phase 788 - the proved Elmish runtime as oracle (Fable)" [
@@ -232,7 +259,12 @@ let tests =
             let ops = genRingOps (Lcg 850_001) opCount 65
             let produced = productionRing capacity ops
             let modelled = modelRing capacity ops
-            Expect.equal modelled produced "the measured runs must still agree"
+            // As arrays: `node:assert`'s deep equality recurses once per
+            // cons cell, and a list of ~1,400 pops overflows its stack. Until
+            // Phase 884 fixed the Fable LCG this sequence was pushes after its
+            // first few draws, so the list compared here was all but empty and
+            // the limit was never met.
+            Expect.equal (Array.ofList modelled) (Array.ofList produced) "the measured runs must still agree"
 
             let productionNs =
                 perOpNs 100 opCount (fun () -> productionRing capacity ops |> ignore)
@@ -248,4 +280,6 @@ let tests =
                 (modelNs / productionNs)
 
             Expect.isTrue (productionNs > 0.0 && modelNs > 0.0) "both measurements ran")
+
+        loopTests
     ]
