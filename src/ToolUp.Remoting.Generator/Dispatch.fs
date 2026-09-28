@@ -150,9 +150,11 @@ module Dispatch =
             sprintf "namespace %s" namespaceName
             ""
             // Phase 804 — `System` too, as the decoders emitter already does:
-            // an argument spelled `Guid`, `DateOnly` or `Tuple<int, string>`
-            // resolves through it, and the first consumer to COMPILE an
-            // emitted table (samples/HelloWorld-AOT) failed on exactly those.
+            // an argument spelled `Guid` or `DateOnly` resolves through it,
+            // and the first consumer to COMPILE an emitted table
+            // (samples/HelloWorld-AOT) failed on exactly those. (Phase 914 —
+            // a tuple argument spells as `int * string`, not `Tuple<int,
+            // string>`, so it no longer needs this open on its own account.)
             "open System"
             "open System.Text.Json"
             "open ToolUp.Remoting"

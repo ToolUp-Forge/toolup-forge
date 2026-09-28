@@ -409,7 +409,7 @@ module ICorpusApiDispatch =
     let decodeTuplePairArgs (options: JsonSerializerOptions) (args: JsonElement list) =
         match args with
         | [ a0 ] ->
-            match FableConverters.tryDeserialise<Tuple<int, string>> a0 options with
+            match FableConverters.tryDeserialise<int * string> a0 options with
             | Error e -> Error(DecodeError.under "TuplePair(args)[0]" e)
             | Ok v0 ->
             Ok(v0)
@@ -420,7 +420,7 @@ module ICorpusApiDispatch =
     let decodeTupleTripleArgs (options: JsonSerializerOptions) (args: JsonElement list) =
         match args with
         | [ a0 ] ->
-            match FableConverters.tryDeserialise<Tuple<int, string, bool>> a0 options with
+            match FableConverters.tryDeserialise<int * string * bool> a0 options with
             | Error e -> Error(DecodeError.under "TupleTriple(args)[0]" e)
             | Ok v0 ->
             Ok(v0)
