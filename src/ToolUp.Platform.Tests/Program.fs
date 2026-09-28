@@ -156,6 +156,7 @@ let private registeredTests =
         FactStoreTests.surfacePopulationRegistryTests
         FactStoreTests.metricSurfaceTests
         FactStoreTests.metricSurfaceScaleTests
+        FactStoreTests.pointReadBaselineTests
         // Phase 566 — canonical-method selection for competing facts: selector
         // matching, canonical query default, explicit override, undeclared
         // parity, competition indicator.

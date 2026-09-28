@@ -672,10 +672,18 @@ let auditAndFreshnessTests =
 type private CountingBlobStorage(inner: IBlobStorage) =
     let gate = obj ()
     let mutable downloads = 0
+    let mutable lists = 0
 
     member _.Downloads = lock gate (fun () -> downloads)
 
-    member _.Reset() = lock gate (fun () -> downloads <- 0)
+    /// `List` calls since the last reset (Phase 890) — a listing returns
+    /// names only, so it is counted apart from the reads that fetch a blob.
+    member _.Lists = lock gate (fun () -> lists)
+
+    member _.Reset() =
+        lock gate (fun () ->
+            downloads <- 0
+            lists <- 0)
 
     interface IBlobStorage with
         // Phase 741 — no bounded multi-part commit primitive here; callers assemble through memory.
@@ -693,7 +701,12 @@ type private CountingBlobStorage(inner: IBlobStorage) =
         }
 
         member _.Delete(container, blobName) = inner.Delete(container, blobName)
-        member _.List(container, prefix) = inner.List(container, prefix)
+
+        member _.List(container, prefix) = async {
+            lock gate (fun () -> lists <- lists + 1)
+            return! inner.List(container, prefix)
+        }
+
         member _.Exists(container, blobName) = inner.Exists(container, blobName)
         member _.GetMetadata(container, blobName) = inner.GetMetadata(container, blobName)
 
@@ -1396,5 +1409,77 @@ let metricSurfaceScaleTests =
 
                 Expect.equal population.Stats.Minimum (Some 0m) "smallest of the permutation"
                 Expect.isTrue population.Truncated "the rest of the population stayed out of the answer"
+        }
+    ]
+// ─── Phase 890 — measure first (baseline, pre-index) ─────────────────
+
+[<Literal>]
+let private PointScaleSize = 10_000
+
+let private pointPeriod (k: int) : TemporalExtent = {
+    From = DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(3 * k)
+    To = DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(3 * k + 3)
+    Label = None
+}
+
+let private pointFact (index: int) : Fact = {
+    syntheticFact index (Scalar(decimal index)) with
+        FactId = sprintf "p%08d" index
+        Subject = {
+            Hierarchy = "geography"
+            Path = [ "eu"; sprintf "sku-%04d" (index / 10) ]
+        }
+        Metric = MetricRef "revenue"
+        Period = pointPeriod (index % 10)
+}
+
+let pointReadBaselineTests =
+    testList "Phase 890 measure first" [
+        testCaseAsync "baseline point read cost over 10,000 facts"
+        <| async {
+            let counting = CountingBlobStorage(InMemoryBlobStorage.InMemoryBlobStorage())
+            let storage = counting :> IBlobStorage
+            let scope = newScope ()
+            let json = FableConverters.create ()
+
+            for i in 0 .. PointScaleSize - 1 do
+                let fact = pointFact i
+                let payload = JsonSerializer.Serialize(fact, json) |> Encoding.UTF8.GetBytes
+                let! _ = storage.Upload(scope, sprintf "_facts/%s.json" fact.FactId, payload)
+                ()
+
+            let store =
+                storeOver storage (steppingClock (baseAsOf.AddDays 1.0)) FactSurfaceOptions.defaults
+
+            let target = pointFact 423
+
+            let query = {
+                FactQuery.forSubjectMetric target.Subject target.Metric with
+                    PeriodOverlaps = Some target.Period
+            }
+
+            counting.Reset()
+            let! found = store.Query(scope, query)
+            printfn "Phase 890 BASELINE point read: %d downloads, %d lists" counting.Downloads counting.Lists
+            Expect.equal found [ target ] "the point read finds its fact"
+
+            counting.Reset()
+            let! chain = store.QuerySupersessionChain(scope, target.FactId)
+            printfn "Phase 890 BASELINE chain: %d downloads, %d lists" counting.Downloads counting.Lists
+            Expect.equal chain [ target ] "chain"
+
+            counting.Reset()
+
+            let! asserted =
+                store.Assert(
+                    scope,
+                    {
+                        draftAt target.Subject.Path "revenue" syntheticMethod (Scalar 1m) "new-input" with
+                            Period = target.Period
+                    }
+                )
+
+            printfn "Phase 890 BASELINE assert: %d downloads, %d lists" counting.Downloads counting.Lists
+            Expect.isOk asserted "assert"
         }
     ]
