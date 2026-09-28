@@ -1656,4 +1656,39 @@ let tests =
                 Expect.equal (List.ofSeq disposed) [ "effect" ] $"the effect was disposed once ({route})"
                 Expect.isFalse handle.Value.IsActive $"terminated ({route})"
         }
+
+        test "a command's synchronous prefix runs before dispatch returns on .NET, as on Fable - Phase 907" {
+            // `Cmd.OfAsync` starts its async body via `AsyncHelpers.start`
+            // (Prelude.fs). The boot always paints the untouched init model
+            // first (`boot_paints_init_model`); init's command then runs,
+            // and - per `reentrant_no_loss` - a command whose body
+            // dispatches before it reaches a real await has that dispatch
+            // drained into a SECOND paint. What this pins is WHEN that
+            // second paint happens. Phase 907 makes the .NET branch use
+            // `Async.StartImmediate`, matching Fable's 851.C branch: an
+            // async body with no real await runs to completion on the
+            // calling thread, so its dispatch - and the second paint it
+            // causes - lands inside the SAME call to `runWithDispatch`,
+            // before that call returns. Before 907, .NET's `Async.Start`
+            // posted the whole body to the thread pool; `runWithDispatch`
+            // returned with only the boot paint on record
+            // (`renders = [ [] ]`), the second paint arriving - if at all -
+            // on another thread after this assertion had already run, and
+            // that is the red this test pinned.
+            let renders = ResizeArray<string list>()
+
+            let task () = async { return "async-result" }
+
+            let init () = [], Cmd.OfAsync.perform task () id
+            let update (msg: string) (model: string list) = model @ [ msg ], Cmd.none
+
+            Program.mkProgram init update (fun _ _ -> ())
+            |> Program.withSetState (fun m _ -> renders.Add m)
+            |> Program.runWithDispatch id ()
+
+            Expect.equal
+                (List.ofSeq renders)
+                [ []; [ "async-result" ] ]
+                "the async command's synchronous prefix (no real await) must dispatch and drain a second paint before runWithDispatch returns - as it does on Fable"
+        }
     ]

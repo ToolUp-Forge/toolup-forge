@@ -44,9 +44,24 @@ module internal Log =
 /// already running. `Async.StartImmediate` runs the body synchronously to
 /// its first bind on a pending promise and continues on that promise's
 /// resolution (a microtask), so nothing waits on a timer.
+///
+/// Phase 907 — the .NET branch is started IMMEDIATELY too, by the SAME
+/// theorem. `Async.Start` schedules the whole body on the thread pool
+/// unconditionally, even when the body never reaches a real await — so on
+/// .NET a command's synchronous prefix used to run on a worker thread, at
+/// an unspecified point after `dispatch` had already returned, instead of
+/// inside the drain that issued it. `reentrant_no_loss` does not depend on
+/// which host runs it: the re-entrancy latch is host-agnostic, so the
+/// argument that makes the timer-hop unnecessary under Fable makes the
+/// thread-pool hop unnecessary here too. `Async.StartImmediate` on .NET
+/// runs the body synchronously, on the calling thread, to its first await
+/// on a pending `Task`/`Async`, and continues the rest on that awaiter's
+/// callback — so a fully synchronous body (no real await at all) now
+/// completes, and dispatches, before `Async.Start`'s caller returns, on
+/// the SAME thread, exactly as it already did under Fable.
 module internal AsyncHelpers =
 #if FABLE_COMPILER
     let start x = Async.StartImmediate x
 #else
-    let inline start x = Async.Start x
+    let inline start x = Async.StartImmediate x
 #endif
