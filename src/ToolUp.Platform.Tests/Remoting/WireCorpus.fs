@@ -1506,6 +1506,42 @@ let private wrongKindJson (text: string) =
 ///     does not attempt — the two hand-written MsgPack rows for that
 ///     class above (`missing-field-record` / `extra-field-record`) stay
 ///     the authoritative coverage on that wire.
+/// Phase 913 measured the `/truncated` row's MsgPack outcome across the
+/// WHOLE pinned population (previously only the JSON side drew from this
+/// generator, plus the two hand-written MsgPack rows above) and found the
+/// blanket `Refused` wrong for these twelve names. `Reader.RequireAvailable`
+/// (Phase 786) guards only the LENGTH PREFIX of a str/bin/array/map read; it
+/// does not guard a fixed-width scalar read (`ReadInt64`/`ReadUInt64` etc.,
+/// which slice a `Span` and throw `ArgumentOutOfRangeException` when too few
+/// bytes remain — the int64/uint64/date-family cases below, all JSON-string-
+/// encoded and therefore MsgPack-fixed-width with no length prefix at all),
+/// nor a per-element read inside a container loop that runs past the end of
+/// the byte array after the header's own count passed its coarse
+/// `minBytesPerElement` check (`ReadByte` via the plain array indexer,
+/// `IndexOutOfRangeException` — the nested/keyed-container cases below).
+/// Each name is the WireCase's own `.Name`, so a rename makes this set
+/// visibly stale (an unmatched name is simply never consulted, and the
+/// row falls back to `Refused`) rather than silently wrong.
+let private truncationThrowsUnnamedFor =
+    set [
+        // Fixed-width scalar reads: no length prefix for RequireAvailable
+        // to check at all.
+        "width-int64-max"
+        "width-int64-beyond-int32"
+        "width-uint64-max"
+        "date-datetime-utc"
+        "date-datetime-unspecified"
+        "date-datetimeoffset"
+        "date-timeonly"
+        "date-timeonly-max"
+        // Container/record loops that read a nested or keyed element past
+        // the array end after the outer header's coarse check passed.
+        "list-of-records"
+        "map-int-key"
+        "set-string"
+        "record-consignment"
+    ]
+
 let private generatedMutationsFor (c: WireCase) : WireMutation list =
     let json = c.WriteJson()
     let trimmedJson = json.TrimStart()
@@ -1549,7 +1585,12 @@ let private generatedMutationsFor (c: WireCase) : WireMutation list =
                     Target = c.ClrType
                     MsgPack = truncatedMsgPack
                     Json = truncatedJson
-                    ExpectedMsgPack = Refused
+                    ExpectedMsgPack =
+                        if truncationThrowsUnnamedFor.Contains c.Name then
+                            ThrewUnnamed
+                                "a fixed-width scalar read or a per-element container read walked off the end of the byte array after RequireAvailable's own check had already passed — see the `truncationThrowsUnnamedFor` doc comment (Phase 913)"
+                        else
+                            Refused
                     // Cutting a container or string text in half almost
                     // always leaves an unterminated string, array or
                     // object — malformed JSON, not merely a wrong VALUE
