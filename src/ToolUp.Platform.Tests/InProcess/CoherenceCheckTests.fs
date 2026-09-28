@@ -170,6 +170,7 @@ let private jobCtx (scopeId: string) : JobContext = {
     AccessContext = AccessContext.unrestricted (AuthenticatedUser "system")
     Attempt = 1
     Trigger = Trigger.Manual
+    Scope = ToolUp.Platform.ResolvedScope.anonymous
     TriggerSource = ScheduledManually "system"
     ScheduledAt = DateTime.UtcNow
     RunningAt = DateTime.UtcNow

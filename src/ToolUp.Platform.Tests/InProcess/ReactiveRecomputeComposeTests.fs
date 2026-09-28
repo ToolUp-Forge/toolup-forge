@@ -155,6 +155,12 @@ type private DispatchingScheduler() =
         member _.RegisterHandler(name, handler) = handlers[name] <- handler
         member _.RegisterHandlerAsync(name, handler) = async { return Ok(handlers[name] <- handler) }
 
+        member this.Schedule(scope: ToolUp.Platform.ResolvedScope, registration: ToolUp.Platform.JobRegistration) =
+            (this :> IJobScheduler).Schedule {
+                registration with
+                    ScopeId = scope.ScopeId
+            }
+
         member _.Schedule(registration: JobRegistration) = async {
             let id = Guid.NewGuid()
             scheduled.Enqueue registration
@@ -185,6 +191,7 @@ type private DispatchingScheduler() =
                         AccessContext = AccessContext.unrestricted (AuthenticatedUser byUserId)
                         Attempt = 1
                         Trigger = registration.Trigger
+                        Scope = ToolUp.Platform.ResolvedScope.anonymous
                         TriggerSource = ScheduledManually byUserId
                         ScheduledAt = DateTime.UtcNow
                         RunningAt = DateTime.UtcNow

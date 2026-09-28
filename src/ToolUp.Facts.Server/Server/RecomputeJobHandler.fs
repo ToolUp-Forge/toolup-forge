@@ -29,8 +29,17 @@ open ToolUp.Platform
 // no-op — the fact base converges, it does not churn (task 561.D).
 //
 // **Stateless handler (GP 12 rule 4).** Everything the handler needs
-// arrives via `JobContext` (`ScopeId`) + the deserialised payload (the
-// target `FactId`); no in-memory state survives across dispatches.
+// arrives via `JobContext` (`Scope` / `ScopeId`) + the deserialised payload
+// (the target `FactId`); no in-memory state survives across dispatches.
+//
+// **Which scope form it uses (Phase 818).** A recompute job scheduled with
+// a resolver-minted scope (`IJobScheduler.Schedule(scope, …)` with this
+// handler's name and `payloadFor`) runs through the store's
+// `ResolvedScope` members, under the scope the scheduling request resolved
+// to. `scheduleRecompute` below schedules through the STRING overload,
+// because the only scope `reactToDataChange` holds is the one a data write
+// carried — see `ReactiveDataChange.fs` — and promoting that string to a
+// resolved scope would be exactly the laundering Phase 797 forbids.
 
 /// Recompute-job payload (JSON). The scope is carried by `JobContext`, so
 /// the payload only names the fact to recompute.
@@ -64,6 +73,32 @@ type InvalidationOutcome =
     /// carried for diagnostics.
     | ScheduleFailed of factId: string * error: string
 
+/// `FactInvalidation.recomputeNow` over a `ResolvedScope` (Phase 818): the
+/// same recompute-then-re-assert, with the re-assert through the store's
+/// typed member. The recompute engine itself (`IFactRecomputer`) keys on
+/// the shard string — it computes a value, it does not read the fact base
+/// through a door.
+module private RecomputeUnder =
+    let resolvedScope
+        (store: IFactStore)
+        (recomputer: IFactRecomputer)
+        (scope: ResolvedScope)
+        (fact: Fact)
+        : Async<Result<Fact option, string>> =
+        async {
+            let! recomputed = recomputer.Recompute(scope.ScopeId, fact)
+
+            match recomputed with
+            | Error e -> return Error e
+            | Ok None -> return Ok None
+            | Ok(Some draft) ->
+                let! asserted = store.Assert(scope, draft)
+
+                match asserted with
+                | Ok f -> return Ok(Some f)
+                | Error e -> return Error e
+        }
+
 /// `IJobHandler` that runs one recompute: load the target fact, recompute
 /// its value through the deployment's `IFactRecomputer`, and re-assert.
 type RecomputeJobHandler(store: IFactStore, recomputer: IFactRecomputer, logger: ILogger) =
@@ -77,7 +112,25 @@ type RecomputeJobHandler(store: IFactStore, recomputer: IFactRecomputer, logger:
                 logger.Warn msg
                 return JobResult.PermanentFailure msg
             | Some payload ->
-                let! fact = store.Get(ctx.ScopeId, payload.factId)
+                // Phase 818 — a job whose scope the scheduler re-minted
+                // (scheduled through the typed `Schedule`) reads and writes
+                // the fact store through the `ResolvedScope` members. A job
+                // whose scope was only carried — scheduled through the
+                // string `Schedule`, which is what `reactToDataChange`
+                // does, see `ReactiveDataChange.fs` for why — runs under
+                // the anonymous scope on `ctx.Scope`, and reading the
+                // anonymous shard for it would silently find nothing; its
+                // carried `ScopeId` keys the store instead, exactly as
+                // before this phase (GP 11). Both key one shard: the typed
+                // form is the string form over `ScopeId` (Phase 797).
+                let resolved =
+                    not ctx.Scope.IsAnonymous || ctx.ScopeId = ResolvedScope.AnonymousScopeId
+
+                let! fact =
+                    if resolved then
+                        store.Get(ctx.Scope, payload.factId)
+                    else
+                        store.Get(ctx.ScopeId, payload.factId)
 
                 match fact with
                 | None ->
@@ -88,7 +141,11 @@ type RecomputeJobHandler(store: IFactStore, recomputer: IFactRecomputer, logger:
 
                     return JobResult.Success
                 | Some fact ->
-                    let! result = FactInvalidation.recomputeNow store recomputer ctx.ScopeId fact
+                    let! result =
+                        if resolved then
+                            RecomputeUnder.resolvedScope store recomputer ctx.Scope fact
+                        else
+                            FactInvalidation.recomputeNow store recomputer ctx.ScopeId fact
 
                     match result with
                     | Ok _ ->
@@ -140,7 +197,10 @@ module RecomputeJobHandler =
     /// Idempotency keys on the fact id, so a fact invalidated repeatedly
     /// within the TTL coalesces to one live job. `ShardKey` = the fact id
     /// so a distributed scheduler serialises a fact's recomputes
-    /// (portability rule 5).
+    /// (portability rule 5). The scope is a CARRIED string, so the job is
+    /// scheduled through the string overload and runs with the anonymous
+    /// scope on `JobContext.Scope` (Phase 818); the handler then keys the
+    /// store on the carried `ScopeId`, as it always has.
     let scheduleRecompute
         (scheduler: IJobScheduler)
         (scopeId: string)

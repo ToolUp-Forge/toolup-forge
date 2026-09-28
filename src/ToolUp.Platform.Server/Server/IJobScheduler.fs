@@ -87,6 +87,27 @@ type IJobScheduler =
     /// guarantees "submitting twice = the job runs once".
     abstract Schedule: registration: JobRegistration -> Async<Result<JobId, ScheduleError>>
 
+    /// Submit a new job under a scope the platform's scope resolution
+    /// minted (Phase 818). The same validation chain and idempotency rule
+    /// as the string overload; the job is registered under
+    /// `scope.ScopeId`, and `registration.ScopeId` is ignored.
+    ///
+    /// What this overload adds is PROVENANCE: the scheduler records on the
+    /// job definition that its scope was resolver-minted, and when the job
+    /// runs it hands the same scope back on `JobContext.Scope`, so a
+    /// handler can call a store's `ResolvedScope` members with the scope
+    /// the scheduling request resolved to rather than a string it carried.
+    /// A job scheduled through the string overload runs under the
+    /// anonymous scope on that field — never a widening.
+    ///
+    /// Re-minting is the platform's act: `ResolvedScope` has an internal
+    /// constructor, so an implementation outside the platform's server tier
+    /// cannot re-mint and must hand its handlers `ResolvedScope.anonymous`
+    /// (the contract pack's `carriedScopeTests` pins which of the two an
+    /// implementation declares). Passing `ResolvedScope.anonymous` here
+    /// registers an ordinary job under the anonymous scope.
+    abstract Schedule: scope: ResolvedScope * registration: JobRegistration -> Async<Result<JobId, ScheduleError>>
+
     /// Cancel a job — sets `Status = Cancelled`. The scheduler skips
     /// it on subsequent ticks; no further runs are dispatched. Does
     /// not delete the record (history remains for audit).
@@ -136,6 +157,95 @@ type IJobScheduler =
     /// (the in-process scheduler is wired via `HookedEventStore` so
     /// a single write maps to a single notify).
     abstract NotifyEventWritten: scopeId: string * eventType: string * eventId: System.Guid -> Async<unit>
+
+// ─── Phase 818 — the carried mint's persisted provenance ─────────────
+//
+// A job's scope is persisted as a string (`JobDefinition.ScopeId`, rule 1:
+// identity by value), and the dispatch that runs it happens later, in
+// another request or none, possibly in another process. So "this job's
+// scope was resolver-minted" has to be written down WITH the definition,
+// and the resolver's full `StorageScope` with it, for the scheduler to
+// hand the same scope back when the job runs.
+//
+// It rides the definition's `Tags` under a reserved `_platform.scope.`
+// prefix rather than a new `JobDefinition` field: the record is persisted
+// by every job store and crosses the job-admin wire, and a field would
+// retype its constructor for every store and decoder in the ecosystem to
+// carry three strings. The price of a tag is that it can be WRITTEN by a
+// caller, which is why the string `Schedule` strips the prefix before
+// persisting: provenance is stamped only by the typed overload, and a
+// registration that arrives over the wire cannot claim it. What remains
+// trusted is the job store itself — a party that can write definitions
+// straight into it is inside the server's trust boundary already, and
+// holds the string store members besides.
+module internal CarriedJobScope =
+
+    /// The reserved tag prefix. Every key under it is the scheduler's.
+    [<Literal>]
+    let Prefix = "_platform.scope."
+
+    /// Present, with value `Resolver`, when the definition's scope was
+    /// minted by the platform's scope resolution.
+    [<Literal>]
+    let ProvenanceTag = "_platform.scope.provenance"
+
+    /// The provenance value the typed `Schedule` stamps.
+    [<Literal>]
+    let Resolver = "resolver"
+
+    /// The resolved `StorageScope.Container`.
+    [<Literal>]
+    let ContainerTag = "_platform.scope.container"
+
+    /// The resolved `StorageScope.Persist`, as `"true"` / `"false"`.
+    [<Literal>]
+    let PersistTag = "_platform.scope.persist"
+
+    /// Remove every reserved key — what the string `Schedule` does to a
+    /// caller's tags, so no registration can claim a provenance it lacks.
+    let strip (tags: Map<string, string>) : Map<string, string> =
+        if isNull (box tags) then
+            Map.empty
+        else
+            tags
+            |> Map.filter (fun key _ -> not (key.StartsWith(Prefix, StringComparison.Ordinal)))
+
+    /// The tags the typed `Schedule` persists: the caller's, stripped,
+    /// plus the resolver's scope when there is one. The anonymous scope
+    /// carries no provenance — it runs anonymous whichever way it came.
+    let stamp (scope: ResolvedScope) (tags: Map<string, string>) : Map<string, string> =
+        let stripped = strip tags
+
+        match scope.Storage with
+        | None -> stripped
+        | Some storage ->
+            stripped
+            |> Map.add ProvenanceTag Resolver
+            |> Map.add ContainerTag storage.Container
+            |> Map.add PersistTag (if storage.Persist then "true" else "false")
+
+    /// The scope a dispatch of this definition runs under: the resolver's
+    /// scope, re-minted, when the definition carries a complete provenance
+    /// record; otherwise the anonymous scope. A partial or malformed record
+    /// is anonymous, never a guess.
+    let ofDefinition (definition: JobDefinition) : ResolvedScope =
+        let tags = definition.Tags
+
+        if isNull (box tags) then
+            ResolvedScope.anonymous
+        else
+            match Map.tryFind ProvenanceTag tags, Map.tryFind ContainerTag tags, Map.tryFind PersistTag tags with
+            | Some provenance, Some container, Some persist when provenance = Resolver ->
+                match persist with
+                | "true"
+                | "false" ->
+                    ResolvedScope.ofCarried {
+                        ScopeId = definition.ScopeId
+                        Container = container
+                        Persist = (persist = "true")
+                    }
+                | _ -> ResolvedScope.anonymous
+            | _ -> ResolvedScope.anonymous
 
 // ─── Phase 9b.B — compose-time scheduled-job declarations ─────────────
 //

@@ -582,6 +582,7 @@ let private cronContext (scopeId: string) : JobContext = {
     AccessContext = AccessContext.unrestricted (AuthenticatedUser Connection)
     Attempt = 1
     Trigger = CronTrigger DefaultRenewalCron
+    Scope = ToolUp.Platform.ResolvedScope.anonymous
     TriggerSource = ScheduledByCron
     ScheduledAt = DateTime.UtcNow
     RunningAt = DateTime.UtcNow

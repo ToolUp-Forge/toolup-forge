@@ -7520,7 +7520,7 @@ ToolUp.Platform.JobApi.ListJobs : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.F
 ToolUp.Platform.JobApi.Schedule : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.JobRegistration, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, ToolUp.Platform.ScheduleError]]] { get }
 ToolUp.Platform.JobApi.TriggerOnce : Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.JobContext (class)
-ToolUp.Platform.JobContext..ctor(System.Guid, System.String, ToolUp.Platform.AccessContext, System.Int32, ToolUp.Platform.Trigger, ToolUp.Platform.TriggerSource, System.DateTime, System.DateTime, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.JobContext..ctor(System.Guid, System.String, ToolUp.Platform.ResolvedScope, ToolUp.Platform.AccessContext, System.Int32, ToolUp.Platform.Trigger, ToolUp.Platform.TriggerSource, System.DateTime, System.DateTime, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.JobContext.AccessContext : ToolUp.Platform.AccessContext { get }
 ToolUp.Platform.JobContext.Attempt : System.Int32 { get }
 ToolUp.Platform.JobContext.DeadLetterDestination : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -7528,6 +7528,7 @@ ToolUp.Platform.JobContext.JobId : System.Guid { get }
 ToolUp.Platform.JobContext.Payload : System.String { get }
 ToolUp.Platform.JobContext.RunningAt : System.DateTime { get }
 ToolUp.Platform.JobContext.ScheduledAt : System.DateTime { get }
+ToolUp.Platform.JobContext.Scope : ToolUp.Platform.ResolvedScope { get }
 ToolUp.Platform.JobContext.ScopeId : System.String { get }
 ToolUp.Platform.JobContext.Trigger : ToolUp.Platform.Trigger { get }
 ToolUp.Platform.JobContext.TriggerSource : ToolUp.Platform.TriggerSource { get }

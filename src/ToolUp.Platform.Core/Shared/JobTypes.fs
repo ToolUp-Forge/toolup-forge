@@ -338,6 +338,19 @@ type TriggerSource =
 type JobContext = {
     JobId: JobId
     ScopeId: string
+    /// The scope the job runs under as a `ResolvedScope` (Phase 818) —
+    /// the typed form of `ScopeId`, for handlers that read or write a
+    /// store through its resolver-minted overloads.
+    ///
+    /// A job scheduled through `IJobScheduler.Schedule(scope, …)` with a
+    /// scope the platform's resolution minted runs under THAT scope: the
+    /// in-tree scheduler persists it with the definition and re-mints it
+    /// here on every dispatch. A job scheduled through the string
+    /// `Schedule(registration)` — or by a scheduler that cannot re-mint —
+    /// runs under `ResolvedScope.anonymous`, never a widening. `ScopeId`
+    /// is unchanged either way, so a handler that reads only the string
+    /// sees no difference (GP 11).
+    Scope: ResolvedScope
     /// System-synthesised access context for the job's scope. Carries
     /// the team / individual scope but NOT the scheduling user's
     /// permissions — cron jobs run when no user is online, so a
@@ -412,7 +425,9 @@ type JobRegistration = {
     /// Logical scope to register the job under. The scheduler stamps
     /// this verbatim into `JobDefinition.ScopeId`. The handler-side
     /// `JobApi` validates that this matches the caller's resolved
-    /// scope before forwarding to `IJobScheduler`.
+    /// scope before forwarding to `IJobScheduler`. Ignored by the typed
+    /// `IJobScheduler.Schedule(scope, registration)` overload (Phase 818),
+    /// which registers the job under `scope.ScopeId`.
     ScopeId: string
     Handler: string
     Payload: string

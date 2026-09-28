@@ -1292,7 +1292,7 @@ let private handoffTests =
 /// `Close` disposes: `InProcessJobScheduler` is a `BackgroundService`,
 /// and this binding never starts the hosted service — `TriggerOnce`
 /// dispatches directly — so disposal is the whole of the teardown.
-let private restartContractTests =
+let private restartBinding () =
     let factory () =
         let root =
             Path.Combine(Path.GetTempPath(), "toolup-jobsched-restart-" + Guid.NewGuid().ToString("N"))
@@ -1324,7 +1324,15 @@ let private restartContractTests =
 
         binding
 
-    IJobSchedulerContract.restartTests "InProcessJobScheduler" factory
+    factory ()
+
+let private restartContractTests =
+    IJobSchedulerContract.restartTests "InProcessJobScheduler" restartBinding
+
+/// Phase 818 — the platform's own scheduler RE-MINTS a resolver-minted
+/// scope for the job's handler, over the same restartable binding.
+let private carriedScopeContractTests =
+    IJobSchedulerContract.carriedScopeTests "InProcessJobScheduler" true restartBinding
 
 let tests =
     let factory () =
@@ -1335,6 +1343,7 @@ let tests =
     testList "InProcessJobScheduler" [
         IJobSchedulerContract.tests "InProcessJobScheduler" factory
         restartContractTests
+        carriedScopeContractTests
         telemetryTests
         catchUpTests
         handoffTests
