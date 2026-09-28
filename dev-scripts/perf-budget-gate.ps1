@@ -42,6 +42,18 @@
 # construction) — each printed with its headroom ratio on a green run, exactly
 # as the server ceilings are. -SkipClient runs the server half alone.
 #
+# ── The load half (Phase 886) ────────────────────────────────────────────
+#
+# Last, the script measures the FACT and RETRIEVAL paths under concurrent
+# load: it builds src/ToolUp.RAG.Benchmarks in Release, runs its `load gate`
+# entry (N concurrent callers against one composed retrieval pipeline and
+# against the fact store, blob read counts beside every clock), and decides
+# the run against the `load` block of the same budget file through the
+# VerifyLoadPerfBudget target. -SkipLoad leaves it out; -SkipServer leaves
+# out the minimal-app half, so the load half can be run and decided alone:
+#
+#   pwsh ./dev-scripts/perf-budget-gate.ps1 -SkipServer -SkipClient
+#
 # ── What "cold start" means here, exactly ───────────────────────────────
 #
 # Process start to the host's "Application started." line on stdout. That is
@@ -130,7 +142,18 @@ param(
     [int] $ClientSeed = 849001,
 
     # Measure and decide the server half only.
-    [switch] $SkipClient
+    [switch] $SkipClient,
+
+    # Phase 886 — the load harness, and where its measurement file is
+    # written.
+    [string] $LoadHarness = "src/ToolUp.RAG.Benchmarks/ToolUp.RAG.Benchmarks.fsproj",
+    [string] $LoadMeasurementsFile = "artifacts/perf-budget/load-measurements.json",
+
+    # Leave out the load half.
+    [switch] $SkipLoad,
+
+    # Leave out the minimal-app (cold start + hot path) half.
+    [switch] $SkipServer
 )
 
 $ErrorActionPreference = "Stop"
@@ -143,7 +166,7 @@ $exeName = [IO.Path]::GetFileNameWithoutExtension($Project)
 
 # ─── Build ───────────────────────────────────────────────────────────────
 
-if (-not $EvaluateOnly -and -not $SkipBuild) {
+if (-not $EvaluateOnly -and -not $SkipBuild -and -not $SkipServer) {
     Write-Host "== perf-budget: build $Project (Release)" -ForegroundColor Cyan
     dotnet build $Project -c Release --nologo
     if ($LASTEXITCODE -ne 0) {
@@ -362,7 +385,7 @@ function New-Sample {
 
 # ─── Measure ─────────────────────────────────────────────────────────────
 
-if (-not $EvaluateOnly) {
+if (-not $EvaluateOnly -and -not $SkipServer) {
     $suffix = if ($IsWindows) { ".exe" } else { "" }
     $exePath = Join-Path $outputDir ($exeName + $suffix)
 
@@ -514,6 +537,37 @@ if (-not $SkipClient -and -not $EvaluateOnly) {
     }
 }
 
+# ─── Measure the fact and retrieval paths under load (Phase 886) ─────────
+
+$loadMeasurementsPath = Join-Path $repoRoot $LoadMeasurementsFile
+
+if (-not $SkipLoad -and -not $EvaluateOnly) {
+    $loadDll = Join-Path (Split-Path -Parent (Join-Path $repoRoot $LoadHarness)) "bin/Release/net10.0/ToolUp.RAG.Benchmarks.dll"
+
+    if (-not $SkipBuild -or -not (Test-Path $loadDll)) {
+        Write-Host "== perf-budget: load — build $LoadHarness (Release)" -ForegroundColor Cyan
+        dotnet build (Join-Path $repoRoot $LoadHarness) -c Release --nologo
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "perf-budget: the load harness did not build; there is nothing to measure."
+            exit 1
+        }
+    }
+
+    if (Test-Path $loadMeasurementsPath) { Remove-Item $loadMeasurementsPath }
+
+    Write-Host "== perf-budget: load — the gate configurations (concurrent retrieval + fact store, memory blob arm)" -ForegroundColor Cyan
+    dotnet $loadDll load gate --measurements $loadMeasurementsPath | Out-Host
+    $loadExit = $LASTEXITCODE
+
+    # The harness writes NOTHING when any operation failed — a failed call
+    # timed as a fast one is a suspiciously good result — so a missing file
+    # is the failure, named here, and never a skipped half.
+    if (-not (Test-Path $loadMeasurementsPath)) {
+        Write-Error "perf-budget: the load harness exited $loadExit and wrote no measurement file."
+        exit 1
+    }
+}
+
 # ─── Decide ──────────────────────────────────────────────────────────────
 
 function Invoke-Decider {
@@ -550,13 +604,29 @@ if ($decideClient -and -not (Test-Path $clientMeasurementsPath)) {
     exit 1
 }
 
-Write-Host "== perf-budget: decide against $Budget" -ForegroundColor Cyan
-$verdict = Invoke-Decider -BudgetPath $Budget
+$decideLoad = -not $SkipLoad
+
+if ($decideLoad -and -not (Test-Path $loadMeasurementsPath)) {
+    Write-Error "perf-budget: no load measurement file at $loadMeasurementsPath — run without -EvaluateOnly, or pass -SkipLoad."
+    exit 1
+}
+
+$verdict = 0
+if (-not $SkipServer) {
+    Write-Host "== perf-budget: decide against $Budget" -ForegroundColor Cyan
+    $verdict = Invoke-Decider -BudgetPath $Budget
+}
 
 $clientVerdict = 0
 if ($decideClient) {
     Write-Host "== perf-budget: client — decide against the 'client' block of $Budget" -ForegroundColor Cyan
     $clientVerdict = Invoke-Decider -BudgetPath $Budget -Target "VerifyClientPerfBudget" -Measurements $clientMeasurementsPath
+}
+
+$loadVerdict = 0
+if ($decideLoad) {
+    Write-Host "== perf-budget: load — decide against the 'load' block of $Budget" -ForegroundColor Cyan
+    $loadVerdict = Invoke-Decider -BudgetPath $Budget -Target "VerifyLoadPerfBudget" -Measurements $loadMeasurementsPath
 }
 
 if ($TeethCheck) {
@@ -582,18 +652,38 @@ if ($TeethCheck) {
     "statistic": "min",
     "ceilings": { "bootMs": 0.001, "decodePerResponseUs": 0.0001, "viewPerDispatchUs": 0.0001 },
     "minimumSamples": { "bootMs": 1, "decodePerResponseUs": 1, "viewPerDispatchUs": 1 }
+  },
+  "load": {
+    "label": "TEETH CHECK - deliberately unreachable load block",
+    "subject": "teeth check",
+    "statistic": "min",
+    "ceilings": { "retrievalP95Ms": 0.0001, "factPointReadMs": 0.0001 },
+    "minimumSamples": { "retrievalP95Ms": 1, "factPointReadMs": 1 }
   }
 }
 '@ | Set-Content -Path $teethBudget -Encoding utf8
 
-    $teeth = Invoke-Decider -BudgetPath $teethBudget
+    $teeth = 1
+    if (-not $SkipServer) {
+        $teeth = Invoke-Decider -BudgetPath $teethBudget
+    }
 
     $clientTeeth = 1
     if ($decideClient) {
         $clientTeeth = Invoke-Decider -BudgetPath $teethBudget -Target "VerifyClientPerfBudget" -Measurements $clientMeasurementsPath
     }
 
+    $loadTeeth = 1
+    if ($decideLoad) {
+        $loadTeeth = Invoke-Decider -BudgetPath $teethBudget -Target "VerifyLoadPerfBudget" -Measurements $loadMeasurementsPath
+    }
+
     Remove-Item $teethBudget -ErrorAction SilentlyContinue
+
+    if ($loadTeeth -eq 0) {
+        Write-Error "perf-budget: TEETH CHECK FAILED — the load gate passed an unreachable load block. It is not deciding anything; do not trust its green."
+        exit 1
+    }
 
     if ($teeth -eq 0) {
         Write-Error "perf-budget: TEETH CHECK FAILED — the gate passed a budget of 0.001 ms. It is not deciding anything; do not trust its green."
@@ -605,7 +695,7 @@ if ($TeethCheck) {
         exit 1
     }
 
-    Write-Host "== perf-budget: teeth check passed — the gate went red (exit $teeth$(if ($decideClient) { ", client exit $clientTeeth" })) on the unreachable budget" -ForegroundColor Green
+    Write-Host "== perf-budget: teeth check passed — the gate went red ($(if (-not $SkipServer) { "server exit $teeth" } else { "server skipped" })$(if ($decideClient) { ", client exit $clientTeeth" })$(if ($decideLoad) { ", load exit $loadTeeth" })) on the unreachable budget" -ForegroundColor Green
 }
 
 if ($verdict -ne 0) {
@@ -618,5 +708,15 @@ if ($clientVerdict -ne 0) {
     exit $clientVerdict
 }
 
-Write-Host "== perf-budget: within budget$(if ($decideClient) { ' (server and client)' })" -ForegroundColor Green
+if ($loadVerdict -ne 0) {
+    Write-Host "== perf-budget: load BREACHED (exit $loadVerdict)" -ForegroundColor Red
+    exit $loadVerdict
+}
+
+$halves = @(
+    if (-not $SkipServer) { 'server' }
+    if ($decideClient) { 'client' }
+    if ($decideLoad) { 'load' }
+)
+Write-Host "== perf-budget: within budget ($($halves -join ', '))" -ForegroundColor Green
 exit 0
