@@ -1,6 +1,8 @@
 module MyDataManager.Server
 
+open System
 open ToolUp.Platform
+open ProcessedDataTypes
 open MyDataManager.SharedTypes
 
 // ─── IDataSource skeleton ─────────────────────────────────────────
@@ -52,10 +54,31 @@ type MyDataSource() =
 
 let dataSource: IDataSource = MyDataSource() :> IDataSource
 
-let private ingest (request: IngestRequest) : Async<IngestResult> = async {
-    return {
+let private ingest (request: IngestRequest) : Async<IngestResponse> = async {
+    let result = {
         DatasetId = sprintf "%s::%s" request.SourceUri request.Format
         RowCount = 0
+    }
+
+    // The `ProcessedFileEntry` every other module will see once this
+    // module fills the data-manager shell slot and publishes it via
+    // `ClientModule.withProcessedData` (ClientView.fs). `DataType`
+    // reuses the connector's own `Kind` above; a deployment with more
+    // than one source kind picks whatever id its own data modules query
+    // with `withNeedsDataKeys`. `ProcessedDataCodec.encode` is the
+    // server-tier codec (docs/platform/modules.md, "Replacing a
+    // built-in — shell slots") — the shared/client tier carries none of
+    // its own, so the envelope is always built here, not on the client.
+    let processed =
+        ProcessedFileEntry.summarised
+            request.SourceUri
+            "MyDataManager"
+            DateTime.UtcNow
+            (ProcessedDataCodec.encode result)
+
+    return {
+        Result = result
+        Processed = processed
     }
 }
 

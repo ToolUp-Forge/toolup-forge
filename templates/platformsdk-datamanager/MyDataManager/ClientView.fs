@@ -42,9 +42,11 @@ let view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
 /// shell has one data manager, so the choice belongs to the
 /// composition root rather than to this module. The module takes the
 /// slot's position and becomes the shell's data source: once it has
-/// mounted, data modules see only what it provides, so declare
-/// `ClientModule.withProcessedData` when your manager should feed them
-/// (docs/platform/modules.md, "Replacing a built-in").
+/// mounted, data modules see only what it provides. This module
+/// declares `ClientModule.withProcessedData` below, publishing every
+/// entry `Model.Processed` holds — see docs/platform/modules.md,
+/// "Replacing a built-in — shell slots", the data-manager slot's
+/// contract, for what a rewritten replacement must keep meeting.
 let register () : ErasedModule =
     ClientModule.create {
         Init = init
@@ -53,4 +55,5 @@ let register () : ErasedModule =
         Icon = Html.span [ prop.text "D" ]
     }
     |> ClientModule.withView view
+    |> ClientModule.withProcessedData _.Processed
     |> ClientModule.register

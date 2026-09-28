@@ -89,6 +89,12 @@ let allTests =
         // module gets the floor over its OWN `view` rather than over a
         // hand-written tree that can drift away from it.
         ModuleViewA11yTests.tests
+        // Phase 901 — the data-manager template publishes processed data:
+        // `MyDataManager.ClientView.register()` declares
+        // `ClientModule.withProcessedData`, and the extractor publishes
+        // what `IngestSucceeded` recorded, driven through the template's
+        // real `init` / `update` (Platform.Client tier).
+        DataManagerTemplateProcessedDataTests.tests
         // Phase 636 — the KB version-history client surface: the GP 11
         // gate (a single-version row renders byte-for-byte what it did
         // before the phase, asserted over mounted markup) and the
