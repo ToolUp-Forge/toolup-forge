@@ -2470,6 +2470,9 @@ let private registeredTests =
         // metadata, stable keyset paging, search, titling with fallback, and
         // the GetTaskStatus polling fallback.
         ConversationListingTests.tests
+        // Phase 859 - team conversation visibility: per-team level, every
+        // read/write path filtered, audit, and who may change the level.
+        ConversationVisibilityTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each
