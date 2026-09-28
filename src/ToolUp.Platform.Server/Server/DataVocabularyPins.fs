@@ -8,8 +8,9 @@ namespace ToolUp.Platform
 // lived in ToolUp.Platform.Core behind `#if !FABLE_COMPILER`, with a Fable
 // arm of `pin` that returned an empty hash nothing could verify. Every caller
 // is server-tier, so they compile here. The pure half (governance, drift,
-// canonical JSON) stays in Core; F# resolves `DataVocabulary.X` across both
-// modules, so a site that references the server tier reads as before.
+// canonical JSON) stays in Core; F# resolves a name under `DataVocabulary`
+// across both modules, so a site that references the server tier reads as
+// before.
 
 /// The server half of `DataVocabulary`: hash, loader and pin.
 module DataVocabulary =
