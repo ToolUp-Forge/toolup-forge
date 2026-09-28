@@ -2728,6 +2728,10 @@
              with provider-failure fallback, deleted/purged rows unlisted, and
              GetTaskStatus polling through a real turn. -->
         <Compile Include="InProcess\ConversationListingTests.fs" />
+        <!-- Phase 859 — team conversation visibility: the pure rule, every read and
+             write path per level and role, per-team records and the deployment
+             default, elevated-read and level-change audit, and who may change it. -->
+        <Compile Include="InProcess\ConversationVisibilityTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />

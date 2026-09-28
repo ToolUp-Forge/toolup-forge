@@ -540,6 +540,135 @@ type AIAssistantApi = {
     ListConversationsPage: ConversationListQuery -> Async<ConversationPage>
 }
 
+// ─── Phase 859 — team conversation visibility ────────────────────
+//
+// In a team's shared storage every conversation sits in one container, so
+// nothing about the storage layout says who may read one. This is the
+// declared answer: a per-team level, chosen by the team within the set the
+// deployment allows. A conversation's author always sees it; personal
+// (non-team) scope is owner-only by construction and is not governed here.
+
+/// Who, besides its author, can see a conversation held in a team's shared
+/// storage (Phase 859). A property of the TEAM: the deployment declares the
+/// default a team starts with and the levels a team may choose from, and
+/// the team's `Owner` chooses within that set.
+type TeamConversationVisibility =
+    /// Every member of the team. The default, and the behaviour before
+    /// Phase 859 — a team that has chosen nothing is unchanged.
+    | TeamVisible
+    /// The team's `Owner` and `Admin` roles only.
+    | TeamAdmins
+    /// Holders of `PlatformRole.PlatformAdmin` only.
+    | PlatformAdmins
+
+/// The Phase 859 visibility rule. `canSee` is the single place the read
+/// rule lives; every read path in the handler filters through it.
+module TeamConversationVisibility =
+    /// Every level, widest first.
+    let all: TeamConversationVisibility list = [ TeamVisible; TeamAdmins; PlatformAdmins ]
+
+    let private isTeamAdmin (viewerTeamRole: TeamRole option) =
+        match viewerTeamRole with
+        | Some TeamRole.Owner
+        | Some TeamRole.Admin -> true
+        | Some TeamRole.Member
+        | None -> false
+
+    let private isAuthor (viewer: string) (conversationOwner: string) =
+        not (String.IsNullOrEmpty conversationOwner) && viewer = conversationOwner
+
+    /// Whether `viewer` may see a conversation whose stored author is
+    /// `conversationOwner`, under `policy`. The author always may. Under
+    /// `TeamVisible` any member of the team may (`viewerTeamRole` is
+    /// `Some`); under `TeamAdmins` a team `Owner` or `Admin`; under
+    /// `PlatformAdmins` a platform admin. A conversation with no recorded
+    /// author (persisted before authors were recorded) has no author to
+    /// exempt, so only the level decides.
+    let canSee
+        (policy: TeamConversationVisibility)
+        (viewer: string)
+        (conversationOwner: string)
+        (viewerTeamRole: TeamRole option)
+        (viewerIsPlatformAdmin: bool)
+        : bool =
+        isAuthor viewer conversationOwner
+        || (match policy with
+            | TeamVisible -> viewerTeamRole.IsSome
+            | TeamAdmins -> isTeamAdmin viewerTeamRole
+            | PlatformAdmins -> viewerIsPlatformAdmin)
+
+    /// Whether the viewer holds the level's ELEVATED role, the one that may
+    /// delete or change another member's conversation: team `Owner` /
+    /// `Admin` under `TeamVisible` and `TeamAdmins`, a platform admin under
+    /// `PlatformAdmins`.
+    let isElevated
+        (policy: TeamConversationVisibility)
+        (viewerTeamRole: TeamRole option)
+        (viewerIsPlatformAdmin: bool)
+        : bool =
+        match policy with
+        | TeamVisible
+        | TeamAdmins -> isTeamAdmin viewerTeamRole
+        | PlatformAdmins -> viewerIsPlatformAdmin
+
+    /// Whether `viewer` may delete or otherwise change the conversation:
+    /// its author always; anyone else only when they can see it AND hold
+    /// the level's elevated role.
+    let canModify
+        (policy: TeamConversationVisibility)
+        (viewer: string)
+        (conversationOwner: string)
+        (viewerTeamRole: TeamRole option)
+        (viewerIsPlatformAdmin: bool)
+        : bool =
+        isAuthor viewer conversationOwner
+        || (canSee policy viewer conversationOwner viewerTeamRole viewerIsPlatformAdmin
+            && isElevated policy viewerTeamRole viewerIsPlatformAdmin)
+
+    /// Stable name of a level, as a refusal or an audit row names it.
+    let name (level: TeamConversationVisibility) : string =
+        match level with
+        | TeamVisible -> "TeamVisible"
+        | TeamAdmins -> "TeamAdmins"
+        | PlatformAdmins -> "PlatformAdmins"
+
+    /// The sentence a member reads to know who can see what they type.
+    let describe (level: TeamConversationVisibility) : string =
+        match level with
+        | TeamVisible -> "Every member of this team can see your conversations."
+        | TeamAdmins -> "Only you and this team's owners and admins can see your conversations."
+        | PlatformAdmins -> "Only you and the platform administrators can see your conversations."
+
+/// The visibility level in force for the caller's active team, as the
+/// client shows it (Phase 859.H).
+type TeamConversationVisibilityView = {
+    /// False outside a team scope: a personal conversation is visible to
+    /// its owner only, and there is no level to show or set.
+    InTeamScope: bool
+    /// The level in force now.
+    Level: TeamConversationVisibility
+    /// The levels this deployment lets a team choose from.
+    Allowed: TeamConversationVisibility list
+    /// The levels THIS caller may select now. Empty when the caller may not
+    /// change the level at all.
+    Selectable: TeamConversationVisibility list
+}
+
+/// Read and set the active team's conversation visibility (Phase 859).
+/// Mounted beside `AIAssistantApi`; the team is always the caller's active
+/// team, never a request field.
+type TeamConversationVisibilityApi = {
+    /// The level in force for the caller's active team, and what the caller
+    /// may change it to.
+    [<AllowAnonymous>]
+    GetConversationVisibility: unit -> Async<TeamConversationVisibilityView>
+    /// Set the active team's level. Only the team `Owner` may; selecting
+    /// `PlatformAdmins`, or leaving it, also needs a platform admin. A level
+    /// outside the deployment's allowed set is refused, naming the set.
+    [<RequiresClaim "scope">]
+    SetConversationVisibility: TeamConversationVisibility -> Async<Result<TeamConversationVisibilityView, string>>
+}
+
 // ─── Branding ─────────────────────────────────────────────────────
 
 /// Client-visible branding for the AI assistant module and side panel.

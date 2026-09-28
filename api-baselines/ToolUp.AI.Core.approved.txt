@@ -610,6 +610,35 @@ ToolUp.AI.TeamAIKeyStatus..ctor(System.String, System.String, System.Boolean)
 ToolUp.AI.TeamAIKeyStatus.HasKey : System.Boolean { get }
 ToolUp.AI.TeamAIKeyStatus.ProviderId : System.String { get }
 ToolUp.AI.TeamAIKeyStatus.TeamId : System.String { get }
+ToolUp.AI.TeamConversationVisibility (class)
+ToolUp.AI.TeamConversationVisibility.IsPlatformAdmins : System.Boolean { get }
+ToolUp.AI.TeamConversationVisibility.IsTeamAdmins : System.Boolean { get }
+ToolUp.AI.TeamConversationVisibility.IsTeamVisible : System.Boolean { get }
+ToolUp.AI.TeamConversationVisibility.PlatformAdmins : ToolUp.AI.TeamConversationVisibility { get }
+ToolUp.AI.TeamConversationVisibility.Tag : System.Int32 { get }
+ToolUp.AI.TeamConversationVisibility.TeamAdmins : ToolUp.AI.TeamConversationVisibility { get }
+ToolUp.AI.TeamConversationVisibility.TeamVisible : ToolUp.AI.TeamConversationVisibility { get }
+ToolUp.AI.TeamConversationVisibility+Tags (class)
+ToolUp.AI.TeamConversationVisibility+Tags.PlatformAdmins : System.Int32 (literal)
+ToolUp.AI.TeamConversationVisibility+Tags.TeamAdmins : System.Int32 (literal)
+ToolUp.AI.TeamConversationVisibility+Tags.TeamVisible : System.Int32 (literal)
+ToolUp.AI.TeamConversationVisibilityApi (class)
+ToolUp.AI.TeamConversationVisibilityApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.TeamConversationVisibilityView]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.TeamConversationVisibility, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.TeamConversationVisibilityView, System.String]]])
+ToolUp.AI.TeamConversationVisibilityApi.GetConversationVisibility : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.TeamConversationVisibilityView]] { get }
+ToolUp.AI.TeamConversationVisibilityApi.SetConversationVisibility : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.TeamConversationVisibility, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.TeamConversationVisibilityView, System.String]]] { get }
+ToolUp.AI.TeamConversationVisibilityModule (class)
+ToolUp.AI.TeamConversationVisibilityModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.TeamConversationVisibility] { get }
+ToolUp.AI.TeamConversationVisibilityModule.canModify(ToolUp.AI.TeamConversationVisibility, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], System.Boolean) : System.Boolean
+ToolUp.AI.TeamConversationVisibilityModule.canSee(ToolUp.AI.TeamConversationVisibility, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], System.Boolean) : System.Boolean
+ToolUp.AI.TeamConversationVisibilityModule.describe(ToolUp.AI.TeamConversationVisibility) : System.String
+ToolUp.AI.TeamConversationVisibilityModule.isElevated(ToolUp.AI.TeamConversationVisibility, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], System.Boolean) : System.Boolean
+ToolUp.AI.TeamConversationVisibilityModule.name(ToolUp.AI.TeamConversationVisibility) : System.String
+ToolUp.AI.TeamConversationVisibilityView (class)
+ToolUp.AI.TeamConversationVisibilityView..ctor(System.Boolean, ToolUp.AI.TeamConversationVisibility, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.TeamConversationVisibility], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.TeamConversationVisibility])
+ToolUp.AI.TeamConversationVisibilityView.Allowed : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.TeamConversationVisibility] { get }
+ToolUp.AI.TeamConversationVisibilityView.InTeamScope : System.Boolean { get }
+ToolUp.AI.TeamConversationVisibilityView.Level : ToolUp.AI.TeamConversationVisibility { get }
+ToolUp.AI.TeamConversationVisibilityView.Selectable : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.TeamConversationVisibility] { get }
 ToolUp.AI.ToolApprovalDecision (class)
 ToolUp.AI.ToolApprovalDecision.Approved : ToolUp.AI.ToolApprovalDecision { get }
 ToolUp.AI.ToolApprovalDecision.IsApproved : System.Boolean { get }

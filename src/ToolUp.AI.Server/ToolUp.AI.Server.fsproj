@@ -106,6 +106,10 @@
              platform ILogger/Logger only; MUST precede AIAssistantHandler,
              which enqueues onto it, and AICompose, which registers it. -->
         <Compile Include="Server\AIChatWorker.fs" />
+        <!-- Phase 859 - the per-team conversation visibility policy. MUST
+             precede AIAssistantHandler, which filters every conversation
+             read and write through it, and AICompose, which mounts its API. -->
+        <Compile Include="Server\TeamConversationPolicyStore.fs" />
         <Compile Include="Server\AIAssistantHandler.fs" />
         <Compile Include="Server\ConversationReplay.fs" />
         <Compile Include="Server\AIProviderSurface.fs" />
