@@ -161,6 +161,7 @@ let private jobContext (now: DateTime) : JobContext = {
     AccessContext = AccessContext.unrestricted (AuthenticatedUser "_system")
     Attempt = 1
     Trigger = Manual
+    Scope = ToolUp.Platform.ResolvedScope.anonymous
     TriggerSource = TriggerSource.ScheduledManually "_system"
     ScheduledAt = now
     RunningAt = now

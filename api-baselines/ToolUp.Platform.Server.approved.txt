@@ -5715,6 +5715,7 @@ ToolUp.Platform.IJobScheduler.NotifyEventWritten(System.String, System.String, S
 ToolUp.Platform.IJobScheduler.RegisterHandler(System.String, ToolUp.Platform.IJobHandler) : System.Void
 ToolUp.Platform.IJobScheduler.RegisterHandlerAsync(System.String, ToolUp.Platform.IJobHandler) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.IJobScheduler.Schedule(ToolUp.Platform.JobRegistration) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, ToolUp.Platform.ScheduleError]]
+ToolUp.Platform.IJobScheduler.Schedule(ToolUp.Platform.ResolvedScope, ToolUp.Platform.JobRegistration) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, ToolUp.Platform.ScheduleError]]
 ToolUp.Platform.IJobScheduler.TriggerOnce(System.String, System.Guid, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.IJobStore (interface)
 ToolUp.Platform.IJobStore.AwaitingExternalRuns(System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobRun]]

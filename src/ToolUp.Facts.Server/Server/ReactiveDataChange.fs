@@ -66,6 +66,22 @@ open ToolUp.Platform
 // "the facts reacted" unordered, which is untestable through a compose
 // root and unobservable in production — the exact shape that let Phase
 // 561's gap sit unnoticed. The cost is bounded by the gate above.
+//
+// **The scope this reaction holds is CARRIED, and stays a string (Phase
+// 818).** Phase 818 gave jobs a typed scope: a job scheduled with a
+// resolver-minted `ResolvedScope` runs under it. The recompute this file
+// enqueues cannot be scheduled that way, because the seam it hangs off —
+// `IDataObjectStore.Save` / `Recover` — hands it a `scopeId: string` and
+// nothing else. A save arrives from a request, from an ingestion job, from
+// an import; the decorator cannot tell which, and no resolved scope rides
+// the call (there is no ambient one: the request's lives on its
+// `HttpContext`, which a store never sees). Minting a `ResolvedScope` here
+// from that string would promote a carried value to a resolved one —
+// precisely the forgery the type exists to make uncompilable — so the
+// enqueue stays on the string `Schedule`, the job runs with the anonymous
+// scope on `JobContext.Scope`, and `RecomputeJobHandler` keys the store on
+// the carried `ScopeId`. Typing this hop needs the ORIGIN typed first: a
+// resolved scope carried into the data-object write path.
 
 /// The reaction a data-object version arrival triggers: given the scope
 /// and the changed input identities, drive whatever the fact tier does

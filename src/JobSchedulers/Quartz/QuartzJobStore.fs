@@ -387,6 +387,7 @@ type internal QuartzDispatchJob(context: QuartzDispatchContext) =
                         AccessContext = systemContext context.Config job.ScopeId
                         Attempt = attempt
                         Trigger = job.Trigger
+                        Scope = ToolUp.Platform.ResolvedScope.anonymous
                         TriggerSource = source
                         ScheduledAt =
                             if ctx.ScheduledFireTimeUtc.HasValue then

@@ -592,7 +592,13 @@ Not proved. *Measured*, on every run of the gate.
   narrower and is the same shape as the assembly bullet below: a caller that assembles a
   `ModelInput` *outside* the doors writes the `DisclosedFact.Scope` string itself, and nothing
   here checks that it wrote the resolver's. The doors are where the theorem's fold runs in the
-  shipped code, so this is the residual, not the rule.
+  shipped code, so this is the residual, not the rule. Behind the doors, the scopes the platform
+  *carries* rather than resolves are still strings, and Phase 818 names them: a job scheduled with a
+  resolver-minted scope now runs under it (the in-process scheduler re-mints it through a second
+  internal mint whose one caller is pinned), but the reactive recompute path — carried from a
+  string-keyed data write — imports, coherence sweeps, knowledge-base dependency records, the
+  job-admin API and any scheduler outside the platform's server tier still key the fact store on a
+  carried string.
 * **The tool-effect side is assumed, not checked here.** This theorem is about what goes *in*. The
   sentence a reader wants — that a model is isolated from knowledge except what is explicitly
   permitted — additionally needs that the tools a model may call cannot fetch what the input side

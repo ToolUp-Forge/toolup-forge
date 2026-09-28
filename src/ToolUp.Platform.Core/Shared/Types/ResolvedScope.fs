@@ -78,7 +78,8 @@ type ResolvedScope =
 
 /// Constructors and accessors for `ResolvedScope`. The only constructor a
 /// consumer can reach is `anonymous`; `ofStorageScope` is internal and is
-/// called by the scope-resolution middleware alone.
+/// called by the scope-resolution middleware alone, and `ofCarried`
+/// (Phase 818) is internal and is called by the job scheduler alone.
 [<RequireQualifiedAccess>]
 module ResolvedScope =
 
@@ -95,6 +96,19 @@ module ResolvedScope =
     /// caller, and `InternalsVisibleTo` reaches no further than the
     /// platform's own server tier.
     let internal ofStorageScope (scope: StorageScope) : ResolvedScope = Resolved scope
+
+    /// Re-mint a scope the platform CARRIED rather than resolved (Phase
+    /// 818) — the job scheduler's run-time mint. A job scheduled through
+    /// `IJobScheduler.Schedule(scope: ResolvedScope, …)` persists the
+    /// resolver's `StorageScope` with its definition; when the job runs,
+    /// the scheduler hands the same scope back on `JobContext.Scope`
+    /// through this function. A second mint rather than a second use of
+    /// `ofStorageScope` so the two provenances stay separately auditable:
+    /// this one is called only where a scope that WAS resolved is being
+    /// carried across a hop, never where a string is being promoted.
+    /// Internal for the same reason as `ofStorageScope`: `InternalsVisibleTo`
+    /// reaches the platform's server tier and nothing a caller controls.
+    let internal ofCarried (scope: StorageScope) : ResolvedScope = Resolved scope
 
     /// The shard key — see `ResolvedScope.ScopeId`.
     let scopeId (scope: ResolvedScope) : string = scope.ScopeId

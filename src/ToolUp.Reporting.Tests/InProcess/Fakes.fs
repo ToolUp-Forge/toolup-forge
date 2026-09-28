@@ -148,6 +148,12 @@ type RecordingScheduler() =
             return Ok()
         }
 
+        member this.Schedule(scope: ToolUp.Platform.ResolvedScope, registration: ToolUp.Platform.JobRegistration) =
+            (this :> IJobScheduler).Schedule {
+                registration with
+                    ScopeId = scope.ScopeId
+            }
+
         member _.Schedule registration = async {
             // Mirror the real scheduler's two refusals the API handler
             // maps onto typed errors: an unparseable cron, and an
@@ -272,6 +278,7 @@ let jobContext (scopeId: string) (attempt: int) (payload: string) : JobContext =
     AccessContext = AccessContext.unrestricted (TeamMember("_system", scopeId))
     Attempt = attempt
     Trigger = CronTrigger "0 6 * * 1"
+    Scope = ToolUp.Platform.ResolvedScope.anonymous
     TriggerSource = ScheduledByCron
     ScheduledAt = DateTime.UtcNow
     RunningAt = DateTime.UtcNow

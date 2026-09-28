@@ -501,6 +501,13 @@ let private nullScheduler =
     { new IJobScheduler with
         member _.RegisterHandler(_, _) = ()
         member _.RegisterHandlerAsync(_, _) = async { return Ok() }
+
+        member this.Schedule(scope: ToolUp.Platform.ResolvedScope, registration: ToolUp.Platform.JobRegistration) =
+            (this :> IJobScheduler).Schedule {
+                registration with
+                    ScopeId = scope.ScopeId
+            }
+
         member _.Schedule(_) = async { return Ok(Guid.NewGuid()) }
         member _.Cancel(_, _) = async { return () }
         member _.Disable(_, _) = async { return () }
@@ -1318,6 +1325,7 @@ let private subscriptionTests =
                 AccessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
                 Attempt = 1
                 Trigger = Trigger.CronTrigger DefaultRenewalCron
+                Scope = ToolUp.Platform.ResolvedScope.anonymous
                 TriggerSource = ScheduledByCron
                 ScheduledAt = DateTime.UtcNow
                 RunningAt = DateTime.UtcNow
@@ -1367,6 +1375,7 @@ let private subscriptionTests =
                 AccessContext = AccessContext.unrestricted (AuthenticatedUser "alice")
                 Attempt = 1
                 Trigger = Trigger.CronTrigger DefaultRenewalCron
+                Scope = ToolUp.Platform.ResolvedScope.anonymous
                 TriggerSource = ScheduledByCron
                 ScheduledAt = DateTime.UtcNow
                 RunningAt = DateTime.UtcNow

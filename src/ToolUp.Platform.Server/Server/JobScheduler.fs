@@ -678,6 +678,10 @@ type InProcessJobScheduler
                         let ctx: JobContext = {
                             JobId = current.JobId
                             ScopeId = current.ScopeId
+                            // Phase 818 — the carried mint: the resolver's
+                            // scope when the typed `Schedule` recorded one,
+                            // otherwise the anonymous scope.
+                            Scope = CarriedJobScope.ofDefinition current
                             AccessContext = buildSystemContext current.ScopeId
                             Attempt = attempt
                             Trigger = current.Trigger
@@ -1160,6 +1164,24 @@ type InProcessJobScheduler
                 Error(PrecisionUnsupported(Second, [ Minute ]))
             else
                 Ok()
+
+    /// Both `Schedule` overloads, after each has settled the registration's
+    /// scope and tags: validate, honour idempotency, persist.
+    let scheduleValidated (registration: JobRegistration) : Async<Result<JobId, ScheduleError>> = async {
+        match validateRegistration registration with
+        | Error e -> return Error e
+        | Ok() ->
+
+            // Idempotency check before any persistence work.
+            match registration.Idempotency with
+            | Some k ->
+                let! existing = store.FindByIdempotencyKey(registration.ScopeId, k.Key, k.TtlSeconds, DateTime.UtcNow)
+
+                match existing with
+                | Some jobId -> return Ok jobId
+                | None -> return! createNewJob registration
+            | None -> return! createNewJob registration
+    }
 
     // ─── Phase 320 — the exactly-once terminal claim ─────────────
     //
@@ -2144,22 +2166,22 @@ type InProcessJobScheduler
             return Ok()
         }
 
-        member _.Schedule(registration) = async {
-            match validateRegistration registration with
-            | Error e -> return Error e
-            | Ok() ->
+        // Phase 818 — the string overload strips the reserved provenance
+        // tags, so a registration (which may have arrived over the wire)
+        // can never claim a resolver-minted scope; the typed overload is
+        // the one place they are stamped.
+        member _.Schedule(registration: JobRegistration) =
+            scheduleValidated {
+                registration with
+                    Tags = CarriedJobScope.strip registration.Tags
+            }
 
-                // Idempotency check before any persistence work.
-                match registration.Idempotency with
-                | Some k ->
-                    let! existing =
-                        store.FindByIdempotencyKey(registration.ScopeId, k.Key, k.TtlSeconds, DateTime.UtcNow)
-
-                    match existing with
-                    | Some jobId -> return Ok jobId
-                    | None -> return! createNewJob registration
-                | None -> return! createNewJob registration
-        }
+        member _.Schedule(scope: ResolvedScope, registration: JobRegistration) =
+            scheduleValidated {
+                registration with
+                    ScopeId = scope.ScopeId
+                    Tags = CarriedJobScope.stamp scope registration.Tags
+            }
 
         member _.Cancel(scopeId, jobId) = setStatus scopeId jobId Cancelled
 

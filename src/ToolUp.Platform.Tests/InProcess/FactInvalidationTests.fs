@@ -113,6 +113,12 @@ type private RecordingScheduler() =
         member _.RegisterHandler(_, _) = ()
         member _.RegisterHandlerAsync(_, _) = async { return Ok() }
 
+        member this.Schedule(scope: ToolUp.Platform.ResolvedScope, registration: ToolUp.Platform.JobRegistration) =
+            (this :> IJobScheduler).Schedule {
+                registration with
+                    ScopeId = scope.ScopeId
+            }
+
         member _.Schedule(reg: JobRegistration) = async {
             let id = Guid.NewGuid()
             scheduled.Enqueue reg
@@ -145,6 +151,7 @@ let private jobCtx (scopeId: string) (payload: string) : JobContext = {
     AccessContext = AccessContext.unrestricted (AuthenticatedUser "system")
     Attempt = 1
     Trigger = Trigger.Manual
+    Scope = ToolUp.Platform.ResolvedScope.anonymous
     TriggerSource = ScheduledManually "system"
     ScheduledAt = DateTime.UtcNow
     RunningAt = DateTime.UtcNow
