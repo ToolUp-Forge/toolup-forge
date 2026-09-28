@@ -222,6 +222,11 @@
              Fable-host oracle project referenced below, and run live
              beside the transpiled ring. -->
         <Compile Include="..\ToolUp.Platform.Tests\Client\ElmishProofDifferential.fs" />
+        <!-- Phase 884 - the dispatch loop's differential, host-neutral: the
+             same script generator, drivers and rows the .NET pack runs, here
+             against the transpiled Program.runWithDispatch and the ElmishLoop
+             extraction the Fable oracle project compiles. -->
+        <Compile Include="..\ToolUp.Platform.Tests\Client\ElmishLoopDifferential.fs" />
         <Compile Include="ElmishProofOracleTests.fs" />
         <!-- Phase 536 — module inspect-state contract, driven through the shell update. -->
         <Compile Include="ModuleInspectStateTests.fs" />

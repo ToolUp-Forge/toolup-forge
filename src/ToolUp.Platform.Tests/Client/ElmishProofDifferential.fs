@@ -55,12 +55,26 @@ open ToolUp.Elmish
 
 /// A 32-bit LCG (Numerical Recipes constants) — identical on .NET and
 /// under Fable, which `System.Random` is not.
+///
+/// **Identical only because the step is widened (Phase 884).** Fable
+/// transpiles `uint32 * uint32 + uint32` to a plain JavaScript
+/// `a * b + c` with no reduction modulo 2^32, so the state grew as a
+/// float, lost its low bits within a few draws and reached `Infinity`
+/// within about fifty — after which every draw was 0. The Fable host's
+/// "same" draw was a different and quickly constant one, and nothing
+/// compared the two hosts' draws to notice. The product is at most
+/// 2^32 * 1664525 < 2^53, so it is formed in `uint64` (exact on .NET, a
+/// BigInt under Fable) and narrowed with `uint32`, which truncates on
+/// both hosts; on .NET the value is the one the wrapping `uint32` step
+/// always produced, so no .NET-written corpus moves. The loop
+/// differential's pinned campaign fingerprint is what holds the two
+/// hosts' draws to each other from now on.
 type Lcg(seed: int) =
     let mutable state = uint32 seed
 
     /// The next value in `[0, bound)`.
     member _.Next(bound: int) : int =
-        state <- state * 1664525u + 1013904223u
+        state <- uint32 (uint64 state * 1664525UL + 1013904223UL)
         int ((state >>> 8) % uint32 bound)
 
 /// One seed for the whole differential, on both hosts, so a failure
