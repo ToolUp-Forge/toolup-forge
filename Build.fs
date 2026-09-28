@@ -734,26 +734,26 @@ let main args =
         Shell.deleteDir feedDir
         Directory.ensure feedDir
 
-        // Wipe this version's global-packages entries so the restore
-        // below cannot serve a previous run's extracted copy. See the
-        // "WHY A THROWAWAY VERSION" note above.
-        let globalPackages =
-            match Environment.environVarOrNone "NUGET_PACKAGES" with
-            | Some dir when dir <> "" -> dir
-            | _ ->
-                Path.Combine(
-                    System.Environment.GetFolderPath System.Environment.SpecialFolder.UserProfile,
-                    ".nuget",
-                    "packages"
-                )
+        // Phase 903 — a PRIVATE, per-run packages folder, rather than
+        // guessing at the machine's shared global-packages folder (which
+        // may not even be the one NuGet is using — see
+        // TemplateGatePackages.fs) and evicting THIS version's entries
+        // from it. Wiped wholesale below: nothing but this gate's own
+        // restores writes here, so there is no previous run's extracted
+        // copy this folder could serve except one of this gate's own.
+        let privatePackages =
+            TemplateGatePackages.privatePackagesFolder (Path.getFullName ".")
 
-        for pkg in templateGatePackages do
-            let cached =
-                Path.Combine(globalPackages, pkg.Id.ToLowerInvariant(), templateGateVersion)
+        let eviction = TemplateGatePackages.evict privatePackages
 
-            if Directory.Exists cached then
-                Trace.tracefn "▶ VerifyTemplates: clearing stale cache entry %s" cached
-                Shell.deleteDir cached
+        Trace.tracefn
+            "▶ VerifyTemplates: private packages folder %s (evicted %d prior entr%s: %s)"
+            eviction.Folder
+            eviction.Removed.Length
+            (if eviction.Removed.Length = 1 then "y" else "ies")
+            (String.concat ", " eviction.Removed)
+
+        System.Environment.SetEnvironmentVariable("NUGET_PACKAGES", privatePackages)
 
         for pkg in templateGatePackages do
             if not (File.Exists(Path.getFullName pkg.Project)) then
@@ -3978,22 +3978,25 @@ let main args =
         Shell.deleteDir feedDir
         Directory.ensure feedDir
 
-        let globalPackages =
-            match Environment.environVarOrNone "NUGET_PACKAGES" with
-            | Some dir when dir <> "" -> dir
-            | _ ->
-                Path.Combine(
-                    System.Environment.GetFolderPath System.Environment.SpecialFolder.UserProfile,
-                    ".nuget",
-                    "packages"
-                )
+        // Phase 903 — same private-folder fix as VerifyTemplates above,
+        // and the SAME path: each gate runs as its OWN `dotnet run`
+        // process (CI invokes them as two separate steps) and always
+        // evicts on entry, so there is no cross-target state to protect —
+        // sharing the path is for one worktree to have one private
+        // packages folder to reason about, not to skip a restore.
+        let privatePackages =
+            TemplateGatePackages.privatePackagesFolder (Path.getFullName ".")
 
-        for pkg in packagedModuleTemplateGatePackages do
-            let cached =
-                Path.Combine(globalPackages, pkg.Id.ToLowerInvariant(), templateGateVersion)
+        let eviction = TemplateGatePackages.evict privatePackages
 
-            if Directory.Exists cached then
-                Shell.deleteDir cached
+        Trace.tracefn
+            "▶ VerifyPackagedModuleTemplate: private packages folder %s (evicted %d prior entr%s: %s)"
+            eviction.Folder
+            eviction.Removed.Length
+            (if eviction.Removed.Length = 1 then "y" else "ies")
+            (String.concat ", " eviction.Removed)
+
+        System.Environment.SetEnvironmentVariable("NUGET_PACKAGES", privatePackages)
 
         for pkg in packagedModuleTemplateGatePackages do
             if not (File.Exists(Path.getFullName pkg.Project)) then
