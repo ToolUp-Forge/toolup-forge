@@ -134,7 +134,7 @@ ToolUp.OpenXml.SvgRasterizer.Skia 3/3
 ToolUp.Platform.Build 268/523
 ToolUp.Platform.Client 2709/6964
 ToolUp.Platform.Core 6322/14619
-ToolUp.Platform.Server 6080/11624
+ToolUp.Platform.Server 6083/11627
 ToolUp.Platform.Testing 115/264
 ToolUp.Platform.UI 71/183
 ToolUp.PublicRendering 597/1062
@@ -172,7 +172,7 @@ ToolUp.Tabular 103/273
 ToolUp.TelemetrySinks.Ga4 2/4
 ToolUp.TimeSeriesStores.Timescale 3/5
 ToolUp.VectorStores.Hnsw 4/26
-ToolUp.VectorStores.Pgvector 40/86
+ToolUp.VectorStores.Pgvector 97/142
 ToolUp.Voice.Client 6/18
 ToolUp.Voice.Core 31/77
 ToolUp.VoiceProviders.AzureSpeech 14/23

@@ -37,12 +37,12 @@ open ToolUp.Platform.IVectorStore
 // **GP 4 — structural scope isolation.** Scope is a first-class `scope`
 // column and part of the composite primary key `(scope, chunk_id)`.
 // Every statement this companion issues except the scope *enumeration*
-// binds it, in one of exactly two ways (`Sql.ScopeBinding`): the six
+// binds it, in one of exactly two ways (`Sql.ScopeBinding`): the seven
 // that read or mutate existing rows carry a `scope = @scope` predicate,
-// and the one INSERT — which has no rows to filter yet — carries the
-// scope in the row identity it writes plus its `ON CONFLICT (scope,
-// chunk_id)` target, so a chunk id colliding across scopes cannot
-// overwrite a neighbour's row. There is no statement shape that can
+// and the two INSERTs (single and batched) — which have no rows to
+// filter yet — carry the scope in the row identity they write plus their
+// `ON CONFLICT (scope, chunk_id)` target, so a chunk id colliding across
+// scopes cannot overwrite a neighbour's row. There is no statement shape that can
 // reach across scopes, so cross-scope leakage is impossible by
 // construction rather than by remembering to filter — the SQL twin of
 // `HnswVectorStore`'s per-scope graph. `Sql.scopeBoundStatements` is the
@@ -303,6 +303,154 @@ module PgvectorOptions =
                 else
                     Ok()
 
+// ─── Tuning (Phase 892) ──────────────────────────────────────────────
+//
+// Search-time and write-time posture, kept OUT of `PgvectorOptions` so a
+// deployment that constructs the options record in full keeps compiling,
+// and so the pre-892 behaviour is one named value (`unchanged`) rather
+// than a set of defaults spread across a widened record (GP 11). The
+// original `create` / `createWithDataSource` entry points compose
+// `PgvectorTuning.unchanged`; `createTuned` / `createTunedWithDataSource`
+// take one explicitly.
+
+/// Search-time and write-time tuning for `PgvectorVectorStore`. Start
+/// from `PgvectorTuning.recommended` (or `PgvectorTuning.unchanged`, the
+/// pre-Phase-892 behaviour) and override fields with `with`.
+type PgvectorTuning = {
+    /// Per-query search width — `hnsw.ef_search` under an HNSW index,
+    /// `ivfflat.probes` under IVFFlat. `None` leaves the database default
+    /// in force. Applied with `set_config(name, value, true)` inside the
+    /// query's OWN transaction, so the setting ends with that transaction
+    /// and a pooled connection never carries one caller's width to the
+    /// next. Has no effect under `NoAnnIndex`.
+    SearchWidth: int option
+    /// Ask pgvector to keep scanning the approximate index until the scope
+    /// filter has yielded `topK` rows (`relaxed_order` iterative scan).
+    /// Applied only when the installed extension supports it (pgvector
+    /// 0.8.0 and later) — detected at `create` time, and reported by the
+    /// health probe when requested but unavailable.
+    IterativeScan: bool
+    /// With an approximate index configured, order the search statement
+    /// by distance ALONE so the index can serve its `ORDER BY … LIMIT`,
+    /// and restore the `(score, scope, chunkId)` total order by re-sorting
+    /// the returned page. `false` keeps the pre-892 statement, whose
+    /// secondary `chunk_id` sort key PostgreSQL cannot serve from an
+    /// ordering-operator index scan. Has no effect under `NoAnnIndex`.
+    IndexOrderedSearch: bool
+    /// When an index-ordered page for one scope comes back SHORTER than
+    /// `topK`, re-run that scope with the exact statement. A short page
+    /// means either the scope holds fewer live chunks than `topK`, or the
+    /// scope filter starved the approximate scan; the exact re-run is
+    /// cheap in exactly the small-scope case where starvation happens, and
+    /// it makes a full top-k a guarantee rather than a tuning outcome.
+    ExactFallbackOnShortPage: bool
+    /// Upper bound on the per-scope queries a multi-scope `Search` runs
+    /// concurrently. `1` is sequential (the pre-892 behaviour). Each
+    /// concurrent query holds one pooled connection for its duration.
+    MaxSearchConcurrency: int
+    /// Estimated row count above which the preflight validator
+    /// (`Health.validator`) warns that no approximate index is configured
+    /// and every search is an exact scan.
+    ExactScanWarningRows: int64
+}
+
+/// Presets and validation for `PgvectorTuning`.
+module PgvectorTuning =
+    /// pgvector's upper bound on `hnsw.ef_search`.
+    [<Literal>]
+    let MaxHnswEfSearch = 1000
+
+    /// pgvector's upper bound on `ivfflat.probes`.
+    [<Literal>]
+    let MaxIvfFlatProbes = 32768
+
+    /// Upper bound on `MaxSearchConcurrency` — a multi-scope search holding
+    /// more pooled connections than this is a misconfiguration, not a
+    /// tuning choice.
+    [<Literal>]
+    let MaxSearchConcurrencyLimit = 64
+
+    /// The pre-Phase-892 behaviour, exactly: database-default search width,
+    /// no iterative scan, the two-key `ORDER BY`, no fallback, sequential
+    /// multi-scope search. What `create` / `createWithDataSource` compose.
+    let unchanged: PgvectorTuning = {
+        SearchWidth = None
+        IterativeScan = false
+        IndexOrderedSearch = false
+        ExactFallbackOnShortPage = false
+        MaxSearchConcurrency = 1
+        ExactScanWarningRows = 500_000L
+    }
+
+    /// The recommended production posture for a shared table holding many
+    /// scopes: a raised search width, iterative scanning where the
+    /// extension supports it, an index-servable `ORDER BY` with the page
+    /// re-sorted, the exact fallback on a short page, and a bounded
+    /// concurrent multi-scope search. See the companion README for what
+    /// each value buys and what has been measured.
+    let recommended: PgvectorTuning = {
+        SearchWidth = Some 100
+        IterativeScan = true
+        IndexOrderedSearch = true
+        ExactFallbackOnShortPage = true
+        MaxSearchConcurrency = 4
+        ExactScanWarningRows = 500_000L
+    }
+
+    /// Bounds-check a tuning against the options it will run with, before
+    /// any I/O, naming the offending field.
+    let validate (options: PgvectorOptions) (t: PgvectorTuning) : Result<unit, string> =
+        let widthCheck =
+            match t.SearchWidth, options.AnnIndex with
+            | None, _
+            | Some _, NoAnnIndex -> Ok()
+            | Some w, HnswAnnIndex _ when w < 1 || w > MaxHnswEfSearch ->
+                Error(sprintf "SearchWidth (hnsw.ef_search) must be in [1, %d]; got %d." MaxHnswEfSearch w)
+            | Some w, IvfFlatAnnIndex _ when w < 1 || w > MaxIvfFlatProbes ->
+                Error(sprintf "SearchWidth (ivfflat.probes) must be in [1, %d]; got %d." MaxIvfFlatProbes w)
+            | Some _, _ -> Ok()
+
+        match widthCheck with
+        | Error e -> Error e
+        | Ok() ->
+            if t.MaxSearchConcurrency < 1 || t.MaxSearchConcurrency > MaxSearchConcurrencyLimit then
+                Error(
+                    sprintf
+                        "MaxSearchConcurrency must be in [1, %d]; got %d."
+                        MaxSearchConcurrencyLimit
+                        t.MaxSearchConcurrency
+                )
+            elif t.ExactScanWarningRows < 0L then
+                Error(sprintf "ExactScanWarningRows must be >= 0; got %d." t.ExactScanWarningRows)
+            else
+                Ok()
+
+/// The installed `vector` extension's version, as `pg_extension.extversion`
+/// reports it, and the capabilities that hang off it.
+module ExtensionVersion =
+    /// The first pgvector release with iterative index scans.
+    let iterativeScanSince = Version(0, 8, 0)
+
+    /// Parse the leading numeric part of an `extversion` string (`0.8.0`,
+    /// `0.7.4`); `None` for anything without one.
+    let tryParse (extversion: string) : Version option =
+        if String.IsNullOrWhiteSpace extversion then
+            None
+        else
+            let m = Text.RegularExpressions.Regex.Match(extversion.Trim(), @"^\d+(\.\d+){1,3}")
+
+            match m.Success, Version.TryParse m.Value with
+            | true, (true, v) -> Some v
+            | _ -> None
+
+    /// Whether an extension at `extversion` supports iterative index scans.
+    /// An unknown version is treated as unsupported, so the setting is never
+    /// sent to a server that would reject it.
+    let supportsIterativeScan (extversion: string option) : bool =
+        extversion
+        |> Option.bind tryParse
+        |> Option.exists (fun v -> v >= iterativeScanSince)
+
 // ─── SQL ─────────────────────────────────────────────────────────────
 //
 // Every statement lives here, built from the validated table name, so
@@ -392,6 +540,29 @@ SET content = EXCLUDED.content,
     deleted_at = NULL;"""
             o.Table
 
+    /// Phase 892 — batched upsert on the composite key: ONE statement per
+    /// batch whatever its size. The rows arrive as parallel arrays
+    /// (`unnest … WITH ORDINALITY`) and the embeddings as ONE flat `real[]`
+    /// sliced per row, so every vector travels as a binary float4 array
+    /// parameter rather than a text literal — without the separate
+    /// pgvector type-handler package. The scope is bound once and written
+    /// into every row's identity, with the same conflict target as
+    /// `upsert`, so the batch is scope-keyed exactly as the single write
+    /// is. The caller de-duplicates chunk ids first (a conflict target may
+    /// not be hit twice by one statement).
+    let upsertBatch (o: PgvectorOptions) =
+        sprintf
+            """INSERT INTO %s (scope, chunk_id, content, metadata, embedding, deleted_at)
+SELECT @scope, b.chunk_id, b.content, b.metadata::jsonb,
+       ((@embeddings::real[])[((b.ord - 1) * @dimensions + 1)::int:(b.ord * @dimensions)::int])::vector, NULL
+FROM unnest(@chunk_ids::text[], @contents::text[], @metadata::text[]) WITH ORDINALITY AS b(chunk_id, content, metadata, ord)
+ON CONFLICT (scope, chunk_id) DO UPDATE
+SET content = EXCLUDED.content,
+    metadata = EXCLUDED.metadata,
+    embedding = EXCLUDED.embedding,
+    deleted_at = NULL;"""
+            o.Table
+
     /// Per-scope KNN. `<=>` is pgvector's cosine distance, so
     /// `1 - distance` is the cosine similarity the other stores report.
     /// Tie-broken on `chunk_id` inside the scope; the caller applies the
@@ -402,6 +573,20 @@ SET content = EXCLUDED.content,
 FROM %s
 WHERE scope = @scope AND deleted_at IS NULL
 ORDER BY embedding <=> @embedding::vector, chunk_id
+LIMIT @top_k;"""
+            o.Table
+
+    /// Phase 892 — per-scope KNN whose `ORDER BY` is the distance operator
+    /// ALONE, the only shape an ordering-operator index (HNSW / IVFFlat)
+    /// can serve. The total order `search` states in SQL is restored by the
+    /// caller re-sorting the returned page. Used only when an approximate
+    /// index is configured and `PgvectorTuning.IndexOrderedSearch` is set.
+    let searchIndexOrdered (o: PgvectorOptions) =
+        sprintf
+            """SELECT chunk_id, content, metadata, 1 - (embedding <=> @embedding::vector) AS score
+FROM %s
+WHERE scope = @scope AND deleted_at IS NULL
+ORDER BY embedding <=> @embedding::vector
 LIMIT @top_k;"""
             o.Table
 
@@ -424,6 +609,8 @@ SET deleted_at = @deleted_at
 WHERE scope = @scope AND chunk_id = @chunk_id AND deleted_at IS NULL;"""
             o.Table
 
+    /// Tombstone removal. Only a tombstoned row is touched, so a restore of
+    /// a live chunk is a no-op.
     let restoreChunk (o: PgvectorOptions) =
         sprintf
             """UPDATE %s
@@ -431,12 +618,15 @@ SET deleted_at = NULL
 WHERE scope = @scope AND chunk_id = @chunk_id AND deleted_at IS NOT NULL;"""
             o.Table
 
+    /// Hard-delete of the scope's tombstones older than `@older_than`.
     let vacuum (o: PgvectorOptions) =
         sprintf
             """DELETE FROM %s
 WHERE scope = @scope AND deleted_at IS NOT NULL AND deleted_at < @older_than;"""
             o.Table
 
+    /// Hard-delete of every row in the scope — the configuration-grade
+    /// reset `IVectorStore.DeleteByScope` names.
     let deleteByScope (o: PgvectorOptions) =
         sprintf "DELETE FROM %s WHERE scope = @scope;" o.Table
 
@@ -444,6 +634,75 @@ WHERE scope = @scope AND deleted_at IS NOT NULL AND deleted_at < @older_than;"""
     /// enumerate scopes, and is exempt by construction, not by omission.
     let listScopes (o: PgvectorOptions) =
         sprintf "SELECT DISTINCT scope FROM %s ORDER BY scope;" o.Table
+
+    /// Phase 892 — the database settings a search applies for its own
+    /// transaction, as `(setting, value)` pairs: the search width and the
+    /// iterative-scan mode of the configured index family. Empty under
+    /// `NoAnnIndex`, and empty when nothing is tuned — in which case the
+    /// search runs exactly as it did before 892, with no transaction. The
+    /// iterative-scan setting is included only when `extensionVersion`
+    /// supports it, so it is never sent to a server that would reject it.
+    let searchSettings
+        (o: PgvectorOptions)
+        (t: PgvectorTuning)
+        (extensionVersion: string option)
+        : (string * string) list =
+        let iterative =
+            t.IterativeScan && ExtensionVersion.supportsIterativeScan extensionVersion
+
+        let family =
+            match o.AnnIndex with
+            | NoAnnIndex -> None
+            | HnswAnnIndex _ -> Some("hnsw.ef_search", "hnsw.iterative_scan")
+            | IvfFlatAnnIndex _ -> Some("ivfflat.probes", "ivfflat.iterative_scan")
+
+        match family with
+        | None -> []
+        | Some(widthSetting, iterativeSetting) -> [
+            match t.SearchWidth with
+            | Some w -> widthSetting, string w
+            | None -> ()
+            if iterative then
+                iterativeSetting, "relaxed_order"
+          ]
+
+    /// Phase 892 — one statement applying `count` settings for the current
+    /// transaction only (`set_config(…, true)` is `SET LOCAL`). Names and
+    /// values are bound as parameters `@setting_i` / `@value_i`.
+    let setLocal (count: int) =
+        let calls =
+            List.init count (fun i -> sprintf "set_config(@setting_%d, @value_%d, true)" i i)
+
+        sprintf "SELECT %s;" (String.concat ", " calls)
+
+    /// Phase 892 — the posture read behind the health probe and the
+    /// preflight validator, in one round-trip: the installed extension
+    /// version, the approximate-index access methods present on the table,
+    /// the database's current search-width settings, and an estimated row
+    /// count (planner statistics, falling back to the live-tuple counter
+    /// for a never-analysed table — never a `count(*)`). The `'[1]'::vector`
+    /// literal is coerced at parse time, which loads the extension library
+    /// in this backend so its settings are defined when read.
+    let diagnostics =
+        """SELECT
+    ('[1]'::vector IS NOT NULL) AS vector_loaded,
+    (SELECT extversion FROM pg_extension WHERE extname = 'vector') AS extversion,
+    (SELECT COALESCE(string_agg(DISTINCT am.amname, ','), '')
+       FROM pg_index i
+       JOIN pg_class ic ON ic.oid = i.indexrelid
+       JOIN pg_am am ON am.oid = ic.relam
+      WHERE i.indrelid = to_regclass(@table) AND am.amname IN ('hnsw', 'ivfflat')) AS ann_methods,
+    current_setting('hnsw.ef_search', true) AS hnsw_ef_search,
+    current_setting('ivfflat.probes', true) AS ivfflat_probes,
+    COALESCE((SELECT COALESCE(NULLIF(c.reltuples, -1)::bigint, s.n_live_tup, 0)
+                FROM pg_class c
+                LEFT JOIN pg_stat_user_tables s ON s.relid = c.oid
+               WHERE c.oid = to_regclass(@table)), 0) AS row_estimate;"""
+
+    /// The installed `vector` extension's version (`create`-time read).
+    [<Literal>]
+    let ExtensionVersionRead =
+        "SELECT extversion FROM pg_extension WHERE extname = 'vector';"
 
     /// How a statement binds the scope column. Two shapes, because an
     /// INSERT has no rows to filter yet — its isolation is carried by
@@ -472,13 +731,104 @@ WHERE scope = @scope AND deleted_at IS NOT NULL AND deleted_at < @older_than;"""
     /// scopes, so a scope predicate would make it useless.
     let scopeBoundStatements (o: PgvectorOptions) : (string * ScopeBinding * string) list = [
         "Upsert", ScopeKeyed, upsert o
+        "UpsertBatch", ScopeKeyed, upsertBatch o
         "Search", ScopePredicated, search o
+        "SearchIndexOrdered", ScopePredicated, searchIndexOrdered o
         "ListChunks", ScopePredicated, listChunks o
         "DeleteChunk", ScopePredicated, deleteChunk o
         "RestoreChunk", ScopePredicated, restoreChunk o
         "Vacuum", ScopePredicated, vacuum o
         "DeleteByScope", ScopePredicated, deleteByScope o
     ]
+
+// ─── Batched write preparation (Phase 892) ───────────────────────────
+
+/// The parallel arrays one `Sql.upsertBatch` statement binds: one entry
+/// per DISTINCT chunk id, embeddings flattened row-major into one array
+/// of `count × Dimensions` unit-normalised floats.
+type PreparedBatch = {
+    /// Distinct chunk ids, in first-seen order.
+    ChunkIds: string array
+    /// Chunk content, aligned with `ChunkIds`.
+    Contents: string array
+    /// Chunk metadata as JSON objects, aligned with `ChunkIds`.
+    Metadata: string array
+    /// Every row's unit-normalised vector, concatenated in `ChunkIds` order.
+    Embeddings: float32 array
+}
+
+/// Pure preparation of a batched upsert — everything except the I/O, so
+/// the de-duplication and dimension guard are provable without a database.
+module BatchUpsert =
+    /// Validate and flatten `chunks` for `Sql.upsertBatch`. A chunk id
+    /// repeated inside the batch keeps its first position and its LAST
+    /// value — the state sequential upserts would leave. A vector of the
+    /// wrong length is refused, naming the chunk, before anything is
+    /// written. The tombstone metadata key is stripped, as `Upsert` does.
+    let prepare (options: PgvectorOptions) (chunks: (string * float32 array * TextChunk) list) : PreparedBatch =
+        let order = ResizeArray<string>()
+        let latest = Collections.Generic.Dictionary<string, float32 array * TextChunk>()
+
+        for chunkId, vector, chunk in chunks do
+            if vector.Length <> options.Dimensions then
+                fail (
+                    sprintf
+                        "[PgvectorVectorStore] Chunk '%s' in a batch carries a %d-dimension vector but table '%s' is vector(%d). Nothing in the batch was written. The column dimension is fixed at migration time — re-embed the corpus with the composed provider, or compose a separate store per embedding model."
+                        chunkId
+                        vector.Length
+                        options.Table
+                        options.Dimensions
+                )
+
+            if not (latest.ContainsKey chunkId) then
+                order.Add chunkId
+
+            latest[chunkId] <- (vector, chunk)
+
+        let ids = order.ToArray()
+        let embeddings = Array.zeroCreate<float32> (ids.Length * options.Dimensions)
+
+        ids
+        |> Array.iteri (fun i id ->
+            let vector, _ = latest[id]
+            Array.blit (Vector.normalise vector) 0 embeddings (i * options.Dimensions) options.Dimensions)
+
+        {
+            ChunkIds = ids
+            Contents = ids |> Array.map (fun id -> (snd latest[id]).Content)
+            Metadata =
+                ids
+                |> Array.map (fun id ->
+                    (snd latest[id]).Metadata
+                    |> Map.remove ChunkMetadata.DeletedAtKey
+                    |> Metadata.toJson)
+            Embeddings = embeddings
+        }
+
+// ─── Diagnostics (Phase 892) ─────────────────────────────────────────
+
+/// A live read of the store's posture — what the health probe reports and
+/// the preflight validator judges. Produced by `PgvectorVectorStore.Diagnose`.
+type PgvectorDiagnostics = {
+    /// The options the store was built with.
+    Options: PgvectorOptions
+    /// The tuning the store was built with.
+    Tuning: PgvectorTuning
+    /// The `vector` extension version read at `create` — what the store's
+    /// per-query settings were chosen against.
+    ExtensionVersionAtCreate: string option
+    /// The `vector` extension version installed now.
+    ExtensionVersion: string option
+    /// Approximate-index access methods (`hnsw` / `ivfflat`) of the
+    /// indexes present on the table.
+    AnnIndexMethods: string list
+    /// The database's current `hnsw.ef_search`, when defined.
+    DatabaseHnswEfSearch: string option
+    /// The database's current `ivfflat.probes`, when defined.
+    DatabaseIvfFlatProbes: string option
+    /// Estimated row count (planner statistics; never a full count).
+    RowEstimate: int64
+}
 
 // ─── Store ───────────────────────────────────────────────────────────
 
@@ -490,8 +840,15 @@ WHERE scope = @scope AND deleted_at IS NOT NULL AND deleted_at < @older_than;"""
 /// which perform the `create`-time connectivity + schema probe. The
 /// constructor itself is deliberately I/O-free so the probe's failure
 /// mode is a single, descriptive exception from one place.
-type PgvectorVectorStore(dataSource: NpgsqlDataSource, options: PgvectorOptions, ownsDataSource: bool, ?logger: ILogger)
-    =
+type PgvectorVectorStore
+    (
+        dataSource: NpgsqlDataSource,
+        options: PgvectorOptions,
+        tuning: PgvectorTuning,
+        extensionVersionAtCreate: string option,
+        ownsDataSource: bool,
+        logger: ILogger option
+    ) =
 
     let log =
         logger
@@ -509,7 +866,9 @@ type PgvectorVectorStore(dataSource: NpgsqlDataSource, options: PgvectorOptions,
         | _ -> false
 
     let sqlUpsert = Sql.upsert options
+    let sqlUpsertBatch = Sql.upsertBatch options
     let sqlSearch = Sql.search options
+    let sqlSearchIndexOrdered = Sql.searchIndexOrdered options
     let sqlListChunks = Sql.listChunks options
     let sqlDeleteChunk = Sql.deleteChunk options
     let sqlRestoreChunk = Sql.restoreChunk options
@@ -565,9 +924,167 @@ type PgvectorVectorStore(dataSource: NpgsqlDataSource, options: PgvectorOptions,
         else
             Some(reader.GetFieldValue<DateTime> ordinal)
 
+    // ─── Phase 892 search paths ──────────────────────────────────────
+
+    let annConfigured =
+        match options.AnnIndex with
+        | NoAnnIndex -> false
+        | _ -> true
+
+    let indexOrdered = annConfigured && tuning.IndexOrderedSearch
+
+    // Fixed for the store's lifetime: the settings depend only on the
+    // options, the tuning and the extension version read at `create`.
+    let settings = Sql.searchSettings options tuning extensionVersionAtCreate
+    let sqlSetLocal = Sql.setLocal settings.Length
+
+    let bindSearch (parameters: NpgsqlParameterCollection) (scopeKey: string) (queryLiteral: string) (topK: int) =
+        parameters.AddWithValue("scope", scopeKey) |> ignore
+        parameters.AddWithValue("embedding", queryLiteral) |> ignore
+        parameters.AddWithValue("top_k", topK) |> ignore
+
+    let readMatches (scope: VectorScope) (scopeKey: string) (reader: Data.Common.DbDataReader) = async {
+        let acc = ResizeArray<VectorMatch>()
+        let mutable go = true
+
+        while go do
+            let! has = reader.ReadAsync() |> Async.AwaitTask
+
+            if has then
+                let chunkId = reader.GetString 0
+
+                acc.Add {
+                    ChunkId = chunkId
+                    Content = reader.GetString 1
+                    Score = reader.GetDouble 3
+                    Scope = scope
+                    Metadata = decodeMetadata scopeKey chunkId (reader.GetString 2)
+                }
+            else
+                go <- false
+
+        return List.ofSeq acc
+    }
+
+    /// One statement on a pooled connection — the pre-892 path, used
+    /// whenever there is nothing to apply for the query's transaction.
+    let runPlain (sql: string) (scope: VectorScope) (queryLiteral: string) (topK: int) = async {
+        let scopeKey = Scope.toKey scope
+        use cmd = newCommand sql
+        bindSearch cmd.Parameters scopeKey queryLiteral topK
+        use! reader = cmd.ExecuteReaderAsync() |> Async.AwaitTask
+        return! readMatches scope scopeKey reader
+    }
+
+    /// The search inside its own transaction, with the tuned settings
+    /// applied `LOCAL` to it: they end at commit, so the pooled connection
+    /// goes back to the pool carrying nothing of this caller's.
+    let runWithSettings (sql: string) (scope: VectorScope) (queryLiteral: string) (topK: int) = async {
+        let scopeKey = Scope.toKey scope
+        use! conn = dataSource.OpenConnectionAsync().AsTask() |> Async.AwaitTask
+        use! tx = conn.BeginTransactionAsync().AsTask() |> Async.AwaitTask
+
+        use setCmd = new NpgsqlCommand(sqlSetLocal, conn, tx)
+
+        if options.CommandTimeoutSeconds > 0 then
+            setCmd.CommandTimeout <- options.CommandTimeoutSeconds
+
+        settings
+        |> List.iteri (fun i (name, value) ->
+            setCmd.Parameters.AddWithValue(sprintf "setting_%d" i, name) |> ignore
+            setCmd.Parameters.AddWithValue(sprintf "value_%d" i, value) |> ignore)
+
+        let! _ = setCmd.ExecuteNonQueryAsync() |> Async.AwaitTask
+
+        use searchCmd = new NpgsqlCommand(sql, conn, tx)
+
+        if options.CommandTimeoutSeconds > 0 then
+            searchCmd.CommandTimeout <- options.CommandTimeoutSeconds
+
+        bindSearch searchCmd.Parameters scopeKey queryLiteral topK
+
+        let! rows = async {
+            use! reader = searchCmd.ExecuteReaderAsync() |> Async.AwaitTask
+            return! readMatches scope scopeKey reader
+        }
+
+        do! tx.CommitAsync() |> Async.AwaitTask
+        return rows
+    }
+
+    /// One scope's page. Index-ordered when configured; a page that comes
+    /// back short of `topK` is re-run with the exact statement when the
+    /// fallback is on (see `PgvectorTuning.ExactFallbackOnShortPage`).
+    let searchScope (scope: VectorScope) (queryLiteral: string) (topK: int) = async {
+        let sql = if indexOrdered then sqlSearchIndexOrdered else sqlSearch
+
+        let! page =
+            if List.isEmpty settings then
+                runPlain sql scope queryLiteral topK
+            else
+                runWithSettings sql scope queryLiteral topK
+
+        if indexOrdered && tuning.ExactFallbackOnShortPage && page.Length < topK then
+            return! runPlain sqlSearch scope queryLiteral topK
+        else
+            return page
+    }
+
     /// The configuration this store was built with — read by the health
     /// probe and useful in diagnostics.
     member _.Options = options
+
+    /// Phase 892 — the search / write tuning this store was built with.
+    member _.Tuning = tuning
+
+    /// Phase 892 — the `vector` extension version read at `create`, which
+    /// decides whether iterative scanning is applied. `None` for a store
+    /// constructed directly without one.
+    member _.ExtensionVersionAtCreate = extensionVersionAtCreate
+
+    /// Phase 892 — read the store's live posture in one round-trip: the
+    /// installed extension version, the approximate indexes present on the
+    /// table, the database's search-width settings and an estimated row
+    /// count. Feeds the health probe and the preflight validator.
+    member _.Diagnose() : Async<PgvectorDiagnostics> = async {
+        use cmd = newCommand Sql.diagnostics
+        cmd.Parameters.AddWithValue("table", options.Table) |> ignore
+        use! reader = cmd.ExecuteReaderAsync() |> Async.AwaitTask
+        let! has = reader.ReadAsync() |> Async.AwaitTask
+
+        let text (ordinal: int) =
+            if has && not (reader.IsDBNull ordinal) then
+                Some(reader.GetValue(ordinal).ToString())
+            else
+                None
+
+        let annMethods =
+            text 2
+            |> Option.map (fun s -> s.Split(',', StringSplitOptions.RemoveEmptyEntries) |> List.ofArray)
+            |> Option.defaultValue []
+
+        let rows =
+            if has && not (reader.IsDBNull 5) then
+                Convert.ToInt64(reader.GetValue 5, CultureInfo.InvariantCulture)
+            else
+                0L
+
+        return {
+            Options = options
+            Tuning = tuning
+            ExtensionVersionAtCreate = extensionVersionAtCreate
+            ExtensionVersion = text 1
+            AnnIndexMethods = annMethods
+            DatabaseHnswEfSearch = text 3
+            DatabaseIvfFlatProbes = text 4
+            RowEstimate = rows
+        }
+    }
+
+    /// The pre-Phase-892 constructor: `PgvectorTuning.unchanged` and no
+    /// recorded extension version, so the store behaves exactly as it did.
+    new(dataSource: NpgsqlDataSource, options: PgvectorOptions, ownsDataSource: bool, ?logger: ILogger) =
+        new PgvectorVectorStore(dataSource, options, PgvectorTuning.unchanged, None, ownsDataSource, logger)
 
     interface IVectorStore with
 
@@ -605,45 +1122,29 @@ type PgvectorVectorStore(dataSource: NpgsqlDataSource, options: PgvectorOptions,
                 return []
             else
                 let queryLiteral = Vector.toLiteral (Vector.normalise query)
-                let matches = ResizeArray<VectorMatch>()
 
                 // One scope-parameterised query per requested scope. A
                 // single `scope = ANY(@scopes)` query would be fewer
                 // round-trips but would put the isolation guarantee inside
                 // an array parameter; per-scope keeps `Sql.search`'s
-                // predicate the only shape that exists (GP 4).
-                for scope in scopes do
-                    let scopeKey = Scope.toKey scope
-                    use cmd = newCommand sqlSearch
-                    cmd.Parameters.AddWithValue("scope", scopeKey) |> ignore
-                    cmd.Parameters.AddWithValue("embedding", queryLiteral) |> ignore
-                    cmd.Parameters.AddWithValue("top_k", topK) |> ignore
-
-                    use! reader = cmd.ExecuteReaderAsync() |> Async.AwaitTask
-                    let mutable go = true
-
-                    while go do
-                        let! has = reader.ReadAsync() |> Async.AwaitTask
-
-                        if has then
-                            let chunkId = reader.GetString 0
-
-                            matches.Add {
-                                ChunkId = chunkId
-                                Content = reader.GetString 1
-                                Score = reader.GetDouble 3
-                                Scope = scope
-                                Metadata = decodeMetadata scopeKey chunkId (reader.GetString 2)
-                            }
-                        else
-                            go <- false
+                // predicate the only shape that exists (GP 4). Phase 892
+                // runs them concurrently under `MaxSearchConcurrency`
+                // (`1` — the unchanged default — is sequential).
+                let! pages =
+                    Async.Parallel(
+                        scopes |> List.map (fun scope -> searchScope scope queryLiteral topK),
+                        maxDegreeOfParallelism = tuning.MaxSearchConcurrency
+                    )
 
                 // Same total order as every in-tree store: score
                 // descending, ties broken on `(Scope, ChunkId)` so a
                 // repeated query is byte-identical run to run — the
                 // deterministic-ordering contract the eval gate rests on.
+                // It is also what restores the total order of an
+                // index-ordered page, whose SQL orders by distance alone.
                 return
-                    matches
+                    pages
+                    |> Seq.concat
                     |> Seq.sortBy (fun m -> -m.Score, m.Scope, m.ChunkId)
                     |> Seq.truncate topK
                     |> Seq.toList
@@ -734,6 +1235,25 @@ type PgvectorVectorStore(dataSource: NpgsqlDataSource, options: PgvectorOptions,
         member this.Erase(scope, subjectUserId, policy, dryRun) =
             ToolUp.Platform.IVectorStore.eraseSubject (this :> IVectorStore) scope subjectUserId policy dryRun
 
+    // Phase 892 — one `INSERT … SELECT … FROM unnest(…)` per batch, the
+    // vectors bound as one binary `real[]`. The statement count is one for
+    // every non-empty batch, whatever its size.
+    interface IVectorStoreBatch with
+        member _.UpsertBatch scope chunks = async {
+            let prepared = BatchUpsert.prepare options chunks
+
+            if prepared.ChunkIds.Length > 0 then
+                use cmd = newCommand sqlUpsertBatch
+                cmd.Parameters.AddWithValue("scope", Scope.toKey scope) |> ignore
+                cmd.Parameters.AddWithValue("chunk_ids", prepared.ChunkIds) |> ignore
+                cmd.Parameters.AddWithValue("contents", prepared.Contents) |> ignore
+                cmd.Parameters.AddWithValue("metadata", prepared.Metadata) |> ignore
+                cmd.Parameters.AddWithValue("embeddings", prepared.Embeddings) |> ignore
+                cmd.Parameters.AddWithValue("dimensions", options.Dimensions) |> ignore
+                let! _ = cmd.ExecuteNonQueryAsync() |> Async.AwaitTask
+                ()
+        }
+
     interface IDisposable with
         member _.Dispose() =
             if ownsDataSource then
@@ -821,10 +1341,57 @@ let private probeAndMigrate (dataSource: NpgsqlDataSource) (options: PgvectorOpt
             )
 }
 
+/// Phase 892 — the installed extension version, read once at `create` by
+/// the tuned entry points; it decides whether iterative scanning is sent.
+let private readExtensionVersion (dataSource: NpgsqlDataSource) : Async<string option> = async {
+    use cmd = dataSource.CreateCommand Sql.ExtensionVersionRead
+    let! result = cmd.ExecuteScalarAsync() |> Async.AwaitTask
+
+    return
+        if isNull result || result = box DBNull.Value then
+            None
+        else
+            Some(string result)
+}
+
 let private validateOrFail (options: PgvectorOptions) =
     match PgvectorOptions.validate options with
     | Ok() -> ()
     | Error message -> fail (sprintf "[PgvectorVectorStore] Invalid PgvectorOptions — %s" message)
+
+let private validateTuningOrFail (options: PgvectorOptions) (tuning: PgvectorTuning) =
+    match PgvectorTuning.validate options tuning with
+    | Ok() -> ()
+    | Error message -> fail (sprintf "[PgvectorVectorStore] Invalid PgvectorTuning — %s" message)
+
+/// Warn once, at `create`, when iterative scanning was asked for and the
+/// installed extension cannot provide it — the store still composes, and
+/// the health probe keeps reporting it.
+let private warnIfIterativeUnavailable
+    (log: ILogger option)
+    (tuning: PgvectorTuning)
+    (options: PgvectorOptions)
+    (version: string option)
+    =
+    let annConfigured =
+        match options.AnnIndex with
+        | NoAnnIndex -> false
+        | _ -> true
+
+    if
+        annConfigured
+        && tuning.IterativeScan
+        && not (ExtensionVersion.supportsIterativeScan version)
+    then
+        let logger =
+            log |> Option.defaultWith (fun () -> ConsoleLogger.ConsoleLogger() :> ILogger)
+
+        logger.Warn(
+            sprintf
+                "[PgvectorVectorStore] IterativeScan is requested but the installed vector extension (%s) predates %O — it is not applied. Upgrade pgvector (ALTER EXTENSION vector UPDATE) to enable it; the exact fallback on a short page still guarantees a full top-k."
+                (version |> Option.defaultValue "version unknown")
+                ExtensionVersion.iterativeScanSince
+        )
 
 /// Build a store over a data source the CALLER owns (a shared pool, or a
 /// data source configured with TLS / logging the deployment supplies).
@@ -873,3 +1440,72 @@ let create (connectionString: string) (options: PgvectorOptions) (logger: ILogge
     match logger with
     | Some l -> new PgvectorVectorStore(dataSource, options, true, l) :> IVectorStore
     | None -> new PgvectorVectorStore(dataSource, options, true) :> IVectorStore
+
+/// Phase 892 — `createWithDataSource` with an explicit `PgvectorTuning`
+/// (start from `PgvectorTuning.recommended`). The tuning is validated with
+/// the options before any I/O, and the extension version is read once so
+/// iterative scanning is sent only to a server that supports it. The
+/// returned store also implements `IVectorStoreBatch`.
+let createTunedWithDataSource
+    (dataSource: NpgsqlDataSource)
+    (options: PgvectorOptions)
+    (tuning: PgvectorTuning)
+    (logger: ILogger option)
+    : IVectorStore =
+    validateOrFail options
+    validateTuningOrFail options tuning
+
+    let version =
+        async {
+            do! probeAndMigrate dataSource options
+            return! readExtensionVersion dataSource
+        }
+        |> Async.RunSynchronously
+
+    warnIfIterativeUnavailable logger tuning options version
+    new PgvectorVectorStore(dataSource, options, tuning, version, false, logger) :> IVectorStore
+
+/// Phase 892 — `create` with an explicit `PgvectorTuning` (start from
+/// `PgvectorTuning.recommended`). The store owns the resulting
+/// `NpgsqlDataSource` and disposes it with itself.
+///
+/// ```
+/// let store =
+///     PgvectorVectorStore.createTuned
+///         connectionString
+///         { PgvectorOptions.forDimensions 1536 with AnnIndex = HnswAnnIndex(16, 64) }
+///         PgvectorTuning.recommended
+///         (Some logger)
+/// ```
+let createTuned
+    (connectionString: string)
+    (options: PgvectorOptions)
+    (tuning: PgvectorTuning)
+    (logger: ILogger option)
+    : IVectorStore =
+    validateOrFail options
+    validateTuningOrFail options tuning
+
+    if String.IsNullOrWhiteSpace connectionString then
+        fail
+            "[PgvectorVectorStore] The connection string is empty. Supply it from ISecretStore / configuration at compose time."
+
+    let dataSource =
+        try
+            NpgsqlDataSource.Create connectionString
+        with ex ->
+            fail (sprintf "[PgvectorVectorStore] The connection string could not be parsed: %s" ex.Message)
+
+    let version =
+        try
+            async {
+                do! probeAndMigrate dataSource options
+                return! readExtensionVersion dataSource
+            }
+            |> Async.RunSynchronously
+        with _ ->
+            dataSource.Dispose()
+            reraise ()
+
+    warnIfIterativeUnavailable logger tuning options version
+    new PgvectorVectorStore(dataSource, options, tuning, version, true, logger) :> IVectorStore
