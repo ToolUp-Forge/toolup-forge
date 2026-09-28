@@ -70,6 +70,15 @@ asked for. `unsigned` is read by neither reconstruction — the low/high bit pat
 bits regardless of the tag. None of the four records above takes an `int64` argument, so no traffic
 changes for them; a consumer registering a decoder for a record that does may rely on this shape.
 
+> **Being withdrawn (Phase 911) — do not build on the object form.** The admission above is reversed:
+> a coming release refuses the `{high, low, unsigned}` form in `asInt64` and `asUInt64` on **every**
+> profile, restoring the behaviour of v0.23.0, so against the last tagged release nothing narrows. The
+> reasons: no writer the gates verify against emits the shape, so nothing but hand-written pins stands
+> behind it; `unsigned` is silently ignored, a lenient read no oracle can see; and one accepted form per
+> type is simpler than a profile branch. Until that release lands the shape is still accepted. A
+> request body built by hand should carry an `int64` / `uint64` as a JSON number or the signed string
+> (`"+42"`, `"-7"`) — or, better, go through the SDK's own proxy, which already does.
+
 **A quoted `decimal` is admitted by `asDecimal` (decided Phase 885)**, because that is how the
 browser writes one: `Fable.SimpleJson` sends `"1234.50"`, which the converter set always read and
 the algebra refused — so a consumer API with a `decimal` argument failed from a reflective client
