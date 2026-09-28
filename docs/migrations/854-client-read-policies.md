@@ -21,8 +21,10 @@ phase. The public surface grows additively: `CacheableAttribute` / `InvalidatesA
 
 3. Pin the two equal in a .NET test:
    `Expect.equal (ReadPolicies.ofAttributes typeof<CatalogApi>) declarations "declared once"`.
-4. If your deployment changes the signed-in identity other than through `UserSession.setAuthToken` /
-   `clearAuthToken`, call `ReadPolicies.clear ()` when it does.
+4. Nothing to do for identity: since Phase 908 every identity route the SDK owns (tokens, subject
+   kind, dev identity, token storage, the team switch, another tab) clears the cache through
+   `UserSession.identityChanged`. Call that yourself only from an identity route of your own that
+   bypasses `UserSession`.
 
 An Elmish `update` that handles `ofSuccess` needs no change: a cache hit dispatches it twice (the
 cached value, then the refreshed one), which is the point. Semantics in full:
