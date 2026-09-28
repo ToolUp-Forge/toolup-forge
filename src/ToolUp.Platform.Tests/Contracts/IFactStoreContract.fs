@@ -290,6 +290,122 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             Expect.equal (List.head chain).FactId f1.FactId "earliest first"
         }
 
+        // ─── Point reads beside their neighbours (Phase 890) ──────────
+        //
+        // An indexed point read narrows before it filters, so these pin
+        // the shapes a narrowing could get wrong: a neighbouring period,
+        // a competing lineage, another subject, and a period whose
+        // `DateTime` carries no kind.
+
+        testCaseAsync "a period clause returns the overlapping lineage and not its neighbours"
+        <| async {
+            let store, scopeA, _ = factory ()
+
+            let quarter (k: int) : TemporalExtent = {
+                From = DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(3 * k)
+                To = DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(3 * k + 3)
+                Label = None
+            }
+
+            let! facts =
+                [ 0..3 ]
+                |> List.map (fun k -> {
+                    draft "uk" "revenue" (sprintf "q%d" k) (decimal k) with
+                        Period = quarter k
+                })
+                |> List.map (assertOk "quarter" store scopeA)
+                |> Async.Sequential
+
+            let! _ =
+                assertOk "other subject" store scopeA {
+                    draft "fr" "revenue" "q1-fr" 7m with
+                        Period = quarter 1
+                }
+
+            let! q1 =
+                store.Query(
+                    scopeA,
+                    {
+                        FactQuery.forSubjectMetric facts[1].Subject facts[1].Metric with
+                            PeriodOverlaps = Some(quarter 1)
+                    }
+                )
+
+            Expect.equal (q1 |> List.map _.FactId) [ facts[1].FactId ] "adjacent quarters do not overlap"
+
+            let! all = store.Query(scopeA, FactQuery.forSubjectMetric facts[1].Subject facts[1].Metric)
+
+            Expect.equal
+                (all |> List.map _.FactId)
+                (facts |> Array.map _.FactId |> Array.toList)
+                "no period clause returns every quarter, ordered by period"
+        }
+
+        testCaseAsync "QuerySupersessionChain walks its own lineage and no competitor's"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let! f1 = assertOk "v1" store scopeA (draft "uk" "revenue" "hashA" 100m)
+            let! f2 = assertOk "v2" store scopeA (draft "uk" "revenue" "hashB" 110m)
+
+            let! _ =
+                assertOk "competitor" store scopeA {
+                    draft "uk" "revenue" "hashE" 105m with
+                        Method = Computed("estimator", "1", "p0")
+                }
+
+            let! _ =
+                assertOk "neighbour period" store scopeA {
+                    draft "uk" "revenue" "hashN" 90m with
+                        Period = {
+                            From = q2.To
+                            To = q2.To.AddMonths 3
+                            Label = None
+                        }
+                }
+
+            let! chain = store.QuerySupersessionChain(scopeA, f2.FactId)
+            Expect.equal (chain |> List.map _.FactId) [ f1.FactId; f2.FactId ] "the lineage, and only the lineage"
+        }
+
+        testCaseAsync "a period with no DateTimeKind supersedes within its lineage"
+        <| async {
+            let store, scopeA, _ = factory ()
+
+            let unmarked: TemporalExtent = {
+                From = DateTime(2026, 1, 1)
+                To = DateTime(2026, 2, 1)
+                Label = None
+            }
+
+            let! f1 =
+                assertOk "v1" store scopeA {
+                    draft "uk" "revenue" "hashA" 1m with
+                        Period = unmarked
+                }
+
+            let! f2 =
+                assertOk "v2" store scopeA {
+                    draft "uk" "revenue" "hashB" 2m with
+                        Period = unmarked
+                }
+
+            Expect.equal f2.Supersedes (Some f1.FactId) "the unmarked period is one lineage"
+
+            let! current =
+                store.Query(
+                    scopeA,
+                    {
+                        FactQuery.forSubjectMetric f1.Subject f1.Metric with
+                            PeriodOverlaps = Some unmarked
+                    }
+                )
+
+            Expect.equal (current |> List.map _.FactId) [ f2.FactId ] "the head is current"
+
+            let! chain = store.QuerySupersessionChain(scopeA, f1.FactId)
+            Expect.equal (chain |> List.map _.FactId) [ f1.FactId; f2.FactId ] "and the chain walks it"
+        }
+
         // ─── Batch assertion (Phase 704) ──────────────────────────────
 
         testCaseAsync "re-asserting an unchanged population is all-idempotent and writes no new facts"

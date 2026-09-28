@@ -1411,7 +1411,56 @@ let metricSurfaceScaleTests =
                 Expect.isTrue population.Truncated "the rest of the population stayed out of the answer"
         }
     ]
-// ─── Phase 890 — measure first (baseline, pre-index) ─────────────────
+
+// ─── Phase 890 — the point-read index ────────────────────────────────
+//
+// **Measured first**, before the index existed, over the seed below
+// (10,000 facts: 1,000 subjects × 10 quarters of one metric) through the
+// counting decorator: one point read (subject, metric, period) cost 10,000
+// downloads and 1 list; `QuerySupersessionChain` 10,001 downloads and 1
+// list; one `Assert` superseding a fact 10,001 downloads and 2 lists. The
+// tests below hold the after-shape structurally — counts, never a clock —
+// and compare it across two scope sizes, because "does not depend on the
+// scope's size" is a claim about a slope, not a number.
+//
+// The whole `IFactStore` contract is bound once more with the index forced
+// on (`FactIndexOptions.always`), as Phase 702 did for the surface, so every
+// contract case runs through the indexed path; the direct comparison below
+// then holds the two paths' answers equal on shapes the contract does not
+// enumerate.
+
+let private indexFactory () : IFactStore * string * string =
+    let store =
+        BlobFactStore.createWithIndex
+            (InMemoryBlobStorage.InMemoryBlobStorage())
+            (InMemoryEventStore.InMemoryEventStore())
+            None
+            (fun () -> DateTime.UtcNow)
+            FactSurfaceOptions.defaults
+            FactIndexOptions.always
+
+    store, newScope (), newScope ()
+
+/// The generic contract pack bound to a store with the point-read index
+/// forced on at every size.
+let indexTests =
+    IFactStoreContract.tests "BlobFactStore (point-read index)" indexFactory
+
+let private indexRegistryFactory (registry: IMetricRegistry) : IFactStore * string * string =
+    let store =
+        BlobFactStore.createWithIndex
+            (InMemoryBlobStorage.InMemoryBlobStorage())
+            (InMemoryEventStore.InMemoryEventStore())
+            (Some registry)
+            (fun () -> DateTime.UtcNow)
+            FactSurfaceOptions.defaults
+            FactIndexOptions.always
+
+    store, newScope (), newScope ()
+
+/// The registry-directed population contract bound to the same store.
+let indexPopulationRegistryTests =
+    IFactStoreContract.populationRegistryTests "BlobFactStore (point-read index)" indexRegistryFactory
 
 [<Literal>]
 let private PointScaleSize = 10_000
@@ -1433,53 +1482,568 @@ let private pointFact (index: int) : Fact = {
         Period = pointPeriod (index % 10)
 }
 
-let pointReadBaselineTests =
-    testList "Phase 890 measure first" [
-        testCaseAsync "baseline point read cost over 10,000 facts"
-        <| async {
-            let counting = CountingBlobStorage(InMemoryBlobStorage.InMemoryBlobStorage())
-            let storage = counting :> IBlobStorage
-            let scope = newScope ()
-            let json = FableConverters.create ()
+let private seedPoints (storage: IBlobStorage) (scope: string) (count: int) = async {
+    let json = FableConverters.create ()
 
-            for i in 0 .. PointScaleSize - 1 do
-                let fact = pointFact i
-                let payload = JsonSerializer.Serialize(fact, json) |> Encoding.UTF8.GetBytes
-                let! _ = storage.Upload(scope, sprintf "_facts/%s.json" fact.FactId, payload)
+    for i in 0 .. count - 1 do
+        let fact = pointFact i
+        let payload = JsonSerializer.Serialize(fact, json) |> Encoding.UTF8.GetBytes
+        let! _ = storage.Upload(scope, sprintf "_facts/%s.json" fact.FactId, payload)
+        ()
+}
+
+let private blobStoreWithIndex (storage: IBlobStorage) (clock: unit -> DateTime) (index: FactIndexOptions) =
+    BlobFactStore(
+        storage,
+        InMemoryEventStore.InMemoryEventStore(),
+        Some surfaceRegistry,
+        clock,
+        FactSurfaceOptions.defaults,
+        index
+    )
+
+let private storeWithIndex (storage: IBlobStorage) (clock: unit -> DateTime) (index: FactIndexOptions) : IFactStore =
+    blobStoreWithIndex storage clock index :> IFactStore
+
+let private leavesIn (storage: IBlobStorage) (scope: string) = storage.List(scope, FactIndex.Prefix)
+
+/// The counts one measured run produces.
+type private PointReadCost = {
+    Enumerated: int
+    Cold: int
+    Warm: int
+    WarmLists: int
+    Chain: int
+    Superseding: int
+    NewLineage: int
+}
+
+/// Seed `size` facts, then count what each indexed operation reads.
+let private measurePointReads (size: int) = async {
+    let counting = CountingBlobStorage(InMemoryBlobStorage.InMemoryBlobStorage())
+    let storage = counting :> IBlobStorage
+    let scope = newScope ()
+    do! seedPoints storage scope size
+
+    let clock = steppingClock (baseAsOf.AddDays 1.0)
+    let enumerating = storeWithIndex storage clock FactIndexOptions.disabled
+    let indexed = storeWithIndex storage clock FactIndexOptions.defaults
+
+    // Verify the probe before trusting any count it produces.
+    let target = pointFact 423
+    let! readBack = enumerating.Get(scope, target.FactId)
+    Expect.equal readBack (Some target) "the seeded blobs are in the store's own format"
+
+    let query = {
+        FactQuery.forSubjectMetric target.Subject target.Metric with
+            PeriodOverlaps = Some target.Period
+    }
+
+    counting.Reset()
+    let! viaLog = enumerating.Query(scope, query)
+    let enumerated = counting.Downloads
+
+    // Cold: the first consulting read finds no leaves, so it enumerates
+    // (the truth) and writes every missing leaf from the facts it read.
+    counting.Reset()
+    let! cold = indexed.Query(scope, query)
+    let coldReads = counting.Downloads
+
+    counting.Reset()
+    let! warm = indexed.Query(scope, query)
+    let warmReads = counting.Downloads
+    let warmLists = counting.Lists
+
+    counting.Reset()
+    let! chain = indexed.QuerySupersessionChain(scope, target.FactId)
+    let chainReads = counting.Downloads
+
+    counting.Reset()
+
+    let! superseding =
+        indexed.Assert(
+            scope,
+            {
+                draftAt target.Subject.Path "revenue" syntheticMethod (Scalar 1m) "new-input" with
+                    Period = target.Period
+            }
+        )
+
+    let supersedingReads = counting.Downloads
+
+    counting.Reset()
+
+    let! fresh =
+        indexed.Assert(
+            scope,
+            {
+                draftAt [ "eu"; "sku-new" ] "revenue" syntheticMethod (Scalar 2m) "fresh" with
+                    Period = target.Period
+            }
+        )
+
+    let newReads = counting.Downloads
+
+    Expect.equal viaLog [ target ] "the enumeration finds the one fact"
+    Expect.equal cold viaLog "the cold read answers what the log does"
+    Expect.equal warm viaLog "and so does the warm, indexed read"
+    Expect.equal chain [ target ] "the chain is the target's lineage"
+
+    match superseding, fresh with
+    | Ok f, Ok g ->
+        Expect.equal f.Supersedes (Some target.FactId) "the indexed head lookup found the head"
+        Expect.isNone g.Supersedes "a new lineage has no head"
+    | _ -> failtestf "assert failed: %A / %A" superseding fresh
+
+    return {
+        Enumerated = enumerated
+        Cold = coldReads
+        Warm = warmReads
+        WarmLists = warmLists
+        Chain = chainReads
+        Superseding = supersedingReads
+        NewLineage = newReads
+    }
+}
+
+/// An `IBlobStorage` probe for the failure and fan-out cases: it can refuse
+/// every index-leaf write, and it records the most downloads ever in flight
+/// at once (with an optional delay so that concurrency can show at all).
+type private ProbeBlobStorage(inner: IBlobStorage) =
+    let gate = obj ()
+    let mutable refuseIndex = false
+    let mutable delay = false
+    let mutable inFlight = 0
+    let mutable maxInFlight = 0
+
+    member _.RefuseIndexWrites
+        with get () = refuseIndex
+        and set v = refuseIndex <- v
+
+    member _.DelayDownloads
+        with get () = delay
+        and set v = delay <- v
+
+    member _.MaxInFlight = lock gate (fun () -> maxInFlight)
+
+    interface IBlobStorage with
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            ToolUp.Platform.BlobStorage.composeNotSupported "test double"
+
+        member _.Upload(container, blobName, content) =
+            if refuseIndex && blobName.StartsWith(FactIndex.Prefix, StringComparison.Ordinal) then
+                async.Return(Error "index write refused (test)")
+            else
+                inner.Upload(container, blobName, content)
+
+        member _.Download(container, blobName) = async {
+            lock gate (fun () ->
+                inFlight <- inFlight + 1
+                maxInFlight <- max maxInFlight inFlight)
+
+            try
+                if delay then
+                    do! Async.Sleep 2
+
+                return! inner.Download(container, blobName)
+            finally
+                lock gate (fun () -> inFlight <- inFlight - 1)
+        }
+
+        member _.Delete(container, blobName) = inner.Delete(container, blobName)
+        member _.List(container, prefix) = inner.List(container, prefix)
+        member _.Exists(container, blobName) = inner.Exists(container, blobName)
+        member _.GetMetadata(container, blobName) = inner.GetMetadata(container, blobName)
+
+        member _.DownloadRange(container, blobName, offset, length) =
+            inner.DownloadRange(container, blobName, offset, length)
+
+        member _.Erase(container, prefix, policy, dryRun) =
+            inner.Erase(container, prefix, policy, dryRun)
+
+let private unmarkedPeriod: TemporalExtent = {
+    From = DateTime(2026, 1, 1)
+    To = DateTime(2026, 2, 1)
+    Label = None
+}
+
+let private localPeriod: TemporalExtent = {
+    From = DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Local)
+    To = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Local)
+    Label = None
+}
+
+let private q3: TemporalExtent = {
+    From = q2.To
+    To = q2.To.AddMonths 3
+    Label = Some "Q3-2026"
+}
+
+let private estimator = Computed("estimator", "1", "p0")
+
+/// Paths carrying every character a blob path or the lineage key's own
+/// separators could trip on, and the empty segment.
+let private awkwardPath = [ "a/b"; ""; "c>d"; "x|y"; "100%"; "é" ]
+
+/// Seed every shape a narrowed read could get wrong, through `store`, and
+/// return what was written in order.
+let private seed890 (store: IFactStore) (scope: string) = async {
+    let drafts = [
+        draftAt [ "uk" ] "revenue" rollup (Scalar 1m) "uk-q2-v1"
+        draftAt [ "uk" ] "revenue" rollup (Scalar 2m) "uk-q2-v2"
+        draftAt [ "uk" ] "revenue" estimator (Scalar 3m) "uk-q2-est"
+        {
+            draftAt [ "uk" ] "revenue" rollup (Scalar 4m) "uk-q3" with
+                Period = q3
+        }
+        {
+            draftAt [ "uk" ] "revenue" rollup (Scalar 5m) "uk-un-v1" with
+                Period = unmarkedPeriod
+        }
+        {
+            draftAt [ "uk" ] "revenue" rollup (Scalar 6m) "uk-un-v2" with
+                Period = unmarkedPeriod
+        }
+        {
+            draftAt [ "uk" ] "revenue" rollup (Scalar 7m) "uk-loc" with
+                Period = localPeriod
+        }
+        draftAt [ "uk" ] "cost" rollup (Scalar 8m) "uk-cost"
+        draftAt [ "fr" ] "revenue" rollup (Scalar 9m) "fr-q2"
+        draftAt awkwardPath "revenue" rollup (Scalar 10m) "awk-v1"
+        draftAt awkwardPath "revenue" rollup (Scalar 11m) "awk-v2"
+        draftAt [ "de" ] "elasticity" rollup (Scalar 12m) "de-rollup"
+        draftAt [ "de" ] "elasticity" estimator (Scalar 13m) "de-est"
+    ]
+
+    let written = ResizeArray<Fact>()
+
+    for d in drafts do
+        let! r = store.Assert(scope, d)
+
+        match r with
+        | Ok f -> written.Add f
+        | Error e -> failtestf "seed failed: %s" e
+
+    return List.ofSeq written
+}
+
+/// The query matrix: every subject × metric × period clause × method clause
+/// × history flag × visibility instant the seed can distinguish.
+let private queries890 (midway: DateTime) : FactQuery list = [
+    for path in [ [ "uk" ]; [ "fr" ]; awkwardPath; [ "de" ]; [ "nobody" ] ] do
+        for metric in [ "revenue"; "cost"; "elasticity" ] do
+            for period in [ None; Some q2; Some q3; Some unmarkedPeriod; Some localPeriod ] do
+                for method' in [ None; Some rollup; Some estimator ] do
+                    for history in [ false; true ] do
+                        for asOf in [ None; Some midway ] ->
+                            {
+                                Subject = Some { Hierarchy = "geography"; Path = path }
+                                Metric = Some(MetricRef metric)
+                                PeriodOverlaps = period
+                                Method = method'
+                                AsOf = asOf
+                                IncludeSuperseded = history
+                            }
+]
+
+/// Both read paths, every query in the matrix, every chain: equal.
+let private expectSameReads (enumerating: IFactStore) (indexed: IFactStore) (scope: string) (facts: Fact list) = async {
+    let midway = facts[0].AsOf
+
+    for query in queries890 midway do
+        let! a = enumerating.Query(scope, query)
+        let! b = indexed.Query(scope, query)
+        Expect.equal b a (sprintf "Query agrees for %A" query)
+        let! ca = enumerating.QueryWithCompetition(scope, query)
+        let! cb = indexed.QueryWithCompetition(scope, query)
+        Expect.equal cb ca (sprintf "QueryWithCompetition agrees for %A" query)
+
+    for f in facts do
+        let! a = enumerating.QuerySupersessionChain(scope, f.FactId)
+        let! b = indexed.QuerySupersessionChain(scope, f.FactId)
+        Expect.equal b a (sprintf "the chain of %s agrees" f.FactId)
+}
+
+let private fixedClock () = baseAsOf.AddDays 30.0
+
+let pointReadIndexTests =
+    testList "Phase 890 point-read index" [
+
+        testCaseAsync "a point read reads the facts it concerns, whatever the scope's size"
+        <| async {
+            let! small = measurePointReads 1_000
+            let! large = measurePointReads PointScaleSize
+
+            printfn
+                "Phase 890 point reads: before (enumeration) %d downloads at 1,000 facts, %d at 10,000 | after, warm: point read %d / %d downloads (%d lists), chain %d / %d, superseding assert %d / %d, new-lineage assert %d / %d | cold first read %d / %d (enumerates once, writes the index)"
+                small.Enumerated
+                large.Enumerated
+                small.Warm
+                large.Warm
+                large.WarmLists
+                small.Chain
+                large.Chain
+                small.Superseding
+                large.Superseding
+                small.NewLineage
+                large.NewLineage
+                small.Cold
+                large.Cold
+
+            Expect.equal large.Enumerated PointScaleSize "the enumeration reads every one of the 10,000 facts"
+            Expect.equal large.Cold PointScaleSize "the cold read enumerates exactly once"
+            Expect.equal large.Warm 1 "the warm point read reads the one fact it returns"
+            Expect.equal large.WarmLists 2 "and lists the census and the leaves"
+            Expect.equal large.Chain 2 "the chain reads the target and its one-fact lineage"
+
+            // The surface's own snapshot probe is one of these reads on the
+            // assert path; the head lookup's confirmation is the other.
+            Expect.isLessThanOrEqual large.Superseding 2 "a superseding assert reads its head, not the scope"
+            Expect.isLessThanOrEqual large.NewLineage 1 "a new lineage reads no fact at all"
+
+            Expect.equal
+                (large.Warm, large.Chain, large.Superseding, large.NewLineage)
+                (small.Warm, small.Chain, small.Superseding, small.NewLineage)
+                "no indexed count depends on the scope's size"
+        }
+
+        testCaseAsync "the indexed and enumerating paths agree on every query, competition and chain"
+        <| async {
+            let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
+            let scope = newScope ()
+            let writer = storeWithIndex storage (steppingClock baseAsOf) FactIndexOptions.always
+            let! facts = seed890 writer scope
+            let enumerating = storeWithIndex storage fixedClock FactIndexOptions.disabled
+            let indexed = storeWithIndex storage fixedClock FactIndexOptions.always
+
+            let! leaves = leavesIn storage scope
+            Expect.equal leaves.Length facts.Length "one leaf per fact, written with the fact"
+
+            do! expectSameReads enumerating indexed scope facts
+        }
+
+        testCaseAsync "deleting the index and re-querying rebuilds it and answers the same"
+        <| async {
+            let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
+            let scope = newScope ()
+            let writer = storeWithIndex storage (steppingClock baseAsOf) FactIndexOptions.always
+            let! facts = seed890 writer scope
+            let enumerating = storeWithIndex storage fixedClock FactIndexOptions.disabled
+            let indexed = storeWithIndex storage fixedClock FactIndexOptions.always
+
+            let! before = leavesIn storage scope
+
+            for leaf in before do
+                let! _ = storage.Delete(scope, leaf)
                 ()
 
-            let store =
-                storeOver storage (steppingClock (baseAsOf.AddDays 1.0)) FactSurfaceOptions.defaults
+            let! emptied = leavesIn storage scope
+            Expect.isEmpty emptied "the index is gone"
 
-            let target = pointFact 423
-
-            let query = {
-                FactQuery.forSubjectMetric target.Subject target.Metric with
-                    PeriodOverlaps = Some target.Period
-            }
-
-            counting.Reset()
-            let! found = store.Query(scope, query)
-            printfn "Phase 890 BASELINE point read: %d downloads, %d lists" counting.Downloads counting.Lists
-            Expect.equal found [ target ] "the point read finds its fact"
-
-            counting.Reset()
-            let! chain = store.QuerySupersessionChain(scope, target.FactId)
-            printfn "Phase 890 BASELINE chain: %d downloads, %d lists" counting.Downloads counting.Lists
-            Expect.equal chain [ target ] "chain"
-
-            counting.Reset()
-
-            let! asserted =
-                store.Assert(
-                    scope,
+            let query =
+                FactQuery.forSubjectMetric
                     {
-                        draftAt target.Subject.Path "revenue" syntheticMethod (Scalar 1m) "new-input" with
-                            Period = target.Period
+                        Hierarchy = "geography"
+                        Path = [ "uk" ]
                     }
+                    (MetricRef "revenue")
+
+            let! viaLog = enumerating.Query(scope, query)
+            let! viaIndex = indexed.Query(scope, query)
+            Expect.equal viaIndex viaLog "the re-query answers what the log does"
+
+            let! rebuilt = leavesIn storage scope
+            Expect.equal (List.sort rebuilt) (List.sort before) "and wrote the index back, leaf for leaf"
+
+            do! expectSameReads enumerating indexed scope facts
+        }
+
+        testCaseAsync "a failed index write degrades to the enumeration and is repaired, never a different answer"
+        <| async {
+            let probe = ProbeBlobStorage(InMemoryBlobStorage.InMemoryBlobStorage())
+            let storage = probe :> IBlobStorage
+            let scope = newScope ()
+            let writer = storeWithIndex storage (steppingClock baseAsOf) FactIndexOptions.always
+
+            probe.RefuseIndexWrites <- true
+            let! facts = seed890 writer scope
+            let! refused = leavesIn storage scope
+            Expect.isEmpty refused "every leaf write failed, and no assert did"
+
+            let enumerating = storeWithIndex storage fixedClock FactIndexOptions.disabled
+            let maintained = blobStoreWithIndex storage fixedClock FactIndexOptions.always
+            let indexed = maintained :> IFactStore
+            do! expectSameReads enumerating indexed scope facts
+
+            let! consistency = maintained.IndexConsistencyCheck(scope, 100)
+
+            Expect.equal
+                (consistency |> List.map (fun e -> e.UnindexedCanonicals))
+                [ facts.Length ]
+                "the consistency check names the drift"
+
+            probe.RefuseIndexWrites <- false
+
+            let! _ =
+                indexed.Query(
+                    scope,
+                    FactQuery.forSubjectMetric
+                        {
+                            Hierarchy = "geography"
+                            Path = [ "fr" ]
+                        }
+                        (MetricRef "revenue")
                 )
 
-            printfn "Phase 890 BASELINE assert: %d downloads, %d lists" counting.Downloads counting.Lists
-            Expect.isOk asserted "assert"
+            let! repaired = leavesIn storage scope
+            Expect.equal repaired.Length facts.Length "one read repaired every missing leaf"
+
+            let! after = maintained.IndexConsistencyCheck(scope, 100)
+
+            Expect.equal
+                (after
+                 |> List.map (fun e -> e.SampleSize, e.ConsistentEntries, e.OrphanedIndexEntries, e.UnindexedCanonicals))
+                [ facts.Length, facts.Length, 0, 0 ]
+                "and the check reports no drift"
+
+            do! expectSameReads enumerating indexed scope facts
+        }
+
+        testCaseAsync "a fact written behind the store's back is still read, and indexed by that read"
+        <| async {
+            let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
+            let scope = newScope ()
+            let writer = storeWithIndex storage (steppingClock baseAsOf) FactIndexOptions.always
+            let! facts = seed890 writer scope
+
+            let outOfBand = {
+                pointFact 1 with
+                    Subject = {
+                        Hierarchy = "geography"
+                        Path = [ "uk" ]
+                    }
+                    Period = q2
+                    Method = Computed("manual", "1", "p0")
+            }
+
+            let payload =
+                JsonSerializer.Serialize(outOfBand, FableConverters.create ())
+                |> Encoding.UTF8.GetBytes
+
+            let! _ = storage.Upload(scope, sprintf "_facts/%s.json" outOfBand.FactId, payload)
+
+            let indexed = storeWithIndex storage fixedClock FactIndexOptions.always
+            let enumerating = storeWithIndex storage fixedClock FactIndexOptions.disabled
+
+            let query = {
+                FactQuery.forSubjectMetric outOfBand.Subject outOfBand.Metric with
+                    PeriodOverlaps = Some q2
+            }
+
+            let! viaIndex = indexed.Query(scope, query)
+            Expect.contains viaIndex outOfBand "the unindexed fact is in the answer"
+
+            let! leaves = leavesIn storage scope
+            Expect.equal leaves.Length (facts.Length + 1) "and now has its leaf"
+
+            do! expectSameReads enumerating indexed scope (outOfBand :: facts)
+        }
+
+        testCaseAsync "RebuildIndex writes every leaf and the consistency check finds orphans"
+        <| async {
+            let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
+            let scope = newScope ()
+
+            let writer =
+                storeWithIndex storage (steppingClock baseAsOf) FactIndexOptions.disabled
+
+            let! facts = seed890 writer scope
+            let! none = leavesIn storage scope
+            Expect.isEmpty none "a disabled store writes no index"
+
+            let maintained = blobStoreWithIndex storage fixedClock FactIndexOptions.always
+            let indexed = maintained :> IFactStore
+            let! rebuilt = maintained.RebuildIndex scope
+            Expect.equal rebuilt facts.Length "every fact indexed"
+
+            let! clean = maintained.IndexConsistencyCheck(scope, 100)
+
+            Expect.equal
+                (clean
+                 |> List.map (fun e -> e.StoreName, e.IndexName, e.UnindexedCanonicals, e.OrphanedIndexEntries))
+                [ "facts", "_factindex", 0, 0 ]
+                "a rebuilt index has no drift"
+
+            // An erasure: the fact goes, its leaf stays. Reads ignore the
+            // orphan (only census members are read); the check names it.
+            let erased = facts |> List.find (fun f -> f.Subject.Path = [ "fr" ])
+            let! _ = storage.Delete(scope, sprintf "_facts/%s.json" erased.FactId)
+            let! orphaned = maintained.IndexConsistencyCheck(scope, 100)
+
+            Expect.equal (orphaned |> List.map (fun e -> e.OrphanedIndexEntries)) [ 1 ] "the orphaned leaf is reported"
+
+            let! fr = indexed.Query(scope, FactQuery.forSubjectMetric erased.Subject erased.Metric)
+
+            Expect.isEmpty fr "and never read"
+        }
+
+        testCaseAsync "below the threshold no index is written and the blob layout is unchanged"
+        <| async {
+            let plain = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
+            let defaulted = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
+            let scope = newScope ()
+
+            let enumerating =
+                storeWithIndex plain (steppingClock baseAsOf) FactIndexOptions.disabled
+
+            let belowThreshold =
+                storeWithIndex defaulted (steppingClock baseAsOf) FactIndexOptions.defaults
+
+            let! factsA = seed890 enumerating scope
+            let! factsB = seed890 belowThreshold scope
+            Expect.equal factsB factsA "the same facts, the same transaction times"
+
+            let query =
+                FactQuery.forSubjectMetric
+                    {
+                        Hierarchy = "geography"
+                        Path = [ "uk" ]
+                    }
+                    (MetricRef "revenue")
+
+            let! a = enumerating.Query(scope, query)
+            let! b = belowThreshold.Query(scope, query)
+            Expect.equal b a "the same answer"
+
+            let! namesA = plain.List(scope, "")
+            let! namesB = defaulted.List(scope, "")
+            Expect.equal (List.sort namesB) (List.sort namesA) "the same blobs"
+            Expect.isFalse (namesB |> List.exists (fun n -> n.StartsWith(FactIndex.Prefix))) "and no index blob"
+
+            for name in namesA do
+                let! bytesA = plain.Download(scope, name)
+                let! bytesB = defaulted.Download(scope, name)
+                Expect.equal bytesB bytesA (sprintf "%s is byte-identical" name)
+        }
+
+        testCaseAsync "every blob fan-out runs under the stated bound"
+        <| async {
+            let probe = ProbeBlobStorage(InMemoryBlobStorage.InMemoryBlobStorage())
+            let storage = probe :> IBlobStorage
+            let scope = newScope ()
+            do! seedPoints storage scope 2_000
+            probe.DelayDownloads <- true
+
+            let store = storeWithIndex storage fixedClock FactIndexOptions.disabled
+            let! everything = store.Query(scope, FactQuery.all)
+            Expect.equal everything.Length 2_000 "the whole-store walk read every fact"
+
+            // The probe first: a delay that produced no concurrency would
+            // make any bound hold vacuously.
+            Expect.isGreaterThan probe.MaxInFlight 1 "the reads did overlap"
+            Expect.isLessThanOrEqual probe.MaxInFlight 16 "and never more than BlobFanOut.Bound at once"
         }
     ]
