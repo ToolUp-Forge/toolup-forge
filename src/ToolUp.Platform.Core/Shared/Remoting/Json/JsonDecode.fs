@@ -589,6 +589,89 @@ module JsonDecode =
     let asMap<'K, 'V when 'K: comparison> (key: KeyDecoder<'K>) (entry: JsonDecoder<'V>) : JsonDecoder<Map<'K, 'V>> =
         entries key entry |> map Map.ofList
 
+    // ─── Phase 899 — a map whose key is a JSON VALUE ─────────────────
+    //
+    // A key that is not string-representable — a union with fields, a
+    // tuple, a record — reaches the server in one of TWO forms, and the
+    // converter set reads both:
+    //
+    //   * the browser's (`Fable.SimpleJson`): an ARRAY of `[key, value]`
+    //     pairs, the key in its own JSON form — `[[{"Circle":1.5},1]]`;
+    //   * the server writer's (`FSharpMapNonStringKeyConverter`): an
+    //     OBJECT whose member names are each key's JSON TEXT —
+    //     `{"{\"Circle\":1.5}":1}`.
+    //
+    // `asMapOf` reads both, with the key decoded by an ordinary
+    // `JsonDecoder` — one reading of the key type, whichever position it
+    // occupies. A member name that is not JSON text is refused naming the
+    // key; so is an array element that is not a two-element pair. A later
+    // duplicate key wins, as the converter set's `Map.add` does.
+
+    /// Every `[key, value]` pair of an array-of-pairs map, in wire order.
+    let private pairEntries
+        (key: JsonDecoder<'K>)
+        (entry: JsonDecoder<'V>)
+        (pairs: JsonValue list)
+        : Result<('K * 'V) list, DecodeError> =
+        let rec go (remaining: JsonValue list) (position: int) (acc: ('K * 'V) list) =
+            match remaining with
+            | [] -> Ok(List.rev acc)
+            | JsonValue.Array [ k; v ] :: rest ->
+                let at = sprintf "[%d]" position
+
+                match key k with
+                | Error error -> Error(DecodeError.under at (DecodeError.under "[0]" error))
+                | Ok decodedKey ->
+                    match entry v with
+                    | Error error -> Error(DecodeError.under at (DecodeError.under "[1]" error))
+                    | Ok decoded -> go rest (position + 1) ((decodedKey, decoded) :: acc)
+            | pair :: _ ->
+                Error(
+                    DecodeError.under
+                        (sprintf "[%d]" position)
+                        (DecodeError.create "a [key, value] pair" (JsonValue.describe pair))
+                )
+
+        go pairs 0 []
+
+    /// Every member of an object-form map, each NAME read as the key's
+    /// JSON text, in wire order.
+    let private namedEntries
+        (key: JsonDecoder<'K>)
+        (entry: JsonDecoder<'V>)
+        (members: (string * JsonValue) list)
+        : Result<('K * 'V) list, DecodeError> =
+        let rec go (remaining: (string * JsonValue) list) (acc: ('K * 'V) list) =
+            match remaining with
+            | [] -> Ok(List.rev acc)
+            | (name, member') :: rest ->
+                let decodedKey =
+                    match JsonText.tryParse name with
+                    | Ok keyValue -> key keyValue
+                    | Error _ -> Error(DecodeError.create "a key written as JSON text" (sprintf "key `%s`" name))
+
+                match decodedKey with
+                | Error error -> Error(DecodeError.under name error)
+                | Ok k ->
+                    match entry member' with
+                    | Ok v -> go rest ((k, v) :: acc)
+                    | Error error -> Error(DecodeError.under name error)
+
+        go members []
+
+    /// Phase 899 — a map whose KEY is read as a JSON value by `key`: the
+    /// browser's array of `[key, value]` pairs, or the server writer's
+    /// object whose member names are the keys' JSON text. The combinator
+    /// for a key that is not string-representable (a union with fields, a
+    /// tuple, a record); a string, `int32`, `int64` or `Guid` key keeps
+    /// `asMap`. A later duplicate key wins, as the converter set's does.
+    let asMapOf<'K, 'V when 'K: comparison> (key: JsonDecoder<'K>) (entry: JsonDecoder<'V>) : JsonDecoder<Map<'K, 'V>> =
+        fun value ->
+            match value with
+            | JsonValue.Array pairs -> pairEntries key entry pairs |> Result.map Map.ofList
+            | JsonValue.Object members -> namedEntries key entry members |> Result.map Map.ofList
+            | _ -> refuse "a map (an array of [key, value] pairs, or an object keyed by JSON text)" value
+
     // ─── Tuples ──────────────────────────────────────────────────────
     //
     // A tuple is an array of its elements (`FSharpTupleConverter`).
