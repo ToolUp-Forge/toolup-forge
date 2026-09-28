@@ -301,6 +301,10 @@ module ModuleSurface =
             // implies (`INotificationPreferenceStore`) is a deployment-level
             // opt-in the category never forces, so nothing lands on `Needs`.
             c (nameof m.NotificationCategories) ProvidesFacet
+            // Phase 887 — the module's declared fact tables: population
+            // output it states it produces, on the `Metrics` / `Subjects`
+            // precedent.
+            c (nameof m.FactTables) ProvidesFacet
         ]
 
     let private serverProvides (m: ServerModule) : ModuleSurfaceEntry list =
@@ -454,6 +458,12 @@ module ModuleSurface =
             m.Subjects
             |> List.map (fun d -> entry (nameof m.Subjects) "subject" d.Id d.Name (Some(ComponentId.forSubject d.Id)))
 
+        // Phase 887 — one entry per declared fact table; an undeclared
+        // module's surface is byte-identical to its pre-887 self.
+        let factTables =
+            m.FactTables
+            |> List.map (fun d -> entry (nameof m.FactTables) "fact-table" d.Id d.ProducingOperation None)
+
         List.concat [
             dataTypes
             vectorisation
@@ -473,6 +483,7 @@ module ModuleSurface =
             metrics
             subjects
             notificationCategories
+            factTables
         ]
 
     /// The substrate a module's own registrations IMPLY. Not a per-module
@@ -510,6 +521,7 @@ module ModuleSurface =
             implied (nameof m.BindingStamp) m.BindingStamp.IsSome [ "IModuleBindingVerifier" ]
             implied (nameof m.Metrics) (not m.Metrics.IsEmpty) [ "IFactStore" ]
             implied (nameof m.Subjects) (not m.Subjects.IsEmpty) [ "IFactStore" ]
+            implied (nameof m.FactTables) (not m.FactTables.IsEmpty) [ "IFactTableWriter" ]
         ]
         |> List.distinctBy (fun e -> e.Kind, e.Key)
 
