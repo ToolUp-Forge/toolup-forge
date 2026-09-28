@@ -6848,6 +6848,7 @@ UserSession.getDisplayName() : Microsoft.FSharp.Core.FSharpOption`1[System.Strin
 UserSession.getEmail() : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 UserSession.getSubjectKind() : ToolUp.Platform.SubjectKind
 UserSession.getUserId() : System.String
+UserSession.identityChanged() : System.Void
 UserSession.identityHeaderPairs() : System.Tuple`2[System.String, System.String][]
 UserSession.installBridge(ToolUp.Platform.IAuthBridge) : System.Void
 UserSession.onAuthTokenChange(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]
@@ -6856,6 +6857,7 @@ UserSession.refreshFromBridge() : Microsoft.FSharp.Control.FSharpAsync`1[Microso
 UserSession.setAuthToken(System.String) : System.Void
 UserSession.uninstallBridge() : System.Void
 UserSession.userIdHeader : System.String { get }
+UserSession.watchIdentityAcrossTabs() : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]
 UserSession.withRequestHeaders(ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Remoting.Client.RemoteBuilderOptions
 WebhookAdminUI (class)
 WebhookAdminUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule

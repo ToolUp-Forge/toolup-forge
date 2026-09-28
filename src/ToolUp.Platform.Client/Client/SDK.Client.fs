@@ -1890,6 +1890,11 @@ module Client =
 
                 reset,
                 Cmd.batch [
+                    // Phase 908 — the server scopes a read to the active
+                    // team, and a cached read's key does not carry it, so
+                    // the move is an identity change: drop every cached
+                    // read FIRST, before the loaders below issue theirs.
+                    Cmd.ofEffect (fun _ -> UserSession.identityChanged ())
                     bootLoadCmd "permissions" (withCsrf loadAccessibleModules) AccessibleModulesLoaded
                     bootLoadCmd "configs" (withCsrf loadAllConfigs) ConfigsLoaded
                     bootLoadCmd "flags" (withCsrf loadResolvedFlags) FlagsLoaded
@@ -4224,6 +4229,10 @@ module Client =
         // `POST /api/auth/session`; `ClientCookieAndLocalStorage` (default)
         // preserves the legacy behaviour.
         UserSession.configureAuthTokenStorage config.AuthTokenStorage
+        // Phase 908 — another tab's sign-in / sign-out changes the identity
+        // this tab's requests carry; the watch routes it through the one
+        // identity-change seam. Idempotent, like the rest of this function.
+        UserSession.watchIdentityAcrossTabs () |> ignore
 
         // Phase 13a — install the per-request guard with explicit
         // seam thunks (replaces the legacy module-load do block in
