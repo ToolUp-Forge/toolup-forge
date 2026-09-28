@@ -273,6 +273,9 @@
         <Compile Include="ClientBench.fs" />
         <!-- Phase 542 - the UI-awareness companion's list_active_actions executor. -->
         <Compile Include="ListActiveActionsTests.fs" />
+        <!-- Phase 908 - every identity change clears the read cache (after
+             RenderScope.fs, whose jsdom each case installs). -->
+        <Compile Include="Remoting\IdentityChangeReadCacheTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

@@ -133,6 +133,9 @@ let allTests =
         // enabled/disabled action states for the request's active module, and
         // both status branches.
         ListActiveActionsTests.tests
+        // Phase 908 - every identity-change route clears the declared-read
+        // cache: tokens, boot configuration, the team switch, another tab.
+        IdentityChangeReadCacheTests.tests
     ]
 
 // Phase 849 — `output/Program.js ClientBench` runs the browser-runtime
