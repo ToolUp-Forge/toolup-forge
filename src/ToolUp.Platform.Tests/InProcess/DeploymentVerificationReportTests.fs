@@ -13,6 +13,7 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.ConfigKeys
 open ToolUp.Platform.DeploymentVerification
 open ToolUp.Platform.AuditSinks.ChainedLedger
+open ToolUp.Platform.Tests.Contracts
 
 // ─── Phase 686 — the one-command deployment verification report ──────
 //
@@ -305,6 +306,49 @@ let private withSeam (seam: SeamAuthorityIntegrity) =
     |> DeploymentVerificationEvidence.withSeamAuthority (Some seam)
 
 let private healthyEvidence () = fullEvidence None None None None None
+
+// ─── Phase 912 — the remoting decoder evidence seams' sample postures ─
+//
+// Two distinguishable `RemotingDecoderIntegrity` values, one per sibling
+// facet, so a contract-pack probe over a withRemotingDecoders /
+// withRemotingArgumentDecoders pair cannot pass by accidentally reading
+// the wrong member's value.
+
+let private sampleRemotingDecoderRecord: RemotingDecoderRecord = {
+    RecordApiRecord = "SampleApi"
+    RecordClassification = "algebra"
+    RecordUncovered = []
+    RecordCorpusCovered = true
+}
+
+let private sampleRemotingDecoders: RemotingDecoderIntegrity = {
+    DecoderProfile = "standard"
+    DecoderMandatory = false
+    DecoderRecords = [ sampleRemotingDecoderRecord ]
+}
+
+let private sampleRemotingArgumentDecoders: RemotingDecoderIntegrity = {
+    DecoderProfile = "verified"
+    DecoderMandatory = true
+    DecoderRecords = [
+        {
+            sampleRemotingDecoderRecord with
+                RecordClassification = "reflection"
+                RecordUncovered = [ "System.Guid" ]
+                RecordCorpusCovered = false
+        }
+    ]
+}
+
+/// Base evidence carrying BOTH sibling facets at a non-None posture, so
+/// every wither bound against it below exercises the actual regression
+/// the contract packs exist to catch: does this wither carry the member
+/// it does not name through, or does it silently rebuild the value
+/// without it.
+let private evidenceWithBothRemotingFacets () =
+    DeploymentVerificationEvidence.none
+    |> DeploymentVerificationEvidence.withRemotingDecoders (Some sampleRemotingDecoders)
+    |> DeploymentVerificationEvidence.withRemotingArgumentDecoders (Some sampleRemotingArgumentDecoders)
 
 let private runReport (evidence: IDeploymentVerificationEvidence) (auditLog: IAuditLog option) =
     DeploymentVerificationReport.run (servicesWith (Some evidence) auditLog) "probe"
@@ -1991,4 +2035,120 @@ let tests =
                 }
             ]
         )
+
+        // ── Phase 912 — the remoting decoder evidence seams carry
+        //    contract packs ─────────────────────────────────────────
+        //
+        // `IRemotingDecoderEvidence` (Phase 785) and its argument-side
+        // twin `IRemotingArgumentDecoderEvidence` (Phase 842) are
+        // replaceable seams — eight production implementations each, one
+        // per `DeploymentVerificationEvidence` producer function (`none`,
+        // `create`, and the six withers). Bound against all eight here,
+        // so the file's own hand-written warning on every wither — "a
+        // wither that dropped a member it does not name would silently
+        // delete the section" — is an executable law rather than a
+        // comment: dropping `remotingDecodersOf` / `remotingArgumentDecodersOf`
+        // from any wither reddens the pack bound to it.
+        testList "Phase 912 — the remoting decoder evidence seams carry contract packs" [
+
+            IRemotingDecoderEvidenceContract.tests "DeploymentVerificationEvidence.none" None (fun () ->
+                DeploymentVerificationEvidence.none)
+
+            IRemotingDecoderEvidenceContract.tests "DeploymentVerificationEvidence.create (no facets)" None (fun () ->
+                DeploymentVerificationEvidence.create None None None None None)
+
+            IRemotingDecoderEvidenceContract.tests
+                "DeploymentVerificationEvidence.withRemotingDecoders"
+                (Some sampleRemotingDecoders)
+                (fun () ->
+                    DeploymentVerificationEvidence.none
+                    |> DeploymentVerificationEvidence.withRemotingDecoders (Some sampleRemotingDecoders))
+
+            IRemotingDecoderEvidenceContract.tests
+                "withGroundingContinuity carries RemotingDecoders through"
+                (Some sampleRemotingDecoders)
+                (fun () ->
+                    evidenceWithBothRemotingFacets ()
+                    |> DeploymentVerificationEvidence.withGroundingContinuity None)
+
+            IRemotingDecoderEvidenceContract.tests
+                "withSeamAuthority carries RemotingDecoders through"
+                (Some sampleRemotingDecoders)
+                (fun () ->
+                    evidenceWithBothRemotingFacets ()
+                    |> DeploymentVerificationEvidence.withSeamAuthority None)
+
+            IRemotingDecoderEvidenceContract.tests
+                "withEvidenceChain carries RemotingDecoders through"
+                (Some sampleRemotingDecoders)
+                (fun () ->
+                    evidenceWithBothRemotingFacets ()
+                    |> DeploymentVerificationEvidence.withEvidenceChain None)
+
+            IRemotingDecoderEvidenceContract.tests
+                "withEgress carries RemotingDecoders through"
+                (Some sampleRemotingDecoders)
+                (fun () ->
+                    evidenceWithBothRemotingFacets ()
+                    |> DeploymentVerificationEvidence.withEgress None)
+
+            IRemotingDecoderEvidenceContract.tests
+                "withRemotingArgumentDecoders carries RemotingDecoders through"
+                (Some sampleRemotingDecoders)
+                (fun () ->
+                    evidenceWithBothRemotingFacets ()
+                    |> DeploymentVerificationEvidence.withRemotingArgumentDecoders None)
+
+            IRemotingArgumentDecoderEvidenceContract.tests "DeploymentVerificationEvidence.none" None (fun () ->
+                DeploymentVerificationEvidence.none)
+
+            IRemotingArgumentDecoderEvidenceContract.tests
+                "DeploymentVerificationEvidence.create (no facets)"
+                None
+                (fun () -> DeploymentVerificationEvidence.create None None None None None)
+
+            IRemotingArgumentDecoderEvidenceContract.tests
+                "DeploymentVerificationEvidence.withRemotingArgumentDecoders"
+                (Some sampleRemotingArgumentDecoders)
+                (fun () ->
+                    DeploymentVerificationEvidence.none
+                    |> DeploymentVerificationEvidence.withRemotingArgumentDecoders (
+                        Some sampleRemotingArgumentDecoders
+                    ))
+
+            IRemotingArgumentDecoderEvidenceContract.tests
+                "withGroundingContinuity carries RemotingArgumentDecoders through"
+                (Some sampleRemotingArgumentDecoders)
+                (fun () ->
+                    evidenceWithBothRemotingFacets ()
+                    |> DeploymentVerificationEvidence.withGroundingContinuity None)
+
+            IRemotingArgumentDecoderEvidenceContract.tests
+                "withSeamAuthority carries RemotingArgumentDecoders through"
+                (Some sampleRemotingArgumentDecoders)
+                (fun () ->
+                    evidenceWithBothRemotingFacets ()
+                    |> DeploymentVerificationEvidence.withSeamAuthority None)
+
+            IRemotingArgumentDecoderEvidenceContract.tests
+                "withEvidenceChain carries RemotingArgumentDecoders through"
+                (Some sampleRemotingArgumentDecoders)
+                (fun () ->
+                    evidenceWithBothRemotingFacets ()
+                    |> DeploymentVerificationEvidence.withEvidenceChain None)
+
+            IRemotingArgumentDecoderEvidenceContract.tests
+                "withEgress carries RemotingArgumentDecoders through"
+                (Some sampleRemotingArgumentDecoders)
+                (fun () ->
+                    evidenceWithBothRemotingFacets ()
+                    |> DeploymentVerificationEvidence.withEgress None)
+
+            IRemotingArgumentDecoderEvidenceContract.tests
+                "withRemotingDecoders carries RemotingArgumentDecoders through"
+                (Some sampleRemotingArgumentDecoders)
+                (fun () ->
+                    evidenceWithBothRemotingFacets ()
+                    |> DeploymentVerificationEvidence.withRemotingDecoders None)
+        ]
     ]
