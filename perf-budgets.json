@@ -52,5 +52,50 @@
       "reproducing": "cd src/ToolUp.AI.Client.Tests; NODE_ENV=production node --import ./register-loader.mjs output/Program.js ClientBench --seed 849001. The seed orders the fixtures and the dispatch sequence, and is printed beside the runtime on every run.",
       "reviewing-a-change": "Raising a client ceiling is a claim that the client runtime is now legitimately slower. Say why here, in the same diff; ToolUp.Platform.Build.Tests refuses any ceiling more than 20x its baseline."
     }
+  },
+  "load": {
+    "label": "Fact and retrieval paths under concurrent load (Phase 886)",
+    "subject": "src/ToolUp.RAG.Benchmarks `load gate`: retrieval = flat store, memory blob arm, 10,000 chunks, 8 concurrent callers, 200 queries x 5 rounds; facts = BlobFactStore, memory blob arm, 1,000 subjects x 3 metrics x 4 weeks (12,000 facts), 4 concurrent callers, 20 operations x 5 rounds per operation",
+    "statistic": "min",
+    "ceilings": {
+      "retrievalP95Ms": 450,
+      "retrievalBlobReadsPerQuery": 0,
+      "factPointReadMs": 2500,
+      "factPopulationReadMs": 180,
+      "factAssertMs": 3400,
+      "factBatchAssertMs": 3200,
+      "factBlobReadsPerPointRead": 18000
+    },
+    "minimumSamples": {
+      "retrievalP95Ms": 5,
+      "retrievalBlobReadsPerQuery": 5,
+      "factPointReadMs": 5,
+      "factPopulationReadMs": 5,
+      "factAssertMs": 5,
+      "factBatchAssertMs": 5,
+      "factBlobReadsPerPointRead": 5
+    },
+    "baselines": {
+      "retrievalP95Ms": 32.38,
+      "retrievalBlobReadsPerQuery": 0,
+      "factPointReadMs": 182.52,
+      "factPopulationReadMs": 13.4,
+      "factAssertMs": 243.71,
+      "factBatchAssertMs": 233.38,
+      "factBlobReadsPerPointRead": 12000
+    },
+    "notes": {
+      "machine": "Every baseline is the minimum over three `load gate` runs on 2026-09-28: Windows 11, Intel Core Ultra 9 386H, 16 logical processors, 31.5 GB. It was NOT a quiet machine - six build-and-test sessions ran beside it, CPU load read 93% and 2.5 GB of memory was free - so, like the client block's baselines, these overstate the quiet cost. The per-run spread shows it: the population read's min-over-rounds p95 was 87.15 / 13.40 / 32.54 ms across the three runs.",
+      "retrievalP95Ms": "Baseline 32.38 ms (runs: 42.16 / 32.38 / 41.38). The value is the p95 of TOTAL retrieval latency within one round - measured around IRetrievalPipeline.Retrieve by RagTelemetry.RetrievalMeter, embedding, dense search, BM25, fusion and merge included - and the gate reads the minimum over five rounds. Ceiling ~14x (Phase 192's slack ratio).",
+      "retrievalBlobReadsPerQuery": "Baseline 0: once the scope's index is loaded (the warm-up pays it), the flat store and the BM25 index answer from memory and read no blob per query. The count is deterministic, so its ceiling is the baseline itself: a retrieval path that starts reading blobs per query has changed shape, whatever the clock says. On object storage each read is a request, which is why this is gated beside the clock rather than instead of it.",
+      "factPointReadMs": "Baseline 182.52 ms (runs: 297.36 / 182.52 / 268.20). A subject-and-metric read (FactQuery.forSubjectMetric, latest week) - which BlobFactStore answers by enumerating and deserialising every fact in the scope. Ceiling ~14x.",
+      "factPopulationReadMs": "Baseline 13.40 ms (runs: 87.15 / 13.40 / 32.54 - the widest spread in the block, and the reason its ceiling is ~13x of the quiet-est run rather than of the median). A top-10 population read over one metric's latest week; the scope is above the Phase 702 surface's 512-head threshold, so the surface is consulted (491 blob reads per read on average, cold builds included, against 12,000 for the enumerating point read). Ceiling ~13x.",
+      "factAssertMs": "Baseline 243.71 ms (runs: 252.64 / 243.71 / 347.36). One Assert superseding the latest week of a distinct subject - which reads every fact in scope to find the lineage head. Ceiling ~14x.",
+      "factBatchAssertMs": "Baseline 233.38 ms (runs: 312.27 / 233.38 / 301.97). One AssertBatch of 50 drafts, each superseding. Ceiling ~14x.",
+      "factBlobReadsPerPointRead": "Baseline 12,000 = every fact in the 12,000-fact scope: the point read is O(store), and this count is what says so on any backend. Deterministic, so the ceiling is 1.5x rather than an order of magnitude: reading the scope twice per read is a regression the clock might hide on a busy runner and the count cannot.",
+      "statistic": "Min over rounds, for Phase 192's reason: wallclock noise is one-sided. Each round is a closed loop of N concurrent callers; a round's value is the p95 of its own operations.",
+      "reproducing": "dotnet build src/ToolUp.RAG.Benchmarks -c Release, then dotnet src/ToolUp.RAG.Benchmarks/bin/Release/net10.0/ToolUp.RAG.Benchmarks.dll load gate --measurements artifacts/perf-budget/load-measurements.json. The full matrix (other stores, blob arms and sizes) is `load retrieval` / `load facts`; docs/rag/performance.md records what it measured.",
+      "reviewing-a-change": "Raising a load ceiling is a claim that the fact or retrieval path is now legitimately slower. Say why here, in the same diff; ToolUp.Platform.Build.Tests refuses any ceiling more than 20x its baseline."
+    }
   }
 }
