@@ -498,6 +498,13 @@ module Program =
                 finally
                     dispatcherCore.MarkTerminated()
 
+        // Read by `Subs.Fx.change` between the subscriptions one diff
+        // starts, and by `EffectRegistry.Register` after an effect's start
+        // returns (Phase 871 / 900): a start that calls `Terminate` ran the
+        // teardown while it was still running, and nothing started after
+        // it would ever be stopped.
+        let isTerminated () = terminated
+
         let rec dispatch msg =
             if not terminated then
                 rb.Push msg
@@ -550,16 +557,28 @@ module Program =
                             let model', cmd' = program.update msg state
                             let sub' = program.subscribe model'
 
-                            activeSubs <- Subs.diff activeSubs sub' |> Subs.Fx.change onError dispatch'
+                            // F*: `step`'s `start_all` — Phase 900. The diff
+                            // is gated between its starts: a subscription
+                            // that terminates the program from its start
+                            // function stops the rest of the diff starting,
+                            // and `change` returns the empty set having
+                            // stopped what it started. Until 900 the rest
+                            // started anyway and were assigned to the set
+                            // the teardown had already stopped.
+                            activeSubs <- Subs.diff activeSubs sub' |> Subs.Fx.change onError dispatch' isTerminated
 
-                            cmd'
-                            |> Cmd.exec
-                                (fun ex ->
-                                    reportException
-                                        (ErrorPhase.Update(box msg))
-                                        ("Error handling the message: " + safeMsgRepr msg)
-                                        ex)
-                                dispatch'
+                            // F*: `step`'s gated command — the message's
+                            // command runs only while the program is still
+                            // running after its diff (Phase 900).
+                            if not terminated then
+                                cmd'
+                                |> Cmd.exec
+                                    (fun ex ->
+                                        reportException
+                                            (ErrorPhase.Update(box msg))
+                                            ("Error handling the message: " + safeMsgRepr msg)
+                                            ex)
+                                    dispatch'
 
                             state <- model'
                     with ex ->
@@ -628,9 +647,14 @@ module Program =
         // returns (`Register`'s check; the `Subs.Fx.stop` below), for the
         // same reason. The sinks are not gated: they are handed handles and
         // start nothing.
-        let isTerminated () = terminated
-
-        for effect in program.effects do
+        //
+        // In ATTACH order (Phase 900): `withEffect` prepends, as the sink
+        // registrations do, and the sinks above are reversed on the way
+        // out; until 900 the effects were not, so they started in the
+        // reverse of the order they were attached, which is the order
+        // `effectIds` reports and the one a consumer reading its own
+        // composition expects. See `docs/migrations/900-effect-start-order.md`.
+        for effect in List.rev program.effects do
             if not terminated then
                 effectRegistry.Register effect dispatch' reportRaw isTerminated
 
@@ -645,13 +669,11 @@ module Program =
         if not terminated then
             // `activeSubs` is empty here, so what `change` returns is
             // exactly what it started — and if one of those starts
-            // terminated the program, the teardown stopped the empty set.
-            let started = Subs.diff activeSubs sub |> Subs.Fx.change onError dispatch'
-
-            if terminated then
-                Subs.Fx.stop onError started
-            else
-                activeSubs <- started
+            // terminated the program, the teardown stopped the empty set
+            // and `change` itself stopped what it had started and returns
+            // nothing (Phase 900; until then the boot stopped what
+            // `change` returned, after it had started the lot).
+            activeSubs <- Subs.diff activeSubs sub |> Subs.Fx.change onError dispatch' isTerminated
 
         if not terminated then
             cmd

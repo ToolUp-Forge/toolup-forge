@@ -142,15 +142,41 @@
 /// `gated_terminated` is the per-start guard it rests on, and
 /// `start_terminating_releases` the start that terminates by itself.
 ///
+/// Phase 900 splits the step at the diff. Until 900 the `update` oracle
+/// was one reply — the new model and every event `update`, `subscribe`,
+/// `Subs.Fx.change` and `Cmd.exec` raised, flattened — so a `Terminate`
+/// raised by one subscription's start function inside a MESSAGE's diff
+/// was, to the model, an event among events: the machine terminated,
+/// every later event was absorbed, and nothing said whether production
+/// went on STARTING. It did: `Subs.Fx.change` started the rest of the
+/// diff, the loop assigned the lot to the set the teardown had already
+/// stopped, and the message's command ran after. The oracle now returns
+/// a `reply` — the model, the diff's STARTS (one `start` per subscription
+/// `Subs.Fx.change` starts, in order) and the command — and `step`
+/// applies them as the boot does: `start_all` makes each start only
+/// while the program runs, holds what it returned only if it is still
+/// running when it returns, and `start_opt` runs the command only if it
+/// is still running after the diff. `diff_terminating_starts_nothing_after`
+/// is the theorem: a diff whose i-th start terminates the program makes
+/// exactly i starts, no command, and holds nothing. `started` and `held`
+/// now count the message arm's starts too, so `terminated_holds_nothing`
+/// covers them, and the go-red (the step before 900 — `apply_evs` over the
+/// flattened events) fails `diff_terminating_starts_nothing_after` on
+/// the start count.
+///
 /// # What is abstracted, and stated as such
 ///
 /// Every parameter of the model is an assumption. `update` is the
 /// composite of `update`, `subscribe`, `Subs.Fx.change` and `Cmd.exec`:
-/// a pure function of the message and the model to the new model and the
-/// events those four raise synchronously, in order — an exception from
-/// any of them is an oracle reply whose model is the old one (production
-/// leaves `state` unassigned) carrying whatever was dispatched before
-/// the throw. `render` is `setState`: a pure function of the model
+/// a pure function of the message and the model to a `reply` — the new
+/// model, the starts the diff makes (each the events its start function
+/// raises synchronously, in order, and whether it returned a handle) and
+/// the events the command raises. An exception from `update` or
+/// `subscribe` is an oracle reply whose model is the old one (production
+/// leaves `state` unassigned) with no starts and no command; a start that
+/// throws is reported and returns nothing (`holds = false`); a command
+/// that throws is a command carrying whatever it dispatched before the
+/// throw. `render` is `setState`: a pure function of the model
 /// handed to it, to the events it raises synchronously; the React
 /// adapter raises none. `to_terminate` is `Program.withTermination`'s
 /// predicate, a pure function of the message. `fuel` is a bound the
@@ -186,20 +212,21 @@
 /// is what happens to both. And a teardown RE-ENTERED from its own
 /// handler: the same flag makes the inner call a no-op.
 ///
-/// What the model abstracts about teardown, and states: WHAT the
-/// released handles do when disposed (an effect's `Dispose`, a
+/// What the model abstracts about teardown and the starts, and states:
+/// WHAT the released handles do when disposed (an effect's `Dispose`, a
 /// subscription's stop) is the effects' contract, not the loop's; the
-/// model counts handles, it does not look inside them. `held` counts
-/// what the BOOT's starts acquired; a message's subscription diff runs
-/// inside the `update` oracle and changes which subscriptions the held
-/// set contains without being counted. So `terminated_holds_nothing` is
-/// exact for the boot and for teardown, and says nothing about a
-/// subscription that a message's diff starts AFTER a `Terminate` raised
-/// by an earlier subscription's start in the same diff: `Subs.Fx.change`
-/// starts the rest, and the loop assigns them after the teardown has
-/// run. Closing that needs the gate inside `Sub.fs`, and is not this
-/// module's claim. The `DispatchAsync` post-await recheck is an
-/// interleaving and is NOT modelled — this is the synchronous machine.
+/// model counts handles, it does not look inside them. Since Phase 900
+/// `held` counts what the boot's starts AND every message diff's starts
+/// acquired, so `terminated_holds_nothing` covers a subscription a
+/// message's diff started. What a diff STOPS is not counted: `held`
+/// never moves down except at teardown, so the model is exact for a
+/// program whose subscription keys only ever accumulate (which is what
+/// the differential scripts), and which keys a diff stops is
+/// `ElmishSub.fst`'s theorem (`stop_exactly_removed`), not this one's. A
+/// stop function that calls `Terminate` is not modelled either: the
+/// diff's stops run before its starts and are the effects' contract.
+/// The `DispatchAsync` post-await recheck is an interleaving and is NOT
+/// modelled — this is the synchronous machine.
 
 module ElmishLoop
 
@@ -235,6 +262,26 @@ noeq type start (m: Type0) = {
   raised: list (ev m);
   holds: bool;
 }
+
+/// Phase 900 — what the `update` oracle returns for one message: the
+/// new model; the STARTS the subscription diff makes, one per
+/// subscription `Subs.Fx.change` starts, in the order it starts them
+/// (`toStart`'s order: the requested order, deduplicated); and the
+/// message's command — the events `Cmd.exec` raises, or none for
+/// `Cmd.none`. Until 900 the three were one flattened event list.
+noeq type reply (m: Type0) (md: Type0) = {
+  next: md;
+  starts: list (start m);
+  cmd: opt (list (ev m));
+}
+
+/// A command as a start: it runs, raises its events, and holds nothing —
+/// a command returns no handle. Used by the boot for `init`'s command and
+/// by `step` for the message's.
+let command (#m: Type0) (cmd: opt (list (ev m))) : opt (start m) =
+  match cmd with
+  | ONone -> ONone
+  | OSome evs -> OSome ({ raised = evs; holds = false })
 
 (* ───────────────────────────────────────────────────────────────────
    The state — the five cells, the dispatcher's flag, four observables.
@@ -327,24 +374,58 @@ let paint (#m #md: Type0) (render: md -> list (ev m)) (s: st m md) : st m md =
   let s1 = { s with dirty = false; painted = OSome s.model; renders = s.renders + 1 } in
   apply_evs s1 (render s.model)
 
+/// F#: one subscription `Subs.Fx.change` starts inside a message's diff
+/// (Phase 900) — `if terminated () then None else tryStart …`, and the
+/// stop of everything the call started once the flag is found set. Made
+/// only while the program runs; its events are applied under the latch
+/// (a `dispatch'` enqueues, a `Terminate` goes through the callback);
+/// what it returned is held only if the program is still running when
+/// it returns — otherwise `change` stops it as soon as the diff returns.
+/// `gated` below is the same transition for the boot's starts, whose
+/// events go through `boot_ev`; under the latch the two agree
+/// (`boot_evs_are_apply_evs`).
+let start_one (#m #md: Type0) (s: st m md) (x: start m) : st m md =
+  if s.terminated then s
+  else
+    let s1 = apply_evs { s with started = s.started + 1 } x.raised in
+    if x.holds && not s1.terminated then { s1 with held = s1.held + 1 } else s1
+
+/// F#: `toStart |> List.choose (fun sub -> if terminated () then None
+/// else tryStart …)` — the diff's starts, one at a time, in order.
+let rec start_all (#m #md: Type0) (s: st m md) (xs: list (start m)) : Tot (st m md) (decreases xs) =
+  match xs with
+  | [] -> s
+  | x :: rest -> start_all (start_one s x) rest
+
+/// F#: `if not terminated then cmd' |> Cmd.exec …` — the message's
+/// command, run only while the program is still running after its diff
+/// (Phase 900); `Cmd.none` runs nothing.
+let start_opt (#m #md: Type0) (s: st m md) (x: opt (start m)) : st m md =
+  match x with
+  | ONone -> s
+  | OSome x -> start_one s x
+
 /// F#: the `Some msg` arm of `processMsgs`'s `while` — one popped
 /// message. `toTerminate msg` takes the teardown branch; otherwise
-/// `update`, `subscribe`, `Subs.Fx.change` and `Cmd.exec` run (the
-/// oracle: the message is handed to `update` — that is the `trace`
-/// append — and the events they raise are applied in order), and only
-/// THEN is `state <- model'; dirty <- true` assigned, which is why a
-/// `Terminate` raised from a command still leaves the new model in place.
-/// Since Phase 851 `setState` is NOT among the callees here.
+/// `update` and `subscribe` run (the oracle: the message is handed to
+/// `update` — that is the `trace` append), then the diff's starts one at
+/// a time (`Subs.Fx.change`, gated between them since Phase 900), then
+/// the command if the program is still running (`Cmd.exec`, gated since
+/// 900), and only THEN is `state <- model'; dirty <- true` assigned,
+/// which is why a `Terminate` raised from a start or a command still
+/// leaves the new model in place. Since Phase 851 `setState` is NOT
+/// among the callees here.
 let step (#m #md: Type0)
-         (update: m -> md -> pair md (list (ev m)))
+         (update: m -> md -> reply m md)
          (to_terminate: m -> bool)
          (msg: m) (s: st m md) : st m md =
   if to_terminate msg then terminate s
   else
-    let Pair model' evs = update msg s.model in
+    let r = update msg s.model in
     let s1 = { s with trace = append s.trace [msg] } in
-    let s2 = apply_evs s1 evs in
-    { s2 with model = model'; dirty = true }
+    let s2 = start_all s1 r.starts in
+    let s3 = start_opt s2 (command r.cmd) in
+    { s3 with model = r.next; dirty = true }
 
 (* ───────────────────────────────────────────────────────────────────
    The drain.
@@ -365,7 +446,7 @@ let step (#m #md: Type0)
 /// the arm exists because the function is total.
 let rec loop (#m #md: Type0)
              (fuel: nat)
-             (update: m -> md -> pair md (list (ev m)))
+             (update: m -> md -> reply m md)
              (to_terminate: m -> bool)
              (render: md -> list (ev m))
              (s: st m md) (next: opt (slot m))
@@ -391,7 +472,7 @@ let rec loop (#m #md: Type0)
 /// F#: `processMsgs ()` — `let mutable nextMsg = rb.Pop()` then the loop.
 let process_msgs (#m #md: Type0)
                  (fuel: nat)
-                 (update: m -> md -> pair md (list (ev m)))
+                 (update: m -> md -> reply m md)
                  (to_terminate: m -> bool)
                  (render: md -> list (ev m))
                  (s: st m md) : pair (st m md) bool =
@@ -404,7 +485,7 @@ let process_msgs (#m #md: Type0)
 /// which is where production would be too.
 let critical (#m #md: Type0)
              (fuel: nat)
-             (update: m -> md -> pair md (list (ev m)))
+             (update: m -> md -> reply m md)
              (to_terminate: m -> bool)
              (render: md -> list (ev m))
              (s: st m md) : st m md =
@@ -414,7 +495,7 @@ let critical (#m #md: Type0)
 /// F#: `dispatch msg`.
 let dispatch (#m #md: Type0)
              (fuel: nat)
-             (update: m -> md -> pair md (list (ev m)))
+             (update: m -> md -> reply m md)
              (to_terminate: m -> bool)
              (render: md -> list (ev m))
              (s: st m md) (msg: m) : st m md =
@@ -434,7 +515,7 @@ let dispatch (#m #md: Type0)
 /// a `Terminate` through the callback.
 let boot_ev (#m #md: Type0)
             (fuel: nat)
-            (update: m -> md -> pair md (list (ev m)))
+            (update: m -> md -> reply m md)
             (to_terminate: m -> bool)
             (render: md -> list (ev m))
             (s: st m md) (e: ev m) : st m md =
@@ -444,7 +525,7 @@ let boot_ev (#m #md: Type0)
 
 let rec boot_evs (#m #md: Type0)
                  (fuel: nat)
-                 (update: m -> md -> pair md (list (ev m)))
+                 (update: m -> md -> reply m md)
                  (to_terminate: m -> bool)
                  (render: md -> list (ev m))
                  (s: st m md) (evs: list (ev m)) : Tot (st m md) (decreases evs) =
@@ -465,7 +546,7 @@ let rec boot_evs (#m #md: Type0)
 /// program terminated at is not made at all.
 let gated (#m #md: Type0)
           (fuel: nat)
-          (update: m -> md -> pair md (list (ev m)))
+          (update: m -> md -> reply m md)
           (to_terminate: m -> bool)
           (render: md -> list (ev m))
           (s: st m md) (x: start m) : st m md =
@@ -477,7 +558,7 @@ let gated (#m #md: Type0)
 /// F#: `for effect in program.effects do if not terminated then Register …`.
 let rec gated_all (#m #md: Type0)
                   (fuel: nat)
-                  (update: m -> md -> pair md (list (ev m)))
+                  (update: m -> md -> reply m md)
                   (to_terminate: m -> bool)
                   (render: md -> list (ev m))
                   (s: st m md) (xs: list (start m)) : Tot (st m md) (decreases xs) =
@@ -489,20 +570,13 @@ let rec gated_all (#m #md: Type0)
 /// subscription, `Cmd.none` runs no command.
 let gated_opt (#m #md: Type0)
               (fuel: nat)
-              (update: m -> md -> pair md (list (ev m)))
+              (update: m -> md -> reply m md)
               (to_terminate: m -> bool)
               (render: md -> list (ev m))
               (s: st m md) (x: opt (start m)) : st m md =
   match x with
   | ONone -> s
   | OSome x -> gated fuel update to_terminate render s x
-
-/// `init`'s command as a start: it runs, raises its events, and holds
-/// nothing — a command returns no handle.
-let command (#m: Type0) (cmd: opt (list (ev m))) : opt (start m) =
-  match cmd with
-  | ONone -> ONone
-  | OSome evs -> OSome ({ raised = evs; holds = false })
 
 /// F#: the head of the boot — `reentered <- true` FIRST, before anything
 /// the program supplied is called; then the dispatcher-handle sinks and
@@ -520,7 +594,7 @@ let command (#m: Type0) (cmd: opt (list (ev m))) : opt (start m) =
 /// `boot_paints_init_model` is what the order buys.
 let preboot (#m #md: Type0)
             (fuel: nat)
-            (update: m -> md -> pair md (list (ev m)))
+            (update: m -> md -> reply m md)
             (to_terminate: m -> bool)
             (render: md -> list (ev m))
             (s: st m md) (sinks: list (ev m)) (fx: list (start m)) : st m md =
@@ -534,7 +608,7 @@ let preboot (#m #md: Type0)
 /// init model once, as production does.
 let boot_paint (#m #md: Type0)
                (fuel: nat)
-               (update: m -> md -> pair md (list (ev m)))
+               (update: m -> md -> reply m md)
                (to_terminate: m -> bool)
                (render: md -> list (ev m))
                (s: st m md) (sinks: list (ev m)) (fx: list (start m)) : st m md =
@@ -548,7 +622,7 @@ let boot_paint (#m #md: Type0)
 /// `reentered <- false`.
 let boot (#m #md: Type0)
          (fuel: nat)
-         (update: m -> md -> pair md (list (ev m)))
+         (update: m -> md -> reply m md)
          (to_terminate: m -> bool)
          (render: md -> list (ev m))
          (s: st m md) (sinks: list (ev m)) (fx: list (start m))
@@ -568,7 +642,7 @@ let boot (#m #md: Type0)
 /// not have returned to the host.
 let rec run (#m #md: Type0)
             (fuel: nat)
-            (update: m -> md -> pair md (list (ev m)))
+            (update: m -> md -> reply m md)
             (to_terminate: m -> bool)
             (render: md -> list (ev m))
             (s: st m md) (exts: list (ext m)) : Tot (st m md) (decreases exts) =
@@ -584,7 +658,7 @@ let rec run (#m #md: Type0)
 /// `init`'s command after it, the boot drain, then the outside world.
 let program (#m #md: Type0)
             (fuel: nat)
-            (update: m -> md -> pair md (list (ev m)))
+            (update: m -> md -> reply m md)
             (to_terminate: m -> bool)
             (render: md -> list (ev m))
             (capacity: int) (model: md)
@@ -755,13 +829,53 @@ let rec apply_evs_spec (#m #md: Type0) (s: st m md) (evs: list (ev m))
       terminate_spec s;
       apply_evs_spec (terminate s) rest
 
+/// **`start_one_spec`** (Phase 900). A start inside a message's diff
+/// keeps the core invariant: its events extend log and pending in
+/// lockstep (`apply_evs_spec`), its handle is held only while the
+/// program runs, and a terminated machine is untouched — the gate.
+let start_one_spec (#m #md: Type0) (s: st m md) (x: start m)
+  : Lemma (requires inv_core s)
+          (ensures (let s' = start_one s x in
+                    inv_core s'
+                    /\ s'.reentered == s.reentered /\ s'.trace == s.trace /\ s'.model == s.model
+                    /\ s'.dirty == s.dirty /\ s'.painted == s.painted /\ s'.renders == s.renders
+                    /\ (s.terminated ==> s' == s))) =
+  if s.terminated then ()
+  else apply_evs_spec { s with started = s.started + 1 } x.raised
+
+let rec start_all_spec (#m #md: Type0) (s: st m md) (xs: list (start m))
+  : Lemma (requires inv_core s)
+          (ensures (let s' = start_all s xs in
+                    inv_core s'
+                    /\ s'.reentered == s.reentered /\ s'.trace == s.trace /\ s'.model == s.model
+                    /\ s'.dirty == s.dirty /\ s'.painted == s.painted /\ s'.renders == s.renders
+                    /\ (s.terminated ==> s' == s)))
+          (decreases xs) =
+  match xs with
+  | [] -> ()
+  | x :: rest ->
+      start_one_spec s x;
+      start_all_spec (start_one s x) rest
+
+let start_opt_spec (#m #md: Type0) (s: st m md) (x: opt (start m))
+  : Lemma (requires inv_core s)
+          (ensures (let s' = start_opt s x in
+                    inv_core s'
+                    /\ s'.reentered == s.reentered /\ s'.trace == s.trace /\ s'.model == s.model
+                    /\ s'.dirty == s.dirty /\ s'.painted == s.painted /\ s'.renders == s.renders
+                    /\ (s.terminated ==> s' == s))) =
+  match x with
+  | ONone -> ()
+  | OSome x -> start_one_spec s x
+
 /// **`step_spec`.** Processing a popped message — one the log holds at
 /// the head of what is pending — restores the core invariant: the
-/// message moves from pending to trace, every event the callees raised
-/// extends both log and pending in lockstep, and the model is dirty (or
-/// the machine terminated). The paint is untouched.
+/// message moves from pending to trace, every event the diff's starts
+/// and the command raised extends both log and pending in lockstep, and
+/// the model is dirty (or the machine terminated). The paint is
+/// untouched.
 let step_spec (#m #md: Type0)
-              (update: m -> md -> pair md (list (ev m)))
+              (update: m -> md -> reply m md)
               (to_terminate: m -> bool)
               (msg: m) (s: st m md)
   : Lemma (requires wf s.ring /\ s.active = not s.terminated /\ not s.terminated
@@ -774,10 +888,11 @@ let step_spec (#m #md: Type0)
                     /\ (not (to_terminate msg) ==> s'.dirty))) =
   if to_terminate msg then prefix_append s.trace (msg :: pending s)
   else begin
-    let Pair _ evs = update msg s.model in
+    let r = update msg s.model in
     let s1 = { s with trace = append s.trace [msg] } in
     append_assoc s.trace [msg] (pending s);
-    apply_evs_spec s1 evs
+    start_all_spec s1 r.starts;
+    start_opt_spec (start_all s1 r.starts) (command r.cmd)
   end
 
 /// **`paint_spec`.** The paint hands the hook the current model, counts
@@ -831,7 +946,7 @@ let pop_loop_inv (#m #md: Type0) (s: st m md)
 
 let rec loop_spec (#m #md: Type0)
                   (fuel: nat)
-                  (update: m -> md -> pair md (list (ev m)))
+                  (update: m -> md -> reply m md)
                   (to_terminate: m -> bool)
                   (render: md -> list (ev m))
                   (s: st m md) (next: opt (slot m))
@@ -866,7 +981,7 @@ let rec loop_spec (#m #md: Type0)
 
 let process_msgs_spec (#m #md: Type0)
                       (fuel: nat)
-                      (update: m -> md -> pair md (list (ev m)))
+                      (update: m -> md -> reply m md)
                       (to_terminate: m -> bool)
                       (render: md -> list (ev m))
                       (s: st m md)
@@ -880,7 +995,7 @@ let process_msgs_spec (#m #md: Type0)
 
 let critical_spec (#m #md: Type0)
                   (fuel: nat)
-                  (update: m -> md -> pair md (list (ev m)))
+                  (update: m -> md -> reply m md)
                   (to_terminate: m -> bool)
                   (render: md -> list (ev m))
                   (s: st m md)
@@ -892,7 +1007,7 @@ let critical_spec (#m #md: Type0)
 /// state that satisfies it — idle or latched, terminated or not.
 let dispatch_inv (#m #md: Type0)
                  (fuel: nat)
-                 (update: m -> md -> pair md (list (ev m)))
+                 (update: m -> md -> reply m md)
                  (to_terminate: m -> bool)
                  (render: md -> list (ev m))
                  (s: st m md) (msg: m)
@@ -914,7 +1029,7 @@ let terminate_inv (#m #md: Type0) (s: st m md)
 /// the clause-for-clause transcription and the primitive agree.
 let dispatch_latched (#m #md: Type0)
                      (fuel: nat)
-                     (update: m -> md -> pair md (list (ev m)))
+                     (update: m -> md -> reply m md)
                      (to_terminate: m -> bool)
                      (render: md -> list (ev m))
                      (s: st m md) (msg: m)
@@ -923,7 +1038,7 @@ let dispatch_latched (#m #md: Type0)
 
 let rec boot_evs_are_apply_evs (#m #md: Type0)
                                (fuel: nat)
-                               (update: m -> md -> pair md (list (ev m)))
+                               (update: m -> md -> reply m md)
                                (to_terminate: m -> bool)
                                (render: md -> list (ev m))
                                (s: st m md) (evs: list (ev m))
@@ -946,7 +1061,7 @@ let rec boot_evs_are_apply_evs (#m #md: Type0)
 /// the invariant.
 let gated_reentered (#m #md: Type0)
                     (fuel: nat)
-                    (update: m -> md -> pair md (list (ev m)))
+                    (update: m -> md -> reply m md)
                     (to_terminate: m -> bool)
                     (render: md -> list (ev m))
                     (s: st m md) (x: start m)
@@ -961,7 +1076,7 @@ let gated_reentered (#m #md: Type0)
 
 let rec gated_all_reentered (#m #md: Type0)
                             (fuel: nat)
-                            (update: m -> md -> pair md (list (ev m)))
+                            (update: m -> md -> reply m md)
                             (to_terminate: m -> bool)
                             (render: md -> list (ev m))
                             (s: st m md) (xs: list (start m))
@@ -976,7 +1091,7 @@ let rec gated_all_reentered (#m #md: Type0)
 
 let gated_opt_reentered (#m #md: Type0)
                         (fuel: nat)
-                        (update: m -> md -> pair md (list (ev m)))
+                        (update: m -> md -> reply m md)
                         (to_terminate: m -> bool)
                         (render: md -> list (ev m))
                         (s: st m md) (x: opt (start m))
@@ -993,7 +1108,7 @@ let gated_opt_reentered (#m #md: Type0)
 /// it is counted once; on a terminated program it is not made.
 let gated_spec (#m #md: Type0)
                (fuel: nat)
-               (update: m -> md -> pair md (list (ev m)))
+               (update: m -> md -> reply m md)
                (to_terminate: m -> bool)
                (render: md -> list (ev m))
                (s: st m md) (x: start m)
@@ -1013,7 +1128,7 @@ let gated_spec (#m #md: Type0)
 
 let rec gated_all_spec (#m #md: Type0)
                        (fuel: nat)
-                       (update: m -> md -> pair md (list (ev m)))
+                       (update: m -> md -> reply m md)
                        (to_terminate: m -> bool)
                        (render: md -> list (ev m))
                        (s: st m md) (xs: list (start m))
@@ -1032,7 +1147,7 @@ let rec gated_all_spec (#m #md: Type0)
 
 let gated_opt_spec (#m #md: Type0)
                    (fuel: nat)
-                   (update: m -> md -> pair md (list (ev m)))
+                   (update: m -> md -> reply m md)
                    (to_terminate: m -> bool)
                    (render: md -> list (ev m))
                    (s: st m md) (x: opt (start m))
@@ -1053,7 +1168,7 @@ let gated_opt_spec (#m #md: Type0)
 /// subscription start and `init`'s command.
 let gated_terminated (#m #md: Type0)
                      (fuel: nat)
-                     (update: m -> md -> pair md (list (ev m)))
+                     (update: m -> md -> reply m md)
                      (to_terminate: m -> bool)
                      (render: md -> list (ev m))
                      (s: st m md) (x: start m)
@@ -1063,7 +1178,7 @@ let gated_terminated (#m #md: Type0)
 /// …and over every effect still to start.
 let rec gated_all_terminated (#m #md: Type0)
                              (fuel: nat)
-                             (update: m -> md -> pair md (list (ev m)))
+                             (update: m -> md -> reply m md)
                              (to_terminate: m -> bool)
                              (render: md -> list (ev m))
                              (s: st m md) (xs: list (start m))
@@ -1081,7 +1196,7 @@ let rec gated_all_terminated (#m #md: Type0)
 /// raised after the boot paint.
 let boot_inv (#m #md: Type0)
              (fuel: nat)
-             (update: m -> md -> pair md (list (ev m)))
+             (update: m -> md -> reply m md)
              (to_terminate: m -> bool)
              (render: md -> list (ev m))
              (s: st m md) (sinks: list (ev m)) (fx: list (start m))
@@ -1112,7 +1227,7 @@ let boot_inv (#m #md: Type0)
 /// painted a model the server never rendered.
 let boot_paints_init_model (#m #md: Type0)
                            (fuel: nat)
-                           (update: m -> md -> pair md (list (ev m)))
+                           (update: m -> md -> reply m md)
                            (to_terminate: m -> bool)
                            (render: md -> list (ev m))
                            (s: st m md) (sinks: list (ev m)) (fx: list (start m))
@@ -1133,7 +1248,7 @@ let boot_paints_init_model (#m #md: Type0)
 /// **`run_inv`.** The outside world preserves the invariant.
 let rec run_inv (#m #md: Type0)
                 (fuel: nat)
-                (update: m -> md -> pair md (list (ev m)))
+                (update: m -> md -> reply m md)
                 (to_terminate: m -> bool)
                 (render: md -> list (ev m))
                 (s: st m md) (exts: list (ext m))
@@ -1163,7 +1278,7 @@ let initial_inv (#m #md: Type0) (capacity: int) (model: md)
 /// invariant.
 let program_inv (#m #md: Type0)
                 (fuel: nat)
-                (update: m -> md -> pair md (list (ev m)))
+                (update: m -> md -> reply m md)
                 (to_terminate: m -> bool)
                 (render: md -> list (ev m))
                 (capacity: int) (model: md)
@@ -1187,7 +1302,7 @@ let program_inv (#m #md: Type0)
 /// order it was accepted.
 let exactly_once (#m #md: Type0)
                  (fuel: nat)
-                 (update: m -> md -> pair md (list (ev m)))
+                 (update: m -> md -> reply m md)
                  (to_terminate: m -> bool)
                  (render: md -> list (ev m))
                  (capacity: int) (model: md)
@@ -1205,7 +1320,7 @@ let exactly_once (#m #md: Type0)
 /// termination can only truncate.
 let in_order (#m #md: Type0)
              (fuel: nat)
-             (update: m -> md -> pair md (list (ev m)))
+             (update: m -> md -> reply m md)
              (to_terminate: m -> bool)
              (render: md -> list (ev m))
              (capacity: int) (model: md)
@@ -1231,7 +1346,7 @@ let in_order (#m #md: Type0)
 /// under the latch, and this is what the latch does with it.
 let reentrant_no_loss (#m #md: Type0)
                       (fuel: nat)
-                      (update: m -> md -> pair md (list (ev m)))
+                      (update: m -> md -> reply m md)
                       (to_terminate: m -> bool)
                       (render: md -> list (ev m))
                       (s: st m md) (msg: m)
@@ -1263,7 +1378,7 @@ let rec terminated_stays_terminated (#m #md: Type0) (s: st m md) (evs: list (ev 
 /// `dispatch` and `processMsgs`'s `while` are this lemma.
 let rec terminated_absorbing (#m #md: Type0)
                              (fuel: nat)
-                             (update: m -> md -> pair md (list (ev m)))
+                             (update: m -> md -> reply m md)
                              (to_terminate: m -> bool)
                              (render: md -> list (ev m))
                              (s: st m md) (exts: list (ext m))
@@ -1291,7 +1406,7 @@ let rec terminated_absorbing (#m #md: Type0)
 /// `terminated_starts_nothing`.
 let terminated_absorbing_boot (#m #md: Type0)
                               (fuel: nat)
-                              (update: m -> md -> pair md (list (ev m)))
+                              (update: m -> md -> reply m md)
                               (to_terminate: m -> bool)
                               (render: md -> list (ev m))
                               (s: st m md) (sinks: list (ev m)) (fx: list (start m))
@@ -1313,7 +1428,7 @@ let terminated_absorbing_boot (#m #md: Type0)
 /// outside means nothing after it is ever processed or painted.
 let terminate_then_nothing (#m #md: Type0)
                            (fuel: nat)
-                           (update: m -> md -> pair md (list (ev m)))
+                           (update: m -> md -> reply m md)
                            (to_terminate: m -> bool)
                            (render: md -> list (ev m))
                            (s: st m md) (exts: list (ext m))
@@ -1345,7 +1460,7 @@ let rec apply_evs_has_term (#m #md: Type0) (s: st m md) (evs: list (ev m))
 /// stops the effects after it by the same guard.
 let terminated_starts_nothing (#m #md: Type0)
                               (fuel: nat)
-                              (update: m -> md -> pair md (list (ev m)))
+                              (update: m -> md -> reply m md)
                               (to_terminate: m -> bool)
                               (render: md -> list (ev m))
                               (s: st m md) (sinks: list (ev m)) (fx: list (start m))
@@ -1374,7 +1489,7 @@ let terminated_starts_nothing (#m #md: Type0)
 /// teardown had already stopped.
 let start_terminating_releases (#m #md: Type0)
                                (fuel: nat)
-                               (update: m -> md -> pair md (list (ev m)))
+                               (update: m -> md -> reply m md)
                                (to_terminate: m -> bool)
                                (render: md -> list (ev m))
                                (s: st m md) (x: start m)
@@ -1393,7 +1508,7 @@ let start_terminating_releases (#m #md: Type0)
 /// start is made after it. It is the invariant's last clause.
 let terminated_holds_nothing (#m #md: Type0)
                              (fuel: nat)
-                             (update: m -> md -> pair md (list (ev m)))
+                             (update: m -> md -> reply m md)
                              (to_terminate: m -> bool)
                              (render: md -> list (ev m))
                              (capacity: int) (model: md)
@@ -1412,7 +1527,7 @@ let terminated_holds_nothing (#m #md: Type0)
 /// and `dispatch`'s are one function.
 let boot_drain_equiv (#m #md: Type0)
                      (fuel: nat)
-                     (update: m -> md -> pair md (list (ev m)))
+                     (update: m -> md -> reply m md)
                      (to_terminate: m -> bool)
                      (render: md -> list (ev m))
                      (s: st m md) (sinks: list (ev m)) (fx: list (start m))
@@ -1451,7 +1566,7 @@ let booted (#m #md: Type0) (render: md -> list (ev m)) (s: st m md) : st m md =
 /// from any idle non-terminated state the paint does not terminate.
 let boot_single_is_dispatch (#m #md: Type0)
                             (fuel: nat)
-                            (update: m -> md -> pair md (list (ev m)))
+                            (update: m -> md -> reply m md)
                             (to_terminate: m -> bool)
                             (render: md -> list (ev m))
                             (s: st m md) (msg: m)
@@ -1472,7 +1587,7 @@ let boot_single_is_dispatch (#m #md: Type0)
 /// coincidence of the paths tried.
 let active_iff_not_terminated (#m #md: Type0)
                               (fuel: nat)
-                              (update: m -> md -> pair md (list (ev m)))
+                              (update: m -> md -> reply m md)
                               (to_terminate: m -> bool)
                               (render: md -> list (ev m))
                               (capacity: int) (model: md)
@@ -1500,7 +1615,7 @@ let fallback_breaks_encoding (#m #md: Type0) (s: st m md)
 /// paint saw the last model.
 let painted_is_model (#m #md: Type0)
                      (fuel: nat)
-                     (update: m -> md -> pair md (list (ev m)))
+                     (update: m -> md -> reply m md)
                      (to_terminate: m -> bool)
                      (render: md -> list (ev m))
                      (capacity: int) (model: md)
@@ -1518,7 +1633,7 @@ let painted_is_model (#m #md: Type0)
 /// terminated painted nothing.
 let rec loop_quiet (#m #md: Type0)
                    (fuel: nat)
-                   (update: m -> md -> pair md (list (ev m)))
+                   (update: m -> md -> reply m md)
                    (to_terminate: m -> bool)
                    (render: md -> list (ev m))
                    (s: st m md) (next: opt (slot m))
@@ -1566,7 +1681,7 @@ let rec loop_quiet (#m #md: Type0)
 /// too, and the differential scripts it.
 let render_once_per_drain (#m #md: Type0)
                           (fuel: nat)
-                          (update: m -> md -> pair md (list (ev m)))
+                          (update: m -> md -> reply m md)
                           (to_terminate: m -> bool)
                           (render: md -> list (ev m))
                           (s: st m md) (msg: m)
@@ -1590,3 +1705,113 @@ let render_once_per_drain (#m #md: Type0)
   // set, so the result is not idle); `loop_quiet` for the count.
   loop_spec fuel update to_terminate render { s1 with ring = r } next;
   loop_quiet fuel update to_terminate render { s1 with ring = r } next
+
+(* ───────────────────────────────────────────────────────────────────
+   A message's diff that terminates mid-way (Phase 900).
+   ─────────────────────────────────────────────────────────────────── *)
+
+/// No start in the list raises a `Terminate`.
+[@@ noextract_to "FSharp"]
+let rec no_term (#m: Type0) (xs: list (start m)) : Tot bool (decreases xs) =
+  match xs with
+  | [] -> true
+  | x :: rest -> not (has_term x.raised) && no_term rest
+
+/// Events with no `Terminate` among them leave a running machine running
+/// and count no start.
+let rec apply_evs_no_term (#m #md: Type0) (s: st m md) (evs: list (ev m))
+  : Lemma (requires not s.terminated /\ not (has_term evs))
+          (ensures (let s' = apply_evs s evs in not s'.terminated /\ s'.started == s.started))
+          (decreases evs) =
+  match evs with
+  | [] -> ()
+  | Msg msg :: rest -> apply_evs_no_term (enqueue s msg) rest
+  | Term :: _ -> ()
+
+/// Events with a `Terminate` among them terminate a running machine and
+/// leave it holding nothing: the teardown released everything, and every
+/// event after it is absorbed.
+let rec apply_evs_term_held (#m #md: Type0) (s: st m md) (evs: list (ev m))
+  : Lemma (requires not s.terminated /\ has_term evs)
+          (ensures (let s' = apply_evs s evs in s'.terminated /\ s'.held == 0 /\ s'.started == s.started))
+          (decreases evs) =
+  match evs with
+  | [] -> ()
+  | Msg msg :: rest -> apply_evs_term_held (enqueue s msg) rest
+  | Term :: rest -> terminated_stays_terminated (terminate s) rest
+
+/// **`start_one_terminated`** (Phase 900). The gate in `Subs.Fx.change`:
+/// a subscription the diff reaches once the program is terminated is not
+/// started, and the state is unchanged. `start_all_terminated` is the
+/// rest of the diff after a start that terminated it.
+let start_one_terminated (#m #md: Type0) (s: st m md) (x: start m)
+  : Lemma (requires s.terminated) (ensures start_one s x == s) = ()
+
+let rec start_all_terminated (#m #md: Type0) (s: st m md) (xs: list (start m))
+  : Lemma (requires s.terminated) (ensures start_all s xs == s) (decreases xs) =
+  match xs with
+  | [] -> ()
+  | _ :: rest -> start_all_terminated s rest
+
+/// **`start_one_terminating`** (Phase 900). A start in a message's diff
+/// whose own events terminate the program is made and counted, and the
+/// machine afterwards holds nothing: what the start returned is stopped
+/// as soon as the diff returns rather than held past the teardown.
+let start_one_terminating (#m #md: Type0) (s: st m md) (x: start m)
+  : Lemma (requires not s.terminated /\ has_term x.raised)
+          (ensures (let s' = start_one s x in
+                    s'.terminated /\ s'.held == 0 /\ s'.started == s.started + 1)) =
+  apply_evs_term_held { s with started = s.started + 1 } x.raised
+
+/// Starts none of which terminates the program are all made, in order.
+let rec start_all_no_term (#m #md: Type0) (s: st m md) (xs: list (start m))
+  : Lemma (requires not s.terminated /\ no_term xs)
+          (ensures (let s' = start_all s xs in not s'.terminated /\ s'.started == s.started + length xs))
+          (decreases xs) =
+  match xs with
+  | [] -> ()
+  | x :: rest ->
+      apply_evs_no_term { s with started = s.started + 1 } x.raised;
+      start_all_no_term (start_one s x) rest
+
+let rec start_all_append (#m #md: Type0) (s: st m md) (xs ys: list (start m))
+  : Lemma (ensures start_all s (append xs ys) == start_all (start_all s xs) ys) (decreases xs) =
+  match xs with
+  | [] -> ()
+  | x :: rest -> start_all_append (start_one s x) rest ys
+
+/// **`diff_terminating_starts_nothing_after`** (Phase 900) — the
+/// headline. A message whose diff starts `before`, then a subscription
+/// `x` that calls `Terminate` from its start function, then `after`:
+/// exactly the starts up to and including `x` are made (`before` in
+/// full, because none of them terminates; `x`; and none of `after`), the
+/// message's command does not run (it would have counted), the machine
+/// is terminated and holds nothing — what `before` and `x` returned was
+/// stopped as soon as the diff returned — and the new model is still
+/// assigned, as a `Terminate` from a command leaves it. Until 900
+/// production started `after` too, held all of it past the teardown, and
+/// ran the command; the go-red is the step before 900, which applies the
+/// flattened events and fails this lemma on the start count.
+let diff_terminating_starts_nothing_after (#m #md: Type0)
+                                          (update: m -> md -> reply m md)
+                                          (to_terminate: m -> bool)
+                                          (msg: m) (s: st m md)
+                                          (before: list (start m)) (x: start m) (after: list (start m))
+  : Lemma (requires not s.terminated /\ not (to_terminate msg)
+                    /\ (update msg s.model).starts == append before (x :: after)
+                    /\ no_term before /\ has_term x.raised)
+          (ensures (let s' = step update to_terminate msg s in
+                    s'.terminated /\ s'.held == 0
+                    /\ s'.started == s.started + length before + 1
+                    /\ s'.model == (update msg s.model).next)) =
+  let r = update msg s.model in
+  let s1 = { s with trace = append s.trace [msg] } in
+  start_all_append s1 before (x :: after);
+  start_all_no_term s1 before;
+  let s2 = start_all s1 before in
+  start_one_terminating s2 x;
+  let s3 = start_one s2 x in
+  start_all_terminated s3 after;
+  match command r.cmd with
+  | ONone -> ()
+  | OSome c -> start_one_terminated s3 c

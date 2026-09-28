@@ -57,6 +57,29 @@ let __proj__Mkstart__item__holds =
          (match (projectee) with
           | {raised = raised; holds = holds} -> (holds)))
 
+type reply<'m, 'md> = {next : 'md; starts : Prims.list<start<'m>>; cmd : ElmishRing.opt<Prims.list<ev<'m>>>}
+
+let __proj__Mkreply__item__next =
+    (fun (projectee : reply<'m, 'md>) ->
+         (match (projectee) with
+          | {next = next; starts = starts; cmd = cmd} -> (next)))
+
+let __proj__Mkreply__item__starts =
+    (fun (projectee : reply<'m, 'md>) ->
+         (match (projectee) with
+          | {next = next; starts = starts; cmd = cmd} -> (starts)))
+
+let __proj__Mkreply__item__cmd =
+    (fun (projectee : reply<'m, 'md>) ->
+         (match (projectee) with
+          | {next = next; starts = starts; cmd = cmd} -> (cmd)))
+
+let command =
+    (fun (cmd : ElmishRing.opt<Prims.list<ev<'m>>>) ->
+         (match (cmd) with
+          | ElmishRing.ONone -> (ElmishRing.ONone)
+          | ElmishRing.OSome (evs) -> (ElmishRing.OSome ({raised = evs; holds = false}))))
+
 type st<'m, 'md> = {ring : ElmishRing.ring<'m>; reentered : Prims.bool; terminated : Prims.bool; active : Prims.bool; model : 'md; dirty : Prims.bool; trace : Prims.list<'m>; log : Prims.list<'m>; painted : ElmishRing.opt<'md>; renders : Prims.nat; started : Prims.nat; held : Prims.nat}
 
 let __proj__Mkst__item__ring =
@@ -142,20 +165,39 @@ let paint =
          (let s1 = {ring = s.ring; reentered = s.reentered; terminated = s.terminated; active = s.active; model = s.model; dirty = false; trace = s.trace; log = s.log; painted = ElmishRing.OSome (s.model); renders = (s.renders + (Prims.parse_int "1")); started = s.started; held = s.held} in
           (apply_evs s1 (render s.model))))
 
+let start_one =
+    (fun (s : st<'m, 'md>) (x : start<'m>) ->
+         if s.terminated then
+             (s)
+         else
+             ((let s1 = (apply_evs {ring = s.ring; reentered = s.reentered; terminated = s.terminated; active = s.active; model = s.model; dirty = s.dirty; trace = s.trace; log = s.log; painted = s.painted; renders = s.renders; started = (s.started + (Prims.parse_int "1")); held = s.held} x.raised) in
+               if (x.holds && (not (s1.terminated))) then ({ring = s1.ring; reentered = s1.reentered; terminated = s1.terminated; active = s1.active; model = s1.model; dirty = s1.dirty; trace = s1.trace; log = s1.log; painted = s1.painted; renders = s1.renders; started = s1.started; held = (s1.held + (Prims.parse_int "1"))}) else (s1))))
+
+let rec start_all =
+    (fun (s : st<'m, 'md>) (xs : Prims.list<start<'m>>) ->
+         (match (xs) with
+          | [] -> (s)
+          | (x) ::rest -> ((start_all (start_one s x) rest))))
+
+let start_opt =
+    (fun (s : st<'m, 'md>) (x : ElmishRing.opt<start<'m>>) ->
+         (match (x) with
+          | ElmishRing.ONone -> (s)
+          | ElmishRing.OSome (x1) -> ((start_one s x1))))
+
 let step =
-    (fun (update : 'm -> 'md -> ElmishRing.pair<'md, Prims.list<ev<'m>>>) (to_terminate : 'm -> Prims.bool) (msg : 'm) (s : st<'m, 'md>) ->
+    (fun (update : 'm -> 'md -> reply<'m, 'md>) (to_terminate : 'm -> Prims.bool) (msg : 'm) (s : st<'m, 'md>) ->
          if (to_terminate msg) then
              ((terminate s))
          else
-             ((let uu___ = (update msg s.model) in
-               (match (uu___) with
-                | ElmishRing.Pair (model', evs) ->
-                    ((let s1 = {ring = s.ring; reentered = s.reentered; terminated = s.terminated; active = s.active; model = s.model; dirty = s.dirty; trace = (ElmishRing.append s.trace ((msg) :: [])); log = s.log; painted = s.painted; renders = s.renders; started = s.started; held = s.held} in
-                      (let s2 = (apply_evs s1 evs) in
-                       {ring = s2.ring; reentered = s2.reentered; terminated = s2.terminated; active = s2.active; model = model'; dirty = true; trace = s2.trace; log = s2.log; painted = s2.painted; renders = s2.renders; started = s2.started; held = s2.held})))))))
+             ((let r = (update msg s.model) in
+               (let s1 = {ring = s.ring; reentered = s.reentered; terminated = s.terminated; active = s.active; model = s.model; dirty = s.dirty; trace = (ElmishRing.append s.trace ((msg) :: [])); log = s.log; painted = s.painted; renders = s.renders; started = s.started; held = s.held} in
+                (let s2 = (start_all s1 r.starts) in
+                 (let s3 = (start_opt s2 (command r.cmd)) in
+                  {ring = s3.ring; reentered = s3.reentered; terminated = s3.terminated; active = s3.active; model = r.next; dirty = true; trace = s3.trace; log = s3.log; painted = s3.painted; renders = s3.renders; started = s3.started; held = s3.held}))))))
 
 let rec loop =
-    (fun (fuel : Prims.nat) (update : 'm -> 'md -> ElmishRing.pair<'md, Prims.list<ev<'m>>>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (next : ElmishRing.opt<ElmishRing.slot<'m>>) ->
+    (fun (fuel : Prims.nat) (update : 'm -> 'md -> reply<'m, 'md>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (next : ElmishRing.opt<ElmishRing.slot<'m>>) ->
          if s.terminated then
              (ElmishRing.Pair (s, true))
          else
@@ -182,19 +224,19 @@ let rec loop =
                             | ElmishRing.Pair (r', next') -> ((loop (fuel - (Prims.parse_int "1")) update to_terminate render {ring = r'; reentered = s'.reentered; terminated = s'.terminated; active = s'.active; model = s'.model; dirty = s'.dirty; trace = s'.trace; log = s'.log; painted = s'.painted; renders = s'.renders; started = s'.started; held = s'.held} next'))))))))))
 
 let process_msgs =
-    (fun (fuel : Prims.nat) (update : 'm -> 'md -> ElmishRing.pair<'md, Prims.list<ev<'m>>>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) ->
+    (fun (fuel : Prims.nat) (update : 'm -> 'md -> reply<'m, 'md>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) ->
          (let uu___ = (ElmishRing.pop s.ring) in
           (match (uu___) with
            | ElmishRing.Pair (r, next) -> ((loop fuel update to_terminate render {ring = r; reentered = s.reentered; terminated = s.terminated; active = s.active; model = s.model; dirty = s.dirty; trace = s.trace; log = s.log; painted = s.painted; renders = s.renders; started = s.started; held = s.held} next)))))
 
 let critical =
-    (fun (fuel : Prims.nat) (update : 'm -> 'md -> ElmishRing.pair<'md, Prims.list<ev<'m>>>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) ->
+    (fun (fuel : Prims.nat) (update : 'm -> 'md -> reply<'m, 'md>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) ->
          (let uu___ = (process_msgs fuel update to_terminate render {ring = s.ring; reentered = true; terminated = s.terminated; active = s.active; model = s.model; dirty = s.dirty; trace = s.trace; log = s.log; painted = s.painted; renders = s.renders; started = s.started; held = s.held}) in
           (match (uu___) with
            | ElmishRing.Pair (s', finished) -> (if finished then ({ring = s'.ring; reentered = false; terminated = s'.terminated; active = s'.active; model = s'.model; dirty = s'.dirty; trace = s'.trace; log = s'.log; painted = s'.painted; renders = s'.renders; started = s'.started; held = s'.held}) else (s')))))
 
 let dispatch =
-    (fun (fuel : Prims.nat) (update : 'm -> 'md -> ElmishRing.pair<'md, Prims.list<ev<'m>>>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (msg : 'm) ->
+    (fun (fuel : Prims.nat) (update : 'm -> 'md -> reply<'m, 'md>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (msg : 'm) ->
          if s.terminated then
              (s)
          else
@@ -202,19 +244,19 @@ let dispatch =
                if s1.reentered then (s1) else ((critical fuel update to_terminate render s1)))))
 
 let boot_ev =
-    (fun (fuel : Prims.nat) (update : 'm -> 'md -> ElmishRing.pair<'md, Prims.list<ev<'m>>>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (e : ev<'m>) ->
+    (fun (fuel : Prims.nat) (update : 'm -> 'md -> reply<'m, 'md>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (e : ev<'m>) ->
          (match (e) with
           | Msg (msg) -> ((dispatch fuel update to_terminate render s msg))
           | Term -> ((terminate s))))
 
 let rec boot_evs =
-    (fun (fuel : Prims.nat) (update : 'm -> 'md -> ElmishRing.pair<'md, Prims.list<ev<'m>>>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (evs : Prims.list<ev<'m>>) ->
+    (fun (fuel : Prims.nat) (update : 'm -> 'md -> reply<'m, 'md>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (evs : Prims.list<ev<'m>>) ->
          (match (evs) with
           | [] -> (s)
           | (e) ::rest -> ((boot_evs fuel update to_terminate render (boot_ev fuel update to_terminate render s e) rest))))
 
 let gated =
-    (fun (fuel : Prims.nat) (update : 'm -> 'md -> ElmishRing.pair<'md, Prims.list<ev<'m>>>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (x : start<'m>) ->
+    (fun (fuel : Prims.nat) (update : 'm -> 'md -> reply<'m, 'md>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (x : start<'m>) ->
          if s.terminated then
              (s)
          else
@@ -222,29 +264,23 @@ let gated =
                if (x.holds && (not (s1.terminated))) then ({ring = s1.ring; reentered = s1.reentered; terminated = s1.terminated; active = s1.active; model = s1.model; dirty = s1.dirty; trace = s1.trace; log = s1.log; painted = s1.painted; renders = s1.renders; started = s1.started; held = (s1.held + (Prims.parse_int "1"))}) else (s1))))
 
 let rec gated_all =
-    (fun (fuel : Prims.nat) (update : 'm -> 'md -> ElmishRing.pair<'md, Prims.list<ev<'m>>>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (xs : Prims.list<start<'m>>) ->
+    (fun (fuel : Prims.nat) (update : 'm -> 'md -> reply<'m, 'md>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (xs : Prims.list<start<'m>>) ->
          (match (xs) with
           | [] -> (s)
           | (x) ::rest -> ((gated_all fuel update to_terminate render (gated fuel update to_terminate render s x) rest))))
 
 let gated_opt =
-    (fun (fuel : Prims.nat) (update : 'm -> 'md -> ElmishRing.pair<'md, Prims.list<ev<'m>>>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (x : ElmishRing.opt<start<'m>>) ->
+    (fun (fuel : Prims.nat) (update : 'm -> 'md -> reply<'m, 'md>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (x : ElmishRing.opt<start<'m>>) ->
          (match (x) with
           | ElmishRing.ONone -> (s)
           | ElmishRing.OSome (x1) -> ((gated fuel update to_terminate render s x1))))
 
-let command =
-    (fun (cmd : ElmishRing.opt<Prims.list<ev<'m>>>) ->
-         (match (cmd) with
-          | ElmishRing.ONone -> (ElmishRing.ONone)
-          | ElmishRing.OSome (evs) -> (ElmishRing.OSome ({raised = evs; holds = false}))))
+let preboot = (fun (fuel : Prims.nat) (update : 'm -> 'md -> reply<'m, 'md>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (sinks : Prims.list<ev<'m>>) (fx : Prims.list<start<'m>>) -> (gated_all fuel update to_terminate render (boot_evs fuel update to_terminate render {ring = s.ring; reentered = true; terminated = s.terminated; active = s.active; model = s.model; dirty = s.dirty; trace = s.trace; log = s.log; painted = s.painted; renders = s.renders; started = s.started; held = s.held} sinks) fx))
 
-let preboot = (fun (fuel : Prims.nat) (update : 'm -> 'md -> ElmishRing.pair<'md, Prims.list<ev<'m>>>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (sinks : Prims.list<ev<'m>>) (fx : Prims.list<start<'m>>) -> (gated_all fuel update to_terminate render (boot_evs fuel update to_terminate render {ring = s.ring; reentered = true; terminated = s.terminated; active = s.active; model = s.model; dirty = s.dirty; trace = s.trace; log = s.log; painted = s.painted; renders = s.renders; started = s.started; held = s.held} sinks) fx))
-
-let boot_paint = (fun (fuel : Prims.nat) (update : 'm -> 'md -> ElmishRing.pair<'md, Prims.list<ev<'m>>>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (sinks : Prims.list<ev<'m>>) (fx : Prims.list<start<'m>>) -> (paint render (preboot fuel update to_terminate render s sinks fx)))
+let boot_paint = (fun (fuel : Prims.nat) (update : 'm -> 'md -> reply<'m, 'md>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (sinks : Prims.list<ev<'m>>) (fx : Prims.list<start<'m>>) -> (paint render (preboot fuel update to_terminate render s sinks fx)))
 
 let boot =
-    (fun (fuel : Prims.nat) (update : 'm -> 'md -> ElmishRing.pair<'md, Prims.list<ev<'m>>>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (sinks : Prims.list<ev<'m>>) (fx : Prims.list<start<'m>>) (subs : ElmishRing.opt<start<'m>>) (cmd : ElmishRing.opt<Prims.list<ev<'m>>>) ->
+    (fun (fuel : Prims.nat) (update : 'm -> 'md -> reply<'m, 'md>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (sinks : Prims.list<ev<'m>>) (fx : Prims.list<start<'m>>) (subs : ElmishRing.opt<start<'m>>) (cmd : ElmishRing.opt<Prims.list<ev<'m>>>) ->
          (let s1 = (boot_paint fuel update to_terminate render s sinks fx) in
           (let s2 = (gated_opt fuel update to_terminate render (gated_opt fuel update to_terminate render s1 subs) (command cmd)) in
            (let uu___ = (process_msgs fuel update to_terminate render s2) in
@@ -252,7 +288,7 @@ let boot =
              | ElmishRing.Pair (s3, finished) -> (if finished then ({ring = s3.ring; reentered = false; terminated = s3.terminated; active = s3.active; model = s3.model; dirty = s3.dirty; trace = s3.trace; log = s3.log; painted = s3.painted; renders = s3.renders; started = s3.started; held = s3.held}) else (s3)))))))
 
 let rec run =
-    (fun (fuel : Prims.nat) (update : 'm -> 'md -> ElmishRing.pair<'md, Prims.list<ev<'m>>>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (exts : Prims.list<ext<'m>>) ->
+    (fun (fuel : Prims.nat) (update : 'm -> 'md -> reply<'m, 'md>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (s : st<'m, 'md>) (exts : Prims.list<ext<'m>>) ->
          if s.reentered then
              (s)
          else
@@ -261,6 +297,6 @@ let rec run =
                | (XDispatch (msg)) ::rest -> ((run fuel update to_terminate render (dispatch fuel update to_terminate render s msg) rest))
                | (XTerminate) ::rest -> ((run fuel update to_terminate render (terminate s) rest)))))
 
-let program = (fun (fuel : Prims.nat) (update : 'm -> 'md -> ElmishRing.pair<'md, Prims.list<ev<'m>>>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (capacity : Prims.int) (model : 'md) (sinks : Prims.list<ev<'m>>) (fx : Prims.list<start<'m>>) (subs : ElmishRing.opt<start<'m>>) (cmd : ElmishRing.opt<Prims.list<ev<'m>>>) (exts : Prims.list<ext<'m>>) -> (run fuel update to_terminate render (boot fuel update to_terminate render (initial capacity model) sinks fx subs cmd) exts))
+let program = (fun (fuel : Prims.nat) (update : 'm -> 'md -> reply<'m, 'md>) (to_terminate : 'm -> Prims.bool) (render : 'md -> Prims.list<ev<'m>>) (capacity : Prims.int) (model : 'md) (sinks : Prims.list<ev<'m>>) (fx : Prims.list<start<'m>>) (subs : ElmishRing.opt<start<'m>>) (cmd : ElmishRing.opt<Prims.list<ev<'m>>>) (exts : Prims.list<ext<'m>>) -> (run fuel update to_terminate render (boot fuel update to_terminate render (initial capacity model) sinks fx subs cmd) exts))
 
 let fallback_terminate = (fun (s : st<'m, 'md>) -> {ring = s.ring; reentered = s.reentered; terminated = s.terminated; active = false; model = s.model; dirty = s.dirty; trace = s.trace; log = s.log; painted = s.painted; renders = s.renders; started = s.started; held = s.held})
