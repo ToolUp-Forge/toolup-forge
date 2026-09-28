@@ -227,38 +227,21 @@ module Layout =
                 ToolUp.Platform.Icons.spinner
         | CustomLoader render -> render ()
 
-    /// Application shell - combines sidebar, header, main content, and optional side panel.
-    /// `sections` is the structured sidebar layout (pinned / groups / other).
-    /// `selectedModule` is the id of the currently active module.
-    /// `content` is the active page's rendered body, whose `PageContent` case
-    /// determines the inner layout (split panel, stacked column, full-width,
-    /// named-area dashboard, or a custom element).
-    /// `onHideToggled` receives the sidebar id the user hid (or restored from the
-    /// "Hidden items" section) — a per-user preference, never an access change.
-    /// sidePanel: when Some, rendered as a fixed panel on the right side of the screen.
-    /// headerAction: when Some, rendered in the trailing position of the page header
-    /// (used by features such as the AI assistant toggle; the shell owns the markup,
-    /// the toolkit stays feature-agnostic).
-    [<ReactComponent>]
-    let AppShell
+    /// The shell frame both `AppShell` and `AppShellWith` render: the
+    /// empty-shell placeholder, or the sidebar beside the header, the
+    /// active page and the optional side panel. `sidebar` is a thunk so the
+    /// empty branch builds no sidebar element at all.
+    let private appShellFrame
+        (messages: ShellMessages)
         (appName: string)
-        (appLogo: string)
         (sections: Toolup.Sidebar.SidebarSection list)
-        selectedModule
-        onModuleSelected
-        (onGroupToggled: string -> unit)
-        (onPinToggled: string -> unit)
-        (onModuleToggled: string -> unit)
-        (onHideToggled: string -> unit)
-        (onReorder: string -> string list -> unit)
+        (selectedModule: string)
+        (sidebar: unit -> ReactElement)
         (content: PageContent)
         (sidePanel: ReactElement option)
         (headerAction: ReactElement option)
         (inputsWidth: InputsPaneWidth)
-        =
-        // Phase 767 — read unconditionally, ahead of the empty-shell
-        // branch below, because it is a hook.
-        let messages = (MessageCatalogProvider.useMessages ()).Shell
+        : ReactElement =
         let flatModules = Toolup.Sidebar.flatten sections
 
         // Empty-module shell: the accessible-modules filter (RBAC) can legitimately
@@ -292,17 +275,7 @@ module Layout =
                         prop.className "relative z-10 h-full w-full"
                         prop.children [
                             // Sidebar - absolutely positioned
-                            Toolup.Sidebar.Sidebar
-                                appName
-                                appLogo
-                                sections
-                                selectedModule
-                                onModuleSelected
-                                onGroupToggled
-                                onPinToggled
-                                onModuleToggled
-                                onHideToggled
-                                onReorder
+                            sidebar ()
 
                             // Main content area - header + content with left padding for sidebar
                             // When side panel is open, add right padding to avoid overlap.
@@ -335,6 +308,220 @@ module Layout =
                     ]
                 ]
             ]
+
+    /// Application shell - combines sidebar, header, main content, and optional side panel.
+    /// `sections` is the structured sidebar layout (pinned / groups / other).
+    /// `selectedModule` is the id of the currently active module.
+    /// `content` is the active page's rendered body, whose `PageContent` case
+    /// determines the inner layout (split panel, stacked column, full-width,
+    /// named-area dashboard, or a custom element).
+    /// `onHideToggled` receives the sidebar id the user hid (or restored from the
+    /// "Hidden items" section) — a per-user preference, never an access change.
+    /// sidePanel: when Some, rendered as a fixed panel on the right side of the screen.
+    /// headerAction: when Some, rendered in the trailing position of the page header
+    /// (used by features such as the AI assistant toggle; the shell owns the markup,
+    /// the toolkit stays feature-agnostic).
+    [<ReactComponent>]
+    let AppShell
+        (appName: string)
+        (appLogo: string)
+        (sections: Toolup.Sidebar.SidebarSection list)
+        selectedModule
+        onModuleSelected
+        (onGroupToggled: string -> unit)
+        (onPinToggled: string -> unit)
+        (onModuleToggled: string -> unit)
+        (onHideToggled: string -> unit)
+        (onReorder: string -> string list -> unit)
+        (content: PageContent)
+        (sidePanel: ReactElement option)
+        (headerAction: ReactElement option)
+        (inputsWidth: InputsPaneWidth)
+        =
+        // Phase 767 — read unconditionally, ahead of the empty-shell
+        // branch below, because it is a hook.
+        let messages = (MessageCatalogProvider.useMessages ()).Shell
+
+        appShellFrame
+            messages
+            appName
+            sections
+            selectedModule
+            (fun () ->
+                Toolup.Sidebar.Sidebar
+                    appName
+                    appLogo
+                    sections
+                    selectedModule
+                    onModuleSelected
+                    onGroupToggled
+                    onPinToggled
+                    onModuleToggled
+                    onHideToggled
+                    onReorder)
+            content
+            sidePanel
+            headerAction
+            inputsWidth
+
+    // ─── Phase 883 — the sidebar is its own memo boundary ────────────────
+    //
+    // `AppShell` builds the sidebar inline, so the sidebar renders every
+    // time the shell does: a toast, a theme flip or a header badge redrew
+    // the whole navigation tree. `AppShellWith` takes the sidebar's inputs
+    // as ONE value and renders them behind a `React.memo` whose comparer
+    // asks whether anything the sidebar renders from has changed — so a
+    // shell render that leaves those inputs alone renders no sidebar.
+    //
+    // The comparer is a VALUE walk over the whole props record, not a list
+    // of fields: strings and flags compare by value, the section/row
+    // records and lists by content, and the two things the sidebar cannot
+    // look inside compare by REFERENCE — callbacks, and React elements (the
+    // row icons). Walking the record rather than naming its fields means a
+    // field added to `SidebarProps` or to a sidebar row participates
+    // without an edit here, so the failure mode of forgetting is an extra
+    // render, never a stale sidebar. The sidebar's own state (hover, focus,
+    // the roving stop) and the message catalog it reads through a context
+    // are untouched by the boundary: React re-renders a memoised component
+    // for its own state and for a context change regardless of its props.
+    //
+    // What makes the boundary hold is the caller's half of the contract:
+    // the six callbacks must be the SAME functions from render to render
+    // (the SDK shell builds them once per Elmish loop, beside
+    // `Client.moduleDispatchFor`), and the icons must be the elements the
+    // modules declared rather than fresh ones. A caller that passes fresh
+    // closures gets a correct sidebar that renders every time, as
+    // `AppShell` does.
+
+    /// Everything the sidebar renders from, as one value — the unit the
+    /// sidebar's memo boundary compares (`AppShellWith`).
+    /// `Sections` is the structured sidebar layout (pinned / groups /
+    /// other); `SelectedModule` is the sidebar id of the active entry
+    /// (bare module id, or the composite page id of a multi-page module).
+    /// `OnHideToggled` receives the sidebar id the user hid (or restored
+    /// from the "Hidden items" section) — a per-user preference, never an
+    /// access change. Pass the SAME callback functions on every render:
+    /// a callback compares by reference, so a fresh closure is a change.
+    type SidebarProps = {
+        /// The application name the rail shows beside its logo.
+        AppName: string
+        /// The logo image URL at the head of the rail.
+        AppLogo: string
+        /// The structured rail: pinned, placed, grouped and hidden sections.
+        Sections: Toolup.Sidebar.SidebarSection list
+        /// The sidebar id of the active entry.
+        SelectedModule: string
+        /// Receives the sidebar id of the entry the user chose.
+        OnModuleSelected: string -> unit
+        /// Receives the key of the section whose collapse state the user toggled.
+        OnGroupToggled: string -> unit
+        /// Receives the sidebar id the user pinned or unpinned.
+        OnPinToggled: string -> unit
+        /// Receives the id of the multi-page module the user expanded or collapsed.
+        OnModuleToggled: string -> unit
+        /// Receives the sidebar id the user hid or restored.
+        OnHideToggled: string -> unit
+        /// Receives a section key and its module ids in the user's new order.
+        OnReorder: string -> string list -> unit
+    }
+
+    /// Value equality as the sidebar sees it: primitives by value (NaN
+    /// equal to NaN), arrays and iterables (F# lists, maps, sets) element
+    /// by element, records and unions field by field (same prototype, same
+    /// own keys), dates by time — and functions and React elements by
+    /// REFERENCE, because nothing about a different closure or a different
+    /// element can be shown to render the same. Past a depth of 32 the
+    /// answer is "changed": an extra render, never a stale sidebar.
+    let private sameRenderedFn: obj =
+        emitJsExpr
+            ()
+            "(function same(a, b, depth) {
+                if (a === b) return true;
+                if (a !== a && b !== b) return true;
+                if (a == null || b == null || typeof a !== 'object' || typeof b !== 'object') return false;
+                if (a.$$typeof !== undefined || b.$$typeof !== undefined) return false;
+                if (depth > 32) return false;
+                if (Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false;
+                if (a instanceof Date) return a.getTime() === b.getTime();
+                if (Array.isArray(a)) {
+                    if (a.length !== b.length) return false;
+                    for (var i = 0; i < a.length; i++) if (!same(a[i], b[i], depth + 1)) return false;
+                    return true;
+                }
+                if (typeof a[Symbol.iterator] === 'function') {
+                    var ia = a[Symbol.iterator](), ib = b[Symbol.iterator]();
+                    for (;;) {
+                        var x = ia.next(), y = ib.next();
+                        if (x.done || y.done) return x.done === y.done;
+                        if (!same(x.value, y.value, depth + 1)) return false;
+                    }
+                }
+                var ka = Object.keys(a);
+                if (ka.length !== Object.keys(b).length) return false;
+                for (var j = 0; j < ka.length; j++) {
+                    var k = ka[j];
+                    if (!Object.prototype.hasOwnProperty.call(b, k) || !same(a[k], b[k], depth + 1)) return false;
+                }
+                return true;
+            })"
+
+    /// The comparison the sidebar's memo boundary runs (see
+    /// `sameRenderedFn`). Internal so the Fable pack can pin it.
+    let internal sameRendered (a: obj) (b: obj) : bool =
+        emitJsExpr (sameRenderedFn, a, b) "$0($1, $2, 0)"
+
+    [<Fable.Core.Import("memo", "react")>]
+    let private reactMemo (render: obj, areEqual: obj) : obj = Fable.Core.Util.jsNative
+
+    let private renderSidebar (props: obj) : ReactElement =
+        let p = unbox<SidebarProps> props
+
+        Toolup.Sidebar.Sidebar
+            p.AppName
+            p.AppLogo
+            p.Sections
+            p.SelectedModule
+            p.OnModuleSelected
+            p.OnGroupToggled
+            p.OnPinToggled
+            p.OnModuleToggled
+            p.OnHideToggled
+            p.OnReorder
+
+    let private memoisedSidebar: obj =
+        // The comparer goes to React as a two-argument JS function: a boxed
+        // curried F# function may reach it curried, and React would read the
+        // returned closure as "equal".
+        reactMemo (box renderSidebar, box (System.Func<obj, obj, bool>(fun a b -> sameRendered a b)))
+
+    /// Application shell with the sidebar behind its own memo boundary
+    /// (Phase 883): the same frame `AppShell` renders — sidebar, header,
+    /// the active page's `content` and the optional `sidePanel` — but the
+    /// sidebar re-renders only when a value in `sidebar` changes, not every
+    /// time the shell does. The header reads the active entry's name and
+    /// icon from `sidebar.Sections`, as `AppShell` does.
+    /// `headerAction`: when Some, rendered in the trailing position of the
+    /// page header. `inputsWidth` sizes a split panel's inputs pane.
+    [<ReactComponent>]
+    let AppShellWith
+        (sidebar: SidebarProps)
+        (content: PageContent)
+        (sidePanel: ReactElement option)
+        (headerAction: ReactElement option)
+        (inputsWidth: InputsPaneWidth)
+        =
+        let messages = (MessageCatalogProvider.useMessages ()).Shell
+
+        appShellFrame
+            messages
+            sidebar.AppName
+            sidebar.Sections
+            sidebar.SelectedModule
+            (fun () -> ReactLegacy.createElement (unbox<ReactElement> memoisedSidebar, box sidebar))
+            content
+            sidePanel
+            headerAction
+            inputsWidth
 
     /// Panel component - container with background
     module Panel =

@@ -398,4 +398,32 @@ let tests =
 
                 clearStore ())
         ]
+
+        // Phase 883 — the sidebar renders behind a memo boundary that
+        // compares its sections by value. Hiding and restoring are
+        // preference changes the user must SEE, so each has to read as a
+        // change at the boundary; re-deriving the same rail must not.
+        testList "the sidebar's memo boundary sees a hide as a change" [
+            let views = [
+                singlePage "Sales" "Sales" (Some "Analytics")
+                multiPage "Reports" "Reports" None [ "/a", "A"; "/b", "B" ]
+            ]
+
+            let same (a: SidebarSection list) (b: SidebarSection list) =
+                Toolup.UIToolkit.Layout.sameRendered (box a) (box b)
+
+            testCase "the same preferences, re-derived, are the same rail" (fun () ->
+                Expect.isTrue
+                    (same (buildSections views (hiding [ "Sales" ])) (buildSections views (hiding [ "Sales" ])))
+                    "a fresh list of fresh records with the same content: no sidebar render")
+
+            testCase "hiding a module, a page, and restoring each, is a change" (fun () ->
+                let none = buildSections views (hiding [])
+                Expect.isFalse (same none (buildSections views (hiding [ "Sales" ]))) "hiding a module"
+                Expect.isFalse (same none (buildSections views (hiding [ "Reports/b" ]))) "hiding a page"
+
+                Expect.isFalse
+                    (same (buildSections views (hiding [ "Sales" ])) none)
+                    "restoring it from the Hidden items section")
+        ]
     ]

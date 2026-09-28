@@ -249,7 +249,11 @@ let private shellScopeTests =
                     r.AfterModuleMsg
                     r.AfterChromeMsg
 
-                Expect.equal r.AfterMount { Chrome = 1; Module = 1 } "one chrome render and one module render to mount"
+                Expect.equal
+                    (r.AfterMount.Chrome, r.AfterMount.Module)
+                    (1, 1)
+                    "one chrome render and one module render to mount"
+
                 Expect.equal r.ModuleText "count 1" "the module message reached the screen"
                 Expect.equal (r.AfterModuleMsg.Chrome - r.AfterMount.Chrome) 0 "NO chrome render for a module message"
                 Expect.equal (r.AfterModuleMsg.Module - r.AfterMount.Module) 1 "one module render for it"
@@ -383,5 +387,104 @@ let private gridCompareTests =
                 "two distinct cycles: past the depth cap the answer is the safe one")
     ]
 
+// ─── Phase 883 — the sidebar is its own memo boundary ──────────────────
+//
+// A chrome message that leaves the sidebar's inputs alone renders the
+// sidebar 0 times, on BOTH render paths (the boundary is inside the shell
+// view every composer builds, not a property of the store binding); a
+// navigation still renders it once. The mount count is the instrument's
+// positive control: a counter that never counted would read 0 everywhere.
+
+let private sidebarScope (label: string) (r: ScopeRun) =
+    printfn
+        "[883] %s: sidebar renders mount %d -> module msg +%d -> chrome msg +%d -> navigation +%d"
+        label
+        r.AfterMount.Sidebar
+        (r.AfterModuleMsg.Sidebar - r.AfterMount.Sidebar)
+        (r.AfterChromeMsg.Sidebar - r.AfterModuleMsg.Sidebar)
+        (r.AfterNavigation.Sidebar - r.AfterChromeMsg.Sidebar)
+
+    Expect.equal r.AfterMount.Sidebar 1 "the sidebar rendered once to mount (the counter counts)"
+
+    Expect.equal
+        (r.AfterChromeMsg.Chrome - r.AfterModuleMsg.Chrome)
+        1
+        "the chrome message did re-render the chrome (so the sidebar's parent ran)"
+
+    Expect.equal
+        (r.AfterChromeMsg.Sidebar - r.AfterModuleMsg.Sidebar)
+        0
+        "NO sidebar render for a chrome message that left its inputs alone"
+
+    Expect.equal (r.AfterModuleMsg.Sidebar - r.AfterMount.Sidebar) 0 "NO sidebar render for a module message"
+
+    Expect.equal
+        (r.AfterNavigation.Sidebar - r.AfterChromeMsg.Sidebar)
+        1
+        "one sidebar render for a navigation, which moves the highlighted row"
+
+let private sidebarBoundaryTests =
+    let mutable whole: ScopeRun option = None
+    let mutable sliced: ScopeRun option = None
+
+    testList "883 - a chrome message renders no sidebar" [
+
+        testCaseDeferred "the whole-tree path (every Client.program composer)" (RunMs + 100)
+        <| fun () ->
+            run false (fun r -> whole <- Some r)
+            fun () -> sidebarScope "whole-tree" whole.Value
+
+        testCaseDeferred "the sliced path (Client.run)" (RunMs + 100)
+        <| fun () ->
+            run true (fun r -> sliced <- Some r)
+            fun () -> sidebarScope "sliced" sliced.Value
+
+        testCase "the sidebar's callbacks are the same functions for one loop, and new ones for another" (fun () ->
+            let loopA = fun (_: Client.Msg) -> ()
+            let loopB = fun (_: Client.Msg) -> ()
+            let a1 = Client.sidebarDispatchersFor loopA
+            let a2 = Client.sidebarDispatchersFor loopA
+            Expect.isTrue (obj.ReferenceEquals(a1, a2)) "the same set, render after render"
+            Expect.isTrue (obj.ReferenceEquals(a1.Select, a2.Select)) "so each callback is the same function"
+            let b = Client.sidebarDispatchersFor loopB
+            Expect.isFalse (obj.ReferenceEquals(a1, b)) "a different loop (HMR re-ran the program) gets its own"
+
+            Expect.isFalse
+                (obj.ReferenceEquals(Client.sidebarDispatchersFor loopA, b))
+                "and the first loop's are rebuilt, never reused for the second")
+
+        testCase "the boundary compares by value, and callbacks and elements by reference" (fun () ->
+            let same (a: obj) (b: obj) =
+                Toolup.UIToolkit.Layout.sameRendered a b
+
+            let icon = Html.span "i"
+
+            let row (name: string) (icon: ReactElement) =
+                createObj [ "Name" ==> name; "Icon" ==> icon ]
+
+            Expect.isTrue (same (box [ row "a" icon ]) (box [ row "a" icon ])) "fresh rows, same content, same icon"
+            Expect.isFalse (same (box [ row "a" icon ]) (box [ row "b" icon ])) "a changed name"
+
+            Expect.isFalse
+                (same (box [ row "a" icon ]) (box [ row "a" (Html.span "i") ]))
+                "an equal-looking but different element: the sidebar cannot know it renders the same"
+
+            let f = fun (_: string) -> ()
+            Expect.isTrue (same (createObj [ "On" ==> f ]) (createObj [ "On" ==> f ])) "the same callback"
+
+            Expect.isFalse
+                (same (createObj [ "On" ==> f ]) (createObj [ "On" ==> (fun (_: string) -> ()) ]))
+                "a fresh closure is a change"
+
+            Expect.isTrue (same (box (Some "x", nan)) (box (Some "x", nan))) "options and NaN"
+            Expect.isFalse (same (box [ 1; 2 ]) (box [ 1; 2; 3 ])) "a longer list"
+            Expect.isFalse (same (cyclic ()) (cyclic ())) "past the depth cap the answer is 'changed', never a hang")
+    ]
+
 let tests =
-    testList "Phase 852 - the sliced model store" [ storeBindingTests; shellScopeTests; gridCompareTests ]
+    testList "Phase 852 - the sliced model store" [
+        storeBindingTests
+        shellScopeTests
+        gridCompareTests
+        sidebarBoundaryTests
+    ]

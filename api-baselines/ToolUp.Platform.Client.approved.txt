@@ -6750,6 +6750,7 @@ Toolup.Sidebar+SidebarSection.Modules : Microsoft.FSharp.Collections.FSharpList`
 Toolup.Sidebar+SidebarSection.Title : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 Toolup.UIToolkit.Layout (class)
 Toolup.UIToolkit.Layout.AppShell(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarSection], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.Unit]], ToolUp.Platform.PageContent, Microsoft.FSharp.Core.FSharpOption`1[Fable.React.ReactElement], Microsoft.FSharp.Core.FSharpOption`1[Fable.React.ReactElement], ToolUp.Platform.InputsPaneWidth) : Fable.React.ReactElement
+Toolup.UIToolkit.Layout.AppShellWith(Toolup.UIToolkit.Layout+SidebarProps, ToolUp.Platform.PageContent, Microsoft.FSharp.Core.FSharpOption`1[Fable.React.ReactElement], Microsoft.FSharp.Core.FSharpOption`1[Fable.React.ReactElement], ToolUp.Platform.InputsPaneWidth) : Fable.React.ReactElement
 Toolup.UIToolkit.Layout.UserButton(Microsoft.FSharp.Collections.FSharpList`1[Feliz.IReactProperty]) : Fable.React.ReactElement
 Toolup.UIToolkit.Layout.loadingIndicator(ToolUp.Platform.LoadingIndicatorMode) : Fable.React.ReactElement
 Toolup.UIToolkit.Layout.loadingIndicatorInline(ToolUp.Platform.LoadingIndicatorMode) : Fable.React.ReactElement
@@ -6760,6 +6761,18 @@ Toolup.UIToolkit.Layout.userButton() : Fable.React.ReactElement
 Toolup.UIToolkit.Layout+Panel (class)
 Toolup.UIToolkit.Layout+Panel.panel(System.String, Microsoft.FSharp.Collections.FSharpList`1[Fable.React.ReactElement]) : Fable.React.ReactElement
 Toolup.UIToolkit.Layout+Panel.panelSection(System.String, Microsoft.FSharp.Collections.FSharpList`1[Fable.React.ReactElement]) : Fable.React.ReactElement
+Toolup.UIToolkit.Layout+SidebarProps (class)
+Toolup.UIToolkit.Layout+SidebarProps..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarSection], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.Unit]])
+Toolup.UIToolkit.Layout+SidebarProps.AppLogo : System.String { get }
+Toolup.UIToolkit.Layout+SidebarProps.AppName : System.String { get }
+Toolup.UIToolkit.Layout+SidebarProps.OnGroupToggled : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit] { get }
+Toolup.UIToolkit.Layout+SidebarProps.OnHideToggled : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit] { get }
+Toolup.UIToolkit.Layout+SidebarProps.OnModuleSelected : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit] { get }
+Toolup.UIToolkit.Layout+SidebarProps.OnModuleToggled : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit] { get }
+Toolup.UIToolkit.Layout+SidebarProps.OnPinToggled : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit] { get }
+Toolup.UIToolkit.Layout+SidebarProps.OnReorder : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.Unit]] { get }
+Toolup.UIToolkit.Layout+SidebarProps.Sections : Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarSection] { get }
+Toolup.UIToolkit.Layout+SidebarProps.SelectedModule : System.String { get }
 Toolup.UIToolkit.Layout+Tabs (class)
 Toolup.UIToolkit.Layout+Tabs.container(Microsoft.FSharp.Collections.FSharpList`1[Fable.React.ReactElement]) : Fable.React.ReactElement
 Toolup.UIToolkit.Layout+Tabs.tab(System.String, System.Boolean, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
