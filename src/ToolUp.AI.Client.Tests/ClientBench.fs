@@ -38,13 +38,13 @@
 ///     message; the number of render-hook calls one drain of several
 ///     messages makes; and the latency between an update issuing a
 ///     `Cmd.OfAsync` command and that async body starting.
-///   * RENDER SCOPE (Phase 852) — components rendered per message in a
-///     mounted one-module SDK shell (`RenderScope`): chrome renders and
-///     module-view runs for a module message and for a chrome message, on
-///     the whole-tree path (`Client.program` composers) and the sliced
-///     store (`Client.run`). Reported as levers, not budgeted samples: they
-///     are counts that pin a structure, and `SlicedStoreTests` asserts
-///     them on every run.
+///   * RENDER SCOPE (Phase 852, 883) — components rendered per message in
+///     a mounted SDK shell (`RenderScope`): chrome renders, module-view
+///     runs and sidebar-component renders for a module message, a chrome
+///     message and a navigation, on the whole-tree path (`Client.program`
+///     composers) and the sliced store (`Client.run`). Reported as levers,
+///     not budgeted samples: they are counts that pin a structure, and
+///     `SlicedStoreTests` asserts them on every run.
 ///
 /// ─── Discipline ──────────────────────────────────────────────────────
 ///
@@ -830,22 +830,31 @@ let private runAsync (argv: string[]) : Async<int> = async {
 
     let perMessage (r: RenderScope.ScopeRun) =
         let delta (a: RenderScope.ScopeCounts) (b: RenderScope.ScopeCounts) =
-            createObj [ "chrome" ==> b.Chrome - a.Chrome; "module" ==> b.Module - a.Module ]
+            createObj [
+                "chrome" ==> b.Chrome - a.Chrome
+                "module" ==> b.Module - a.Module
+                // Phase 883 — renders of the sidebar component.
+                "sidebar" ==> b.Sidebar - a.Sidebar
+            ]
 
         createObj [
             "moduleMessage" ==> delta r.AfterMount r.AfterModuleMsg
             "chromeMessage" ==> delta r.AfterModuleMsg r.AfterChromeMsg
+            "navigationMessage" ==> delta r.AfterChromeMsg r.AfterNavigation
         ]
 
     for r in [ wholeTree; slicedScope ] do
         say (
             sprintf
-                "render scope (%s): module message -> %d chrome + %d module render(s); chrome message -> %d chrome + %d module render(s)"
+                "render scope (%s): module message -> %d chrome + %d module + %d sidebar render(s); chrome message -> %d chrome + %d module + %d sidebar render(s); navigation -> %d sidebar render(s)"
                 r.Path
                 (r.AfterModuleMsg.Chrome - r.AfterMount.Chrome)
                 (r.AfterModuleMsg.Module - r.AfterMount.Module)
+                (r.AfterModuleMsg.Sidebar - r.AfterMount.Sidebar)
                 (r.AfterChromeMsg.Chrome - r.AfterModuleMsg.Chrome)
                 (r.AfterChromeMsg.Module - r.AfterModuleMsg.Module)
+                (r.AfterChromeMsg.Sidebar - r.AfterModuleMsg.Sidebar)
+                (r.AfterNavigation.Sidebar - r.AfterChromeMsg.Sidebar)
         )
 
     // ── The measurement document ──

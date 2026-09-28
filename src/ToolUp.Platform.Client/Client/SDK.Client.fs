@@ -2759,6 +2759,49 @@ module Client =
             moduleDispatchCache <- Some(dispatch, forModules)
             forModules
 
+    // ─── Phase 883 — one set of sidebar callbacks per loop ──────────────
+    //
+    // The sidebar is its own memo boundary (`Layout.AppShellWith`), and a
+    // memo boundary holds only if its props do. Built inline in `view` —
+    // `ModuleSelected >> dispatch` and five siblings — the sidebar's
+    // callbacks were fresh closures on every render, so the boundary would
+    // see a change on every chrome render and hold nothing. Same discipline
+    // as `moduleDispatchFor` above: one set per loop, cached against the
+    // `dispatch` it wraps by reference, rebuilt only when a different loop
+    // renders.
+
+    /// The sidebar's six callbacks for one Elmish loop.
+    type internal SidebarDispatchers = {
+        Select: string -> unit
+        ToggleGroup: string -> unit
+        TogglePin: string -> unit
+        ToggleModule: string -> unit
+        ToggleHidden: string -> unit
+        Reorder: string -> string list -> unit
+    }
+
+    let mutable private sidebarDispatchCache: ((Msg -> unit) * SidebarDispatchers) option =
+        None
+
+    /// The sidebar's callbacks for the shell's `dispatch`: the same
+    /// functions every render, for as long as the same loop is running.
+    /// Internal so the Fable pack can pin the identity (`SlicedStoreTests`).
+    let internal sidebarDispatchersFor (dispatch: Msg -> unit) : SidebarDispatchers =
+        match sidebarDispatchCache with
+        | Some(cached, dispatchers) when obj.ReferenceEquals(cached, dispatch) -> dispatchers
+        | _ ->
+            let dispatchers = {
+                Select = ModuleSelected >> dispatch
+                ToggleGroup = SidebarGroupToggled >> dispatch
+                TogglePin = SidebarModulePinToggled >> dispatch
+                ToggleModule = SidebarModuleExpandToggled >> dispatch
+                ToggleHidden = SidebarEntryHideToggled >> dispatch
+                Reorder = fun groupKey orderedIds -> dispatch (SidebarModuleReordered(groupKey, orderedIds))
+            }
+
+            sidebarDispatchCache <- Some(dispatch, dispatchers)
+            dispatchers
+
     /// The active module's error boundary around its view — one
     /// construction site for both render paths (the whole-tree `view` and
     /// the Phase 852 store-subscribed host below).
@@ -3401,18 +3444,31 @@ module Client =
                 }
                 model.PlatformConfig
 
+        // Phase 883 — the sidebar renders behind its own memo boundary, on
+        // every render path (`view`, `viewWithSignIn` and the sliced
+        // `Client.run` shell alike): a chrome render that leaves these
+        // values alone renders no sidebar. `sidebarSections` is rebuilt on
+        // every chrome render and compared by value at the boundary; the
+        // callbacks are the loop's own (`sidebarDispatchersFor`), so they
+        // compare equal by reference.
+        let sidebarDispatch = sidebarDispatchersFor dispatch
+
+        let sidebar: Toolup.UIToolkit.Layout.SidebarProps = {
+            AppName = resolvedBranding.AppName
+            AppLogo = resolvedBranding.LogoUrl
+            Sections = sidebarSections
+            SelectedModule = selectedSidebarId
+            OnModuleSelected = sidebarDispatch.Select
+            OnGroupToggled = sidebarDispatch.ToggleGroup
+            OnPinToggled = sidebarDispatch.TogglePin
+            OnModuleToggled = sidebarDispatch.ToggleModule
+            OnHideToggled = sidebarDispatch.ToggleHidden
+            OnReorder = sidebarDispatch.Reorder
+        }
+
         let shell =
-            Toolup.UIToolkit.Layout.AppShell
-                resolvedBranding.AppName
-                resolvedBranding.LogoUrl
-                sidebarSections
-                selectedSidebarId
-                (ModuleSelected >> dispatch)
-                (SidebarGroupToggled >> dispatch)
-                (SidebarModulePinToggled >> dispatch)
-                (SidebarModuleExpandToggled >> dispatch)
-                (SidebarEntryHideToggled >> dispatch)
-                (fun groupKey orderedIds -> dispatch (SidebarModuleReordered(groupKey, orderedIds)))
+            Toolup.UIToolkit.Layout.AppShellWith
+                sidebar
                 content
                 chrome.SidePanel
                 combinedHeaderAction

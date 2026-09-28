@@ -467,6 +467,29 @@ The comparison is reference identity, never structural equality: it is one point
 publish however large your state is, and it cannot be fooled by a field that compares equal but
 changed identity (a callback, a mutable array a child component holds).
 
+**The shell renders behind three boundaries (since Phase 883).** Each re-renders only when what it
+reads changes, so a message costs the part of the screen it moved:
+
+1. **The chrome** — header, overlays, providers — reads every shell field except the module states,
+   compared field by field by reference. A module message does not render it.
+2. **The sidebar** — the navigation rail inside the chrome — reads its sections, the active entry
+   and its six callbacks (`Layout.SidebarProps`), compared **by value**: the rail is re-derived on
+   every chrome render and redrawn only when something on it differs. A chrome message that leaves
+   the rail alone (a toast, a theme flip, a header badge, the command palette) does not render it;
+   a navigation, a pin, a hide or a collapse does. The rail is still derived from each module's own
+   declarations — group, placement, navigation role, visibility — exactly as before; the boundary
+   decides only whether the derived rail changed.
+3. **The active module** — your view — reads `ModuleStates[yourModuleId]` by reference, as above.
+
+The sidebar boundary is part of the shell view itself, so unlike the other two it holds on **every**
+render path, including the whole-tree composers below. What keeps it holding is that its inputs
+are stable: the shell builds the sidebar's callbacks once per Elmish loop, and a row's icon is the
+element your module declared — so declare icons once (`Icon = myIcon`, a value), not with a
+function that builds a fresh element per call. A fresh element is never wrong, only a rail redrawn
+on every chrome render. A custom shell composed over `Layout.AppShellWith` gets the same boundary
+if it passes the same callback functions from render to render; `Layout.AppShell`, which takes the
+callbacks one by one, keeps building the sidebar inline.
+
 **Your view must read only its arguments.** Under the store, a module's view runs when its own state
 changes — not whenever the shell happens to re-render. A view that reads anything else — a
 module-level mutable, a value some callback writes outside `update` — used to be refreshed by the
@@ -477,8 +500,8 @@ contexts, and a change to any of them re-renders the components that read it, bo
 
 **Where it does not apply.** The store is the `Client.run` entry point's. An application that builds
 its own program over `Client.program` or `Client.view` — the AI assistant's composer, a custom
-composition root — renders the whole tree per message exactly as before (GP 11); following the rule
-there costs nothing and changes nothing. Components you write yourself can use the same mechanism
+composition root — renders the whole tree per message exactly as before (GP 11), apart from the
+sidebar boundary above; following the rule there costs nothing and changes nothing. Components you write yourself can use the same mechanism
 under any store-bound program: `ModelStore.useSelector store selector ModelStore.refEquals` reads a
 slice and re-renders only when it changes. Migration notes and the measurement:
 [`docs/migrations/852-sliced-model-store.md`](../migrations/852-sliced-model-store.md).
