@@ -1292,6 +1292,9 @@ let private view model dispatch =
             // conversation (shell-history style).
             MessageInput model.Messages (fun content -> dispatch (SubmitMessage content))
 
+            // Phase 859.H — who can see what is typed above.
+            ConversationPanel.ConversationVisibilityNotice()
+
             // Error display
             match model.ErrorMessage with
             | Some err ->
