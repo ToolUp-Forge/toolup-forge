@@ -294,10 +294,29 @@ let genDiffInput (rng: Lcg) : DiffInput =
         match rng.Next 4 with
         | 0 ->
             // Exactly the active key set, possibly reordered — the
-            // shortcut's case.
-            activeKeys
-            |> List.sortBy (fun _ -> rng.Next 1000)
-            |> List.mapi (fun i key -> key, 200 + i)
+            // shortcut's case. The shuffle draws ONE key per element, in
+            // element order, and sorts by it with the index as the tie-break
+            // — and draws nothing for fewer than two elements (Phase 900).
+            // Until 900 this was `List.sortBy (fun _ -> rng.Next 1000)`,
+            // which on .NET projects each element once into a keys array,
+            // and not at all for a list of fewer than two (which is why the
+            // guard is here: the .NET draw is unchanged, draw for draw, so no
+            // corpus moved), but under Fable applies the projection inside
+            // the comparer, once per COMPARISON — so the two hosts consumed
+            // different numbers of draws here and every later input
+            // differed. Nothing noticed, because the Fable host replays the
+            // .NET-written corpus rather than drawing; the campaign pin
+            // below is what caught it.
+            let shuffled =
+                if List.length activeKeys < 2 then
+                    activeKeys
+                else
+                    activeKeys
+                    |> List.mapi (fun i key -> (rng.Next 1000, i), key)
+                    |> List.sortBy fst
+                    |> List.map snd
+
+            shuffled |> List.mapi (fun i key -> key, 200 + i)
         | _ ->
             let count = rng.Next 9
             [ for i in 0 .. count - 1 -> alphabet[rng.Next(List.length alphabet)], 300 + i ]
@@ -534,6 +553,14 @@ let corpusLines (text: string) : string list =
 // (Phase 850's), and nothing said the two hosts' draws of THESE
 // generators agree. Each campaign now has a pin in the shape of 884's
 // two, asserted on both hosts over a draw each host makes itself.
+//
+// The diff pin caught one on its first Fable run: the shuffle in
+// `genDiffInput` sorted by a projection that drew from the generator, and
+// Fable's `List.sortBy` applies the projection per comparison where
+// FSharp.Core's applies it per element — so the Fable host drew a
+// different diff campaign from the same seed (rendering 400:32117:…
+// against .NET's 400:31330:…). Fixed by drawing the shuffle keys once per
+// element; the .NET draw did not move.
 
 /// Count, total length and a polynomial hash modulo 2^31 - 1, in `int64`
 /// so neither host overflows (Fable carries `int64` exactly). Not a

@@ -917,7 +917,13 @@ one every client executes.
   draws the campaign the .NET corpus was written from (100 ring sequences, 400 diff inputs, the same
   seed) and asserts its canonical rendering against one literal — so "the Fable host replays what the
   .NET host drew" no longer rests on the loop's pin alone, and a generator that drew differently on
-  one host fails by name on both.
+  one host fails by name on both. **The diff pin caught one on its first Fable run.** The diff
+  generator's shuffle sorted by a projection that drew from the LCG, and Fable's `List.sortBy` applies
+  the projection inside the comparer (per comparison) where FSharp.Core's projects each element once —
+  so from the same seed, with the same LCG, the Fable host drew a different diff campaign from the
+  first shuffled input on (its rendering was 400:32117:… against .NET's 400:31330:…). The replay
+  never noticed because it never drew. The shuffle now draws one key per element, which is what .NET
+  always did, so the corpus did not move; the pin holds both hosts to it.
 * **The campaign is known to have reached the grow step.** The .NET host asserts the largest backing
   array the model reached is past several doublings, and that the diff campaign hit both the shortcut
   and the duplicate path — a campaign that only ever exercised the steady state would pass every
