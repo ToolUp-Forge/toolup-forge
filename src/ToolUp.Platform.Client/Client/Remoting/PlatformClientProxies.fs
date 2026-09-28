@@ -207,6 +207,57 @@ module PlatformClientProxies =
                 "Tags", (JsonEncode.map JsonEncode.Key.string JsonEncode.string) value.Tags
             ]
 
+    /// Generated JSON encoder for `ContactOwner` — members by name, cases by case name, as the writer emits them.
+    let encodeContactOwner: JsonEncoder<ContactOwner> =
+        function
+        | ContactOwner.User field -> JsonEncode.payload "User" (JsonEncode.string field)
+        | ContactOwner.Team field -> JsonEncode.payload "Team" (JsonEncode.string field)
+
+    /// Generated JSON encoder for `CreateExternalContactRequest` — members by name, cases by case name, as the writer emits them.
+    let encodeCreateExternalContactRequest: JsonEncoder<CreateExternalContactRequest> =
+        fun (value: CreateExternalContactRequest) ->
+            JsonEncode.record [
+                "DisplayName", JsonEncode.string value.DisplayName
+                "EmailAddress", (JsonEncode.option JsonEncode.string) value.EmailAddress
+                "PhoneNumber", (JsonEncode.option JsonEncode.string) value.PhoneNumber
+                "WhatsAppNumber", (JsonEncode.option JsonEncode.string) value.WhatsAppNumber
+                "Owner", encodeContactOwner value.Owner
+                "Tags", (JsonEncode.list JsonEncode.string) value.Tags
+                "Notes", (JsonEncode.option JsonEncode.string) value.Notes
+            ]
+
+    /// Generated JSON encoder for `UpdateExternalContactRequest` — members by name, cases by case name, as the writer emits them.
+    let encodeUpdateExternalContactRequest: JsonEncoder<UpdateExternalContactRequest> =
+        fun (value: UpdateExternalContactRequest) ->
+            JsonEncode.record [
+                "ContactId", JsonEncode.string value.ContactId
+                "DisplayName", JsonEncode.string value.DisplayName
+                "EmailAddress", (JsonEncode.option JsonEncode.string) value.EmailAddress
+                "PhoneNumber", (JsonEncode.option JsonEncode.string) value.PhoneNumber
+                "WhatsAppNumber", (JsonEncode.option JsonEncode.string) value.WhatsAppNumber
+                "Tags", (JsonEncode.list JsonEncode.string) value.Tags
+                "Notes", (JsonEncode.option JsonEncode.string) value.Notes
+            ]
+
+    /// Generated JSON encoder for `RecordOptInRequest` — members by name, cases by case name, as the writer emits them.
+    let encodeRecordOptInRequest: JsonEncoder<RecordOptInRequest> =
+        fun (value: RecordOptInRequest) ->
+            JsonEncode.record [
+                "ContactId", JsonEncode.string value.ContactId
+                "Channel", JsonEncode.string value.Channel
+                "Source", JsonEncode.string value.Source
+                "ExpiresAt", (JsonEncode.option JsonEncode.dateTime) value.ExpiresAt
+            ]
+
+    /// Generated JSON encoder for `WithdrawOptInRequest` — members by name, cases by case name, as the writer emits them.
+    let encodeWithdrawOptInRequest: JsonEncoder<WithdrawOptInRequest> =
+        fun (value: WithdrawOptInRequest) ->
+            JsonEncode.record [
+                "ContactId", JsonEncode.string value.ContactId
+                "Channel", JsonEncode.string value.Channel
+                "Reason", JsonEncode.string value.Reason
+            ]
+
     /// Generated JSON encoder for `FlagValue` — members by name, cases by case name, as the writer emits them.
     let encodeFlagValue: JsonEncoder<FlagValue> =
         function
@@ -1684,6 +1735,73 @@ module PlatformClientProxies =
         |> JsonDecode.apply (JsonDecode.field "NotProved" (JsonDecode.list decodeNotProvedStatement))
         |> JsonDecode.apply (JsonDecode.field "Outcome" decodeDeploymentVerificationOutcome)
         |> JsonDecode.apply (JsonDecode.field "VerdictDigest" JsonDecode.asString)
+
+    /// Generated JSON decoder for `ContactOwner` — members by name, cases by case name, read off the type's own shape.
+    let decodeContactOwner: JsonDecoder<ContactOwner> =
+        JsonDecode.union "ContactOwner" (function
+            | "User" -> Some(JsonDecode.payload (JsonDecode.asString |> JsonDecode.map ContactOwner.User))
+            | "Team" -> Some(JsonDecode.payload (JsonDecode.asString |> JsonDecode.map ContactOwner.Team))
+            | _ -> None)
+
+    /// Generated JSON decoder for `NotificationKind.PushVariant` — members by name, cases by case name, read off the type's own shape.
+    let decodePushVariant: JsonDecoder<NotificationKind.PushVariant> =
+        JsonDecode.union "NotificationKind.PushVariant" (function
+            | "WebPush" -> Some(JsonDecode.case0 NotificationKind.PushVariant.WebPush)
+            | "Fcm" -> Some(JsonDecode.case0 NotificationKind.PushVariant.Fcm)
+            | "Apns" -> Some(JsonDecode.case0 NotificationKind.PushVariant.Apns)
+            | "Other" -> Some(JsonDecode.payload (JsonDecode.asString |> JsonDecode.map NotificationKind.PushVariant.Other))
+            | _ -> None)
+
+    /// Generated JSON decoder for `NotificationKind.SinkKind` — members by name, cases by case name, read off the type's own shape.
+    let decodeSinkKind: JsonDecoder<NotificationKind.SinkKind> =
+        JsonDecode.union "NotificationKind.SinkKind" (function
+            | "Email" -> Some(JsonDecode.case0 NotificationKind.SinkKind.Email)
+            | "Sms" -> Some(JsonDecode.case0 NotificationKind.SinkKind.Sms)
+            | "Push" -> Some(JsonDecode.payload (decodePushVariant |> JsonDecode.map NotificationKind.SinkKind.Push))
+            | "WhatsApp" -> Some(JsonDecode.case0 NotificationKind.SinkKind.WhatsApp)
+            | _ -> None)
+
+    /// Generated JSON decoder for `OptInRecord` — members by name, cases by case name, read off the type's own shape.
+    let decodeOptInRecord: JsonDecoder<OptInRecord> =
+        JsonDecode.succeed (fun grantedAt source expiresAt -> ({
+            GrantedAt = grantedAt
+            Source = source
+            ExpiresAt = expiresAt
+        }: OptInRecord))
+        |> JsonDecode.apply (JsonDecode.field "GrantedAt" JsonDecode.asDateTime)
+        |> JsonDecode.apply (JsonDecode.field "Source" JsonDecode.asString)
+        |> JsonDecode.apply (JsonDecode.optionalField "ExpiresAt" JsonDecode.asDateTime)
+
+    /// Generated JSON decoder for `ExternalContact` — members by name, cases by case name, read off the type's own shape.
+    let decodeExternalContact: JsonDecoder<ExternalContact> =
+        JsonDecode.succeed (fun id type' version displayName optionalEmailAddress optionalPhoneNumber optionalWhatsAppNumber owner optIns tags createdAt lastInboundUtc notes -> ({
+            Id = id
+            Type = type'
+            Version = version
+            DisplayName = displayName
+            OptionalEmailAddress = optionalEmailAddress
+            OptionalPhoneNumber = optionalPhoneNumber
+            OptionalWhatsAppNumber = optionalWhatsAppNumber
+            Owner = owner
+            OptIns = optIns
+            Tags = tags
+            CreatedAt = createdAt
+            LastInboundUtc = lastInboundUtc
+            Notes = notes
+        }: ExternalContact))
+        |> JsonDecode.apply (JsonDecode.field "Id" JsonDecode.asString)
+        |> JsonDecode.apply (JsonDecode.field "Type" JsonDecode.asString)
+        |> JsonDecode.apply (JsonDecode.field "Version" JsonDecode.asInt32)
+        |> JsonDecode.apply (JsonDecode.field "DisplayName" JsonDecode.asString)
+        |> JsonDecode.apply (JsonDecode.optionalField "OptionalEmailAddress" JsonDecode.asString)
+        |> JsonDecode.apply (JsonDecode.optionalField "OptionalPhoneNumber" JsonDecode.asString)
+        |> JsonDecode.apply (JsonDecode.optionalField "OptionalWhatsAppNumber" JsonDecode.asString)
+        |> JsonDecode.apply (JsonDecode.field "Owner" decodeContactOwner)
+        |> JsonDecode.apply (JsonDecode.field "OptIns" (JsonDecode.asMapOf decodeSinkKind decodeOptInRecord))
+        |> JsonDecode.apply (JsonDecode.field "Tags" (JsonDecode.list JsonDecode.asString))
+        |> JsonDecode.apply (JsonDecode.field "CreatedAt" JsonDecode.asDateTime)
+        |> JsonDecode.apply (JsonDecode.optionalField "LastInboundUtc" JsonDecode.asDateTime)
+        |> JsonDecode.apply (JsonDecode.optionalField "Notes" JsonDecode.asString)
 
     /// Generated JSON decoder for `FlagValue` — members by name, cases by case name, read off the type's own shape.
     let decodeFlagValue: JsonDecoder<FlagValue> =
@@ -3623,6 +3741,30 @@ module PlatformClientProxies =
             GetVerificationReport = fun () -> callGetVerificationReport "{}"
         }
 
+    /// Generated client proxy for `IExternalContactApi` — 8 method(s), each a closure over its
+    /// generated encoders, the transport and its generated response decoder.
+    let iExternalContactApiProxy (options: RemoteBuilderOptions) : IExternalContactApi =
+        let api = Proxy.generatedApi "ToolUp.Platform.IExternalContactApi" "IExternalContactApi" options
+        let callListContacts = Proxy.generatedMethod<Result<ExternalContact list, string>> api "ListContacts" false (JsonDecode.result (JsonDecode.list decodeExternalContact) JsonDecode.asString)
+        let callGetContact = Proxy.generatedMethod<Result<ExternalContact, string>> api "GetContact" true (JsonDecode.result decodeExternalContact JsonDecode.asString)
+        let callCreateContact = Proxy.generatedMethod<Result<ExternalContact, string>> api "CreateContact" true (JsonDecode.result decodeExternalContact JsonDecode.asString)
+        let callUpdateContact = Proxy.generatedMethod<Result<ExternalContact, string>> api "UpdateContact" true (JsonDecode.result decodeExternalContact JsonDecode.asString)
+        let callDeleteContact = Proxy.generatedMethod<Result<unit, string>> api "DeleteContact" true (JsonDecode.result JsonDecode.asUnit JsonDecode.asString)
+        let callRecordOptIn = Proxy.generatedMethod<Result<ExternalContact, string>> api "RecordOptIn" true (JsonDecode.result decodeExternalContact JsonDecode.asString)
+        let callWithdrawOptIn = Proxy.generatedMethod<Result<ExternalContact, string>> api "WithdrawOptIn" true (JsonDecode.result decodeExternalContact JsonDecode.asString)
+        let callRecordInbound = Proxy.generatedMethod<Result<ExternalContact, string>> api "RecordInbound" true (JsonDecode.result decodeExternalContact JsonDecode.asString)
+
+        {
+            ListContacts = fun () -> callListContacts "{}"
+            GetContact = fun a0 -> callGetContact (JsonEncode.arguments [ JsonEncode.string a0 ])
+            CreateContact = fun a0 -> callCreateContact (JsonEncode.arguments [ encodeCreateExternalContactRequest a0 ])
+            UpdateContact = fun a0 -> callUpdateContact (JsonEncode.arguments [ encodeUpdateExternalContactRequest a0 ])
+            DeleteContact = fun a0 -> callDeleteContact (JsonEncode.arguments [ JsonEncode.string a0 ])
+            RecordOptIn = fun a0 -> callRecordOptIn (JsonEncode.arguments [ encodeRecordOptInRequest a0 ])
+            WithdrawOptIn = fun a0 -> callWithdrawOptIn (JsonEncode.arguments [ encodeWithdrawOptInRequest a0 ])
+            RecordInbound = fun a0 -> callRecordInbound (JsonEncode.arguments [ JsonEncode.string a0 ])
+        }
+
     /// Generated client proxy for `IFeatureFlagApi` — 5 method(s), each a closure over its
     /// generated encoders, the transport and its generated response decoder.
     let iFeatureFlagApiProxy (options: RemoteBuilderOptions) : IFeatureFlagApi =
@@ -4113,6 +4255,7 @@ module PlatformClientProxies =
         "ToolUp.Platform.IDataMigrationApi"
         "ToolUp.Platform.IDeploymentReadinessApi"
         "ToolUp.Platform.IDeploymentVerificationApi"
+        "ToolUp.Platform.IExternalContactApi"
         "ToolUp.Platform.IFeatureFlagApi"
         "ToolUp.Platform.IHealthMonitorApi"
         "ToolUp.Platform.IHomeOverviewApi"
@@ -4156,6 +4299,7 @@ module PlatformClientProxies =
         | "ToolUp.Platform.IDataMigrationApi" -> Some(box (iDataMigrationApiProxy options))
         | "ToolUp.Platform.IDeploymentReadinessApi" -> Some(box (iDeploymentReadinessApiProxy options))
         | "ToolUp.Platform.IDeploymentVerificationApi" -> Some(box (iDeploymentVerificationApiProxy options))
+        | "ToolUp.Platform.IExternalContactApi" -> Some(box (iExternalContactApiProxy options))
         | "ToolUp.Platform.IFeatureFlagApi" -> Some(box (iFeatureFlagApiProxy options))
         | "ToolUp.Platform.IHealthMonitorApi" -> Some(box (iHealthMonitorApiProxy options))
         | "ToolUp.Platform.IHomeOverviewApi" -> Some(box (iHomeOverviewApiProxy options))
@@ -4199,6 +4343,7 @@ module PlatformClientProxies =
         GeneratedProxies.register "ToolUp.Platform.IDataMigrationApi" (fun options -> box (iDataMigrationApiProxy options))
         GeneratedProxies.register "ToolUp.Platform.IDeploymentReadinessApi" (fun options -> box (iDeploymentReadinessApiProxy options))
         GeneratedProxies.register "ToolUp.Platform.IDeploymentVerificationApi" (fun options -> box (iDeploymentVerificationApiProxy options))
+        GeneratedProxies.register "ToolUp.Platform.IExternalContactApi" (fun options -> box (iExternalContactApiProxy options))
         GeneratedProxies.register "ToolUp.Platform.IFeatureFlagApi" (fun options -> box (iFeatureFlagApiProxy options))
         GeneratedProxies.register "ToolUp.Platform.IHealthMonitorApi" (fun options -> box (iHealthMonitorApiProxy options))
         GeneratedProxies.register "ToolUp.Platform.IHomeOverviewApi" (fun options -> box (iHomeOverviewApiProxy options))

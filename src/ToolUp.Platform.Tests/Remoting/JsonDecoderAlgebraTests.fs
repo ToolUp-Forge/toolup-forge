@@ -176,12 +176,11 @@ let rec private tree: JsonDecoder<Tree> =
 let private throughFloat: JsonDecoder<int64> =
     JsonDecode.asFloat |> JsonDecode.map int64
 
-/// A union-typed map KEY (Phase 6f.A, corpus case `map-union-key`). The
-/// writer emits a non-string key as its own JSON text used as the member
-/// name, so a payload-bearing case arrives as `{"Rejected":"no opt-in"}`
-/// in the property-name position. The key is therefore parsed as JSON and
-/// read with the same `outcome` decoder a value would be — one reading
-/// of the union, whichever position it occupies on the wire.
+/// The pre-899 reading of a union-typed map KEY (Phase 6f.A, corpus case
+/// `map-union-key`): the member NAME parsed as JSON and read with the
+/// `outcome` decoder, over the OBJECT form only. Right on every text the
+/// server writes and refused on the browser's array of pairs — kept as the
+/// probe Phase 899's cases hold `JsonDecode.asMapOf` against.
 let private outcomeKey: JsonDecode.KeyDecoder<Outcome> =
     fun name -> JsonRead.tryParse name |> Result.bind outcome
 
@@ -226,7 +225,7 @@ let private covered: (Type * RegisteredJsonDecoder) list = [
     entry (JsonDecode.array JsonDecode.asString)
     entry (JsonDecode.asMap JsonDecode.Key.string JsonDecode.asInt32)
     entry (JsonDecode.asMap JsonDecode.Key.int32 JsonDecode.asString)
-    entry (JsonDecode.asMap outcomeKey address)
+    entry (JsonDecode.asMapOf outcome address)
     entry (JsonDecode.asSet JsonDecode.asString)
     entry (JsonDecode.asSet JsonDecode.asInt32)
     entry (JsonDecode.tuple2 JsonDecode.asInt32 JsonDecode.asString)
@@ -1788,20 +1787,13 @@ let tests =
                 "the converter set reads a double from no string and the algebra's asFloat takes a number token only: a browser NaN argument is refused on both paths, as it was before this phase"
             ]
 
-            // Measured by this phase's gate and NOT closed by it: a `Map`
-            // whose key is neither primitive nor an enum-like union is written
-            // by the browser as an ARRAY of `[key, value]` pairs, which the
-            // converter set reads and `JsonDecode.asMap` (an object only, keys
-            // read through a member-name `KeyDecoder`) refuses — even empty
-            // (`[]`). Closing it needs a JSON-value key decoder on `asMap` and
-            // in the generator: a successor phase, not a widening of this one.
-            // The gate REFUSES such a decoder against the browser's writer,
-            // which is the gate doing its job; the case is asserted refused
-            // so the declaration goes red the day the successor lands.
-            let browserStrictness: (Type * string) list = [
-                typeof<Map<Outcome, Address>>,
-                "the browser writes a union-keyed Map as an array of [key, value] pairs; asMap reads an object only"
-            ]
+            // Covered decoders the gate REFUSES against the browser's writer,
+            // each with why, asserted still refused so a declaration cannot
+            // outlive its fact. Empty since Phase 899: the one 885 measured —
+            // a `Map` keyed by a union with fields, which the browser writes
+            // as an ARRAY of `[key, value]` pairs — is covered by
+            // `JsonDecode.asMapOf`, which reads that form and the server's.
+            let browserStrictness: (Type * string) list = []
 
             testCase "885.A — the mirror writes every pinned case exactly as the transpiled Fable.SimpleJson does"
             <| fun () ->
@@ -2029,6 +2021,242 @@ let tests =
                             Expect.equal b.At.Kind DateTimeKind.Utc (label + ": UTC kind")
                             Expect.equal b.Duration.Ticks 54000002500L (label + ": the tick")
                         | Error e -> failtestf "%s via the %s: refused: %s" name route (DecodeError.render e)
+
+                JsonDecoders.resetForTests ()
+        ]
+
+        testList "Phase 899 — a JSON Map decodes whatever key shape the browser sends" [
+            let decodeText (decoder: JsonDecoder<'T>) (text: string) =
+                JsonRead.tryParse text |> Result.bind decoder
+
+            let shapeCounts =
+                JsonDecode.asMapOf BrowserWriterFixture.browserShapeDecoder JsonDecode.asInt32
+
+            let shapeCountsType = typeof<Map<BrowserWriterFixture.BrowserShape, int>>
+
+            // The converter set's reading of a text, a throw reported as one.
+            let viaConverterSet (target: Type) (text: string) : Result<obj, string> =
+                try
+                    match gateOracle.Decode target text with
+                    | Ok value -> Ok value
+                    | Error e -> Error(DecodeError.render e)
+                with ex ->
+                    Error("threw " + ex.GetType().Name)
+
+            // The pre-899 decoder, kept as the red-first probe: the member NAME
+            // read as the key's JSON text, over the OBJECT form only.
+            let objectOnly: JsonDecoder<Map<BrowserWriterFixture.BrowserShape, int>> =
+                JsonDecode.asMap
+                    (fun name -> JsonRead.tryParse name |> Result.bind BrowserWriterFixture.browserShapeDecoder)
+                    JsonDecode.asInt32
+
+            let three =
+                Map.ofList [
+                    BrowserWriterFixture.Dot, 2
+                    BrowserWriterFixture.Circle 1.5, 1
+                    BrowserWriterFixture.Rect(2.0, 3.0), 4
+                ]
+
+            testCase "899 — both forms read to one value: the browser's array of pairs and the server's object"
+            <| fun () ->
+                let browser = BrowserJsonWriter.serialize shapeCountsType (box three)
+                let server = gateOracle.Write shapeCountsType (box three)
+
+                Expect.stringStarts browser "[[" "the browser writes an array of pairs"
+                Expect.stringStarts server "{" "the server writes an object keyed by JSON text"
+
+                for name, text in [ "browser", browser; "server", server ] do
+                    Expect.equal (decodeText shapeCounts text) (Ok three) (name + ": the algebra")
+
+                    Expect.equal
+                        (viaConverterSet shapeCountsType text
+                         |> Result.map unbox<Map<BrowserWriterFixture.BrowserShape, int>>)
+                        (Ok three)
+                        (name + ": the converter set")
+
+                match decodeText objectOnly browser with
+                | Error _ -> ()
+                | Ok v -> failtestf "the pre-899 object-only decoder read the browser's pairs: %A" v
+
+            testCase "899 — an empty map and a one-pair map, in both forms, agree with the converter set"
+            <| fun () ->
+                let one = Map.ofList [ BrowserWriterFixture.Circle 1.5, 7 ]
+
+                let texts = [
+                    "[]", Map.empty
+                    "{}", Map.empty
+                    """[[{"Circle": 1.5}, 7]]""", one
+                    """{"{\"Circle\":1.5}":7}""", one
+                ]
+
+                for text, expected in texts do
+                    Expect.equal (decodeText shapeCounts text) (Ok expected) (text + ": the algebra")
+
+                    Expect.equal
+                        (viaConverterSet shapeCountsType text
+                         |> Result.map unbox<Map<BrowserWriterFixture.BrowserShape, int>>)
+                        (Ok expected)
+                        (text + ": the converter set")
+
+                match decodeText objectOnly "[]" with
+                | Error _ -> ()
+                | Ok v -> failtestf "the pre-899 decoder read even the empty array: %A" v
+
+            testCase "899 — a duplicate key reads as the converter set reads it: the LATER pair wins, in both forms"
+            <| fun () ->
+                // Measured, not assumed: the converter set folds the pairs (and
+                // an object's members) through `Map.add`, so a repeated key is
+                // not refused — the later value replaces the earlier. The
+                // algebra reads it identically; it neither refuses what the
+                // server accepts nor lands on a different value.
+                let expected = Map.ofList [ BrowserWriterFixture.Dot, 2 ]
+
+                for text in [ """[["Dot", 1], ["Dot", 2]]"""; """{"\"Dot\"":1,"\"Dot\"":2}""" ] do
+                    Expect.equal (decodeText shapeCounts text) (Ok expected) (text + ": the algebra")
+
+                    Expect.equal
+                        (viaConverterSet shapeCountsType text
+                         |> Result.map unbox<Map<BrowserWriterFixture.BrowserShape, int>>)
+                        (Ok expected)
+                        (text + ": the converter set")
+
+            testCase "899 — a malformed pair or key is refused with its position, never thrown"
+            <| fun () ->
+                let malformed = [
+                    """[["Dot"]]""", "[0]"
+                    """[["Dot", 1, 2]]""", "[0]"
+                    """[["Dot", 1], 3]""", "[1]"
+                    """[null]""", "[0]"
+                    """[["Square", 1]]""", "[0]"
+                    """[["Dot", "one"]]""", "[0]"
+                    """{"Dot":1}""", "Dot"
+                    """{"\"Square\"":1}""", "\"Square\""
+                    "null", ""
+                    "3", ""
+                ]
+
+                for text, head in malformed do
+                    let outcome =
+                        try
+                            decodeText shapeCounts text
+                        with ex ->
+                            failtestf "`%s` threw %s" text (ex.GetType().Name)
+
+                    match outcome with
+                    | Ok v -> failtestf "`%s` decoded to %A" text v
+                    | Error e ->
+                        if head <> "" then
+                            Expect.equal (List.tryHead e.Path) (Some head) (text + ": the refusal names where")
+
+            testCase "899 — the gate verifies `asMapOf` against both writers, and refuses the object-only probe"
+            <| fun () ->
+                match JsonDecoders.verifyBothWith gateOracle gateDraws gateSeed shapeCounts with
+                | Ok verification -> Expect.isEmpty verification.DeclaredDifferences "exact on both writers"
+                | Error refusal -> failtest (JsonDecoders.describeRefusal refusal)
+
+                match JsonDecoders.verifyWith gateOracle gateDraws gateSeed objectOnly with
+                | Ok _ -> ()
+                | Error refusal ->
+                    failtestf "the probe should agree on the server's text: %s" (JsonDecoders.describeRefusal refusal)
+
+                match JsonDecoders.verifyBothWith gateOracle gateDraws gateSeed objectOnly with
+                | Error(DecoderDiverges _) -> ()
+                | other -> failtestf "the browser's pairs did not refute the object-only probe: %A" other
+
+            testCase "899 — the generator plans a union-keyed map through `asMapOf`, and writes it through `mapOf`"
+            <| fun () ->
+                let spelling = Generator.Plan.typeSpelling typeof<BrowserWriterFixture.Tally>
+
+                let countsRead (plan: Generator.GenerationPlan) =
+                    plan.Bindings
+                    |> List.pick (function
+                        | Generator.RecordDecoder(_, s, fields) when s = spelling -> Some fields
+                        | _ -> None)
+                    |> List.find (fun f -> f.FieldName = "Counts")
+                    |> _.Decoder
+
+                let decoding = Generator.Plan.forJsonTypes [ typeof<BrowserWriterFixture.Tally> ]
+                Expect.isEmpty decoding.Refusals "the union-keyed map is expressible"
+                Expect.stringContains (countsRead decoding) "JsonDecode.asMapOf" "read with the key as a value"
+
+                let encoding = Generator.Plan.forJsonEncoders [ typeof<BrowserWriterFixture.Tally> ]
+                Expect.isEmpty encoding.Refusals "and writable, by the same walk"
+                Expect.stringContains (countsRead encoding) "JsonEncode.mapOf" "written as the browser's pairs"
+
+            testCase
+                "899 acceptance — a Map<union with fields, int> argument round-trips from each browser writer to the server decoder"
+            <| fun () ->
+                let tally = BrowserWriterFixture.tally
+
+                Expect.equal
+                    ("["
+                     + BrowserJsonWriter.serialize typeof<BrowserWriterFixture.Tally> (box tally)
+                     + "]")
+                    BrowserWriterFixture.TallyReflectiveBody
+                    "the mirror writes what the reflective proxy sends"
+
+                Expect.equal
+                    (JsonEncode.arguments [ BrowserWriterFixture.tallyEncoder tally ])
+                    BrowserWriterFixture.TallyEncodedBody
+                    "the generated encoder writes the browser's pairs"
+
+                Expect.equal
+                    ("[" + gateOracle.Write typeof<BrowserWriterFixture.Tally> (box tally) + "]")
+                    BrowserWriterFixture.TallyServerBody
+                    "the server writer's spelling"
+
+                let bodies = [
+                    "reflective proxy", BrowserWriterFixture.TallyReflectiveBody
+                    "generated proxy", BrowserWriterFixture.TallyEncodedBody
+                    "server writer", BrowserWriterFixture.TallyServerBody
+                ]
+
+                let decodeVia (route: string) (element: JsonElement) =
+                    JsonDecoders.resetForTests ()
+
+                    match route with
+                    | "algebra" ->
+                        JsonDecoders.registerFor<BrowserWriterFixture.Tally>
+                            "TallyApi"
+                            BrowserWriterFixture.tallyDecoder
+                    | "pre-899 algebra" ->
+                        JsonDecoders.registerFor<BrowserWriterFixture.Tally>
+                            "TallyApi"
+                            (JsonDecode.succeed (fun label counts -> {
+                                BrowserWriterFixture.Label = label
+                                BrowserWriterFixture.Counts = counts
+                             })
+                             |> JsonDecode.apply (JsonDecode.field "Label" JsonDecode.asString)
+                             |> JsonDecode.apply (JsonDecode.field "Counts" objectOnly))
+                    | _ -> ()
+
+                    ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseElement
+                        (Some "TallyApi")
+                        element
+                        typeof<BrowserWriterFixture.Tally>
+                        jsonOptions
+
+                for name, body in bodies do
+                    use document = JsonDocument.Parse body
+                    let element = document.RootElement.[0]
+
+                    for route in [ "algebra"; "converter set" ] do
+                        match decodeVia route element with
+                        | Ok value ->
+                            Expect.equal
+                                (unbox<BrowserWriterFixture.Tally> value)
+                                tally
+                                (sprintf "%s via the %s" name route)
+                        | Error e -> failtestf "%s via the %s: refused: %s" name route (DecodeError.render e)
+
+                    // Red first: the object-only decoder 885 measured refuses
+                    // both browser bodies and reads only the server's.
+                    match name, decodeVia "pre-899 algebra" element with
+                    | "server writer", Ok _ -> ()
+                    | "server writer", Error e ->
+                        failtestf "the probe refused the server's body: %s" (DecodeError.render e)
+                    | _, Error _ -> ()
+                    | _, Ok _ -> failtestf "%s: the pre-899 decoder read the browser's pairs" name
 
                 JsonDecoders.resetForTests ()
         ]
