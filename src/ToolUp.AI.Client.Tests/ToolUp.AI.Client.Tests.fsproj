@@ -159,6 +159,23 @@
              the half Phase 610 left open (it covered the shell rail only,
              and `AssertAccessible` still needed a hand-supplied render). -->
         <Compile Include="ModuleViewA11yTests.fs" />
+        <!-- Phase 901 — the data-manager template publishes processed
+             data. The template's three module files are compiled in
+             directly from `templates/platformsdk-datamanager/MyDataManager/`
+             rather than copied — see templates/README.md's "Programmatic
+             invocation" byte-identical acceptance bar, which is what makes
+             this a faithful instantiation of `dotnet new
+             platformsdk-datamanager`. Same reason as every pack above:
+             `ClientModel.fs` holds a module-level `Api.makeProxy` and
+             `ClientView.fs`'s `register()` builds a real Feliz
+             `ReactElement` for its `Icon`, both of which are `jsNative`
+             under plain .NET reflection/execution, so `ToolUp.Platform.Tests`
+             cannot drive this module at all — only a Fable-transpiled host
+             with a real `react` can. Must follow ModuleHarness.fs. -->
+        <Compile Include="..\..\templates\platformsdk-datamanager\MyDataManager\SharedTypes.fs" />
+        <Compile Include="..\..\templates\platformsdk-datamanager\MyDataManager\ClientModel.fs" />
+        <Compile Include="..\..\templates\platformsdk-datamanager\MyDataManager\ClientView.fs" />
+        <Compile Include="DataManagerTemplateProcessedDataTests.fs" />
         <!-- Phase 636 — the KB version-history client surface: the GP 11
              gate asserted over REAL mounted markup (a single-version row
              must be byte-for-byte what it was) plus the drawer's MVU

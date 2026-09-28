@@ -219,6 +219,34 @@ full table — each slot's field, default, gate and built-in — is in
    the built-in does — otherwise the server-side switch persists while the client keeps the previous
    team's data.
 
+### The data-manager slot contract — a checklist for a replacement
+
+Clause 4 above states the rule; this is the checklist a replacement is held to (Phase 901). The
+`platformsdk-datamanager` template meets every point below, and its own gate (in
+`src/ToolUp.AI.Client.Tests`, run through `VerifyFable`) re-checks the template against it on every
+push — see the template's `ClientView.fs` for what "meeting it" looks like in code.
+
+1. **Declare `ClientModule.withProcessedData`.** Its extractor is a plain `'Model -> ProcessedFileEntry
+   list` function — `_.Processed` is enough when the model keeps its own list, as the template does.
+   Omitting it is silent: nothing refuses a data-manager replacement that skips this, the slot fills,
+   the shell mounts it, and every other data module reads an empty list forever after (clause 4).
+2. **Build the `ProcessedData` envelope on the SERVER, never the client.** The shared/client tier
+   carries no JSON codec by design (the `ModuleQueryCodec` precedent) — encode with
+   `ProcessedDataCodec.encode<'T>` (`ToolUp.Platform.Server`) and hand the resulting `ProcessedFileEntry`
+   to the client over your own API record, exactly as `FileUploadResponse.Processed` does for the
+   built-in. A client-fabricated envelope cannot be decoded by `DataTypeDisplay.tryDecode`, because
+   nothing on the server ever produced it the way a consumer's decode expects.
+3. **Never reset the published list to `[]` on a single ingest.** The extractor runs against whatever
+   the model currently holds, so a manager that keeps only "the last file" silently drops every entry
+   a data module elsewhere in the shell still depends on. Append; do not replace.
+4. **Use a stable `DataTypeId`** your data modules can query for with `ClientModule.withNeedsDataKeys`
+   / `withRequiredDataTypes` — the connector's own `IDataSource.Kind` is a reasonable default when a
+   deployment has exactly one source kind.
+5. **This is ADVICE, not an enforced gate on a deployment's module** (operator decision, Phase 901): a
+   slot enforces no behaviour. Nothing in the shell refuses, hides, or re-gates a data manager that
+   fills the slot without meeting the checklist above — the SDK holds its own template to it because
+   the template is the SDK's contract to keep, not a deployment's.
+
 Shell chrome — the toast centre, auth UI, loading indicator, not-authorised view, command palette,
 admin surface, offline mode, observability module and platform users — is not a slot and keeps its
 own `ClientConfig` setting.
