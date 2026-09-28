@@ -12,14 +12,14 @@ open ToolUp.Platform.Narrative
 // lived in ToolUp.Platform.Core behind `#if !FABLE_COMPILER` (Fable cannot
 // compile `System.Environment`), which shipped ~1,000 lines of server-only
 // source to every Fable consumer as dead text. It now compiles here, in the
-// tier that runs it. The `defaults` half stays in Core; F# resolves
-// `ServerConfig.X` across both modules, so `ServerConfig.fromEnv` and
+// tier that runs it. The `defaults` half stays in Core; F# resolves a name
+// under `ServerConfig` across both modules, so `ServerConfig.fromEnv` and
 // `ServerConfig.defaults` read exactly as before at every call site.
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ServerConfig =
     /// The Fable-visible half's value, named locally so the binder below
-    /// reads `defaults.X` exactly as it did when both halves shared a module.
+    /// reads each default exactly as it did when both halves shared a module.
     let private defaults = ServerConfig.defaults
 
     /// Phase 696 — every key this reader consults now resolves through the
