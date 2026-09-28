@@ -3,8 +3,11 @@
 
 module ToolUp.Platform.Build.Tests.TemplateGateTests
 
+open System
+open System.IO
 open Expecto
 open ToolUp.Platform.Build
+open ToolUp.Forge
 
 // ─── Phase 754 — the stranger's-package guard, proven in both ────────
 // ─── directions ──────────────────────────────────────────────────────
@@ -136,4 +139,152 @@ let tests =
             Expect.stringContains message "stranger" "the class, so the reader knows why this matters"
             Expect.stringContains message "PackageId" "where to look in the declared project"
         }
+
+        // ─── Phase 903 — the private-packages fix ────────────────────
+        //
+        // `VerifyTemplates` / `VerifyPackagedModuleTemplate` used to wipe
+        // the throwaway gate version's cache entries out of a GUESSED
+        // global-packages folder — `NUGET_PACKAGES` if set, else
+        // `~/.nuget/packages`. That guess is narrower than NuGet's own
+        // resolution (a `globalPackagesFolder` nuget.config setting wins
+        // over both), so a machine that sets it made the eviction step a
+        // silent no-op while restore kept resolving whatever NuGet's REAL
+        // cache already held — a stale copy could mask genuinely broken
+        // source and the gate would report green. `withScratchRoot`
+        // reproduces the retired guess as a LOCAL function (production
+        // code no longer has one to call) purely to pin the class of bug
+        // it had; every other test below exercises the actual fix.
+        testList "TemplateGatePackages" [
+
+            let withScratchRoot (body: string -> unit) =
+                let temp =
+                    Path.Combine(Path.GetTempPath(), "toolup-tgp-" + Guid.NewGuid().ToString "N")
+
+                Directory.CreateDirectory temp |> ignore
+
+                try
+                    body temp
+                finally
+                    if Directory.Exists temp then
+                        Directory.Delete(temp, true)
+
+            /// The retired two-path guess `VerifyTemplates` used to make,
+            /// reproduced here only to demonstrate what it misses — this is
+            /// NOT called from production code any more.
+            let retiredGuessedFolder (envNugetPackages: string option) (assumedProfileNuget: string) =
+                match envNugetPackages with
+                | Some dir when dir <> "" -> dir
+                | _ -> assumedProfileNuget
+
+            // ── RED (pinned): the guess misses a real, configured folder ─
+            test
+                "pin it red — a globalPackagesFolder that is neither of the two assumed paths hides a stale entry from the retired guess" {
+                withScratchRoot (fun scratch ->
+                    // The machine's REAL global-packages folder, as set by a
+                    // `globalPackagesFolder` entry in some nuget.config the
+                    // retired guess never reads — neither `NUGET_PACKAGES`
+                    // (unset here) nor the profile default.
+                    let realConfiguredFolder = Path.Combine(scratch, "elsewhere", "nuget-packages")
+
+                    let staleVersionDir =
+                        Path.Combine(realConfiguredFolder, "toolup.platform.core", "0.0.0-templategate")
+
+                    Directory.CreateDirectory staleVersionDir |> ignore
+                    File.WriteAllText(Path.Combine(staleVersionDir, "stale.nupkg"), "stale")
+
+                    let assumedProfileNuget = Path.Combine(scratch, "profile", ".nuget", "packages")
+
+                    let guessed = retiredGuessedFolder None assumedProfileNuget
+
+                    Expect.notEqual
+                        guessed
+                        realConfiguredFolder
+                        "the retired guess never considered a configured globalPackagesFolder, so it names a folder that is not the real one"
+
+                    Expect.isTrue
+                        (Directory.Exists staleVersionDir)
+                        "the stale entry in the REAL folder is untouched by the retired guess — this is the bug: restore would still resolve it")
+            }
+
+            // ── GREEN: the fix removes the guess, so it cannot repeat that miss ─
+            test "privatePackagesFolder is a pure function of the repo root — it consults no ambient config" {
+                let repoRoot = @"C:\repos\some-sdk-checkout"
+
+                let a = TemplateGatePackages.privatePackagesFolder repoRoot
+                let b = TemplateGatePackages.privatePackagesFolder repoRoot
+
+                Expect.equal a b "computing it twice for the same root must agree"
+
+                Expect.stringContains
+                    a
+                    (Path.Combine(repoRoot, "obj"))
+                    "it is scoped under the repo's own obj/, never a machine-wide folder"
+            }
+
+            test "two different repo roots (two worktrees) never resolve the same private folder" {
+                let checkoutA =
+                    TemplateGatePackages.privatePackagesFolder @"C:\repos\some-sdk-checkout-a"
+
+                let checkoutB =
+                    TemplateGatePackages.privatePackagesFolder @"C:\repos\some-sdk-checkout-b"
+
+                Expect.notEqual
+                    checkoutA
+                    checkoutB
+                    "two worktrees running the gate at once must never contend for one folder"
+            }
+
+            test "evict wipes a populated private folder and reports every entry it removed, sorted" {
+                withScratchRoot (fun scratch ->
+                    let folder = Path.Combine(scratch, "template-gate-packages")
+
+                    Directory.CreateDirectory(Path.Combine(folder, "toolup.platform.server"))
+                    |> ignore
+
+                    Directory.CreateDirectory(Path.Combine(folder, "toolup.platform.core"))
+                    |> ignore
+
+                    File.WriteAllText(Path.Combine(folder, "toolup.platform.core", "marker.txt"), "x")
+
+                    let report = TemplateGatePackages.evict folder
+
+                    Expect.equal
+                        report.Removed
+                        [ "toolup.platform.core"; "toolup.platform.server" ]
+                        "both prior entries are named, sorted for a stable report"
+
+                    Expect.isTrue (Directory.Exists folder) "the folder itself is left present"
+
+                    Expect.isEmpty
+                        (Directory.EnumerateFileSystemEntries folder |> List.ofSeq)
+                        "and empty — every entry was actually removed")
+            }
+
+            test "evict on a folder that does not exist yet creates it and reports nothing removed" {
+                withScratchRoot (fun scratch ->
+                    let folder = Path.Combine(scratch, "never-seen-before")
+
+                    let report = TemplateGatePackages.evict folder
+
+                    Expect.equal report.Removed [] "a cold run removed nothing, because there was nothing"
+                    Expect.isTrue (Directory.Exists folder) "evict leaves the folder present either way")
+            }
+
+            test "evict never touches a folder other than the one it was given" {
+                withScratchRoot (fun scratch ->
+                    // The whole point: a private folder's evict cannot reach
+                    // outside itself, unlike the retired shared-folder guess,
+                    // which read (and could evict) a machine-wide path.
+                    let untouched = Path.Combine(scratch, "untouched", "toolup.platform.core")
+                    Directory.CreateDirectory untouched |> ignore
+
+                    let ownFolder = Path.Combine(scratch, "own", "template-gate-packages")
+
+                    TemplateGatePackages.evict ownFolder |> ignore
+
+                    Expect.isTrue
+                        (Directory.Exists untouched)
+                        "evicting the private folder must never reach a sibling directory")
+            }
+        ]
     ]

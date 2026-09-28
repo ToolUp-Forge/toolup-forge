@@ -420,3 +420,40 @@ its author decides deliberately whether the new field closes a gap.
 `verify-all` job; a repository variable names the corpus repository and the job fails by name when
 it is unset. The specification's home is public, so no read token is involved — the checkout uses
 the job's default credentials, and fork PRs run the family like any other job.
+
+## The template gates use a PRIVATE packages folder, never a guessed shared one (Phase 903)
+
+`VerifyTemplates` and `VerifyPackagedModuleTemplate` both restore scratch-fed `dotnet new` scaffolds
+against a throwaway SDK version (`0.0.0-templategate`), packed fresh into a scratch feed on every
+run — see the "WHY A THROWAWAY VERSION" note beside `templateGateVersion` in `Build.fs`. A throwaway
+version only works if NuGet's own package cache cannot serve a *previous* run's extracted copy of
+it, which means the gate must evict that version's cache entries before it restores.
+
+**The rule: evict a folder the gate itself owns privately, never the machine's shared
+`globalPackagesFolder`.** Both targets used to wipe the throwaway version's entries out of a
+*guessed* shared folder — `NUGET_PACKAGES` if set, else `~/.nuget/packages`. That guess is narrower
+than NuGet's own resolution: a `globalPackagesFolder` entry in *any* `nuget.config` on NuGet's
+search path overrides both the env var and the default, so a machine that sets it points the gate's
+eviction at a folder NuGet is not actually reading from. The eviction step then no-ops silently,
+restore resolves the *previous* run's package from wherever NuGet is really caching, and the gate
+reports green having verified nothing about the tree it was told to check.
+
+**The multi-worktree reason it is a private folder, not merely a better-resolved shared one.** The
+narrower fix — ask NuGet directly (`dotnet nuget locals global-packages --list`), honouring
+`NUGET_PACKAGES` first exactly as NuGet does — closes the wrong-folder class but still points every
+run at ONE folder shared by every worktree on the machine. Two worktrees running a template gate at
+once pack and evict the same throwaway version in the same shared cache, and each run's eviction can
+race a sibling's restore — precisely the contention a several-worker campaign produces when multiple
+sessions each hold their own `wt/<phase>` checkout of this repository on one machine. `TemplateGatePackages.privatePackagesFolder`
+(`TemplateGatePackages.fs`, source-linked into `ToolUp.Platform.Build.Tests`) instead scopes the
+folder under the calling repository's own `obj/` — already the home of `template-gate-feed` /
+`packaged-module-template-feed`, and per-worktree by construction, since a worktree has its own
+`obj/` — and the gate points `NUGET_PACKAGES` at it for every child process it spawns for the
+remainder of the target. A private folder needs no resolution logic at all, because there is
+nothing ambient left to get wrong, and it structurally cannot read — or evict — a sibling worktree's
+cache. `TemplateGatePackages.evict` therefore wipes the whole private folder unconditionally rather
+than targeting individual cache entries by id and version the way the retired shared-folder logic
+did: nothing but this gate's own restores ever writes there, so a targeted eviction would only add
+ceremony. Both targets print the folder they evicted and every package id (top-level subfolder name)
+that was present before the wipe, so a reader of the gate's own output can tell a cold run from one
+that actually needed it.
