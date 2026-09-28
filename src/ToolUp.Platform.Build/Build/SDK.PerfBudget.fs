@@ -86,6 +86,29 @@ type PerfMetric =
     /// Phase 849 — the `view` construction the render hook performs for one
     /// dispatched model-changing message. Microseconds.
     | ClientViewPerDispatchUs
+    /// Phase 886 — the p95 TOTAL latency of one retrieval under concurrent
+    /// load, per round of the load harness's gate configuration (the value
+    /// is the minimum over rounds). Milliseconds.
+    | RetrievalP95Ms
+    /// Phase 886 — blob reads per retrieval under the same load. A COUNT,
+    /// not a clock: it survives a change of blob backend where the clock
+    /// does not (the Phase 702 lesson). Reads.
+    | RetrievalBlobReadsPerQuery
+    /// Phase 886 — the p95 latency of one subject-and-metric fact read
+    /// under concurrent load. Milliseconds.
+    | FactPointReadMs
+    /// Phase 886 — the p95 latency of one cross-subject population read
+    /// under concurrent load. Milliseconds.
+    | FactPopulationReadMs
+    /// Phase 886 — the p95 latency of one single-fact assert under
+    /// concurrent load. Milliseconds.
+    | FactAssertMs
+    /// Phase 886 — the p95 latency of one batch assert under concurrent
+    /// load. Milliseconds.
+    | FactBatchAssertMs
+    /// Phase 886 — blob reads per subject-and-metric fact read. A count,
+    /// for the same reason as `RetrievalBlobReadsPerQuery`. Reads.
+    | FactBlobReadsPerPointRead
 
 module PerfMetric =
 
@@ -100,6 +123,13 @@ module PerfMetric =
         | ClientBootMs -> "bootMs"
         | ClientDecodePerResponseUs -> "decodePerResponseUs"
         | ClientViewPerDispatchUs -> "viewPerDispatchUs"
+        | RetrievalP95Ms -> "retrievalP95Ms"
+        | RetrievalBlobReadsPerQuery -> "retrievalBlobReadsPerQuery"
+        | FactPointReadMs -> "factPointReadMs"
+        | FactPopulationReadMs -> "factPopulationReadMs"
+        | FactAssertMs -> "factAssertMs"
+        | FactBatchAssertMs -> "factBatchAssertMs"
+        | FactBlobReadsPerPointRead -> "factBlobReadsPerPointRead"
 
     /// The metrics the budget file's top level (the server block) budgets,
     /// in report order.
@@ -109,8 +139,20 @@ module PerfMetric =
     /// report order.
     let client = [ ClientBootMs; ClientDecodePerResponseUs; ClientViewPerDispatchUs ]
 
+    /// Phase 886 — the metrics the budget file's `load` block budgets (the
+    /// fact and retrieval paths under concurrent load), in report order.
+    let load = [
+        RetrievalP95Ms
+        RetrievalBlobReadsPerQuery
+        FactPointReadMs
+        FactPopulationReadMs
+        FactAssertMs
+        FactBatchAssertMs
+        FactBlobReadsPerPointRead
+    ]
+
     /// Every metric the gate knows, in report order.
-    let all = server @ client
+    let all = server @ client @ load
 
     let tryParse (token: string) =
         all
@@ -121,9 +163,16 @@ module PerfMetric =
         match metric with
         | ColdStartMs
         | HotPathMs
-        | ClientBootMs -> "ms"
+        | ClientBootMs
+        | RetrievalP95Ms
+        | FactPointReadMs
+        | FactPopulationReadMs
+        | FactAssertMs
+        | FactBatchAssertMs -> "ms"
         | ClientDecodePerResponseUs
         | ClientViewPerDispatchUs -> "us"
+        | RetrievalBlobReadsPerQuery
+        | FactBlobReadsPerPointRead -> "reads"
 
     /// What a regression in this metric would mean, rendered into the
     /// failure so a CI log is actionable without opening this file.
@@ -134,6 +183,13 @@ module PerfMetric =
         | ClientBootMs -> "import of the transpiled minimal client to its first render"
         | ClientDecodePerResponseUs -> "one remoting response through the client proxy's reflective decode"
         | ClientViewPerDispatchUs -> "the view the render hook builds for one dispatched message"
+        | RetrievalP95Ms -> "the p95 total latency of one retrieval under concurrent load"
+        | RetrievalBlobReadsPerQuery -> "the blob reads one retrieval costs under concurrent load"
+        | FactPointReadMs -> "the p95 latency of one subject-and-metric fact read under concurrent load"
+        | FactPopulationReadMs -> "the p95 latency of one population read under concurrent load"
+        | FactAssertMs -> "the p95 latency of one single-fact assert under concurrent load"
+        | FactBatchAssertMs -> "the p95 latency of one batch assert under concurrent load"
+        | FactBlobReadsPerPointRead -> "the blob reads one subject-and-metric fact read costs"
 
 /// Phase 192 — one statistic the measuring half produced, with the
 /// evidence that it measured a real thing.
@@ -535,6 +591,31 @@ module PerfBudgetGate =
             readSchema label BudgetSchemaToken root errors
             Some(readBlock label PerfMetric.server root errors))
 
+    /// A block nested under `property` in the budget document, read by
+    /// `readBlock` and restricted to `allowed`. `gate` names the gate in
+    /// the refusal a document without the block gets.
+    let private parseNestedBlock
+        (property: string)
+        (gate: string)
+        (allowed: PerfMetric list)
+        (label: string)
+        (json: string)
+        : Result<PerfBudget, string list> =
+        parseDocument label json (fun root errors ->
+            readSchema label BudgetSchemaToken root errors
+            let blockLabel = $"{label} ({property})"
+
+            match tryProperty root property with
+            | Some block when block.ValueKind = JsonValueKind.Object -> Some(readBlock blockLabel allowed block errors)
+            | Some block ->
+                errors.Add $"'{label}' — '{property}' must be a JSON object, but is {block.ValueKind}."
+                None
+            | None ->
+                errors.Add
+                    $"'{label}' declares no '{property}' block — the {gate} gate has no ceiling to check against."
+
+                None)
+
     /// The property the client block sits under in the budget file.
     [<Literal>]
     let ClientBlockProperty = "client"
@@ -546,21 +627,19 @@ module PerfBudgetGate =
     /// client block is REFUSED rather than read as a budget asserting
     /// nothing about the client.
     let parseClientBudget (label: string) (json: string) : Result<PerfBudget, string list> =
-        parseDocument label json (fun root errors ->
-            readSchema label BudgetSchemaToken root errors
-            let blockLabel = $"{label} ({ClientBlockProperty})"
+        parseNestedBlock ClientBlockProperty "client" PerfMetric.client label json
 
-            match tryProperty root ClientBlockProperty with
-            | Some block when block.ValueKind = JsonValueKind.Object ->
-                Some(readBlock blockLabel PerfMetric.client block errors)
-            | Some block ->
-                errors.Add $"'{label}' — '{ClientBlockProperty}' must be a JSON object, but is {block.ValueKind}."
-                None
-            | None ->
-                errors.Add
-                    $"'{label}' declares no '{ClientBlockProperty}' block — the client gate has no ceiling to check against."
+    /// The property the load block sits under in the budget file.
+    [<Literal>]
+    let LoadBlockProperty = "load"
 
-                None)
+    /// Phase 886 — parse the same budget document's `load` block: the fact
+    /// and retrieval paths under concurrent load, as the load harness in
+    /// `src/ToolUp.RAG.Benchmarks` measures them. Same shape as the other
+    /// two blocks, restricted to `PerfMetric.load`, and REFUSED when absent
+    /// for the same reason the client block is.
+    let parseLoadBudget (label: string) (json: string) : Result<PerfBudget, string list> =
+        parseNestedBlock LoadBlockProperty "load" PerfMetric.load label json
 
     /// Parse a measurement run. Same all-defects-at-once contract as
     /// the budget parser.
@@ -770,6 +849,11 @@ module PerfBudgetGate =
     let verifyClient (options: PerfBudgetGateOptions) : Result<PerfBudget * PerfFinding list, string list> =
         verifyWith parseClientBudget options
 
+    /// Phase 886 — the same load-and-check against the budget file's `load`
+    /// block and a load-harness measurement run.
+    let verifyLoad (options: PerfBudgetGateOptions) : Result<PerfBudget * PerfFinding list, string list> =
+        verifyWith parseLoadBudget options
+
     /// FAKE's `Target` module cannot be reached fully-qualified from
     /// here — the same binding collision the Core-Web-Vitals target
     /// documents — so the FAKE surface is reached through a nested
@@ -825,7 +909,9 @@ module PerfBudgetGate =
     /// ```
     ///
     /// The client target reads the SAME budget file — its `client` block —
-    /// so both halves' ceilings live in one reviewable document.
+    /// so both halves' ceilings live in one reviewable document. Phase 886
+    /// added a third, `VerifyLoadPerfBudget`, deciding the load harness's
+    /// run against the same file's `load` block.
     ///
     /// Options are resolved INSIDE the target body, not at
     /// registration: a repo registering this target must stay runnable
@@ -833,3 +919,4 @@ module PerfBudgetGate =
     let registerTarget () : unit =
         decideTarget "VerifyPerfBudget" verify
         decideTarget "VerifyClientPerfBudget" verifyClient
+        decideTarget "VerifyLoadPerfBudget" verifyLoad

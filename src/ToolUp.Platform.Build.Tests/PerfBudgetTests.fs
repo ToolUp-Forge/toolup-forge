@@ -491,5 +491,167 @@ let private clientTests =
         }
     ]
 
+// ─── Phase 886 — the load block ────────────────────────────────────────
+//
+// The fact and retrieval paths under concurrent load, as the load harness
+// in src/ToolUp.RAG.Benchmarks measures them. Same file, same shape, same
+// laws — and the same disjointness: a load metric is unknown in the other
+// two blocks and theirs are unknown here. The two COUNT metrics (blob
+// reads) are held to the same laws as the clocks: a count ceiling too far
+// above its baseline defends nothing either.
+
+let private loadBudgetOrFail label json =
+    match PerfBudgetGate.parseLoadBudget label json with
+    | Ok b -> b
+    | Error errors -> failtestf "expected the load block of '%s' to parse, got: %s" label (String.concat "; " errors)
+
+let private loadBudgetErrors label json =
+    match PerfBudgetGate.parseLoadBudget label json with
+    | Ok _ -> failtestf "expected the load block of '%s' to be REFUSED, but it parsed" label
+    | Error errors -> errors
+
+let private loadBlock =
+    """ "load": { "subject": "load harness", "statistic": "min", "ceilings": { "retrievalP95Ms": 100, "retrievalBlobReadsPerQuery": 20 }, "minimumSamples": { "retrievalP95Ms": 5, "retrievalBlobReadsPerQuery": 5 }, "baselines": { "retrievalP95Ms": 10, "retrievalBlobReadsPerQuery": 2 } } """
+
+let private loadRun (p95: float) (reads: float) =
+    let sample metric (value: float) =
+        let v = value.ToString(Globalization.CultureInfo.InvariantCulture)
+
+        $"""{{ "metric": "{metric}", "statistic": "min", "value": {v}, "samples": 5, "observed": true, "evidence": "fixture" }}"""
+
+    let samples =
+        String.Join(", ", [ sample "retrievalP95Ms" p95; sample "retrievalBlobReadsPerQuery" reads ])
+
+    $"""{{ "schema": "toolup.perf-measurements/v1", "appDirectory": "bench", "samples": [ {samples} ] }}"""
+
+let private shippedLoadNotes () =
+    use document = Text.Json.JsonDocument.Parse(shippedBudgetJson ())
+
+    match document.RootElement.TryGetProperty "load" with
+    | true, load ->
+        match load.TryGetProperty "notes" with
+        | true, notes when notes.ValueKind = Text.Json.JsonValueKind.Object -> [
+            for p in notes.EnumerateObject() do
+                if p.Value.ValueKind = Text.Json.JsonValueKind.String then
+                    yield p.Name, p.Value.GetString()
+          ]
+        | _ -> []
+    | _ -> []
+
+let private loadTests =
+    testList "load block" [
+        test "a budget with no load block is refused by the load parser, not read as asserting nothing" {
+            let errors = loadBudgetErrors "no-load.json" (budgetJson defaultCeilings)
+            Expect.isTrue (mentions "declares no 'load' block" errors) $"got: %A{errors}"
+        }
+
+        test "the server and client parsers ignore the load block" {
+            let budget =
+                budgetOrFail "all.json" (budgetJson (defaultCeilings + "," + clientBlock + "," + loadBlock))
+
+            Expect.equal (budget.Ceilings |> List.map fst) [ ColdStartMs; HotPathMs ] "the server block is unchanged"
+
+            let client =
+                clientBudgetOrFail "all.json" (budgetJson (defaultCeilings + "," + clientBlock + "," + loadBlock))
+
+            Expect.equal
+                (client.Ceilings |> List.map fst)
+                [ ClientBootMs; ClientDecodePerResponseUs; ClientViewPerDispatchUs ]
+                "the client block is unchanged"
+        }
+
+        test
+            "a client metric placed in the load block is an unknown metric there, and a load metric at the top level too" {
+            let misplaced =
+                """ "load": { "subject": "load harness", "statistic": "min", "ceilings": { "bootMs": 3000 }, "minimumSamples": { "bootMs": 5 } } """
+
+            let errors =
+                loadBudgetErrors "misplaced.json" (budgetJson (defaultCeilings + "," + misplaced))
+
+            Expect.isTrue (mentions "unknown metric 'bootMs'" errors) $"got: %A{errors}"
+
+            let topLevel =
+                budgetErrors
+                    "misplaced.json"
+                    (budgetJson
+                        """ "ceilings": { "retrievalP95Ms": 3000 }, "minimumSamples": { "retrievalP95Ms": 5 } """)
+
+            Expect.isTrue (mentions "unknown metric 'retrievalP95Ms'" topLevel) $"got: %A{topLevel}"
+        }
+
+        test "a within-budget load run passes, and a count metric renders in reads" {
+            let budget =
+                loadBudgetOrFail "load.json" (budgetJson (defaultCeilings + "," + loadBlock))
+
+            let findings =
+                PerfBudgetGate.check budget (runOrFail "load-run.json" (loadRun 12.5 2.0))
+
+            Expect.isEmpty (PerfBudgetGate.breaches findings) "every load measurement is within its ceiling"
+            let text = PerfBudgetGate.report budget findings
+            Expect.stringContains text "retrievalBlobReadsPerQuery 2 reads / 20 reads" "a count renders in reads"
+            Expect.stringContains text "retrievalP95Ms 12.5 ms / 100 ms" "a clock renders in ms"
+        }
+
+        test "an order-of-magnitude regression on the retrieval path breaches, naming both numbers" {
+            let budget =
+                loadBudgetOrFail "load.json" (budgetJson (defaultCeilings + "," + loadBlock))
+
+            let findings =
+                PerfBudgetGate.check budget (runOrFail "load-run.json" (loadRun 125.0 2.0))
+
+            Expect.equal
+                (PerfBudgetGate.breaches findings)
+                [ CeilingBreached(RetrievalP95Ms, 125.0, 100.0) ]
+                "exactly the regressed metric breaches"
+        }
+
+        test "a read-count regression breaches even when the clock does not move" {
+            let budget =
+                loadBudgetOrFail "load.json" (budgetJson (defaultCeilings + "," + loadBlock))
+
+            let findings =
+                PerfBudgetGate.check budget (runOrFail "load-run.json" (loadRun 12.5 200.0))
+
+            Expect.equal
+                (PerfBudgetGate.breaches findings)
+                [ CeilingBreached(RetrievalBlobReadsPerQuery, 200.0, 20.0) ]
+                "the count is gated on its own"
+        }
+
+        test "perf-budgets.json carries a load block covering every load metric" {
+            let budget = loadBudgetOrFail "shipped-budget.json" (shippedBudgetJson ())
+
+            for metric in PerfMetric.load do
+                Expect.isTrue
+                    (budget.Ceilings |> List.exists (fun (m, _) -> m = metric))
+                    $"the shipped load block must place a ceiling on '{PerfMetric.key metric}' — the harness measures it, and a measured number nothing budgets is discarded"
+        }
+
+        test "no shipped load ceiling is more than 20x its recorded baseline" {
+            let budget = loadBudgetOrFail "shipped-budget.json" (shippedBudgetJson ())
+
+            for metric, ceiling in budget.Ceilings do
+                match budget.Baselines |> List.tryFind (fun (m, _) -> m = metric) with
+                | None -> failtestf "'%s' has a load ceiling but no baseline" (PerfMetric.key metric)
+                | Some(_, baseline) ->
+                    Expect.isLessThanOrEqual
+                        ceiling
+                        (baseline * 20.0)
+                        $"'load.{PerfMetric.key metric}' allows {ceiling} {PerfMetric.unit metric} against a {baseline} {PerfMetric.unit metric} baseline — re-measure and lower it, or justify the new baseline in the load block's notes."
+        }
+
+        test "every shipped load ceiling carries a note saying why it is where it is" {
+            let budget = loadBudgetOrFail "shipped-budget.json" (shippedBudgetJson ())
+            let notes = shippedLoadNotes ()
+
+            for metric, _ in budget.Ceilings do
+                Expect.isTrue
+                    (notes
+                     |> List.exists (fun (name, text) ->
+                         name = PerfMetric.key metric && not (String.IsNullOrWhiteSpace text)))
+                    $"'load.{PerfMetric.key metric}' has no entry in load.notes — a ceiling nobody can explain is one nobody can safely raise"
+        }
+    ]
+
 let tests =
-    testList "PerfBudget" [ parserTests; checkTests; shippedBudgetTests; clientTests ]
+    testList "PerfBudget" [ parserTests; checkTests; shippedBudgetTests; clientTests; loadTests ]
