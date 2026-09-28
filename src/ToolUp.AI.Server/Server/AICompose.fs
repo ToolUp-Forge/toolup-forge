@@ -341,6 +341,8 @@ let composeAI (app: AIServerApp) : ServerApp =
             // SubmitMessage + /api/ai/events (below) stay mounted unchanged.
             makeApi (fun ctx -> aiAssistantApi aiConfig moduleAIContextMap (resolveManager ctx) ctx |> snd)
             makeApi (aiSettingsApi aiProviderFactory providerProfile)
+            // Phase 859 — the active team's conversation visibility level.
+            makeApi TeamConversationPolicyStore.teamConversationVisibilityApi
             // Phase 70 — Platform Admin AI keys API. Every method
             // is gated server-side on canModifyPlatformConfig; the
             // client-side module is hidden from non-admin sidebars by
@@ -1229,3 +1231,27 @@ let withConversationRetention (policy: ConversationRetentionPolicy) (scopes: str
 let withConversationTitling (policy: ConversationTitlingPolicy) (app: ServerApp) : ServerApp =
     app
     |> withServiceConfig (fun s -> s.AddSingleton<ConversationTitlingPolicy>(policy))
+
+// ─── Phase 859 — team conversation visibility ────────────────────
+
+/// Declare who, besides its author, can see a conversation in a team's
+/// shared storage (Phase 859.D): `defaultLevel` is the level a team starts
+/// with, `allowed` the levels a team owner may choose from. The level is
+/// stored per team, in the team's own record, and read per request in the
+/// team's scope; `TeamConversationVisibilityApi` is how the owner sets it.
+///
+/// **Not composing this is the default**: every team starts at
+/// `TeamVisible` and may choose any level, so a team that has set nothing
+/// behaves exactly as before (GP 11). The declaration is validated at
+/// compose — an empty allowed set, or a default outside it, fails startup.
+let withTeamConversationVisibility
+    (defaultLevel: TeamConversationVisibility)
+    (allowed: TeamConversationVisibility list)
+    (app: ServerApp)
+    : ServerApp =
+    match TeamConversationPolicyStore.TeamConversationVisibilitySettings.create defaultLevel allowed with
+    | Ok settings ->
+        app
+        |> withServiceConfig (fun s ->
+            s.AddSingleton<TeamConversationPolicyStore.TeamConversationVisibilitySettings>(settings))
+    | Error message -> failwith message
