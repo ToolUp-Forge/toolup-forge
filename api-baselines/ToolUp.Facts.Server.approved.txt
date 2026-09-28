@@ -98,9 +98,13 @@ ToolUp.Facts.BlobFactStore (class)
 ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
 ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
 ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Facts.FactSurfaceOptions)
+ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Facts.FactSurfaceOptions, ToolUp.Facts.FactIndexOptions)
+ToolUp.Facts.BlobFactStore.IndexConsistencyCheck(System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SecondaryIndex+IndexConsistencyEntry]]
+ToolUp.Facts.BlobFactStore.RebuildIndex(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
 ToolUp.Facts.BlobFactStoreModule (class)
 ToolUp.Facts.BlobFactStoreModule.create(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore) : ToolUp.Facts.IFactStore
 ToolUp.Facts.BlobFactStoreModule.createWithClock(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]) : ToolUp.Facts.IFactStore
+ToolUp.Facts.BlobFactStoreModule.createWithIndex(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Facts.FactSurfaceOptions, ToolUp.Facts.FactIndexOptions) : ToolUp.Facts.IFactStore
 ToolUp.Facts.BlobFactStoreModule.createWithRegistry(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry]) : ToolUp.Facts.IFactStore
 ToolUp.Facts.BlobFactStoreModule.createWithRegistryAndClock(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]) : ToolUp.Facts.IFactStore
 ToolUp.Facts.BlobFactStoreModule.createWithSurface(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Facts.FactSurfaceOptions) : ToolUp.Facts.IFactStore
@@ -579,6 +583,16 @@ ToolUp.Facts.FactImportRefusal+Tags.ImportUnverifiable : System.Int32 (literal)
 ToolUp.Facts.FactImportRefusal+Tags.ImportWithheldByPeer : System.Int32 (literal)
 ToolUp.Facts.FactImportRefusalModule (class)
 ToolUp.Facts.FactImportRefusalModule.describe(ToolUp.Facts.FactImportRefusal) : System.String
+ToolUp.Facts.FactIndex (class)
+ToolUp.Facts.FactIndex.Prefix : System.String (literal)
+ToolUp.Facts.FactIndexOptions (class)
+ToolUp.Facts.FactIndexOptions..ctor(System.Boolean, System.Int32)
+ToolUp.Facts.FactIndexOptions.Enabled : System.Boolean { get }
+ToolUp.Facts.FactIndexOptions.MinimumFacts : System.Int32 { get }
+ToolUp.Facts.FactIndexOptionsModule (class)
+ToolUp.Facts.FactIndexOptionsModule.always : ToolUp.Facts.FactIndexOptions { get }
+ToolUp.Facts.FactIndexOptionsModule.defaults : ToolUp.Facts.FactIndexOptions { get }
+ToolUp.Facts.FactIndexOptionsModule.disabled : ToolUp.Facts.FactIndexOptions { get }
 ToolUp.Facts.FactInvalidation (class)
 ToolUp.Facts.FactInvalidation.deriveFreshness(ToolUp.Platform.Grounding.StalenessPolicy, ToolUp.Facts.Fact, System.Boolean, System.Boolean, System.DateTime) : ToolUp.Facts.FactFreshness
 ToolUp.Facts.FactInvalidation.invalidatedHeads(ToolUp.Facts.IFactStore, System.String, Microsoft.FSharp.Collections.FSharpSet`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]]
