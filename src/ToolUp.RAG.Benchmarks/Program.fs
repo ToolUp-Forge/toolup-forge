@@ -155,6 +155,9 @@ let private printUsage () =
 [<EntryPoint>]
 let main argv =
     match parseArgs argv with
+    // Phase 886 — the concurrent load harness has its own verb and parser
+    // (`load gate|retrieval|facts`); everything else is the BEIR runner.
+    | _ when argv.Length > 0 && argv[0] = "load" -> FactStoreLoadBenchmark.LoadCommand.run argv[1..]
     | Error msg ->
         eprintfn "Error: %s" msg
         eprintfn ""

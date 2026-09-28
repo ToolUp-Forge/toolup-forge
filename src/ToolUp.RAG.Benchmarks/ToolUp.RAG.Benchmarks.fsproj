@@ -19,6 +19,12 @@
          content + embedder) and drives HnswVectorStore directly with
          the pre-computed mixed-dim vectors. -->
     <Compile Include="Runner\MixedDimBenchmark.fs" />
+    <!-- Phase 886 — the concurrent load harness: N simultaneous callers
+         against one composed retrieval pipeline and against the fact
+         store, with blob read counts beside every clock. Its gate
+         configuration feeds the `load` block of perf-budgets.json. -->
+    <Compile Include="Runner\ConcurrentLoadBenchmark.fs" />
+    <Compile Include="Runner\FactStoreLoadBenchmark.fs" />
     <Compile Include="Runner\ReportWriter.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
@@ -37,6 +43,13 @@
     <ProjectReference Include="..\EmbeddingProviders\Local\LocalEmbeddingProvider.fsproj" />
     <ProjectReference Include="..\EmbeddingProviders\OpenAI\OpenAIEmbeddingProvider.fsproj" />
     <ProjectReference Include="..\VectorStores\Hnsw\HnswVectorStore.fsproj" />
+    <!-- Phase 886 — the load harness's other arms: the pgvector store, the
+         object-storage arm (Azure Blob against the local emulator) and the
+         fact store. -->
+    <ProjectReference Include="..\VectorStores\Pgvector\PgvectorVectorStore.fsproj" />
+    <ProjectReference Include="..\Storage\AzureBlobStorage\AzureBlobStorage.fsproj" />
+    <ProjectReference Include="..\ToolUp.Facts.Core\ToolUp.Facts.Core.fsproj" />
+    <ProjectReference Include="..\ToolUp.Facts.Server\ToolUp.Facts.Server.fsproj" />
   </ItemGroup>
   <!-- Phase 14k WS5 Item 3 — mixed-dim fixture JSON, linked from the
        co-located RAG.Evaluation/fixtures/ directory into the benchmark
