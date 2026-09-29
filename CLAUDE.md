@@ -458,7 +458,7 @@ Written down here so the next reader does not have to re-derive it from `.github
 | `cloud-parity` | the `ToolUp.Cloud.Parity.Tests` pack with the Azurite emulator leg armed | yes |
 | **`templates`** | the **`dotnet new` scaffolds under `templates/`** compile, via `VerifyTemplates`; and the packaged-module template scaffolds, builds, passes both conformance layers and packs, via `VerifyPackagedModuleTemplate` | **yes** |
 | **`browser-smoke`** | eight real-browser scenarios via `VerifyBrowserSmoke` — and, as the compile that gets them there, **the only CI transpilation of `ToolUp.Offline.Client`** | **yes** |
-| `perf-budget` | the minimal shape's cold start + hot path against the committed `perf-budgets.json`, via `dev-scripts/perf-budget-gate.ps1` | runs; **not yet a required check** |
+| `perf-budget` | every block of the committed `perf-budgets.json`, via `dev-scripts/perf-budget-gate.ps1 -TeethCheck`: the minimal shape's cold start + hot path; the **client** budgets (Phase 849) — boot, decode per response and view per dispatch under Node, plus the **production bundle sizes** of the minimal client sample and the SDK shell (Phase 909); and the fact and retrieval paths under concurrent **load** (Phase 886) | runs; **not yet a required check** |
 
 Everything marked "yes" runs on every push to `main` and every PR against it. `dco` is PR-only because direct-to-main is this repo's normal integration path, so signed-off discipline there relies on the local commit template. `perf-budget` likewise runs on every push and PR but is not in the branch-protection rule yet — the state the seven test gates were in before 2026-09-12; see [`CONTRIBUTING.md`](CONTRIBUTING.md#required-checks-on-main-maintainer-setup).
 
