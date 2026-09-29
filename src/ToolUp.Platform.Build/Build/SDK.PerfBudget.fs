@@ -66,7 +66,8 @@ open System.Text.Json
 /// Phase 192 — the wallclock quantities a perf budget places a ceiling
 /// on. The two server metrics are milliseconds; Phase 849 added the three
 /// CLIENT metrics, measured under Node by the Fable-tier ClientBench
-/// harness, whose unit each case names (`PerfMetric.unit`).
+/// harness, whose unit each case names (`PerfMetric.unit`); Phase 909 added
+/// the two client BUNDLE sizes, which are bytes rather than a clock.
 type PerfMetric =
     /// Process start to the host's ready line: what a serverless cold
     /// invocation pays before it can serve anything.
@@ -109,6 +110,18 @@ type PerfMetric =
     /// Phase 886 — blob reads per subject-and-metric fact read. A count,
     /// for the same reason as `RetrievalBlobReadsPerQuery`. Reads.
     | FactBlobReadsPerPointRead
+    /// Phase 909 — the JavaScript a production build of the minimal client
+    /// sample (`samples/MinimalClient`, its `index.html` entry) ships:
+    /// every emitted `.js` file's bytes, minified and uncompressed. A SIZE,
+    /// not a clock: deterministic for one source tree and one lockfile.
+    /// Kibibytes.
+    | ClientMinimalBundleKiB
+    /// Phase 909 — the same for the SDK shell's module graph (`SDK.Client`
+    /// as the entry, every export kept): what the platform's client tier,
+    /// its generated proxies included, adds to a consumer bundle.
+    /// Kibibytes. (The two bundle cases sit last so no earlier case's tag
+    /// moves.)
+    | ClientShellBundleKiB
 
 module PerfMetric =
 
@@ -123,6 +136,8 @@ module PerfMetric =
         | ClientBootMs -> "bootMs"
         | ClientDecodePerResponseUs -> "decodePerResponseUs"
         | ClientViewPerDispatchUs -> "viewPerDispatchUs"
+        | ClientMinimalBundleKiB -> "minimalBundleKiB"
+        | ClientShellBundleKiB -> "shellBundleKiB"
         | RetrievalP95Ms -> "retrievalP95Ms"
         | RetrievalBlobReadsPerQuery -> "retrievalBlobReadsPerQuery"
         | FactPointReadMs -> "factPointReadMs"
@@ -137,7 +152,13 @@ module PerfMetric =
 
     /// Phase 849 — the metrics the budget file's `client` block budgets, in
     /// report order.
-    let client = [ ClientBootMs; ClientDecodePerResponseUs; ClientViewPerDispatchUs ]
+    let client = [
+        ClientBootMs
+        ClientDecodePerResponseUs
+        ClientViewPerDispatchUs
+        ClientMinimalBundleKiB
+        ClientShellBundleKiB
+    ]
 
     /// Phase 886 — the metrics the budget file's `load` block budgets (the
     /// fact and retrieval paths under concurrent load), in report order.
@@ -173,6 +194,8 @@ module PerfMetric =
         | ClientViewPerDispatchUs -> "us"
         | RetrievalBlobReadsPerQuery
         | FactBlobReadsPerPointRead -> "reads"
+        | ClientMinimalBundleKiB
+        | ClientShellBundleKiB -> "KiB"
 
     /// What a regression in this metric would mean, rendered into the
     /// failure so a CI log is actionable without opening this file.
@@ -183,6 +206,8 @@ module PerfMetric =
         | ClientBootMs -> "import of the transpiled minimal client to its first render"
         | ClientDecodePerResponseUs -> "one remoting response through the client proxy's reflective decode"
         | ClientViewPerDispatchUs -> "the view the render hook builds for one dispatched message"
+        | ClientMinimalBundleKiB -> "the JavaScript a production build of the minimal client sample ships"
+        | ClientShellBundleKiB -> "the JavaScript a production build of the SDK shell's module graph ships"
         | RetrievalP95Ms -> "the p95 total latency of one retrieval under concurrent load"
         | RetrievalBlobReadsPerQuery -> "the blob reads one retrieval costs under concurrent load"
         | FactPointReadMs -> "the p95 latency of one subject-and-metric fact read under concurrent load"
