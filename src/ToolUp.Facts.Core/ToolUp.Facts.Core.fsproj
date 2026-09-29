@@ -19,6 +19,9 @@
         <!-- Phase 889 — the delegate fact: a population held as one record
              pointing at a declared fact table. -->
         <Compile Include="Shared\DelegateFactTypes.fs" />
+        <!-- Phase 897 — team-to-team fact publication: the grant, the two
+             consents, the target's declaration and the refusals. -->
+        <Compile Include="Shared\PublicationTypes.fs" />
     </ItemGroup>
     <!-- FSharp.Core is implicit via the .NET SDK. -->
 </Project>
