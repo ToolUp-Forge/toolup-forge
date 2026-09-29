@@ -176,7 +176,7 @@ let offlineTests =
 
             Expect.equal (BlobFactStoreScale.verdict 3 10 20 []) ConfigValidation.ValidationResult.Ok "no scopes"
 
-        testCase "the scale verdict warns first, then refuses, naming the largest scope and the companion"
+        testCase "the scale verdict warns, then warns harder, naming the largest scope and the companion"
         <| fun _ ->
             match BlobFactStoreScale.verdict 2 10 20 [ "small", 3; "big", 15 ] with
             | ConfigValidation.ValidationResult.Warning message ->
@@ -184,11 +184,20 @@ let offlineTests =
                 Expect.stringContains message BlobFactStoreScale.Remedy "the remedy is named"
             | other -> failtestf "expected a warning, got %A" other
 
+            // Warn-only in this release (operator decision, 2026-09-29):
+            // past the upper threshold the guard still advises the move and
+            // never refuses startup.
             match BlobFactStoreScale.verdict 2 10 20 [ "small", 3; "big", 21 ] with
-            | ConfigValidation.ValidationResult.Error message ->
+            | ConfigValidation.ValidationResult.Warning message ->
                 Expect.stringContains message "'big'" "the largest scope is named"
                 Expect.stringContains message BlobFactStoreScale.Remedy "the remedy is named"
-            | other -> failtestf "expected a refusal, got %A" other
+                Expect.stringContains message "20-fact upper threshold" "the upper threshold is named"
+                Expect.stringContains message "does not refuse startup" "and says it does not refuse"
+            | other -> failtestf "expected a warning, never a refusal, got %A" other
+
+            match BlobFactStoreScale.verdict 2 10 20 [ "big", 2_000_000 ] with
+            | ConfigValidation.ValidationResult.Error _ -> failtest "the guard never refuses startup in this release"
+            | _ -> ()
 
         testCaseAsync "the guard counts the blob census, and stands down for a replacement store"
         <| async {
@@ -199,12 +208,13 @@ let offlineTests =
 
             let validate (v: ConfigValidation.IConfigValidator) = v.Validate()
 
-            let! refused = validate (BlobFactStoreScaleValidator(2, storage, scopes, true, 5, 10))
+            let! aboveUpper = validate (BlobFactStoreScaleValidator(2, storage, scopes, true, 5, 10))
 
-            match refused with
-            | ConfigValidation.ValidationResult.Error message ->
+            match aboveUpper with
+            | ConfigValidation.ValidationResult.Warning message ->
                 Expect.stringContains message "holds 12 facts" "the census count is reported"
-            | other -> failtestf "expected a refusal, got %A" other
+                Expect.stringContains message "upper threshold" "past the upper threshold, the stronger warning"
+            | other -> failtestf "expected a warning (warn-only in this release), got %A" other
 
             let! warned = validate (BlobFactStoreScaleValidator(2, storage, scopes, true, 5, 20))
 
