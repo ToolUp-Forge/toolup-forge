@@ -35,7 +35,10 @@
          TypeShape directly — `open TypeShape`, `shapeof<_>`, `Shape.X`
          patterns — and needs visibility into Core's internals. Mirrors
          the original ToolUp.Remoting.MsgPack -> ToolUp.Remoting.Server
-         InternalsVisibleTo from the pre-fold layout. -->
+         InternalsVisibleTo from the pre-fold layout.
+         Phase 902 — TypeShape now lives in Platform.Server itself; the
+         friendship stays for the internal scope conversions Server still
+         reads (e.g. `ofCarried`, `ofStorageScope`). -->
     <ItemGroup>
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
             <_Parameter1>ToolUp.Platform.Server</_Parameter1>
@@ -718,9 +721,12 @@
              remoting client (Client/Remoting/Remoting.fs); lives in Core
              so both tiers compile against the same source rather than
              duplicating the converters. Compile order matches the
-             original ToolUp.Remoting.MsgPack package order. -->
-        <Compile Include="Shared\Remoting\MsgPack\TypeShape.fs" />
-        <Compile Include="Shared\Remoting\MsgPack\TypeShapeUtils.fs" />
+             original ToolUp.Remoting.MsgPack package order.
+             Phase 902 — the TypeShape reflection engine and the .NET writer
+             it backs (TypeShape.fs, TypeShapeUtils.fs, the .NET half of
+             Write.fs) and the registries' verify arms moved to
+             Platform.Server, namespaces preserved. What stays compiles
+             under Fable. -->
         <Compile Include="Shared\Remoting\MsgPack\Format.fs" />
         <!-- Phase 785 — the closed value model the one-pass reader
              produces. After Format.fs (it names no format constants but

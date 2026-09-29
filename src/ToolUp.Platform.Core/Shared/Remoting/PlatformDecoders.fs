@@ -3544,340 +3544,344 @@ module PlatformDecoders =
         RemotingDecoders.register<UsageAggregateRow list> (Decode.list usageAggregateRow)
         RemotingDecoders.register<byte[]> Decode.asBytes
 
-#if !FABLE_COMPILER
     /// Phase 801 — every decoder above beside the reflection reader,
-    /// over `draws` draws of its own type from `seed`. One outcome per
-    /// registration, in registration order; a refusal names the type
-    /// and the first diverging draw.
-    let verifyAll (draws: int) (seed: int) : Result<DecoderVerification, DecoderRefusal> list = [
-        RemotingDecoders.verify<ColumnMappingTypes.DateOrder> draws seed dateOrder
-        RemotingDecoders.verify<ColumnMappingTypes.CellTransform> draws seed cellTransform
-        RemotingDecoders.verify<ColumnMappingTypes.ColumnExpr> draws seed columnExpr
-        RemotingDecoders.verify<ColumnMappingTypes.DerivedColumn> draws seed derivedColumn
-        RemotingDecoders.verify<ColumnMappingTypes.Conversion> draws seed conversion
-        RemotingDecoders.verify<ColumnMappingTypes.ConversionRecord> draws seed conversionRecord
-        RemotingDecoders.verify<ColumnMappingTypes.DryRunCellIssue> draws seed dryRunCellIssue
-        RemotingDecoders.verify<ColumnMappingTypes.DryRunRowIssue> draws seed dryRunRowIssue
-        RemotingDecoders.verify<ColumnMappingTypes.DryRunReport> draws seed dryRunReport
-        RemotingDecoders.verify<DataManagementTypes.UploadedFileInfo> draws seed uploadedFileInfo
-        RemotingDecoders.verify<ProcessedDataTypes.ProcessedData> draws seed processedData
-        RemotingDecoders.verify<ProcessedDataTypes.ProcessedFileEntry> draws seed processedFileEntry
-        RemotingDecoders.verify<ProcessedDataTypes.FileUploadResponse> draws seed fileUploadResponse
-        RemotingDecoders.verify<DataManagementTypes.FileIngestionStatus> draws seed fileIngestionStatus
-        RemotingDecoders.verify<ProcessedDataTypes.FileListSnapshot> draws seed fileListSnapshot
-        RemotingDecoders.verify<DataManagementTypes.DataFileUpload> draws seed dataFileUpload
-        RemotingDecoders.verify<ProcessedDataTypes.SessionStoreInfo> draws seed sessionStoreInfo
-        RemotingDecoders.verify<FlagScope> draws seed flagScope
-        RemotingDecoders.verify<ModuleVisibilityResolution> draws seed moduleVisibilityResolution
-        RemotingDecoders.verify<AccessibleModulesResponse> draws seed accessibleModulesResponse
-        RemotingDecoders.verify<DataManagementTypes.ColumnType> draws seed columnType
-        RemotingDecoders.verify<DataManagementTypes.DataTypeColumn> draws seed dataTypeColumn
-        RemotingDecoders.verify<DataManagementTypes.DataTypeSchema> draws seed dataTypeSchema
-        RemotingDecoders.verify<DataManagementTypes.DataTypeInfo> draws seed dataTypeInfo
-        RemotingDecoders.verify<DataManagementTypes.DataTypeCatalogEntry> draws seed dataTypeCatalogEntry
-        RemotingDecoders.verify<DataManagementTypes.DataCatalogResponse> draws seed dataCatalogResponse
-        RemotingDecoders.verify<DataSubjectRequestKind> draws seed dataSubjectRequestKind
-        RemotingDecoders.verify<ErasurePolicy> draws seed erasurePolicy
-        RemotingDecoders.verify<DataSubjectRequest> draws seed dataSubjectRequest
-        RemotingDecoders.verify<ErasureSummary> draws seed erasureSummary
-        RemotingDecoders.verify<DataSubjectRequestApi.ErasurePreview> draws seed erasurePreview
-        RemotingDecoders.verify<ErasureError> draws seed erasureError
-        RemotingDecoders.verify<DataSubjectRequestApi.ErasureRunSummary> draws seed erasureRunSummary
-        RemotingDecoders.verify<DataSubjectRequestApi.ErasureRunResult> draws seed erasureRunResult
-        RemotingDecoders.verify<ExportStatus> draws seed exportStatus
-        RemotingDecoders.verify<ExportSignature> draws seed exportSignature
-        RemotingDecoders.verify<SignedExportEnvelope> draws seed signedExportEnvelope
-        RemotingDecoders.verify<AuditEventView> draws seed auditEventView
-        RemotingDecoders.verify<AuditEventPage> draws seed auditEventPage
-        RemotingDecoders.verify<InspectedComponent> draws seed inspectedComponent
-        RemotingDecoders.verify<InspectedKnob> draws seed inspectedKnob
-        RemotingDecoders.verify<InspectedCanonicalMethod> draws seed inspectedCanonicalMethod
-        RemotingDecoders.verify<CompositionView> draws seed compositionView
-        RemotingDecoders.verify<InspectedSurface> draws seed inspectedSurface
-        RemotingDecoders.verify<SurfacesView> draws seed surfacesView
-        RemotingDecoders.verify<InspectedRule> draws seed inspectedRule
-        RemotingDecoders.verify<InspectedDefect> draws seed inspectedDefect
-        RemotingDecoders.verify<RulesView> draws seed rulesView
-        RemotingDecoders.verify<InspectedDeclaration> draws seed inspectedDeclaration
-        RemotingDecoders.verify<DisclosureView> draws seed disclosureView
-        RemotingDecoders.verify<ProvenanceView> draws seed provenanceView
-        RemotingDecoders.verify<ConfigFieldKind> draws seed configFieldKind
-        RemotingDecoders.verify<ConfigFieldSchema> draws seed configFieldSchema
-        RemotingDecoders.verify<ModuleConfigSchema> draws seed moduleConfigSchema
-        RemotingDecoders.verify<ModuleConfigEntry> draws seed moduleConfigEntry
-        RemotingDecoders.verify<ModuleConfigView> draws seed moduleConfigView
-        RemotingDecoders.verify<DataSourceConfig> draws seed dataSourceConfig
-        RemotingDecoders.verify<IngestionStatus> draws seed ingestionStatus
-        RemotingDecoders.verify<IngestionError> draws seed ingestionError
-        RemotingDecoders.verify<IngestionRun> draws seed ingestionRun
-        RemotingDecoders.verify<CredentialStatus> draws seed credentialStatus
-        RemotingDecoders.verify<OAuthRefreshOutcome> draws seed oAuthRefreshOutcome
-        RemotingDecoders.verify<TokenStatus> draws seed tokenStatus
-        RemotingDecoders.verify<MigrationDataTypeInfo> draws seed migrationDataTypeInfo
-        RemotingDecoders.verify<MigrationRunState> draws seed migrationRunState
-        RemotingDecoders.verify<MigrationFailure> draws seed migrationFailure
-        RemotingDecoders.verify<MigrationStatus> draws seed migrationStatus
-        RemotingDecoders.verify<ReadinessVerdict> draws seed readinessVerdict
-        RemotingDecoders.verify<SourceStatus> draws seed sourceStatus
-        RemotingDecoders.verify<DeploymentReadiness.PreflightSummary> draws seed preflightSummary
-        RemotingDecoders.verify<DeploymentReadiness.SmokeSummary> draws seed smokeSummary
-        RemotingDecoders.verify<DeploymentReadiness.DriftSummary> draws seed driftSummary
-        RemotingDecoders.verify<DeploymentReadiness.HealthSummary> draws seed healthSummary
-        RemotingDecoders.verify<DeploymentReadiness.LiveInterfaceSummary> draws seed liveInterfaceSummary
-        RemotingDecoders.verify<DeploymentReadiness.DeploymentReadinessReport> draws seed deploymentReadinessReport
-        RemotingDecoders.verify<VerificationSectionVerdict> draws seed verificationSectionVerdict
-        RemotingDecoders.verify<DeploymentVerification.ReportSection> draws seed reportSection
-        RemotingDecoders.verify<DeploymentVerification.NotProvedStatement> draws seed notProvedStatement
-        RemotingDecoders.verify<DeploymentVerificationOutcome> draws seed deploymentVerificationOutcome
-        RemotingDecoders.verify<DeploymentVerification.DeploymentVerificationReport> draws seed deploymentVerificationReport
-        RemotingDecoders.verify<ContactOwner> draws seed contactOwner
-        RemotingDecoders.verify<NotificationKind.PushVariant> draws seed pushVariant
-        RemotingDecoders.verify<NotificationKind.SinkKind> draws seed sinkKind
-        RemotingDecoders.verify<OptInRecord> draws seed optInRecord
-        RemotingDecoders.verify<ExternalContact> draws seed externalContact
-        RemotingDecoders.verify<FlagValue> draws seed flagValue
-        RemotingDecoders.verify<FeatureFlag> draws seed featureFlag
-        RemotingDecoders.verify<HealthProbeView> draws seed healthProbeView
-        RemotingDecoders.verify<HealthSnapshot> draws seed healthSnapshot
-        RemotingDecoders.verify<PreflightOutcomeView> draws seed preflightOutcomeView
-        RemotingDecoders.verify<PreflightSnapshotView> draws seed preflightSnapshotView
-        RemotingDecoders.verify<JobSchedulerTelemetryView> draws seed jobSchedulerTelemetryView
-        RemotingDecoders.verify<DegradedCapability> draws seed degradedCapability
-        RemotingDecoders.verify<AIDenialGroupCount> draws seed aiDenialGroupCount
-        RemotingDecoders.verify<AIDenialToolModulePair> draws seed aiDenialToolModulePair
-        RemotingDecoders.verify<RecentAIDenial> draws seed recentAIDenial
-        RemotingDecoders.verify<AIDenialRollup> draws seed aiDenialRollup
-        RemotingDecoders.verify<ToolDataCount> draws seed toolDataCount
-        RemotingDecoders.verify<ToolSummary> draws seed toolSummary
-        RemotingDecoders.verify<ActiveAiSummary> draws seed activeAiSummary
-        RemotingDecoders.verify<DeploymentContext> draws seed deploymentContext
-        RemotingDecoders.verify<HomeOverview> draws seed homeOverview
-        RemotingDecoders.verify<HomePinningState> draws seed homePinningState
-        RemotingDecoders.verify<ModuleQueryResponse> draws seed moduleQueryResponse
-        RemotingDecoders.verify<ModuleQueryError> draws seed moduleQueryError
-        RemotingDecoders.verify<ModuleVisibilityRule> draws seed moduleVisibilityRule
-        RemotingDecoders.verify<ModuleVisibilityProfile> draws seed moduleVisibilityProfile
-        RemotingDecoders.verify<NotificationCategory> draws seed notificationCategory
-        RemotingDecoders.verify<PreferenceChannel> draws seed preferenceChannel
-        RemotingDecoders.verify<DigestFrequency> draws seed digestFrequency
-        RemotingDecoders.verify<DeliveryPreference> draws seed deliveryPreference
-        RemotingDecoders.verify<CategoryChannelPreference> draws seed categoryChannelPreference
-        RemotingDecoders.verify<QuietHours> draws seed quietHours
-        RemotingDecoders.verify<UserNotificationPreferences> draws seed userNotificationPreferences
-        RemotingDecoders.verify<NotificationPreferenceView> draws seed notificationPreferenceView
-        RemotingDecoders.verify<TenantLifecyclePhase> draws seed tenantLifecyclePhase
-        RemotingDecoders.verify<LifecycleHookResult> draws seed lifecycleHookResult
-        RemotingDecoders.verify<LifecycleHookOutcome> draws seed lifecycleHookOutcome
-        RemotingDecoders.verify<LifecycleSummary> draws seed lifecycleSummary
-        RemotingDecoders.verify<LifecycleJobHandle> draws seed lifecycleJobHandle
-        RemotingDecoders.verify<LifecyclePreviewItem> draws seed lifecyclePreviewItem
-        RemotingDecoders.verify<LifecyclePreview> draws seed lifecyclePreview
-        RemotingDecoders.verify<LifecycleExportArchive> draws seed lifecycleExportArchive
-        RemotingDecoders.verify<ExportThenDeprovisionResult> draws seed exportThenDeprovisionResult
-        RemotingDecoders.verify<OffboardConfirmation> draws seed offboardConfirmation
-        RemotingDecoders.verify<ScheduledDeprovision> draws seed scheduledDeprovision
-        RemotingDecoders.verify<TeamRole> draws seed teamRole
-        RemotingDecoders.verify<PrincipalSummary> draws seed principalSummary
-        RemotingDecoders.verify<PresenceLocation> draws seed presenceLocation
-        RemotingDecoders.verify<PresencePeer> draws seed presencePeer
-        RemotingDecoders.verify<EntityLockRef> draws seed entityLockRef
-        RemotingDecoders.verify<LockLease> draws seed lockLease
-        RemotingDecoders.verify<LockOutcome> draws seed lockOutcome
-        RemotingDecoders.verify<WireProvenanceCaps> draws seed wireProvenanceCaps
-        RemotingDecoders.verify<WireProvenanceNodeKind> draws seed wireProvenanceNodeKind
-        RemotingDecoders.verify<WireProvenanceNode> draws seed wireProvenanceNode
-        RemotingDecoders.verify<WireWithheldNode> draws seed wireWithheldNode
-        RemotingDecoders.verify<WireProvenanceNodeAnswer> draws seed wireProvenanceNodeAnswer
-        RemotingDecoders.verify<WireProvenanceEdgeKind> draws seed wireProvenanceEdgeKind
-        RemotingDecoders.verify<WireProvenanceEdge> draws seed wireProvenanceEdge
-        RemotingDecoders.verify<WireProvenanceEdgeSet> draws seed wireProvenanceEdgeSet
-        RemotingDecoders.verify<WireProvenanceChainPage> draws seed wireProvenanceChainPage
-        RemotingDecoders.verify<ProvenanceQueryError> draws seed provenanceQueryError
-        RemotingDecoders.verify<CredentialOrigin> draws seed credentialOrigin
-        RemotingDecoders.verify<ProviderHealthStatus> draws seed providerHealthStatus
-        RemotingDecoders.verify<ProviderHealth> draws seed providerHealth
-        RemotingDecoders.verify<ProviderEntryView> draws seed providerEntryView
-        RemotingDecoders.verify<RoutingRule> draws seed routingRule
-        RemotingDecoders.verify<FallbackChain> draws seed fallbackChain
-        RemotingDecoders.verify<ProviderProfileView> draws seed providerProfileView
-        RemotingDecoders.verify<ModulePermission> draws seed modulePermission
-        RemotingDecoders.verify<ServiceAccountStatus> draws seed serviceAccountStatus
-        RemotingDecoders.verify<ServiceAccount> draws seed serviceAccount
-        RemotingDecoders.verify<ServiceAccountTokenView> draws seed serviceAccountTokenView
-        RemotingDecoders.verify<MintedServiceAccountTokenView> draws seed mintedServiceAccountTokenView
-        RemotingDecoders.verify<OverallStatus> draws seed overallStatus
-        RemotingDecoders.verify<StatusSeverity> draws seed statusSeverity
-        RemotingDecoders.verify<SectionSummary> draws seed sectionSummary
-        RemotingDecoders.verify<ServiceStatusSnapshot> draws seed serviceStatusSnapshot
-        RemotingDecoders.verify<SessionStatus> draws seed sessionStatus
-        RemotingDecoders.verify<SessionRecord> draws seed sessionRecord
-        RemotingDecoders.verify<TeamInviteIssueResult> draws seed teamInviteIssueResult
-        RemotingDecoders.verify<TeamInviteAcceptResult> draws seed teamInviteAcceptResult
-        RemotingDecoders.verify<TeamInviteSummary> draws seed teamInviteSummary
-        RemotingDecoders.verify<PendingInviteByEmail> draws seed pendingInviteByEmail
-        RemotingDecoders.verify<TeamInviteExpiredPayload> draws seed teamInviteExpiredPayload
-        RemotingDecoders.verify<TeamInfo> draws seed teamInfo
-        RemotingDecoders.verify<UserSummary> draws seed userSummary
-        RemotingDecoders.verify<AuthoredBy> draws seed authoredBy
-        RemotingDecoders.verify<BIFriendlyType> draws seed biFriendlyType
-        RemotingDecoders.verify<FieldSensitivity> draws seed fieldSensitivity
-        RemotingDecoders.verify<UserSchemaField> draws seed userSchemaField
-        RemotingDecoders.verify<SchemaMigration> draws seed schemaMigration
-        RemotingDecoders.verify<UserAuthoredSchema> draws seed userAuthoredSchema
-        RemotingDecoders.verify<UserSchemaError> draws seed userSchemaError
-        RemotingDecoders.verify<MigrationOutcome> draws seed migrationOutcome
-        RemotingDecoders.verify<WebhookStatus> draws seed webhookStatus
-        RemotingDecoders.verify<WebhookSubscription> draws seed webhookSubscription
-        RemotingDecoders.verify<WebhookTestResult> draws seed webhookTestResult
-        RemotingDecoders.verify<WebhookDeliveryOutcome> draws seed webhookDeliveryOutcome
-        RemotingDecoders.verify<WebhookDelivery> draws seed webhookDelivery
-        RemotingDecoders.verify<Trigger> draws seed trigger
-        RemotingDecoders.verify<IdempotencyKey> draws seed idempotencyKey
-        RemotingDecoders.verify<JobRetryPolicy> draws seed jobRetryPolicy
-        RemotingDecoders.verify<JobPrecision> draws seed jobPrecision
-        RemotingDecoders.verify<JobStatus> draws seed jobStatus
-        RemotingDecoders.verify<JobRunStatus> draws seed jobRunStatus
-        RemotingDecoders.verify<JobDefinition> draws seed jobDefinition
-        RemotingDecoders.verify<ExternalHandle> draws seed externalHandle
-        RemotingDecoders.verify<JobRun> draws seed jobRun
-        RemotingDecoders.verify<ScheduleError> draws seed scheduleError
-        RemotingDecoders.verify<ModelExecutionJobRef> draws seed modelExecutionJobRef
-        RemotingDecoders.verify<ModelExecutionScoreRefusal> draws seed modelExecutionScoreRefusal
-        RemotingDecoders.verify<ComputeBudgetDenial> draws seed computeBudgetDenial
-        RemotingDecoders.verify<ModelExecutionGateVerdict> draws seed modelExecutionGateVerdict
-        RemotingDecoders.verify<ModelExecutionRefusal> draws seed modelExecutionRefusal
-        RemotingDecoders.verify<ModelExecutionReceipt> draws seed modelExecutionReceipt
-        RemotingDecoders.verify<ModelExecutionArtifactRef> draws seed modelExecutionArtifactRef
-        RemotingDecoders.verify<ModelExecutionTiming> draws seed modelExecutionTiming
-        RemotingDecoders.verify<ModelExecutionCost> draws seed modelExecutionCost
-        RemotingDecoders.verify<ModelExecutionOutcome> draws seed modelExecutionOutcome
-        RemotingDecoders.verify<ModelExecutionOutcomePage> draws seed modelExecutionOutcomePage
-        RemotingDecoders.verify<ModelExecutionDatasetVersion> draws seed modelExecutionDatasetVersion
-        RemotingDecoders.verify<ModuleExposure> draws seed moduleExposure
-        RemotingDecoders.verify<GrantState> draws seed grantState
-        RemotingDecoders.verify<PartyRef> draws seed partyRef
-        RemotingDecoders.verify<GrantPolicy> draws seed grantPolicy
-        RemotingDecoders.verify<ModuleGrantRecord> draws seed moduleGrantRecord
-        RemotingDecoders.verify<TeamPermissions> draws seed teamPermissions
-        RemotingDecoders.verify<PlatformKnowledgeBaseMode> draws seed platformKnowledgeBaseMode
-        RemotingDecoders.verify<PlatformInfo> draws seed platformInfo
-        RemotingDecoders.verify<TeamMembership> draws seed teamMembership
-        RemotingDecoders.verify<TeamCreationPolicy> draws seed teamCreationPolicy
-        RemotingDecoders.verify<TeamSummary> draws seed teamSummary
-        RemotingDecoders.verify<ProviderOrigin> draws seed providerOrigin
-        RemotingDecoders.verify<UsageRecord> draws seed usageRecord
-        RemotingDecoders.verify<UsageAggregateRow> draws seed usageAggregateRow
-        RemotingDecoders.verify<ColumnMappingTypes.Conversion list> draws seed (Decode.list conversion)
-        RemotingDecoders.verify<Result<unit, string>> draws seed (Decode.result Decode.asUnit Decode.asString)
-        RemotingDecoders.verify<ColumnMappingTypes.ConversionRecord list> draws seed (Decode.list conversionRecord)
-        RemotingDecoders.verify<Result<ColumnMappingTypes.DryRunReport, string>> draws seed (Decode.result dryRunReport Decode.asString)
-        RemotingDecoders.verify<Result<ProcessedDataTypes.FileUploadResponse, string>> draws seed (Decode.result fileUploadResponse Decode.asString)
-        RemotingDecoders.verify<Result<DataManagementTypes.DataFileUpload, string>> draws seed (Decode.result dataFileUpload Decode.asString)
-        RemotingDecoders.verify<Result<ProcessedDataTypes.ProcessedFileEntry, string>> draws seed (Decode.result processedFileEntry Decode.asString)
-        RemotingDecoders.verify<Result<int, string>> draws seed (Decode.result Decode.asInt32 Decode.asString)
-        RemotingDecoders.verify<unit> draws seed Decode.asUnit
-        RemotingDecoders.verify<Result<byte[], string>> draws seed (Decode.result Decode.asBytes Decode.asString)
-        RemotingDecoders.verify<Result<DataSubjectRequestApi.ErasurePreview, string>> draws seed (Decode.result erasurePreview Decode.asString)
-        RemotingDecoders.verify<Result<DataSubjectRequestApi.ErasureRunResult, string>> draws seed (Decode.result erasureRunResult Decode.asString)
-        RemotingDecoders.verify<Result<string, string>> draws seed (Decode.result Decode.asString Decode.asString)
-        RemotingDecoders.verify<Result<ExportStatus, string>> draws seed (Decode.result exportStatus Decode.asString)
-        RemotingDecoders.verify<Result<SignedExportEnvelope, string>> draws seed (Decode.result signedExportEnvelope Decode.asString)
-        RemotingDecoders.verify<Result<AuditEventPage, string>> draws seed (Decode.result auditEventPage Decode.asString)
-        RemotingDecoders.verify<Result<string list, string>> draws seed (Decode.result (Decode.list Decode.asString) Decode.asString)
-        RemotingDecoders.verify<Result<CompositionView, string>> draws seed (Decode.result compositionView Decode.asString)
-        RemotingDecoders.verify<Result<SurfacesView, string>> draws seed (Decode.result surfacesView Decode.asString)
-        RemotingDecoders.verify<Result<RulesView, string>> draws seed (Decode.result rulesView Decode.asString)
-        RemotingDecoders.verify<Result<DisclosureView, string>> draws seed (Decode.result disclosureView Decode.asString)
-        RemotingDecoders.verify<Result<ProvenanceView, string>> draws seed (Decode.result provenanceView Decode.asString)
-        RemotingDecoders.verify<ModuleConfigEntry list> draws seed (Decode.list moduleConfigEntry)
-        RemotingDecoders.verify<Result<ModuleConfigView, string>> draws seed (Decode.result moduleConfigView Decode.asString)
-        RemotingDecoders.verify<Map<string, Map<string, string>>> draws seed (Decode.asMap Decode.asString (Decode.asMap Decode.asString Decode.asString))
-        RemotingDecoders.verify<DataSourceConfig list> draws seed (Decode.list dataSourceConfig)
-        RemotingDecoders.verify<DataSourceConfig option> draws seed (Decode.option dataSourceConfig)
-        RemotingDecoders.verify<Result<Guid, string>> draws seed (Decode.result Decode.asGuid Decode.asString)
-        RemotingDecoders.verify<IngestionRun list> draws seed (Decode.list ingestionRun)
-        RemotingDecoders.verify<TokenStatus option> draws seed (Decode.option tokenStatus)
-        RemotingDecoders.verify<MigrationDataTypeInfo list> draws seed (Decode.list migrationDataTypeInfo)
-        RemotingDecoders.verify<MigrationStatus list> draws seed (Decode.list migrationStatus)
-        RemotingDecoders.verify<Result<MigrationStatus, string>> draws seed (Decode.result migrationStatus Decode.asString)
-        RemotingDecoders.verify<Result<DeploymentReadiness.DeploymentReadinessReport, string>> draws seed (Decode.result deploymentReadinessReport Decode.asString)
-        RemotingDecoders.verify<Result<DeploymentVerification.DeploymentVerificationReport, string>> draws seed (Decode.result deploymentVerificationReport Decode.asString)
-        RemotingDecoders.verify<Result<ExternalContact list, string>> draws seed (Decode.result (Decode.list externalContact) Decode.asString)
-        RemotingDecoders.verify<Result<ExternalContact, string>> draws seed (Decode.result externalContact Decode.asString)
-        RemotingDecoders.verify<Map<string, FlagValue>> draws seed (Decode.asMap Decode.asString flagValue)
-        RemotingDecoders.verify<FeatureFlag list> draws seed (Decode.list featureFlag)
-        RemotingDecoders.verify<Result<Map<string, FlagValue>, string>> draws seed (Decode.result (Decode.asMap Decode.asString flagValue) Decode.asString)
-        RemotingDecoders.verify<Result<HealthSnapshot, string>> draws seed (Decode.result healthSnapshot Decode.asString)
-        RemotingDecoders.verify<Result<PreflightSnapshotView, string>> draws seed (Decode.result preflightSnapshotView Decode.asString)
-        RemotingDecoders.verify<Result<JobSchedulerTelemetryView, string>> draws seed (Decode.result jobSchedulerTelemetryView Decode.asString)
-        RemotingDecoders.verify<Result<DegradedCapability list, string>> draws seed (Decode.result (Decode.list degradedCapability) Decode.asString)
-        RemotingDecoders.verify<Result<AIDenialRollup option, string>> draws seed (Decode.result (Decode.option aiDenialRollup) Decode.asString)
-        RemotingDecoders.verify<(Result<ModuleQueryResponse, ModuleQueryError>) option> draws seed (Decode.option (Decode.result moduleQueryResponse moduleQueryError))
-        RemotingDecoders.verify<ModuleVisibilityResolution option> draws seed (Decode.option moduleVisibilityResolution)
-        RemotingDecoders.verify<Result<ModuleVisibilityProfile option, string>> draws seed (Decode.result (Decode.option moduleVisibilityProfile) Decode.asString)
-        RemotingDecoders.verify<string list> draws seed (Decode.list Decode.asString)
-        RemotingDecoders.verify<Result<NotificationPreferenceView, string>> draws seed (Decode.result notificationPreferenceView Decode.asString)
-        RemotingDecoders.verify<Result<LifecycleSummary, string>> draws seed (Decode.result lifecycleSummary Decode.asString)
-        RemotingDecoders.verify<Result<LifecycleSummary option, string>> draws seed (Decode.result (Decode.option lifecycleSummary) Decode.asString)
-        RemotingDecoders.verify<Result<LifecycleJobHandle, string>> draws seed (Decode.result lifecycleJobHandle Decode.asString)
-        RemotingDecoders.verify<Result<LifecyclePreview, string>> draws seed (Decode.result lifecyclePreview Decode.asString)
-        RemotingDecoders.verify<Result<ExportThenDeprovisionResult, string>> draws seed (Decode.result exportThenDeprovisionResult Decode.asString)
-        RemotingDecoders.verify<Result<OffboardConfirmation, string>> draws seed (Decode.result offboardConfirmation Decode.asString)
-        RemotingDecoders.verify<Result<ScheduledDeprovision, string>> draws seed (Decode.result scheduledDeprovision Decode.asString)
-        RemotingDecoders.verify<Result<ScheduledDeprovision option, string>> draws seed (Decode.result (Decode.option scheduledDeprovision) Decode.asString)
-        RemotingDecoders.verify<Result<PrincipalSummary list, string>> draws seed (Decode.result (Decode.list principalSummary) Decode.asString)
-        RemotingDecoders.verify<PresencePeer list> draws seed (Decode.list presencePeer)
-        RemotingDecoders.verify<LockLease option> draws seed (Decode.option lockLease)
-        RemotingDecoders.verify<Result<WireProvenanceChainPage, ProvenanceQueryError>> draws seed (Decode.result wireProvenanceChainPage provenanceQueryError)
-        RemotingDecoders.verify<Result<ProviderProfileView, string>> draws seed (Decode.result providerProfileView Decode.asString)
-        RemotingDecoders.verify<Result<(string * ProviderHealth) list, string>> draws seed (Decode.result (Decode.list (Decode.tuple2 Decode.asString providerHealth)) Decode.asString)
-        RemotingDecoders.verify<Result<ServiceAccount list, string>> draws seed (Decode.result (Decode.list serviceAccount) Decode.asString)
-        RemotingDecoders.verify<Result<ServiceAccount, string>> draws seed (Decode.result serviceAccount Decode.asString)
-        RemotingDecoders.verify<Result<ServiceAccountTokenView list, string>> draws seed (Decode.result (Decode.list serviceAccountTokenView) Decode.asString)
-        RemotingDecoders.verify<Result<MintedServiceAccountTokenView, string>> draws seed (Decode.result mintedServiceAccountTokenView Decode.asString)
-        RemotingDecoders.verify<Result<ServiceStatusSnapshot, string>> draws seed (Decode.result serviceStatusSnapshot Decode.asString)
-        RemotingDecoders.verify<Result<SectionSummary, string>> draws seed (Decode.result sectionSummary Decode.asString)
-        RemotingDecoders.verify<Result<SessionRecord list, string>> draws seed (Decode.result (Decode.list sessionRecord) Decode.asString)
-        RemotingDecoders.verify<Result<TeamInviteIssueResult, string>> draws seed (Decode.result teamInviteIssueResult Decode.asString)
-        RemotingDecoders.verify<Result<TeamInviteAcceptResult, string>> draws seed (Decode.result teamInviteAcceptResult Decode.asString)
-        RemotingDecoders.verify<Result<TeamInviteSummary list, string>> draws seed (Decode.result (Decode.list teamInviteSummary) Decode.asString)
-        RemotingDecoders.verify<Result<(string * PendingInviteByEmail) list, string>> draws seed (Decode.result (Decode.list (Decode.tuple2 Decode.asString pendingInviteByEmail)) Decode.asString)
-        RemotingDecoders.verify<Result<TeamInviteExpiredPayload list, string>> draws seed (Decode.result (Decode.list teamInviteExpiredPayload) Decode.asString)
-        RemotingDecoders.verify<Result<TeamInfo option, string>> draws seed (Decode.result (Decode.option teamInfo) Decode.asString)
-        RemotingDecoders.verify<Result<UserSummary list, string>> draws seed (Decode.result (Decode.list userSummary) Decode.asString)
-        RemotingDecoders.verify<Result<UserAuthoredSchema list, UserSchemaError>> draws seed (Decode.result (Decode.list userAuthoredSchema) userSchemaError)
-        RemotingDecoders.verify<Result<UserAuthoredSchema, UserSchemaError>> draws seed (Decode.result userAuthoredSchema userSchemaError)
-        RemotingDecoders.verify<Result<MigrationOutcome, UserSchemaError>> draws seed (Decode.result migrationOutcome userSchemaError)
-        RemotingDecoders.verify<Result<unit, UserSchemaError>> draws seed (Decode.result Decode.asUnit userSchemaError)
-        RemotingDecoders.verify<Result<WebhookSubscription, string>> draws seed (Decode.result webhookSubscription Decode.asString)
-        RemotingDecoders.verify<Result<WebhookSubscription list, string>> draws seed (Decode.result (Decode.list webhookSubscription) Decode.asString)
-        RemotingDecoders.verify<Result<WebhookTestResult, string>> draws seed (Decode.result webhookTestResult Decode.asString)
-        RemotingDecoders.verify<Result<WebhookDelivery list, string>> draws seed (Decode.result (Decode.list webhookDelivery) Decode.asString)
-        RemotingDecoders.verify<JobDefinition list> draws seed (Decode.list jobDefinition)
-        RemotingDecoders.verify<JobDefinition option> draws seed (Decode.option jobDefinition)
-        RemotingDecoders.verify<JobRun list> draws seed (Decode.list jobRun)
-        RemotingDecoders.verify<Result<Guid, ScheduleError>> draws seed (Decode.result Decode.asGuid scheduleError)
-        RemotingDecoders.verify<Result<ModelExecutionReceipt, ModelExecutionRefusal>> draws seed (Decode.result modelExecutionReceipt modelExecutionRefusal)
-        RemotingDecoders.verify<Result<ModelExecutionOutcome, ModelExecutionRefusal>> draws seed (Decode.result modelExecutionOutcome modelExecutionRefusal)
-        RemotingDecoders.verify<Result<ModelExecutionOutcomePage, ModelExecutionRefusal>> draws seed (Decode.result modelExecutionOutcomePage modelExecutionRefusal)
-        RemotingDecoders.verify<Result<ModelExecutionDatasetVersion, ModelExecutionRefusal>> draws seed (Decode.result modelExecutionDatasetVersion modelExecutionRefusal)
-        RemotingDecoders.verify<Result<TeamPermissions, string>> draws seed (Decode.result teamPermissions Decode.asString)
-        RemotingDecoders.verify<bool> draws seed Decode.asBool
-        RemotingDecoders.verify<Result<TeamInfo, string>> draws seed (Decode.result teamInfo Decode.asString)
-        RemotingDecoders.verify<TeamInfo list> draws seed (Decode.list teamInfo)
-        RemotingDecoders.verify<TeamMembership list> draws seed (Decode.list teamMembership)
-        RemotingDecoders.verify<string option> draws seed (Decode.option Decode.asString)
-        RemotingDecoders.verify<Result<TeamSummary list, string>> draws seed (Decode.result (Decode.list teamSummary) Decode.asString)
-        RemotingDecoders.verify<UsageRecord list> draws seed (Decode.list usageRecord)
-        RemotingDecoders.verify<UsageAggregateRow list> draws seed (Decode.list usageAggregateRow)
-        RemotingDecoders.verify<byte[]> draws seed Decode.asBytes
+    /// over `draws` draws of its own type from `seed`, through `gate`
+    /// (the shipped one is `RemotingDecoders.gate`, in the server tier).
+    /// One outcome per registration, in registration order; a refusal
+    /// names the type and the first diverging draw.
+    let verifyAll (gate: DecoderGate) (draws: int) (seed: int) : Result<DecoderVerification, DecoderRefusal> list = [
+        RemotingDecoders.verifyThrough<ColumnMappingTypes.DateOrder> gate draws seed dateOrder
+        RemotingDecoders.verifyThrough<ColumnMappingTypes.CellTransform> gate draws seed cellTransform
+        RemotingDecoders.verifyThrough<ColumnMappingTypes.ColumnExpr> gate draws seed columnExpr
+        RemotingDecoders.verifyThrough<ColumnMappingTypes.DerivedColumn> gate draws seed derivedColumn
+        RemotingDecoders.verifyThrough<ColumnMappingTypes.Conversion> gate draws seed conversion
+        RemotingDecoders.verifyThrough<ColumnMappingTypes.ConversionRecord> gate draws seed conversionRecord
+        RemotingDecoders.verifyThrough<ColumnMappingTypes.DryRunCellIssue> gate draws seed dryRunCellIssue
+        RemotingDecoders.verifyThrough<ColumnMappingTypes.DryRunRowIssue> gate draws seed dryRunRowIssue
+        RemotingDecoders.verifyThrough<ColumnMappingTypes.DryRunReport> gate draws seed dryRunReport
+        RemotingDecoders.verifyThrough<DataManagementTypes.UploadedFileInfo> gate draws seed uploadedFileInfo
+        RemotingDecoders.verifyThrough<ProcessedDataTypes.ProcessedData> gate draws seed processedData
+        RemotingDecoders.verifyThrough<ProcessedDataTypes.ProcessedFileEntry> gate draws seed processedFileEntry
+        RemotingDecoders.verifyThrough<ProcessedDataTypes.FileUploadResponse> gate draws seed fileUploadResponse
+        RemotingDecoders.verifyThrough<DataManagementTypes.FileIngestionStatus> gate draws seed fileIngestionStatus
+        RemotingDecoders.verifyThrough<ProcessedDataTypes.FileListSnapshot> gate draws seed fileListSnapshot
+        RemotingDecoders.verifyThrough<DataManagementTypes.DataFileUpload> gate draws seed dataFileUpload
+        RemotingDecoders.verifyThrough<ProcessedDataTypes.SessionStoreInfo> gate draws seed sessionStoreInfo
+        RemotingDecoders.verifyThrough<FlagScope> gate draws seed flagScope
+        RemotingDecoders.verifyThrough<ModuleVisibilityResolution> gate draws seed moduleVisibilityResolution
+        RemotingDecoders.verifyThrough<AccessibleModulesResponse> gate draws seed accessibleModulesResponse
+        RemotingDecoders.verifyThrough<DataManagementTypes.ColumnType> gate draws seed columnType
+        RemotingDecoders.verifyThrough<DataManagementTypes.DataTypeColumn> gate draws seed dataTypeColumn
+        RemotingDecoders.verifyThrough<DataManagementTypes.DataTypeSchema> gate draws seed dataTypeSchema
+        RemotingDecoders.verifyThrough<DataManagementTypes.DataTypeInfo> gate draws seed dataTypeInfo
+        RemotingDecoders.verifyThrough<DataManagementTypes.DataTypeCatalogEntry> gate draws seed dataTypeCatalogEntry
+        RemotingDecoders.verifyThrough<DataManagementTypes.DataCatalogResponse> gate draws seed dataCatalogResponse
+        RemotingDecoders.verifyThrough<DataSubjectRequestKind> gate draws seed dataSubjectRequestKind
+        RemotingDecoders.verifyThrough<ErasurePolicy> gate draws seed erasurePolicy
+        RemotingDecoders.verifyThrough<DataSubjectRequest> gate draws seed dataSubjectRequest
+        RemotingDecoders.verifyThrough<ErasureSummary> gate draws seed erasureSummary
+        RemotingDecoders.verifyThrough<DataSubjectRequestApi.ErasurePreview> gate draws seed erasurePreview
+        RemotingDecoders.verifyThrough<ErasureError> gate draws seed erasureError
+        RemotingDecoders.verifyThrough<DataSubjectRequestApi.ErasureRunSummary> gate draws seed erasureRunSummary
+        RemotingDecoders.verifyThrough<DataSubjectRequestApi.ErasureRunResult> gate draws seed erasureRunResult
+        RemotingDecoders.verifyThrough<ExportStatus> gate draws seed exportStatus
+        RemotingDecoders.verifyThrough<ExportSignature> gate draws seed exportSignature
+        RemotingDecoders.verifyThrough<SignedExportEnvelope> gate draws seed signedExportEnvelope
+        RemotingDecoders.verifyThrough<AuditEventView> gate draws seed auditEventView
+        RemotingDecoders.verifyThrough<AuditEventPage> gate draws seed auditEventPage
+        RemotingDecoders.verifyThrough<InspectedComponent> gate draws seed inspectedComponent
+        RemotingDecoders.verifyThrough<InspectedKnob> gate draws seed inspectedKnob
+        RemotingDecoders.verifyThrough<InspectedCanonicalMethod> gate draws seed inspectedCanonicalMethod
+        RemotingDecoders.verifyThrough<CompositionView> gate draws seed compositionView
+        RemotingDecoders.verifyThrough<InspectedSurface> gate draws seed inspectedSurface
+        RemotingDecoders.verifyThrough<SurfacesView> gate draws seed surfacesView
+        RemotingDecoders.verifyThrough<InspectedRule> gate draws seed inspectedRule
+        RemotingDecoders.verifyThrough<InspectedDefect> gate draws seed inspectedDefect
+        RemotingDecoders.verifyThrough<RulesView> gate draws seed rulesView
+        RemotingDecoders.verifyThrough<InspectedDeclaration> gate draws seed inspectedDeclaration
+        RemotingDecoders.verifyThrough<DisclosureView> gate draws seed disclosureView
+        RemotingDecoders.verifyThrough<ProvenanceView> gate draws seed provenanceView
+        RemotingDecoders.verifyThrough<ConfigFieldKind> gate draws seed configFieldKind
+        RemotingDecoders.verifyThrough<ConfigFieldSchema> gate draws seed configFieldSchema
+        RemotingDecoders.verifyThrough<ModuleConfigSchema> gate draws seed moduleConfigSchema
+        RemotingDecoders.verifyThrough<ModuleConfigEntry> gate draws seed moduleConfigEntry
+        RemotingDecoders.verifyThrough<ModuleConfigView> gate draws seed moduleConfigView
+        RemotingDecoders.verifyThrough<DataSourceConfig> gate draws seed dataSourceConfig
+        RemotingDecoders.verifyThrough<IngestionStatus> gate draws seed ingestionStatus
+        RemotingDecoders.verifyThrough<IngestionError> gate draws seed ingestionError
+        RemotingDecoders.verifyThrough<IngestionRun> gate draws seed ingestionRun
+        RemotingDecoders.verifyThrough<CredentialStatus> gate draws seed credentialStatus
+        RemotingDecoders.verifyThrough<OAuthRefreshOutcome> gate draws seed oAuthRefreshOutcome
+        RemotingDecoders.verifyThrough<TokenStatus> gate draws seed tokenStatus
+        RemotingDecoders.verifyThrough<MigrationDataTypeInfo> gate draws seed migrationDataTypeInfo
+        RemotingDecoders.verifyThrough<MigrationRunState> gate draws seed migrationRunState
+        RemotingDecoders.verifyThrough<MigrationFailure> gate draws seed migrationFailure
+        RemotingDecoders.verifyThrough<MigrationStatus> gate draws seed migrationStatus
+        RemotingDecoders.verifyThrough<ReadinessVerdict> gate draws seed readinessVerdict
+        RemotingDecoders.verifyThrough<SourceStatus> gate draws seed sourceStatus
+        RemotingDecoders.verifyThrough<DeploymentReadiness.PreflightSummary> gate draws seed preflightSummary
+        RemotingDecoders.verifyThrough<DeploymentReadiness.SmokeSummary> gate draws seed smokeSummary
+        RemotingDecoders.verifyThrough<DeploymentReadiness.DriftSummary> gate draws seed driftSummary
+        RemotingDecoders.verifyThrough<DeploymentReadiness.HealthSummary> gate draws seed healthSummary
+        RemotingDecoders.verifyThrough<DeploymentReadiness.LiveInterfaceSummary> gate draws seed liveInterfaceSummary
+        RemotingDecoders.verifyThrough<DeploymentReadiness.DeploymentReadinessReport> gate draws seed deploymentReadinessReport
+        RemotingDecoders.verifyThrough<VerificationSectionVerdict> gate draws seed verificationSectionVerdict
+        RemotingDecoders.verifyThrough<DeploymentVerification.ReportSection> gate draws seed reportSection
+        RemotingDecoders.verifyThrough<DeploymentVerification.NotProvedStatement> gate draws seed notProvedStatement
+        RemotingDecoders.verifyThrough<DeploymentVerificationOutcome> gate draws seed deploymentVerificationOutcome
+        RemotingDecoders.verifyThrough<DeploymentVerification.DeploymentVerificationReport> gate draws seed deploymentVerificationReport
+        RemotingDecoders.verifyThrough<ContactOwner> gate draws seed contactOwner
+        RemotingDecoders.verifyThrough<NotificationKind.PushVariant> gate draws seed pushVariant
+        RemotingDecoders.verifyThrough<NotificationKind.SinkKind> gate draws seed sinkKind
+        RemotingDecoders.verifyThrough<OptInRecord> gate draws seed optInRecord
+        RemotingDecoders.verifyThrough<ExternalContact> gate draws seed externalContact
+        RemotingDecoders.verifyThrough<FlagValue> gate draws seed flagValue
+        RemotingDecoders.verifyThrough<FeatureFlag> gate draws seed featureFlag
+        RemotingDecoders.verifyThrough<HealthProbeView> gate draws seed healthProbeView
+        RemotingDecoders.verifyThrough<HealthSnapshot> gate draws seed healthSnapshot
+        RemotingDecoders.verifyThrough<PreflightOutcomeView> gate draws seed preflightOutcomeView
+        RemotingDecoders.verifyThrough<PreflightSnapshotView> gate draws seed preflightSnapshotView
+        RemotingDecoders.verifyThrough<JobSchedulerTelemetryView> gate draws seed jobSchedulerTelemetryView
+        RemotingDecoders.verifyThrough<DegradedCapability> gate draws seed degradedCapability
+        RemotingDecoders.verifyThrough<AIDenialGroupCount> gate draws seed aiDenialGroupCount
+        RemotingDecoders.verifyThrough<AIDenialToolModulePair> gate draws seed aiDenialToolModulePair
+        RemotingDecoders.verifyThrough<RecentAIDenial> gate draws seed recentAIDenial
+        RemotingDecoders.verifyThrough<AIDenialRollup> gate draws seed aiDenialRollup
+        RemotingDecoders.verifyThrough<ToolDataCount> gate draws seed toolDataCount
+        RemotingDecoders.verifyThrough<ToolSummary> gate draws seed toolSummary
+        RemotingDecoders.verifyThrough<ActiveAiSummary> gate draws seed activeAiSummary
+        RemotingDecoders.verifyThrough<DeploymentContext> gate draws seed deploymentContext
+        RemotingDecoders.verifyThrough<HomeOverview> gate draws seed homeOverview
+        RemotingDecoders.verifyThrough<HomePinningState> gate draws seed homePinningState
+        RemotingDecoders.verifyThrough<ModuleQueryResponse> gate draws seed moduleQueryResponse
+        RemotingDecoders.verifyThrough<ModuleQueryError> gate draws seed moduleQueryError
+        RemotingDecoders.verifyThrough<ModuleVisibilityRule> gate draws seed moduleVisibilityRule
+        RemotingDecoders.verifyThrough<ModuleVisibilityProfile> gate draws seed moduleVisibilityProfile
+        RemotingDecoders.verifyThrough<NotificationCategory> gate draws seed notificationCategory
+        RemotingDecoders.verifyThrough<PreferenceChannel> gate draws seed preferenceChannel
+        RemotingDecoders.verifyThrough<DigestFrequency> gate draws seed digestFrequency
+        RemotingDecoders.verifyThrough<DeliveryPreference> gate draws seed deliveryPreference
+        RemotingDecoders.verifyThrough<CategoryChannelPreference> gate draws seed categoryChannelPreference
+        RemotingDecoders.verifyThrough<QuietHours> gate draws seed quietHours
+        RemotingDecoders.verifyThrough<UserNotificationPreferences> gate draws seed userNotificationPreferences
+        RemotingDecoders.verifyThrough<NotificationPreferenceView> gate draws seed notificationPreferenceView
+        RemotingDecoders.verifyThrough<TenantLifecyclePhase> gate draws seed tenantLifecyclePhase
+        RemotingDecoders.verifyThrough<LifecycleHookResult> gate draws seed lifecycleHookResult
+        RemotingDecoders.verifyThrough<LifecycleHookOutcome> gate draws seed lifecycleHookOutcome
+        RemotingDecoders.verifyThrough<LifecycleSummary> gate draws seed lifecycleSummary
+        RemotingDecoders.verifyThrough<LifecycleJobHandle> gate draws seed lifecycleJobHandle
+        RemotingDecoders.verifyThrough<LifecyclePreviewItem> gate draws seed lifecyclePreviewItem
+        RemotingDecoders.verifyThrough<LifecyclePreview> gate draws seed lifecyclePreview
+        RemotingDecoders.verifyThrough<LifecycleExportArchive> gate draws seed lifecycleExportArchive
+        RemotingDecoders.verifyThrough<ExportThenDeprovisionResult> gate draws seed exportThenDeprovisionResult
+        RemotingDecoders.verifyThrough<OffboardConfirmation> gate draws seed offboardConfirmation
+        RemotingDecoders.verifyThrough<ScheduledDeprovision> gate draws seed scheduledDeprovision
+        RemotingDecoders.verifyThrough<TeamRole> gate draws seed teamRole
+        RemotingDecoders.verifyThrough<PrincipalSummary> gate draws seed principalSummary
+        RemotingDecoders.verifyThrough<PresenceLocation> gate draws seed presenceLocation
+        RemotingDecoders.verifyThrough<PresencePeer> gate draws seed presencePeer
+        RemotingDecoders.verifyThrough<EntityLockRef> gate draws seed entityLockRef
+        RemotingDecoders.verifyThrough<LockLease> gate draws seed lockLease
+        RemotingDecoders.verifyThrough<LockOutcome> gate draws seed lockOutcome
+        RemotingDecoders.verifyThrough<WireProvenanceCaps> gate draws seed wireProvenanceCaps
+        RemotingDecoders.verifyThrough<WireProvenanceNodeKind> gate draws seed wireProvenanceNodeKind
+        RemotingDecoders.verifyThrough<WireProvenanceNode> gate draws seed wireProvenanceNode
+        RemotingDecoders.verifyThrough<WireWithheldNode> gate draws seed wireWithheldNode
+        RemotingDecoders.verifyThrough<WireProvenanceNodeAnswer> gate draws seed wireProvenanceNodeAnswer
+        RemotingDecoders.verifyThrough<WireProvenanceEdgeKind> gate draws seed wireProvenanceEdgeKind
+        RemotingDecoders.verifyThrough<WireProvenanceEdge> gate draws seed wireProvenanceEdge
+        RemotingDecoders.verifyThrough<WireProvenanceEdgeSet> gate draws seed wireProvenanceEdgeSet
+        RemotingDecoders.verifyThrough<WireProvenanceChainPage> gate draws seed wireProvenanceChainPage
+        RemotingDecoders.verifyThrough<ProvenanceQueryError> gate draws seed provenanceQueryError
+        RemotingDecoders.verifyThrough<CredentialOrigin> gate draws seed credentialOrigin
+        RemotingDecoders.verifyThrough<ProviderHealthStatus> gate draws seed providerHealthStatus
+        RemotingDecoders.verifyThrough<ProviderHealth> gate draws seed providerHealth
+        RemotingDecoders.verifyThrough<ProviderEntryView> gate draws seed providerEntryView
+        RemotingDecoders.verifyThrough<RoutingRule> gate draws seed routingRule
+        RemotingDecoders.verifyThrough<FallbackChain> gate draws seed fallbackChain
+        RemotingDecoders.verifyThrough<ProviderProfileView> gate draws seed providerProfileView
+        RemotingDecoders.verifyThrough<ModulePermission> gate draws seed modulePermission
+        RemotingDecoders.verifyThrough<ServiceAccountStatus> gate draws seed serviceAccountStatus
+        RemotingDecoders.verifyThrough<ServiceAccount> gate draws seed serviceAccount
+        RemotingDecoders.verifyThrough<ServiceAccountTokenView> gate draws seed serviceAccountTokenView
+        RemotingDecoders.verifyThrough<MintedServiceAccountTokenView> gate draws seed mintedServiceAccountTokenView
+        RemotingDecoders.verifyThrough<OverallStatus> gate draws seed overallStatus
+        RemotingDecoders.verifyThrough<StatusSeverity> gate draws seed statusSeverity
+        RemotingDecoders.verifyThrough<SectionSummary> gate draws seed sectionSummary
+        RemotingDecoders.verifyThrough<ServiceStatusSnapshot> gate draws seed serviceStatusSnapshot
+        RemotingDecoders.verifyThrough<SessionStatus> gate draws seed sessionStatus
+        RemotingDecoders.verifyThrough<SessionRecord> gate draws seed sessionRecord
+        RemotingDecoders.verifyThrough<TeamInviteIssueResult> gate draws seed teamInviteIssueResult
+        RemotingDecoders.verifyThrough<TeamInviteAcceptResult> gate draws seed teamInviteAcceptResult
+        RemotingDecoders.verifyThrough<TeamInviteSummary> gate draws seed teamInviteSummary
+        RemotingDecoders.verifyThrough<PendingInviteByEmail> gate draws seed pendingInviteByEmail
+        RemotingDecoders.verifyThrough<TeamInviteExpiredPayload> gate draws seed teamInviteExpiredPayload
+        RemotingDecoders.verifyThrough<TeamInfo> gate draws seed teamInfo
+        RemotingDecoders.verifyThrough<UserSummary> gate draws seed userSummary
+        RemotingDecoders.verifyThrough<AuthoredBy> gate draws seed authoredBy
+        RemotingDecoders.verifyThrough<BIFriendlyType> gate draws seed biFriendlyType
+        RemotingDecoders.verifyThrough<FieldSensitivity> gate draws seed fieldSensitivity
+        RemotingDecoders.verifyThrough<UserSchemaField> gate draws seed userSchemaField
+        RemotingDecoders.verifyThrough<SchemaMigration> gate draws seed schemaMigration
+        RemotingDecoders.verifyThrough<UserAuthoredSchema> gate draws seed userAuthoredSchema
+        RemotingDecoders.verifyThrough<UserSchemaError> gate draws seed userSchemaError
+        RemotingDecoders.verifyThrough<MigrationOutcome> gate draws seed migrationOutcome
+        RemotingDecoders.verifyThrough<WebhookStatus> gate draws seed webhookStatus
+        RemotingDecoders.verifyThrough<WebhookSubscription> gate draws seed webhookSubscription
+        RemotingDecoders.verifyThrough<WebhookTestResult> gate draws seed webhookTestResult
+        RemotingDecoders.verifyThrough<WebhookDeliveryOutcome> gate draws seed webhookDeliveryOutcome
+        RemotingDecoders.verifyThrough<WebhookDelivery> gate draws seed webhookDelivery
+        RemotingDecoders.verifyThrough<Trigger> gate draws seed trigger
+        RemotingDecoders.verifyThrough<IdempotencyKey> gate draws seed idempotencyKey
+        RemotingDecoders.verifyThrough<JobRetryPolicy> gate draws seed jobRetryPolicy
+        RemotingDecoders.verifyThrough<JobPrecision> gate draws seed jobPrecision
+        RemotingDecoders.verifyThrough<JobStatus> gate draws seed jobStatus
+        RemotingDecoders.verifyThrough<JobRunStatus> gate draws seed jobRunStatus
+        RemotingDecoders.verifyThrough<JobDefinition> gate draws seed jobDefinition
+        RemotingDecoders.verifyThrough<ExternalHandle> gate draws seed externalHandle
+        RemotingDecoders.verifyThrough<JobRun> gate draws seed jobRun
+        RemotingDecoders.verifyThrough<ScheduleError> gate draws seed scheduleError
+        RemotingDecoders.verifyThrough<ModelExecutionJobRef> gate draws seed modelExecutionJobRef
+        RemotingDecoders.verifyThrough<ModelExecutionScoreRefusal> gate draws seed modelExecutionScoreRefusal
+        RemotingDecoders.verifyThrough<ComputeBudgetDenial> gate draws seed computeBudgetDenial
+        RemotingDecoders.verifyThrough<ModelExecutionGateVerdict> gate draws seed modelExecutionGateVerdict
+        RemotingDecoders.verifyThrough<ModelExecutionRefusal> gate draws seed modelExecutionRefusal
+        RemotingDecoders.verifyThrough<ModelExecutionReceipt> gate draws seed modelExecutionReceipt
+        RemotingDecoders.verifyThrough<ModelExecutionArtifactRef> gate draws seed modelExecutionArtifactRef
+        RemotingDecoders.verifyThrough<ModelExecutionTiming> gate draws seed modelExecutionTiming
+        RemotingDecoders.verifyThrough<ModelExecutionCost> gate draws seed modelExecutionCost
+        RemotingDecoders.verifyThrough<ModelExecutionOutcome> gate draws seed modelExecutionOutcome
+        RemotingDecoders.verifyThrough<ModelExecutionOutcomePage> gate draws seed modelExecutionOutcomePage
+        RemotingDecoders.verifyThrough<ModelExecutionDatasetVersion> gate draws seed modelExecutionDatasetVersion
+        RemotingDecoders.verifyThrough<ModuleExposure> gate draws seed moduleExposure
+        RemotingDecoders.verifyThrough<GrantState> gate draws seed grantState
+        RemotingDecoders.verifyThrough<PartyRef> gate draws seed partyRef
+        RemotingDecoders.verifyThrough<GrantPolicy> gate draws seed grantPolicy
+        RemotingDecoders.verifyThrough<ModuleGrantRecord> gate draws seed moduleGrantRecord
+        RemotingDecoders.verifyThrough<TeamPermissions> gate draws seed teamPermissions
+        RemotingDecoders.verifyThrough<PlatformKnowledgeBaseMode> gate draws seed platformKnowledgeBaseMode
+        RemotingDecoders.verifyThrough<PlatformInfo> gate draws seed platformInfo
+        RemotingDecoders.verifyThrough<TeamMembership> gate draws seed teamMembership
+        RemotingDecoders.verifyThrough<TeamCreationPolicy> gate draws seed teamCreationPolicy
+        RemotingDecoders.verifyThrough<TeamSummary> gate draws seed teamSummary
+        RemotingDecoders.verifyThrough<ProviderOrigin> gate draws seed providerOrigin
+        RemotingDecoders.verifyThrough<UsageRecord> gate draws seed usageRecord
+        RemotingDecoders.verifyThrough<UsageAggregateRow> gate draws seed usageAggregateRow
+        RemotingDecoders.verifyThrough<ColumnMappingTypes.Conversion list> gate draws seed (Decode.list conversion)
+        RemotingDecoders.verifyThrough<Result<unit, string>> gate draws seed (Decode.result Decode.asUnit Decode.asString)
+        RemotingDecoders.verifyThrough<ColumnMappingTypes.ConversionRecord list> gate draws seed (Decode.list conversionRecord)
+        RemotingDecoders.verifyThrough<Result<ColumnMappingTypes.DryRunReport, string>> gate draws seed (Decode.result dryRunReport Decode.asString)
+        RemotingDecoders.verifyThrough<Result<ProcessedDataTypes.FileUploadResponse, string>> gate draws seed (Decode.result fileUploadResponse Decode.asString)
+        RemotingDecoders.verifyThrough<Result<DataManagementTypes.DataFileUpload, string>> gate draws seed (Decode.result dataFileUpload Decode.asString)
+        RemotingDecoders.verifyThrough<Result<ProcessedDataTypes.ProcessedFileEntry, string>> gate draws seed (Decode.result processedFileEntry Decode.asString)
+        RemotingDecoders.verifyThrough<Result<int, string>> gate draws seed (Decode.result Decode.asInt32 Decode.asString)
+        RemotingDecoders.verifyThrough<unit> gate draws seed Decode.asUnit
+        RemotingDecoders.verifyThrough<Result<byte[], string>> gate draws seed (Decode.result Decode.asBytes Decode.asString)
+        RemotingDecoders.verifyThrough<Result<DataSubjectRequestApi.ErasurePreview, string>> gate draws seed (Decode.result erasurePreview Decode.asString)
+        RemotingDecoders.verifyThrough<Result<DataSubjectRequestApi.ErasureRunResult, string>> gate draws seed (Decode.result erasureRunResult Decode.asString)
+        RemotingDecoders.verifyThrough<Result<string, string>> gate draws seed (Decode.result Decode.asString Decode.asString)
+        RemotingDecoders.verifyThrough<Result<ExportStatus, string>> gate draws seed (Decode.result exportStatus Decode.asString)
+        RemotingDecoders.verifyThrough<Result<SignedExportEnvelope, string>> gate draws seed (Decode.result signedExportEnvelope Decode.asString)
+        RemotingDecoders.verifyThrough<Result<AuditEventPage, string>> gate draws seed (Decode.result auditEventPage Decode.asString)
+        RemotingDecoders.verifyThrough<Result<string list, string>> gate draws seed (Decode.result (Decode.list Decode.asString) Decode.asString)
+        RemotingDecoders.verifyThrough<Result<CompositionView, string>> gate draws seed (Decode.result compositionView Decode.asString)
+        RemotingDecoders.verifyThrough<Result<SurfacesView, string>> gate draws seed (Decode.result surfacesView Decode.asString)
+        RemotingDecoders.verifyThrough<Result<RulesView, string>> gate draws seed (Decode.result rulesView Decode.asString)
+        RemotingDecoders.verifyThrough<Result<DisclosureView, string>> gate draws seed (Decode.result disclosureView Decode.asString)
+        RemotingDecoders.verifyThrough<Result<ProvenanceView, string>> gate draws seed (Decode.result provenanceView Decode.asString)
+        RemotingDecoders.verifyThrough<ModuleConfigEntry list> gate draws seed (Decode.list moduleConfigEntry)
+        RemotingDecoders.verifyThrough<Result<ModuleConfigView, string>> gate draws seed (Decode.result moduleConfigView Decode.asString)
+        RemotingDecoders.verifyThrough<Map<string, Map<string, string>>> gate draws seed (Decode.asMap Decode.asString (Decode.asMap Decode.asString Decode.asString))
+        RemotingDecoders.verifyThrough<DataSourceConfig list> gate draws seed (Decode.list dataSourceConfig)
+        RemotingDecoders.verifyThrough<DataSourceConfig option> gate draws seed (Decode.option dataSourceConfig)
+        RemotingDecoders.verifyThrough<Result<Guid, string>> gate draws seed (Decode.result Decode.asGuid Decode.asString)
+        RemotingDecoders.verifyThrough<IngestionRun list> gate draws seed (Decode.list ingestionRun)
+        RemotingDecoders.verifyThrough<TokenStatus option> gate draws seed (Decode.option tokenStatus)
+        RemotingDecoders.verifyThrough<MigrationDataTypeInfo list> gate draws seed (Decode.list migrationDataTypeInfo)
+        RemotingDecoders.verifyThrough<MigrationStatus list> gate draws seed (Decode.list migrationStatus)
+        RemotingDecoders.verifyThrough<Result<MigrationStatus, string>> gate draws seed (Decode.result migrationStatus Decode.asString)
+        RemotingDecoders.verifyThrough<Result<DeploymentReadiness.DeploymentReadinessReport, string>> gate draws seed (Decode.result deploymentReadinessReport Decode.asString)
+        RemotingDecoders.verifyThrough<Result<DeploymentVerification.DeploymentVerificationReport, string>> gate draws seed (Decode.result deploymentVerificationReport Decode.asString)
+        RemotingDecoders.verifyThrough<Result<ExternalContact list, string>> gate draws seed (Decode.result (Decode.list externalContact) Decode.asString)
+        RemotingDecoders.verifyThrough<Result<ExternalContact, string>> gate draws seed (Decode.result externalContact Decode.asString)
+        RemotingDecoders.verifyThrough<Map<string, FlagValue>> gate draws seed (Decode.asMap Decode.asString flagValue)
+        RemotingDecoders.verifyThrough<FeatureFlag list> gate draws seed (Decode.list featureFlag)
+        RemotingDecoders.verifyThrough<Result<Map<string, FlagValue>, string>> gate draws seed (Decode.result (Decode.asMap Decode.asString flagValue) Decode.asString)
+        RemotingDecoders.verifyThrough<Result<HealthSnapshot, string>> gate draws seed (Decode.result healthSnapshot Decode.asString)
+        RemotingDecoders.verifyThrough<Result<PreflightSnapshotView, string>> gate draws seed (Decode.result preflightSnapshotView Decode.asString)
+        RemotingDecoders.verifyThrough<Result<JobSchedulerTelemetryView, string>> gate draws seed (Decode.result jobSchedulerTelemetryView Decode.asString)
+        RemotingDecoders.verifyThrough<Result<DegradedCapability list, string>> gate draws seed (Decode.result (Decode.list degradedCapability) Decode.asString)
+        RemotingDecoders.verifyThrough<Result<AIDenialRollup option, string>> gate draws seed (Decode.result (Decode.option aiDenialRollup) Decode.asString)
+        RemotingDecoders.verifyThrough<(Result<ModuleQueryResponse, ModuleQueryError>) option> gate draws seed (Decode.option (Decode.result moduleQueryResponse moduleQueryError))
+        RemotingDecoders.verifyThrough<ModuleVisibilityResolution option> gate draws seed (Decode.option moduleVisibilityResolution)
+        RemotingDecoders.verifyThrough<Result<ModuleVisibilityProfile option, string>> gate draws seed (Decode.result (Decode.option moduleVisibilityProfile) Decode.asString)
+        RemotingDecoders.verifyThrough<string list> gate draws seed (Decode.list Decode.asString)
+        RemotingDecoders.verifyThrough<Result<NotificationPreferenceView, string>> gate draws seed (Decode.result notificationPreferenceView Decode.asString)
+        RemotingDecoders.verifyThrough<Result<LifecycleSummary, string>> gate draws seed (Decode.result lifecycleSummary Decode.asString)
+        RemotingDecoders.verifyThrough<Result<LifecycleSummary option, string>> gate draws seed (Decode.result (Decode.option lifecycleSummary) Decode.asString)
+        RemotingDecoders.verifyThrough<Result<LifecycleJobHandle, string>> gate draws seed (Decode.result lifecycleJobHandle Decode.asString)
+        RemotingDecoders.verifyThrough<Result<LifecyclePreview, string>> gate draws seed (Decode.result lifecyclePreview Decode.asString)
+        RemotingDecoders.verifyThrough<Result<ExportThenDeprovisionResult, string>> gate draws seed (Decode.result exportThenDeprovisionResult Decode.asString)
+        RemotingDecoders.verifyThrough<Result<OffboardConfirmation, string>> gate draws seed (Decode.result offboardConfirmation Decode.asString)
+        RemotingDecoders.verifyThrough<Result<ScheduledDeprovision, string>> gate draws seed (Decode.result scheduledDeprovision Decode.asString)
+        RemotingDecoders.verifyThrough<Result<ScheduledDeprovision option, string>> gate draws seed (Decode.result (Decode.option scheduledDeprovision) Decode.asString)
+        RemotingDecoders.verifyThrough<Result<PrincipalSummary list, string>> gate draws seed (Decode.result (Decode.list principalSummary) Decode.asString)
+        RemotingDecoders.verifyThrough<PresencePeer list> gate draws seed (Decode.list presencePeer)
+        RemotingDecoders.verifyThrough<LockLease option> gate draws seed (Decode.option lockLease)
+        RemotingDecoders.verifyThrough<Result<WireProvenanceChainPage, ProvenanceQueryError>> gate draws seed (Decode.result wireProvenanceChainPage provenanceQueryError)
+        RemotingDecoders.verifyThrough<Result<ProviderProfileView, string>> gate draws seed (Decode.result providerProfileView Decode.asString)
+        RemotingDecoders.verifyThrough<Result<(string * ProviderHealth) list, string>> gate draws seed (Decode.result (Decode.list (Decode.tuple2 Decode.asString providerHealth)) Decode.asString)
+        RemotingDecoders.verifyThrough<Result<ServiceAccount list, string>> gate draws seed (Decode.result (Decode.list serviceAccount) Decode.asString)
+        RemotingDecoders.verifyThrough<Result<ServiceAccount, string>> gate draws seed (Decode.result serviceAccount Decode.asString)
+        RemotingDecoders.verifyThrough<Result<ServiceAccountTokenView list, string>> gate draws seed (Decode.result (Decode.list serviceAccountTokenView) Decode.asString)
+        RemotingDecoders.verifyThrough<Result<MintedServiceAccountTokenView, string>> gate draws seed (Decode.result mintedServiceAccountTokenView Decode.asString)
+        RemotingDecoders.verifyThrough<Result<ServiceStatusSnapshot, string>> gate draws seed (Decode.result serviceStatusSnapshot Decode.asString)
+        RemotingDecoders.verifyThrough<Result<SectionSummary, string>> gate draws seed (Decode.result sectionSummary Decode.asString)
+        RemotingDecoders.verifyThrough<Result<SessionRecord list, string>> gate draws seed (Decode.result (Decode.list sessionRecord) Decode.asString)
+        RemotingDecoders.verifyThrough<Result<TeamInviteIssueResult, string>> gate draws seed (Decode.result teamInviteIssueResult Decode.asString)
+        RemotingDecoders.verifyThrough<Result<TeamInviteAcceptResult, string>> gate draws seed (Decode.result teamInviteAcceptResult Decode.asString)
+        RemotingDecoders.verifyThrough<Result<TeamInviteSummary list, string>> gate draws seed (Decode.result (Decode.list teamInviteSummary) Decode.asString)
+        RemotingDecoders.verifyThrough<Result<(string * PendingInviteByEmail) list, string>> gate draws seed (Decode.result (Decode.list (Decode.tuple2 Decode.asString pendingInviteByEmail)) Decode.asString)
+        RemotingDecoders.verifyThrough<Result<TeamInviteExpiredPayload list, string>> gate draws seed (Decode.result (Decode.list teamInviteExpiredPayload) Decode.asString)
+        RemotingDecoders.verifyThrough<Result<TeamInfo option, string>> gate draws seed (Decode.result (Decode.option teamInfo) Decode.asString)
+        RemotingDecoders.verifyThrough<Result<UserSummary list, string>> gate draws seed (Decode.result (Decode.list userSummary) Decode.asString)
+        RemotingDecoders.verifyThrough<Result<UserAuthoredSchema list, UserSchemaError>> gate draws seed (Decode.result (Decode.list userAuthoredSchema) userSchemaError)
+        RemotingDecoders.verifyThrough<Result<UserAuthoredSchema, UserSchemaError>> gate draws seed (Decode.result userAuthoredSchema userSchemaError)
+        RemotingDecoders.verifyThrough<Result<MigrationOutcome, UserSchemaError>> gate draws seed (Decode.result migrationOutcome userSchemaError)
+        RemotingDecoders.verifyThrough<Result<unit, UserSchemaError>> gate draws seed (Decode.result Decode.asUnit userSchemaError)
+        RemotingDecoders.verifyThrough<Result<WebhookSubscription, string>> gate draws seed (Decode.result webhookSubscription Decode.asString)
+        RemotingDecoders.verifyThrough<Result<WebhookSubscription list, string>> gate draws seed (Decode.result (Decode.list webhookSubscription) Decode.asString)
+        RemotingDecoders.verifyThrough<Result<WebhookTestResult, string>> gate draws seed (Decode.result webhookTestResult Decode.asString)
+        RemotingDecoders.verifyThrough<Result<WebhookDelivery list, string>> gate draws seed (Decode.result (Decode.list webhookDelivery) Decode.asString)
+        RemotingDecoders.verifyThrough<JobDefinition list> gate draws seed (Decode.list jobDefinition)
+        RemotingDecoders.verifyThrough<JobDefinition option> gate draws seed (Decode.option jobDefinition)
+        RemotingDecoders.verifyThrough<JobRun list> gate draws seed (Decode.list jobRun)
+        RemotingDecoders.verifyThrough<Result<Guid, ScheduleError>> gate draws seed (Decode.result Decode.asGuid scheduleError)
+        RemotingDecoders.verifyThrough<Result<ModelExecutionReceipt, ModelExecutionRefusal>> gate draws seed (Decode.result modelExecutionReceipt modelExecutionRefusal)
+        RemotingDecoders.verifyThrough<Result<ModelExecutionOutcome, ModelExecutionRefusal>> gate draws seed (Decode.result modelExecutionOutcome modelExecutionRefusal)
+        RemotingDecoders.verifyThrough<Result<ModelExecutionOutcomePage, ModelExecutionRefusal>> gate draws seed (Decode.result modelExecutionOutcomePage modelExecutionRefusal)
+        RemotingDecoders.verifyThrough<Result<ModelExecutionDatasetVersion, ModelExecutionRefusal>> gate draws seed (Decode.result modelExecutionDatasetVersion modelExecutionRefusal)
+        RemotingDecoders.verifyThrough<Result<TeamPermissions, string>> gate draws seed (Decode.result teamPermissions Decode.asString)
+        RemotingDecoders.verifyThrough<bool> gate draws seed Decode.asBool
+        RemotingDecoders.verifyThrough<Result<TeamInfo, string>> gate draws seed (Decode.result teamInfo Decode.asString)
+        RemotingDecoders.verifyThrough<TeamInfo list> gate draws seed (Decode.list teamInfo)
+        RemotingDecoders.verifyThrough<TeamMembership list> gate draws seed (Decode.list teamMembership)
+        RemotingDecoders.verifyThrough<string option> gate draws seed (Decode.option Decode.asString)
+        RemotingDecoders.verifyThrough<Result<TeamSummary list, string>> gate draws seed (Decode.result (Decode.list teamSummary) Decode.asString)
+        RemotingDecoders.verifyThrough<UsageRecord list> gate draws seed (Decode.list usageRecord)
+        RemotingDecoders.verifyThrough<UsageAggregateRow list> gate draws seed (Decode.list usageAggregateRow)
+        RemotingDecoders.verifyThrough<byte[]> gate draws seed Decode.asBytes
     ]
 
     /// Phase 801 — `registerAll`, gated: registers every decoder above
     /// only when every one verifies, and registers NOTHING otherwise, so
     /// a disagreement can never leave the table half-adopted.
-    let registerAllVerified (draws: int) (seed: int) : Result<DecoderVerification list, DecoderRefusal list> =
-        let outcomes = verifyAll draws seed
+    let registerAllVerified
+        (gate: DecoderGate)
+        (draws: int)
+        (seed: int)
+        : Result<DecoderVerification list, DecoderRefusal list> =
+        let outcomes = verifyAll gate draws seed
 
         let refusals =
             outcomes
@@ -3896,7 +3900,6 @@ module PlatformDecoders =
             )
         else
             Error refusals
-#endif
 
     /// The API records this module covers, shaped exactly as
     /// `RemotingDecoderFacet.inspect` takes them. The corpus flag is

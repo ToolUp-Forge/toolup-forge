@@ -406,7 +406,7 @@ let private gateSeed = RemotingDecoders.DefaultSeed
 let private platformVerifications
     ()
     : ((string option * string) * Result<JsonDecoderVerification, DecoderRefusal>) list =
-    PlatformJsonDecoders.verifyAll gateOracle gateDraws gateSeed
+    PlatformJsonDecoders.verifyAll (JsonDecoders.gateWith gateOracle) gateDraws gateSeed
 
 /// 840.D — the go-red: total, correct-looking, and WRONG. Two same-typed
 /// fields read in each other's place, so every text is accepted and the
@@ -1868,7 +1868,7 @@ let tests =
 
                 Expect.isEmpty refusals (String.Join("\n", refusals))
 
-                for key, result in PlatformJsonDecoders.verifyAll browserGate gateDraws gateSeed do
+                for key, result in PlatformJsonDecoders.verifyAll (JsonDecoders.gateWith browserGate) gateDraws gateSeed do
                     match result with
                     | Ok verification ->
                         for d in verification.DeclaredDifferences do

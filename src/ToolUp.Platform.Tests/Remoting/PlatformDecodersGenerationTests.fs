@@ -102,7 +102,7 @@ let private Seed = 801
 /// The gate's verdict per wire type, from the COMMITTED module's own
 /// `verifyAll` — the recorded run the generated `registerAll` relies on.
 let private verified: Map<string, Result<DecoderVerification, DecoderRefusal>> =
-    PlatformDecoders.verifyAll Draws Seed
+    PlatformDecoders.verifyAll RemotingDecoders.gate Draws Seed
     |> List.map (fun outcome ->
         match outcome with
         | Ok v -> v.WireType, outcome
@@ -220,7 +220,7 @@ let tests =
         <| fun () ->
             RemotingDecoders.resetForTests ()
 
-            match PlatformDecoders.registerAllVerified Draws Seed with
+            match PlatformDecoders.registerAllVerified RemotingDecoders.gate Draws Seed with
             | Error refusals ->
                 failtestf
                     "registerAllVerified refused:\n  %s"
@@ -296,4 +296,70 @@ let tests =
                 Expect.equal wireType "System.Object" "the refusal names the type"
                 Expect.stringContains reason "closed algebra" "and says why no draw exists"
             | other -> failtestf "an undrawable type must be refused as such, not %A" other
+
+        testCase
+            "902 — the gate writes through the writer it is given, and the generated verifyAll runs the gate it is handed"
+        <| fun () ->
+            // A writer that records what it is asked to write and then
+            // writes it as the shipped one does: the gate must encode every
+            // draw through it, which shows the writer is an argument the
+            // gate really reads, not a name it ignores.
+            let shipped = RemotingDecoders.shippedWriter
+            let written = ResizeArray<Type * obj>()
+
+            let recordingWriter: DecoderWriter = {
+                Write =
+                    fun target ->
+                        let write = shipped.Write target
+
+                        fun value ->
+                            written.Add(target, value)
+                            write value
+            }
+
+            match
+                RemotingDecoders.verifyWith<AIDenialToolModulePair>
+                    recordingWriter
+                    Draws
+                    Seed
+                    PlatformDecoders.aiDenialToolModulePair
+            with
+            | Ok v -> Expect.isNone v.Divergence "the shipped writer's bytes agree"
+            | Error refusal -> failtestf "the generated decoder must verify: %s" (DecoderRefusal.describe refusal)
+
+            Expect.equal written.Count Draws "every draw was written by the writer the gate was given"
+
+            Expect.isTrue
+                (written
+                 |> Seq.forall (fun (target, _) -> target = typeof<AIDenialToolModulePair>))
+                "each at the verified type"
+
+            // A writer that refuses every value: the refusal escapes as it
+            // did from the shipped writer before Phase 902, never as a pass.
+            let refusing: DecoderWriter = {
+                Write = fun _ -> fun _ -> invalidOp "the probe writer refuses"
+            }
+
+            Expect.throws
+                (fun () ->
+                    RemotingDecoders.verifyWith<AIDenialToolModulePair>
+                        refusing
+                        Draws
+                        Seed
+                        PlatformDecoders.aiDenialToolModulePair
+                    |> ignore)
+                "a writer that cannot write cannot be agreed with"
+
+            // The generated module passes each decoder to the gate it is
+            // handed, and to nothing else.
+            let seen = ResizeArray<string>()
+
+            let recording: DecoderGate =
+                fun draws seed target decoder ->
+                    seen.Add(RemotingDecoders.keyFor target)
+                    RemotingDecoders.gate draws seed target decoder
+
+            let outcomes = PlatformDecoders.verifyAll recording Draws Seed
+            Expect.equal (List.ofSeq seen) PlatformDecoders.covered "one gate call per covered type, in order"
+            Expect.equal (List.length outcomes) (List.length PlatformDecoders.covered) "one outcome per call"
     ]

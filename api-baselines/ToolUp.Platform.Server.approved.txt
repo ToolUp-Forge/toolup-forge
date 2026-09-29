@@ -10908,6 +10908,12 @@ ToolUp.Remoting.AspNetCore.Extensions.HttpContext.GetService`1(Microsoft.AspNetC
 ToolUp.Remoting.AspNetCore.RemotingMiddleware`1 (class)
 ToolUp.Remoting.AspNetCore.RemotingMiddleware`1..ctor(Microsoft.AspNetCore.Http.RequestDelegate, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]])
 ToolUp.Remoting.AspNetCore.RemotingMiddleware`1.Invoke(Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Remoting.DecoderShapes (class)
+ToolUp.Remoting.DecoderShapes.DefaultDepth : System.Int32 (literal)
+ToolUp.Remoting.DecoderShapes.draw(System.Random, System.Int32, System.Type) : Microsoft.FSharp.Core.FSharpResult`2[System.Object, System.String]
+ToolUp.Remoting.DecoderWriter (class)
+ToolUp.Remoting.DecoderWriter..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.Type, Microsoft.FSharp.Core.FSharpFunc`2[System.Object, System.Byte[]]])
+ToolUp.Remoting.DecoderWriter.Write : Microsoft.FSharp.Core.FSharpFunc`2[System.Type, Microsoft.FSharp.Core.FSharpFunc`2[System.Object, System.Byte[]]] { get }
 ToolUp.Remoting.Giraffe.Remoting (class)
 ToolUp.Remoting.Giraffe.Remoting.buildHttpHandler`1(ToolUp.Remoting.Server.RemotingOptions`2[Microsoft.AspNetCore.Http.HttpContext, t]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
 ToolUp.Remoting.Giraffe.RemotingBatch (class)
@@ -10924,6 +10930,25 @@ ToolUp.Remoting.Giraffe.RemotingBatchOptions..ctor(System.String, System.Int32, 
 ToolUp.Remoting.Giraffe.RemotingBatchOptions.ElementPipeline : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.RequestDelegate, Microsoft.AspNetCore.Http.RequestDelegate] { get }
 ToolUp.Remoting.Giraffe.RemotingBatchOptions.MaxElements : System.Int32 { get }
 ToolUp.Remoting.Giraffe.RemotingBatchOptions.Route : System.String { get }
+ToolUp.Remoting.Json.BrowserJsonWriter (class)
+ToolUp.Remoting.Json.BrowserJsonWriter.serialize(System.Type, System.Object) : System.String
+ToolUp.Remoting.Json.JsonDecoderOracle (class)
+ToolUp.Remoting.Json.JsonDecoderOracle..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.Type, Microsoft.FSharp.Core.FSharpFunc`2[System.Object, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonValue, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpFunc`2[System.Type, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Json.JsonOracleLoss])
+ToolUp.Remoting.Json.JsonDecoderOracle.Decode : Microsoft.FSharp.Core.FSharpFunc`2[System.Type, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]] { get }
+ToolUp.Remoting.Json.JsonDecoderOracle.Losses : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Json.JsonOracleLoss] { get }
+ToolUp.Remoting.Json.JsonDecoderOracle.Read : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonValue, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Json.JsonDecoderOracle.Write : Microsoft.FSharp.Core.FSharpFunc`2[System.Type, Microsoft.FSharp.Core.FSharpFunc`2[System.Object, System.String]] { get }
+ToolUp.Remoting.Json.JsonDecoders (class)
+ToolUp.Remoting.Json.JsonDecoders.BrowserLossPrefix : System.String (literal)
+ToolUp.Remoting.Json.JsonDecoders.browserOracle(ToolUp.Remoting.Json.JsonDecoderOracle) : ToolUp.Remoting.Json.JsonDecoderOracle
+ToolUp.Remoting.Json.JsonDecoders.describeRefusal(ToolUp.Remoting.DecoderRefusal) : System.String
+ToolUp.Remoting.Json.JsonDecoders.gateWith(ToolUp.Remoting.Json.JsonDecoderOracle) : Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Type, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonDecoderVerification, ToolUp.Remoting.DecoderRefusal]]]]]
+ToolUp.Remoting.Json.JsonDecoders.registerVerifiedForWith`1(ToolUp.Remoting.Json.JsonDecoderOracle, System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonDecoderVerification, ToolUp.Remoting.DecoderRefusal]
+ToolUp.Remoting.Json.JsonDecoders.registerVerifiedWith`1(ToolUp.Remoting.Json.JsonDecoderOracle, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonDecoderVerification, ToolUp.Remoting.DecoderRefusal]
+ToolUp.Remoting.Json.JsonDecoders.verifyBothByTypeWith(ToolUp.Remoting.Json.JsonDecoderOracle, System.Int32, System.Int32, System.Type, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonDecoderVerification, ToolUp.Remoting.DecoderRefusal]
+ToolUp.Remoting.Json.JsonDecoders.verifyBothWith`1(ToolUp.Remoting.Json.JsonDecoderOracle, System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonDecoderVerification, ToolUp.Remoting.DecoderRefusal]
+ToolUp.Remoting.Json.JsonDecoders.verifyByTypeWith(ToolUp.Remoting.Json.JsonDecoderOracle, System.Int32, System.Int32, System.Type, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonDecoderVerification, ToolUp.Remoting.DecoderRefusal]
+ToolUp.Remoting.Json.JsonDecoders.verifyWith`1(ToolUp.Remoting.Json.JsonDecoderOracle, System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.Json.JsonDecoderVerification, ToolUp.Remoting.DecoderRefusal]
 ToolUp.Remoting.Json.JsonRead (class)
 ToolUp.Remoting.Json.JsonRead.DefaultMaxDepth : System.Int32 (literal)
 ToolUp.Remoting.Json.JsonRead.DefaultMaxMembers : System.Int32 (literal)
@@ -11077,6 +11102,65 @@ ToolUp.Remoting.Json.SystemTextJson.UInt64Converter (class)
 ToolUp.Remoting.Json.SystemTextJson.UInt64Converter..ctor()
 ToolUp.Remoting.Json.SystemTextJson.UInt64Converter.Read(System.Text.Json.Utf8JsonReader&, System.Type, System.Text.Json.JsonSerializerOptions) : System.UInt64
 ToolUp.Remoting.Json.SystemTextJson.UInt64Converter.Write(System.Text.Json.Utf8JsonWriter, System.UInt64, System.Text.Json.JsonSerializerOptions) : System.Void
+ToolUp.Remoting.MsgPack.Write (class)
+ToolUp.Remoting.MsgPack.Write.makeSerializerObj(System.Type) : System.Action`2[System.Object, System.IO.Stream]
+ToolUp.Remoting.MsgPack.Write.makeSerializer`1() : System.Action`2[T, System.IO.Stream]
+ToolUp.Remoting.MsgPack.Write.serializeObj(System.Object, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.stackalloc`1(System.Int32) : System.Span`1[a]
+ToolUp.Remoting.MsgPack.Write.this : System.Type { get }
+ToolUp.Remoting.MsgPack.Write.write32bitNumber$W`1(Microsoft.FSharp.Core.FSharpFunc`2[a, System.Byte], Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, a]], a, System.IO.Stream) : Microsoft.FSharp.Core.FSharpFunc`2[System.Boolean, Microsoft.FSharp.Core.Unit]
+ToolUp.Remoting.MsgPack.Write.write32bitNumberBytes(System.Byte, System.Byte, System.Byte, System.Byte, System.IO.Stream, System.Boolean) : System.Void
+ToolUp.Remoting.MsgPack.Write.write32bitNumberFull$W`1(Microsoft.FSharp.Core.FSharpFunc`2[a, System.Byte], Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, a]], a, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.write32bitNumberFull`1(a, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.write32bitNumber`1(a, System.IO.Stream) : Microsoft.FSharp.Core.FSharpFunc`2[System.Boolean, Microsoft.FSharp.Core.Unit]
+ToolUp.Remoting.MsgPack.Write.write64bitNumber$W`1(Microsoft.FSharp.Core.FSharpFunc`2[a, System.Byte], Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, a]], a, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.write64bitNumberBytes(System.Byte, System.Byte, System.Byte, System.Byte, System.Byte, System.Byte, System.Byte, System.Byte, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.write64bitNumberFull$W`1(Microsoft.FSharp.Core.FSharpFunc`2[a, System.Byte], Microsoft.FSharp.Core.FSharpFunc`2[a, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, a]], a, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.write64bitNumberFull`1(a, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.write64bitNumber`1(a, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeArrayHeader(System.Int32, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeArray`1(a[], System.IO.Stream, System.Action`2[a, System.IO.Stream]) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeBigInteger(System.Numerics.BigInteger, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeBin(System.Byte[], System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeBool(System.Boolean, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeByte(System.Byte, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeDataSet(System.Data.DataSet, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeDataTable(System.Data.DataTable, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeDateOnly(System.DateOnly, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeDateTime(System.DateTime, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeDateTimeOffset(System.DateTimeOffset, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeDecimal(System.Decimal, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeDict`2(System.Collections.Generic.Dictionary`2[key, value], System.IO.Stream, System.Action`2[key, System.IO.Stream], System.Action`2[value, System.IO.Stream]) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeDouble(System.Double, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeEnum`2(enum, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeGuid(System.Guid, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeInt64(System.Int64, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeList`1(Microsoft.FSharp.Collections.FSharpList`1[a], System.IO.Stream, System.Action`2[a, System.IO.Stream]) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeMapHeader(System.Int32, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeMap`2(Microsoft.FSharp.Collections.FSharpMap`2[key, value], System.IO.Stream, System.Action`2[key, System.IO.Stream], System.Action`2[value, System.IO.Stream]) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeNil(System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeRecord`1(a, System.IO.Stream, System.Action`2[a, System.IO.Stream][]) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeSByte(System.SByte, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeSet`1(Microsoft.FSharp.Collections.FSharpSet`1[a], System.IO.Stream, System.Action`2[a, System.IO.Stream]) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeSingle(System.Single, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeString(System.String, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeStringEnum`1(a, System.IO.Stream, System.String[], Microsoft.FSharp.Core.FSharpFunc`2[a, System.Int32]) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeStringHeader(System.Int32, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeTimeOnly(System.TimeOnly, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeTimeSpan(System.TimeSpan, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeTuple`1(a, System.IO.Stream, System.Action`2[a, System.IO.Stream][]) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeUInt64(System.UInt64, System.IO.Stream) : System.Void
+ToolUp.Remoting.MsgPack.Write.writeUnion`1(a, System.IO.Stream, System.Action`2[a, System.IO.Stream][][], Microsoft.FSharp.Core.FSharpFunc`2[a, System.Int32]) : System.Void
+ToolUp.Remoting.RemotingDecoders (class)
+ToolUp.Remoting.RemotingDecoders.DefaultDraws : System.Int32 (literal)
+ToolUp.Remoting.RemotingDecoders.DefaultSeed : System.Int32 (literal)
+ToolUp.Remoting.RemotingDecoders.gate : Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Type, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.DecoderVerification, ToolUp.Remoting.DecoderRefusal]]]]] { get }
+ToolUp.Remoting.RemotingDecoders.gateWith(ToolUp.Remoting.DecoderWriter) : Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.Type, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.DecoderVerification, ToolUp.Remoting.DecoderRefusal]]]]]
+ToolUp.Remoting.RemotingDecoders.registerVerified`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.DecoderVerification, ToolUp.Remoting.DecoderRefusal]
+ToolUp.Remoting.RemotingDecoders.shippedWriter : ToolUp.Remoting.DecoderWriter { get }
+ToolUp.Remoting.RemotingDecoders.verifyByTypeWith(ToolUp.Remoting.DecoderWriter, System.Int32, System.Int32, System.Type, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[System.Object, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.DecoderVerification, ToolUp.Remoting.DecoderRefusal]
+ToolUp.Remoting.RemotingDecoders.verifyWith`1(ToolUp.Remoting.DecoderWriter, System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.DecoderVerification, ToolUp.Remoting.DecoderRefusal]
+ToolUp.Remoting.RemotingDecoders.verify`1(System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Remoting.DecoderVerification, ToolUp.Remoting.DecoderRefusal]
 ToolUp.Remoting.Server.AllowAnonymousAttribute (class)
 ToolUp.Remoting.Server.AllowAnonymousAttribute..ctor()
 ToolUp.Remoting.Server.ApiDocs`1 (class)

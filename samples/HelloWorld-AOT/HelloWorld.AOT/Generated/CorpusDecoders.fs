@@ -174,55 +174,59 @@ module CorpusDecoders =
         RemotingDecoders.register<int * string> (Decode.tuple2 Decode.asInt32 Decode.asString)
         RemotingDecoders.register<int * string * bool> (Decode.tuple3 Decode.asInt32 Decode.asString Decode.asBool)
 
-#if !FABLE_COMPILER
     /// Phase 801 — every decoder above beside the reflection reader,
-    /// over `draws` draws of its own type from `seed`. One outcome per
-    /// registration, in registration order; a refusal names the type
-    /// and the first diverging draw.
-    let verifyAll (draws: int) (seed: int) : Result<DecoderVerification, DecoderRefusal> list = [
-        RemotingDecoders.verify<WireCorpus.Address> draws seed address
-        RemotingDecoders.verify<WireCorpus.Priority> draws seed priority
-        RemotingDecoders.verify<WireCorpus.Outcome> draws seed outcome
-        RemotingDecoders.verify<WireCorpus.Consignment> draws seed consignment
-        RemotingDecoders.verify<WireCorpus.Tree> draws seed tree
-        RemotingDecoders.verify<bool> draws seed Decode.asBool
-        RemotingDecoders.verify<int> draws seed Decode.asInt32
-        RemotingDecoders.verify<string> draws seed Decode.asString
-        RemotingDecoders.verify<char> draws seed Decode.asChar
-        RemotingDecoders.verify<byte> draws seed Decode.asByte
-        RemotingDecoders.verify<sbyte> draws seed Decode.asSByte
-        RemotingDecoders.verify<int16> draws seed Decode.asInt16
-        RemotingDecoders.verify<uint16> draws seed Decode.asUInt16
-        RemotingDecoders.verify<uint32> draws seed Decode.asUInt32
-        RemotingDecoders.verify<int64> draws seed Decode.asInt64
-        RemotingDecoders.verify<uint64> draws seed Decode.asUInt64
-        RemotingDecoders.verify<float> draws seed Decode.asFloat
-        RemotingDecoders.verify<float32> draws seed Decode.asFloat32
-        RemotingDecoders.verify<decimal> draws seed Decode.asDecimal
-        RemotingDecoders.verify<DateTime> draws seed Decode.asDateTime
-        RemotingDecoders.verify<DateTimeOffset> draws seed Decode.asDateTimeOffset
-        RemotingDecoders.verify<TimeSpan> draws seed Decode.asTimeSpan
-        RemotingDecoders.verify<Guid> draws seed Decode.asGuid
-        RemotingDecoders.verify<byte[]> draws seed Decode.asBytes
-        RemotingDecoders.verify<int option> draws seed (Decode.option Decode.asInt32)
-        RemotingDecoders.verify<string option> draws seed (Decode.option Decode.asString)
-        RemotingDecoders.verify<WireCorpus.Address option> draws seed (Decode.option address)
-        RemotingDecoders.verify<int list> draws seed (Decode.list Decode.asInt32)
-        RemotingDecoders.verify<WireCorpus.Address list> draws seed (Decode.list address)
-        RemotingDecoders.verify<string[]> draws seed (Decode.array Decode.asString)
-        RemotingDecoders.verify<Map<string, int>> draws seed (Decode.asMap Decode.asString Decode.asInt32)
-        RemotingDecoders.verify<Map<int, string>> draws seed (Decode.asMap Decode.asInt32 Decode.asString)
-        RemotingDecoders.verify<Set<string>> draws seed (Decode.asSet Decode.asString)
-        RemotingDecoders.verify<Set<int>> draws seed (Decode.asSet Decode.asInt32)
-        RemotingDecoders.verify<int * string> draws seed (Decode.tuple2 Decode.asInt32 Decode.asString)
-        RemotingDecoders.verify<int * string * bool> draws seed (Decode.tuple3 Decode.asInt32 Decode.asString Decode.asBool)
+    /// over `draws` draws of its own type from `seed`, through `gate`
+    /// (the shipped one is `RemotingDecoders.gate`, in the server tier).
+    /// One outcome per registration, in registration order; a refusal
+    /// names the type and the first diverging draw.
+    let verifyAll (gate: DecoderGate) (draws: int) (seed: int) : Result<DecoderVerification, DecoderRefusal> list = [
+        RemotingDecoders.verifyThrough<WireCorpus.Address> gate draws seed address
+        RemotingDecoders.verifyThrough<WireCorpus.Priority> gate draws seed priority
+        RemotingDecoders.verifyThrough<WireCorpus.Outcome> gate draws seed outcome
+        RemotingDecoders.verifyThrough<WireCorpus.Consignment> gate draws seed consignment
+        RemotingDecoders.verifyThrough<WireCorpus.Tree> gate draws seed tree
+        RemotingDecoders.verifyThrough<bool> gate draws seed Decode.asBool
+        RemotingDecoders.verifyThrough<int> gate draws seed Decode.asInt32
+        RemotingDecoders.verifyThrough<string> gate draws seed Decode.asString
+        RemotingDecoders.verifyThrough<char> gate draws seed Decode.asChar
+        RemotingDecoders.verifyThrough<byte> gate draws seed Decode.asByte
+        RemotingDecoders.verifyThrough<sbyte> gate draws seed Decode.asSByte
+        RemotingDecoders.verifyThrough<int16> gate draws seed Decode.asInt16
+        RemotingDecoders.verifyThrough<uint16> gate draws seed Decode.asUInt16
+        RemotingDecoders.verifyThrough<uint32> gate draws seed Decode.asUInt32
+        RemotingDecoders.verifyThrough<int64> gate draws seed Decode.asInt64
+        RemotingDecoders.verifyThrough<uint64> gate draws seed Decode.asUInt64
+        RemotingDecoders.verifyThrough<float> gate draws seed Decode.asFloat
+        RemotingDecoders.verifyThrough<float32> gate draws seed Decode.asFloat32
+        RemotingDecoders.verifyThrough<decimal> gate draws seed Decode.asDecimal
+        RemotingDecoders.verifyThrough<DateTime> gate draws seed Decode.asDateTime
+        RemotingDecoders.verifyThrough<DateTimeOffset> gate draws seed Decode.asDateTimeOffset
+        RemotingDecoders.verifyThrough<TimeSpan> gate draws seed Decode.asTimeSpan
+        RemotingDecoders.verifyThrough<Guid> gate draws seed Decode.asGuid
+        RemotingDecoders.verifyThrough<byte[]> gate draws seed Decode.asBytes
+        RemotingDecoders.verifyThrough<int option> gate draws seed (Decode.option Decode.asInt32)
+        RemotingDecoders.verifyThrough<string option> gate draws seed (Decode.option Decode.asString)
+        RemotingDecoders.verifyThrough<WireCorpus.Address option> gate draws seed (Decode.option address)
+        RemotingDecoders.verifyThrough<int list> gate draws seed (Decode.list Decode.asInt32)
+        RemotingDecoders.verifyThrough<WireCorpus.Address list> gate draws seed (Decode.list address)
+        RemotingDecoders.verifyThrough<string[]> gate draws seed (Decode.array Decode.asString)
+        RemotingDecoders.verifyThrough<Map<string, int>> gate draws seed (Decode.asMap Decode.asString Decode.asInt32)
+        RemotingDecoders.verifyThrough<Map<int, string>> gate draws seed (Decode.asMap Decode.asInt32 Decode.asString)
+        RemotingDecoders.verifyThrough<Set<string>> gate draws seed (Decode.asSet Decode.asString)
+        RemotingDecoders.verifyThrough<Set<int>> gate draws seed (Decode.asSet Decode.asInt32)
+        RemotingDecoders.verifyThrough<int * string> gate draws seed (Decode.tuple2 Decode.asInt32 Decode.asString)
+        RemotingDecoders.verifyThrough<int * string * bool> gate draws seed (Decode.tuple3 Decode.asInt32 Decode.asString Decode.asBool)
     ]
 
     /// Phase 801 — `registerAll`, gated: registers every decoder above
     /// only when every one verifies, and registers NOTHING otherwise, so
     /// a disagreement can never leave the table half-adopted.
-    let registerAllVerified (draws: int) (seed: int) : Result<DecoderVerification list, DecoderRefusal list> =
-        let outcomes = verifyAll draws seed
+    let registerAllVerified
+        (gate: DecoderGate)
+        (draws: int)
+        (seed: int)
+        : Result<DecoderVerification list, DecoderRefusal list> =
+        let outcomes = verifyAll gate draws seed
 
         let refusals =
             outcomes
@@ -241,5 +245,4 @@ module CorpusDecoders =
             )
         else
             Error refusals
-#endif
 
