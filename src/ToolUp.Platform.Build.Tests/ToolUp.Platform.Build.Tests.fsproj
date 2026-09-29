@@ -21,6 +21,12 @@
         <!-- Phase 754 — the template gate's stranger's-package guard,
              probed in both directions. -->
         <Compile Include="TemplateGateTests.fs" />
+        <!-- Phase 904 - the samples gate's pure half (discovery, the Fable
+             classification, the count reconciliation), source-linked from
+             the repo root so the `VerifySamples` target and these go-red
+             proofs run one implementation. -->
+        <Compile Include="..\..\SampleGate.fs" Link="SampleGate.fs" />
+        <Compile Include="SampleGateTests.fs" />
         <!-- Phase 326 — the ToolUp.Sdk meta-manifest drift guard. The
              reconciler is source-linked from the repo root rather than
              copied, so this test and the `GenerateSdkManifest` FAKE
