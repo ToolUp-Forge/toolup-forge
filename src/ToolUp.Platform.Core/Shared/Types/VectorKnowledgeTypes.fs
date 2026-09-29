@@ -563,6 +563,16 @@ type FactEgressSurface =
     /// the viewer may not see is ABSENT from the page (the retrieval-door
     /// posture), and the page reports a withheld count and no value.
     | FactBrowse
+    /// A fact table row leaving its team for another team's table under a
+    /// publication grant (Phase 897). Its own door, so the SOURCE team
+    /// controls what leaves: an operator narrows what one team may publish
+    /// to another without narrowing what its own members, the model or an
+    /// export see. The audience is the target team, wider than whoever
+    /// scheduled the publication, so a `Restricted` fact is decided for the
+    /// least-privileged viewer of the source team: publishing never carries
+    /// restricted output past the team's own output level. A row with any
+    /// cell denied here is ABSENT from the publication.
+    | FactTeamPublication
 
 module FactEgressSurface =
     /// Canonical string form, shared by audit events and diagnostics.
@@ -575,6 +585,7 @@ module FactEgressSurface =
         | FactWebhook -> "Webhook"
         | FactPeerEgress -> "PeerEgress"
         | FactBrowse -> "Browse"
+        | FactTeamPublication -> "TeamPublication"
 
 /// Per-fact outcome of the disclosure predicate at one egress surface.
 type FactDisclosureVerdict =
