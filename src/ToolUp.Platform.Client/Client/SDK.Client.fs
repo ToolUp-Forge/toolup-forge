@@ -763,6 +763,13 @@ module Client =
         OccurredAt = System.DateTime.UtcNow
     }
 
+    /// The captured shell dispatcher as the shell reads it (see
+    /// `shellDispatcher`).
+    type private ShellDispatch = {
+        SendToShell: Msg -> unit
+        ShellIsActive: unit -> bool
+    }
+
     /// Module-level capture of the shell's Elmish `dispatch` function.
     /// Set once during `init` via `Cmd.ofEffect` (same pattern as the
     /// notification subscriber). Lets `ClientModuleContext.OnTeamSwitched`
@@ -775,14 +782,17 @@ module Client =
     /// — documented in the platform README's "No new side effects"
     /// exceptions list.
     ///
-    /// Typed via `IDispatcher<Msg>` (ToolUp.Elmish primitive — replaces
-    /// the legacy `(Msg -> unit) option` shape). Captured at program-start
-    /// via `Program.withDispatcherHandle`, by `withShellLifetimeEffects`
-    /// for the shell and every composer over it; `IsActive` flips to `false`
-    /// when `withTermination` triggers, so background callbacks check
-    /// before dispatching and no-op cleanly on hot-reload / teardown
+    /// Read off the program's `IDispatcher` (ToolUp.Elmish primitive —
+    /// replaces the legacy `(Msg -> unit) option` shape), captured at
+    /// program-start via `Program.withDispatcherHandle` by
+    /// `withShellLifetimeEffects`, for the shell and every composer over it
+    /// (Phase 931). A composer's loop takes its own message type, so what is
+    /// held is that dispatcher's `Dispatch` lifted through the composer's
+    /// shell-message constructor, beside its `IsActive` — which flips to
+    /// `false` when `withTermination` triggers, so background callbacks
+    /// check before dispatching and no-op cleanly on hot-reload / teardown
     /// rather than spraying messages at a dead loop.
-    let mutable private shellDispatcher: IDispatcher<Msg> option = None
+    let mutable private shellDispatcher: ShellDispatch option = None
 
     /// Optional caller-supplied UI to inject into the shell. Companion
     /// packages (notably ToolUp.AI) fill these slots from their own
@@ -871,8 +881,8 @@ module Client =
             Some(fun teamId ->
                 shellDispatcher
                 |> Option.iter (fun d ->
-                    if d.IsActive then
-                        d.Dispatch(TeamSwitched(Some teamId))))
+                    if d.ShellIsActive() then
+                        d.SendToShell(TeamSwitched(Some teamId))))
         else
             None
 
@@ -886,8 +896,8 @@ module Client =
             Some(fun () ->
                 shellDispatcher
                 |> Option.iter (fun d ->
-                    if d.IsActive then
-                        d.Dispatch RefreshAccessibleModules))
+                    if d.ShellIsActive() then
+                        d.SendToShell RefreshAccessibleModules))
         else
             None
 
@@ -4824,21 +4834,10 @@ module Client =
         : Program<'arg, 'model, 'msg, 'view> =
         let captureShellDispatcher (dispatcher: IDispatcher<'msg>) =
             shellDispatcher <-
-                Some
-                    { new IDispatcher<Msg> with
-                        member _.Dispatch msg = dispatcher.Dispatch(wrap msg)
-
-                        member _.DispatchAsync block =
-                            dispatcher.DispatchAsync(
-                                async {
-                                    let! msg = block
-                                    return wrap msg
-                                }
-                            )
-
-                        member _.IsActive = dispatcher.IsActive
-                        member _.Terminate() = dispatcher.Terminate()
-                    }
+                Some {
+                    SendToShell = fun msg -> dispatcher.Dispatch(wrap msg)
+                    ShellIsActive = fun () -> dispatcher.IsActive
+                }
 
         (prog, programLifetimeEffects config)
         ||> List.fold (fun p effect -> p |> Program.withEffect (EffectHandle.map wrap effect))
