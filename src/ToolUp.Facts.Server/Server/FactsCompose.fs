@@ -39,9 +39,15 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // It speaks only when BOTH hold: more than one replica is configured
 // (`ServerConfig.ReplicaCount > 1`), and the composed store is the blob
 // default. A single-replica deployment does not register it at all, so its
-// composition is byte-for-byte unchanged (GP 11). It warns first — above
-// `BlobFactStoreScale.WarnAboveFacts` facts in any one scope — and refuses
-// startup only above `BlobFactStoreScale.RefuseAboveFacts`.
+// composition is byte-for-byte unchanged (GP 11). It warns above
+// `BlobFactStoreScale.WarnAboveFacts` facts in any one scope, and warns
+// again, in stronger terms, above `BlobFactStoreScale.RefuseAboveFacts`.
+//
+// **Warn-only in this release (operator decision, 2026-09-29).** Phase 888
+// shipped the upper threshold as a startup REFUSAL. It is a warning for
+// now: both thresholds and the advice to move to the indexed companion
+// stand, and nothing this guard reports stops a deployment starting. The
+// upper constant keeps its name so no caller breaks.
 //
 // The count is the census `BlobFactStore` keeps (`_facts/{factId}.json`,
 // one blob per fact): one `List` per scope, no download.
@@ -56,9 +62,11 @@ module BlobFactStoreScale =
     let WarnAboveFacts = 50_000
 
     /// Above this many facts in one scope, with more than one replica, the
-    /// guard refuses startup. Sized at the grounding plane's stated
-    /// population (300,000 subjects), where one blob-store population read
-    /// is 300,000 blob reads per replica per question.
+    /// guard's warning becomes the stronger one. Sized at the grounding
+    /// plane's stated population (300,000 subjects), where one blob-store
+    /// population read is 300,000 blob reads per replica per question.
+    /// Warn-only in this release (operator decision, 2026-09-29): Phase 888
+    /// refused startup here, and the name is kept from then.
     [<Literal>]
     let RefuseAboveFacts = 300_000
 
@@ -72,8 +80,10 @@ module BlobFactStoreScale =
     let FactsPrefix = "_facts/"
 
     /// The guard's verdict over per-scope fact counts. `Ok` below the warn
-    /// threshold or at one replica; `Warning` above it; `Error` above the
-    /// refusal threshold. The largest scope decides, and is named.
+    /// threshold or at one replica; `Warning` above it, and a stronger
+    /// `Warning` above the upper threshold — never `Error` in this release
+    /// (operator decision, 2026-09-29). The largest scope decides, and is
+    /// named.
     let verdict
         (replicaCount: int)
         (warnAboveFacts: int)
@@ -84,9 +94,9 @@ module BlobFactStoreScale =
         | _ when replicaCount <= 1 -> ConfigValidation.ValidationResult.Ok
         | None -> ConfigValidation.ValidationResult.Ok
         | Some(scope, count) when count > refuseAboveFacts ->
-            ConfigValidation.ValidationResult.Error(
+            ConfigValidation.ValidationResult.Warning(
                 sprintf
-                    "ReplicaCount = %d and scope '%s' holds %d facts in BlobFactStore, above the %d-fact refusal threshold. Every replica reads the whole scope for a population read, an assert and every whole-store walk, so each question costs %d blob reads per replica. Compose %s (PostgresFactStoreCompose.withPostgresFactStore) behind the same IFactStore contract, or run a single replica."
+                    "ReplicaCount = %d and scope '%s' holds %d facts in BlobFactStore, above the %d-fact upper threshold. Every replica reads the whole scope for a population read, an assert and every whole-store walk, so each question costs %d blob reads per replica. Move to %s (PostgresFactStoreCompose.withPostgresFactStore) behind the same IFactStore contract, or run a single replica. This check warns and does not refuse startup in this release."
                     replicaCount
                     scope
                     count
@@ -97,7 +107,7 @@ module BlobFactStoreScale =
         | Some(scope, count) when count > warnAboveFacts ->
             ConfigValidation.ValidationResult.Warning(
                 sprintf
-                    "ReplicaCount = %d and scope '%s' holds %d facts in BlobFactStore, above the %d-fact warning threshold (startup is refused above %d). Population reads and asserts read the whole scope on every replica. Plan the move to %s (PostgresFactStoreCompose.withPostgresFactStore), which indexes each read."
+                    "ReplicaCount = %d and scope '%s' holds %d facts in BlobFactStore, above the %d-fact warning threshold (the stronger warning is at %d). Population reads and asserts read the whole scope on every replica. Plan the move to %s (PostgresFactStoreCompose.withPostgresFactStore), which indexes each read."
                     replicaCount
                     scope
                     count
@@ -113,11 +123,12 @@ module BlobFactStoreScale =
 /// blob store from a replacement even when a decorator wraps it.
 type internal FactStoreBackend = { Backend: string }
 
-/// Startup guard (Phase 888): warns, then refuses, a multi-replica
-/// deployment whose blob fact store holds more facts in one scope than the
-/// blob layout serves well, naming `ToolUp.FactStores.Postgres` as the
-/// remedy. Registered by `FactsCompose.withFactStore` only when
-/// `ServerConfig.ReplicaCount > 1`.
+/// Startup guard (Phase 888): warns a multi-replica deployment whose blob
+/// fact store holds more facts in one scope than the blob layout serves
+/// well, in stronger terms past the upper threshold, naming
+/// `ToolUp.FactStores.Postgres` as the remedy. Warn-only in this release
+/// (operator decision, 2026-09-29) — it never refuses startup. Registered
+/// by `FactsCompose.withFactStore` only when `ServerConfig.ReplicaCount > 1`.
 type BlobFactStoreScaleValidator
     /// The guard over `storage`'s census of the scopes `scopes` enumerates,
     /// at explicit thresholds. `isBlobStore` is whether the composed store

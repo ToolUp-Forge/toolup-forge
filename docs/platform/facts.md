@@ -282,9 +282,15 @@ below its index threshold).
 blob store composed, `FactsCompose.withFactStore` registers
 `BlobFactStoreScaleValidator`: it counts each scope's fact census, warns
 above `BlobFactStoreScale.WarnAboveFacts` (50,000) facts in one scope, and
-refuses startup above `BlobFactStoreScale.RefuseAboveFacts` (300,000),
-naming this companion as the remedy. A single-replica deployment registers
-nothing, and the guard stands down once another store is composed.
+warns again, in stronger terms, above `BlobFactStoreScale.RefuseAboveFacts`
+(300,000), naming this companion as the remedy both times. **It is
+warn-only in this release** (operator decision, 2026-09-29): Phase 888
+shipped the upper threshold as a startup refusal, and it now reports a
+warning instead — both thresholds and the advice to move to this companion
+stand, the constant keeps its name so no caller breaks, and nothing the
+guard reports stops a deployment starting. A single-replica deployment
+registers nothing, and the guard stands down once another store is
+composed.
 
 ## Fact vs result vs model artifact
 
