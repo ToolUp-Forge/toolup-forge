@@ -60,6 +60,46 @@ type NoFactRecomputer() =
             return Ok None
         }
 
+/// Phase 889 — what the whole-store walks ask a DELEGATED metric instead of
+/// enumerating its facts. A delegated population lives in a declared fact
+/// table, not in the fact log, so coherence checking and invalidation take a
+/// delegated path that puts the question to the table: its current run, the
+/// rows for named subjects, the per-parent totals of its column. None of
+/// them mints a fact or materialises the population in the fact tier.
+///
+/// Implemented by the delegated fact store (`DelegatedFactStore`), which is
+/// also the composed `IFactStore` — so a walk handed the composed store can
+/// discover the delegated paths by a type test, and a composition with no
+/// delegate never sees this interface at all (GP 13).
+///
+/// Walks are platform-carried work (a coherence sweep, a refresh), so the
+/// members take the persisted `string` scope, as the store's own walk-facing
+/// overloads do.
+type IDelegatedFactWalks =
+    inherit IFactStore
+
+    /// The composed delegate records, one per delegated (table, column),
+    /// as declared (`Watermark = None`).
+    abstract Delegates: DelegateFact list
+
+    /// Ask the table for the delegate's current run — its watermark, row
+    /// count and period reach — or `None` when the table has never
+    /// committed in this scope.
+    abstract CurrentRun: scopeId: string * metric: MetricRef -> Async<Result<DelegateRun option, DelegateRefusal>>
+
+    /// Ask the table for the current run's rows of the named subjects (a
+    /// bounded point read per subject). Subjects the run does not carry are
+    /// simply absent from the answer.
+    abstract CurrentRows:
+        scopeId: string * metric: MetricRef * subjects: string list list ->
+            Async<Result<DelegateTableRow list, DelegateRefusal>>
+
+    /// Ask the table for the current run's per-parent totals of the
+    /// delegate's column (one entry per parent path and period).
+    abstract ChildTotals:
+        scopeId: string * metric: MetricRef * periodOverlaps: TemporalExtent option ->
+            Async<Result<DelegateChildTotal list, DelegateRefusal>>
+
 /// The pure invalidation derivation + the OnQuery inline recompute path.
 module FactInvalidation =
 
@@ -164,4 +204,45 @@ module FactInvalidation =
                 match asserted with
                 | Ok f -> return Ok(Some f)
                 | Error e -> return Error e
+        }
+
+    // ── The delegated path (Phase 889) ─────────────────────────────
+
+    /// Whether a fact was minted from a run of the delegate's table OTHER
+    /// than the current one — the delegated `InputsChanged` state. A minted
+    /// fact names its run by watermark token among its input hashes, and a
+    /// commit advancing the table's watermark changes that input; so this is
+    /// `isInvalidated` over "every run of this table but `currentToken`",
+    /// derived per call and never stored (law L1).
+    let isMintedUnderStaleRun (delegateFact: DelegateFact) (currentToken: string) (fact: Fact) : bool =
+        fact.Metric = delegateFact.Metric
+        && DelegateFact.covers delegateFact fact.Subject
+        && Fact.methodIdentity fact.Method = Fact.methodIdentity delegateFact.Method
+        && fact.Evidence.InputHashes
+           |> List.exists (fun input -> DelegateFact.isRunToken delegateFact.TableId input && input <> currentToken)
+
+    /// The delegated invalidation walk: the current heads minted from a
+    /// superseded run of the delegate's table. The read is narrowed to the
+    /// delegated metric and its method, so it enumerates what was QUOTED —
+    /// never the population, which the fact tier does not hold — and the
+    /// table is asked nothing but its current watermark (the caller's
+    /// `currentToken`).
+    let staleDelegatedHeads
+        (store: IFactStore)
+        (scopeId: string)
+        (delegateFact: DelegateFact)
+        (currentToken: string)
+        : Async<Fact list> =
+        async {
+            let! heads =
+                store.Query(
+                    scopeId,
+                    {
+                        FactQuery.all with
+                            Metric = Some delegateFact.Metric
+                            Method = Some delegateFact.Method
+                    }
+                )
+
+            return heads |> List.filter (isMintedUnderStaleRun delegateFact currentToken)
         }
