@@ -14,11 +14,12 @@ open Fable.Core
 // for a route, it injects a `<meta name="toolup-prerendered"
 // content="true">` marker into the document head. On page load,
 // this module reads the marker:
-//   - present  → mount via `Program.withReactHydrate` (React's
-//                `hydrateRoot` against the existing DOM, preserving
-//                the indexable first paint emitted by the build).
-//   - absent   → mount via `Program.withReactSynchronous` (React's
-//                `createRoot`, the standard SPA-only path).
+//   - present  → mount the store-bound shell with hydration
+//                (`Client.runStoreBound true`: React's `hydrateRoot`
+//                against the existing DOM, preserving the indexable
+//                first paint emitted by the build).
+//   - absent   → mount via `Client.run` (React's `createRoot`, the
+//                standard SPA-only path).
 //
 // Stock SPA deployments stay byte-for-byte unchanged:
 // `ClientConfig.PrerenderRoutes = []` ⇒ no prerendered HTML ⇒

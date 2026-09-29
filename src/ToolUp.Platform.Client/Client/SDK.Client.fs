@@ -770,9 +770,9 @@ module Client =
         ShellIsActive: unit -> bool
     }
 
-    /// Module-level capture of the shell's Elmish `dispatch` function.
-    /// Set once during `init` via `Cmd.ofEffect` (same pattern as the
-    /// notification subscriber). Lets `ClientModuleContext.OnTeamSwitched`
+    /// Module-level capture of the shell's Elmish `dispatch` function,
+    /// set once at program start (see the capture paragraph below). Lets
+    /// `ClientModuleContext.OnTeamSwitched`
     /// dispatch a shell-level `TeamSwitched` from within a module's
     /// update handler — the module's own `dispatch` is typed to its own
     /// `Msg`, so it can't otherwise reach the shell.
