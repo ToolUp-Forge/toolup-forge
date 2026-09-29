@@ -9,7 +9,11 @@ F# source you commit and compile like any other:
   closed composition with no reflective call on any path, which is what lets a client decode
   binary responses under `PublishAot`.
 - **Typed argument-parse tables** — per API record, one typed parse per method through the
-  statically-typed System.Text.Json seam, and a `methods` manifest.
+  statically-typed System.Text.Json seam, a `methods` manifest, and (since Phase 906) the
+  record's generated **invocations** with a `register ()`: call it from the server's composition
+  root before the remoting handler is built, and the remoting proxy serves every covered method
+  through its typed call — inside the adapter's pre-flight chain, never beside it — without
+  building the reflective endpoint for it.
 - **JSON argument decoders** — per API record, a JSON algebra decoder for every argument type its
   methods take, registered scoped to the record: what the server's argument seam reads through.
 - **Client proxies** — per API record, argument encoders, response decoders and a proxy builder

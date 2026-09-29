@@ -2043,6 +2043,7 @@
              AspNetCore-side refusal scope. Same TestServer-scaffold
              deferral as the prior 69 perf-shrink packs. -->
         <Compile Include="InProcess\FromContextAsyncBuildOnceTests.fs" />
+        <Compile Include="InProcess\GeneratedInvocationChainTests.fs" />
         <!-- Phase 26 — deploy-plane substrate bindings. Real
              EntityStoreTenantFleet (over BlobEntityStore + in-memory
              mocks for the injected IContainerScheduler / IDeployPipeline)

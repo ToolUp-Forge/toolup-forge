@@ -1569,6 +1569,9 @@ let private registeredTests =
         // Source-audit pack pinning the `buildDispatcherTable` carve +
         // the compose-time bind in the FromContextAsync arm.
         FromContextAsyncBuildOnceTests.tests
+        // Phase 906 — a generated invocation runs inside the pre-flight
+        // chain, stage by stage, against its reflective twin.
+        GeneratedInvocationChainTests.tests
         IAIProviderContract.tests
         // Phase 26 — deploy-plane substrate contract packs bound to
         // their single-node defaults + in-memory mocks. The

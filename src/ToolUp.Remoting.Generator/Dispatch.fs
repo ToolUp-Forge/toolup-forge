@@ -37,10 +37,19 @@ open Microsoft.FSharp.Reflection
 // follow-on will swap a `Decode`-composed body into without changing a single
 // call site.
 //
-// The handler invocation and result serialisation are NOT emitted. Both live
-// behind `Proxy.fs`'s private composition and the adapter's `HttpContext`
-// plumbing; emitting them would mean widening that surface, which is the
-// irreversible call this phase escalates rather than takes.
+// Phase 906 — the handler INVOCATION is now emitted too, as a
+// `GeneratedInvocationTable` the server's remoting proxy composes (see
+// `SourceGenDispatch.fs` in ToolUp.Platform.Server for the whole account).
+// What the emitted code owns is exactly the part that needs static types:
+// the call of the record's field with each argument taken, in order,
+// through `GeneratedArguments.Next<'T>`, and the handler's `Async<'r>` handed
+// to `GeneratedArguments.Complete`. Both are the proxy's own steps, so the
+// verb check, the argument decode (record-scoped, as the reflective proxy
+// decodes), the refusals and the result's serialise stay the proxy's single
+// implementation, and the adapter's pre-flight chain runs around the call
+// because the call is INSIDE the proxy the chain already wraps. The
+// `decode<Method>Args` parses above are unchanged and still emitted: they
+// are a standalone typed parse, not the dispatch path.
 
 /// One method on an API record, as the dispatch emitter sees it.
 type DispatchMethod = {
@@ -50,11 +59,20 @@ type DispatchMethod = {
     ArgumentTypes: string list
     /// The `Async<'r>` result's `'r`, spelled as F# source.
     ReturnSpelling: string
+    /// Phase 906 — the field's type flattened through its curried chain,
+    /// each part spelled as F# source: the same list, in the same order, as
+    /// the server's reflective proxy computes (`TypeInfo.flattenFuncTypes`),
+    /// ending in the `Async<'r>`. Emitted so the generated table reflects
+    /// over nothing when it is built.
+    FlattenedTypes: string list
 }
 
 /// One API record's dispatch table.
 type DispatchTable = {
     ApiRecordName: string
+    /// The record's F# source spelling, FULLY QUALIFIED (Phase 906): the
+    /// emitted invocation table names the record itself, and the emitted
+    /// module's namespace and opens need not reach the record's own.
     ApiRecordSpelling: string
     Methods: DispatchMethod list
 }
@@ -71,6 +89,21 @@ module Dispatch =
         else
             []
 
+    /// The server proxy's flattening rule (`TypeInfo.flattenFuncTypes`):
+    /// a function type contributes its domain's parts, then its range's.
+    let rec private flatten (t: Type) : Type list =
+        if FSharpType.IsFunction t then
+            let domain, range = FSharpType.GetFunctionElements t
+            flatten domain @ flatten range
+        else
+            [ t ]
+
+    let private spellFlattened (t: Type) : string =
+        if t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<Async<_>> then
+            sprintf "Async<%s>" (Plan.typeSpelling (t.GetGenericArguments()[0]))
+        else
+            Plan.typeSpelling t
+
     /// Read an API record's methods off the same metadata the dispatcher's
     /// reflective classifier reads.
     let tableFor (apiRecord: Type) : DispatchTable =
@@ -83,11 +116,12 @@ module Dispatch =
                     MethodName = f.Name
                     ArgumentTypes = domains f.PropertyType |> List.map Plan.typeSpelling
                     ReturnSpelling = Plan.typeSpelling returnType
+                    FlattenedTypes = flatten f.PropertyType |> List.map spellFlattened
                 }))
 
         {
             ApiRecordName = Plan.simpleName apiRecord
-            ApiRecordSpelling = Plan.typeSpelling apiRecord
+            ApiRecordSpelling = apiRecord.FullName.Replace('+', '.')
             Methods = methods
         }
 
@@ -130,6 +164,44 @@ module Dispatch =
             ""
         ]
 
+    /// Phase 906 — one method's entry in the emitted invocation table.
+    let private invocationEntry (table: DispatchTable) (m: DispatchMethod) =
+        let builder =
+            match m.ArgumentTypes with
+            | first :: _ when first <> "unit" ->
+                sprintf
+                    "ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<%s, %s>"
+                    table.ApiRecordSpelling
+                    first
+            | _ -> sprintf "ToolUp.Remoting.Server.GeneratedInvocation.forMethod<%s>" table.ApiRecordSpelling
+
+        let flattened =
+            m.FlattenedTypes |> List.map (sprintf "typeof<%s>") |> String.concat "; "
+
+        let takes =
+            m.ArgumentTypes
+            |> List.mapi (fun i spelling -> sprintf "                    let a%d = args.Next<%s>()" i spelling)
+
+        let call =
+            match m.ArgumentTypes with
+            | [] -> sprintf "api.%s" m.MethodName
+            | _ ->
+                sprintf
+                    "api.%s %s"
+                    m.MethodName
+                    (m.ArgumentTypes |> List.mapi (fun i _ -> sprintf "a%d" i) |> String.concat " ")
+
+        [
+            sprintf "            %s" builder
+            sprintf "                \"%s\"" m.MethodName
+            sprintf "                [| %s |]" flattened
+            sprintf
+                "                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: %s) ->"
+                table.ApiRecordSpelling
+        ]
+        @ takes
+        @ [ sprintf "                    args.Complete(%s))" call ]
+
     /// Render a dispatch table as F# source.
     let compilationUnit (namespaceName: string) (opens: string list) (table: DispatchTable) : string =
         let sb = StringBuilder()
@@ -145,6 +217,9 @@ module Dispatch =
             sprintf "//   Phase 69k.B — typed argument parse for %s." table.ApiRecordName
             "//   Every argument decodes through the Phase 783 statically-typed STJ"
             "//   seam, never a reflective MethodInfo walk over a boxed obj."
+            "//   Phase 906 — and the generated invocation of every method, which"
+            "//   the server's remoting proxy composes inside the adapter's"
+            "//   pre-flight chain once `register ()` has run."
             "// </auto-generated>"
             ""
             sprintf "namespace %s" namespaceName
@@ -181,4 +256,27 @@ module Dispatch =
 
         write [ "    ]"; "" ]
         table.Methods |> List.iter (methodBody table >> write)
+
+        write [
+            "    /// Phase 906 — every method's generated invocation. The server's"
+            "    /// remoting proxy composes it as the INNERMOST stage of the adapter's"
+            "    /// pre-flight chain (auth, rate limit, validation, idempotency and"
+            "    /// audit all run around it); arguments decode through the proxy's"
+            "    /// own seam, and only the call and the result's type are typed here."
+            sprintf "    let invocations: ToolUp.Remoting.Server.GeneratedInvocationTable<%s> =" table.ApiRecordSpelling
+            "        ToolUp.Remoting.Server.GeneratedInvocation.table ["
+        ]
+
+        table.Methods |> List.iter (invocationEntry table >> write)
+
+        write [
+            "        ]"
+            ""
+            "    /// Register `invocations` with the server's remoting proxy. Call"
+            "    /// once from the composition root, BEFORE the remoting handler is"
+            "    /// built: the proxy reads the registry when it is built."
+            "    let register () ="
+            "        ToolUp.Remoting.Server.GeneratedInvocation.register invocations"
+        ]
+
         sb.ToString()
