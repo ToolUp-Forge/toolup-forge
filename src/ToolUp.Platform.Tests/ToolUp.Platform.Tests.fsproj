@@ -2738,6 +2738,10 @@
              write path per level and role, per-team records and the deployment
              default, elevated-read and level-change audit, and who may change it. -->
         <Compile Include="InProcess\ConversationVisibilityTests.fs" />
+        <!-- Phase 895 — the fact browse surface (IFactBrowseApi): page ceiling,
+             the FactBrowse egress door, the population tool's ranking, runs and
+             movers, one fact's provenance, and the per-run notification. -->
+        <Compile Include="InProcess\FactBrowseTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />

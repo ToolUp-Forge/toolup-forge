@@ -2487,6 +2487,10 @@ let private registeredTests =
         // Phase 859 - team conversation visibility: per-team level, every
         // read/write path filtered, audit, and who may change the level.
         ConversationVisibilityTests.tests
+        // Phase 895 - the fact browse surface: bounded pages over a
+        // 100,000-subject table, the FactBrowse egress door, one ranking with
+        // the population tool, tables and runs, per-run notification.
+        FactBrowseTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each
