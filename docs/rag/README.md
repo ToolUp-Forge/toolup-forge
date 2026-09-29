@@ -86,6 +86,10 @@ See [api-reference.md](api-reference.md) for `RAGServerApp`, `IRetrievalPipeline
 
 See [extending.md](extending.md) for writing a new embedding provider, vector store, or retrieval tracer.
 
+## Performance
+
+See [performance.md](performance.md) for what retrieval and the fact store cost under concurrent load — measured over each vector store, over in-memory, on-disk and emulated object storage, and over a local database — with the machine and its load named beside every figure, the budgets the gate holds them to, and which figures are extrapolated rather than measured.
+
 ## Scope isolation
 
 The retrieval pipeline filters requested scopes against the caller's `AccessContext.TeamId` before any call into `IVectorStore`. A mismatched `Team teamId` returns an empty result rather than an error — prompt builders compose without fault handling. `Platform` and `Deployment` scopes are universally readable for authenticated callers (when `PlatformKnowledgeBase` is enabled).
