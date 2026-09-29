@@ -1140,3 +1140,462 @@ let populationRegistryTests (name: string) (registryFactory: IMetricRegistry -> 
                 "naming a method selects exactly its lineage"
         }
     ]
+// ─── Differential pack — two implementations, one answer (Phase 888) ─
+//
+// The contract packs above hold one store to the laws. This one holds a
+// CANDIDATE store to a REFERENCE store: one seeded fact base, asserted
+// through both under the same deterministic clock, then every query shape
+// compared value for value — the Phase 702 population matrix, a point-read
+// matrix over every clause the seed can distinguish (subject × metric ×
+// period × method × history × visibility instant), every supersession
+// chain and every fact by id.
+//
+// What is normalised, and why: a point read's listing is ordered by
+// (hierarchy, metric, period start) under the contract, and ties are left
+// to the implementation — so both listings are compared re-sorted with the
+// content address as the tiebreak, and each is separately required to be
+// in the contract's order. A competition indicator is a set rendered as a
+// list, so it is compared sorted. Nothing else is normalised: population
+// results, chains and facts compare exactly.
+
+/// A deterministic, strictly-increasing clock — identical sequences give
+/// both stores identical transaction times.
+let private differentialClock () : unit -> DateTime =
+    let current = ref (DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc))
+
+    fun () ->
+        let value = current.Value
+        current.Value <- value.AddSeconds 1.0
+        value
+
+let private differentialRegistry: IMetricRegistry =
+    MetricRegistry.build [
+        {
+            Module = "test"
+            Definition = {
+                Id = "elasticity"
+                Name = "Elasticity"
+                Unit = "ratio"
+                Dimensionality = "ratio"
+                Direction = HigherIsBetter
+                DisplayFormat = "N2"
+                Staleness = UntilSuperseded
+                ProducingOperation = None
+                CanonicalMethod = Some "computed:rollup"
+                RecomputePolicy = None
+                RollUp = None
+                Context = None
+            }
+        }
+    ] []
+
+let private q3Differential: TemporalExtent = {
+    From = q2.To
+    To = q2.To.AddMonths 3
+    Label = Some "Q3-2026"
+}
+
+let private unmarkedDifferential: TemporalExtent = {
+    From = DateTime(2026, 1, 1)
+    To = DateTime(2026, 2, 1)
+    Label = None
+}
+
+let private localDifferential: TemporalExtent = {
+    From = DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Local)
+    To = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Local)
+    Label = None
+}
+
+let private rollupMethod = Computed("rollup", "1", "p0")
+let private estimatorMethod = Computed("estimator", "1", "p0")
+
+/// Paths carrying every character a key, a path or a separator could trip
+/// on, and the empty segment.
+let private awkwardDifferentialPath = [ "a/b"; ""; "c>d"; "x|y"; "100%"; "é"; "we>ird\tta\\b\nnl" ]
+
+let private differentialDraft
+    (path: string list)
+    (metric: string)
+    (method': MethodRef)
+    (value: FactValue)
+    (inputHash: string)
+    : FactDraft =
+    {
+        Subject = { Hierarchy = "geography"; Path = path }
+        Metric = MetricRef metric
+        Value = value
+        Period = q2
+        Method = method'
+        Evidence = {
+            ResultRef = None
+            InputHashes = [ inputHash ]
+            TriggerRef = None
+        }
+        Confidence = None
+        Disclosure = Disclosure.Surfaceable
+    }
+
+/// The seed: the Phase 702 population (supersession, competition, the
+/// non-comparable shapes, a second depth, a neighbouring metric, awkward
+/// and empty path segments, equal magnitudes at different scales) plus the
+/// Phase 890 point-read shapes (several periods, unmarked and local-kind
+/// periods, supersession within each), asserted one draft at a time — then
+/// a batch carrying one lineage twice.
+let private differentialDrafts: FactDraft list = [
+    for i in 0..5 do
+        differentialDraft
+            [ "eu"; sprintf "sku-%06d" i ]
+            "elasticity"
+            rollupMethod
+            (Scalar(decimal (10 * i)))
+            (sprintf "h%d" i)
+    differentialDraft [ "eu"; "sku-000000" ] "elasticity" rollupMethod (Scalar 95m) "h0-v2"
+    differentialDraft [ "eu"; "sku-000001" ] "elasticity" (HumanAsserted "cfo") (Scalar 77m) "cfo-1"
+    differentialDraft [ "eu"; "sku-000006" ] "elasticity" rollupMethod (Absent "no data loaded") "h6"
+    differentialDraft [ "eu"; "sku-000007" ] "elasticity" rollupMethod (Categorical "n/a") "h7"
+    differentialDraft [ "eu"; "sku-000008" ] "elasticity" rollupMethod (Interval(1m, 2m)) "h8"
+    differentialDraft [ "eu" ] "elasticity" rollupMethod (Scalar 500m) "hroot"
+    differentialDraft [ "eu"; "sku-000000" ] "revenue" rollupMethod (Scalar 1234m) "rev0"
+    differentialDraft [ "eu"; "we>ird\tta\\b\nnl" ] "elasticity" rollupMethod (Scalar 42m) "hodd"
+    differentialDraft [ "eu"; "" ] "elasticity" rollupMethod (Scalar 43.0m) "hempty"
+    differentialDraft [ "eu"; "sku-000009" ] "elasticity" rollupMethod (Scalar 43.00m) "htie"
+    differentialDraft [ "uk" ] "revenue" rollupMethod (Scalar 1m) "uk-q2-v1"
+    differentialDraft [ "uk" ] "revenue" rollupMethod (Scalar 2m) "uk-q2-v2"
+    differentialDraft [ "uk" ] "revenue" estimatorMethod (Scalar 3m) "uk-q2-est"
+    {
+        differentialDraft [ "uk" ] "revenue" rollupMethod (Scalar 4m) "uk-q3" with
+            Period = q3Differential
+    }
+    {
+        differentialDraft [ "uk" ] "revenue" rollupMethod (Scalar 5m) "uk-un-v1" with
+            Period = unmarkedDifferential
+    }
+    {
+        differentialDraft [ "uk" ] "revenue" rollupMethod (Scalar 6m) "uk-un-v2" with
+            Period = unmarkedDifferential
+    }
+    {
+        differentialDraft [ "uk" ] "revenue" rollupMethod (Scalar 7m) "uk-loc" with
+            Period = localDifferential
+    }
+    differentialDraft [ "uk" ] "cost" rollupMethod (Scalar 8m) "uk-cost"
+    differentialDraft [ "fr" ] "revenue" rollupMethod (Scalar 9m) "fr-q2"
+    differentialDraft awkwardDifferentialPath "revenue" rollupMethod (Scalar 10m) "awk-v1"
+    differentialDraft awkwardDifferentialPath "revenue" rollupMethod (Scalar 11m) "awk-v2"
+    differentialDraft [ "de" ] "elasticity" rollupMethod (Scalar 12m) "de-rollup"
+    differentialDraft [ "de" ] "elasticity" estimatorMethod (Scalar 13m) "de-est"
+    // An idempotent replay — no new fact and no clock read, in either store.
+    differentialDraft [ "fr" ] "revenue" rollupMethod (Scalar 9m) "fr-q2"
+]
+
+let private differentialBatch: FactDraft list = [
+    differentialDraft [ "eu"; "sku-000003" ] "elasticity" rollupMethod (Scalar 999m) "h3-v2"
+    differentialDraft [ "eu"; "sku-000003" ] "elasticity" rollupMethod (Scalar 998m) "h3-v3"
+    differentialDraft [ "eu"; "sku-000004" ] "elasticity" (HumanAsserted "cfo") (Scalar 61m) "cfo-4"
+    differentialDraft [ "eu"; "sku-000010" ] "elasticity" rollupMethod (Scalar 88m) "h10"
+    differentialDraft [ "eu"; "sku-000002" ] "elasticity" rollupMethod (Scalar 20m) "h2"
+]
+
+let private seedDifferential (store: IFactStore) (scope: string) : Async<Fact list * BatchAssertReceipt> = async {
+    let written = ResizeArray<Fact>()
+
+    for d in differentialDrafts do
+        let! f = assertOk "differential seed" store scope d
+        written.Add f
+
+    let! receipt = assertBatchOk "differential batch" store scope differentialBatch
+    return List.ofSeq written, receipt
+}
+
+/// The Phase 702 population matrix, plus the shapes the seed adds.
+let private populationMatrix: (string * PopulationQuery) list =
+    let baseQuery = PopulationQuery.create (MetricRef "elasticity") "geography"
+    let level2 = { baseQuery with Level = Some 2 }
+
+    let noWhen = {
+        From = DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        To = DateTime(2020, 2, 1, 0, 0, 0, DateTimeKind.Utc)
+        Label = None
+    }
+
+    [
+        "registry-directed, default top-k", level2
+        "explicit descending", { level2 with Ordering = Descending }
+        "explicit ascending", { level2 with Ordering = Ascending }
+        "every depth", { baseQuery with Ordering = Descending }
+        "root level",
+        {
+            baseQuery with
+                Level = Some 0
+                Ordering = Descending
+        }
+        "path prefix",
+        {
+            level2 with
+                Ordering = Descending
+                PathPrefix = Some [ "eu" ]
+        }
+        "empty path prefix",
+        {
+            baseQuery with
+                Ordering = Descending
+                PathPrefix = Some []
+        }
+        "path prefix matching nothing",
+        {
+            baseQuery with
+                Ordering = Descending
+                PathPrefix = Some [ "apac" ]
+        }
+        "threshold AtLeast",
+        {
+            level2 with
+                Ordering = Descending
+                Threshold = Some(AtLeast 30m)
+        }
+        "threshold AtMost",
+        {
+            level2 with
+                Ordering = Ascending
+                Threshold = Some(AtMost 43m)
+        }
+        "threshold Between",
+        {
+            level2 with
+                Ordering = Ascending
+                Threshold = Some(Between(20m, 50m))
+        }
+        "threshold excluding everything",
+        {
+            level2 with
+                Ordering = Ascending
+                Threshold = Some(AtMost -1m)
+        }
+        "threshold over all competing methods",
+        {
+            level2 with
+                Ordering = Descending
+                Methods = AllCompetingMethods
+                Threshold = Some(AtLeast 50m)
+        }
+        "top-k of one",
+        {
+            level2 with
+                Ordering = Descending
+                TopK = 1
+        }
+        "top-k of zero clamps up",
+        {
+            level2 with
+                Ordering = Descending
+                TopK = 0
+        }
+        "top-k above the ceiling",
+        {
+            level2 with
+                Ordering = Descending
+                TopK = PopulationQuery.MaxTopK * 4
+        }
+        "all competing methods",
+        {
+            level2 with
+                Ordering = Descending
+                Methods = AllCompetingMethods
+        }
+        "one named method",
+        {
+            level2 with
+                Ordering = Descending
+                Methods = OneMethod(HumanAsserted "cfo")
+        }
+        "period overlapping",
+        {
+            level2 with
+                Ordering = Descending
+                PeriodOverlaps = Some q2
+        }
+        "period overlapping nothing",
+        {
+            level2 with
+                Ordering = Descending
+                PeriodOverlaps = Some noWhen
+        }
+        "another hierarchy",
+        {
+            baseQuery with
+                Hierarchy = "nowhere"
+                Ordering = Descending
+        }
+        "a neighbouring metric",
+        {
+            PopulationQuery.create (MetricRef "revenue") "geography" with
+                Ordering = Descending
+        }
+        "a registry-directed refusal", PopulationQuery.create (MetricRef "revenue") "geography"
+    ]
+
+/// The point-read matrix: every subject × metric × period clause × method
+/// clause × history flag × visibility instant the seed distinguishes, and
+/// the whole-scope reads.
+let private pointMatrix (instants: DateTime list) : FactQuery list = [
+    let paths = [
+        [ "uk" ]
+        [ "fr" ]
+        awkwardDifferentialPath
+        [ "de" ]
+        [ "eu"; "sku-000003" ]
+        [ "nobody" ]
+    ]
+
+    let periods = [
+        None
+        Some q2
+        Some q3Differential
+        Some unmarkedDifferential
+        Some localDifferential
+    ]
+
+    let asOfs = None :: (instants |> List.map Some)
+
+    for path in paths do
+        for metric in [ "revenue"; "cost"; "elasticity" ] do
+            for period in periods do
+                for method' in [ None; Some rollupMethod; Some estimatorMethod ] do
+                    for history in [ false; true ] do
+                        for asOf in asOfs do
+                            yield {
+                                Subject = Some { Hierarchy = "geography"; Path = path }
+                                Metric = Some(MetricRef metric)
+                                PeriodOverlaps = period
+                                Method = method'
+                                AsOf = asOf
+                                IncludeSuperseded = history
+                            }
+
+    for history in [ false; true ] do
+        for asOf in asOfs do
+            yield {
+                FactQuery.all with
+                    IncludeSuperseded = history
+                    AsOf = asOf
+            }
+
+            yield {
+                FactQuery.all with
+                    Metric = Some(MetricRef "elasticity")
+                    IncludeSuperseded = history
+                    AsOf = asOf
+            }
+]
+
+let private listingKey (f: Fact) =
+    f.Subject.Hierarchy, f.Metric.Value, f.Period.From
+
+let private byListingThenId (a: Fact) (b: Fact) =
+    match compare (listingKey a) (listingKey b) with
+    | 0 -> String.CompareOrdinal(a.FactId, b.FactId)
+    | c -> c
+
+let private expectContractOrder (label: string) (facts: Fact list) =
+    Expect.equal (facts |> List.map listingKey) (facts |> List.map listingKey |> List.sort) label
+
+/// Hold `candidate` to `reference` over one seeded fact base and every
+/// query shape (Phase 888). Each factory builds a FRESH store over the
+/// supplied registry and clock, and returns it with a scope to seed.
+let differentialTests
+    (name: string)
+    (referenceFactory: IMetricRegistry option -> (unit -> DateTime) -> IFactStore * string)
+    (candidateFactory: IMetricRegistry option -> (unit -> DateTime) -> IFactStore * string)
+    =
+
+    let bothOver (registry: IMetricRegistry option) = async {
+        let reference, referenceScope = referenceFactory registry (differentialClock ())
+        let candidate, candidateScope = candidateFactory registry (differentialClock ())
+        let! referenceFacts, referenceReceipt = seedDifferential reference referenceScope
+        let! candidateFacts, candidateReceipt = seedDifferential candidate candidateScope
+
+        Expect.equal candidateFacts referenceFacts "the seed wrote the same facts, with the same transaction times"
+        Expect.equal candidateReceipt referenceReceipt "the batch settled identically, digest included"
+
+        return reference, referenceScope, candidate, candidateScope, referenceFacts
+    }
+
+    let comparePopulation (registry: IMetricRegistry option) = async {
+        let! reference, referenceScope, candidate, candidateScope, facts = bothOver registry
+        let midpoint = facts[12].AsOf
+
+        let queries =
+            populationMatrix
+            @ (populationMatrix
+               |> List.map (fun (label, q) -> label + " (as of the seed's midpoint)", PopulationQuery.asOf midpoint q))
+
+        for label, query in queries do
+            let! expected = reference.QueryPopulation(referenceScope, query)
+            let! actual = candidate.QueryPopulation(candidateScope, query)
+            Expect.equal actual expected (sprintf "%s — population '%s' answers identically" name label)
+    }
+
+    let comparePoints (registry: IMetricRegistry option) = async {
+        let! reference, referenceScope, candidate, candidateScope, facts = bothOver registry
+        let instants = [ facts[0].AsOf; facts[13].AsOf; facts[20].AsOf ]
+
+        let renderCompetition (xs: FactWithCompetition list) =
+            xs
+            |> List.sortWith (fun a b -> byListingThenId a.Fact b.Fact)
+            |> List.map (fun x -> x.Fact, List.sort x.CompetingMethods)
+
+        for query in pointMatrix instants do
+            let! expected = reference.Query(referenceScope, query)
+            let! actual = candidate.Query(candidateScope, query)
+            expectContractOrder (sprintf "%s — Query listing order for %A" name query) actual
+
+            Expect.equal
+                (List.sortWith byListingThenId actual)
+                (List.sortWith byListingThenId expected)
+                (sprintf "%s — Query agrees for %A" name query)
+
+            let! expectedC = reference.QueryWithCompetition(referenceScope, query)
+            let! actualC = candidate.QueryWithCompetition(candidateScope, query)
+
+            Expect.equal
+                (renderCompetition actualC)
+                (renderCompetition expectedC)
+                (sprintf "%s — QueryWithCompetition agrees for %A" name query)
+
+        let! everything =
+            reference.Query(
+                referenceScope,
+                {
+                    FactQuery.all with
+                        IncludeSuperseded = true
+                }
+            )
+
+        Expect.isGreaterThan (List.length everything) 30 "the whole-history read saw the whole seed"
+
+        for f in everything do
+            let! expectedChain = reference.QuerySupersessionChain(referenceScope, f.FactId)
+            let! actualChain = candidate.QuerySupersessionChain(candidateScope, f.FactId)
+            Expect.equal actualChain expectedChain (sprintf "%s — the chain of %s agrees" name f.FactId)
+
+            let! got = candidate.Get(candidateScope, f.FactId)
+            Expect.equal got (Some f) (sprintf "%s — Get %s agrees" name f.FactId)
+
+        let! unknown = candidate.QuerySupersessionChain(candidateScope, "no-such-fact")
+        Expect.isEmpty unknown "an unknown id has no chain"
+    }
+
+    testList $"{name} — differential against the reference store (Phase 888)" [
+        testCaseAsync "every population shape answers identically (registry with a canonical method)"
+        <| comparePopulation (Some differentialRegistry)
+
+        testCaseAsync "every population shape answers identically (no registry)"
+        <| comparePopulation None
+
+        testCaseAsync "every point read, competition indicator, chain and id answers identically (registry)"
+        <| comparePoints (Some differentialRegistry)
+
+        testCaseAsync "every point read, competition indicator, chain and id answers identically (no registry)"
+        <| comparePoints None
+    ]
