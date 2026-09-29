@@ -22,6 +22,23 @@ open ToolUp.Platform.TeamManagement
 // (via `TeamRoles.canWriteTeamConfig`). Read paths (`ListJobs`,
 // `GetJob`, `GetRecentRuns`) are ungated within the caller's scope
 // — any team member can inspect the team's jobs.
+//
+// **Typed scheduling (Phase 930).** `Schedule` hands the scheduler the
+// scope the platform RESOLVED for this request, through the typed
+// `IJobScheduler.Schedule(ResolvedScope, …)` overload (Phase 818), so the
+// job runs under that scope rather than the anonymous one. The scope is the
+// value the scope-resolution middleware recorded on the request (only a
+// `ResolvedScope` is honoured at that key, and only the platform can mint
+// one); it is used only when it names the same shard the registration is
+// written under. A request the middleware resolved no scope for (a caller
+// bypassing it) keeps the string overload, whose job runs anonymous on
+// `JobContext.Scope` with the carried `ScopeId`, as before this phase.
+
+/// The `HttpContext.Items` key the scope-resolution middleware records the
+/// request's `ResolvedScope` under (`ScopeResolution.ItemsKey`, which
+/// compiles after this file). Only a `ResolvedScope` value is honoured there.
+[<Literal>]
+let private ResolvedScopeItemsKey = "ToolUp.ResolvedScope"
 
 let jobApi (ctx: HttpContext) : JobApi =
 
@@ -36,19 +53,28 @@ let jobApi (ctx: HttpContext) : JobApi =
         | _ ->
             // Fallback for tests bypassing the middleware. Mirrors
             // ConfigHandler.configApi's fallback.
+            // (Phase 930 dropped an unused team-id read of the storage
+            // scope item from here: the fallback is anonymous whatever that
+            // item says, and the 797 guard now scans this file for the
+            // pre-797 bag read.)
             let userId =
                 match ctx.Items.TryGetValue "ToolUp.UserId" with
                 | true, (:? string as id) -> id
                 | _ -> "anonymous"
 
-            let teamId =
-                match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-                | true, (:? StorageScope as s) when s.Container.StartsWith "team-" -> Some s.ScopeId
-                | _ -> None
-
             AccessContext.unrestricted (AnonymousSession userId)
 
     let scopeOpt = AccessContext.configScope accessContext
+
+    // Phase 930 — the scope the middleware resolved and recorded for this
+    // request. `ScopeResolution.forRequest` compiles after this file, so the
+    // record is read here by its key; `ScopeChokePointTests` pins that the
+    // two agree. A type test, never a construction: a value that is not a
+    // `ResolvedScope` is ignored.
+    let requestScope =
+        match ctx.Items.TryGetValue ResolvedScopeItemsKey with
+        | true, (:? ResolvedScope as scope) -> Some scope
+        | _ -> None
 
     // Team-mode write gate — Owner/Admin only. Mirrors
     // ConfigHandler.ensureWriteAllowed verbatim because the policy
@@ -131,7 +157,10 @@ let jobApi (ctx: HttpContext) : JobApi =
                                 CreatedBy = accessContext.UserId
                         }
 
-                        return! s.Schedule safeRegistration
+                        match requestScope with
+                        | Some resolved when not resolved.IsAnonymous && resolved.ScopeId = scope.ScopeId ->
+                            return! s.Schedule(resolved, safeRegistration)
+                        | _ -> return! s.Schedule safeRegistration
             }
 
         Cancel =
