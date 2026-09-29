@@ -537,9 +537,10 @@ let private defaultWorld
 
 let private bindAll = [ BindAllFactTables DefaultFactTableWriter.Destination ]
 
-/// The contract pack bound to the default writer.
-let defaultWriterTests =
-    tests "DefaultFactTableWriter" (fun clock tables metrics -> (defaultWorld clock tables metrics bindAll).Fixture)
+/// The default writer as a contract-pack factory, binding every declared table.
+/// The pack itself is bound from the test runner, by its qualified name.
+let defaultWriterFactory: FactTableWriterFactory =
+    fun clock tables metrics -> (defaultWorld clock tables metrics bindAll).Fixture
 
 let private runEvents (events: IEventStore) (scope: string) : ModuleEvent list =
     events.ReadBySource(scope, FactEvents.SourceModule) |> Async.RunSynchronously

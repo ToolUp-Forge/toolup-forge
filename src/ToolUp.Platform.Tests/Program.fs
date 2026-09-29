@@ -132,7 +132,7 @@ let private registeredTests =
         // Phase 887 — declared fact tables: the IFactTableWriter contract pack
         // bound to the default writer, the default writer's audit / binding /
         // 10,000-subject obligations, and the compose-time fact-table preflight.
-        IFactTableWriterContract.defaultWriterTests
+        IFactTableWriterContract.tests "DefaultFactTableWriter" IFactTableWriterContract.defaultWriterFactory
         IFactTableWriterContract.defaultWriterObligationTests
         IFactTableWriterContract.preflightTests
         // Phase 520 — grounding fact store: IFactStore contract pack (content-
