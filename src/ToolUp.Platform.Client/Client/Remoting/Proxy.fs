@@ -1218,6 +1218,10 @@ module Proxy =
                 // identically on both wires.
                 let returnClrType = getReturnType fieldType
 
+                // Phase 911 — decided once per field: whether the reflective
+                // read below needs the int64 / uint64 rewrite pass at all.
+                let holdsWideIntegers = ReflectiveWideIntegers.holdsWide returnType
+
                 fun requestBody -> async {
                     // make plain RPC request and let it go through the deserialization pipeline
                     let! response = sendJson options route url headers funcNeedParameters isMultipart requestBody
@@ -1237,7 +1241,27 @@ module Proxy =
                         | Some decoder -> return decodeJsonResponse url response decoder
                         | None ->
                             let parsedJson = SimpleJson.parseNative response.ResponseBody
-                            return Convert.fromJsonAs parsedJson returnType
+
+                            if not holdsWideIntegers then
+                                return Convert.fromJsonAs parsedJson returnType
+                            else
+                                // Phase 911 — an int64 / uint64 number is read
+                                // exactly or refused by name, never wrapped.
+                                match ReflectiveWideIntegers.widen [] parsedJson returnType with
+                                | Ok widened -> return Convert.fromJsonAs widened returnType
+                                | Error error ->
+                                    return
+                                        raise (
+                                            ProxyRequestException(
+                                                response,
+                                                sprintf
+                                                    "The server's response to %s did not decode: %s"
+                                                    url
+                                                    (DecodeError.render error),
+                                                response.ResponseBody,
+                                                Some error
+                                            )
+                                        )
                     | _ -> return raiseStatus url response
                 }
 
