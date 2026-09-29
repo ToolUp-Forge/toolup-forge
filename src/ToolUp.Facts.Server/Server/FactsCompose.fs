@@ -1107,6 +1107,16 @@ module FactsCompose =
         | :? Grounding.IMetricRegistry as r -> Some r
         | _ -> None
 
+    // Phase 889 — the store a coherence sweep reads. When delegate facts are
+    // composed it is the delegated store itself, so the sweep takes the
+    // delegated path (`CoherenceCheck.findings`) whatever decorates it above;
+    // the sweep only reads, so bypassing an assertion-hook decorator costs
+    // nothing. Otherwise it is the composed store, exactly as before.
+    let private coherenceStore (sp: IServiceProvider) : IFactStore =
+        match sp.GetService(typeof<IDelegatedFactWalks>) with
+        | :? IDelegatedFactWalks as walks -> walks :> IFactStore
+        | _ -> sp.GetRequiredService<IFactStore>()
+
     let private registerCoherenceChecks
         (config: CoherenceConfig)
         (cadence: Trigger)
@@ -1118,7 +1128,7 @@ module FactsCompose =
             // `config.HealthScope` — a fresh re-scan per call (GP 12 rule 4).
             .AddSingleton<HealthChecks.IHealthCheck>(
                 Func<IServiceProvider, HealthChecks.IHealthCheck>(fun sp ->
-                    CoherenceHealthCheck.create (sp.GetRequiredService<IFactStore>()) (tryRegistry sp) config)
+                    CoherenceHealthCheck.create (coherenceStore sp) (tryRegistry sp) config)
             )
             // Schedule the standing check on the opt-in cadence. The
             // scheduler + metric registry are only resolvable from the built
@@ -1133,7 +1143,7 @@ module FactsCompose =
                             | :? IJobScheduler as scheduler ->
                                 let handler =
                                     CoherenceJobHandler.create
-                                        (sp.GetRequiredService<IFactStore>())
+                                        (coherenceStore sp)
                                         (tryRegistry sp)
                                         (sp.GetRequiredService<INotificationChannel>())
                                         (sp.GetRequiredService<IEventStore>())
@@ -1343,6 +1353,147 @@ module FactsCompose =
                 app with
                     Extensions = {
                         app.Extensions with
+                            ServiceConfig = serviceConfig
+                    }
+            }
+    // ─── Phase 889 — delegate facts (opt-in) ──────────────────────────
+    //
+    // A declared fact table can hold its metric populations as delegates:
+    // the table is kept as rows (one image per committed run), the fact tier
+    // holds one record per delegate plus exactly what an answer quoted, and
+    // a read of a delegated metric is pushed down to the table. Everything is
+    // a DECORATION of what the composition already registered — the fact
+    // store and the table writer — so the tools, the planner, the disclosure
+    // gate and the coverage narrative resolve the same `IFactStore` they
+    // always did. A composition that never calls this is byte-for-byte
+    // unchanged (GP 11 / GP 13).
+
+    // The last registration of `'T` as a factory, captured from the
+    // collection before it is replaced — never resolved from the built
+    // provider, where `'T` is by then the decorator and would recurse (the
+    // Phase 707 coverage-narrative shape, for the same reason).
+    let private capturedFactory<'T> (services: IServiceCollection) : (IServiceProvider -> 'T) option =
+        match
+            services
+            |> Seq.filter (fun descriptor -> descriptor.ServiceType = typeof<'T>)
+            |> Seq.tryLast
+        with
+        | Some descriptor when not (isNull (box descriptor.ImplementationFactory)) ->
+            let factory = descriptor.ImplementationFactory
+            Some(fun sp -> factory.Invoke sp :?> 'T)
+        | Some descriptor when not (isNull descriptor.ImplementationInstance) ->
+            let instance = descriptor.ImplementationInstance :?> 'T
+            Some(fun _ -> instance)
+        | _ -> None
+
+    let private registerDelegateFacts (tableIds: string list) (services: IServiceCollection) : IServiceCollection =
+        match capturedFactory<IFactStore> services with
+        // No fact store to decorate: left untouched, as the coverage
+        // narrative does — the fact tier's own registrations surface that
+        // composition defect far more clearly than a decorator would.
+        | None -> services
+        | Some resolveInner ->
+            let resolveWriter = capturedFactory<IFactTableWriter> services
+
+            // The delegate records, resolved once from the composed table and
+            // metric registries. A table that cannot be delegated fails the
+            // first resolution, naming the table, rather than serving reads
+            // over a declaration it does not understand.
+            let delegatesOf (sp: IServiceProvider) : DelegateFact list =
+                let tables =
+                    tryService<Grounding.IFactTableRegistry> sp
+                    |> Option.defaultValue Grounding.FactTableRegistry.empty
+
+                match DelegateFacts.resolve tables (tryService<Grounding.IMetricRegistry> sp) tableIds with
+                | Ok delegates -> delegates
+                | Error reason -> invalidOp reason
+
+            services.AddSingleton<DelegatedFactStore>(
+                Func<IServiceProvider, DelegatedFactStore>(fun sp ->
+                    DelegatedFactStore.create
+                        (resolveInner sp)
+                        (sp.GetRequiredService<IBlobStorage>())
+                        (delegatesOf sp)
+                        (tryService<Grounding.IMetricRegistry> sp)
+                        (fun () -> DateTime.UtcNow))
+            )
+            |> ignore
+
+            services.AddSingleton<IFactStore>(
+                Func<IServiceProvider, IFactStore>(fun sp -> sp.GetRequiredService<DelegatedFactStore>() :> IFactStore)
+            )
+            |> ignore
+
+            services.AddSingleton<IDelegatedFactWalks>(
+                Func<IServiceProvider, IDelegatedFactWalks>(fun sp ->
+                    sp.GetRequiredService<DelegatedFactStore>() :> IDelegatedFactWalks)
+            )
+            |> ignore
+
+            services.AddSingleton<IFactTableWriter>(
+                Func<IServiceProvider, IFactTableWriter>(fun sp ->
+                    let delegated = sp.GetRequiredService<DelegatedFactStore>()
+
+                    DelegatedFactStore.writer
+                        (resolveWriter |> Option.map (fun resolve -> resolve sp))
+                        (sp.GetRequiredService<IBlobStorage>())
+                        (sp.GetRequiredService<IEventStore>())
+                        (tryService<Grounding.IFactTableRegistry> sp
+                         |> Option.defaultValue Grounding.FactTableRegistry.empty)
+                        (tryService<Grounding.IMetricRegistry> sp)
+                        delegated.Delegates
+                        // The COMPOSED store at commit time, so the refresh
+                        // reaches whatever decorates it.
+                        (fun () -> tryService<IFactStore> sp)
+                        (fun () -> DateTime.UtcNow))
+            )
+
+    /// Hold the named declared fact tables as delegate facts (Phase 889):
+    /// each table is bound to the delegate destination and kept as rows;
+    /// each of its columns becomes one delegate record in the fact tier; and
+    /// a point or population read of a delegated metric is answered from the
+    /// table, minting as ordinary facts only the rows it returns.
+    ///
+    /// Requires the fact store (`ServerConfig.FactStore = EnabledFactStore`);
+    /// under `NoFactStore` this returns the app unchanged. Insert AFTER
+    /// `withFactStore` (and after `withFactStoreImplementation`, which drops
+    /// every registration made before it) — it decorates what they
+    /// registered. `withFactTableWriter` may come before or after: tables
+    /// bound here are held by the delegate writer, and every other table is
+    /// handed to the writer that composed it.
+    ///
+    /// ```fsharp
+    /// ServerApp.empty
+    /// |> ServerApp.withConfig { ServerConfig.defaults with FactStore = EnabledFactStore }
+    /// |> ServerApp.addModules [ salesModule ]
+    /// |> FactsCompose.withFactStore
+    /// |> FactsCompose.withFactTableWriter
+    /// |> FactsCompose.withDelegateFacts [ "sku-sales" ]
+    /// ```
+    let withDelegateFacts (tableIds: string list) (app: ServerApp) : ServerApp =
+        match app.Config.FactStore, tableIds with
+        | NoFactStore, _
+        | _, [] -> app
+        | EnabledFactStore, _ ->
+            let register = registerDelegateFacts tableIds
+
+            let serviceConfig =
+                match app.Extensions.ServiceConfig with
+                | None -> Some register
+                | Some existing -> Some(fun s -> register (existing s))
+
+            let bound =
+                tableIds
+                |> List.distinct
+                |> List.fold
+                    (fun a tableId ->
+                        ServerApp.bindFactTables (Grounding.BindFactTable(tableId, DelegateFact.Destination)) a)
+                    app
+
+            {
+                bound with
+                    Extensions = {
+                        bound.Extensions with
                             ServiceConfig = serviceConfig
                     }
             }

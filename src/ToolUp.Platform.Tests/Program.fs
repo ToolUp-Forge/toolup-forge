@@ -2497,6 +2497,10 @@ let private registeredTests =
         // 100,000-subject table, the FactBrowse egress door, one ranking with
         // the population tool, tables and runs, per-run notification.
         FactBrowseTests.tests
+        // Phase 889 - the delegate fact: a population held as a pointer to a
+        // table, only the quoted rows minted, AsOf exact or refused, refresh
+        // supersession, and the delegated coherence / coverage walks.
+        DelegateFactTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

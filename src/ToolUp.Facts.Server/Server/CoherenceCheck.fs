@@ -248,6 +248,25 @@ module CoherenceCheck =
                 | Grounding.UntilUpstreamChange -> None)
             |> Option.defaultValue config.VintageWindow
 
+    // The classifier over the two signals it reads from a comparable set —
+    // whether any member is `Absent`, and the members' `AsOf` spread — so a
+    // set that is NOT a fact list (a delegated table's per-parent totals,
+    // Phase 889) is classified by exactly the same ordering.
+    let private classifyOn
+        (config: CoherenceConfig)
+        (vintageWindow: TimeSpan)
+        (tolerance: decimal)
+        (found: decimal)
+        (expected: decimal)
+        (hasAbsent: bool)
+        (spread: TimeSpan)
+        : CoherenceCauseClass =
+        if hasAbsent then PartialLoad
+        elif isUnitSlip config found expected then UnitSlip
+        elif spread > vintageWindow then MixedVintage
+        elif found - expected > tolerance then PartialLoad
+        else Unclassified
+
     /// Classify a discrepancy over its comparable set (parent :: children).
     /// Ordered strongest-signal first: an explicit `Absent` child ⇒
     /// partial load; a power-of-ten ratio ⇒ unit slip; a wide `AsOf`
@@ -262,16 +281,14 @@ module CoherenceCheck =
         (expected: decimal)
         (comparable: Fact list)
         : CoherenceCauseClass =
-        if comparable |> List.exists (fun f -> isAbsent f.Value) then
-            PartialLoad
-        elif isUnitSlip config found expected then
-            UnitSlip
-        elif vintageSpread comparable > vintageWindow then
-            MixedVintage
-        elif found - expected > tolerance then
-            PartialLoad
-        else
-            Unclassified
+        classifyOn
+            config
+            vintageWindow
+            tolerance
+            found
+            expected
+            (comparable |> List.exists (fun f -> isAbsent f.Value))
+            (vintageSpread comparable)
 
     /// The pure check (task 563.A/B): over a set of current-head facts,
     /// derive the coherence findings. Comparability is derived wholly from
@@ -352,6 +369,252 @@ module CoherenceCheck =
                                 ChildCount = List.length children
                             }))
 
+    // ── The delegated path (Phase 889) ─────────────────────────────
+    //
+    // A delegated metric's population lives in a declared fact table, and
+    // the fact tier holds only the rows an answer quoted. Handing those
+    // minted facts to `check` would compare a parent against a SAMPLE of its
+    // children and report a partial load that is not there; enumerating the
+    // table would materialise the population the delegate exists to avoid.
+    // So a delegated metric is checked by asking its table the question:
+    // per-parent totals when the table holds the children, and point reads
+    // of the named parents when it holds the parents.
+
+    /// Whether a fact is owned by a delegate — minted from its table, or the
+    /// delegate's own record. Such facts are the table's to answer for.
+    let private ownedByDelegate (delegates: DelegateFact list) (fact: Fact) : bool =
+        delegates
+        |> List.exists (fun d ->
+            d.Metric = fact.Metric
+            && d.Query.Hierarchy = fact.Subject.Hierarchy
+            && Fact.methodIdentity d.Method = Fact.methodIdentity fact.Method)
+
+    let private samePeriod (a: TemporalExtent) (b: TemporalExtent) = a.From = b.From && a.To = b.To
+
+    let private absoluteSpread (a: DateTime) (b: DateTime) : TimeSpan = (a - b).Duration()
+
+    /// One delegated comparison — a parent value against its children's
+    /// total — as a finding when it exceeds the metric's tolerance.
+    let private delegatedFinding
+        (registry: Grounding.IMetricRegistry option)
+        (config: CoherenceConfig)
+        (tolerance: decimal)
+        (subject: SubjectRef)
+        (metric: MetricRef)
+        (period: TemporalExtent)
+        (found: decimal)
+        (expected: decimal)
+        (hasAbsent: bool)
+        (spread: TimeSpan)
+        (childCount: int)
+        : CoherenceFinding option =
+        let discrepancy = found - expected
+
+        if childCount = 0 || abs discrepancy <= tolerance then
+            None
+        else
+            Some {
+                Subject = subject
+                Metric = metric
+                Period = period
+                Expected = expected
+                Found = found
+                Discrepancy = discrepancy
+                Tolerance = tolerance
+                Cause =
+                    classifyOn
+                        config
+                        (vintageWindowFor registry config metric)
+                        tolerance
+                        found
+                        expected
+                        hasAbsent
+                        spread
+                ChildCount = childCount
+            }
+
+    /// The table holds the CHILDREN: its per-parent totals against the
+    /// parents the fact tier holds.
+    let private childSideFindings
+        (reg: Grounding.IMetricRegistry)
+        (config: CoherenceConfig)
+        (tolerance: decimal)
+        (d: DelegateFact)
+        (committedAt: DateTime)
+        (parents: Fact list)
+        (totals: DelegateChildTotal list)
+        : CoherenceFinding list =
+        totals
+        |> List.choose (fun total ->
+            parents
+            |> List.filter (fun p -> p.Subject.Path = total.Parent && samePeriod p.Period total.Period)
+            |> List.sortByDescending _.AsOf
+            |> List.tryHead
+            |> Option.bind (fun parent ->
+                scalarOf parent.Value
+                |> Option.bind (fun found ->
+                    delegatedFinding
+                        (Some reg)
+                        config
+                        tolerance
+                        parent.Subject
+                        d.Metric
+                        parent.Period
+                        found
+                        total.Total
+                        (total.AbsentCount > 0)
+                        (absoluteSpread parent.AsOf committedAt)
+                        total.ChildCount)))
+
+    /// The table holds the PARENTS: the children the fact tier holds, summed
+    /// per parent, against point reads of exactly those parents.
+    let private parentSideFindings
+        (reg: Grounding.IMetricRegistry)
+        (config: CoherenceConfig)
+        (tolerance: decimal)
+        (d: DelegateFact)
+        (committedAt: DateTime)
+        (groups: ((string list * DateTime * DateTime) * Fact list) list)
+        (rows: DelegateTableRow list)
+        : CoherenceFinding list =
+        groups
+        |> List.choose (fun ((path, from, until), members) ->
+            // One representative per child subject — the freshest head, as
+            // `check` takes it.
+            let representatives =
+                members
+                |> List.groupBy _.Subject.Path
+                |> List.map (fun (_, fs) -> fs |> List.maxBy _.AsOf)
+
+            rows
+            |> List.tryFind (fun r -> r.Subject = path && r.Period.From = from && r.Period.To = until)
+            |> Option.bind (fun row ->
+                scalarOf row.Value
+                |> Option.bind (fun found ->
+                    let expected =
+                        representatives |> List.choose (fun c -> scalarOf c.Value) |> List.sum
+
+                    let spread =
+                        representatives
+                        |> List.map (fun c -> absoluteSpread c.AsOf committedAt)
+                        |> List.fold max TimeSpan.Zero
+
+                    delegatedFinding
+                        (Some reg)
+                        config
+                        tolerance
+                        {
+                            Hierarchy = d.Query.Hierarchy
+                            Path = path
+                        }
+                        d.Metric
+                        row.Period
+                        found
+                        expected
+                        (representatives |> List.exists (fun c -> isAbsent c.Value))
+                        spread
+                        (List.length representatives))))
+
+    /// The findings for every delegated metric, asked of the tables. `heads`
+    /// are the current heads the fact tier holds with every delegate-owned
+    /// fact already removed. A table that cannot be read contributes no
+    /// finding — a sweep is not the place to invent a discrepancy — and a
+    /// metric with no additive roll-up is never checked, exactly as in
+    /// `check`.
+    let private delegatedFindings
+        (walks: IDelegatedFactWalks)
+        (reg: Grounding.IMetricRegistry)
+        (config: CoherenceConfig)
+        (scopeId: string)
+        (heads: Fact list)
+        : Async<CoherenceFinding list> =
+        async {
+            let additive =
+                walks.Delegates
+                |> List.choose (fun d ->
+                    let tolerance =
+                        reg.TryGetMetric d.Metric.Value
+                        |> Option.bind _.RollUp
+                        |> Grounding.RollUp.additiveTolerance
+
+                    match tolerance with
+                    | Some tol when (reg.TryGetSubject d.Query.Hierarchy |> Option.isSome) -> Some(d, tol)
+                    | _ -> None)
+
+            let! perDelegate =
+                additive
+                |> List.map (fun (d, tolerance) -> async {
+                    match! walks.CurrentRun(scopeId, d.Metric) with
+                    | Error _
+                    | Ok None -> return []
+                    | Ok(Some run) ->
+                        let committedAt = run.Watermark.CommittedAt
+
+                        let ordinaryAt (depth: int) =
+                            heads
+                            |> List.filter (fun f ->
+                                f.Metric = d.Metric
+                                && f.Subject.Hierarchy = d.Query.Hierarchy
+                                && List.length f.Subject.Path = depth)
+
+                        let parents = ordinaryAt (d.Query.Level - 1)
+
+                        let! childSide = async {
+                            if List.isEmpty parents then
+                                return []
+                            else
+                                match! walks.ChildTotals(scopeId, d.Metric, None) with
+                                | Error _ -> return []
+                                | Ok totals ->
+                                    return childSideFindings reg config tolerance d committedAt parents totals
+                        }
+
+                        let children = ordinaryAt (d.Query.Level + 1)
+
+                        let! parentSide = async {
+                            if List.isEmpty children then
+                                return []
+                            else
+                                let groups =
+                                    children
+                                    |> List.groupBy (fun c ->
+                                        List.truncate d.Query.Level c.Subject.Path, c.Period.From, c.Period.To)
+
+                                let parentPaths =
+                                    groups |> List.map (fun ((path, _, _), _) -> path) |> List.distinct
+
+                                match! walks.CurrentRows(scopeId, d.Metric, parentPaths) with
+                                | Error _ -> return []
+                                | Ok rows -> return parentSideFindings reg config tolerance d committedAt groups rows
+                        }
+
+                        return childSide @ parentSide
+                })
+                |> Async.Sequential
+
+            return perDelegate |> Array.toList |> List.concat
+        }
+
+    /// The findings for one scope — the whole-store walk, taking the
+    /// delegated path when the store it is handed carries delegates. Over a
+    /// store with none this is exactly `check` over the current heads (GP 11).
+    let findings
+        (store: IFactStore)
+        (registry: Grounding.IMetricRegistry option)
+        (config: CoherenceConfig)
+        (scopeId: string)
+        : Async<CoherenceFinding list> =
+        async {
+            let! heads = store.Query(scopeId, FactQuery.all)
+
+            match store, registry with
+            | (:? IDelegatedFactWalks as walks), Some reg when not (List.isEmpty walks.Delegates) ->
+                let ordinary = heads |> List.filter (ownedByDelegate walks.Delegates >> not)
+                let! delegated = delegatedFindings walks reg config scopeId ordinary
+                return check registry config ordinary @ delegated
+            | _ -> return check registry config heads
+        }
+
     let private writeFindingEvent
         (events: IEventStore)
         (scopeId: string)
@@ -406,8 +669,7 @@ module CoherenceCheck =
         (scopeId: string)
         : Async<CoherenceFinding list> =
         async {
-            let! heads = store.Query(scopeId, FactQuery.all)
-            let findings = check registry config heads
+            let! findings = findings store registry config scopeId
             let now = clock().ToUniversalTime()
 
             for finding in findings do
@@ -493,9 +755,9 @@ type CoherenceHealthCheck(store: IFactStore, registry: Grounding.IMetricRegistry
         member _.Timeout = IHealthCheck.defaultTimeout
 
         member _.Check() : Async<HealthResult> = async {
-            let! heads = store.Query(config.HealthScope, FactQuery.all)
+            let! found = CoherenceCheck.findings store registry config config.HealthScope
 
-            match CoherenceCheck.check registry config heads with
+            match found with
             | [] -> return Healthy
             | findings ->
                 return

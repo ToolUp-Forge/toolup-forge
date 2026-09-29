@@ -107,6 +107,11 @@
         <!-- Phase 887 — the fact-table writer seam + its default over
              IFactStore. Before FactsCompose.fs, which composes it. -->
         <Compile Include="Server\IFactTableWriter.fs" />
+        <!-- Phase 889 — the delegate fact: a delegated table's writer, the
+             IFactStore decorator its reads go through, and the refresh.
+             After the writer (it reuses its row validation and blob I/O),
+             before FactsCompose.fs, which composes it. -->
+        <Compile Include="Server\DelegatedFactStore.fs" />
         <Compile Include="Server\FactsCompose.fs" />
         <!-- Phase 895 — the fact browse read surface (IFactBrowseApi) and its
              per-run notification decoration of the table writer. -->

@@ -156,3 +156,96 @@ every failure as a `FactTableWriteError` case. It keeps no state between calls: 
 records live in the backing store. Ordering holds only within one (scope, table). Times are at
 second precision. The contract pack `IFactTableWriterContract.tests` holds any implementation to
 the same bar.
+
+## Delegate facts — a population held as a pointer to a table
+
+The default writer turns every cell into a fact. For a large population that is one stored fact,
+one blob and one index entry per subject per metric, most of which no answer will ever quote. A
+table can instead be held as **delegate facts**: the table is kept as rows, and the fact tier holds
+one record per column that points at it.
+
+```fsharp skip=fragment
+ServerApp.empty
+|> ServerApp.withConfig { ServerConfig.defaults with FactStore = EnabledFactStore }
+|> ServerApp.addModules [ salesModule ]
+|> FactsCompose.withFactStore
+|> FactsCompose.withFactTableWriter          // every other table, as facts
+|> FactsCompose.withDelegateFacts [ "sku-sales" ]
+```
+
+`withDelegateFacts` binds each named table to the `delegate-table` destination and decorates the
+composed `IFactStore` and `IFactTableWriter`. The module still writes through `IFactTableWriter`
+exactly as above. The fact tools, the answer planner, the disclosure gate and the coverage
+narrative resolve the same `IFactStore` they always did. A composition that names no table is
+unchanged.
+
+**The record.** Each (table, column) pair becomes a `DelegateFact`: the metric, the table id, a
+source reference, the declared query spec, the table's current watermark, the method, the
+disclosure class and the history fidelity. A commit asserts the record again, and the new one
+supersedes the last, so the record's supersession chain is the table's run history.
+
+**Only what is quoted becomes a fact.** A read of a delegated metric is pushed down to the table,
+and the table answers only these questions:
+
+| Read | Pushed down as | Mints |
+|---|---|---|
+| point read (`Query`) of a subject at the table's level | `DelegateTableRead.Point` | that subject's rows |
+| population read (`QueryPopulation`) at the table's level, or at no level | `DelegateTableRead.Ranked` | the ranking, at most `PopulationQuery.MaxTopK` rows |
+| coherence totals (see below) | `DelegateTableRead.ChildTotals` | nothing |
+
+Every returned row becomes an ordinary fact. Its evidence names the run by watermark, and the
+watermark is one of its input hashes. For an append-by-run table this is exactly the fact the
+default writer would have written, with the same id. A repeated read of an unchanged table is an
+idempotent re-assertion. The summary statistics describe the whole matched population, and a
+subject that nobody asked about has no fact. A read that names no subject ("every fact for this
+metric") is not a point read. It reaches the underlying store, which holds what was quoted.
+
+**No free-form query.** The query spec is a column mapping declared at composition: the subject is
+the row's path at the table's level, the period is the row's period, and the value is the column's
+cell. A caller supplies only what the tool parameters already carry (metric, subject, period,
+ordering, count), and those arrive as a typed `DelegateTableRead`.
+
+**History.**
+
+- An **append-by-run** table keeps every run, so its history is `Exact`. An `AsOf` read is answered
+  from the run that was current at that time. A value from a run that is no longer current is not
+  asserted, because asserting it now would make it the current head of its lineage. It is recorded
+  beside the log as a reconstruction instead, which `Get` and the disclosure gate resolve like any
+  fact.
+- A **replace** table keeps only its latest run, so its history is `Approximate`. An `AsOf` read is
+  **refused**. The population read returns the refusal on its error channel. The point read has no
+  error channel, so it returns one `Absent` fact whose reason is the refusal. Neither read
+  approximates.
+
+**Refresh.** A commit advances the delegate records. It then finds the facts quoted from earlier
+runs, using the delegated form of the reactive-recomputation invalidation walk, and re-reads each
+one from the new run. A changed row's
+fact is superseded by its new value, and a removed row's fact is superseded by `Absent`. The read
+path enforces the same rule: before it answers, it mints the current row and retires a removed
+one. So a fact from a run that is no longer current is never served as a current head, even if a
+refresh fails.
+
+**Whole-store walks.**
+
+- **Coherence checking** removes delegate-owned facts from the fact list it would otherwise compare.
+  A quoted sample would read as a partial load. For each delegated additive metric it asks the table
+  instead: per-parent totals when the table holds the children, and point reads of the named
+  parents when the table holds the parents.
+- **Invalidation** narrows its read to the delegated metric and method (the facts that were quoted)
+  and compares each one's run against the table's current watermark.
+
+Neither walk mints a fact or reads the population into the fact tier.
+
+**Disclosure.** A minted fact is born with the column's class, or the table's class where the
+column declares none, so the gate judges it like any other fact.
+
+**Coverage narrative.** A delegated metric's narrative is built from the declaration and the last
+run's reach: row count, distinct subjects, comparable cells and period range. The table records all
+of these at commit, so the narrative reads no row and mints nothing. It therefore cites no fact.
+Its posture comes from the class: a surfaceable column is described, and an internal or restricted
+column is reported as restricted.
+
+**Writer.** The delegate writer has the default writer's run lifecycle, validation, watermark,
+change summary and single audit record. It keeps one row image per committed run, beside the
+scope's facts under `_delegate-tables/`, and it writes no fact (`FactsWritten = 0`). A table bound
+anywhere else goes to the writer that was already composed.

@@ -716,6 +716,122 @@ module CoverageNarrative =
             }
         }
 
+    // ── The delegated path (Phase 889) ────────────────────────────
+    //
+    // A delegated metric's population lives in a declared fact table, and
+    // the fact tier holds only the rows an answer quoted. Its coverage is
+    // therefore generated from the delegate's declaration and its table's
+    // last run — row count, distinct subjects, comparable cells, period
+    // reach — which the table recorded at commit. Nothing reads a row, and
+    // nothing is minted: the probe `readHierarchy` runs over an ordinary
+    // population would mint the probe's ranking as facts.
+    //
+    // **Disclosure without a probe.** No fact is minted, so there is no id
+    // to hand the gate; the posture is read off the class every minted row
+    // WOULD carry, conservatively. `Surfaceable` is describable; `Internal`
+    // and `Restricted` are wholly restricted — a policy the narrative
+    // cannot resolve here is never read as a permission (the door never
+    // fails open). A delegated population cites no fact, for the same
+    // reason: a citation is a minted fact id.
+
+    /// A delegated population's coverage — from its declaration and the
+    /// last committed run, with no population read.
+    let delegatedHierarchy
+        (definition: Grounding.MetricDefinition)
+        (delegateFact: DelegateFact)
+        (run: DelegateRun)
+        (hierarchy: Grounding.SubjectDefinition)
+        (now: DateTime)
+        : HierarchyCoverage =
+        let comparable =
+            run.ComparableByColumn
+            |> Map.tryFind delegateFact.Query.ValueColumn
+            |> Option.defaultValue 0
+
+        let fresh =
+            match Freshness.deriveAt definition.Staleness run.Watermark.CommittedAt true now with
+            | Fresh -> run.RowCount
+            | Stale _ -> 0
+
+        let stats: PopulationStats = {
+            PopulationStats.empty with
+                SubjectCount = run.SubjectCount
+                FactCount = run.RowCount
+                ComparableCount = comparable
+                NonComparableCount = run.RowCount - comparable
+                PeriodFrom = run.PeriodFrom
+                PeriodTo = run.PeriodTo
+                Freshness = {
+                    FreshCount = fresh
+                    StaleCount = run.RowCount - fresh
+                }
+                MethodMix = [ Fact.methodIdentity delegateFact.Method, run.RowCount ]
+        }
+
+        match delegateFact.Disclosure with
+        | Surfaceable -> {
+            Hierarchy = hierarchy
+            Posture = Describable []
+            Stats = Some stats
+            Cited = []
+          }
+        | Disclosure.Internal -> {
+            Hierarchy = hierarchy
+            Posture = WhollyRestricted [ "Internal" ]
+            Stats = None
+            Cited = []
+          }
+        | Restricted policyRef -> {
+            Hierarchy = hierarchy
+            Posture = WhollyRestricted [ policyRef ]
+            Stats = None
+            Cited = []
+          }
+
+    /// `readCoverage`, taking the delegated path for every (metric,
+    /// hierarchy) pair a delegate holds. `walks = None` is exactly
+    /// `readCoverage` (GP 11). A delegate whose table has never committed in
+    /// the scope holds nothing, and so is absent, like an empty population.
+    let readCoverageWith
+        (walks: IDelegatedFactWalks option)
+        (now: DateTime)
+        (store: IFactStore)
+        (gate: IFactDisclosureGate)
+        (scopeId: string)
+        (principal: string)
+        (definition: Grounding.MetricDefinition)
+        (hierarchies: Grounding.SubjectDefinition list)
+        : Async<MetricCoverage> =
+        async {
+            let delegateFor (hierarchy: Grounding.SubjectDefinition) =
+                walks
+                |> Option.bind (fun w ->
+                    w.Delegates
+                    |> List.tryFind (fun d -> d.Metric.Value = definition.Id && d.Query.Hierarchy = hierarchy.Id)
+                    |> Option.map (fun d -> w, d))
+
+            let! populations =
+                hierarchies
+                |> List.map (fun hierarchy ->
+                    match delegateFor hierarchy with
+                    | None -> readHierarchy store gate scopeId principal definition.Id hierarchy
+                    | Some(w, d) -> async {
+                        match! w.CurrentRun(scopeId, d.Metric) with
+                        | Ok(Some run) -> return Some(delegatedHierarchy definition d run hierarchy now)
+                        // Never committed, or unreadable: a narrative is not
+                        // the place to surface a store fault, so this pair
+                        // holds nothing — as `readHierarchy` treats a fault.
+                        | Ok None
+                        | Error _ -> return None
+                      })
+                |> Async.Sequential
+
+            return {
+                Definition = definition
+                Populations = populations |> Array.choose id |> Array.toList
+            }
+        }
+
     // ── The compose-time options (707.C) ──────────────────────────
 
     /// Where a coverage narrative is committed, and as whom.
@@ -852,8 +968,25 @@ module CoverageNarrative =
                             match tryResolve<IFactDisclosureGate> services with
                             | None -> return ()
                             | Some gate ->
+                                // Phase 889 — a delegated metric's coverage
+                                // comes from its table's last run. The walks
+                                // are the inner store itself when it is the
+                                // delegated store, else the composed ones.
+                                let walks =
+                                    match inner with
+                                    | :? IDelegatedFactWalks as w -> Some w
+                                    | _ -> tryResolve<IDelegatedFactWalks> services
+
                                 let! coverage =
-                                    readCoverage inner gate scopeId options.Principal definition registry.Subjects
+                                    readCoverageWith
+                                        walks
+                                        (clock().UtcDateTime)
+                                        inner
+                                        gate
+                                        scopeId
+                                        options.Principal
+                                        definition
+                                        registry.Subjects
 
                                 if not (shouldCommit coverage) then
                                     return ()
