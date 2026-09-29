@@ -332,6 +332,45 @@ module Outcome =
             do! deadLetterChunk deps job chunkIndex reason attemptCount
         }
 
+/// Phase 894 — one worker slot, held by exactly one document at a time.
+///
+/// The drain loop acquires a slot BEFORE it dequeues and hands it to the
+/// document it dequeued; the document releases it when it is done. An
+/// in-process retry releases its slot for the backoff sleep and takes one
+/// again before the next attempt, so a sleeping retry does not hold the
+/// pool. `Release` is idempotent, so a document's final release never
+/// returns a permit a cancelled sleep already gave back.
+///
+/// **Why re-acquiring can steal.** The drain loop holds a slot while it
+/// waits for the next document; with nothing arriving it would hold that
+/// slot indefinitely, and a waking retry would starve behind an idle
+/// wait. So a retry that finds no free permit takes the loop's idle one
+/// (`stealIdle`); the loop, on dequeuing, notices and waits for a permit
+/// before starting the document. That document is the only one ever held
+/// outside the queue's accounting.
+type internal WorkerSlot(sem: SemaphoreSlim, stealIdle: unit -> bool) =
+    let mutable held = 1
+
+    /// Give the permit back, if this slot still holds it.
+    member _.Release() =
+        if Interlocked.Exchange(&held, 0) = 1 then
+            sem.Release() |> ignore
+
+    /// Take a permit again: a free one, else the drain loop's idle one.
+    /// Polls at 50 ms — against a backoff measured in seconds that costs
+    /// nothing, and it cannot lose the race to a loop about to park.
+    member _.Reacquire() = async {
+        let mutable acquired = false
+
+        while not acquired do
+            if sem.Wait 0 || stealIdle () then
+                acquired <- true
+            else
+                do! Async.Sleep 50
+
+        Interlocked.Exchange(&held, 1) |> ignore
+    }
+
 // ─── Background service ───────────────────────────────────────────
 
 /// Dequeues `DocumentIngestionJob` entries and indexes every chunk. Each
@@ -392,6 +431,14 @@ type IngestionBackgroundService
     inherit BackgroundService()
 
     let sem = new SemaphoreSlim(maxConcurrency, maxConcurrency)
+
+    // Phase 894 — `1` while the drain loop holds a permit it has not yet
+    // given to a document (it is waiting in `Dequeue`); a waking retry may
+    // take that permit (see `WorkerSlot`).
+    let mutable idleReservation = 0
+
+    let stealIdle () =
+        Interlocked.Exchange(&idleReservation, 0) = 1
 
     let jsonOptions = FableConverters.create ()
 
@@ -567,6 +614,7 @@ type IngestionBackgroundService
     /// Does NOT survive restart (the scheduled path does); it is the
     /// graceful-degradation path, not the default.
     let inProcessRetry
+        (slot: WorkerSlot)
         (doc: DocumentIngestionJob)
         (chunkIndex: int)
         (chunkId: string)
@@ -585,7 +633,12 @@ type IngestionBackgroundService
                     + IngestionRetryPolicy.jitterComponentFor retryPolicy attempt (Random.Shared.NextDouble())
 
                 if delay > TimeSpan.Zero then
+                    // Phase 894 — a backoff sleep holds no worker slot: the
+                    // pool serves other documents meanwhile, and this one
+                    // queues for a slot again before its next attempt.
+                    slot.Release()
                     do! Async.Sleep delay
+                    do! slot.Reacquire()
 
                 try
                     do! pipeline.Index chunkId chunk doc.Scope
@@ -609,6 +662,7 @@ type IngestionBackgroundService
     /// permanently on a non-retryable failure, otherwise hand off to the
     /// durable scheduler (or the in-process fallback) for retry.
     let handleChunkFailure
+        (slot: WorkerSlot)
         (doc: DocumentIngestionJob)
         (chunkIndex: int)
         (chunkId: string)
@@ -626,10 +680,10 @@ type IngestionBackgroundService
                 else
                     match resolveScheduler () with
                     | Some scheduler -> do! scheduleRetry scheduler doc chunkIndex chunkId chunk ex.Message
-                    | None -> do! inProcessRetry doc chunkIndex chunkId chunk job ex.Message
+                    | None -> do! inProcessRetry slot doc chunkIndex chunkId chunk job ex.Message
         }
 
-    let processJobCore (doc: DocumentIngestionJob) = async {
+    let processJobCore (slot: WorkerSlot) (doc: DocumentIngestionJob) = async {
         let chunkTexts = doc.Chunks |> List.map (fun (_, c) -> c.Content) |> List.toArray
 
         // Phase 9 compute-quota: embedding API calls are billable
@@ -715,18 +769,47 @@ type IngestionBackgroundService
                     Some ex
                 )
 
-            for (chunkIndex, (chunkId, chunk)) in List.indexed doc.Chunks do
-                let job = chunkJob doc chunkId chunk
+            // Phase 894 (carrying 892.t6) — when the pipeline can write a
+            // whole document in one batched round-trip (its store implements
+            // `IVectorStoreBatch`), do so, then report every chunk indexed.
+            // Any failure falls through to the per-chunk path below, which
+            // classifies, retries and dead-letters per chunk exactly as
+            // before; per-chunk upserts are idempotent over what the batch
+            // wrote. A pipeline that cannot batch never takes this branch
+            // (GP 11).
+            let! batched =
+                match pipeline with
+                | :? ToolUp.RAG.RetrievalPipeline.IBatchIndexer as batch when batch.SupportsBatch -> async {
+                    try
+                        do! batch.IndexBatch doc.Chunks doc.Scope
+                        return true
+                    with ex ->
+                        logger.Warn(
+                            $"[IngestionBackgroundService] event=batched_index_failed doc={doc.DocumentId} chunks={doc.Chunks.Length}: {ex.Message}; falling back to per-chunk indexing"
+                        )
 
-                try
-                    do! pipeline.Index chunkId chunk doc.Scope
+                        return false
+                  }
+                | _ -> async.Return false
+
+            if batched then
+                for (chunkId, chunk) in doc.Chunks do
+                    let job = chunkJob doc chunkId chunk
                     do! emitIndexed job
                     do! notifyObservers "OnChunkIndexed" job (fun o -> o.OnChunkIndexed job)
-                with ex ->
-                    // Phase 14t — classify + retry (transient) / dead-letter
-                    // (permanent) instead of the former silent single
-                    // `KnowledgeChunkFailed` that dropped the chunk for good.
-                    do! handleChunkFailure doc chunkIndex chunkId chunk job ex
+            else
+                for (chunkIndex, (chunkId, chunk)) in List.indexed doc.Chunks do
+                    let job = chunkJob doc chunkId chunk
+
+                    try
+                        do! pipeline.Index chunkId chunk doc.Scope
+                        do! emitIndexed job
+                        do! notifyObservers "OnChunkIndexed" job (fun o -> o.OnChunkIndexed job)
+                    with ex ->
+                        // Phase 14t — classify + retry (transient) / dead-letter
+                        // (permanent) instead of the former silent single
+                        // `KnowledgeChunkFailed` that dropped the chunk for good.
+                        do! handleChunkFailure slot doc chunkIndex chunkId chunk job ex
     }
 
     /// Phase 509 — process one leased document, then settle the lease.
@@ -739,9 +822,11 @@ type IngestionBackgroundService
     /// in-memory default `Ack` / `Abandon` are no-ops — there is nothing
     /// to redeliver from, which is exactly the gap the durable arm
     /// closes.
-    let processJob (lease: IngestionLease) = async {
+    ///
+    /// Phase 894 — the worker slot arrives HELD: the drain loop acquired it
+    /// before dequeuing this lease. This releases it when done.
+    let processJob (slot: WorkerSlot) (lease: IngestionLease) = async {
         let doc = lease.Job
-        do! sem.WaitAsync() |> Async.AwaitTask
 
         try
             // Top-level guard: `processJob` is dispatched via `Async.Start`
@@ -755,7 +840,7 @@ type IngestionBackgroundService
             // so the best-effort mark-failed sweep below cannot
             // contradict an already-emitted per-chunk event.
             try
-                do! processJobCore doc
+                do! processJobCore slot doc
                 do! queue.Ack lease.LeaseId
             with ex ->
                 logger.Error(
@@ -786,7 +871,7 @@ type IngestionBackgroundService
 
                     do! queue.Ack lease.LeaseId
         finally
-            sem.Release() |> ignore
+            slot.Release()
     }
 
     override _.ExecuteAsync(stoppingToken: CancellationToken) = task {
@@ -831,14 +916,39 @@ type IngestionBackgroundService
 
         while not stoppingToken.IsCancellationRequested do
             try
-                let! lease = Async.StartAsTask(queue.Dequeue stoppingToken, cancellationToken = stoppingToken)
+                // Phase 894 — acquire a worker slot BEFORE dequeuing. A
+                // document leaves the queue only when a worker is free to
+                // take it, so the queue's depth is exactly what is waiting
+                // and its capacity bounds what is held in memory. (Before,
+                // the loop dequeued eagerly and each job waited for a slot
+                // inside itself — every waiting document had already left
+                // the queue's accounting.)
+                do! sem.WaitAsync(stoppingToken)
+                Volatile.Write(&idleReservation, 1)
+                let mutable settled = false
 
-                match lease with
-                | Some claimed ->
-                    // Fire each job without awaiting — concurrency is
-                    // controlled by the semaphore inside processJob.
-                    Async.Start(processJob claimed, stoppingToken)
-                | None -> ()
+                try
+                    let! lease = Async.StartAsTask(queue.Dequeue stoppingToken, cancellationToken = stoppingToken)
+                    // Still ours unless a waking retry took it meanwhile.
+                    let owned = Interlocked.Exchange(&idleReservation, 0) = 1
+                    settled <- true
+
+                    match lease with
+                    | Some claimed ->
+                        if not owned then
+                            do! sem.WaitAsync(stoppingToken)
+
+                        // Fire the job without awaiting; it owns the slot
+                        // now and releases it when done.
+                        Async.Start(processJob (WorkerSlot(sem, stealIdle)) claimed, stoppingToken)
+                    | None ->
+                        if owned then
+                            sem.Release() |> ignore
+                finally
+                    // Dequeue raised (cancellation): give back the idle
+                    // permit, unless a retry already took it.
+                    if not settled && Interlocked.Exchange(&idleReservation, 0) = 1 then
+                        sem.Release() |> ignore
             with
             | :? OperationCanceledException -> ()
             | ex ->
