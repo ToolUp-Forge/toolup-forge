@@ -259,6 +259,9 @@ type private WorldOptions = {
     OutputLevel: TeamVisibilityLevel option
     Signing: PublicationSigning
     Verifier: (ISecretStore -> IArtefactVerifier) option
+    /// Decorates the table writer the world composes (Phase 932): the
+    /// writer the publication service is handed is the decorated one.
+    Decorate: IFactTableWriter -> IFactTableWriter
 }
 
 let private defaults = {
@@ -266,6 +269,7 @@ let private defaults = {
     OutputLevel = None
     Signing = PublicationSigning.RecordedProvenance
     Verifier = None
+    Decorate = id
 }
 
 let private worldWith (options: WorldOptions) : World =
@@ -282,6 +286,7 @@ let private worldWith (options: WorldOptions) : World =
 
     let writer =
         DefaultFactTableWriter.createWithClock store storage events tables (Some registry) clock
+        |> options.Decorate
 
     let taint = DisclosureTaintConfig.ofLists [ salesPolicy options.Permit ] []
     let plain = FactDisclosureGate(store, events, taint = taint)
@@ -1154,6 +1159,122 @@ let private auditTests =
         }
     ]
 
+// ─── 6. Consolidation runs keep the composed writer (Phase 932) ─────
+
+/// Records every notification a channel is handed, by scope.
+type private RecordingChannel() =
+    let published = ConcurrentQueue<string * Notification>()
+
+    /// The browse run notices published under a scope, in order.
+    member _.RunNotices(scopeId: string) : FactTableRunNotice list =
+        published
+        |> Seq.choose (fun (scope, notification) ->
+            match notification with
+            | CustomNotification(key, payload) when
+                scope = scopeId && key = FactBrowseLinks.RunCommittedNotificationKey
+                ->
+                Some(
+                    JsonSerializer.Deserialize<FactTableRunNotice>(
+                        payload,
+                        ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+                    )
+                )
+            | _ -> None)
+        |> List.ofSeq
+
+    interface INotificationChannel with
+        member _.Publish(scopeId, notification) = async { published.Enqueue((scopeId, notification)) }
+
+        member _.Subscribe(_, _) =
+            async.Return Unchecked.defaultof<NotificationSubscriptionId>
+
+        member _.Unsubscribe _ = async.Return()
+
+/// A world whose composed writer is decorated the way `withFactBrowse`
+/// decorates it: every committed run publishes one notice to its scope.
+let private notifyingWorld () : World * RecordingChannel =
+    let channel = RecordingChannel()
+
+    let w =
+        worldWith {
+            defaults with
+                Decorate = FactBrowseHandler.notifyingWriter channel
+        }
+
+    w, channel
+
+let private composedWriterTests =
+    testList "consolidation runs keep the composed writer" [
+
+        test "an ordinary run raises one browse notice in its own scope (the probe below is not vacuous)" {
+            let w, channel = notifyingWorld ()
+            commitSource w north [ row "sku-1" 100m 10m ]
+
+            Expect.equal
+                (channel.RunNotices north |> List.map _.TableId)
+                [ regionalSales.Id ]
+                "the source run notified its own scope once"
+        }
+
+        test "a consolidation run raises the same per-run browse notice an ordinary run does" {
+            let w, channel = notifyingWorld ()
+            commitSource w north [ row "sku-1" 100m 10m; row "sku-2" 300m 30m ]
+            let grant = grantInForce w north
+            let receipt = published w north grant.GrantId
+
+            match channel.RunNotices group with
+            | [ notice ] ->
+                Expect.equal notice.TableId groupSales.Id "the notice names the target table"
+                Expect.equal notice.RowCount 2 "and carries the consolidation run's counts"
+                Expect.equal notice.New 2 "both rows are new to the target"
+
+                let runs =
+                    w.Writer.Runs(group, groupSales.Id)
+                    |> Async.RunSynchronously
+                    |> Result.defaultWith (fun e -> failtestf "runs: %s" (FactTableWriteError.describe e))
+
+                Expect.equal (runs |> List.map _.RunId) [ notice.RunId ] "the notice names the run the writer holds"
+
+                Expect.equal
+                    (Some(
+                        FactTableWatermark.render (
+                            runs.Head.Status
+                            |> function
+                                | FactTableRunStatus.Committed c -> c.Watermark
+                                | other -> failtestf "the run is %A" other
+                        )
+                    ))
+                    (Some receipt.TargetRun)
+                    "the receipt names that run's watermark"
+            | other -> failtestf "expected one notice in the target scope, got %d" other.Length
+
+            for fact in groupRows w do
+                Expect.equal fact.Method (Imported(PublicationGrant.certificateRef grant)) "still Imported"
+        }
+
+        test "a refresh is a consolidation run too, and notifies once" {
+            let w, channel = notifyingWorld ()
+            commitSource w north [ row "sku-1" 100m 10m ]
+            let grant = grantInForce w north
+            published w north grant.GrantId |> ignore
+
+            asUser owners[north] north (w.Publication.Revoke(teamScope north, grant.GrantId))
+            |> Result.defaultWith (fun e -> failtestf "revoke: %s" (PublicationRefusal.describe e))
+            |> ignore
+
+            w.Publication.Refresh(teamScope group, groupSales.Id)
+            |> Async.RunSynchronously
+            |> Result.defaultWith (fun e -> failtestf "refresh: %s" (PublicationRefusal.describe e))
+            |> ignore
+
+            match channel.RunNotices group with
+            | [ _; refresh ] ->
+                Expect.equal refresh.RowCount 0 "the refresh left no row from the withdrawn origin"
+                Expect.equal refresh.Removed 1 "and its notice counts the removal"
+            | other -> failtestf "expected two notices in the target scope, got %d" other.Length
+        }
+    ]
+
 let tests =
     testList "Phase 897 — team-to-team fact publication" [
         consolidationTests
@@ -1161,4 +1282,5 @@ let tests =
         disclosureTests
         withdrawalTests
         auditTests
+        composedWriterTests
     ]
