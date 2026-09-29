@@ -361,8 +361,24 @@ type BlobFactStore
 
     // Phase 702 — the derived current-heads read model. Constructed
     // eagerly and consulted only when the policy says so, so a disabled
-    // policy costs one unused object per store and nothing per call.
-    let surface = BlobFactSurface(storage) :> IFactSurface
+    // policy costs one unused object per store and nothing per call. Its
+    // census is sized to decode the largest difference the policy will
+    // fold incrementally (Phase 891).
+    let surface =
+        BlobFactSurface(storage, FactCensus.widthFor surfaceOptions.MaxIncrementalFold) :> IFactSurface
+
+    // Phase 891 — the parse cache over the surface. It does not exist when
+    // the surface is disabled, so a disabled policy holds nothing.
+    let surfaceCache =
+        if surfaceOptions.Enabled then
+            Some(FactSurfaceCache.CreateDefault())
+        else
+            None
+
+    let cacheSurface (scopeId: string) (metric: string) (snapshot: FactSurfaceSnapshot) =
+        match surfaceCache with
+        | Some cache -> cache.Store(scopeId, metric, snapshot)
+        | None -> ()
 
     let serialise (f: Fact) : byte[] =
         JsonSerializer.Serialize(f, jsonOptions) |> Encoding.UTF8.GetBytes
@@ -787,15 +803,18 @@ type BlobFactStore
     let rebuildSurface (scopeId: string) (metric: MetricRef) : Async<FactSurfaceSnapshot option> = async {
         let! all = loadAll scopeId
         let heads = currentHeadsFor metric all
-        let headIds = HashSet<string>(heads |> List.map _.FactId, StringComparer.Ordinal)
 
-        let absorbed = all |> List.map _.FactId |> List.filter (headIds.Contains >> not)
-
-        let! r = surface.Rebuild(scopeId, metric.Value, heads, absorbed)
+        // The census is every fact the rebuild actually READ — never the
+        // listing's names. A blob that would not read this time is left
+        // out, so the next read sees it as unseen and tries it again,
+        // rather than recording as folded a fact whose row is missing.
+        let! r = surface.Rebuild(scopeId, metric.Value, heads, all |> List.map _.FactId)
 
         return
             match r with
-            | Ok snapshot -> Some snapshot
+            | Ok snapshot ->
+                cacheSurface scopeId metric.Value snapshot
+                Some snapshot
             | Error _ -> None
     }
 
@@ -806,32 +825,32 @@ type BlobFactStore
     let reconcileSurface
         (scopeId: string)
         (metric: MetricRef)
-        (names: string list)
+        (logIds: string list)
+        (logCensus: FactCensusValue)
         (existing: FactSurfaceSnapshot option)
         : Async<FactSurfaceSnapshot option> =
         async {
-            let storeCount = List.length names
-
             match existing with
             | Some snapshot when not snapshot.Stale ->
-                let folded = FactSurfaceRead.foldedCount snapshot
+                let folded = FactCensus.valueOf snapshot.Census
 
-                if folded = storeCount then
-                    // The folded set is a subset of the census by
-                    // construction, so equal cardinality is equality — and
-                    // the converged path never has to materialise the ids.
+                if folded = logCensus then
+                    // The same count and the same digest: the same ids (the
+                    // one assumption, stated in FactSurface.fs) — and the
+                    // converged path never materialises the difference.
                     return Some snapshot
-                elif folded > storeCount then
-                    // Facts left the log — nothing in the store does that,
-                    // so this is an out-of-band deletion (an erasure).
-                    // Rebuild rather than reason about which rows survived.
+                elif logCensus.Count - folded.Count > surfaceOptions.MaxIncrementalFold then
+                    // More unseen facts than the policy folds one by one:
+                    // one enumeration is cheaper, whatever the decode says.
                     return! rebuildSurface scopeId metric
                 else
-                    let missing = FactSurfaceRead.unseen snapshot (names |> List.map factIdOfBlob)
-
-                    if List.length missing > surfaceOptions.MaxIncrementalFold then
+                    match FactCensus.unseen snapshot.Census logIds with
+                    | Error _ ->
+                        // Undecodable, a departed fact (an erasure), or a
+                        // key collision: rebuild from the log rather than
+                        // reason about which rows survived.
                         return! rebuildSurface scopeId metric
-                    else
+                    | Ok missing ->
                         let! fetched = missing |> List.map (load scopeId) |> BlobFanOut.run
                         let facts = fetched |> Array.choose id |> Array.toList
 
@@ -840,13 +859,22 @@ type BlobFactStore
                         else
                             // Ascending `AsOf` is a topological order over
                             // the supersession edges (law L3).
-                            let folded =
-                                facts
-                                |> List.sortBy _.AsOf
-                                |> List.fold (fun acc f -> FactSurfaceFold.applyFact metric.Value f acc) snapshot
+                            let folded, _ =
+                                FactSurfaceFold.applyFacts metric.Value (facts |> List.sortBy _.AsOf) snapshot
 
-                            let! _ = surface.Put(scopeId, metric.Value, folded)
-                            return Some folded
+                            // Belt and braces: a decoded difference is only
+                            // trusted when the fold lands exactly on the
+                            // log's census.
+                            if FactCensus.valueOf folded.Census <> logCensus then
+                                return! rebuildSurface scopeId metric
+                            else
+                                let! put = surface.Put(scopeId, metric.Value, folded)
+
+                                match put with
+                                | Ok() -> cacheSurface scopeId metric.Value folded
+                                | Error _ -> ()
+
+                                return Some folded
             | _ -> return! rebuildSurface scopeId metric
         }
 
@@ -956,12 +984,49 @@ type BlobFactStore
                 // unchanged.
                 return None
             else
-                let! existing = surface.Get(scopeId, query.Metric.Value)
-                let! reconciled = reconcileSurface scopeId query.Metric names existing
+                // The census value: one key per listed id, which is what
+                // both the reconcile and the parse cache compare against.
+                let logIds = names |> List.map factIdOfBlob
+                let logCensus = FactCensus.valueOfIds logIds
 
-                match reconciled with
-                | None -> return None
+                let! cached = async {
+                    match surfaceCache with
+                    | None -> return None
+                    | Some cache ->
+                        match cache.TryGet(scopeId, query.Metric.Value, logCensus) with
+                        | None -> return None
+                        | Some snapshot ->
+                            // A hit still asks whether the snapshot blob
+                            // exists — one probe, never a download — so
+                            // `FactSurface.drop` flushes every replica's
+                            // cache as well as the blob, and remains the
+                            // operator's lever it was before the cache.
+                            let! present = storage.Exists(scopeId, FactSurface.blobName query.Metric.Value)
+
+                            if present then
+                                return Some snapshot
+                            else
+                                cache.Evict(scopeId, query.Metric.Value)
+                                return None
+                }
+
+                match cached with
                 | Some snapshot -> return! answerFromSnapshot scopeId query direction metricDef snapshot
+                | None ->
+                    let! existing = surface.Get(scopeId, query.Metric.Value)
+
+                    // A snapshot already converged is remembered here; the
+                    // reconcile remembers the ones it folds or rebuilds.
+                    match existing with
+                    | Some snapshot when not snapshot.Stale && FactCensus.valueOf snapshot.Census = logCensus ->
+                        cacheSurface scopeId query.Metric.Value snapshot
+                    | _ -> ()
+
+                    let! reconciled = reconcileSurface scopeId query.Metric logIds logCensus existing
+
+                    match reconciled with
+                    | None -> return None
+                    | Some snapshot -> return! answerFromSnapshot scopeId query direction metricDef snapshot
         }
 
     let runPopulation (scopeId: string) (query: PopulationQuery) : Async<Result<PopulationResult, string>> = async {
@@ -1008,7 +1073,13 @@ type BlobFactStore
                 let! updated = surface.Update(scopeId, fact.Metric.Value, fact)
 
                 match updated with
-                | Ok() -> return ()
+                | Ok None -> return ()
+                | Ok(Some written) ->
+                    // Converged against the log as this replica last read
+                    // it plus this fact: a read whose census matches may
+                    // answer from it without a download.
+                    cacheSurface scopeId fact.Metric.Value written
+                    return ()
                 | Error _ ->
                     do! surface.Drop(scopeId, fact.Metric.Value)
                     let! still = surface.Get(scopeId, fact.Metric.Value)
@@ -1068,14 +1139,15 @@ type BlobFactStore
                     // maintain, and the read path builds it on demand.
                     | None -> ()
                     | Some snapshot ->
-                        let folded =
-                            ordered
-                            |> List.fold (fun acc f -> FactSurfaceFold.applyFact metric.Value f acc) snapshot
+                        // Linear in the batch (Phase 891): one walk of the
+                        // snapshot's rows, however many heads the batch
+                        // supersedes.
+                        let folded, _ = FactSurfaceFold.applyFacts metric.Value ordered snapshot
 
                         let! put = surface.Put(scopeId, metric.Value, folded)
 
                         match put with
-                        | Ok() -> ()
+                        | Ok() -> cacheSurface scopeId metric.Value folded
                         | Error _ ->
                             do! surface.Drop(scopeId, metric.Value)
                             let! still = surface.Get(scopeId, metric.Value)
@@ -1483,6 +1555,11 @@ type BlobFactStore
 
                 return [ entry sampled.Length consistent orphans (sampled.Length - consistent) ]
         }
+
+    /// The metric surface's parse cache (Phase 891), or `None` when the
+    /// surface policy is disabled. Internal: exposed to the test pack so
+    /// "the cache is off when the surface is" is asserted, not assumed.
+    member internal _.SurfaceCache: FactSurfaceCache option = surfaceCache
 
     /// Registry-less construction — the pre-566 shape, byte-for-byte.
     new(storage: IBlobStorage, events: IEventStore, clock: unit -> DateTime) =

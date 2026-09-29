@@ -28,6 +28,12 @@
     <ItemGroup>
         <None Include="..\ToolUp.Facts\README.md" Pack="true" PackagePath="\" />
     </ItemGroup>
+    <!-- Phase 891 — the metric surface's fold, codec and snapshot cache are
+         internal; the test pack asserts on them directly (row visits, the
+         census sketch, cache eviction) rather than only through timings. -->
+    <ItemGroup>
+        <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
+    </ItemGroup>
     <ItemGroup>
         <Compile Include="Server\IFactStore.fs" />
         <!-- Phase 702 — the metric surface: the derived, columnar

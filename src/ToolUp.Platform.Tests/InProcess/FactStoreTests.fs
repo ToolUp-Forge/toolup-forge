@@ -673,8 +673,13 @@ type private CountingBlobStorage(inner: IBlobStorage) =
     let gate = obj ()
     let mutable downloads = 0
     let mutable lists = 0
+    let mutable surfaceDownloads = 0
 
     member _.Downloads = lock gate (fun () -> downloads)
+
+    /// Downloads of a metric-surface snapshot (Phase 891) — the read the
+    /// parse cache exists to avoid. Also counted in `Downloads`.
+    member _.SurfaceDownloads = lock gate (fun () -> surfaceDownloads)
 
     /// `List` calls since the last reset (Phase 890) — a listing returns
     /// names only, so it is counted apart from the reads that fetch a blob.
@@ -683,7 +688,8 @@ type private CountingBlobStorage(inner: IBlobStorage) =
     member _.Reset() =
         lock gate (fun () ->
             downloads <- 0
-            lists <- 0)
+            lists <- 0
+            surfaceDownloads <- 0)
 
     interface IBlobStorage with
         // Phase 741 — no bounded multi-part commit primitive here; callers assemble through memory.
@@ -696,7 +702,12 @@ type private CountingBlobStorage(inner: IBlobStorage) =
             inner.Upload(container, blobName, content)
 
         member _.Download(container, blobName) = async {
-            lock gate (fun () -> downloads <- downloads + 1)
+            lock gate (fun () ->
+                downloads <- downloads + 1
+
+                if blobName.StartsWith(FactSurface.Prefix, StringComparison.Ordinal) then
+                    surfaceDownloads <- surfaceDownloads + 1)
+
             return! inner.Download(container, blobName)
         }
 
@@ -946,6 +957,76 @@ let private expectSameAnswers (label: string) (enumerating: IFactStore) (surface
             viaLog
             (sprintf "%s — '%s' must answer identically through either read model" label name)
 }
+
+// ─── Phase 891 — the surface stops growing with history ─────────────
+//
+// **Measured first**, before any change, at 100,000 heads of one metric
+// seeded straight into the log (loaded machine, in-memory backend): the
+// census listed 100,000 entries and the snapshot was 13,288,933 bytes;
+// writing a second metric of 100,000 facts took the census to 200,000 and
+// the elasticity snapshot to 14,288,938 bytes — a megabyte of absorbed ids
+// for a metric whose rows had not changed (ten bytes an id here; a real
+// content-addressed id is ~68). A superseding batch folded fact by fact
+// over those 100,000 rows cost 3,986 / 7,986 / 16,297 / 33,490 ms for
+// 500 / 1,000 / 2,000 / 4,000 facts: 8.2 ms a fact, linear in the rows per
+// fact, so quadratic in a refresh — some fourteen minutes for a batch
+// restating every subject.
+//
+// The cases below hold the after-shape structurally: row visits rather
+// than a clock, blob sizes rather than an estimate, snapshot downloads
+// rather than a latency.
+
+let private emptySnapshot (width: int) : FactSurfaceSnapshot = {
+    Metric = "elasticity"
+    Stale = false
+    Rows = []
+    Census = FactCensus.empty width
+}
+
+/// A head per index, under `metric`, at a distinct transaction time.
+let private headAt (metric: string) (index: int) : Fact = {
+    syntheticFact index (Scalar(decimal index)) with
+        Metric = MetricRef metric
+        AsOf = baseAsOf.AddSeconds(float index)
+}
+
+/// A fact superseding `prior`, later than it.
+let private successorOf (index: int) (prior: Fact) : Fact = {
+    syntheticFact index (Scalar(decimal index)) with
+        Subject = prior.Subject
+        Metric = prior.Metric
+        AsOf = prior.AsOf.AddDays 1.0
+        Supersedes = Some prior.FactId
+}
+
+let private surfaceBlobSize (storage: IBlobStorage) (scope: string) = async {
+    let! r = storage.Download(scope, FactSurface.blobName "elasticity")
+
+    return
+        match r with
+        | Ok bytes -> bytes.Length
+        | Error e -> failtestf "no surface blob: %s" e
+}
+
+let private writeRaw (storage: IBlobStorage) (scope: string) (fact: Fact) = async {
+    let payload =
+        JsonSerializer.Serialize(fact, FableConverters.create ())
+        |> Encoding.UTF8.GetBytes
+
+    let! written = storage.Upload(scope, sprintf "_facts/%s.json" fact.FactId, payload)
+
+    match written with
+    | Error e -> failtestf "could not write %s: %s" fact.FactId e
+    | Ok _ -> ()
+}
+
+let private levelTwo = {
+    PopulationQuery.create elasticity "geography" with
+        Level = Some 2
+        Ordering = Descending
+        TopK = 5
+}
+
 
 let metricSurfaceTests =
     testList "Phase 702 metric surface" [
@@ -1279,6 +1360,406 @@ let metricSurfaceTests =
                 (1 + PopulationQuery.effectiveTopK query)
                 "the surface reads one snapshot plus the returned page, and nothing else"
         }
+
+        testCase "a superseding batch folds in row visits linear in the batch"
+        <| fun () ->
+            // 20,000 heads, then 20,000 facts superseding every one of
+            // them. Folded fact by fact that is 20,000 walks of 20,000
+            // rows — 400 million visits, and three times that counting the
+            // two `List.length` calls the old fold made per supersession.
+            let size = 20_000
+            let heads = [ for i in 0 .. size - 1 -> headAt "elasticity" i ]
+
+            let seeded, seedVisits =
+                FactSurfaceFold.applyFacts "elasticity" heads (emptySnapshot 64)
+
+            Expect.equal (List.length seeded.Rows) size "every head is a row"
+            Expect.equal seedVisits size "adding heads visits each added row once"
+
+            let successors = heads |> List.mapi (fun i h -> successorOf (size + i) h)
+
+            let clock = Diagnostics.Stopwatch.StartNew()
+            let refreshed, visits = FactSurfaceFold.applyFacts "elasticity" successors seeded
+            clock.Stop()
+
+            printfn
+                "Phase 891 fold: %d superseding facts over %d rows — %d row visits in %dms (fact-by-fact: %d)"
+                size
+                size
+                visits
+                clock.ElapsedMilliseconds
+                (3 * size * size)
+
+            Expect.isLessThanOrEqual visits (3 * size) "row visits are linear in the batch, not quadratic"
+
+            Expect.equal
+                (refreshed.Rows |> List.map _.Member.FactId |> Set.ofList)
+                (successors |> List.map _.FactId |> Set.ofList)
+                "every superseded head left the rows and every successor joined them"
+
+            Expect.equal refreshed.Census.Count (2 * size) "the census counts the superseded heads too"
+
+        testCase "the batch fold is exactly the fact-by-fact fold, row order and census included"
+        <| fun () ->
+            let heads = [ for i in 0..39 -> headAt "elasticity" i ]
+            let neighbours = [ for i in 100..109 -> headAt "revenue" i ]
+
+            let start =
+                FactSurfaceFold.applyFacts "elasticity" (heads @ neighbours) (emptySnapshot 16)
+                |> fst
+
+            let added = headAt "elasticity" 200
+            let addedThenRetired = successorOf 201 added
+            let retiredAgain = successorOf 202 addedThenRetired
+
+            let batch = [
+                successorOf 300 heads[3]
+                headAt "revenue" 301
+                added
+                successorOf 302 heads[7]
+                addedThenRetired
+                {
+                    headAt "elasticity" 303 with
+                        Subject = heads[9].Subject
+                        Method = HumanAsserted "cfo"
+                }
+                retiredAgain
+                successorOf 304 neighbours[2]
+                // Supersedes an id the snapshot never held as a row.
+                {
+                    headAt "elasticity" 305 with
+                        Supersedes = Some "no-such-fact"
+                }
+            ]
+
+            let batched, _ = FactSurfaceFold.applyFacts "elasticity" batch start
+
+            let oneByOne =
+                batch
+                |> List.fold (fun acc f -> FactSurfaceFold.applyFact "elasticity" f acc) start
+
+            Expect.equal batched.Rows oneByOne.Rows "the same rows, in the same order"
+            Expect.equal batched.Census oneByOne.Census "the same census"
+            Expect.equal batched oneByOne "the same snapshot"
+
+        testCase "the census decodes a small difference and refuses what it cannot vouch for"
+        <| fun () ->
+            let ids = [ for i in 0..999 -> sprintf "fact-%04d" i ]
+            let census = FactCensus.ofIds (FactCensus.widthFor 32) ids
+
+            Expect.equal
+                (FactCensus.valueOf census)
+                (FactCensus.valueOfIds ids)
+                "the table and the bare value agree on the same ids"
+
+            let fresh = [ for i in 0..19 -> sprintf "new-%02d" i ]
+
+            match FactCensus.unseen census (ids @ fresh) with
+            | Ok missing -> Expect.equal (Set.ofList missing) (Set.ofList fresh) "exactly the new ids decode"
+            | Error e -> failtestf "a 20-id difference at capacity 32 should decode: %A" e
+
+            match FactCensus.unseen census ids with
+            | Ok missing -> Expect.isEmpty missing "a converged census has nothing unseen"
+            | Error e -> failtestf "no difference should decode trivially: %A" e
+
+            let tooMany = [ for i in 0..499 -> sprintf "bulk-%03d" i ]
+
+            match FactCensus.unseen census (ids @ tooMany) with
+            | Error FactCensus.Undecodable -> ()
+            | other -> failtestf "500 new ids cannot decode at capacity 32, got %A" other
+
+            // An erasure that an addition hides from the count: 999 + 1.
+            let erasedOne = (ids |> List.filter ((<>) "fact-0500")) @ [ "replacement" ]
+
+            Expect.equal (FactCensus.valueOfIds erasedOne).Count census.Count "the count alone cannot see this shape"
+
+            Expect.notEqual (FactCensus.valueOfIds erasedOne) (FactCensus.valueOf census) "the digest can"
+
+            match FactCensus.unseen census erasedOne with
+            | Error(FactCensus.Departed 1) -> ()
+            | other -> failtestf "one departed id must be reported, got %A" other
+
+        testCaseAsync "a snapshot's size does not grow when another metric in the scope is refreshed"
+        <| async {
+            let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
+            let clock = steppingClock baseAsOf
+            let enumerating = storeOver storage clock FactSurfaceOptions.disabled
+
+            // Capacity for the whole refresh below, so the neighbour's 400
+            // facts are folded incrementally — the path that used to append
+            // each one's id to this snapshot.
+            let surfaced =
+                storeOver storage clock {
+                    FactSurfaceOptions.always with
+                        MaxIncrementalFold = 512
+                }
+
+            let scope = newScope ()
+
+            for i in 0..199 do
+                do!
+                    assertSeed
+                        surfaced
+                        scope
+                        (draftAt
+                            [ "eu"; sprintf "sku-%06d" i ]
+                            "elasticity"
+                            rollup
+                            (Scalar(decimal i))
+                            (sprintf "e%d" i))
+
+            do! expectSameAnswers "seeded" enumerating surfaced scope
+            let! before = surfaceBlobSize storage scope
+
+            // Refresh a neighbouring metric twice over, every restatement
+            // superseding the last — the history the id list used to carry.
+            for round in 0..1 do
+                for i in 0..199 do
+                    do!
+                        assertSeed
+                            surfaced
+                            scope
+                            (draftAt
+                                [ "eu"; sprintf "sku-%06d" i ]
+                                "revenue"
+                                rollup
+                                (Scalar(decimal (i + round)))
+                                (sprintf "r%d-%d" round i))
+
+            do! expectSameAnswers "after the neighbour's refresh" enumerating surfaced scope
+            let! after = surfaceBlobSize storage scope
+
+            printfn "Phase 891 snapshot: %d bytes before a neighbouring refresh of 400 facts, %d after" before after
+            Expect.equal after before "the snapshot is a function of its own heads, not of the scope's history"
+        }
+
+        testCaseAsync "a second population question against an unchanged store downloads no snapshot"
+        <| async {
+            let counting = CountingBlobStorage(InMemoryBlobStorage.InMemoryBlobStorage())
+            let storage = counting :> IBlobStorage
+            let clock = steppingClock baseAsOf
+            let enumerating = storeOver storage clock FactSurfaceOptions.disabled
+            let surfaced = storeOver storage clock FactSurfaceOptions.always
+            let scope = newScope ()
+
+            do! seed702 enumerating scope
+
+            // Built cold (a rebuild), then asked again.
+            let! first = surfaced.QueryPopulation(scope, levelTwo)
+            counting.Reset()
+            let! second = surfaced.QueryPopulation(scope, levelTwo)
+            let snapshotReads = counting.SurfaceDownloads
+
+            // Verify the probe: the same question through a fresh store —
+            // a cold cache over the same blob — DOES download the snapshot.
+            let fresh = storeOver storage clock FactSurfaceOptions.always
+            counting.Reset()
+            let! third = fresh.QueryPopulation(scope, levelTwo)
+            let coldReads = counting.SurfaceDownloads
+
+            Expect.equal second first "the cached answer is the same answer"
+            Expect.equal third first "and so is a cold cache's"
+            Expect.equal snapshotReads 0 "a warm cache over an unchanged log reads no snapshot"
+            Expect.equal coldReads 1 "a cold cache reads the snapshot blob exactly as before"
+            do! expectSameAnswers "cached" enumerating surfaced scope
+        }
+
+        testCaseAsync "a second replica writing behind a warm cache is folded in before the next answer"
+        <| async {
+            let counting = CountingBlobStorage(InMemoryBlobStorage.InMemoryBlobStorage())
+            let storage = counting :> IBlobStorage
+            let clock = steppingClock baseAsOf
+            let enumerating = storeOver storage clock FactSurfaceOptions.disabled
+            let replicaA = storeOver storage clock FactSurfaceOptions.always
+            let replicaB = storeOver storage clock FactSurfaceOptions.always
+            let scope = newScope ()
+
+            do! seed702 replicaA scope
+            do! expectSameAnswers "replica A warm" enumerating replicaA scope
+
+            // Replica B writes through its OWN maintenance — a supersession
+            // and a new subject — and then a fact reaches the log through
+            // neither replica.
+            do! assertSeed replicaB scope (draftAt [ "eu"; "sku-000002" ] "elasticity" rollup (Scalar 612m) "b-v2")
+            do! assertSeed replicaB scope (draftAt [ "eu"; "sku-000077" ] "elasticity" rollup (Scalar 611m) "b-77")
+
+            let smuggled = {
+                syntheticFact 777777 (Scalar 613m) with
+                    Subject = {
+                        Hierarchy = "geography"
+                        Path = [ "eu"; "sku-777777" ]
+                    }
+                    AsOf = baseAsOf
+            }
+
+            do! writeRaw storage scope smuggled
+
+            counting.Reset()
+            let! viaA = replicaA.QueryPopulation(scope, levelTwo)
+            let! viaLog = enumerating.QueryPopulation(scope, levelTwo)
+
+            Expect.equal viaA viaLog "replica A answers what the log says, not what its cache held"
+            Expect.isGreaterThanOrEqual counting.SurfaceDownloads 1 "the moved census sent replica A to the blob"
+
+            match viaA with
+            | Error e -> failtestf "population read refused: %s" e
+            | Ok population ->
+                let values = population.Ranked |> List.map _.Value
+
+                Expect.containsAll
+                    values
+                    [ Scalar 613m; Scalar 612m; Scalar 611m ]
+                    "both replicas' writes and the out-of-band one rank"
+
+            do! expectSameAnswers "replica A after replica B" enumerating replicaA scope
+        }
+
+        testCaseAsync "an erasure is rebuilt from the log, with or without FactSurface.drop"
+        <| async {
+            let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
+            let clock = steppingClock baseAsOf
+            let enumerating = storeOver storage clock FactSurfaceOptions.disabled
+            let surfaced = storeOver storage clock FactSurfaceOptions.always
+            let scope = newScope ()
+
+            do! seed702 surfaced scope
+            do! assertSeed surfaced scope (draftAt [ "eu"; "sku-000040" ] "elasticity" rollup (Scalar 401m) "e40-v1")
+
+            let! latest =
+                surfaced.Assert(scope, draftAt [ "eu"; "sku-000040" ] "elasticity" rollup (Scalar 402m) "e40-v2")
+
+            let erased =
+                match latest with
+                | Ok f -> f
+                | Error e -> failtestf "seed failed: %s" e
+
+            do! expectSameAnswers "before the erasure" enumerating surfaced scope
+
+            // The shape the pre-891 reconcile could not see: one fact
+            // erased and another added, so the census COUNT is unchanged.
+            let! deleted = storage.Delete(scope, sprintf "_facts/%s.json" erased.FactId)
+
+            match deleted with
+            | Error e -> failtestf "could not erase: %s" e
+            | Ok _ -> ()
+
+            do!
+                writeRaw storage scope {
+                    headAt "elasticity" 404040 with
+                        AsOf = baseAsOf
+                }
+
+            // Verify the probe: the erased head is gone from the log, so the
+            // enumeration ranks its predecessor again.
+            let! gone = enumerating.Get(scope, erased.FactId)
+            Expect.isNone gone "the erased fact is no longer readable"
+
+            do! expectSameAnswers "after an erasure, without a drop" enumerating surfaced scope
+
+            let! afterErasure = surfaced.QueryPopulation(scope, levelTwo)
+
+            match afterErasure with
+            | Error e -> failtestf "population read refused: %s" e
+            | Ok population ->
+                Expect.isFalse
+                    (population.Ranked |> List.exists (fun f -> f.FactId = erased.FactId))
+                    "the erased head never ranks"
+
+            // And the operator's flush still does what it always did.
+            do! FactSurface.drop storage scope
+            do! expectSameAnswers "after the erasure and a drop" enumerating surfaced scope
+            let! rebuilt = storage.List(scope, FactSurface.Prefix)
+            Expect.isNonEmpty rebuilt "the next read rebuilt the surface"
+        }
+
+        testCaseAsync "a version-1 snapshot reads as no surface and is rebuilt"
+        <| async {
+            let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
+            let clock = steppingClock baseAsOf
+            let enumerating = storeOver storage clock FactSurfaceOptions.disabled
+            let surfaced = storeOver storage clock FactSurfaceOptions.always
+            let scope = newScope ()
+
+            do! seed702 enumerating scope
+
+            // A pre-891 snapshot: its header and one absorbed id, and no rows.
+            let legacy =
+                Encoding.UTF8.GetBytes(sprintf "%s\t1\telasticity\t0\t1\t0\nf00000001\n" FactSurfaceCodec.Magic)
+
+            let! _ = storage.Upload(scope, FactSurface.blobName "elasticity", legacy)
+
+            do! expectSameAnswers "over a version-1 snapshot" enumerating surfaced scope
+
+            let! r = storage.Download(scope, FactSurface.blobName "elasticity")
+
+            match r with
+            | Error e -> failtestf "no snapshot after the read: %s" e
+            | Ok bytes ->
+                let header = Encoding.UTF8.GetString(bytes).Split('\n')[0]
+
+                Expect.stringStarts
+                    header
+                    (sprintf "%s\t%d\t" FactSurfaceCodec.Magic FactSurfaceCodec.Version)
+                    "the read rebuilt it in the current format"
+        }
+
+        testCase "the parse cache is bounded in entries and bytes and evicts oldest first"
+        <| fun () ->
+            let snapshotOf (rows: int) =
+                FactSurfaceFold.applyFacts
+                    "elasticity"
+                    [ for i in 0 .. rows - 1 -> headAt "elasticity" i ]
+                    (emptySnapshot 8)
+                |> fst
+
+            let small = snapshotOf 1
+            let weight = FactSurfaceCodec.estimatedBytes small
+
+            let byEntries = FactSurfaceCache(2, Int64.MaxValue)
+            byEntries.Store("s", "a", small)
+            byEntries.Store("s", "b", small)
+            byEntries.Store("s", "c", small)
+            let census = FactCensus.valueOf small.Census
+
+            Expect.equal byEntries.Count 2 "never more than the entry bound"
+            Expect.isNone (byEntries.TryGet("s", "a", census)) "the oldest went first"
+            Expect.isSome (byEntries.TryGet("s", "c", census)) "the newest stayed"
+
+            let byBytes = FactSurfaceCache(100, 2L * weight)
+            byBytes.Store("s", "a", small)
+            byBytes.Store("s", "b", small)
+            byBytes.Store("s", "c", small)
+
+            Expect.isLessThanOrEqual byBytes.Bytes (2L * weight) "never more than the byte bound"
+            Expect.isNone (byBytes.TryGet("s", "a", census)) "the oldest went first"
+
+            let large = snapshotOf 50
+            byBytes.Store("s", "big", large)
+
+            Expect.isNone
+                (byBytes.TryGet("s", "big", FactCensus.valueOf large.Census))
+                "an entry over the budget is never admitted"
+
+            let other = FactCensus.valueOf (snapshotOf 2).Census
+            Expect.isNone (byEntries.TryGet("s", "c", other)) "a different census is a miss"
+            Expect.isNone (byEntries.TryGet("s", "c", census)) "and the out-of-date entry was dropped"
+
+            byEntries.Store("s", "d", { small with Stale = true })
+            Expect.isNone (byEntries.TryGet("s", "d", census)) "a stale snapshot is never cached"
+
+        testCase "the parse cache does not exist when the surface is disabled"
+        <| fun () ->
+            let over options =
+                BlobFactStore(
+                    InMemoryBlobStorage.InMemoryBlobStorage(),
+                    InMemoryEventStore.InMemoryEventStore(),
+                    None,
+                    (fun () -> DateTime.UtcNow),
+                    options
+                )
+
+            Expect.isNone (over FactSurfaceOptions.disabled).SurfaceCache "off when the surface is"
+            Expect.isSome (over FactSurfaceOptions.defaults).SurfaceCache "on when it is not"
     ]
 
 // ─── The metric surface at the requirement's cardinality (Phase 702) ─
@@ -1410,6 +1891,121 @@ let metricSurfaceScaleTests =
                 Expect.equal population.Stats.Minimum (Some 0m) "smallest of the permutation"
                 Expect.isTrue population.Truncated "the rest of the population stayed out of the answer"
         }
+
+        testCaseAsync
+            "at 100,000 heads the snapshot ignores a neighbour, the fold is linear and a repeat read parses nothing"
+        <| async {
+            // Phase 891's measure-first run, repeated after the change on
+            // the same shape (the before-figures are in the note above
+            // `metricSurfaceTests`' Phase 891 cases). Counted as well as
+            // timed; only the counts are asserted.
+            let counting = CountingBlobStorage(InMemoryBlobStorage.InMemoryBlobStorage())
+            let storage = counting :> IBlobStorage
+            let scope = newScope ()
+
+            for i in 0 .. SurfaceScaleSize - 1 do
+                do! writeRaw storage scope (scaleFact i)
+
+            let clock = steppingClock (baseAsOf.AddDays 1.0)
+            let enumerating = storeOver storage clock FactSurfaceOptions.disabled
+            let surfaced = storeOver storage clock FactSurfaceOptions.defaults
+
+            let probe = scaleFact 7
+            let! readBack = enumerating.Get(scope, probe.FactId)
+            Expect.equal readBack (Some probe) "the seeded blobs are in the store's own format"
+
+            let query = {
+                PopulationQuery.create elasticity "geography" with
+                    Level = Some 2
+                    Ordering = Descending
+                    TopK = 10
+            }
+
+            let! viaLog = enumerating.QueryPopulation(scope, query)
+            let! cold = surfaced.QueryPopulation(scope, query)
+            let! census = storage.List(scope, "_facts/")
+            let! sizeAlone = surfaceBlobSize storage scope
+
+            counting.Reset()
+            let warmClock = Diagnostics.Stopwatch.StartNew()
+            let! warm = surfaced.QueryPopulation(scope, query)
+            warmClock.Stop()
+            let warmSnapshotReads = counting.SurfaceDownloads
+
+            // The same read with no cache — a fresh store over the same
+            // converged blob — is the pre-891 read path: download and parse.
+            let uncachedClock = Diagnostics.Stopwatch.StartNew()
+            let! uncached = (storeOver storage clock FactSurfaceOptions.defaults).QueryPopulation(scope, query)
+            uncachedClock.Stop()
+
+            // What the census check costs a read: one key per listed id.
+            let ids = census |> List.map (fun n -> n.Substring(7, n.Length - 12))
+            let digestClock = Diagnostics.Stopwatch.StartNew()
+            let value = FactCensus.valueOfIds ids
+            digestClock.Stop()
+            Expect.equal value.Count SurfaceScaleSize "the digest covered the whole census"
+
+            // A neighbouring metric of the same size, written into the log.
+            for i in 0 .. SurfaceScaleSize - 1 do
+                do!
+                    writeRaw storage scope {
+                        scaleFact (SurfaceScaleSize + i) with
+                            Metric = MetricRef "revenue"
+                    }
+
+            let! viaLogAfter = enumerating.QueryPopulation(scope, query)
+            let! afterNeighbour = surfaced.QueryPopulation(scope, query)
+            let! censusAfter = storage.List(scope, "_facts/")
+            let! sizeWithNeighbour = surfaceBlobSize storage scope
+
+            // A refresh restating every subject, folded into the snapshot.
+            let! blob = storage.Download(scope, FactSurface.blobName "elasticity")
+
+            let snapshot =
+                match blob |> Result.toOption |> Option.bind FactSurfaceCodec.decode with
+                | Some s -> s
+                | None -> failtest "the snapshot did not read back"
+
+            let successors =
+                snapshot.Rows
+                |> List.mapi (fun i row -> {
+                    scaleFact (2 * SurfaceScaleSize + i) with
+                        Subject = row.Member.Subject
+                        AsOf = row.Member.AsOf.AddDays 1.0
+                        Supersedes = Some row.Member.FactId
+                })
+
+            let foldClock = Diagnostics.Stopwatch.StartNew()
+            let refreshed, visits = FactSurfaceFold.applyFacts "elasticity" successors snapshot
+            foldClock.Stop()
+
+            printfn
+                "Phase 891 scale (loaded machine): %d heads — census %d entries, snapshot %d bytes; with a %d-fact neighbour census %d entries, snapshot %d bytes | read without the cache %dms, cached %dms with %d snapshot downloads | census digest %dms | superseding fold of %d over %d rows %dms, %d row visits"
+                SurfaceScaleSize
+                (List.length census)
+                sizeAlone
+                SurfaceScaleSize
+                (List.length censusAfter)
+                sizeWithNeighbour
+                uncachedClock.ElapsedMilliseconds
+                warmClock.ElapsedMilliseconds
+                warmSnapshotReads
+                digestClock.ElapsedMilliseconds
+                (List.length successors)
+                (List.length snapshot.Rows)
+                foldClock.ElapsedMilliseconds
+                visits
+
+            Expect.equal cold viaLog "the cold surface answers what the log does"
+            Expect.equal warm viaLog "and so does the cached read"
+            Expect.equal uncached viaLog "and a read with no cache at all"
+            Expect.equal afterNeighbour viaLogAfter "and the read after the neighbour's arrival"
+            Expect.equal warmSnapshotReads 0 "a repeat question over an unchanged log downloads no snapshot"
+            Expect.equal sizeWithNeighbour sizeAlone "a neighbour of 100,000 facts adds nothing to this snapshot"
+            Expect.equal (List.length refreshed.Rows) SurfaceScaleSize "the refresh replaced every head"
+            Expect.isLessThanOrEqual visits (3 * SurfaceScaleSize) "in row visits linear in the batch"
+        }
+
     ]
 
 // ─── Phase 890 — the point-read index ────────────────────────────────
