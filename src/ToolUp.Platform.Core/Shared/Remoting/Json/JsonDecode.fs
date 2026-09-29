@@ -191,9 +191,9 @@ module JsonDecode =
     /// read by neither reconstruction below, matching the STJ converters:
     /// the low/high bit pattern is the same 64 bits regardless of the
     /// tag, which says only how Long.js itself would interpret them.
-    let private tryLongObjectBits (members: (string * JsonValue) list) : uint64 option =
+    let private tryLongObjectBits (members: (string * JsonValue)[]) : uint64 option =
         let find name =
-            members |> List.tryPick (fun (k, v) -> if k = name then Some v else None)
+            members |> Array.tryPick (fun (k, v) -> if k = name then Some v else None)
 
         let tryInt32Token (text: string) =
             match JsonValue.tryInt64 text with
@@ -432,47 +432,56 @@ module JsonDecode =
             with _ ->
                 refuseWith "byte[]" (sprintf "string of %d character(s), which is not base64" text.Length)
         | JsonValue.Array items ->
-            let rec go (remaining: JsonValue list) (index: int) (acc: byte list) =
-                match remaining with
-                | [] -> Ok(acc |> List.rev |> List.toArray)
-                | item :: rest ->
-                    match asByte item with
-                    | Ok b -> go rest (index + 1) (b :: acc)
+            let bytes = Array.zeroCreate<byte> items.Length
+
+            let rec go (index: int) =
+                if index = items.Length then
+                    Ok bytes
+                else
+                    match asByte items[index] with
+                    | Ok b ->
+                        bytes[index] <- b
+                        go (index + 1)
                     | Error error -> Error(DecodeError.under (sprintf "[%d]" index) error)
 
-            go items 0 []
+            go 0
         | value -> refuse "byte[]" value
 
     // ─── Structure ───────────────────────────────────────────────────
 
-    /// An array's elements, undecoded.
+    /// An array's elements, undecoded. The `list` return is the combinator
+    /// surface Phase 799 shipped; since Phase 905 it is converted from the
+    /// array-backed carrier once, linearly.
     let items: JsonDecoder<JsonValue list> =
         function
-        | JsonValue.Array items -> Ok items
+        | JsonValue.Array items -> Ok(List.ofArray items)
         | value -> refuse "array" value
 
     /// An array of exactly `arity` elements.
     let exactly (arity: int) : JsonDecoder<JsonValue list> =
         function
-        | JsonValue.Array items when List.length items = arity -> Ok items
+        | JsonValue.Array items when items.Length = arity -> Ok(List.ofArray items)
         | JsonValue.Array items ->
-            refuseWith
-                (sprintf "an array of %d element(s)" arity)
-                (sprintf "array of %d element(s)" (List.length items))
+            refuseWith (sprintf "an array of %d element(s)" arity) (sprintf "array of %d element(s)" items.Length)
         | value -> refuse (sprintf "an array of %d element(s)" arity) value
 
     /// Element `position` of an array, decoded by `decoder`; a refusal
-    /// beneath it is annotated `[position]`.
+    /// beneath it is annotated `[position]`. Phase 905: an indexed read
+    /// under a bounds test, in constant time — over the list this case used
+    /// to carry, element `i` walked `i` cells. A negative position is
+    /// absent, exactly as `List.tryItem` answered it.
     let index (position: int) (decoder: JsonDecoder<'T>) : JsonDecoder<'T> =
         fun value ->
             match value with
             | JsonValue.Array items ->
-                match List.tryItem position items with
-                | Some item -> decoder item |> Result.mapError (DecodeError.under (sprintf "[%d]" position))
-                | None ->
+                if position >= 0 && position < items.Length then
+                    match decoder items[position] with
+                    | Ok decoded -> Ok decoded
+                    | Error error -> Error(DecodeError.under (sprintf "[%d]" position) error)
+                else
                     refuseWith
                         (sprintf "an array with an element at %d" position)
-                        (sprintf "array of %d element(s)" (List.length items))
+                        (sprintf "array of %d element(s)" items.Length)
             | _ -> refuse "array" value
 
     /// Member `name` of an object, decoded by `decoder`; a refusal beneath
@@ -509,15 +518,17 @@ module JsonDecode =
         fun value ->
             match value with
             | JsonValue.Array items ->
-                let rec go (remaining: JsonValue list) (position: int) (acc: 'T list) =
-                    match remaining with
-                    | [] -> Ok(List.rev acc)
-                    | item :: rest ->
-                        match element item with
-                        | Ok decoded -> go rest (position + 1) (decoded :: acc)
+                // Forward, by index, so the refusal reported is the FIRST
+                // failing element — the order the list walk reported in.
+                let rec go (position: int) (acc: 'T list) =
+                    if position = items.Length then
+                        Ok(List.rev acc)
+                    else
+                        match element items[position] with
+                        | Ok decoded -> go (position + 1) (decoded :: acc)
                         | Error error -> Error(DecodeError.under (sprintf "[%d]" position) error)
 
-                go items 0 []
+                go 0 []
             | _ -> refuse "array" value
 
     /// `list`, as an array.
@@ -571,18 +582,20 @@ module JsonDecode =
         fun value ->
             match value with
             | JsonValue.Object members ->
-                let rec go (remaining: (string * JsonValue) list) (acc: ('K * 'V) list) =
-                    match remaining with
-                    | [] -> Ok(List.rev acc)
-                    | (name, member') :: rest ->
+                let rec go (position: int) (acc: ('K * 'V) list) =
+                    if position = members.Length then
+                        Ok(List.rev acc)
+                    else
+                        let name, member' = members[position]
+
                         match key name with
                         | Error error -> Error error
                         | Ok k ->
                             match entry member' with
-                            | Ok v -> go rest ((k, v) :: acc)
+                            | Ok v -> go (position + 1) ((k, v) :: acc)
                             | Error error -> Error(DecodeError.under name error)
 
-                go members []
+                go 0 []
             | _ -> refuse "object" value
 
     /// `entries`, as a map (a later duplicate key wins, as `Map.ofList`).
@@ -611,40 +624,44 @@ module JsonDecode =
     let private pairEntries
         (key: JsonDecoder<'K>)
         (entry: JsonDecoder<'V>)
-        (pairs: JsonValue list)
+        (pairs: JsonValue[])
         : Result<('K * 'V) list, DecodeError> =
-        let rec go (remaining: JsonValue list) (position: int) (acc: ('K * 'V) list) =
-            match remaining with
-            | [] -> Ok(List.rev acc)
-            | JsonValue.Array [ k; v ] :: rest ->
-                let at = sprintf "[%d]" position
+        let rec go (position: int) (acc: ('K * 'V) list) =
+            if position = pairs.Length then
+                Ok(List.rev acc)
+            else
+                match pairs[position] with
+                | JsonValue.Array [| k; v |] ->
+                    let at = sprintf "[%d]" position
 
-                match key k with
-                | Error error -> Error(DecodeError.under at (DecodeError.under "[0]" error))
-                | Ok decodedKey ->
-                    match entry v with
-                    | Error error -> Error(DecodeError.under at (DecodeError.under "[1]" error))
-                    | Ok decoded -> go rest (position + 1) ((decodedKey, decoded) :: acc)
-            | pair :: _ ->
-                Error(
-                    DecodeError.under
-                        (sprintf "[%d]" position)
-                        (DecodeError.create "a [key, value] pair" (JsonValue.describe pair))
-                )
+                    match key k with
+                    | Error error -> Error(DecodeError.under at (DecodeError.under "[0]" error))
+                    | Ok decodedKey ->
+                        match entry v with
+                        | Error error -> Error(DecodeError.under at (DecodeError.under "[1]" error))
+                        | Ok decoded -> go (position + 1) ((decodedKey, decoded) :: acc)
+                | pair ->
+                    Error(
+                        DecodeError.under
+                            (sprintf "[%d]" position)
+                            (DecodeError.create "a [key, value] pair" (JsonValue.describe pair))
+                    )
 
-        go pairs 0 []
+        go 0 []
 
     /// Every member of an object-form map, each NAME read as the key's
     /// JSON text, in wire order.
     let private namedEntries
         (key: JsonDecoder<'K>)
         (entry: JsonDecoder<'V>)
-        (members: (string * JsonValue) list)
+        (members: (string * JsonValue)[])
         : Result<('K * 'V) list, DecodeError> =
-        let rec go (remaining: (string * JsonValue) list) (acc: ('K * 'V) list) =
-            match remaining with
-            | [] -> Ok(List.rev acc)
-            | (name, member') :: rest ->
+        let rec go (position: int) (acc: ('K * 'V) list) =
+            if position = members.Length then
+                Ok(List.rev acc)
+            else
+                let name, member' = members[position]
+
                 let decodedKey =
                     match JsonText.tryParse name with
                     | Ok keyValue -> key keyValue
@@ -654,10 +671,10 @@ module JsonDecode =
                 | Error error -> Error(DecodeError.under name error)
                 | Ok k ->
                     match entry member' with
-                    | Ok v -> go rest ((k, v) :: acc)
+                    | Ok v -> go (position + 1) ((k, v) :: acc)
                     | Error error -> Error(DecodeError.under name error)
 
-        go members []
+        go 0 []
 
     /// Phase 899 — a map whose KEY is read as a JSON value by `key`: the
     /// browser's array of `[key, value]` pairs, or the server writer's
@@ -676,14 +693,23 @@ module JsonDecode =
     //
     // A tuple is an array of its elements (`FSharpTupleConverter`).
 
+    /// `exactly`'s arity check and refusal, without materialising the
+    /// elements as a list the tuple decoders would discard (Phase 905).
+    let private arity (count: int) : JsonDecoder<unit> =
+        function
+        | JsonValue.Array items when items.Length = count -> Ok()
+        | JsonValue.Array items ->
+            refuseWith (sprintf "an array of %d element(s)" count) (sprintf "array of %d element(s)" items.Length)
+        | value -> refuse (sprintf "an array of %d element(s)" count) value
+
     /// A pair from an array of exactly two elements.
     let tuple2 (first: JsonDecoder<'A>) (second: JsonDecoder<'B>) : JsonDecoder<'A * 'B> =
-        exactly 2
+        arity 2
         |> bind (fun _ -> succeed (fun a b -> a, b) |> apply (index 0 first) |> apply (index 1 second))
 
     /// A triple from an array of exactly three elements.
     let tuple3 (first: JsonDecoder<'A>) (second: JsonDecoder<'B>) (third: JsonDecoder<'C>) : JsonDecoder<'A * 'B * 'C> =
-        exactly 3
+        arity 3
         |> bind (fun _ ->
             succeed (fun a b c -> a, b, c)
             |> apply (index 0 first)
@@ -697,7 +723,7 @@ module JsonDecode =
         (third: JsonDecoder<'C>)
         (fourth: JsonDecoder<'D>)
         : JsonDecoder<'A * 'B * 'C * 'D> =
-        exactly 4
+        arity 4
         |> bind (fun _ ->
             succeed (fun a b c d -> a, b, c, d)
             |> apply (index 0 first)
@@ -734,8 +760,8 @@ module JsonDecode =
         let expected = sprintf "a union case carrying %d fields" arity
 
         function
-        | Some(JsonValue.Array inner as value) when List.length inner = arity -> decoder value
-        | Some(JsonValue.Array inner) -> refuseWith expected (sprintf "array of %d element(s)" (List.length inner))
+        | Some(JsonValue.Array inner as value) when inner.Length = arity -> decoder value
+        | Some(JsonValue.Array inner) -> refuseWith expected (sprintf "array of %d element(s)" inner.Length)
         | Some value -> refuse expected value
         | None -> refuseWith expected "a union case with no payload"
 
@@ -751,11 +777,11 @@ module JsonDecode =
 
             match value with
             | JsonValue.String name -> dispatch name None
-            | JsonValue.Object [ name, carried ] -> dispatch name (Some carried)
+            | JsonValue.Object [| name, carried |] -> dispatch name (Some carried)
             | JsonValue.Object members ->
                 refuseWith
                     (sprintf "%s (a case name, or a one-member object {\"Case\": payload})" typeName)
-                    (sprintf "object of %d member(s)" (List.length members))
+                    (sprintf "object of %d member(s)" members.Length)
             | _ -> refuse (sprintf "%s (a case name, or a one-member object {\"Case\": payload})" typeName) value
 
     /// A `[<StringEnum>]` union, written as its case name with the first

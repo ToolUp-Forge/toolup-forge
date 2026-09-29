@@ -461,6 +461,12 @@ measure — and **`Number of lexical: string`**: the token text as written, neve
 width a decoder needs from the text, exactly. The number grammar is RFC 8259's, checked by hand
 so both hosts run the same code.
 
+**`Array` and `Object` carry arrays (Phase 905)**, as `MsgPack.Value.Arr` has since Phase 856:
+`index` reads by position, and on .NET a wide object's member names resolve through an index
+memoised against the value, so a record decode costs the same per field at 8 fields as at 256 on
+this wire too. Code that built or matched these cases with list syntax moves to array syntax
+(`[| … |]`); the combinators' `list` returns (`items`, `exactly`) are unchanged.
+
 ### The pass — `JsonRead`
 
 `JsonRead.tryRead` builds the model from a `JsonElement` System.Text.Json has already parsed (the

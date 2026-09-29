@@ -608,6 +608,101 @@ let private decodeWide (decoders: Decoder<int> list) (value: Value) : unit =
         | Ok _ -> ()
         | Error error -> failwith (DecodeError.render error)
 
+// ─── Phase 905 — the same fixture on the JSON wire ──────────────────────
+
+/// A record of `width` fields as the JSON writer puts it on the wire: one
+/// object keyed by field name (`{"F0":0,"F1":1,…}`), members in
+/// declaration order. Built as TEXT and read through the one-pass reader,
+/// so the fixture does not depend on how `JsonValue.Object` spells its
+/// carrier — the same source measures the model before and after.
+let private wideJsonObjectText (width: int) : string =
+    Seq.init width (fun i -> "\"F" + string i + "\":" + string (i % 128))
+    |> String.concat ","
+    |> fun members -> "{" + members + "}"
+
+/// The same values as a JSON array — the positional shape a tuple, a
+/// union's field list and a map entry take on this wire.
+let private wideJsonArrayText (width: int) : string =
+    Seq.init width (fun i -> string (i % 128))
+    |> String.concat ","
+    |> fun items -> "[" + items + "]"
+
+let private parseJson (text: string) : Json.JsonValue =
+    match Json.JsonText.tryParse text with
+    | Ok value -> value
+    | Error error -> failwith (DecodeError.render error)
+
+let private decodeWideJson (decoders: Json.JsonDecoder<int> list) (value: Json.JsonValue) : unit =
+    for decoder in decoders do
+        match decoder value with
+        | Ok _ -> ()
+        | Error error -> failwith (DecodeError.render error)
+
+/// Per-record and per-field cost of the JSON decode a generated record
+/// decoder performs (one `JsonDecode.field` BY NAME per field, in
+/// declaration order), and of positional `JsonDecode.index` over an array
+/// of the same width. The falsifier is the same as the MessagePack table's:
+/// a per-field column that is flat from 8 to 256 fields means linear.
+///
+/// The FRESH table decodes a distinct parsed value on every operation, as a
+/// server does per request, so whatever a lookup builds once per value is
+/// paid on every row of it rather than amortised across the warm loop.
+let private wideJson (rounds: int) =
+    let widths = [ 8; 32; 64; 128; 256 ]
+
+    let table (title: string) (fresh: bool) (text: int -> string) (decoders: int -> Json.JsonDecoder<int> list) =
+        Console.Out.WriteLine("| " + title + " | whole record, min / median | per field, min / median |")
+        Console.Out.WriteLine "|---|---|---|"
+
+        for width in widths do
+            let decoders = decoders width
+
+            let ops =
+                if fresh then
+                    max 50 (20_000 / width)
+                else
+                    max 200 (200_000 / width)
+
+            // One value per operation when FRESH (warm-up and every round),
+            // parsed up front so the parse is not what is timed.
+            let pool =
+                if fresh then
+                    Array.init (ops * (rounds + 1)) (fun _ -> parseJson (text width))
+                else
+                    [| parseJson (text width) |]
+
+            let mutable next = 0
+
+            let decodeNext () =
+                decodeWideJson decoders pool[next % pool.Length]
+                next <- next + 1
+
+            // Checked once before timing: a fixture that refuses measures the refusal.
+            decodeWideJson decoders pool[0]
+
+            for _ in 1..ops do
+                decodeNext ()
+
+            let s = measure rounds ops decodeNext
+
+            let perField = {
+                MinUs = s.MinUs / float width
+                MedianUs = s.MedianUs / float width
+            }
+
+            Console.Out.WriteLine("| " + string width + " | " + us s + " | " + us perField + " |")
+
+    let byName width =
+        List.init width (fun i -> Json.JsonDecode.field ("F" + string i) Json.JsonDecode.asInt32)
+
+    table "JSON object, `field` by name (fields)" false wideJsonObjectText byName
+    Console.Out.WriteLine ""
+    table "JSON object, `field` by name, a FRESH value per decode (fields)" true wideJsonObjectText byName
+    Console.Out.WriteLine ""
+
+    table "JSON array, `index` (elements)" false wideJsonArrayText (fun width ->
+        List.init width (fun i -> Json.JsonDecode.index i Json.JsonDecode.asInt32))
+
 /// Per-record and per-field decode cost across widths. LINEAR cost reads
 /// as a flat per-field column; quadratic cost as a per-field column that
 /// grows with the width. The falsifier is that column: if the per-field
@@ -641,6 +736,9 @@ let private wide (rounds: int) =
         }
 
         Console.Out.WriteLine("| " + string width + " | " + us s + " | " + us perField + " |")
+
+    Console.Out.WriteLine ""
+    wideJson rounds
 
 [<EntryPoint>]
 let main argv =
