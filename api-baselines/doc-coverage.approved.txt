@@ -93,7 +93,7 @@ ToolUp.ExternalCompute.Http 100/144
 ToolUp.FactStores.Postgres 34/46
 ToolUp.Facts.Client 41/109
 ToolUp.Facts.Core 420/763
-ToolUp.Facts.Server 694/1071
+ToolUp.Facts.Server 702/1087
 ToolUp.Facts.Shared 157/183
 ToolUp.FeatureFlagProviders.OpenFeature 5/9
 ToolUp.Forms.Client 4/19

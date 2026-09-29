@@ -72,7 +72,13 @@ let tests =
             DataObjectStore(blob) :> IDataObjectStore)
 
         IConditionalDataObjectStoreContract.tests "ReactiveDataObjectStore over DataObjectStore" (fun blob ->
-            ReactiveDataObjectStore(DataObjectStore(blob), (fun () -> false), (fun _ _ -> async.Return()), noopLogger)
+            ReactiveDataObjectStore(
+                DataObjectStore(blob),
+                (fun () -> false),
+                (fun () -> None),
+                (fun _ _ -> async.Return()),
+                noopLogger
+            )
             :> IDataObjectStore)
 
         testCaseAsync "the probe falls back to compare-then-save on a store without the capability"
