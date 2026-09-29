@@ -395,6 +395,8 @@
     <!-- Phase 520 — grounding fact store companion -->
     <PackageVersion Include="ToolUp.Facts.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Facts.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Facts.Shared" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Facts.Client" Version="$(ToolUpSdkVersion)" />
 
     <!-- AI provider companions -->
     <PackageVersion Include="ToolUp.AIProviders.Claude" Version="$(ToolUpSdkVersion)" />

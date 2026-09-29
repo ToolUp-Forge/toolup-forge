@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Facts Shared — the Fable-safe wire tier of the fact companion: the IFactBrowseApi ToolUp.Remoting contract and its view records (tables, runs, paged rows, one fact's provenance). Depends on ToolUp.Platform.Core only, so the fact client companion compiles under Fable. Phase 895.</Description>
+        <PackageTags>fsharp;fable;sdk;types;facts;grounding</PackageTags>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- ToolUp.Facts.Core is deliberately NOT referenced: its content
+             addressing uses System.Security.Cryptography, which Fable cannot
+             compile, and a Fable consumer compiles every referenced
+             project's sources. The views here carry strings, counts and
+             rendered values, never a `Fact`. -->
+        <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    </ItemGroup>
+    <!-- Client-tier closure: pack source for Fable consumers under fable/. -->
+    <ItemGroup>
+        <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+    </ItemGroup>
+    <ItemGroup>
+        <None Include="..\ToolUp.Facts\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Shared\FactBrowseApi.fs" />
+    </ItemGroup>
+    <!-- FSharp.Core is implicit via the .NET SDK. -->
+</Project>
