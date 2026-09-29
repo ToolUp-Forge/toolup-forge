@@ -176,7 +176,7 @@ ToolUp.Tabular 103/273
 ToolUp.TelemetrySinks.Ga4 2/4
 ToolUp.TimeSeriesStores.Timescale 3/5
 ToolUp.VectorStores.Hnsw 4/26
-ToolUp.VectorStores.Pgvector 97/142
+ToolUp.VectorStores.Pgvector 98/143
 ToolUp.Voice.Client 6/18
 ToolUp.Voice.Core 31/77
 ToolUp.VoiceProviders.AzureSpeech 14/23

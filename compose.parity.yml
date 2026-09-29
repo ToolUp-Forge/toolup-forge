@@ -19,6 +19,12 @@
 #     dotnet build ToolUp.Forge.sln
 #     dotnet src/ToolUp.Cloud.Parity.Tests/bin/Debug/net10.0/ToolUp.Cloud.Parity.Tests.dll
 #
+# The same lane is the declared home of the pgvector vector store's live
+# arm (Phase 928) — see the `pgvector` service below:
+#
+#     $env:TOOLUP_PGVECTOR_CONNECTION_STRING = "Host=localhost;Port=5433;Username=postgres;Database=postgres"
+#     dotnet src/ToolUp.Platform.Tests/bin/Debug/net10.0/ToolUp.Platform.Tests.dll --filter-test-list "PgvectorVectorStore"
+#
 # and tear it down with:
 #
 #     docker compose -f compose.parity.yml down -v
@@ -222,3 +228,34 @@ services:
     depends_on:
       - fake-gcs
     restart: "no"
+
+  # ── PostgreSQL + pgvector, for the pgvector vector store (Phase 928) ──
+  #
+  # Armed by TOOLUP_PGVECTOR_CONNECTION_STRING (the connection string in
+  # the header above). Unset, the `PgvectorVectorStore` pack reports its
+  # live arm pending; armed, it runs every live case, including the
+  # EXPLAIN assertions the store's exact short-page fallback rests on.
+  #
+  # Pinned by digest to the image Phase 928 measured (PostgreSQL 17.11,
+  # pgvector 0.8.6): the figures in the companion README are that
+  # server's, and a floating tag would silently change what they describe.
+  # The store needs pgvector 0.8.0 or later for iterative scanning.
+  #
+  # `trust` authentication with the port published on the LOOPBACK address
+  # only: a local emulator lane, reachable from this machine alone, with
+  # no password to commit or leak. Host port 5433 so a developer's own
+  # PostgreSQL on 5432 is left alone. The `vector` extension is not
+  # pre-created — the store's `create` issues `CREATE EXTENSION IF NOT
+  # EXISTS vector`, which is part of what the live arm exercises.
+  pgvector:
+    image: pgvector/pgvector:pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f
+    ports:
+      - "127.0.0.1:5433:5432"
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s

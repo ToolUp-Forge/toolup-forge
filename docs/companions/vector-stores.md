@@ -122,6 +122,39 @@ let options = {
 
 `IvfFlatAnnIndex lists` is the alternative. It must be built *after* the table holds representative data, so provision it out of band rather than at first `create` against an empty table.
 
+## Production posture — `createTuned` / `createTunedWithDataSource`
+
+`create` and `createWithDataSource` keep the store's original behaviour exactly. A table that holds many scopes under an approximate index should be composed through the tuned entry points instead, which take one more argument, a `PgvectorTuning`:
+
+```fsharp skip=fragment
+open ToolUp.RAG.VectorStores.Pgvector
+
+let options = {
+    PgvectorOptions.forDimensions 1536 with
+        AnnIndex = HnswAnnIndex(16, 64)
+}
+
+// The store owns the data source it builds from the connection string.
+let store =
+    PgvectorVectorStore.createTuned connectionString options PgvectorTuning.recommended (Some logger)
+
+// Or share a data source the deployment already owns; the store never disposes it.
+let shared =
+    PgvectorVectorStore.createTunedWithDataSource dataSource options PgvectorTuning.recommended (Some logger)
+```
+
+Both validate the tuning against the options before any I/O, run the same fail-loud probe and migration as `create`, and read the installed extension version once, so iterative scanning is only ever sent to a server that supports it (pgvector 0.8.0 and later). The returned store also implements `IVectorStoreBatch`, so `IVectorStore.upsertBatch` writes a whole batch in one statement.
+
+Why it matters: one approximate index serves every scope in the table, and the scope filter is applied as the index is walked. Measured on a local container (pgvector 0.8.6, PostgreSQL 17), with pgvector's default search width, a scope holding 1–12 % of a 165,000-row table was routed to the index by the planner and came back short on **every** query: recall@10 fell to 0.05–0.52. `PgvectorTuning.recommended` held recall@10 at 0.96 or above with no short pages for every scope size measured, at under 3 ms per query server-side. It sets:
+
+- a per-query search width (`hnsw.ef_search = 100`), applied transaction-locally so a pooled connection never carries it to the next caller;
+- `relaxed_order` iterative scanning, where the extension supports it;
+- a distance-only `ORDER BY`, with the page re-sorted into the total order;
+- an exact re-run of any scope whose page comes back short of `topK`, through a statement no approximate index can serve — which makes a full top-k a guarantee rather than a tuning outcome;
+- bounded concurrency (4) for a multi-scope search.
+
+Start from `PgvectorTuning.recommended` and override single fields with `{ PgvectorTuning.recommended with … }`. The companion [README](../../src/VectorStores/Pgvector/README.md#production-posture--createtuned-and-pgvectortuning) carries the full settings table, the index-choice measurement behind the shared-index posture, and every recorded figure.
+
 ## Testing
 
 The companion's test pack has two arms:
@@ -129,11 +162,17 @@ The companion's test pack has two arms:
 - a **structural arm** that always runs — it reads the scope-isolation guarantee off the generated SQL, exercises the `create`-time option guards, and round-trips the vector / metadata codecs, all without a database;
 - a **live arm** gated on `TOOLUP_PGVECTOR_CONNECTION_STRING`, which runs the full `IVectorStore` contract, the scope-isolation cases, the shared deterministic-ordering contract, and the two-replica consistency case. It reports **Pending** when the variable is unset, so a fresh checkout is green without a database.
 
-Point it at any PostgreSQL with pgvector installed:
+The live arm also carries the posture cases: the starvation reproduction, the `EXPLAIN` assertions that the fallback's exact statement is never served by the approximate index, the fallback repairing a starved page exactly, recall and latency at the recommended settings, and the batched write.
+
+Its declared home is the `pgvector` service in `compose.parity.yml` (pinned to the image the recorded figures came from):
 
 ```powershell
-$env:TOOLUP_PGVECTOR_CONNECTION_STRING = "Host=localhost;Username=postgres;Password=postgres;Database=toolup_test"
-dotnet run --project src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj
+docker compose -f compose.parity.yml up -d --wait pgvector
+$env:TOOLUP_PGVECTOR_CONNECTION_STRING = "Host=localhost;Port=5433;Username=postgres;Database=postgres"
+dotnet build src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj
+dotnet src/ToolUp.Platform.Tests/bin/Debug/net10.0/ToolUp.Platform.Tests.dll --filter-test-list "PgvectorVectorStore"
 ```
+
+Any other PostgreSQL with pgvector 0.8.0 or later works the same way.
 
 Each live case provisions its own table and drops it afterwards, so the arm is re-runnable and two concurrent runs against one database do not interfere.
