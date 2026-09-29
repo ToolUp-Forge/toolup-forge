@@ -81,7 +81,7 @@ module JsonRead =
 
                         match failure with
                         | Some error -> Error error
-                        | None -> Ok(JsonValue.Array(List.rev acc))
+                        | None -> Ok(JsonValue.Array(Array.ofList (List.rev acc)))
             | JsonValueKind.Object ->
                 if depth >= maxDepth then
                     refuse (sprintf "nesting at most %d container(s) deep" maxDepth) "an object nested deeper"
@@ -108,7 +108,7 @@ module JsonRead =
 
                     match failure with
                     | Some error -> Error error
-                    | None -> Ok(JsonValue.Object(List.rev acc))
+                    | None -> Ok(JsonValue.Object(Array.ofList (List.rev acc)))
             | other -> refuse "a JSON value" (sprintf "a %A token" other)
 
         go 0 element

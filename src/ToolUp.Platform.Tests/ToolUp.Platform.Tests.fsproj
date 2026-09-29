@@ -340,6 +340,9 @@
              agreement cases. The fixture is compiled into the Fable pack too. -->
         <Compile Include="Remoting\JsonClientDecodeFixture.fs" />
         <Compile Include="Remoting\JsonTextTests.fs" />
+        <!-- Phase 905 - the JSON value model's indexed reads, pinned against a
+             forward scan either side of the memoised-index width. -->
+        <Compile Include="Remoting\JsonWideValueTests.fs" />
         <!-- Phase 854 - the client read-policy attributes, read on .NET and pinned
              equal to the declaration the Fable pack registers (shared fixture). -->
         <Compile Include="Remoting\ReadPolicyFixture.fs" />

@@ -14263,13 +14263,13 @@ ToolUp.Remoting.Json.JsonValue.IsString : System.Boolean { get }
 ToolUp.Remoting.Json.JsonValue.Null : ToolUp.Remoting.Json.JsonValue { get }
 ToolUp.Remoting.Json.JsonValue.Tag : System.Int32 { get }
 ToolUp.Remoting.Json.JsonValue+Array (class)
-ToolUp.Remoting.Json.JsonValue+Array.Item : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Json.JsonValue] { get }
+ToolUp.Remoting.Json.JsonValue+Array.Item : ToolUp.Remoting.Json.JsonValue[] { get }
 ToolUp.Remoting.Json.JsonValue+Bool (class)
 ToolUp.Remoting.Json.JsonValue+Bool.Item : System.Boolean { get }
 ToolUp.Remoting.Json.JsonValue+Number (class)
 ToolUp.Remoting.Json.JsonValue+Number.lexical : System.String { get }
 ToolUp.Remoting.Json.JsonValue+Object (class)
-ToolUp.Remoting.Json.JsonValue+Object.members : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Remoting.Json.JsonValue]] { get }
+ToolUp.Remoting.Json.JsonValue+Object.members : System.Tuple`2[System.String, ToolUp.Remoting.Json.JsonValue][] { get }
 ToolUp.Remoting.Json.JsonValue+String (class)
 ToolUp.Remoting.Json.JsonValue+String.Item : System.String { get }
 ToolUp.Remoting.Json.JsonValue+Tags (class)

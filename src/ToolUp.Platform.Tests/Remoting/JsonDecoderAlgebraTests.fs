@@ -781,13 +781,13 @@ let tests =
                 | Ok(JsonValue.Array items) ->
                     Expect.equal
                         items
-                        [
+                        [|
                             JsonValue.Number "1"
                             JsonValue.Number "1.0"
                             JsonValue.Number "1e2"
                             JsonValue.Number "-0"
                             JsonValue.Number "12345678901234567890123456789"
-                        ]
+                        |]
                         "each token as written"
                 | Ok other -> failtestf "not an array: %A" other
         ]
@@ -805,12 +805,12 @@ let tests =
                     JsonValue.String ""
                     JsonValue.String "x"
                     JsonValue.String "+1"
-                    JsonValue.Array []
-                    JsonValue.Array [ JsonValue.Null ]
-                    JsonValue.Array [ JsonValue.Number "1"; JsonValue.String "a" ]
-                    JsonValue.Object []
-                    JsonValue.Object [ "Case", JsonValue.Null ]
-                    JsonValue.Object [ "a", JsonValue.Number "1"; "b", JsonValue.Number "2" ]
+                    JsonValue.Array [||]
+                    JsonValue.Array [| JsonValue.Null |]
+                    JsonValue.Array [| JsonValue.Number "1"; JsonValue.String "a" |]
+                    JsonValue.Object [||]
+                    JsonValue.Object [| "Case", JsonValue.Null |]
+                    JsonValue.Object [| "a", JsonValue.Number "1"; "b", JsonValue.Number "2" |]
                 ]
 
                 for _, decoder in covered do

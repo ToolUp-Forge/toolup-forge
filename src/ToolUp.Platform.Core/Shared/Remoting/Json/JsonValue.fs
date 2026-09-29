@@ -43,9 +43,10 @@ open System.Globalization
 // is a provider wire-mapping's substrate, this one is a decoder's.
 //
 // **Object members preserve insertion order**, as the AI.Wire model's
-// do: an `(string * JsonValue) list`, never a `Map`, so a value
-// round-trips to the text it came from and a duplicate key is VISIBLE
-// (the decoder decides; the model does not silently keep one).
+// do: an ordered `(string * JsonValue)` sequence (an array since Phase
+// 905), never a `Map`, so a value round-trips to the text it came from
+// and a duplicate key is VISIBLE (the decoder decides; the model does
+// not silently keep one).
 
 /// Phase 799 — one JSON value, as the wire can carry it.
 ///
@@ -66,10 +67,21 @@ type JsonValue =
     /// A JSON string, unescaped.
     | String of string
     /// A JSON array's elements, in wire order.
-    | Array of JsonValue list
+    ///
+    /// **An array since Phase 905, for positional access** — the change
+    /// Phase 856 made to `MsgPack.Value.Arr`, for the same reason. A tuple,
+    /// a union's field list and a map entry are read element by element
+    /// through `JsonDecode.index`, and over the F# list this case used to
+    /// carry, element `i` walked `i` cells: an n-element read was quadratic
+    /// in n. Treated as immutable, like `MsgPack.Value.Bin`'s `byte[]`:
+    /// nothing in `JsonDecode` writes to one, and a value is never mutated
+    /// after it is built.
+    | Array of JsonValue[]
     /// An object's members in wire order. Never a `Map`: order and
-    /// duplicates are facts about the wire a decoder may need.
-    | Object of members: (string * JsonValue) list
+    /// duplicates are facts about the wire a decoder may need. An array
+    /// since Phase 905 (see `Array`), so the member a name resolves to is
+    /// read by index; `JsonValue.tryMember` is where that happens.
+    | Object of members: (string * JsonValue)[]
 
 /// The measure, the description and the lexical-number readers over
 /// `JsonValue`.
@@ -85,8 +97,8 @@ module JsonValue =
         | JsonValue.Bool _
         | JsonValue.Number _
         | JsonValue.String _ -> 1
-        | JsonValue.Array items -> items |> List.fold (fun total item -> total + size item) 1
-        | JsonValue.Object members -> members |> List.fold (fun total (_, member') -> total + size member') 1
+        | JsonValue.Array items -> items |> Array.fold (fun total item -> total + size item) 1
+        | JsonValue.Object members -> members |> Array.fold (fun total (_, member') -> total + size member') 1
 
     /// What a refusal's `Found` field says about this value: the shape,
     /// and for a number its text — never a deep rendering of a container.
@@ -97,15 +109,106 @@ module JsonValue =
         | JsonValue.Bool false -> "bool false"
         | JsonValue.Number text -> sprintf "number %s" text
         | JsonValue.String text -> sprintf "string of %d character(s)" text.Length
-        | JsonValue.Array items -> sprintf "array of %d element(s)" (List.length items)
-        | JsonValue.Object members -> sprintf "object of %d member(s)" (List.length members)
+        | JsonValue.Array items -> sprintf "array of %d element(s)" items.Length
+        | JsonValue.Object members -> sprintf "object of %d member(s)" members.Length
+
+    // ─── Phase 905 — a member by name, in constant time ──────────────
+    //
+    // A record goes onto this wire as an object keyed by field name, and a
+    // generated record decoder reads it with one `JsonDecode.field` per
+    // field — each a lookup BY NAME in the same object. A scan per lookup
+    // makes an n-field record decode quadratic in n (Phase 905 measured the
+    // per-field cost rising 0.06 -> 0.21 us from 8 to 256 fields). Indexing
+    // the carrier alone does not remove that: the scan is still a scan.
+    //
+    // So a WIDE object's name -> position index is built once, the first
+    // time a member of it is looked up, and memoised against the members
+    // array's identity in a `ConditionalWeakTable` — it lives exactly as
+    // long as the value does, and nothing in the model changes shape for
+    // it. Three properties make that safe to put under a combinator the
+    // algebra calls pure:
+    //
+    //   * **It answers what the scan answers.** The index keeps each name's
+    //     FIRST position (built forward, first write wins), so a duplicate
+    //     key resolves exactly as `Array.tryPick` resolves it. And a hit is
+    //     re-checked against the member it names before it is trusted.
+    //   * **It depends on nothing but the value.** The table is keyed by the
+    //     array itself, never by a decoder or a call site, so no lookup's
+    //     answer can depend on what an earlier lookup saw.
+    //   * **Narrow objects never pay for it.** At or below
+    //     `IndexedLookupThreshold` members the forward scan is no dearer
+    //     than the table lookup, and is what runs.
+    //
+    // The browser host keeps the scan: `ConditionalWeakTable` has no Fable
+    // mapping, and the cost this removes is the SERVER's per-request cost
+    // (the client decodes a response it asked for, once).
+
+    /// Phase 905 — the member count above which `tryMember` reads a name
+    /// through a memoised index rather than a forward scan. Measured, not
+    /// guessed (2026-09-29, Release, a loaded machine, the benchmark's
+    /// `--wide` JSON table with the threshold forced each way): an index
+    /// lookup costs a flat ~0.04-0.05 us per field; a scan ~0.03 at 16
+    /// members, ~0.05 at 32 and ~0.07 at 64. They cross near 32.
+    [<Literal>]
+    let private IndexedLookupThreshold = 32
+
+    let private scanMember (name: string) (members: (string * JsonValue)[]) : JsonValue option =
+        let mutable found = None
+        let mutable i = 0
+
+        while found.IsNone && i < members.Length do
+            let k, v = members[i]
+
+            if k = name then
+                found <- Some v
+
+            i <- i + 1
+
+        found
+
+#if !FABLE_COMPILER
+    let private memberIndexes =
+        System.Runtime.CompilerServices.ConditionalWeakTable<
+            (string * JsonValue)[],
+            System.Collections.Generic.Dictionary<string, int>
+         >()
+
+    let private buildMemberIndex (members: (string * JsonValue)[]) =
+        let index =
+            System.Collections.Generic.Dictionary<string, int>(members.Length, StringComparer.Ordinal)
+
+        for i in 0 .. members.Length - 1 do
+            // First write wins: a duplicate name keeps its FIRST position.
+            index.TryAdd(fst members[i], i) |> ignore
+
+        index
+#endif
 
     /// The FIRST member named `name`, or `None`. First rather than last
     /// because that is what a reader sees first; a decoder that must
-    /// refuse a duplicate reads `members` itself.
+    /// refuse a duplicate reads `members` itself. Constant time on a wide
+    /// object after its first lookup (Phase 905; see the note above).
     let tryMember (name: string) (value: JsonValue) : JsonValue option =
         match value with
-        | JsonValue.Object members -> members |> List.tryPick (fun (k, v) -> if k = name then Some v else None)
+        | JsonValue.Object members ->
+#if FABLE_COMPILER
+            scanMember name members
+#else
+            if members.Length <= IndexedLookupThreshold then
+                scanMember name members
+            else
+                let index =
+                    memberIndexes.GetValue(
+                        members,
+                        System.Runtime.CompilerServices.ConditionalWeakTable.CreateValueCallback buildMemberIndex
+                    )
+
+                match index.TryGetValue name with
+                | true, position when position < members.Length && fst members[position] = name ->
+                    Some(snd members[position])
+                | true, _ -> scanMember name members
+                | _ -> None
+#endif
         | _ -> None
 
     // ─── The number grammar, and the widths read from it ─────────────
@@ -567,7 +670,7 @@ module JsonText =
 
                 if i < n && text.[i] = ']' then
                     i <- i + 1
-                    JsonValue.Array []
+                    JsonValue.Array [||]
                 else
                     let mutable acc = []
                     let mutable count = 0
@@ -597,7 +700,7 @@ module JsonText =
                     if failure.IsSome then
                         JsonValue.Null
                     else
-                        JsonValue.Array(List.rev acc)
+                        JsonValue.Array(Array.ofList (List.rev acc))
 
         member this.Object(depth: int) : JsonValue =
             if depth >= maxDepth then
@@ -609,7 +712,7 @@ module JsonText =
 
                 if i < n && text.[i] = '}' then
                     i <- i + 1
-                    JsonValue.Object []
+                    JsonValue.Object [||]
                 else
                     let mutable acc = []
                     let mutable count = 0
@@ -651,7 +754,7 @@ module JsonText =
                     if failure.IsSome then
                         JsonValue.Null
                     else
-                        JsonValue.Object(List.rev acc)
+                        JsonValue.Object(Array.ofList (List.rev acc))
 
         /// The whole text as ONE value: anything but whitespace after it
         /// is a refusal.

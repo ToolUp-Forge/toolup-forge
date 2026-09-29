@@ -2396,6 +2396,9 @@ let private registeredTests =
         // Phase 843 - JsonText, the client's JSON reader, differential
         // against JsonRead, plus the .NET half of the pinned payload.
         JsonTextTests.tests
+        // Phase 905 - the JSON value model's indexed reads answer what the
+        // scans they replaced answered, narrow or wide.
+        JsonWideValueTests.tests
         // Phase 854 - client read-policy attributes read on .NET, pinned to
         // the declaration the Fable pack registers.
         ReadPolicyAttributeTests.tests

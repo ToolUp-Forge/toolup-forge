@@ -188,7 +188,7 @@ let tests =
                 same
                     (JsonText.tryParse """{"b":1,"10":2,"2":3}"""
                      |> Result.map (function
-                         | JsonValue.Object members -> List.map fst members
+                         | JsonValue.Object members -> members |> Array.map fst |> List.ofArray
                          | _ -> []))
                     (Ok [ "b"; "10"; "2" ])
                     "JsonText keeps wire order"

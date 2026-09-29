@@ -129,7 +129,8 @@ module JsonEncode =
     /// A request body: the argument ARRAY the server's argument seam
     /// parses (`[a1, a2, …]`, one element per argument in declaration
     /// order), as text.
-    let arguments (values: JsonValue list) : string = toText (JsonValue.Array values)
+    let arguments (values: JsonValue list) : string =
+        toText (JsonValue.Array(List.toArray values))
 
     // ─── Scalars ─────────────────────────────────────────────────────
 
@@ -287,15 +288,15 @@ module JsonEncode =
 
     /// A list, as an array of its elements.
     let list (element: JsonEncoder<'T>) : JsonEncoder<'T list> =
-        fun items -> JsonValue.Array(List.map element items)
+        fun items -> JsonValue.Array(items |> List.map element |> List.toArray)
 
     /// An array, as an array of its elements.
     let array (element: JsonEncoder<'T>) : JsonEncoder<'T[]> =
-        fun items -> JsonValue.Array(items |> Array.map element |> Array.toList)
+        fun items -> JsonValue.Array(Array.map element items)
 
     /// A set, as an array of its elements in the set's order.
     let set<'T when 'T: comparison> (element: JsonEncoder<'T>) : JsonEncoder<Set<'T>> =
-        fun items -> JsonValue.Array(items |> Set.toList |> List.map element)
+        fun items -> JsonValue.Array(items |> Set.toArray |> Array.map element)
 
     /// A map key's member name — the inverse of `JsonDecode.Key`.
     type KeyEncoder<'K> = 'K -> string
@@ -319,22 +320,27 @@ module JsonEncode =
     /// order (`FSharpMapStringKeyConverter`; the name forms
     /// `JsonDecode.Key` reads for the other key types).
     let map<'K, 'V when 'K: comparison> (key: KeyEncoder<'K>) (value: JsonEncoder<'V>) : JsonEncoder<Map<'K, 'V>> =
-        fun m -> JsonValue.Object(m |> Map.toList |> List.map (fun (k, v) -> key k, value v))
+        fun m -> JsonValue.Object(m |> Map.toArray |> Array.map (fun (k, v) -> key k, value v))
 
     /// Phase 899 — a map whose key is not string-representable, as an
     /// array of `[key, value]` pairs in the map's order, each key in its
     /// own JSON form: what `Fable.SimpleJson` writes for such a key, and
     /// the inverse of `JsonDecode.asMapOf`.
     let mapOf<'K, 'V when 'K: comparison> (key: JsonEncoder<'K>) (value: JsonEncoder<'V>) : JsonEncoder<Map<'K, 'V>> =
-        fun m -> JsonValue.Array(m |> Map.toList |> List.map (fun (k, v) -> JsonValue.Array [ key k; value v ]))
+        fun m ->
+            JsonValue.Array(
+                m
+                |> Map.toArray
+                |> Array.map (fun (k, v) -> JsonValue.Array [| key k; value v |])
+            )
 
     /// A pair, as an array of two (`FSharpTupleConverter`).
     let tuple2 (first: JsonEncoder<'A>) (second: JsonEncoder<'B>) : JsonEncoder<'A * 'B> =
-        fun (a, b) -> JsonValue.Array [ first a; second b ]
+        fun (a, b) -> JsonValue.Array [| first a; second b |]
 
     /// A triple, as an array of three.
     let tuple3 (first: JsonEncoder<'A>) (second: JsonEncoder<'B>) (third: JsonEncoder<'C>) : JsonEncoder<'A * 'B * 'C> =
-        fun (a, b, c) -> JsonValue.Array [ first a; second b; third c ]
+        fun (a, b, c) -> JsonValue.Array [| first a; second b; third c |]
 
     /// A quadruple, as an array of four.
     let tuple4
@@ -343,22 +349,22 @@ module JsonEncode =
         (third: JsonEncoder<'C>)
         (fourth: JsonEncoder<'D>)
         : JsonEncoder<'A * 'B * 'C * 'D> =
-        fun (a, b, c, d) -> JsonValue.Array [ first a; second b; third c; fourth d ]
+        fun (a, b, c, d) -> JsonValue.Array [| first a; second b; third c; fourth d |]
 
     /// A record, as an object of its members in declaration order
     /// (`FSharpRecordConverter`). The generated encoder supplies each
     /// member's name and its value's encoding.
-    let record (members: (string * JsonValue) list) : JsonValue = JsonValue.Object members
+    let record (members: (string * JsonValue) list) : JsonValue = JsonValue.Object(List.toArray members)
 
     /// A union case carrying no fields: its NAME as a string.
     let case0 (name: string) : JsonValue = JsonValue.String name
 
     /// A union case carrying ONE field: `{"Case": field}`.
-    let payload (name: string) (field: JsonValue) : JsonValue = JsonValue.Object [ name, field ]
+    let payload (name: string) (field: JsonValue) : JsonValue = JsonValue.Object [| name, field |]
 
     /// A union case carrying SEVERAL fields: `{"Case": [f1, f2, …]}`.
     let fields (name: string) (values: JsonValue list) : JsonValue =
-        JsonValue.Object [ name, JsonValue.Array values ]
+        JsonValue.Object [| name, JsonValue.Array(List.toArray values) |]
 
     /// `Result`, the ordinary two-case union: `{"Ok": v}` / `{"Error": e}`.
     let result (ok: JsonEncoder<'T>) (error: JsonEncoder<'E>) : JsonEncoder<Result<'T, 'E>> =
