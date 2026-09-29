@@ -693,6 +693,14 @@ module DocCoverageFixture =
         // Deliberately undocumented. Do not add a doc comment to this case.
         | Dark = 1
 
+    /// Phase 929 — a union's field-less cases surface as static properties,
+    /// but the compiler keys their doc comments under `T:`.
+    type Tone =
+        /// A documented field-less union case.
+        | Bright
+        // Deliberately undocumented. Do not add a doc comment to this case.
+        | Muted
+
 let private docCoverageFixtures =
     // A minimal documentation file of exactly the shape the compiler
     // emits, with one entry of each id kind plus prose that must NOT be
@@ -1093,6 +1101,43 @@ let private docCoverageFixtures =
                 | _ ->
                     failtest
                         "the DocCoverageFixture literal / enum members were not found on the rendered surface of the test assembly — the fixture was renamed or made non-public."
+        }
+
+        // Phase 929 — the go-red arm for field-less union cases. Under the
+        // pre-929 keying (`P:` for every property) the documented case's id
+        // matches no <member name=…> entry, and the first expectation fails.
+        test "a documented field-less union case counts as documented, keyed T:" {
+            let selfDll = Assembly.GetExecutingAssembly().Location
+
+            match docFileFor selfDll with
+            | None ->
+                failtestf
+                    "no XML documentation file beside %s — GenerateDocumentationFile is not in effect for the test assembly."
+                    (Path.GetFileName selfDll)
+            | Some xmlPath ->
+                let documented = documentedIdsIn (File.ReadAllText xmlPath)
+                let subjects = (renderSurfaceDetail selfDll pool.Value).DocSubjects
+
+                let find needle =
+                    subjects
+                    |> List.tryFind (fun s -> s.DocId.EndsWith("DocCoverageFixture.Tone." + needle))
+
+                match find "Bright", find "Muted" with
+                | Some bright, Some muted ->
+                    Expect.isTrue
+                        (documented.Contains bright.DocId)
+                        (sprintf
+                            "the fixture's DOCUMENTED union case reads as undocumented — the computed id %s appears in no <member name=…> entry. The compiler writes a union case's doc under T:, so a P: key can never match."
+                            bright.DocId)
+
+                    Expect.stringStarts bright.DocId "T:" "a field-less union case is keyed T:"
+
+                    Expect.isFalse
+                        (documented.Contains muted.DocId)
+                        "the fixture's deliberately-undocumented union case reads as documented"
+                | _ ->
+                    failtest
+                        "the DocCoverageFixture union cases were not found on the rendered surface of the test assembly — the fixture was renamed or made non-public."
         }
     ]
 
