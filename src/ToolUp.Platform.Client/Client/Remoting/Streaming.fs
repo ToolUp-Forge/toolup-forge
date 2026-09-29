@@ -9,6 +9,221 @@ open Fable.Core
 open Fable.SimpleJson
 open ToolUp.Remoting
 
+/// Phase 911 — int64 / uint64 on the REFLECTIVE response path: exact, or a
+/// named refusal, never a silently wrong value.
+///
+/// `Fable.SimpleJson`'s `Convert.fromJsonAs` reads an int64 JSON NUMBER
+/// through `int`, so every value outside int32 wraps modulo 2^32 (2^53 + 1,
+/// which `JSON.parse` has already rounded to 2^53, reads as 0; 5,000,000,000
+/// as 705,032,704), and a negative number at uint64 wraps to near 2^64. Its
+/// STRING arms are exact, and the server's writer always sends the string
+/// form — a number token comes from any other writer.
+///
+/// So before the library sees the parsed tree, this pass walks it beside the
+/// return type's `TypeInfo` and rewrites a number at an int64 / uint64
+/// position into the digit string the library reads exactly. A number it
+/// cannot rewrite exactly — fractional, negative at uint64, or beyond
+/// ±(2^53 − 1), where `JSON.parse` may already have rounded it — is REFUSED
+/// with the path to it, and the proxy raises it as a `DecodeError` on
+/// `ProxyRequestException`, the same carrier the algebra's refusals use.
+///
+/// The walk mirrors the shapes the library reads: records by field name,
+/// options, the list/array/seq/set/ResizeArray/HashSet element, tuples by
+/// position, `Map`/`Dictionary` values (object form) and `[key, value]`
+/// pairs (array form), and union cases in the `{"Case": payload}` and
+/// `["Case", …]` forms. A shape it does not know is passed through untouched,
+/// exactly as before. `holdsWide` decides once per proxy field (and once
+/// per stream, for a streamed element type) whether the type has an int64 /
+/// uint64 anywhere, so a type without one pays nothing per call or chunk.
+/// It lives here, ahead of `Proxy`, because the streaming chunk decode below
+/// is the second reflective read it serves.
+module internal ReflectiveWideIntegers =
+
+    /// 2^53 − 1: the largest magnitude at which every integer is a double.
+    let private maxSafeInteger = 9007199254740991.0
+
+    let private isSafeInteger (value: float) =
+        System.Math.Floor value = value && abs value <= maxSafeInteger
+
+    let private refusal (path: string list) (typeName: string) (value: float) : DecodeError =
+        let found =
+            if System.Math.Floor value <> value then
+                sprintf "number %s, which is not an integer" (string value)
+            elif value < 0.0 && typeName = "UInt64" then
+                sprintf "number %s, which is negative" (string value)
+            else
+                sprintf "number %s, beyond the ±(2^53 − 1) a parsed JSON number carries exactly" (string value)
+
+        DecodeError.at
+            path
+            (sprintf "%s as an exact integer (a digit string, or a number within ±(2^53 − 1))" typeName)
+            found
+
+    /// Whether `info` holds an int64 / uint64 anywhere the walk reaches.
+    /// Records and unions already on the descent path are not re-entered,
+    /// so a recursive type terminates.
+    let holdsWide (info: TypeInfo) : bool =
+        let rec go (seen: Set<string>) (info: TypeInfo) =
+            match info with
+            | TypeInfo.Long
+            | TypeInfo.UInt64 -> true
+            | TypeInfo.Option element
+            | TypeInfo.List element
+            | TypeInfo.Array element
+            | TypeInfo.Seq element
+            | TypeInfo.Set element
+            | TypeInfo.ResizeArray element
+            | TypeInfo.HashSet element -> go seen (element ())
+            | TypeInfo.Tuple elements -> elements () |> Array.exists (go seen)
+            | TypeInfo.Map types ->
+                let key, value = types ()
+                go seen key || go seen value
+            | TypeInfo.Dictionary types ->
+                let key, value, _ = types ()
+                go seen key || go seen value
+            | TypeInfo.Record fields ->
+                let fields, recordType = fields ()
+
+                not (seen.Contains recordType.FullName)
+                && fields
+                   |> Array.exists (fun field -> go (seen.Add recordType.FullName) field.FieldType)
+            | TypeInfo.Union cases ->
+                let cases, unionType = cases ()
+
+                not (seen.Contains unionType.FullName)
+                && cases
+                   |> Array.exists (fun case -> case.CaseTypes |> Array.exists (go (seen.Add unionType.FullName)))
+            | _ -> false
+
+        go Set.empty info
+
+    /// Map `f` over `items`, stopping at the first refusal.
+    let private traverse (f: int -> 'A -> Result<'B, DecodeError>) (items: 'A list) : Result<'B list, DecodeError> =
+        let rec loop index acc remaining =
+            match remaining with
+            | [] -> Ok(List.rev acc)
+            | item :: rest ->
+                match f index item with
+                | Ok mapped -> loop (index + 1) (mapped :: acc) rest
+                | Error error -> Error error
+
+        loop 0 [] items
+
+    let private at (path: string list) (index: int) = path @ [ sprintf "[%d]" index ]
+
+    /// The rewrite pass — see the module header.
+    let rec widen (path: string list) (json: Json) (info: TypeInfo) : Result<Json, DecodeError> =
+        match json, info with
+        | JNumber value, TypeInfo.Long ->
+            if isSafeInteger value then
+                Ok(JString((int64 value).ToString()))
+            else
+                Error(refusal path "Int64" value)
+        | JNumber value, TypeInfo.UInt64 ->
+            if value >= 0.0 && isSafeInteger value then
+                Ok(JString((uint64 value).ToString()))
+            else
+                Error(refusal path "UInt64" value)
+        | JNull, TypeInfo.Option _ -> Ok json
+        | _, TypeInfo.Option element -> widen path json (element ())
+        | JArray items, TypeInfo.List element
+        | JArray items, TypeInfo.Array element
+        | JArray items, TypeInfo.Seq element
+        | JArray items, TypeInfo.Set element
+        | JArray items, TypeInfo.ResizeArray element
+        | JArray items, TypeInfo.HashSet element ->
+            let elementType = element ()
+
+            items
+            |> traverse (fun index item -> widen (at path index) item elementType)
+            |> Result.map JArray
+        | JArray items, TypeInfo.Tuple elements ->
+            let elementTypes = elements ()
+
+            if List.length items <> elementTypes.Length then
+                Ok json
+            else
+                items
+                |> traverse (fun index item -> widen (at path index) item elementTypes.[index])
+                |> Result.map JArray
+        | JObject members, TypeInfo.Record fields ->
+            let fields, _ = fields ()
+
+            members
+            |> Map.toList
+            |> traverse (fun _ (name, value) ->
+                match fields |> Array.tryFind (fun field -> field.FieldName = name) with
+                | Some field -> widen (path @ [ name ]) value field.FieldType |> Result.map (fun v -> name, v)
+                | None -> Ok(name, value))
+            |> Result.map (Map.ofList >> JObject)
+        | JObject members, TypeInfo.Map types when not (members.ContainsKey "comparer" && members.ContainsKey "tree") ->
+            let _, valueType = types ()
+            widenValues path members valueType
+        | JObject members, TypeInfo.Dictionary types ->
+            let _, valueType, _ = types ()
+            widenValues path members valueType
+        | JArray pairs, TypeInfo.Map types ->
+            let keyType, valueType = types ()
+            widenPairs path pairs keyType valueType
+        | JArray pairs, TypeInfo.Dictionary types ->
+            let keyType, valueType, _ = types ()
+            widenPairs path pairs keyType valueType
+        | JObject members, TypeInfo.Union cases when members.Count = 1 ->
+            let cases, _ = cases ()
+            let caseName, payload = members |> Map.toList |> List.head
+
+            match cases |> Array.tryFind (fun case -> case.CaseName = caseName) with
+            | None -> Ok json
+            | Some case ->
+                let casePath = path @ [ caseName ]
+
+                let widened =
+                    match payload, case.CaseTypes with
+                    | JArray _, [| single |] when Convert.arrayLike single || Convert.optional single ->
+                        widen casePath payload single
+                    | JArray values, caseTypes when List.length values = caseTypes.Length ->
+                        values
+                        |> traverse (fun index value -> widen (at casePath index) value caseTypes.[index])
+                        |> Result.map JArray
+                    | JArray _, _ -> Ok payload
+                    | _, [| single |] -> widen casePath payload single
+                    | _ -> Ok payload
+
+                widened |> Result.map (fun p -> JObject(Map.ofList [ caseName, p ]))
+        | JArray(JString caseName :: values), TypeInfo.Union cases ->
+            let cases, _ = cases ()
+
+            match cases |> Array.tryFind (fun case -> case.CaseName = caseName) with
+            | Some case when List.length values = case.CaseTypes.Length ->
+                let casePath = path @ [ caseName ]
+
+                values
+                |> traverse (fun index value -> widen (at casePath index) value case.CaseTypes.[index])
+                |> Result.map (fun widened -> JArray(JString caseName :: widened))
+            | _ -> Ok json
+        | _ -> Ok json
+
+    and widenValues path (members: Map<string, Json>) (valueType: TypeInfo) =
+        members
+        |> Map.toList
+        |> traverse (fun _ (key, value) -> widen (path @ [ key ]) value valueType |> Result.map (fun v -> key, v))
+        |> Result.map (Map.ofList >> JObject)
+
+    and widenPairs path (pairs: Json list) (keyType: TypeInfo) (valueType: TypeInfo) =
+        pairs
+        |> traverse (fun index pair ->
+            match pair with
+            | JArray [ key; value ] ->
+                let pairPath = at path index
+
+                match widen (at pairPath 0) key keyType with
+                | Error error -> Error error
+                | Ok key ->
+                    widen (at pairPath 1) value valueType
+                    |> Result.map (fun value -> JArray [ key; value ])
+            | other -> Ok other)
+        |> Result.map JArray
+
 // ─── Phase 69c.D — the Fable consumer of a streaming method ────────────────
 //
 // A server API record field shaped `'arg -> IAsyncEnumerable<'T>` is served
@@ -233,6 +448,8 @@ module RemoteStream =
         (decodeErrorOf: string -> DecodeError option)
         (elementType: TypeInfo)
         : RemoteStream<'T> =
+        let holdsWideIntegers = ReflectiveWideIntegers.holdsWide elementType
+
         {
             Start =
                 fun observer ->
@@ -253,26 +470,37 @@ module RemoteStream =
                         if not finished then
                             match frame.Event with
                             | "chunk" ->
+                                // Phase 911 — an int64 / uint64 number in a chunk
+                                // is read exactly or refused by name, as on the
+                                // request/response path.
                                 let decoded =
                                     try
-                                        Ok(
-                                            Convert.fromJsonAs (SimpleJson.parseNative frame.Data) elementType
-                                            |> unbox<'T>
-                                        )
+                                        let parsed = SimpleJson.parseNative frame.Data
+
+                                        let widened =
+                                            if holdsWideIntegers then
+                                                ReflectiveWideIntegers.widen [] parsed elementType
+                                            else
+                                                Ok parsed
+
+                                        match widened with
+                                        | Ok json -> Ok(Convert.fromJsonAs json elementType |> unbox<'T>)
+                                        | Error error -> Error(DecodeError.render error, Some error)
                                     with ex ->
-                                        Error ex
+                                        Error(ex.Message, None)
 
                                 match decoded with
                                 | Ok value -> observer.OnChunk value
-                                | Error ex ->
+                                | Error(message, decodeError) ->
                                     fail (
                                         ProxyRequestException(
                                             {
                                                 StatusCode = 200
                                                 ResponseBody = frame.Data
                                             },
-                                            sprintf "A chunk streamed from %s did not decode: %s" url ex.Message,
-                                            frame.Data
+                                            sprintf "A chunk streamed from %s did not decode: %s" url message,
+                                            frame.Data,
+                                            decodeError
                                         )
                                     )
                             | "complete" ->

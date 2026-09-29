@@ -95,6 +95,14 @@ type TickStreamApi = {
 let private api: TickStreamApi =
     Remoting.createApi () |> Remoting.buildProxy<TickStreamApi>
 
+/// Phase 911 — a stream of int64 elements, read by the reflective path.
+type WideStreamApi = {
+    Counts: TickRequest -> IAsyncEnumerable<int64>
+}
+
+let private wideApi: WideStreamApi =
+    Remoting.createApi () |> Remoting.buildProxy<WideStreamApi>
+
 /// A recording observer: what arrived, in order, and how the stream ended.
 type private Recorder() =
     let chunks = ResizeArray<TickEvent>()
@@ -469,5 +477,51 @@ let tests =
                             (succeeded |> Seq.map unbox<int> |> List.ofSeq)
                             [ 2 ]
                             "OnSuccess fires once with the number of elements delivered")
+        ]
+
+        testList "Phase 911 — int64 chunks: exact, or refused, never wrapped" [
+            testCaseDeferred "an int64 number chunk outside int32 is delivered exactly" 30 (fun () ->
+                scriptResponse 200 [|
+                    frame "w-0" "5000000000"
+                    + frame "w-1" "\"+9007199254740993\""
+                    + "event: complete\ndata: {}\n\n"
+                |]
+
+                let chunks = ResizeArray<int64>()
+                let errors = ResizeArray<exn>()
+
+                RemoteStream.subscribe (wideApi.Counts { Upto = 2 }) {
+                    OnChunk = chunks.Add
+                    OnComplete = ignore
+                    OnError = errors.Add
+                }
+                |> ignore
+
+                fun () ->
+                    Expect.isTrue
+                        (List.ofSeq chunks = [ 5000000000L; 9007199254740993L ])
+                        (sprintf "exact, not wrapped: %A" (List.ofSeq chunks))
+
+                    Expect.isEmpty (List.ofSeq errors) "no error")
+
+            testCaseDeferred "an int64 number chunk past 2^53 - 1 is a named refusal" 30 (fun () ->
+                scriptResponse 200 [| frame "w-0" "9007199254740993" + "event: complete\ndata: {}\n\n" |]
+                let chunks = ResizeArray<int64>()
+                let errors = ResizeArray<exn>()
+
+                RemoteStream.subscribe (wideApi.Counts { Upto = 1 }) {
+                    OnChunk = chunks.Add
+                    OnComplete = ignore
+                    OnError = errors.Add
+                }
+                |> ignore
+
+                fun () ->
+                    Expect.isEmpty (List.ofSeq chunks) "nothing delivered"
+
+                    match List.ofSeq errors with
+                    | [ (:? ProxyRequestException as e) ] ->
+                        Expect.isTrue e.DecodeError.IsSome "the refusal is carried as data"
+                    | other -> failwithf "expected one ProxyRequestException, got %A" other)
         ]
     ]

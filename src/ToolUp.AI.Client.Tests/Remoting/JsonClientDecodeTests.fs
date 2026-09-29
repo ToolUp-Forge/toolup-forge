@@ -101,6 +101,30 @@ let private api: LedgerApi = Remoting.createApi () |> Remoting.buildProxy<Ledger
 let private bookingApi: BrowserWriterFixture.BookingApi =
     Remoting.createApi () |> Remoting.buildProxy<BrowserWriterFixture.BookingApi>
 
+/// Phase 899 — the union-keyed map argument, through the REFLECTIVE
+/// proxy (its argument written by `Fable.SimpleJson`).
+let private tallyApi: BrowserWriterFixture.TallyApi =
+    Remoting.createApi () |> Remoting.buildProxy<BrowserWriterFixture.TallyApi>
+
+/// Phase 911 — a record whose every integer field is 64 bits wide, at
+/// each position the reflective read descends through. Never registered.
+type WideReading = {
+    Count: int64
+    Size: uint64
+    Maybe: int64 option
+    Series: int64 list
+    Pair: int64 * string
+}
+
+/// Phase 911 — int64 / uint64 responses the reflective proxy reads.
+type WideApi = {
+    GetCount: unit -> Async<int64>
+    GetSize: unit -> Async<uint64>
+    GetReading: unit -> Async<WideReading>
+}
+
+let private wideApi: WideApi = Remoting.createApi () |> Remoting.buildProxy<WideApi>
+
 /// What the reflection path makes of `text` at `'T` — the pre-843
 /// response decode, called directly.
 let inline private viaReflection<'T> (text: string) : 'T =
@@ -476,5 +500,138 @@ let tests =
 
                 for text in [ "90000"; "90000.0"; "9e4" ] do
                     same (read text) (Ok(TimeSpan.FromSeconds 90.0)) text
+        ]
+
+        testList "Phase 899 — the union-keyed map's request bodies, in the browser" [
+            testCaseDeferred
+                "899 — the reflective proxy sends the pinned body for a map keyed by a union with fields"
+                30
+                (fun () ->
+                    installXhrStub ()
+                    scriptResponse 200 "null"
+                    let before = callCount ()
+                    let outcome = start (tallyApi.Record BrowserWriterFixture.tally)
+
+                    fun () ->
+                        same (callCount ()) (before + 1) "one request"
+
+                        same
+                            (callBody before)
+                            BrowserWriterFixture.TallyReflectiveBody
+                            "the pairs form the server decodes"
+
+                        match outcome () with
+                        | Returned() -> ()
+                        | Raised ex -> failwithf "the call raised: %s" ex.Message
+                        | Pending -> failwith "the call never completed")
+
+            testCase "899 — the transpiled `JsonEncode.mapOf` writes the pinned generated-proxy body"
+            <| fun () ->
+                same
+                    (JsonEncode.arguments [ BrowserWriterFixture.tallyEncoder BrowserWriterFixture.tally ])
+                    BrowserWriterFixture.TallyEncodedBody
+                    "the generated proxy's body in the browser"
+        ]
+
+        testList "Phase 911 — int64 through the reflective proxy: exact, or refused, never 0" [
+            // The measurement the phase exists for, kept as a pin on the
+            // library: `Fable.SimpleJson` reads an int64 NUMBER token
+            // through `int`, so anything outside int32 wraps — 2^53 + 1
+            // (parsed to 2^53) is 0, 5,000,000,000 is 705,032,704. The
+            // proxy no longer hands it a number at an int64 position; if
+            // this case goes red the library changed, not the proxy.
+            testCase "911 red — Fable.SimpleJson itself wraps an int64 number token outside int32"
+            <| fun () ->
+                same (viaReflection<int64> "9007199254740993") 0L "2^53 + 1 reads as 0"
+                same (viaReflection<int64> "5000000000") 705032704L "5e9 wraps modulo 2^32"
+                same (viaReflection<int64> "\"+9007199254740993\"") 9007199254740993L "the writer's string is exact"
+
+            testCaseDeferred "911 — an int64 number token outside int32 reads exactly through the proxy" 30 (fun () ->
+                installXhrStub ()
+                JsonDecoders.resetForTests ()
+                scriptResponse 200 "5000000000"
+                let outcome = start (wideApi.GetCount())
+
+                fun () ->
+                    match outcome () with
+                    | Returned n -> same n 5000000000L "exact, not wrapped"
+                    | Raised ex -> failwithf "the call raised: %s" ex.Message
+                    | Pending -> failwith "the call never completed")
+
+            testCaseDeferred
+                "911 — every int64 / uint64 position of a record reads exactly: field, option, list, tuple"
+                30
+                (fun () ->
+                    installXhrStub ()
+                    JsonDecoders.resetForTests ()
+
+                    scriptResponse
+                        200
+                        """{"Count":-5000000000,"Size":9007199254740991,"Maybe":4294967296,"Series":[1,-2147483649,"+9007199254740993"],"Pair":[9007199254740991,"x"]}"""
+
+                    let outcome = start (wideApi.GetReading())
+
+                    fun () ->
+                        match outcome () with
+                        | Returned reading ->
+                            same
+                                reading
+                                {
+                                    Count = -5000000000L
+                                    Size = 9007199254740991UL
+                                    Maybe = Some 4294967296L
+                                    Series = [ 1L; -2147483649L; 9007199254740993L ]
+                                    Pair = 9007199254740991L, "x"
+                                }
+                                "every wide integer exact"
+                        | Raised ex -> failwithf "the call raised: %s" ex.Message
+                        | Pending -> failwith "the call never completed")
+
+            testCaseDeferred "911 — an int64 number past 2^53 - 1 is a named refusal, never 0" 30 (fun () ->
+                installXhrStub ()
+                JsonDecoders.resetForTests ()
+                scriptResponse 200 """{"Count":1,"Size":1,"Maybe":null,"Series":[9007199254740993],"Pair":[1,"x"]}"""
+                let outcome = start (wideApi.GetReading())
+
+                fun () ->
+                    match outcome () with
+                    | Raised(:? ProxyRequestException as ex) ->
+                        match ex.DecodeError with
+                        | Some error ->
+                            same error.Path [ "Series"; "[0]" ] "the path to the offending element"
+                            Expect.isTrue (error.Expected.Contains "Int64") error.Expected
+                            Expect.isTrue (error.Found.Contains "9007199254740992") error.Found
+                        | None -> failwith "DecodeError was None: the refusal was not carried as data"
+                    | Raised ex -> failwithf "raised `%s`, not ProxyRequestException" ex.Message
+                    | Returned reading -> failwithf "a lossy int64 decoded: %A" reading
+                    | Pending -> failwith "the call never completed")
+
+            testCaseDeferred "911 — a fractional or negative token at uint64 is refused" 30 (fun () ->
+                installXhrStub ()
+                JsonDecoders.resetForTests ()
+                scriptResponse 200 "-1"
+                let outcome = start (wideApi.GetSize())
+
+                fun () ->
+                    match outcome () with
+                    | Raised(:? ProxyRequestException as ex) ->
+                        match ex.DecodeError with
+                        | Some error ->
+                            same error.Path [] "the root"
+                            Expect.isTrue (error.Expected.Contains "UInt64") error.Expected
+                        | None -> failwith "DecodeError was None"
+                    | other -> failwithf "expected a named refusal, got %A" other)
+
+            testCaseDeferred "911 — a fractional token at int64 is refused" 30 (fun () ->
+                installXhrStub ()
+                JsonDecoders.resetForTests ()
+                scriptResponse 200 "1.5"
+                let outcome = start (wideApi.GetCount())
+
+                fun () ->
+                    match outcome () with
+                    | Raised(:? ProxyRequestException as ex) ->
+                        Expect.isTrue ex.DecodeError.IsSome "the refusal is carried as data"
+                    | other -> failwithf "expected a named refusal, got %A" other)
         ]
     ]
