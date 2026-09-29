@@ -265,6 +265,89 @@ type RollingRagTelemetry(?windowSeconds: int) =
             }
         }
 
+// ─── Total latency + in-flight on the retrieval path (Phase 886) ──
+
+/// The pseudo-stage name under which `RetrievalMeter` records the TOTAL
+/// latency of one `Retrieve` call. It rides `RecordRetrievalStages` — the
+/// same channel `RAGPromptBuilder`'s fact-clause mark uses, and for the
+/// same reason: `IRagTelemetry` has shipped implementations outside this
+/// repository, so a new abstract member would break every one of them.
+/// A named, timed entry is exactly what this is, and it surfaces in the
+/// snapshot's `RetrievalStageP50Ms` / `RetrievalStageP95Ms` beside the
+/// per-stage entries the pipeline records itself.
+[<Literal>]
+let TotalStage = "Total"
+
+
+/// Phase 886 — an `IRetrievalPipeline` decorator that meters the
+/// retrieval path as a whole: the TOTAL latency of every `Retrieve` (from
+/// entry to exit, including every stage and the glue between them), and
+/// the number of calls in flight. The per-stage percentiles the pipeline
+/// records say where a call's time went; they cannot say how long a
+/// caller waited, and under concurrent load that — together with how many
+/// callers were waiting — is the number that degrades first.
+///
+/// Total latency is recorded into `telemetry` under `TotalStage` on every
+/// exit, so it appears in `/health/rag` wherever the metered pipeline is
+/// the one composed. The in-flight gauge is read from `InFlight` and `PeakInFlight`. `Index`
+/// and `DeleteByScope` pass straight through, unmetered: this meters the
+/// read path. Stateless apart from its gauges (GP 12 rule 4 is about
+/// handler state; a gauge is observation, not state a call depends on).
+type RetrievalMeter
+    /// Meter `inner`, recording each call's total latency into `telemetry`.
+    (inner: IRetrievalPipeline.IRetrievalPipeline, telemetry: IRagTelemetry) =
+    let mutable inFlight = 0
+    let mutable peak = 0
+    let mutable completed = 0L
+
+    let rec raisePeak (observed: int) =
+        let current = System.Threading.Volatile.Read(&peak)
+
+        if observed > current then
+            if
+                System.Threading.Interlocked.CompareExchange(&peak, observed, current)
+                <> current
+            then
+                raisePeak observed
+
+    /// The pipeline this meter decorates.
+    member _.Inner = inner
+
+    /// Calls that have entered `Retrieve` and not yet left it. Safe to read
+    /// from any thread at any time.
+    member _.InFlight = System.Threading.Volatile.Read(&inFlight)
+
+    /// The largest `InFlight` value observed since the meter was created.
+    member _.PeakInFlight = System.Threading.Volatile.Read(&peak)
+
+    /// Calls that have left `Retrieve`, by any exit (result or exception).
+    member _.Completed = System.Threading.Interlocked.Read(&completed)
+
+    interface IRetrievalPipeline.IRetrievalPipeline with
+        member _.Retrieve request context = async {
+            let entered = System.Threading.Interlocked.Increment(&inFlight)
+            raisePeak entered
+            let clock = System.Diagnostics.Stopwatch.StartNew()
+
+            try
+                return! inner.Retrieve request context
+            finally
+                clock.Stop()
+                System.Threading.Interlocked.Decrement(&inFlight) |> ignore
+                System.Threading.Interlocked.Increment(&completed) |> ignore
+                telemetry.RecordRetrievalStages [ TotalStage, clock.Elapsed.TotalMilliseconds ]
+        }
+
+        member _.Index chunkId chunk scope = inner.Index chunkId chunk scope
+
+        member _.DeleteByScope scope = inner.DeleteByScope scope
+
+/// Phase 886 — wrap `pipeline` in a `RetrievalMeter` recording into
+/// `telemetry`. The meter is returned concretely so its caller can read
+/// the in-flight gauge; it is also an `IRetrievalPipeline`.
+let meter (telemetry: IRagTelemetry) (pipeline: IRetrievalPipeline.IRetrievalPipeline) : RetrievalMeter =
+    RetrievalMeter(pipeline, telemetry)
+
 let createNoOp () : IRagTelemetry = NoOpRagTelemetry() :> _
 
 let createRolling (windowSeconds: int) : IRagTelemetry =

@@ -91,6 +91,12 @@ type StubScheduler() =
 
         member _.RegisterHandlerAsync(_name, _handler) = async { return Ok() }
 
+        member this.Schedule(scope: ToolUp.Platform.ResolvedScope, registration: ToolUp.Platform.JobRegistration) =
+            (this :> IJobScheduler).Schedule {
+                registration with
+                    ScopeId = scope.ScopeId
+            }
+
         member _.Schedule(_registration) =
             failwith "StubScheduler.Schedule must not be invoked by the contract pack"
 
@@ -156,6 +162,12 @@ type private RecordingScheduler() =
         member _.RegisterHandler(_name, _handler) = ()
 
         member _.RegisterHandlerAsync(_name, _handler) = async { return Ok() }
+
+        member this.Schedule(scope: ToolUp.Platform.ResolvedScope, registration: ToolUp.Platform.JobRegistration) =
+            (this :> IJobScheduler).Schedule {
+                registration with
+                    ScopeId = scope.ScopeId
+            }
 
         member _.Schedule(registration) = async {
             registered <- Some registration
@@ -263,6 +275,7 @@ let private runJobHandler (handler: IJobHandler) (payload: string) = async {
         AccessContext = AccessContext.unrestricted (AuthenticatedUser "_system")
         Attempt = 1
         Trigger = Manual
+        Scope = ToolUp.Platform.ResolvedScope.anonymous
         TriggerSource = TriggerSource.ScheduledManually "_system"
         ScheduledAt = DateTime.UtcNow
         RunningAt = DateTime.UtcNow
@@ -583,6 +596,7 @@ let tests (name: string) (factory: unit -> IPlatformPeer) =
                 AccessContext = AccessContext.unrestricted (AuthenticatedUser "_system")
                 Attempt = 1
                 Trigger = Manual
+                Scope = ToolUp.Platform.ResolvedScope.anonymous
                 TriggerSource = TriggerSource.ScheduledManually "_system"
                 ScheduledAt = DateTime.UtcNow
                 RunningAt = DateTime.UtcNow

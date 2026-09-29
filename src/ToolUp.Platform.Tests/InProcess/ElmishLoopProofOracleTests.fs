@@ -469,9 +469,9 @@ let tests =
                     member _.Dispose() = disposed.Add name
                 }
 
-            // Effects start in the reverse of the order they were attached,
-            // so `terminates` (attached last) starts first and `after` would
-            // start second.
+            // Effects start in the order they were attached (Phase 900;
+            // until then in the reverse), so `terminates` (attached first)
+            // starts first and `after` would start second.
             Program.mkProgram
                 (fun () -> [], Cmd.ofEffect (fun _ -> started.Add "init's command"))
                 (fun msg model -> model @ [ msg ], Cmd.none)
@@ -484,15 +484,15 @@ let tests =
             ])
             |> Program.withDispatcherHandle (fun d -> handle <- Some d)
             |> Program.withEffect (
-                EffectHandle.programLifetime "after" (fun _ ->
-                    started.Add "after"
-                    disposable "after")
-            )
-            |> Program.withEffect (
                 EffectHandle.programLifetime "terminates" (fun _ ->
                     started.Add "terminates"
                     handle.Value.Terminate()
                     disposable "terminates")
+            )
+            |> Program.withEffect (
+                EffectHandle.programLifetime "after" (fun _ ->
+                    started.Add "after"
+                    disposable "after")
             )
             |> Program.runWithDispatch id ()
 
@@ -616,5 +616,112 @@ let tests =
                 (List.ofSeq renders)
                 [ []; [ "async-result" ] ]
                 "the async command's synchronous prefix (no real await) must dispatch and drain a second paint before runWithDispatch returns - as it does on Fable"
+        }
+
+        // ─── Phase 900 — a message's diff that terminates mid-way ────────
+        //
+        // One message's model asks for three subscriptions: `before`, which
+        // starts normally; `terminates`, which calls `Terminate` from its
+        // start function; and `after`. Until Phase 900 `Subs.Fx.change`
+        // started every entry of the diff whatever the flag said, the loop
+        // assigned all three to the set the teardown had already stopped,
+        // nothing ever disposed them, and the message's command ran after.
+        // Each of the three faults is its own case, so each was shown red
+        // on its own on the tree before the phase (log: w900/red-first-pin).
+        // `Started` / `Disposed` are the two lists the run leaves behind.
+
+        let terminatingDiffRun () =
+            let started = ResizeArray<string>()
+            let disposed = ResizeArray<string>()
+            let mutable handle: IDispatcher<int> option = None
+
+            let disposable (name: string) =
+                { new System.IDisposable with
+                    member _.Dispose() = disposed.Add name
+                }
+
+            let subscription (name: string) (start: unit -> unit) : SubId * Subscribe<int> =
+                [ name ],
+                fun _ ->
+                    started.Add name
+                    start ()
+                    disposable name
+
+            Program.mkProgram
+                (fun () -> [], Cmd.none)
+                (fun msg model -> model @ [ msg ], Cmd.ofEffect (fun _ -> started.Add $"command {msg}"))
+                (fun _ _ -> ())
+            |> Program.withSubscription (fun model ->
+                if List.contains 1 model then
+                    [
+                        subscription "before" ignore
+                        subscription "terminates" (fun () -> handle.Value.Terminate())
+                        subscription "after" ignore
+                    ]
+                else
+                    [])
+            |> Program.withDispatcherHandle (fun d -> handle <- Some d)
+            |> Program.runWithDispatch id ()
+
+            handle.Value.Dispatch 1
+            Expect.isFalse handle.Value.IsActive "the subscription's start terminated the program"
+            List.ofSeq started, List.ofSeq disposed
+
+        test
+            "a subscription a message's diff starts that terminates stops the rest of the diff starting - Phase 900, run" {
+            let started, _ = terminatingDiffRun ()
+
+            Expect.isFalse
+                (List.contains "after" started)
+                $"the subscription after the one that terminated must not start; started {started}"
+        }
+
+        test
+            "a subscription a message's diff starts that terminates has what the diff started disposed - Phase 900, run" {
+            let _, disposed = terminatingDiffRun ()
+
+            Expect.equal
+                disposed
+                [ "before"; "terminates" ]
+                "what the diff started before and including the terminating subscription is disposed as soon as the diff returns"
+        }
+
+        test
+            "a subscription a message's diff starts that terminates stops the message's command running - Phase 900, run" {
+            let started, _ = terminatingDiffRun ()
+
+            Expect.isFalse
+                (List.contains "command 1" started)
+                $"the message's command must not run once its diff terminated the program; started {started}"
+        }
+
+        test "effects start in the order they were attached, the order effectIds reports - Phase 900, run" {
+            // `withEffect` prepends, as the sink registrations do; the boot
+            // reverses the sinks on the way out and, since Phase 900, the
+            // effects too. Until 900 three effects attached a, b, c started
+            // c, b, a — the reverse of what `effectIds` reported and of what
+            // a consumer reading its own composition expects. Pinned here
+            // as the contract, beside the accessor that already stated it.
+            let started = ResizeArray<string>()
+
+            let effect (name: string) =
+                EffectHandle.programLifetime name (fun _ ->
+                    started.Add name
+
+                    { new System.IDisposable with
+                        member _.Dispose() = ()
+                    })
+
+            let program =
+                Program.mkProgram (fun () -> [], Cmd.none) (fun msg model -> model @ [ msg ], Cmd.none) (fun _ _ -> ())
+                |> Program.withEffect (effect "a")
+                |> Program.withEffect (effect "b")
+                |> Program.withEffect (effect "c")
+
+            Expect.equal (Program.effectIds program) [ "a"; "b"; "c" ] "effectIds reports attach order"
+
+            program |> Program.runWithDispatch id ()
+
+            Expect.equal (List.ofSeq started) [ "a"; "b"; "c" ] "the effects started in attach order"
         }
     ]

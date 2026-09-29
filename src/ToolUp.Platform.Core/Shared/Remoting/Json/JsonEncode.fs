@@ -321,6 +321,13 @@ module JsonEncode =
     let map<'K, 'V when 'K: comparison> (key: KeyEncoder<'K>) (value: JsonEncoder<'V>) : JsonEncoder<Map<'K, 'V>> =
         fun m -> JsonValue.Object(m |> Map.toList |> List.map (fun (k, v) -> key k, value v))
 
+    /// Phase 899 — a map whose key is not string-representable, as an
+    /// array of `[key, value]` pairs in the map's order, each key in its
+    /// own JSON form: what `Fable.SimpleJson` writes for such a key, and
+    /// the inverse of `JsonDecode.asMapOf`.
+    let mapOf<'K, 'V when 'K: comparison> (key: JsonEncoder<'K>) (value: JsonEncoder<'V>) : JsonEncoder<Map<'K, 'V>> =
+        fun m -> JsonValue.Array(m |> Map.toList |> List.map (fun (k, v) -> JsonValue.Array [ key k; value v ]))
+
     /// A pair, as an array of two (`FSharpTupleConverter`).
     let tuple2 (first: JsonEncoder<'A>) (second: JsonEncoder<'B>) : JsonEncoder<'A * 'B> =
         fun (a, b) -> JsonValue.Array [ first a; second b ]

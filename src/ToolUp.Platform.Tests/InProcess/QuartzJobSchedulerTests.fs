@@ -212,7 +212,13 @@ let schedulerRestartTests =
 
         binding
 
-    IJobSchedulerContract.restartTests "QuartzJobScheduler" factory
+    testList "QuartzJobScheduler — restartable contract arms" [
+        IJobSchedulerContract.restartTests "QuartzJobScheduler" factory
+        // Phase 818 — a companion outside the platform's server tier
+        // cannot re-mint a `ResolvedScope`; it must hand out the anonymous
+        // scope, never a widening.
+        IJobSchedulerContract.carriedScopeTests "QuartzJobScheduler" false factory
+    ]
 
 // ─── The Quartz side of the seam ─────────────────────────────────────
 

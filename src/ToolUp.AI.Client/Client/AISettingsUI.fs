@@ -918,6 +918,104 @@ let private instanceRow
         ]
     ]
 
+// ─── Phase 859.H — team conversation visibility ──────────────────
+
+let private visibilityApi =
+    Api.makeProxy<TeamConversationVisibilityApi> (customOptions = UserSession.withRequestHeaders)
+
+let private visibilityLabel (level: TeamConversationVisibility) =
+    match level with
+    | TeamVisible -> "Every team member"
+    | TeamAdmins -> "Team owners and admins"
+    | PlatformAdmins -> "Platform administrators"
+
+/// Who, besides its author, can see a team conversation. Every member sees
+/// the level in force; the team owner (and, for `PlatformAdmins`, a
+/// platform admin) chooses it here, within what the deployment allows. Self
+/// contained — its own fetch and save — so the settings model is untouched.
+[<ReactComponent>]
+let private TeamConversationVisibilitySection () =
+    let view, setView = React.useState<TeamConversationVisibilityView option> None
+    let saving, setSaving = React.useState false
+    let message, setMessage = React.useState<Status option> None
+
+    React.useEffectOnce (fun () ->
+        async {
+            try
+                let! loaded = visibilityApi.GetConversationVisibility()
+                setView (Some loaded)
+            with _ ->
+                setView None
+        }
+        |> Async.StartImmediate)
+
+    let choose (level: TeamConversationVisibility) =
+        setSaving true
+        setMessage None
+
+        async {
+            try
+                match! visibilityApi.SetConversationVisibility level with
+                | Ok updated ->
+                    setView (Some updated)
+                    setMessage (Some(SuccessMsg "Conversation visibility updated."))
+                | Error refusal -> setMessage (Some(ErrorMsg refusal))
+            with ex ->
+                setMessage (Some(ErrorMsg ex.Message))
+
+            setSaving false
+        }
+        |> Async.StartImmediate
+
+    match view with
+    | Some v when v.InTeamScope ->
+        Html.div [
+            prop.className "mt-4 pt-4 border-t border-gray-200"
+            prop.children [
+                Html.h4 [
+                    prop.className "text-sm font-semibold text-gray-700 mb-1"
+                    prop.text "Who can see team AI conversations"
+                ]
+                Html.p [
+                    prop.className "text-sm text-gray-600 mb-2"
+                    prop.text (TeamConversationVisibility.describe v.Level)
+                ]
+
+                match message with
+                | Some(SuccessMsg text) -> Html.p [ prop.className "text-xs text-green-700 mb-2"; prop.text text ]
+                | Some(ErrorMsg text) -> Html.p [ prop.className "text-xs text-red-700 mb-2"; prop.text text ]
+                | None -> ()
+
+                if v.Selectable.IsEmpty then
+                    Html.p [
+                        prop.className "text-xs text-gray-500"
+                        prop.text "Only the team owner can change this."
+                    ]
+                else
+                    for level in v.Allowed do
+                        let selectable = List.contains level v.Selectable
+                        let isCurrent = level = v.Level
+
+                        Html.label [
+                            prop.key (TeamConversationVisibility.name level)
+                            prop.className "flex items-center gap-2 text-sm text-gray-700 py-0.5"
+                            prop.children [
+                                Html.input [
+                                    prop.type'.radio
+                                    prop.className "w-4 h-4"
+                                    prop.isChecked isCurrent
+                                    prop.disabled (saving || not selectable)
+                                    prop.onChange (fun (_: bool) ->
+                                        if not isCurrent && selectable then
+                                            choose level)
+                                ]
+                                Html.span [ prop.text (visibilityLabel level) ]
+                            ]
+                        ]
+            ]
+        ]
+    | _ -> Html.none
+
 let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactElement =
     let existingLabels =
         model.Config.ConfiguredProviders |> List.map _.Label |> Set.ofList
@@ -964,6 +1062,9 @@ let private view (model: Model) (dispatch: Msg -> unit) : ReactElement * ReactEl
                         ]
                     ]
                 ]
+
+            // Phase 859.H — the team's conversation visibility.
+            TeamConversationVisibilitySection()
         ]
 
     let panelTitle =

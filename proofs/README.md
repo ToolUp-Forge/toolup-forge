@@ -592,7 +592,13 @@ Not proved. *Measured*, on every run of the gate.
   narrower and is the same shape as the assembly bullet below: a caller that assembles a
   `ModelInput` *outside* the doors writes the `DisclosedFact.Scope` string itself, and nothing
   here checks that it wrote the resolver's. The doors are where the theorem's fold runs in the
-  shipped code, so this is the residual, not the rule.
+  shipped code, so this is the residual, not the rule. Behind the doors, the scopes the platform
+  *carries* rather than resolves are still strings, and Phase 818 names them: a job scheduled with a
+  resolver-minted scope now runs under it (the in-process scheduler re-mints it through a second
+  internal mint whose one caller is pinned), but the reactive recompute path — carried from a
+  string-keyed data write — imports, coherence sweeps, knowledge-base dependency records, the
+  job-admin API and any scheduler outside the platform's server tier still key the fact store on a
+  carried string.
 * **The tool-effect side is assumed, not checked here.** This theorem is about what goes *in*. The
   sentence a reader wants — that a model is isolated from knowledge except what is explicitly
   permitted — additionally needs that the tools a model may call cannot fetch what the input side
@@ -867,7 +873,16 @@ families alone:**
   the general path is precisely where a "started twice / never stopped" leak would live, and nothing
   else in the tree would have seen it.
 * **`change_keys`.** After `Fx.change`, every active key is a requested key, and — when every start
-  succeeds — every requested key is active.
+  succeeds — every requested key is active. **Stated of the ungated path (Phase 900).** `Fx.change`
+  now reads the loop's `terminated` flag before each start, and a start that terminates the program
+  ends the diff — nothing after it starts, what the call started is stopped, the next active list is
+  empty. That gate is the *loop's*: the flag is a cell of `runWithDispatch`, set by a teardown the
+  diff neither owns nor observes, and the theorem about it needs the loop's counters and its
+  `terminate` transition, so it is stated where those live — `ElmishLoop.fst`'s `start_all` and
+  `diff_terminating_starts_nothing_after`, over the same `start` records the boot's gate uses. The
+  model here is `Fx.change` with the flag clear throughout, which is what the differential host
+  runs production against and exactly the path production takes whenever no start terminates the
+  program.
 
 ### Rung 2 — Differentially tested
 
@@ -903,7 +918,18 @@ one every client executes.
   campaign above was, until then, almost entirely capacity-2, one-push sequences. Nothing compared
   the two hosts' draws, so nothing noticed. The step is now widened to `uint64` and narrowed back,
   which is the value the wrapping `uint32` step always produced on .NET (no corpus moved), and the
-  dispatch-loop differential pins a fingerprint of a draw that both hosts assert.
+  dispatch-loop differential pins a fingerprint of a draw that both hosts assert. **Since Phase 900
+  the ring and the diff campaigns are pinned the same way**, in the shape of 884's two pins: each host
+  draws the campaign the .NET corpus was written from (100 ring sequences, 400 diff inputs, the same
+  seed) and asserts its canonical rendering against one literal — so "the Fable host replays what the
+  .NET host drew" no longer rests on the loop's pin alone, and a generator that drew differently on
+  one host fails by name on both. **The diff pin caught one on its first Fable run.** The diff
+  generator's shuffle sorted by a projection that drew from the LCG, and Fable's `List.sortBy` applies
+  the projection inside the comparer (per comparison) where FSharp.Core's projects each element once —
+  so from the same seed, with the same LCG, the Fable host drew a different diff campaign from the
+  first shuffled input on (its rendering was 400:32117:… against .NET's 400:31330:…). The replay
+  never noticed because it never drew. The shuffle now draws one key per element, which is what .NET
+  always did, so the corpus did not move; the pin holds both hosts to it.
 * **The campaign is known to have reached the grow step.** The .NET host asserts the largest backing
   array the model reached is past several doublings, and that the diff campaign hit both the shortcut
   and the duplicate path — a campaign that only ever exercised the steady state would pass every
@@ -939,7 +965,12 @@ Named because an unstated exclusion reads, to anyone who finds it later, as a cl
 * **What a subscription does when started or stopped.** `Fx.change` calls the host's start and
   dispose functions and reports their exceptions through `onError`; the theorem is about which keys
   survive the call, with the start function opaque and its failure modelled as `None`. Whether a
-  start that threw left a resource behind is the subscription author's contract.
+  start that threw left a resource behind is the subscription author's contract. One thing a start
+  *can* do is no longer out, but it is the loop's claim, not this one's: a start that calls
+  `Terminate` ends the diff (Phase 900, `Fx.change`'s gate), and what that means — which starts a
+  terminating diff makes, that it holds nothing afterwards, that the message's command does not run —
+  is [the dispatch-loop ladder's](#the-claims-ladder--the-dispatch-loop-phase-789)
+  `diff_terminating_starts_nothing_after`.
 
 ---
 
@@ -952,8 +983,10 @@ the model and (since Phase 851) the `dirty` flag; its transitions depend on the 
 (`update`, `setState`, `Subs.Fx.change`, `Cmd.exec`) only through **which messages they synchronously
 re-dispatch and whether they call `Terminate`**, so those callees are abstracted as oracles and the
 loop becomes a total, deterministic step function. Two oracles since 851: `update : msg -> model ->
-model * ev list` (update, subscribe, the subscription diff and the command, per message) and
-`render : model -> ev list` (the render hook, once per drain). The ring is *imported* from
+reply` (update, subscribe, the subscription diff and the command, per message — since Phase 900 a
+`reply` is the new model, the diff's *starts* one at a time, and the command, where until 900 it was
+the model and one flattened event list) and `render : model -> ev list` (the render hook, once per
+drain). The ring is *imported* from
 `ElmishRing.fst` — `push`, `pop`, `wf`, `unread` and the 788 lemmas — and nothing about it is
 restated; this proof is about the two latches and the paint.
 
@@ -1003,6 +1036,28 @@ a start that terminated the program has what it returned released at once. The m
 `started` and `held` observables, a `start` record and the `gated` transition; the boot now takes the
 sinks' events, the effects, the subscription start and the command; teardown releases every handle;
 and the invariant gains `terminated ==> held == 0`. Every theorem was re-proved and two are added.
+
+**Phase 900 split the step at the diff.** 871 reached the boot and named what it could not reach:
+the same fault in the steady state. In the message arm the loop called `Subs.Fx.change` once for the
+whole diff; if the first subscription to start called `Terminate` from its start function, the
+teardown stopped the active set *as it stood before the diff*, `change` started the second anyway,
+the loop assigned both to the stopped set, nothing ever disposed them, and the message's command
+ran after. The model could not see it: the `update` oracle returned one flattened event list, so a
+`Terminate` from a start was an event among events and every later event was absorbed — which is
+exactly what a model of the loop's *events* should say, and nothing about what the loop went on
+*starting*. `Fx.change` now takes the loop's flag and reads it before each start (`Sub.fs`, the gate
+871 could not place); once set, nothing further starts, what the call started is stopped, and the
+next active set is empty; the message arm runs the command only while the program is still running
+after the diff. The oracle returns a `reply` — the model, the diff's starts as `start` records (one
+per subscription, in the order `toStart` holds them), the command — and `step` applies them as the
+boot does: `start_all` makes each start only while the program runs and holds its handle only if it
+is still running when it returns, `start_opt` runs the command under the same gate. `started` and
+`held` now count the message arm's starts too, every message's command counts as a start, and every
+theorem was re-proved on the pinned prover with no flag change. One is added. Pinned red first on
+production, one case per fault. Separately, effects now start in *attach* order (`withEffect`
+prepends, as the sink registrations do, and the boot reversed the sinks but not the effects; the
+accessor `effectIds` already reported attach order) — a contract with a test and a migration note,
+not a theorem.
 
 ### Rung 1 — Proved
 
@@ -1056,13 +1111,27 @@ families alone:**
   pre-boot events with the latch clear and the boot's invariant no longer checks.
 * **`terminated_holds_nothing`** (Phase 871), with `start_terminating_releases`. In every state a
   program reaches, a terminated program holds nothing: every handle the boot's starts acquired — an
-  effect's `IDisposable`, the init model's subscriptions — has been released, by the teardown or, for
-  a start that terminated the program from inside its own start function, as soon as that start
-  returned. It is the invariant's new clause, so every single-transition lemma carries it:
-  `terminate_spec` releases everything, and `gated_spec` holds a start's handle only if the program is
-  still running when the start returns. The prover's go-reds are the two lines that fixed production:
-  store the handle regardless (the registry before 871) and `gated_spec` no longer checks; leave
-  `held` alone in `terminate` and `terminate_spec` no longer checks.
+  effect's `IDisposable`, the init model's subscriptions — and, since Phase 900, every handle a
+  *message's* diff acquired, has been released, by the teardown or, for a start that terminated the
+  program from inside its own start function, as soon as that start (900: that diff) returned. It is
+  the invariant's new clause, so every single-transition lemma carries it: `terminate_spec` releases
+  everything, `gated_spec` holds a boot start's handle only if the program is still running when the
+  start returns, and `start_one_spec` (900) says the same of a diff's. The prover's go-reds are the
+  two lines that fixed production: store the handle regardless (the registry before 871) and
+  `gated_spec` no longer checks; leave `held` alone in `terminate` and `terminate_spec` no longer
+  checks.
+* **`diff_terminating_starts_nothing_after`** (Phase 900), with `start_one_terminating`,
+  `start_all_no_term`, `start_all_terminated` and `start_one_terminated`. A message whose diff would
+  start `before`, then a subscription `x` that calls `Terminate` from its start function, then
+  `after`: `step` makes exactly `length before + 1` starts — all of `before`, because none of them
+  terminates; `x`; none of `after` — the message's command does not run (it would have counted), the
+  machine is terminated and holds nothing, and the new model is still assigned, as a `Terminate` from
+  a command leaves it. `start_one_terminated` is the gate itself (a start reached once the program is
+  terminated is not made, state unchanged); `start_one_terminating` the start that terminates
+  (counted, and nothing held afterwards — `apply_evs_term_held`: a `Terminate` among a start's events
+  releases everything and absorbs what follows). The go-red is the step before 900 — the flattened
+  events applied by `apply_evs` — which starts `after` and the command whatever the flag says, and
+  fails the lemma on the start count; the go-red on production is the three-case pin below.
 * **`terminated_starts_nothing`** (Phase 871), with `gated_terminated`. A terminated program starts
   nothing. `gated_terminated` is the guard: a start the boot reaches once the program is terminated —
   an effect's start function, the subscription start, `init`'s command — is not made and the state
@@ -1132,7 +1201,13 @@ Not proved. *Measured*, on every run of the gate.
   of the boot's gated starts ran (the effect's start function, the subscription's, `init`'s command)
   and on how many handles are still held (production counts each handle returned and each dispose).
   Since Phase 884 all of it is compared **per step** — the state after the boot and after every
-  external event — and not only where the script ends.
+  external event — and not only where the script ends. Since Phase 900 a fourth generator gives
+  about a third of the messages subscriptions of their own (one or two each, each start raising up
+  to two forward-pointing messages or `Terminate`), started by the diff after the message is first
+  processed; keys only ever accumulate, so no diff stops anything and `held` on both sides counts
+  every start that came up and was not released; and every message's command is a start, counted
+  whether or not it raises anything, so a command run after its diff terminated the program is one
+  start too many on production's side.
 * **…and under Fable (Phase 884).** The loop every browser client runs is the Fable transpilation
   of `Program.runWithDispatch`, and it is now held to the model the same way. The script, its
   generator, both drivers, the skeleton and every comparison over the campaign are one host-neutral
@@ -1160,7 +1235,10 @@ Not proved. *Measured*, on every run of the gate.
   function, that raise `Terminate` before the boot paint, and that raise nothing before it. A third
   does it for Phase 871: scripts that terminate from a sink, from an effect's start, from a
   subscription's start, that subscribe at all, and that reach the termination predicate with a
-  handler that raises.
+  handler that raises. A fourth does it for Phase 900: scripts that ask for subscriptions from a
+  message (measured 348 of 400), two from one message (250), that terminate from a subscription a
+  message's diff starts (111), and that *reach* a diff which terminates with a subscription after
+  the one that terminated it (25 — the shape the phase is about, counted on production's trace).
 * **Termination is total, on production (Phase 871).** Five cases pin the phase's faults directly,
   and each was run red on the tree before it: a terminating message whose handler raises leaves
   `IsActive` false, a later dispatch reaches `update` zero times, and the subscription and the effect
@@ -1172,6 +1250,14 @@ Not proved. *Measured*, on every run of the gate.
   production ends terminated it holds nothing (`terminated_holds_nothing`, run), and a handler that
   raises and one that returns produce the same run — which is what lets the model have no parameter
   for it.
+* **A terminating diff ends there, on production (Phase 900).** Three cases pin the phase's three
+  faults, one each, and each was run red on its own on the tree before the phase: a message whose
+  model asks for `before`, `terminates` (which calls `Terminate` from its start function) and `after`
+  — the subscription after the one that terminated does not start (the tree before started it); what
+  the diff started before and including the terminating one is disposed as soon as the diff returns
+  (before: nothing was, ever); and the message's command does not run (before: it did). A fourth
+  case pins the effect start order as a contract: three effects attached `a`, `b`, `c` start `a`,
+  `b`, `c`, the order `effectIds` reports.
 * **Six of the theorems are also run on production directly.** `boot_paints_init_model`: a sink
   and an effect that each dispatch at boot, and an `init` command that does too, produce exactly two
   paints — the init model, then the model one drain built from all three messages in the order they
@@ -1195,7 +1281,7 @@ Not proved. *Measured*, on every run of the gate.
   handed to `update` in order, the boot returns with the latch released, and `Terminate` still
   disposes everything and terminates. Each of these escaped the drain with the latch set before the
   guard existed, after which every dispatch queued and nothing was ever processed again.
-* **One faithful loop skeleton, six go-reds.** The loop's scheduling skeleton is transcribed by
+* **One faithful loop skeleton, nine go-reds.** The loop's scheduling skeleton is transcribed by
   hand over the production ring with the callees replaced by the script — the same abstraction the
   model makes, in F#. Faithful, it is asserted to *agree* with the model over the campaign. With one
   line moved each, it is asserted *caught*: the latch released *before* the drain instead of after
@@ -1207,10 +1293,13 @@ Not proved. *Measured*, on every run of the gate.
   some later external dispatch happens to drain it (caught on the trace); and the latch set after
   the sinks and the effects ran, which is the boot as it shipped until it was restated (caught on
   the boot paint, on every script that dispatches before it); every start made whatever the flag
-  says, which is the boot before Phase 871 (caught on the start count); and the handle of a start
-  that terminated the program kept, which is the registry before 871 (caught on the held count). The
-  difference each go-red measures is its one line. A differential that has never been shown to fail agrees with whatever
-  it is shown.
+  says, which is the boot before Phase 871 (caught on the start count); the handle of a start
+  that terminated the program kept, which is the registry before 871 (caught on the held count); and
+  Phase 900's three, the message arm before 900 — the rest of a diff started after one of its
+  subscriptions called `Terminate` (caught on the start count), the terminating start's handle
+  assigned to the stopped set (caught on the held count), and the command run after a terminating
+  diff (caught on the start count). The difference each go-red measures is its one line. A
+  differential that has never been shown to fail agrees with whatever it is shown.
 * **The fallback arm, on production.** A `DispatcherCore` exposed without its terminate callback is
   driven through `Terminate`: `IsActive` goes false, the wiring defect is reported, the interface
   refuses a dispatch — the state `fallback_breaks_encoding` computes, reached on the shipped code.
@@ -1227,11 +1316,15 @@ Not proved. *Measured*, on every run of the gate.
   model and false of the code. Mitigation: the `log` comparison above measures the encoding on production on every
   script; a divergence surfaces as a mismatch on the next dispatch after it.
 * **The oracles abstract the callees, including their exceptions.** `update`, `subscribe`,
-  `Subs.Fx.change` and `Cmd.exec` are one function returning a model and the events raised before
-  control returns; since Phase 851 `setState` is a second, a pure function of the model it is handed
-  to the events it raises synchronously. An exception from any of them is an oracle reply whose model
-  is the old one (production leaves `state` unassigned) carrying whatever was dispatched before the
-  throw — the abstraction admits it, and the differential does not script it. Production marks the
+  `Subs.Fx.change` and `Cmd.exec` are one function returning a `reply` — since Phase 900 the model,
+  the diff's starts one at a time (each the events its start function raises before it returns, and
+  whether it returned a handle) and the command's events; until 900 the model and one flattened event
+  list; since Phase 851 `setState` is a second oracle, a pure function of the model it is handed to
+  the events it raises synchronously. An exception from `update` or `subscribe` is an oracle reply
+  whose model is the old one (production leaves `state` unassigned) with no starts and no command; a
+  start that throws is a start that holds nothing; a command that throws is a command carrying
+  whatever it dispatched before the throw — the abstraction admits each, and the differential does
+  not script them. Production marks the
   model dirty *before* the callees run for exactly this reason: a message that threw is still, to
   the model, a processed message, and its (unchanged) model is painted once at the end of the drain.
   That reply presumes the exception was *reported and the loop went on*, which is true only of a
@@ -1242,14 +1335,19 @@ Not proved. *Measured*, on every run of the gate.
   and sets the flags regardless, and Rung 2 measures that a raising handler changes nothing. Nor is
   what the teardown's callees raise: the flag is set before any of them runs, so a dispatch they make
   is refused and a `Terminate` they call finds the teardown under way.
-* **What the model abstracts about teardown and the starts (Phase 871).** What a released handle
-  *does* when disposed — an effect's `Dispose`, a subscription's stop — is the effect's contract; the
-  model counts handles and does not look inside them. The gate is at the *block*: `Subs.Fx.change`
-  starts the init model's subscriptions together and `Cmd.exec` runs `init`'s command's effects
-  together, so each is one start in the model, and a `Terminate` raised by one subscription does not
-  stop the next in the same block from starting — it is released with the rest as soon as the block
-  returns. And `held` counts what the *boot* acquired; a message's subscription diff is inside the
-  `update` oracle and is not counted (Rung 4 names the gap that leaves).
+* **What the model abstracts about teardown and the starts (Phase 871, narrowed by 900).** What a
+  released handle *does* when disposed — an effect's `Dispose`, a subscription's stop — is the
+  effect's contract; the model counts handles and does not look inside them. Since Phase 900 the
+  gate is per *subscription* wherever `Subs.Fx.change` runs — the boot's start and every message's
+  diff — and `held` counts what both acquired; what remains at the block is `Cmd.exec`: a command's
+  effects run together, so a command is one start and a `Terminate` raised by one of its effects does
+  not stop the next effect of the *same command* from running (a command holds nothing, so nothing
+  leaks; what is not claimed is that the later effect's dispatches are refused, which
+  `terminated_absorbing` does say). What a diff *stops* is not counted: `held` never moves down
+  except at teardown, so the model is exact for a program whose subscription keys only accumulate —
+  the shape the differential scripts — and which keys a diff stops is `ElmishSub.fst`'s theorem. A
+  stop function that calls `Terminate` is not modelled: the diff's stops run before its starts, and
+  what a stop does is the effect's contract.
 * **The render hook is quiet — for `render_once_per_drain` only.** The theorem is stated under the
   hypothesis that the hook dispatches nothing synchronously; the shipped React adapter (`React.fs`)
   hands the view to React and returns, and React 18 commits asynchronously. Every other theorem
@@ -1275,14 +1373,13 @@ Named because an unstated exclusion reads, to anyone who finds it later, as a cl
   the recheck and the dispatch, can slip a message through is an *interleaving* question over two
   observations of one cell. This is the synchronous machine; the async path needs an interleaving
   model and is deferred to a later phase.
-* **A subscription a message's diff starts after a `Terminate` in the same diff (Phase 871).** When
-  a message's subscription diff starts two subscriptions and the first calls `Terminate` from its start
-  function, the teardown stops the set as it stood, `Subs.Fx.change` then starts the second anyway,
-  and the loop assigns both to the stopped set — nothing disposes them — and runs the message's
-  command after. `terminated_holds_nothing` does not cover it: `held` counts the boot's starts, and
-  the step's diff is inside the `update` oracle. Closing it needs the gate inside `Sub.fs` (between
-  the subscriptions one `change` starts) and the step oracle split at the diff; it is outside Phase
-  871's files and is not claimed.
+* **A subscription a message's diff STOPS, and a stop that terminates.** Phase 900 closed what 871
+  named here — a subscription a message's diff starts after a `Terminate` in the same diff is now
+  `diff_terminating_starts_nothing_after`, Rung 1 — and what it leaves is narrower: the model does
+  not count the handles a diff *releases* (`stop_exactly_removed` says which keys, in the diff's own
+  ladder; the loop's `held` moves down only at teardown), so a program whose diffs stop subscriptions
+  is held to the model only through the campaign's shape, where keys accumulate; and a stop function
+  that calls `Terminate` mid-diff is the effect's contract, not modelled.
 * **Liveness of the drain.** That `processMsgs` returns at all depends on `update` eventually
   re-dispatching nothing. The model reports a drain that did not finish; it does not prove that any
   drain does, and production does not either.

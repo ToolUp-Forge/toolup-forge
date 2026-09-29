@@ -667,6 +667,80 @@ let private refusals =
                     (List.length allMutationKinds))
     ]
 
+// ─── Generated mutation population (Phase 844 ↔ 913) ─────────────────
+
+/// The per-shape GENERATED population (`WireCorpus.generatedMutations`),
+/// measured here against the MsgPack reader — the msgpack twin of
+/// `StjRoundTripTests.generatedShapeMutations`. Only rows carrying an
+/// `MsgPack` payload are exercised: `generatedMutationsFor`'s own doc
+/// comment records that `WrongWidth` / `MissingField` / `ExtraField` are
+/// JSON-only BY DESIGN — MsgPack widths are typed bytes rather than text,
+/// so "a non-integral token where an integer was declared" has no MsgPack
+/// analogue, and a generic field splice would need a per-shape rewrite of
+/// the array/map length header this generator does not attempt. The
+/// hand-written rows in `refusals` above stay the authoritative MsgPack
+/// coverage for those three kinds; this arm draws `WrongTag` and
+/// `Truncated` only.
+let private generatedRefusals =
+    testList "generated refuse-path mutations" [
+        yield! [
+            for m in generatedMutations pinnedCases do
+                match m.MsgPack with
+                | None -> ()
+                | Some payload ->
+                    testCase (m.Name + " (" + string m.Kind + ")")
+                    <| fun () ->
+                        let actual, detail = classifyMsgPack m.Target payload
+                        printfn "msgpack refusal (generated) — %s: %s | %s" m.Name (describeOutcome actual) detail
+
+                        if not (sameOutcomeClass actual m.ExpectedMsgPack) then
+                            failtestf
+                                "the MsgPack decoder's behaviour on generated mutation `%s` has changed class.\n  declared: %s\n  measured: %s (%s)\nIf the decoder was IMPROVED, update the declaration in `WireCorpus.generatedMutationsFor`; if it was not, a refusal has been lost."
+                                m.Name
+                                (describeOutcome m.ExpectedMsgPack)
+                                (describeOutcome actual)
+                                detail
+        ]
+
+        testCase "the generated set is not vacuous, and covers every kind it can generate for MsgPack"
+        <| fun () ->
+            let withPayload =
+                generatedMutations pinnedCases |> List.filter (fun m -> m.MsgPack.IsSome)
+
+            Expect.isNonEmpty withPayload "no generated mutation carries an MsgPack payload"
+
+            let kinds = withPayload |> List.map (fun m -> m.Kind) |> List.distinct
+
+            // The generator's own boundary (see the doc comment above):
+            // WrongWidth / MissingField / ExtraField have no MsgPack
+            // analogue in the GENERATED population, so this checks the two
+            // kinds it does draw rather than all five — the other three
+            // are asserted against `mutations()`'s hand-written MsgPack
+            // rows by "every mutation kind is represented" above.
+            for kind in [ MutationKind.WrongTag; MutationKind.Truncated ] do
+                Expect.contains kinds kind (sprintf "no generated MsgPack mutation of kind %A" kind)
+
+        testCase "every mutation kind is represented across hand-written and generated MsgPack mutations"
+        <| fun () ->
+            // The combined floor: the hand-written arm alone already
+            // covers all five kinds on MsgPack (`refusals`'s "every
+            // mutation kind is represented" above), and this re-asserts
+            // that fact jointly with the generated population so a future
+            // change to either declaration cannot silently narrow the
+            // union without a test noticing.
+            let drawn =
+                (mutations () |> List.filter (fun m -> m.MsgPack.IsSome))
+                @ (generatedMutations pinnedCases |> List.filter (fun m -> m.MsgPack.IsSome))
+                |> List.map (fun m -> m.Kind)
+                |> List.distinct
+
+            let missing = allMutationKinds |> List.filter (fun k -> not (List.contains k drawn))
+
+            Expect.isEmpty
+                missing
+                (sprintf "these mutation kinds drew zero MsgPack-payload mutations across BOTH populations: %A" missing)
+    ]
+
 [<Tests>]
 let tests =
     testList "Remoting MsgPack wire corpus" [
@@ -676,6 +750,7 @@ let tests =
         narrowingFalsifier
         fixturePin
         refusals
+        generatedRefusals
         adequacy
         divergences
     ]

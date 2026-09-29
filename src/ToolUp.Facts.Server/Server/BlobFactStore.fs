@@ -20,13 +20,27 @@ open ToolUp.Platform.BlobStorage
 // **distributed-ready** (multiple replicas over one shared blob backend
 // converge, because the content-addressed id makes writes idempotent).
 //
-// The default scans blobs under the scope's `_facts/` prefix (O(n) per
-// query / assert). That is fine for the default single-backend store; a
-// large deployment swaps in an indexed implementation behind the same
+// Below the point-read index threshold (Phase 890) every read scans the
+// blobs under the scope's `_facts/` prefix (O(n) downloads per query /
+// assert), which is fine for a small scope. At or above it, a point read,
+// a lineage-head lookup and a supersession-chain walk read the facts they
+// concern and no others — see "The point-read index" below. A large
+// deployment can still swap in an indexed implementation behind the same
 // `IFactStore` contract (the six-rule audit is what makes that swap
 // safe). Scope isolation is structural (GP 4): the container IS the
 // resolved storage scope, so one scope's facts are unreachable from
 // another.
+//
+// **What still enumerates, by definition.** A query that names neither a
+// subject nor a metric — `FactQuery.all`, and the full-history listing
+// built on it — is the whole-store walk: its answer is every fact, so no
+// index can make it read fewer. A query naming only one of the two
+// enumerates as well; the population read (a metric across subjects) is
+// the metric surface's job (Phase 702), not this index's.
+//
+// **Fan-out.** Every parallel blob fan-out in this file runs under
+// `BlobFanOut.Bound` concurrent requests — a download of a whole scope
+// must never open ten thousand requests at once against an object store.
 //
 // **Audit (GP 6)** rides `IEventStore` under the reserved `_facts` source
 // module (the `ILineageStore` pattern) — a durable, scope-isolated,
@@ -42,18 +56,286 @@ type internal DraftDisposition = {
     Written: Fact option
 }
 
+/// The concurrency bound every parallel blob fan-out in `BlobFactStore`
+/// runs under (Phase 890). Sixteen is well inside the per-client
+/// connection budget of every shipped storage backend, and far above the
+/// point where an in-memory or local backend stops getting faster.
+module internal BlobFanOut =
+
+    [<Literal>]
+    let Bound = 16
+
+    /// `Async.Parallel` under `Bound`. Result order is input order, exactly
+    /// as the unbounded form's is.
+    let run (computations: Async<'T> seq) : Async<'T array> = Async.Parallel(computations, Bound)
+
+// ─── The point-read index (Phase 890) ────────────────────────────────
+//
+// One empty `.ref` leaf per fact, in the Phase 9f blob-index layout
+// (`{prefix}/{key}/{value}.ref`), nested one level deeper so that ONE leaf
+// set carries both indexes the point reads need:
+//
+//     _factindex/{subject-metric}/{lineage}/{asOf}_{factId}.ref
+//
+//   - **by subject and metric** — every lineage, and so every fact, of one
+//     (subject, metric) is under `_factindex/{subject-metric}/`;
+//   - **by lineage** — every fact of one lineage (subject, metric, period,
+//     method identity) is under `…/{subject-metric}/{lineage}/`.
+//
+// One leaf per fact rather than one per index is deliberate: two leaves
+// written by two uploads can land half-written, and a lineage entry whose
+// subject-and-metric entry is missing would answer a point read with a
+// fact short. One upload is either there or not.
+//
+// **The census decides whether the index may answer.** Every consulting
+// read lists `_facts/` (the census the enumeration takes anyway) and the
+// leaf set, and uses the index only when every fact in the census has a
+// leaf. Anything else — a failed leaf write, a fact written behind the
+// store's back, a scope that has just crossed the threshold, an index an
+// operator deleted — reads as "incomplete", and that read enumerates
+// (the truth, always) and writes the missing leaves from the facts it
+// just read. So a failed index write costs one enumeration and never a
+// different answer, and the next read is indexed again. A leaf whose fact
+// is gone (an erasure) is ignored, because only census members are read.
+//
+// **Leaves narrow; the pipeline decides.** A leaf admits a SUPERSET of
+// what the enumeration would keep, and the facts it admits then run
+// through the exact filters and the exact lineage key the enumeration
+// uses, in census order — so the two paths agree by construction, not by
+// a second reading of the rules. Where the leaf name can be exact it is:
+// a `Utc` or `Unspecified` period endpoint round-trips through the store's
+// serialiser with its ticks intact and is compared exactly. A `Local`
+// endpoint is stored as its UTC instant and compared within
+// `LocalTolerance`, which bounds every UTC offset there is — a `Local`
+// value's read-back ticks depend on the reading machine's zone.
+//
+// The index is DERIVED (GP 5): the fact blobs are the truth, the leaves
+// hold no fact data, and deleting every leaf loses nothing.
+
+/// How a `BlobFactStore` maintains and consults its point-read index
+/// (Phase 890) — the by-lineage and by-subject-and-metric index that lets
+/// a point read, a lineage-head lookup and a supersession-chain walk read
+/// the facts they concern and no others.
+type FactIndexOptions = {
+    /// Whether the index is maintained and consulted at all. `false`
+    /// reproduces the pre-890 read and write paths byte-for-byte and
+    /// writes no index blob.
+    Enabled: bool
+    /// The scope's fact count at or above which the index is written and
+    /// consulted. Below it every read enumerates, exactly as before, and
+    /// no index blob is written — so a small scope's blob layout is
+    /// unchanged (GP 13).
+    MinimumFacts: int
+}
+
+/// Standard point-read index policies.
+module FactIndexOptions =
+
+    /// No index: the pre-890 enumeration, byte-for-byte, with no index
+    /// blob written and no index listing on any path.
+    let disabled: FactIndexOptions = { Enabled = false; MinimumFacts = 0 }
+
+    /// The default policy. Enabled at 512 facts — the size Phase 702 chose
+    /// for its surface, below which a whole-scope enumeration is still a
+    /// fraction of a second and the index would be pure overhead.
+    ///
+    /// **On GP 11.** The index changes how a large scope's point reads
+    /// execute, never what they return: the contract pack runs against
+    /// both paths, and every indexed read is the enumeration's pipeline
+    /// applied to a narrower read. A deployment that wants the pre-890
+    /// mechanism as well as its answers composes `disabled`.
+    let defaults: FactIndexOptions = { Enabled = true; MinimumFacts = 512 }
+
+    /// Enabled at every size — no threshold. The shape the contract pack
+    /// binds, so the indexed path is exercised by every contract case
+    /// rather than only at a scale a test suite cannot reach.
+    let always: FactIndexOptions = { defaults with MinimumFacts = 0 }
+
+/// The point-read index's on-disk footprint (Phase 890).
+module FactIndex =
+
+    /// Blob-name prefix every index leaf in a scope lives under. A sibling
+    /// of `_facts/`, never a child: the fact census lists `_facts/` and
+    /// must never count a derived artefact.
+    [<Literal>]
+    let Prefix = "_factindex/"
+
+/// One parsed index leaf.
+type internal FactIndexLeaf = {
+    SubjectMetric: string
+    FromKind: char
+    FromTicks: int64
+    ToKind: char
+    ToTicks: int64
+    MethodHash: string
+    AsOfTicks: int64
+    FactId: string
+}
+
+/// The leaf layout: how a fact names its leaf, how a leaf name parses
+/// back, and the superset tests a read narrows by.
+module internal FactIndexLayout =
+
+    /// Bounds any difference between a `Local` endpoint's stored UTC
+    /// instant and the ticks it reads back as on another machine (every
+    /// UTC offset is within 14 hours).
+    let LocalTolerance = TimeSpan.FromDays(2.0).Ticks
+
+    let private hex (s: string) =
+        Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes s)
+        |> Convert.ToHexStringLower
+
+    // A fixed period and method, so the store's own lineage key can be
+    // reused as the (subject, metric) key: it canonicalises the subject
+    // exactly as the lineage the enumeration compares does, which a
+    // second rendering of the subject here could drift from.
+    let private anyPeriod: TemporalExtent = {
+        From = DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        To = DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        Label = None
+    }
+
+    /// The (subject, metric) key segment.
+    let subjectMetricKey (subject: SubjectRef) (metric: MetricRef) : string =
+        hex (Fact.lineageKey subject metric anyPeriod (HumanAsserted ""))
+
+    /// The method-identity half of the lineage segment.
+    let methodHash (m: MethodRef) : string =
+        (hex (Fact.methodIdentity m)).Substring(0, 32)
+
+    let private endpoint (d: DateTime) : char * int64 =
+        match d.Kind with
+        | DateTimeKind.Utc -> 'U', d.Ticks
+        | DateTimeKind.Unspecified -> 'N', d.Ticks
+        | _ -> 'L', d.ToUniversalTime().Ticks
+
+    /// The leaf blob name for one fact.
+    let leafName (f: Fact) : string =
+        let fk, ft = endpoint f.Period.From
+        let tk, tt = endpoint f.Period.To
+
+        sprintf
+            "%s%s/%c%019d%c%019d_%s/%019d_%s.ref"
+            FactIndex.Prefix
+            (subjectMetricKey f.Subject f.Metric)
+            fk
+            ft
+            tk
+            tt
+            (methodHash f.Method)
+            f.AsOf.Ticks
+            (SecondaryIndex.BlobIndex.pathSafeSegment f.FactId)
+
+    /// Parse a leaf blob name; `None` for anything that is not one (a
+    /// stray blob under the prefix is ignored, never trusted).
+    let tryParse (name: string) : FactIndexLeaf option =
+        let parts = name.Replace('\\', '/').Split('/')
+
+        if parts.Length < 4 || parts[parts.Length - 4] + "/" <> FactIndex.Prefix then
+            None
+        else
+            let sm = parts[parts.Length - 3]
+            let lineage = parts[parts.Length - 2]
+            let leaf = parts[parts.Length - 1]
+
+            let ticks (s: string) =
+                match
+                    Int64.TryParse(s, Globalization.NumberStyles.None, Globalization.CultureInfo.InvariantCulture)
+                with
+                | true, v -> Some v
+                | _ -> None
+
+            let kindOk (c: char) = c = 'U' || c = 'N' || c = 'L'
+
+            if
+                lineage.Length <= 41
+                || lineage[40] <> '_'
+                || not (kindOk lineage[0])
+                || not (kindOk lineage[20])
+                || not (leaf.EndsWith(".ref", StringComparison.Ordinal))
+                || leaf.Length < 25
+                || leaf[19] <> '_'
+            then
+                None
+            else
+                match
+                    ticks (lineage.Substring(1, 19)), ticks (lineage.Substring(21, 19)), ticks (leaf.Substring(0, 19))
+                with
+                | Some fromTicks, Some toTicks, Some asOf ->
+                    Some {
+                        SubjectMetric = sm
+                        FromKind = lineage[0]
+                        FromTicks = fromTicks
+                        ToKind = lineage[20]
+                        ToTicks = toTicks
+                        MethodHash = lineage.Substring 41
+                        AsOfTicks = asOf
+                        FactId = Uri.UnescapeDataString(leaf.Substring(20, leaf.Length - 24))
+                    }
+                | _ -> None
+
+    // The ticks an endpoint READS BACK as, as an interval: exact for `U`
+    // and `N`, the stored instant widened by the tolerance for `L`.
+    let private readBack (kind: char) (ticks: int64) : int64 * int64 =
+        if kind = 'L' then
+            ticks - LocalTolerance, ticks + LocalTolerance
+        else
+            ticks, ticks
+
+    /// Could this leaf's fact overlap `period`? The enumeration's test is
+    /// `period.From < f.Period.To && f.Period.From < period.To` on the
+    /// read-back values; this is that test against their widest range.
+    let mayOverlap (period: TemporalExtent) (leaf: FactIndexLeaf) : bool =
+        let fromLo, _ = readBack leaf.FromKind leaf.FromTicks
+        let _, toHi = readBack leaf.ToKind leaf.ToTicks
+        period.From.Ticks < toHi && fromLo < period.To.Ticks
+
+    // Does one endpoint canonicalise — as the lineage key does, through
+    // `ToUniversalTime` on THIS machine — to the target's instant?
+    let private sameInstant (kind: char) (ticks: int64) (target: DateTime) : bool =
+        let targetUtc = target.ToUniversalTime().Ticks
+
+        match kind with
+        | 'U' -> ticks = targetUtc
+        | 'N' -> DateTime(ticks, DateTimeKind.Unspecified).ToUniversalTime().Ticks = targetUtc
+        | _ -> abs (ticks - targetUtc) <= LocalTolerance
+
+    /// Could this leaf's fact share a lineage with a fact over
+    /// (`subjectMetric`, `period`, `method`)? A superset test: the caller
+    /// decides with the lineage key itself once the fact is read.
+    let mayShareLineage (subjectMetric: string) (period: TemporalExtent) (methodHash: string) (leaf: FactIndexLeaf) =
+        leaf.SubjectMetric = subjectMetric
+        && leaf.MethodHash = methodHash
+        && sameInstant leaf.FromKind leaf.FromTicks period.From
+        && sameInstant leaf.ToKind leaf.ToTicks period.To
+
+/// What a consulting read found when it compared the index with the census.
+type internal FactIndexState =
+    /// The index is off, or the scope is below the threshold: enumerate,
+    /// and write no index.
+    | NotConsulted
+    /// Some census member has no leaf: enumerate, then write the missing
+    /// leaves. Carries the fact ids that do have one.
+    | Incomplete of indexed: HashSet<string>
+    /// Every census member has a leaf. Carries the leaves and each census
+    /// member's position and blob name, so a narrowed read keeps census
+    /// order — the order the enumeration's stable sorts break ties by.
+    | Complete of leaves: FactIndexLeaf list * census: Dictionary<string, int * string>
+
 /// Blob-backed default `IFactStore`. Construct via `BlobFactStore.create`
 /// (or `createWithRegistry` to enable Phase 566 canonical-method
 /// selection — `registry = None` preserves the registry-less behaviour
 /// byte-for-byte, GP 11; or `createWithSurface` to choose the Phase 702
-/// metric-surface policy explicitly).
+/// metric-surface policy explicitly; or `createWithIndex` to choose the
+/// Phase 890 point-read index policy as well).
 type BlobFactStore
     (
         storage: IBlobStorage,
         events: IEventStore,
         registry: Grounding.IMetricRegistry option,
         clock: unit -> DateTime,
-        surfaceOptions: FactSurfaceOptions
+        surfaceOptions: FactSurfaceOptions,
+        indexOptions: FactIndexOptions
     ) =
 
     static let jsonOptions = FableConverters.create ()
@@ -88,10 +370,10 @@ type BlobFactStore
     let deserialise (bytes: byte[]) : Fact =
         JsonSerializer.Deserialize<Fact>(Encoding.UTF8.GetString bytes, jsonOptions)
 
-    // Every fact in scope, materialised. Stateless (recomputed per call).
-    let loadAll (scopeId: string) : Async<Fact list> = async {
-        let! names = storage.List(scopeId, factsPrefix)
-
+    // The facts behind the given blob names, in the given order. A blob
+    // that will not read or parse is skipped — the enumeration's rule, so
+    // every path that reads through here agrees with it.
+    let loadNames (scopeId: string) (names: string list) : Async<Fact list> = async {
         let! facts =
             names
             |> List.map (fun name -> async {
@@ -106,9 +388,15 @@ type BlobFactStore
                             None
                     | Error _ -> None
             })
-            |> Async.Parallel
+            |> BlobFanOut.run
 
         return facts |> Array.choose id |> Array.toList
+    }
+
+    // Every fact in scope, materialised. Stateless (recomputed per call).
+    let loadAll (scopeId: string) : Async<Fact list> = async {
+        let! names = storage.List(scopeId, factsPrefix)
+        return! loadNames scopeId names
     }
 
     let load (scopeId: string) (factId: string) : Async<Fact option> = async {
@@ -128,6 +416,131 @@ type BlobFactStore
         Fact.lineageKey f.Subject f.Metric f.Period f.Method
 
     let periodsOverlap (a: TemporalExtent) (b: TemporalExtent) : bool = a.From < b.To && b.From < a.To
+
+    // ─── The point-read index (Phase 890) ─────────────────────────────
+    //
+    // The layout, the census rule and why the two agree with the
+    // enumeration are in the note above `FactIndexOptions`.
+
+    /// Write one fact's leaf. `false` on any failure — the census check on
+    /// the next consulting read is what notices, and repairs, a leaf that
+    /// is missing, so a failure here is never propagated.
+    ///
+    /// The leaf describes the fact AS IT READS BACK — the form every read,
+    /// and a rebuild, compares against — so the write path and a rebuild
+    /// name the same leaf even where the serialiser normalises a
+    /// `DateTimeKind` on the way through.
+    let writeLeaf (scopeId: string) (f: Fact) : Async<bool> = async {
+        try
+            let readBack = deserialise (serialise f)
+            let! r = storage.Upload(scopeId, FactIndexLayout.leafName readBack, Array.empty)
+            return Result.isOk r
+        with _ ->
+            return false
+    }
+
+    let writeLeaves (scopeId: string) (facts: Fact list) : Async<int> = async {
+        let! written = facts |> List.map (writeLeaf scopeId) |> BlobFanOut.run
+        return written |> Array.filter id |> Array.length
+    }
+
+    /// Compare the index with the census `names`. Lists the leaf set only
+    /// when the policy consults the index at this census size.
+    let readIndex (scopeId: string) (names: string list) : Async<FactIndexState> = async {
+        if not indexOptions.Enabled || List.length names < indexOptions.MinimumFacts then
+            return NotConsulted
+        else
+            let! leafNames = storage.List(scopeId, FactIndex.Prefix)
+            let leaves = leafNames |> List.choose FactIndexLayout.tryParse
+            let indexed = HashSet<string>(leaves |> Seq.map _.FactId, StringComparer.Ordinal)
+            let census = Dictionary<string, int * string>(StringComparer.Ordinal)
+            names |> List.iteri (fun i name -> census[factIdOfBlob name] <- (i, name))
+
+            // Two census names for one id cannot both be narrowed to, so a
+            // scope holding them always enumerates.
+            if census.Count = List.length names && census.Keys |> Seq.forall indexed.Contains then
+                return Complete(leaves, census)
+            else
+                return Incomplete indexed
+    }
+
+    /// Write the leaves the enumeration just proved missing. The facts are
+    /// already in hand, so a repair costs writes and no reads.
+    let repairIndex (scopeId: string) (facts: Fact list) (indexed: HashSet<string>) : Async<unit> =
+        facts
+        |> List.filter (fun f -> not (indexed.Contains f.FactId))
+        |> writeLeaves scopeId
+        |> Async.Ignore
+
+    /// The census members the given leaves admit, as blob names in census
+    /// order — the order the enumeration reads in, and so the order its
+    /// stable sorts break ties by.
+    let admittedNames (census: Dictionary<string, int * string>) (admitted: FactIndexLeaf seq) : string list =
+        admitted
+        |> Seq.choose (fun l ->
+            match census.TryGetValue l.FactId with
+            | true, entry -> Some entry
+            | _ -> None)
+        |> Seq.distinct
+        |> Seq.sortBy fst
+        |> Seq.map snd
+        |> List.ofSeq
+
+    /// The leaves that may belong to the lineage of a fact over
+    /// (`subject`, `metric`, `period`, `method`).
+    let lineageLeaves
+        (leaves: FactIndexLeaf list)
+        (subject: SubjectRef)
+        (metric: MetricRef)
+        (period: TemporalExtent)
+        (method: MethodRef)
+        : FactIndexLeaf list =
+        let subjectMetric = FactIndexLayout.subjectMetricKey subject metric
+        let methodHash = FactIndexLayout.methodHash method
+
+        leaves
+        |> List.filter (FactIndexLayout.mayShareLineage subjectMetric period methodHash)
+
+    /// The enumeration's head rule over one lineage's facts in census
+    /// order: the FIRST fact seen among equal `AsOf` values wins.
+    let headOf (facts: Fact list) : Fact option =
+        facts
+        |> List.fold
+            (fun (acc: Fact option) f ->
+                match acc with
+                | Some existing when existing.AsOf >= f.AsOf -> acc
+                | _ -> Some f)
+            None
+
+    /// The facts a query's clauses can concern. Narrowed through the index
+    /// when the query names a subject AND a metric and the index is
+    /// complete; every fact otherwise — the enumeration, repairing the
+    /// index on the way when it was found incomplete. The query pipeline
+    /// filters whatever this returns, so a wider read is never a wrong one.
+    let queryCandidates (scopeId: string) (query: FactQuery) : Async<Fact list> = async {
+        match query.Subject, query.Metric with
+        | Some subject, Some metric when indexOptions.Enabled ->
+            let! names = storage.List(scopeId, factsPrefix)
+            let! state = readIndex scopeId names
+
+            match state with
+            | Complete(leaves, census) ->
+                let key = FactIndexLayout.subjectMetricKey subject metric
+
+                return!
+                    leaves
+                    |> Seq.filter (fun l ->
+                        l.SubjectMetric = key
+                        && (query.PeriodOverlaps |> Option.forall (fun p -> FactIndexLayout.mayOverlap p l)))
+                    |> admittedNames census
+                    |> loadNames scopeId
+            | Incomplete indexed ->
+                let! all = loadNames scopeId names
+                do! repairIndex scopeId all indexed
+                return all
+            | NotConsulted -> return! loadNames scopeId names
+        | _ -> return! loadAll scopeId
+    }
 
     // Readable projections for the audit payloads (shared renderers, so
     // the audit / provenance / evidence surfaces never drift).
@@ -189,8 +602,13 @@ type BlobFactStore
     // method-less current-heads query) canonical selection. Returns the
     // current heads at `t` (the competition base every returned fact's
     // indicator derives from) alongside the sorted listing.
+    //
+    // Phase 890 — `all` is every fact, or, for a subject-and-metric query
+    // over a complete index, the census-ordered facts of that (subject,
+    // metric)'s lineages. Every step below filters to that set anyway, so
+    // the two inputs produce the same answer.
     let runQuery (scopeId: string) (query: FactQuery) : Async<Fact list * Fact list> = async {
-        let! all = loadAll scopeId
+        let! all = queryCandidates scopeId query
         let t = query.AsOf |> Option.defaultValue (clock().ToUniversalTime())
 
         // Clause filters minus `Method` first (subject / metric / period)
@@ -414,7 +832,7 @@ type BlobFactStore
                     if List.length missing > surfaceOptions.MaxIncrementalFold then
                         return! rebuildSurface scopeId metric
                     else
-                        let! fetched = missing |> List.map (load scopeId) |> Async.Parallel
+                        let! fetched = missing |> List.map (load scopeId) |> BlobFanOut.run
                         let facts = fetched |> Array.choose id |> Array.toList
 
                         if List.length facts <> List.length missing then
@@ -499,7 +917,7 @@ type BlobFactStore
                     ranked
                     |> List.truncate k
                     |> List.map (fun x -> load scopeId x.FactId)
-                    |> Async.Parallel
+                    |> BlobFanOut.run
 
                 let resolved = page |> Array.choose id
 
@@ -727,21 +1145,96 @@ type BlobFactStore
                     })
                 )
         else
-            let! all = loadAll scopeId
-
-            // The current head of every lineage in scope, indexed once.
-            // The scalar path re-derives this per assert by scanning the
-            // whole log; a batch of 10⁵ would scan it 10⁵ times. Keeping
-            // the FIRST fact seen among equal `AsOf` values matches the
-            // scalar path's stable `sortByDescending _.AsOf |> tryHead`.
+            let! index = readIndex scopeId names
             let heads = Dictionary<string, Fact>(StringComparer.Ordinal)
 
-            for f in all do
-                let key = lineageKeyOf f
+            match index with
+            | Complete(leaves, census) ->
+                // Phase 890 — the heads of the lineages this batch touches,
+                // and no others, through the index. A leaf names its fact's
+                // `AsOf`, so each lineage's head is DECIDED from the leaves
+                // and only the winner is read, to confirm it: one read per
+                // touched lineage that has a head, none for a new lineage.
+                // A winner that does not confirm (unreadable, another
+                // lineage behind a tolerant leaf, a leaf that disagrees
+                // with its fact) sends that lineage to the full rule over
+                // every candidate that reads.
+                let touched =
+                    addressed
+                    |> List.filter (fun (_, factId) -> not (stored.Contains factId))
+                    |> List.map (fun (d, _) -> Fact.lineageKey d.Subject d.Metric d.Period d.Method, d)
+                    |> List.distinctBy fst
 
-                match heads.TryGetValue key with
-                | true, existing when existing.AsOf >= f.AsOf -> ()
-                | _ -> heads[key] <- f
+                let candidates =
+                    touched
+                    |> List.map (fun (key, d) ->
+                        let lineage = lineageLeaves leaves d.Subject d.Metric d.Period d.Method
+                        let names = lineage |> admittedNames census
+
+                        // The winner by the head rule over the leaves' own
+                        // `AsOf`, in census order: first among equals.
+                        let ticksOf =
+                            lineage
+                            |> List.map (fun l -> l.FactId, l.AsOfTicks)
+                            |> List.distinctBy fst
+                            |> dict
+
+                        let winner =
+                            names
+                            |> List.fold
+                                (fun acc name ->
+                                    let ticks = ticksOf[factIdOfBlob name]
+
+                                    match acc with
+                                    | Some(_, best) when best >= ticks -> acc
+                                    | _ -> Some(name, ticks))
+                                None
+
+                        key, names, winner)
+
+                let! confirmed =
+                    candidates
+                    |> List.map (fun (key, _, winner) -> async {
+                        match winner with
+                        | None -> return key, None
+                        | Some(name, ticks) ->
+                            let! read = loadNames scopeId [ name ]
+
+                            match read with
+                            | [ f ] when lineageKeyOf f = key && f.AsOf.Ticks = ticks -> return key, Some(Ok f)
+                            | _ -> return key, Some(Error())
+                    })
+                    |> BlobFanOut.run
+
+                for (key, names, _), (_, outcome) in Seq.zip candidates confirmed do
+                    match outcome with
+                    | None -> ()
+                    | Some(Ok head) -> heads[key] <- head
+                    | Some(Error()) ->
+                        let! lineage = loadNames scopeId names
+
+                        match lineage |> List.filter (fun f -> lineageKeyOf f = key) |> headOf with
+                        | Some head -> heads[key] <- head
+                        | None -> ()
+            | NotConsulted
+            | Incomplete _ ->
+                let! all = loadAll scopeId
+
+                // The current head of every lineage in scope, indexed once.
+                // The scalar path re-derives this per assert by scanning the
+                // whole log; a batch of 10⁵ would scan it 10⁵ times. Keeping
+                // the FIRST fact seen among equal `AsOf` values matches the
+                // scalar path's stable `sortByDescending _.AsOf |> tryHead`.
+                for f in all do
+                    let key = lineageKeyOf f
+
+                    match heads.TryGetValue key with
+                    | true, existing when existing.AsOf >= f.AsOf -> ()
+                    | _ -> heads[key] <- f
+
+                match index with
+                | Incomplete indexed -> do! repairIndex scopeId all indexed
+                | _ -> ()
 
             // Derivation first, in submission order and entirely in
             // memory: each draft's head comes from the log OR from an
@@ -817,7 +1310,26 @@ type BlobFactStore
                     let! r = storage.Upload(scopeId, blobName f.FactId, serialise f)
                     return f, r
                 })
-                |> Async.Parallel
+                |> BlobFanOut.run
+
+            // Phase 890 — the index leaves, with the fact writes and after
+            // them: a leaf is written only for a fact that is durable, so no
+            // leaf ever names a fact this call failed to store. A leaf that
+            // fails is noticed by the next consulting read's census check,
+            // which enumerates and rewrites it. Below the threshold, none.
+            match index with
+            | NotConsulted -> ()
+            | Incomplete _
+            | Complete _ ->
+                do!
+                    writeResults
+                    |> Array.choose (fun (f, r) ->
+                        match r with
+                        | Ok _ -> Some f
+                        | Error _ -> None)
+                    |> List.ofArray
+                    |> writeLeaves scopeId
+                    |> Async.Ignore
 
             let failures =
                 writeResults
@@ -894,6 +1406,83 @@ type BlobFactStore
     /// break for every existing caller.
     new(storage: IBlobStorage, events: IEventStore, registry: Grounding.IMetricRegistry option, clock: unit -> DateTime) =
         BlobFactStore(storage, events, registry, clock, FactSurfaceOptions.defaults)
+
+    /// The pre-890 five-argument shape, on the default point-read index
+    /// policy — a secondary constructor for the same reason as the one
+    /// above.
+    new
+        (
+            storage: IBlobStorage,
+            events: IEventStore,
+            registry: Grounding.IMetricRegistry option,
+            clock: unit -> DateTime,
+            surfaceOptions: FactSurfaceOptions
+        ) =
+        BlobFactStore(storage, events, registry, clock, surfaceOptions, FactIndexOptions.defaults)
+
+    /// Rebuild the point-read index (Phase 890) from the scope's facts —
+    /// the Phase 9f `Rebuild` shape. Idempotent, safe to run concurrently
+    /// with writes, and it deletes nothing: a leaf whose fact is gone is
+    /// ignored by every read, because reads consult only census members.
+    /// Writes regardless of the size threshold — an operator asking for a
+    /// rebuild gets one. Returns the number of facts indexed.
+    member _.RebuildIndex(scopeId: string) : Async<int> = async {
+        let! all = loadAll scopeId
+        return! writeLeaves scopeId all
+    }
+
+    /// Sample the scope's facts and index leaves and check each side
+    /// resolves to the other — the Phase 9f consistency check. A sampled
+    /// fact with no leaf describing it is `UnindexedCanonicals`; a sampled
+    /// leaf naming a fact the census does not hold is
+    /// `OrphanedIndexEntries`. Neither ever changes an answer (the census
+    /// check sends an incomplete index to the enumeration and an orphan is
+    /// never read); drift is repaired by `RebuildIndex`. A scope the policy
+    /// does not index (disabled, or below the threshold) reports an empty
+    /// sample rather than a scope's worth of expected misses.
+    member _.IndexConsistencyCheck
+        (scopeId: string, sampleSize: int)
+        : Async<SecondaryIndex.IndexConsistencyEntry list> =
+        async {
+            let! names = storage.List(scopeId, factsPrefix)
+
+            let entry sample consistent orphans unindexed : SecondaryIndex.IndexConsistencyEntry = {
+                StoreName = "facts"
+                IndexName = FactIndex.Prefix.TrimEnd '/'
+                SampleSize = sample
+                ConsistentEntries = consistent
+                OrphanedIndexEntries = orphans
+                UnindexedCanonicals = unindexed
+            }
+
+            if not indexOptions.Enabled || List.length names < indexOptions.MinimumFacts then
+                return [ entry 0 0 0 0 ]
+            else
+                let! leafNames = storage.List(scopeId, FactIndex.Prefix)
+                let leaves = leafNames |> List.choose FactIndexLayout.tryParse
+                let census = HashSet<string>(names |> List.map factIdOfBlob, StringComparer.Ordinal)
+                let! sampled = names |> List.truncate (max sampleSize 0) |> loadNames scopeId
+
+                let described (f: Fact) =
+                    let subjectMetric = FactIndexLayout.subjectMetricKey f.Subject f.Metric
+                    let methodHash = FactIndexLayout.methodHash f.Method
+
+                    leaves
+                    |> List.exists (fun l ->
+                        l.FactId = f.FactId
+                        && l.AsOfTicks = f.AsOf.Ticks
+                        && FactIndexLayout.mayShareLineage subjectMetric f.Period methodHash l)
+
+                let consistent = sampled |> List.filter described |> List.length
+
+                let orphans =
+                    leaves
+                    |> List.truncate (max sampleSize 0)
+                    |> List.filter (fun l -> not (census.Contains l.FactId))
+                    |> List.length
+
+                return [ entry sampled.Length consistent orphans (sampled.Length - consistent) ]
+        }
 
     /// Registry-less construction — the pre-566 shape, byte-for-byte.
     new(storage: IBlobStorage, events: IEventStore, clock: unit -> DateTime) =
@@ -1095,10 +1684,34 @@ type BlobFactStore
             match target with
             | None -> return []
             | Some f ->
-                let! all = loadAll scopeId
                 let key = lineageKeyOf f
 
-                return all |> List.filter (fun g -> lineageKeyOf g = key) |> List.sortBy _.AsOf
+                // Phase 890 — the lineage's own facts through the index when
+                // it is complete; the enumeration (repairing an incomplete
+                // index) otherwise. Either way the lineage key itself makes
+                // the final cut, over facts in census order.
+                let! facts =
+                    if not indexOptions.Enabled then
+                        loadAll scopeId
+                    else
+                        async {
+                            let! names = storage.List(scopeId, factsPrefix)
+                            let! index = readIndex scopeId names
+
+                            match index with
+                            | Complete(leaves, census) ->
+                                return!
+                                    lineageLeaves leaves f.Subject f.Metric f.Period f.Method
+                                    |> admittedNames census
+                                    |> loadNames scopeId
+                            | Incomplete indexed ->
+                                let! all = loadNames scopeId names
+                                do! repairIndex scopeId all indexed
+                                return all
+                            | NotConsulted -> return! loadNames scopeId names
+                        }
+
+                return facts |> List.filter (fun g -> lineageKeyOf g = key) |> List.sortBy _.AsOf
         }
 
 /// Construction for `BlobFactStore`.
@@ -1155,3 +1768,19 @@ module BlobFactStore =
         (surface: FactSurfaceOptions)
         : IFactStore =
         BlobFactStore(storage, events, registry, clock, surface) :> IFactStore
+
+    /// `createWithSurface` with an explicit Phase 890 point-read index
+    /// policy as well. Like the surface policy, it chooses how reads
+    /// execute and never what they return: `FactIndexOptions.disabled` for
+    /// the pre-890 enumeration exactly, `always` to index at every size,
+    /// `defaults` (already in force via the other factories) to index from
+    /// the size at which a whole-scope read stops being cheap.
+    let createWithIndex
+        (storage: IBlobStorage)
+        (events: IEventStore)
+        (registry: Grounding.IMetricRegistry option)
+        (clock: unit -> DateTime)
+        (surface: FactSurfaceOptions)
+        (index: FactIndexOptions)
+        : IFactStore =
+        BlobFactStore(storage, events, registry, clock, surface, index) :> IFactStore

@@ -589,6 +589,7 @@ let private jobCtx (payload: string) : JobContext = {
     AccessContext = AccessContext.unrestricted (AuthenticatedUser "system")
     Attempt = 1
     Trigger = Manual
+    Scope = ToolUp.Platform.ResolvedScope.anonymous
     TriggerSource = ScheduledManually "system"
     ScheduledAt = DateTime.UtcNow
     RunningAt = DateTime.UtcNow

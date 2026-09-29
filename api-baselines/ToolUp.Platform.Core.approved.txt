@@ -3204,9 +3204,11 @@ ToolUp.Platform.ConfigKeys+Names.oidcIssuer : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.oidcPreflightTimeoutMs : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.oidcTenantIdClaim : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.oidcUserIdClaim : System.String (literal)
+ToolUp.Platform.ConfigKeys+Names.parityAzurite : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.peerRoutePrefixes : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.perfBudget : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.perfMeasurements : System.String (literal)
+ToolUp.Platform.ConfigKeys+Names.pgvectorConnectionString : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.platformKnowledgeBase : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.platformSurfaces : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.processProfile : System.String (literal)
@@ -6727,6 +6729,229 @@ ToolUp.Platform.Grounding.DirectionOfBetter+Tags (class)
 ToolUp.Platform.Grounding.DirectionOfBetter+Tags.HigherIsBetter : System.Int32 (literal)
 ToolUp.Platform.Grounding.DirectionOfBetter+Tags.LowerIsBetter : System.Int32 (literal)
 ToolUp.Platform.Grounding.DirectionOfBetter+Tags.Neutral : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableBinding (class)
+ToolUp.Platform.Grounding.FactTableBinding.IsBindAllFactTables : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableBinding.IsBindFactTable : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableBinding.Tag : System.Int32 { get }
+ToolUp.Platform.Grounding.FactTableBinding+BindAllFactTables (class)
+ToolUp.Platform.Grounding.FactTableBinding+BindAllFactTables.destination : System.String { get }
+ToolUp.Platform.Grounding.FactTableBinding+BindFactTable (class)
+ToolUp.Platform.Grounding.FactTableBinding+BindFactTable.destination : System.String { get }
+ToolUp.Platform.Grounding.FactTableBinding+BindFactTable.tableId : System.String { get }
+ToolUp.Platform.Grounding.FactTableBinding+Tags (class)
+ToolUp.Platform.Grounding.FactTableBinding+Tags.BindAllFactTables : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableBinding+Tags.BindFactTable : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableBindingModule (class)
+ToolUp.Platform.Grounding.FactTableBindingModule.destinationOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableBinding], System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.Grounding.FactTableChangeSummary (class)
+ToolUp.Platform.Grounding.FactTableChangeSummary..ctor(System.Int32, System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableMover])
+ToolUp.Platform.Grounding.FactTableChangeSummary.Changed : System.Int32 { get }
+ToolUp.Platform.Grounding.FactTableChangeSummary.LargestMovers : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableMover] { get }
+ToolUp.Platform.Grounding.FactTableChangeSummary.New : System.Int32 { get }
+ToolUp.Platform.Grounding.FactTableChangeSummary.Removed : System.Int32 { get }
+ToolUp.Platform.Grounding.FactTableChangeSummary.Unchanged : System.Int32 { get }
+ToolUp.Platform.Grounding.FactTableChangeSummaryModule (class)
+ToolUp.Platform.Grounding.FactTableChangeSummaryModule.MoverCap : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableChangeSummaryModule.empty : ToolUp.Platform.Grounding.FactTableChangeSummary { get }
+ToolUp.Platform.Grounding.FactTableColumn (class)
+ToolUp.Platform.Grounding.FactTableColumn..ctor(System.String, ToolUp.Platform.Grounding.FactTableValueShape, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.FactTableDisclosure])
+ToolUp.Platform.Grounding.FactTableColumn.Disclosure : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.FactTableDisclosure] { get }
+ToolUp.Platform.Grounding.FactTableColumn.Metric : System.String { get }
+ToolUp.Platform.Grounding.FactTableColumn.Shape : ToolUp.Platform.Grounding.FactTableValueShape { get }
+ToolUp.Platform.Grounding.FactTableCommit (class)
+ToolUp.Platform.Grounding.FactTableCommit..ctor(ToolUp.Platform.Grounding.FactTableWatermark, System.Int32, System.Int32, ToolUp.Platform.Grounding.FactTableChangeSummary, System.String)
+ToolUp.Platform.Grounding.FactTableCommit.BatchDigest : System.String { get }
+ToolUp.Platform.Grounding.FactTableCommit.Change : ToolUp.Platform.Grounding.FactTableChangeSummary { get }
+ToolUp.Platform.Grounding.FactTableCommit.FactsWritten : System.Int32 { get }
+ToolUp.Platform.Grounding.FactTableCommit.RowCount : System.Int32 { get }
+ToolUp.Platform.Grounding.FactTableCommit.Watermark : ToolUp.Platform.Grounding.FactTableWatermark { get }
+ToolUp.Platform.Grounding.FactTableDefinition (class)
+ToolUp.Platform.Grounding.FactTableDefinition..ctor(System.String, System.Int32, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableColumn], ToolUp.Platform.Grounding.FactTablePeriodGrain, System.String, System.TimeSpan, ToolUp.Platform.Grounding.FactTableHistoryMode, ToolUp.Platform.Grounding.FactTableDisclosure, ToolUp.Platform.Grounding.FactTableRequirement)
+ToolUp.Platform.Grounding.FactTableDefinition.Columns : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableColumn] { get }
+ToolUp.Platform.Grounding.FactTableDefinition.Disclosure : ToolUp.Platform.Grounding.FactTableDisclosure { get }
+ToolUp.Platform.Grounding.FactTableDefinition.Hierarchy : System.String { get }
+ToolUp.Platform.Grounding.FactTableDefinition.HistoryMode : ToolUp.Platform.Grounding.FactTableHistoryMode { get }
+ToolUp.Platform.Grounding.FactTableDefinition.Id : System.String { get }
+ToolUp.Platform.Grounding.FactTableDefinition.Level : System.String { get }
+ToolUp.Platform.Grounding.FactTableDefinition.PeriodGrain : ToolUp.Platform.Grounding.FactTablePeriodGrain { get }
+ToolUp.Platform.Grounding.FactTableDefinition.ProducingOperation : System.String { get }
+ToolUp.Platform.Grounding.FactTableDefinition.RefreshCadence : System.TimeSpan { get }
+ToolUp.Platform.Grounding.FactTableDefinition.Requirement : ToolUp.Platform.Grounding.FactTableRequirement { get }
+ToolUp.Platform.Grounding.FactTableDefinition.SchemaVersion : System.Int32 { get }
+ToolUp.Platform.Grounding.FactTableDefinitionModule (class)
+ToolUp.Platform.Grounding.FactTableDefinitionModule.column(System.String, ToolUp.Platform.Grounding.FactTableValueShape) : ToolUp.Platform.Grounding.FactTableColumn
+ToolUp.Platform.Grounding.FactTableDefinitionModule.columnDisclosure(ToolUp.Platform.Grounding.FactTableDefinition, ToolUp.Platform.Grounding.FactTableColumn) : ToolUp.Platform.Grounding.FactTableDisclosure
+ToolUp.Platform.Grounding.FactTableDefinitionModule.levelDepth(ToolUp.Platform.Grounding.SubjectDefinition, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.Int32]
+ToolUp.Platform.Grounding.FactTableDefinitionModule.metrics(ToolUp.Platform.Grounding.FactTableDefinition) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.Grounding.FactTableDisclosure (class)
+ToolUp.Platform.Grounding.FactTableDisclosure.Internal : ToolUp.Platform.Grounding.FactTableDisclosure { get }
+ToolUp.Platform.Grounding.FactTableDisclosure.IsInternal : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableDisclosure.IsRestricted : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableDisclosure.IsSurfaceable : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableDisclosure.Surfaceable : ToolUp.Platform.Grounding.FactTableDisclosure { get }
+ToolUp.Platform.Grounding.FactTableDisclosure.Tag : System.Int32 { get }
+ToolUp.Platform.Grounding.FactTableDisclosure+Restricted (class)
+ToolUp.Platform.Grounding.FactTableDisclosure+Restricted.policyRef : System.String { get }
+ToolUp.Platform.Grounding.FactTableDisclosure+Tags (class)
+ToolUp.Platform.Grounding.FactTableDisclosure+Tags.Internal : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableDisclosure+Tags.Restricted : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableDisclosure+Tags.Surfaceable : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableFreshness (class)
+ToolUp.Platform.Grounding.FactTableFreshness.IsFresh : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableFreshness.IsNeverRefreshed : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableFreshness.IsStale : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableFreshness.NeverRefreshed : ToolUp.Platform.Grounding.FactTableFreshness { get }
+ToolUp.Platform.Grounding.FactTableFreshness.Tag : System.Int32 { get }
+ToolUp.Platform.Grounding.FactTableFreshness+Fresh (class)
+ToolUp.Platform.Grounding.FactTableFreshness+Fresh.lastCommittedAt : System.DateTime { get }
+ToolUp.Platform.Grounding.FactTableFreshness+Stale (class)
+ToolUp.Platform.Grounding.FactTableFreshness+Stale.lastCommittedAt : System.DateTime { get }
+ToolUp.Platform.Grounding.FactTableFreshness+Stale.overdueBy : System.TimeSpan { get }
+ToolUp.Platform.Grounding.FactTableFreshness+Tags (class)
+ToolUp.Platform.Grounding.FactTableFreshness+Tags.Fresh : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableFreshness+Tags.NeverRefreshed : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableFreshness+Tags.Stale : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableFreshnessModule (class)
+ToolUp.Platform.Grounding.FactTableFreshnessModule.derive(System.TimeSpan, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.DateTime]) : ToolUp.Platform.Grounding.FactTableFreshness
+ToolUp.Platform.Grounding.FactTableHistoryMode (class)
+ToolUp.Platform.Grounding.FactTableHistoryMode.AppendByRun : ToolUp.Platform.Grounding.FactTableHistoryMode { get }
+ToolUp.Platform.Grounding.FactTableHistoryMode.IsAppendByRun : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableHistoryMode.IsReplace : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableHistoryMode.Replace : ToolUp.Platform.Grounding.FactTableHistoryMode { get }
+ToolUp.Platform.Grounding.FactTableHistoryMode.Tag : System.Int32 { get }
+ToolUp.Platform.Grounding.FactTableHistoryMode+Tags (class)
+ToolUp.Platform.Grounding.FactTableHistoryMode+Tags.AppendByRun : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableHistoryMode+Tags.Replace : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableMover (class)
+ToolUp.Platform.Grounding.FactTableMover..ctor(System.String, System.String, System.String, System.Decimal, System.Decimal, System.Decimal)
+ToolUp.Platform.Grounding.FactTableMover.Current : System.Decimal { get }
+ToolUp.Platform.Grounding.FactTableMover.Delta : System.Decimal { get }
+ToolUp.Platform.Grounding.FactTableMover.Metric : System.String { get }
+ToolUp.Platform.Grounding.FactTableMover.Period : System.String { get }
+ToolUp.Platform.Grounding.FactTableMover.Previous : System.Decimal { get }
+ToolUp.Platform.Grounding.FactTableMover.Subject : System.String { get }
+ToolUp.Platform.Grounding.FactTablePeriodGrain (class)
+ToolUp.Platform.Grounding.FactTablePeriodGrain.Day : ToolUp.Platform.Grounding.FactTablePeriodGrain { get }
+ToolUp.Platform.Grounding.FactTablePeriodGrain.IsDay : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTablePeriodGrain.IsMonth : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTablePeriodGrain.IsQuarter : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTablePeriodGrain.IsSnapshot : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTablePeriodGrain.IsWeek : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTablePeriodGrain.IsYear : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTablePeriodGrain.Month : ToolUp.Platform.Grounding.FactTablePeriodGrain { get }
+ToolUp.Platform.Grounding.FactTablePeriodGrain.Quarter : ToolUp.Platform.Grounding.FactTablePeriodGrain { get }
+ToolUp.Platform.Grounding.FactTablePeriodGrain.Snapshot : ToolUp.Platform.Grounding.FactTablePeriodGrain { get }
+ToolUp.Platform.Grounding.FactTablePeriodGrain.Tag : System.Int32 { get }
+ToolUp.Platform.Grounding.FactTablePeriodGrain.Week : ToolUp.Platform.Grounding.FactTablePeriodGrain { get }
+ToolUp.Platform.Grounding.FactTablePeriodGrain.Year : ToolUp.Platform.Grounding.FactTablePeriodGrain { get }
+ToolUp.Platform.Grounding.FactTablePeriodGrain+Tags (class)
+ToolUp.Platform.Grounding.FactTablePeriodGrain+Tags.Day : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTablePeriodGrain+Tags.Month : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTablePeriodGrain+Tags.Quarter : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTablePeriodGrain+Tags.Snapshot : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTablePeriodGrain+Tags.Week : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTablePeriodGrain+Tags.Year : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableRegistration (class)
+ToolUp.Platform.Grounding.FactTableRegistration..ctor(System.String, ToolUp.Platform.Grounding.FactTableDefinition)
+ToolUp.Platform.Grounding.FactTableRegistration.Definition : ToolUp.Platform.Grounding.FactTableDefinition { get }
+ToolUp.Platform.Grounding.FactTableRegistration.Module : System.String { get }
+ToolUp.Platform.Grounding.FactTableRegistry (class)
+ToolUp.Platform.Grounding.FactTableRegistry.build(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableRegistration], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableBinding]) : ToolUp.Platform.Grounding.IFactTableRegistry
+ToolUp.Platform.Grounding.FactTableRegistry.empty : ToolUp.Platform.Grounding.IFactTableRegistry { get }
+ToolUp.Platform.Grounding.FactTableRequirement (class)
+ToolUp.Platform.Grounding.FactTableRequirement.IsOptional : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableRequirement.IsRequired : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableRequirement.Optional : ToolUp.Platform.Grounding.FactTableRequirement { get }
+ToolUp.Platform.Grounding.FactTableRequirement.Required : ToolUp.Platform.Grounding.FactTableRequirement { get }
+ToolUp.Platform.Grounding.FactTableRequirement.Tag : System.Int32 { get }
+ToolUp.Platform.Grounding.FactTableRequirement+Tags (class)
+ToolUp.Platform.Grounding.FactTableRequirement+Tags.Optional : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableRequirement+Tags.Required : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableRun (class)
+ToolUp.Platform.Grounding.FactTableRun.outcome(ToolUp.Platform.Grounding.FactTableDefinition, System.DateTime, ToolUp.Platform.Grounding.FactTableRunRecord) : ToolUp.Platform.Grounding.FactTableRunOutcome
+ToolUp.Platform.Grounding.FactTableRunOutcome (class)
+ToolUp.Platform.Grounding.FactTableRunOutcome.InProgress : ToolUp.Platform.Grounding.FactTableRunOutcome { get }
+ToolUp.Platform.Grounding.FactTableRunOutcome.IsDiscarded : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableRunOutcome.IsFailed : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableRunOutcome.IsInProgress : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableRunOutcome.IsSucceeded : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableRunOutcome.Succeeded : ToolUp.Platform.Grounding.FactTableRunOutcome { get }
+ToolUp.Platform.Grounding.FactTableRunOutcome.Tag : System.Int32 { get }
+ToolUp.Platform.Grounding.FactTableRunOutcome+Discarded (class)
+ToolUp.Platform.Grounding.FactTableRunOutcome+Discarded.reason : System.String { get }
+ToolUp.Platform.Grounding.FactTableRunOutcome+Failed (class)
+ToolUp.Platform.Grounding.FactTableRunOutcome+Failed.reason : System.String { get }
+ToolUp.Platform.Grounding.FactTableRunOutcome+Tags (class)
+ToolUp.Platform.Grounding.FactTableRunOutcome+Tags.Discarded : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableRunOutcome+Tags.Failed : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableRunOutcome+Tags.InProgress : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableRunOutcome+Tags.Succeeded : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableRunRecord (class)
+ToolUp.Platform.Grounding.FactTableRunRecord..ctor(System.String, System.String, System.Int32, System.DateTime, System.Int64, System.Int32, ToolUp.Platform.Grounding.FactTableRunStatus)
+ToolUp.Platform.Grounding.FactTableRunRecord.BaseSequence : System.Int64 { get }
+ToolUp.Platform.Grounding.FactTableRunRecord.OpenedAt : System.DateTime { get }
+ToolUp.Platform.Grounding.FactTableRunRecord.RunId : System.String { get }
+ToolUp.Platform.Grounding.FactTableRunRecord.SchemaVersion : System.Int32 { get }
+ToolUp.Platform.Grounding.FactTableRunRecord.StagedRows : System.Int32 { get }
+ToolUp.Platform.Grounding.FactTableRunRecord.Status : ToolUp.Platform.Grounding.FactTableRunStatus { get }
+ToolUp.Platform.Grounding.FactTableRunRecord.TableId : System.String { get }
+ToolUp.Platform.Grounding.FactTableRunStatus (class)
+ToolUp.Platform.Grounding.FactTableRunStatus.IsAbandoned : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableRunStatus.IsCommitted : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableRunStatus.IsOpen : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableRunStatus.IsRejected : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableRunStatus.Open : ToolUp.Platform.Grounding.FactTableRunStatus { get }
+ToolUp.Platform.Grounding.FactTableRunStatus.Tag : System.Int32 { get }
+ToolUp.Platform.Grounding.FactTableRunStatus+Abandoned (class)
+ToolUp.Platform.Grounding.FactTableRunStatus+Abandoned.reason : System.String { get }
+ToolUp.Platform.Grounding.FactTableRunStatus+Committed (class)
+ToolUp.Platform.Grounding.FactTableRunStatus+Committed.Item : ToolUp.Platform.Grounding.FactTableCommit { get }
+ToolUp.Platform.Grounding.FactTableRunStatus+Rejected (class)
+ToolUp.Platform.Grounding.FactTableRunStatus+Rejected.reason : System.String { get }
+ToolUp.Platform.Grounding.FactTableRunStatus+Tags (class)
+ToolUp.Platform.Grounding.FactTableRunStatus+Tags.Abandoned : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableRunStatus+Tags.Committed : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableRunStatus+Tags.Open : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableRunStatus+Tags.Rejected : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableStatus (class)
+ToolUp.Platform.Grounding.FactTableStatus..ctor(System.String, ToolUp.Platform.Grounding.FactTableFreshness, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.FactTableCommit], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.FactTableRunRecord], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.FactTableRunOutcome])
+ToolUp.Platform.Grounding.FactTableStatus.Freshness : ToolUp.Platform.Grounding.FactTableFreshness { get }
+ToolUp.Platform.Grounding.FactTableStatus.LastCommit : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.FactTableCommit] { get }
+ToolUp.Platform.Grounding.FactTableStatus.LatestRun : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.FactTableRunRecord] { get }
+ToolUp.Platform.Grounding.FactTableStatus.LatestRunOutcome : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.FactTableRunOutcome] { get }
+ToolUp.Platform.Grounding.FactTableStatus.TableId : System.String { get }
+ToolUp.Platform.Grounding.FactTableValueShape (class)
+ToolUp.Platform.Grounding.FactTableValueShape.Categorical : ToolUp.Platform.Grounding.FactTableValueShape { get }
+ToolUp.Platform.Grounding.FactTableValueShape.Distribution : ToolUp.Platform.Grounding.FactTableValueShape { get }
+ToolUp.Platform.Grounding.FactTableValueShape.Interval : ToolUp.Platform.Grounding.FactTableValueShape { get }
+ToolUp.Platform.Grounding.FactTableValueShape.IsCategorical : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableValueShape.IsDistribution : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableValueShape.IsInterval : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableValueShape.IsScalar : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableValueShape.IsSeries : System.Boolean { get }
+ToolUp.Platform.Grounding.FactTableValueShape.Scalar : ToolUp.Platform.Grounding.FactTableValueShape { get }
+ToolUp.Platform.Grounding.FactTableValueShape.Series : ToolUp.Platform.Grounding.FactTableValueShape { get }
+ToolUp.Platform.Grounding.FactTableValueShape.Tag : System.Int32 { get }
+ToolUp.Platform.Grounding.FactTableValueShape+Tags (class)
+ToolUp.Platform.Grounding.FactTableValueShape+Tags.Categorical : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableValueShape+Tags.Distribution : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableValueShape+Tags.Interval : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableValueShape+Tags.Scalar : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableValueShape+Tags.Series : System.Int32 (literal)
+ToolUp.Platform.Grounding.FactTableWatermark (class)
+ToolUp.Platform.Grounding.FactTableWatermark..ctor(System.String, System.Int64, System.DateTime, System.String)
+ToolUp.Platform.Grounding.FactTableWatermark.CommittedAt : System.DateTime { get }
+ToolUp.Platform.Grounding.FactTableWatermark.ContentDigest : System.String { get }
+ToolUp.Platform.Grounding.FactTableWatermark.Sequence : System.Int64 { get }
+ToolUp.Platform.Grounding.FactTableWatermark.TableId : System.String { get }
+ToolUp.Platform.Grounding.FactTableWatermarkModule (class)
+ToolUp.Platform.Grounding.FactTableWatermarkModule.render(ToolUp.Platform.Grounding.FactTableWatermark) : System.String
+ToolUp.Platform.Grounding.IFactTableRegistry (interface)
+ToolUp.Platform.Grounding.IFactTableRegistry.DeclaringModule(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.Grounding.IFactTableRegistry.DestinationOf(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.Grounding.IFactTableRegistry.Tables : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableDefinition] { get }
+ToolUp.Platform.Grounding.IFactTableRegistry.TablesByModule(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableDefinition]
+ToolUp.Platform.Grounding.IFactTableRegistry.TryGetTable(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.FactTableDefinition]
 ToolUp.Platform.Grounding.IMetricRegistry (interface)
 ToolUp.Platform.Grounding.IMetricRegistry.Metrics : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.MetricDefinition] { get }
 ToolUp.Platform.Grounding.IMetricRegistry.MetricsByModule(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.MetricDefinition]
@@ -7520,7 +7745,7 @@ ToolUp.Platform.JobApi.ListJobs : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.F
 ToolUp.Platform.JobApi.Schedule : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.JobRegistration, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, ToolUp.Platform.ScheduleError]]] { get }
 ToolUp.Platform.JobApi.TriggerOnce : Microsoft.FSharp.Core.FSharpFunc`2[System.Guid, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.JobContext (class)
-ToolUp.Platform.JobContext..ctor(System.Guid, System.String, ToolUp.Platform.AccessContext, System.Int32, ToolUp.Platform.Trigger, ToolUp.Platform.TriggerSource, System.DateTime, System.DateTime, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.JobContext..ctor(System.Guid, System.String, ToolUp.Platform.ResolvedScope, ToolUp.Platform.AccessContext, System.Int32, ToolUp.Platform.Trigger, ToolUp.Platform.TriggerSource, System.DateTime, System.DateTime, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.JobContext.AccessContext : ToolUp.Platform.AccessContext { get }
 ToolUp.Platform.JobContext.Attempt : System.Int32 { get }
 ToolUp.Platform.JobContext.DeadLetterDestination : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -7528,6 +7753,7 @@ ToolUp.Platform.JobContext.JobId : System.Guid { get }
 ToolUp.Platform.JobContext.Payload : System.String { get }
 ToolUp.Platform.JobContext.RunningAt : System.DateTime { get }
 ToolUp.Platform.JobContext.ScheduledAt : System.DateTime { get }
+ToolUp.Platform.JobContext.Scope : ToolUp.Platform.ResolvedScope { get }
 ToolUp.Platform.JobContext.ScopeId : System.String { get }
 ToolUp.Platform.JobContext.Trigger : ToolUp.Platform.Trigger { get }
 ToolUp.Platform.JobContext.TriggerSource : ToolUp.Platform.TriggerSource { get }
@@ -13907,6 +14133,7 @@ ToolUp.Remoting.Json.JsonDecode.asGuid(ToolUp.Remoting.Json.JsonValue) : Microso
 ToolUp.Remoting.Json.JsonDecode.asInt16 : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Int16, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Json.JsonDecode.asInt32 : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.Int32, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Json.JsonDecode.asInt64(ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[System.Int64, ToolUp.Remoting.DecodeError]
+ToolUp.Remoting.Json.JsonDecode.asMapOf`2(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[K, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[V, ToolUp.Remoting.DecodeError]], ToolUp.Remoting.Json.JsonValue) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[K, V], ToolUp.Remoting.DecodeError]
 ToolUp.Remoting.Json.JsonDecode.asMap`2(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpResult`2[K, ToolUp.Remoting.DecodeError]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[V, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[K, V], ToolUp.Remoting.DecodeError]]
 ToolUp.Remoting.Json.JsonDecode.asSByte : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[System.SByte, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Json.JsonDecode.asSet`1(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Remoting.DecodeError]]) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpSet`1[T], ToolUp.Remoting.DecodeError]]
@@ -13993,6 +14220,7 @@ ToolUp.Remoting.Json.JsonEncode.int16(System.Int16) : ToolUp.Remoting.Json.JsonV
 ToolUp.Remoting.Json.JsonEncode.int32(System.Int32) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Json.JsonEncode.int64(System.Int64) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Json.JsonEncode.list`1(Microsoft.FSharp.Core.FSharpFunc`2[T, ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Collections.FSharpList`1[T]) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Json.JsonEncode.mapOf`2(Microsoft.FSharp.Core.FSharpFunc`2[K, ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Core.FSharpFunc`2[V, ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Collections.FSharpMap`2[K, V]) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Json.JsonEncode.map`2(Microsoft.FSharp.Core.FSharpFunc`2[K, System.String], Microsoft.FSharp.Core.FSharpFunc`2[V, ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Collections.FSharpMap`2[K, V]) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Json.JsonEncode.option`1(Microsoft.FSharp.Core.FSharpFunc`2[T, ToolUp.Remoting.Json.JsonValue], Microsoft.FSharp.Core.FSharpOption`1[T]) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Json.JsonEncode.payload(System.String, ToolUp.Remoting.Json.JsonValue) : ToolUp.Remoting.Json.JsonValue

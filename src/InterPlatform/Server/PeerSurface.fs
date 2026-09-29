@@ -239,6 +239,15 @@ module PeerSurface =
             { new IJobScheduler with
                 member _.RegisterHandler(_, _) = probeUnreachable "RegisterHandler"
                 member _.RegisterHandlerAsync(_, _) = probeUnreachable "RegisterHandlerAsync"
+
+                member this.Schedule
+                    (scope: ToolUp.Platform.ResolvedScope, registration: ToolUp.Platform.JobRegistration)
+                    =
+                    (this :> IJobScheduler).Schedule {
+                        registration with
+                            ScopeId = scope.ScopeId
+                    }
+
                 member _.Schedule _ = probeUnreachable "Schedule"
                 member _.Cancel(_, _) = probeUnreachable "Cancel"
                 member _.Disable(_, _) = probeUnreachable "Disable"

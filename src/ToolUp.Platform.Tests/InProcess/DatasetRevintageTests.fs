@@ -276,6 +276,7 @@ let tests =
                 AccessContext = AccessContext.unrestricted (AuthenticatedUser "cron")
                 Attempt = 1
                 Trigger = CronTrigger "0 3 * * *"
+                Scope = ToolUp.Platform.ResolvedScope.anonymous
                 TriggerSource = ScheduledByCron
                 ScheduledAt = DateTime.UtcNow
                 RunningAt = DateTime.UtcNow

@@ -215,7 +215,19 @@ type QuartzJobScheduler
             return Ok()
         }
 
-        member _.Schedule(registration) = async {
+        // Phase 818 — the typed overload registers under `scope.ScopeId`.
+        // `ResolvedScope`'s constructor is internal to the platform's
+        // server tier, so this companion cannot re-mint the scope at run
+        // time: its handlers see `ResolvedScope.anonymous` on
+        // `JobContext.Scope` whichever overload scheduled the job — never
+        // a widening — and key their stores on `ScopeId`, as before.
+        member this.Schedule(scope: ResolvedScope, registration: JobRegistration) =
+            (this :> IJobScheduler).Schedule {
+                registration with
+                    ScopeId = scope.ScopeId
+            }
+
+        member _.Schedule(registration: JobRegistration) = async {
             match validateRegistration registration with
             | Error e -> return Error e
             | Ok() ->

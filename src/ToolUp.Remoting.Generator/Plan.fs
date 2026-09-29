@@ -562,6 +562,23 @@ module Plan =
             typeof<Guid>, "JsonEncode.Key.guid"
         ]
 
+    /// Phase 899 — a map key the browser writes in its own JSON form, in
+    /// an ARRAY of `[key, value]` pairs: `Fable.SimpleJson` does so for
+    /// every key that is neither one of its primitives nor a union whose
+    /// cases all carry no fields, and the server writer spells the same
+    /// key as a member name holding its JSON text. `JsonDecode.asMapOf`
+    /// reads both forms with the key's own decoder; `JsonEncode.mapOf`
+    /// writes the browser's. The records, reference tuples and unions
+    /// with a field-carrying case are that set's shapes the planner
+    /// already reads as values.
+    let private isPairKeyed (t: Type) =
+        isRecord t
+        || isReferenceTuple t
+        || (isPlainUnion t
+            && not (isStringEnumUnion t)
+            && FSharpType.GetUnionCases(t, true)
+               |> Array.exists (fun case -> not (Array.isEmpty (case.GetFields()))))
+
     /// Phase 841 — which wire a planning run renders combinators for.
     /// The type walk, the naming, the ordering and the cycle grouping are
     /// one algorithm; only the combinator each shape takes differs, so
@@ -797,12 +814,18 @@ module Plan =
                 | true, key ->
                     jsonDecoderFor state args[1]
                     |> Option.map (fun v -> sprintf "%s %s %s" (name "JsonDecode.asMap" "JsonEncode.map") key (arg v))
+                | _ when isPairKeyed args[0] ->
+                    // Phase 899 — the key read (and written) as a value.
+                    match jsonDecoderFor state args[0], jsonDecoderFor state args[1] with
+                    | Some k, Some v ->
+                        Some(sprintf "%s %s %s" (name "JsonDecode.asMapOf" "JsonEncode.mapOf") (arg k) (arg v))
+                    | _ -> None
                 | _ ->
                     refuse
                         state
                         t
                         (sprintf
-                            "a map keyed by %s — the JSON writer emits a key as an object member NAME, and `JsonDecode.Key` reads string, int32, int64 and Guid names"
+                            "a map keyed by %s — the JSON writer emits a key as an object member NAME, and `JsonDecode.Key` reads string, int32, int64 and Guid names (`JsonDecode.asMapOf` reads a record, tuple or field-carrying union key as a value)"
                             (typeSpelling args[0]))
             elif isGenericOf resultDef t then
                 let args = t.GetGenericArguments()
@@ -1158,7 +1181,8 @@ module Plan =
     /// combinator depends on how the field is declared, not only on its
     /// type. Refused beyond the MessagePack set: an option of an option
     /// (the writer flattens `Some None`) and a map whose key `JsonDecode.Key`
-    /// cannot parse.
+    /// cannot parse and `JsonDecode.asMapOf` does not read as a value
+    /// (Phase 899).
     let forJsonTypes (roots: Type seq) : GenerationPlan = forTypesOn Json "" roots
 
     /// Phase 853 — the JSON wire WRITTEN: `forJsonTypes`' walk over

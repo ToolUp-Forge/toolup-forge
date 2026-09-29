@@ -516,9 +516,13 @@ module CompositionRuleVersions =
     /// were absent from the *published* manifest and so from every stamp
     /// drawn under it. Nothing about either rule changed; what changed is
     /// that a conclusion now records having been reached under them.
+    ///
+    /// **1.2.0** adds [Phase 887]'s `FactTablePreflight` family: the
+    /// declared-fact-table checks, enforced at preflight whenever a module
+    /// declares a table. A minor bump for the same reason as 1.1.0.
     let ManifestVersion: RuleVersion = {
         RuleMajor = 1
-        RuleMinor = 1
+        RuleMinor = 2
         RulePatch = 0
     }
 
@@ -578,6 +582,10 @@ module CompositionRuleVersions =
     [<Literal>]
     let ApplianceBootPostureFamily = "appliance-boot-posture"
 
+    /// Family token for the [Phase 887] declared-fact-table checks.
+    [<Literal>]
+    let FactTableFamily = "fact-table-declarations"
+
     /// The versioned `CompositionValidator` rules, projected from the
     /// same `ruleManifest` the runtime check reads.
     let compositionRules: VersionedCompositionRule list =
@@ -598,6 +606,10 @@ module CompositionRuleVersions =
     /// The versioned `ApplianceBootPosture` rules ([Phase 488]).
     let applianceBootPostureRules: VersionedCompositionRule list =
         seed overrides ApplianceBootPostureFamily ApplianceBootPosture.ruleManifest
+
+    /// The versioned `FactTablePreflight` rules ([Phase 887]).
+    let factTableRules: VersionedCompositionRule list =
+        seed overrides FactTableFamily FactTablePreflight.ruleManifest
 
     /// Every versioned rule this build ships, in family order. The
     /// published manifest an external checker reads.
@@ -621,6 +633,7 @@ module CompositionRuleVersions =
         @ dataFootprintRules
         @ scaleReadinessRules
         @ applianceBootPostureRules
+        @ factTableRules
 
     /// The version of a rule by code, across every family. `None` for a
     /// code this build does not ship — the same honest "unknown" answer

@@ -131,6 +131,11 @@ let cases: BrowserCase list = [
     case "an int-keyed map: an object, keys quoted" "{\"2\": \"x\"}" (Map.ofList [ 2, "x" ])
     case "an enum-union-keyed map: an object" "{\"Red\": 1}" (Map.ofList [ Red, 1 ])
     case "a tuple-keyed map: an array of pairs" "[[[1, 2], \"p\"]]" (Map.ofList [ (1, 2), "p" ])
+    case
+        "a map keyed by a union with fields: an array of pairs, each key in its own form"
+        "[[\"Dot\", 2], [{\"Circle\": 1.5}, 1], [{\"Rect\": [2, 3] }, 4]]"
+        (Map.ofList [ Rect(2.0, 3.0), 4; Circle 1.5, 1; Dot, 2 ])
+    case "an empty map keyed by a union with fields: an empty array" "[]" (Map.empty: Map<BrowserShape, int>)
     case "a tuple" "[1, \"a\", true]" (1, "a", true)
     case
         "a record: members separated by comma-space"
@@ -209,3 +214,73 @@ let EncodedBody =
 [<Literal>]
 let ServerBody =
     "[{\"Price\":1234.50,\"Duration\":5400000.25,\"At\":\"2026-09-27T10:30:00.1230000Z\",\"Note\":\"window seat\"}]"
+// ─── Phase 899 — a union-keyed map from the browser ──────────────────
+
+/// A consumer argument carrying a map whose key is a union WITH fields —
+/// the key shape the browser writes as an array of `[key, value]` pairs.
+type Tally = {
+    Label: string
+    Counts: Map<BrowserShape, int>
+}
+
+/// The consumer API the browser calls with it.
+type TallyApi = { Record: Tally -> Async<unit> }
+
+let tally: Tally = {
+    Label = "shapes"
+    Counts = Map.ofList [ Dot, 2; Circle 1.5, 1; Rect(2.0, 3.0), 4 ]
+}
+
+/// The key decoder the generator would emit for `BrowserShape`.
+let browserShapeDecoder: JsonDecoder<BrowserShape> =
+    JsonDecode.union "BrowserShape" (function
+        | "Dot" -> Some(JsonDecode.case0 Dot)
+        | "Circle" -> Some(JsonDecode.payload (JsonDecode.asFloat |> JsonDecode.map Circle))
+        | "Rect" ->
+            Some(
+                JsonDecode.fields
+                    2
+                    (JsonDecode.succeed (fun width height -> Rect(width, height))
+                     |> JsonDecode.apply (JsonDecode.index 0 JsonDecode.asFloat)
+                     |> JsonDecode.apply (JsonDecode.index 1 JsonDecode.asFloat))
+            )
+        | _ -> None)
+
+/// The argument decoder the generator would emit for `Tally`.
+let tallyDecoder: JsonDecoder<Tally> =
+    JsonDecode.succeed (fun label counts -> { Label = label; Counts = counts })
+    |> JsonDecode.apply (JsonDecode.field "Label" JsonDecode.asString)
+    |> JsonDecode.apply (JsonDecode.field "Counts" (JsonDecode.asMapOf browserShapeDecoder JsonDecode.asInt32))
+
+/// The key encoder a generated proxy would emit for `BrowserShape`.
+let browserShapeEncoder: JsonEncoder<BrowserShape> =
+    function
+    | Dot -> JsonEncode.case0 "Dot"
+    | Circle radius -> JsonEncode.payload "Circle" (JsonEncode.float radius)
+    | Rect(width, height) -> JsonEncode.fields "Rect" [ JsonEncode.float width; JsonEncode.float height ]
+
+/// The argument encoder a generated proxy would emit for `Tally`.
+let tallyEncoder: JsonEncoder<Tally> =
+    fun t ->
+        JsonEncode.record [
+            "Label", JsonEncode.string t.Label
+            "Counts", JsonEncode.mapOf browserShapeEncoder JsonEncode.int32 t.Counts
+        ]
+
+/// The request body the REFLECTIVE proxy sends for `Record tally`:
+/// `Fable.SimpleJson`, the map as an array of `[key, value]` pairs.
+[<Literal>]
+let TallyReflectiveBody =
+    "[{\"Label\": \"shapes\", \"Counts\": [[\"Dot\", 2], [{\"Circle\": 1.5}, 1], [{\"Rect\": [2, 3] }, 4]]}]"
+
+/// The request body a GENERATED proxy sends for `Record tally`:
+/// `JsonEncode.mapOf`, the same pairs, compact.
+[<Literal>]
+let TallyEncodedBody =
+    "[{\"Label\":\"shapes\",\"Counts\":[[\"Dot\",2],[{\"Circle\":1.5},1],[{\"Rect\":[2.0,3.0]},4]]}]"
+
+/// The SERVER writer's spelling of the same argument: an object whose
+/// member names are each key's JSON text.
+[<Literal>]
+let TallyServerBody =
+    "[{\"Label\":\"shapes\",\"Counts\":{\"\\\"Dot\\\"\":2,\"{\\\"Circle\\\":1.5}\":1,\"{\\\"Rect\\\":[2.0,3.0]}\":4}}]"

@@ -486,6 +486,9 @@ The §3 surface, transposed to what this wire is:
   writer writes.
 * **`asMap` takes a key parser** (`JsonDecode.Key.string` / `int32` / `int64` / `guid` /
   `parse`), because a non-string key arrives as the property NAME — the key's own JSON text.
+  **`asMapOf` takes a key DECODER** (Phase 899) for a key that is not string-representable — a
+  record, a tuple, a union with fields — and reads both forms such a map arrives in; see "The two
+  map forms" below.
 * `DateOnly` / `TimeOnly` ARE here (.NET only): this wire's decode seam is server-side, so the
   cross-host argument that keeps them out of the MessagePack algebra does not apply.
 
@@ -566,7 +569,7 @@ call. So the gate now runs **two references**:
   byte-exact .NET mirror of the transpiled `Convert.serialize`. The mirror cannot run the writer it
   stands in for, so it is held to it by a fixture both test packs compile
   (`BrowserWriterFixture`): the Fable pack holds `Convert.serialize` to each pinned text, the .NET
-  pack holds the mirror to the same text — fifty-six cases over every shape a decoder can be for,
+  pack holds the mirror to the same text — fifty-eight cases over every shape a decoder can be for,
   including every spelling below.
 * **`JsonDecoders.verifyBothWith` / `verifyBothByTypeWith`** run the server writer's pass, then the
   browser's; the first refusal wins, and a difference either pass attributes to a declared loss is
@@ -605,13 +608,38 @@ call. So the gate now runs **two references**:
    pins), or leaving the kind and comparing instants (the Phase 853 fixture's workaround, which left
    every field accessor wrong in the browser).
 
-**What the gate found and did NOT close.** A `Map` whose key is neither primitive nor an enum-like
-union is written by the browser as an ARRAY of `[key, value]` pairs, which the converter set reads
-and `asMap` (an object, keys through a member-name `KeyDecoder`) refuses — even when empty. The gate
-now REFUSES such a decoder against the browser's writer, which is the correct verdict; closing it
-needs a JSON-value key decoder on `asMap` and in the generator, and is a successor phase. A browser
-`NaN` (`"NaN"`) is refused on both server paths alike, as it was before. Both are declared, and
-asserted still true, in `JsonDecoderAlgebraTests`.
+**What the gate found.** A `Map` whose key is neither primitive nor an enum-like union is written by
+the browser as an ARRAY of `[key, value]` pairs, which the converter set reads and `asMap` (an
+object, keys through a member-name `KeyDecoder`) refused — even when empty. Phase 899 closed it
+(below). A browser `NaN` (`"NaN"`) is refused on both server paths alike, as it was before; that is
+declared, and asserted still true, in `JsonDecoderAlgebraTests`.
+
+### The two map forms (Phase 899)
+
+A `Map` reaches the server in one of two forms, decided by its KEY type:
+
+| Key type | The browser writes (`Fable.SimpleJson`) | The server writer writes | Combinator |
+|---|---|---|---|
+| string-representable: `string`, `int32`, `int64`, `Guid` (and the browser's other primitives, and a union whose cases carry no fields) | an OBJECT, the key as the member name — `{"2": "x"}` | an OBJECT, the key's JSON text as the member name — `{"2": "x"}`, `{"\"+42\"": …}` | `asMap Key.*` |
+| NOT string-representable: a record, a tuple, a union with a field-carrying case | an ARRAY of `[key, value]` pairs, each key in its own JSON form — `[["Dot", 2], [{"Circle": 1.5}, 1]]` | an OBJECT whose member names are each key's JSON text — `{"\"Dot\"": 2, "{\"Circle\":1.5}": 1}` | `asMapOf key` |
+
+`JsonDecode.asMapOf key entry` reads BOTH forms of the second row, with `key` an ordinary
+`JsonDecoder` — one reading of the key type, whichever position it occupies on the wire: an array
+element must be a two-element pair (anything else is refused naming its index), and an object's
+member name must be JSON text the key decoder accepts (refused naming the member). An empty map is
+`[]` or `{}`; `null` is refused, as for every other container. A duplicate key reads as the
+converter set reads it — the LATER pair wins, in either form (measured: the converter set folds
+through `Map.add`, it does not refuse). `JsonEncode.mapOf` writes the browser's array form, which
+the converter set and `asMapOf` both read.
+
+The generator carries it through: `Plan.forJsonTypes` plans a map keyed by a record, a reference
+tuple or a union with a field-carrying case as `JsonDecode.asMapOf <key> <value>`, and the writing
+run (`Plan.forJsonEncoders`) as `JsonEncode.mapOf`, from the same branch — so a type is still written
+by a generated encoder if and only if it is read by a generated decoder. A map keyed by an enum-like
+union, or by a primitive outside `JsonDecode.Key`'s four, is still a named refusal: the browser
+writes it as an object with the key's bare text as the member name, a third spelling neither
+combinator reads today. The platform's `IExternalContactApi` (`OptIns: Map<SinkKind, OptInRecord>`)
+became generated by this phase, so `PlatformClientProxies.fs` gained its proxy.
 
 ### What moved in the trust-boundary statement
 

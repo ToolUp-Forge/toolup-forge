@@ -314,6 +314,12 @@ type DeployPlaneJobScheduler(dispatchOnTrigger: bool) =
             return Ok()
         }
 
+        member this.Schedule(scope: ToolUp.Platform.ResolvedScope, registration: ToolUp.Platform.JobRegistration) =
+            (this :> IJobScheduler).Schedule {
+                registration with
+                    ScopeId = scope.ScopeId
+            }
+
         member _.Schedule(registration) = async {
             let id = Guid.NewGuid()
             jobs[id] <- registration
@@ -346,6 +352,7 @@ type DeployPlaneJobScheduler(dispatchOnTrigger: bool) =
                             AccessContext = AccessContext.unrestricted (AuthenticatedUser byUserId)
                             Attempt = 1
                             Trigger = registration.Trigger
+                            Scope = ToolUp.Platform.ResolvedScope.anonymous
                             TriggerSource = ScheduledManually byUserId
                             ScheduledAt = now
                             RunningAt = now

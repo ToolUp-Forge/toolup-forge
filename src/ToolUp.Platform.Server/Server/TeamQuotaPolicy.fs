@@ -271,7 +271,11 @@ type QuotaGatedJobScheduler(inner: IJobScheduler, quotaPolicy: ITeamQuotaPolicy)
         member _.RegisterHandlerAsync(name, handler) =
             inner.RegisterHandlerAsync(name, handler)
 
-        member _.Schedule(registration) = inner.Schedule(registration)
+        member _.Schedule(registration: JobRegistration) = inner.Schedule(registration)
+
+        // Phase 818 — forward the typed overload as the typed overload, so
+        // the decorator never drops a job's resolver-minted provenance.
+        member _.Schedule(scope: ResolvedScope, registration: JobRegistration) = inner.Schedule(scope, registration)
 
         member _.Cancel(scopeId, jobId) = inner.Cancel(scopeId, jobId)
 

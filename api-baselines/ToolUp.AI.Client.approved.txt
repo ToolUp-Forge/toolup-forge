@@ -334,6 +334,7 @@ ToolUp.AI.Client.ConsentDialog+PendingConsentRequest.TargetModule : System.Strin
 ToolUp.AI.Client.ConsentDialog+PendingConsentRequest.TaskId : System.Guid { get }
 ToolUp.AI.Client.ConsentDialog+PendingConsentRequest.ToolName : System.String { get }
 ToolUp.AI.Client.ConversationPanel (class)
+ToolUp.AI.Client.ConversationPanel.ConversationVisibilityNotice() : Fable.React.ReactElement
 ToolUp.AI.Client.ConversationPanel.ExportMenu(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ConversationMessage]) : Fable.React.ReactElement
 ToolUp.AI.Client.ConversationPanel.KbInventoryBadge(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 ToolUp.AI.Client.ConversationPanel.MessageSources(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+RetrievedSource], System.String) : Fable.React.ReactElement

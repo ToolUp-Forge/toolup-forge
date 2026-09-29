@@ -109,10 +109,7 @@ let private pinned (switch: string) (relative: string) (expected: string) =
 
 /// The records the census DECLARES skipped, with the class of reason. A
 /// record entering or leaving this list is a deliberate edit here.
-let private declaredSkipped = [
-    "ToolUp.Platform.IExternalContactApi", "has no JSON decoder"
-    "ToolUp.Platform.Usage.IUsageQueryApi", "returns byte[]"
-]
+let private declaredSkipped = [ "ToolUp.Platform.Usage.IUsageQueryApi", "returns byte[]" ]
 
 // ─── reflection over the COMPILED generated modules (test-side only) ──
 

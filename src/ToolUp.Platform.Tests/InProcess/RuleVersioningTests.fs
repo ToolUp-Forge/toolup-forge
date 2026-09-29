@@ -69,6 +69,7 @@ let tests =
                 @ DataFootprintPreflight.ruleManifest
                 @ ScaleReadinessPreflight.ruleManifest
                 @ ApplianceBootPosture.ruleManifest
+                @ FactTablePreflight.ruleManifest
                 |> List.map _.Code
 
             Expect.isNonEmpty exported "the fixture is meaningless if no rule ships"
@@ -170,7 +171,7 @@ let tests =
             let document =
                 CompositionRuleVersions.toWireDocument CompositionRuleVersions.allRules
 
-            Expect.equal document.ManifestVersion "1.1.0" "the manifest version is published"
+            Expect.equal document.ManifestVersion "1.2.0" "the manifest version is published"
 
             Expect.all document.Rules (fun r -> r.Version = "1.0.0") "every published rule carries its version string"
 

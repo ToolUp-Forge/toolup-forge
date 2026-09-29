@@ -106,6 +106,13 @@
          SemVerBump's versions and classifications and PublishedSmoke's
          workflow job reader, so it compiles after both. -->
     <Compile Include="ReleaseChannel.fs" />
+    <!-- Phase 903 — the template gates' per-run private packages folder,
+         behind the VerifyTemplates / VerifyPackagedModuleTemplate targets
+         in Build.fs. Same shape and same reason as VerifyGate.fs above:
+         forge's own build hygiene rather than SDK surface, FAKE-free, and
+         source-linked (not copied) into ToolUp.Platform.Build.Tests so the
+         targets and their go-red proofs run one implementation. -->
+    <Compile Include="TemplateGatePackages.fs" />
     <Compile Include="Build.fs" />
   </ItemGroup>
   <ItemGroup>

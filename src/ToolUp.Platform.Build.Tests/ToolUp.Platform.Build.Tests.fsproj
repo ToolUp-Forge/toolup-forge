@@ -12,6 +12,12 @@
         <Compile Include="CoreWebVitalsBudgetTests.fs" />
         <!-- Phase 192 — cold-start / hot-path perf-budget gate. -->
         <Compile Include="PerfBudgetTests.fs" />
+        <!-- Phase 903 — the template gates' per-run private packages
+             folder. Source-linked from the repo root for the same reason
+             VerifyGate.fs below is: the FAKE targets and these go-red
+             proofs run one implementation. Compiled ahead of
+             TemplateGateTests.fs, which exercises it. -->
+        <Compile Include="..\..\TemplateGatePackages.fs" Link="TemplateGatePackages.fs" />
         <!-- Phase 754 — the template gate's stranger's-package guard,
              probed in both directions. -->
         <Compile Include="TemplateGateTests.fs" />

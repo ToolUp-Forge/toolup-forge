@@ -40,6 +40,12 @@ type private InlineScheduler() =
             return Ok()
         }
 
+        member this.Schedule(scope: ToolUp.Platform.ResolvedScope, registration: ToolUp.Platform.JobRegistration) =
+            (this :> IJobScheduler).Schedule {
+                registration with
+                    ScopeId = scope.ScopeId
+            }
+
         member _.Schedule(registration) = async {
             let jobId = Guid.NewGuid()
             jobs[jobId] <- (registration.Handler, registration.Payload)

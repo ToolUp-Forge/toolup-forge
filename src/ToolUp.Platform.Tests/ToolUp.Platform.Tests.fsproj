@@ -244,6 +244,7 @@
         <Compile Include="Contracts\IExternalHandleStoreContract.fs" />
         <!-- Phase 520 — grounding fact store contract pack. -->
         <Compile Include="Contracts\IFactStoreContract.fs" />
+        <Compile Include="Contracts\IFactTableWriterContract.fs" />
         <Compile Include="Contracts\ITelemetrySinkContract.fs" />
         <Compile Include="Contracts\IAdAnalyticsSinkContract.fs" />
         <!-- Phase 62 — IUserClaims contract pack (premium-status round-trip). -->
@@ -1598,6 +1599,11 @@
              the three inclusion verdicts, the enumeration surface, and the
              suppressed-issuance probe against a real chained ledger. -->
         <Compile Include="InProcess\CertificateIssuanceTransparencyTests.fs" />
+        <!-- Phase 912 — IRemotingDecoderEvidence / IRemotingArgumentDecoderEvidence
+             contract packs (Phase 785 / 842's sibling evidence facets). Ahead of
+             DeploymentVerificationReportTests.fs, which binds both. -->
+        <Compile Include="Contracts\IRemotingDecoderEvidenceContract.fs" />
+        <Compile Include="Contracts\IRemotingArgumentDecoderEvidenceContract.fs" />
         <!-- Phase 686 — the one-command deployment verification report: the
              full/bare/seeded-failure probes over the composed five sections,
              the outcome + exit-code + canonical-form folds, the CLI flag, and
@@ -2728,6 +2734,10 @@
              with provider-failure fallback, deleted/purged rows unlisted, and
              GetTaskStatus polling through a real turn. -->
         <Compile Include="InProcess\ConversationListingTests.fs" />
+        <!-- Phase 859 — team conversation visibility: the pure rule, every read and
+             write path per level and role, per-team records and the deployment
+             default, elevated-read and level-change audit, and who may change it. -->
+        <Compile Include="InProcess\ConversationVisibilityTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />

@@ -27,6 +27,12 @@ type private InMemoryJobScheduler() =
         member _.RegisterHandler(_, _) = ()
         member _.RegisterHandlerAsync(_, _) = async { return Ok() }
 
+        member this.Schedule(scope: ToolUp.Platform.ResolvedScope, registration: ToolUp.Platform.JobRegistration) =
+            (this :> IJobScheduler).Schedule {
+                registration with
+                    ScopeId = scope.ScopeId
+            }
+
         member _.Schedule(reg: JobRegistration) = async {
             let id = Guid.NewGuid()
 
@@ -131,6 +137,7 @@ let private jobContext (scopeId: string) (jobId: JobId) (runningAt: DateTime) (p
     AccessContext = AccessContext.unrestricted (AuthenticatedUser "system")
     Attempt = 1
     Trigger = CronTrigger TenantLifecycleAggregator.ScheduledDeprovisionCron
+    Scope = ToolUp.Platform.ResolvedScope.anonymous
     TriggerSource = ScheduledByCron
     ScheduledAt = runningAt
     RunningAt = runningAt

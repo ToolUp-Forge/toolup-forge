@@ -664,6 +664,10 @@
              vocabulary + IMetricRegistry read surface). Distinct from
              MetricsTypes.fs (observability). Depends only on System. -->
         <Compile Include="Shared\MetricRegistryTypes.fs" />
+        <!-- Phase 887 — declared fact tables: the declaration, bindings,
+             IFactTableRegistry and the run / watermark / change-summary
+             records. After MetricRegistryTypes.fs (reads SubjectDefinition). -->
+        <Compile Include="Shared\FactTableTypes.fs" />
         <!-- Phase 43.B — neutral OAuth correlation identifier. Before
              ProviderProfileTypes.fs (ProviderOAuthBinding embeds it) and
              before the Server tier's IOAuthCredentialFlow / IOAuthStateStore,

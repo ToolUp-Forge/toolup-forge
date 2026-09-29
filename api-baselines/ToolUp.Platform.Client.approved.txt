@@ -2762,7 +2762,7 @@ ToolUp.Elmish.Sub+Internal (class)
 ToolUp.Elmish.Sub+Internal.diff`1(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.IDisposable]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable]]]) : System.Tuple`4[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.IDisposable]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.IDisposable]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], System.IDisposable]]]]
 ToolUp.Elmish.Sub+Internal.empty : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.IDisposable]] { get }
 ToolUp.Elmish.Sub+Internal+Fx (class)
-ToolUp.Elmish.Sub+Internal+Fx.change`2(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Exception], Microsoft.FSharp.Core.Unit], a, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], b]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.IDisposable]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[a, System.IDisposable]]]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.IDisposable]]
+ToolUp.Elmish.Sub+Internal+Fx.change`2(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Exception], Microsoft.FSharp.Core.Unit], a, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Boolean], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], b]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.IDisposable]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[a, System.IDisposable]]]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.IDisposable]]
 ToolUp.Elmish.Sub+Internal+Fx.stop`1(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Exception], Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], a]]) : System.Void
 ToolUp.Elmish.Sub+Internal+Fx.tryStart`1(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Exception], Microsoft.FSharp.Core.Unit], a, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[a, System.IDisposable]) : Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], System.IDisposable]]
 ToolUp.Elmish.Sub+Internal+Fx.tryStop(Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.Exception], Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Collections.FSharpList`1[System.String], System.IDisposable) : System.Void
@@ -6203,6 +6203,7 @@ ToolUp.Remoting.Client.PlatformClientProxies.decodeCompositionView : Microsoft.F
 ToolUp.Remoting.Client.PlatformClientProxies.decodeComputeBudgetDenial : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ComputeBudgetDenial, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeConfigFieldKind : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ConfigFieldKind, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeConfigFieldSchema : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ConfigFieldSchema, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Client.PlatformClientProxies.decodeContactOwner : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ContactOwner, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeConversion : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ColumnMappingTypes+Conversion, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeConversionRecord : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ColumnMappingTypes+ConversionRecord, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeCredentialOrigin : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.CredentialOrigin, ToolUp.Remoting.DecodeError]] { get }
@@ -6240,6 +6241,7 @@ ToolUp.Remoting.Client.PlatformClientProxies.decodeErasureSummary : Microsoft.FS
 ToolUp.Remoting.Client.PlatformClientProxies.decodeExportSignature : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExportSignature, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeExportStatus : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExportStatus, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeExportThenDeprovisionResult : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExportThenDeprovisionResult, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Client.PlatformClientProxies.decodeExternalContact : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalContact, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeExternalHandle : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ExternalHandle, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeFallbackChain : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.FallbackChain, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeFeatureFlag : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.FeatureFlag, ToolUp.Remoting.DecodeError]] { get }
@@ -6317,6 +6319,7 @@ ToolUp.Remoting.Client.PlatformClientProxies.decodeNotificationCategory : Micros
 ToolUp.Remoting.Client.PlatformClientProxies.decodeNotificationPreferenceView : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.NotificationPreferenceView, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeOAuthRefreshOutcome : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.OAuthRefreshOutcome, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeOffboardConfirmation : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.OffboardConfirmation, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Client.PlatformClientProxies.decodeOptInRecord : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.OptInRecord, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeOverallStatus : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.OverallStatus, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodePartyRef : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PartyRef, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodePendingInviteByEmail : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PendingInviteByEmail, ToolUp.Remoting.DecodeError]] { get }
@@ -6337,6 +6340,7 @@ ToolUp.Remoting.Client.PlatformClientProxies.decodeProviderEntryView : Microsoft
 ToolUp.Remoting.Client.PlatformClientProxies.decodeProviderHealth : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ProviderHealth, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeProviderHealthStatus : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ProviderHealthStatus, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeProviderProfileView : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ProviderProfileView, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Client.PlatformClientProxies.decodePushVariant : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.NotificationKind+PushVariant, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeQuietHours : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.QuietHours, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeReadinessVerdict : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ReadinessVerdict, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeRecentAIDenial : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.RecentAIDenial, ToolUp.Remoting.DecodeError]] { get }
@@ -6355,6 +6359,7 @@ ToolUp.Remoting.Client.PlatformClientProxies.decodeSessionRecord : Microsoft.FSh
 ToolUp.Remoting.Client.PlatformClientProxies.decodeSessionStatus : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.SessionStatus, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeSessionStoreInfo : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ProcessedDataTypes+SessionStoreInfo, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeSignedExportEnvelope : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.SignedExportEnvelope, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Client.PlatformClientProxies.decodeSinkKind : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.NotificationKind+SinkKind, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeSmokeSummary : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeploymentReadiness+SmokeSummary, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeSourceStatus : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.SourceStatus, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeStatusSeverity : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.StatusSeverity, ToolUp.Remoting.DecodeError]] { get }
@@ -6403,8 +6408,10 @@ ToolUp.Remoting.Client.PlatformClientProxies.encodeBudgetWarning(ToolUp.Platform
 ToolUp.Remoting.Client.PlatformClientProxies.encodeCategoryChannelPreference(ToolUp.Platform.CategoryChannelPreference) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeCellTransform(ColumnMappingTypes+CellTransform) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeColumnExpr(ColumnMappingTypes+ColumnExpr) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Client.PlatformClientProxies.encodeContactOwner(ToolUp.Platform.ContactOwner) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeConversion(ColumnMappingTypes+Conversion) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeConversionRecord(ColumnMappingTypes+ConversionRecord) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Client.PlatformClientProxies.encodeCreateExternalContactRequest(ToolUp.Platform.CreateExternalContactRequest) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeCreateServiceAccountRequest(ToolUp.Platform.CreateServiceAccountRequest) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeCreateTeamRequest(ToolUp.Platform.CreateTeamRequest) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeCreateWebhookRequest(ToolUp.Platform.CreateWebhookRequest) : ToolUp.Remoting.Json.JsonValue
@@ -6447,6 +6454,7 @@ ToolUp.Remoting.Client.PlatformClientProxies.encodeProviderEntryInput(ToolUp.Pla
 ToolUp.Remoting.Client.PlatformClientProxies.encodeProviderVerificationOutcome(ToolUp.Platform.ProviderVerificationOutcome) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeProvisioningRequest(ToolUp.Platform.ProvisioningRequest) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeQuietHours(ToolUp.Platform.QuietHours) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Client.PlatformClientProxies.encodeRecordOptInRequest(ToolUp.Platform.RecordOptInRequest) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeRoutingRule(ToolUp.Platform.RoutingRule) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeSchemaMigration(ToolUp.Platform.SchemaMigration) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeServiceAccountStatus(ToolUp.Platform.ServiceAccountStatus) : ToolUp.Remoting.Json.JsonValue
@@ -6454,6 +6462,7 @@ ToolUp.Remoting.Client.PlatformClientProxies.encodeSubmitterClass(ToolUp.Platfor
 ToolUp.Remoting.Client.PlatformClientProxies.encodeTeamInviteIssueRequest(ToolUp.Platform.TeamInviteIssueRequest) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeTeamRole(ToolUp.Platform.TeamRole) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeTrigger(ToolUp.Platform.Trigger) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Client.PlatformClientProxies.encodeUpdateExternalContactRequest(ToolUp.Platform.UpdateExternalContactRequest) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeUserAuthoredSchema(ToolUp.Platform.UserAuthoredSchema) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeUserNotificationPreferences(ToolUp.Platform.UserNotificationPreferences) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeUserSchemaField(ToolUp.Platform.UserSchemaField) : ToolUp.Remoting.Json.JsonValue
@@ -6461,6 +6470,7 @@ ToolUp.Remoting.Client.PlatformClientProxies.encodeWebhookStatus(ToolUp.Platform
 ToolUp.Remoting.Client.PlatformClientProxies.encodeWireProvenanceChainRequest(ToolUp.Platform.WireProvenanceChainRequest) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeWireProvenanceDirection(ToolUp.Platform.WireProvenanceDirection) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeWireProvenanceRef(ToolUp.Platform.WireProvenanceRef) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Client.PlatformClientProxies.encodeWithdrawOptInRequest(ToolUp.Platform.WithdrawOptInRequest) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.fileManagementApiProxy(ToolUp.Remoting.Client.RemoteBuilderOptions) : ProcessedDataTypes+FileManagementApi
 ToolUp.Remoting.Client.PlatformClientProxies.iAuditViewApiProxy(ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Platform.IAuditViewApi
 ToolUp.Remoting.Client.PlatformClientProxies.iCompositionInspectorApiProxy(ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Platform.ICompositionInspectorApi
@@ -6471,6 +6481,7 @@ ToolUp.Remoting.Client.PlatformClientProxies.iDataMigrationApiProxy(ToolUp.Remot
 ToolUp.Remoting.Client.PlatformClientProxies.iDataSubjectRequestApiProxy(ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Platform.DataSubjectRequestApi+IDataSubjectRequestApi
 ToolUp.Remoting.Client.PlatformClientProxies.iDeploymentReadinessApiProxy(ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Platform.IDeploymentReadinessApi
 ToolUp.Remoting.Client.PlatformClientProxies.iDeploymentVerificationApiProxy(ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Platform.IDeploymentVerificationApi
+ToolUp.Remoting.Client.PlatformClientProxies.iExternalContactApiProxy(ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Platform.IExternalContactApi
 ToolUp.Remoting.Client.PlatformClientProxies.iFeatureFlagApiProxy(ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Platform.IFeatureFlagApi
 ToolUp.Remoting.Client.PlatformClientProxies.iHealthMonitorApiProxy(ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Platform.IHealthMonitorApi
 ToolUp.Remoting.Client.PlatformClientProxies.iHomeOverviewApiProxy(ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Platform.IHomeOverviewApi
@@ -6848,6 +6859,7 @@ UserSession.getDisplayName() : Microsoft.FSharp.Core.FSharpOption`1[System.Strin
 UserSession.getEmail() : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 UserSession.getSubjectKind() : ToolUp.Platform.SubjectKind
 UserSession.getUserId() : System.String
+UserSession.identityChanged() : System.Void
 UserSession.identityHeaderPairs() : System.Tuple`2[System.String, System.String][]
 UserSession.installBridge(ToolUp.Platform.IAuthBridge) : System.Void
 UserSession.onAuthTokenChange(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]
@@ -6856,6 +6868,7 @@ UserSession.refreshFromBridge() : Microsoft.FSharp.Control.FSharpAsync`1[Microso
 UserSession.setAuthToken(System.String) : System.Void
 UserSession.uninstallBridge() : System.Void
 UserSession.userIdHeader : System.String { get }
+UserSession.watchIdentityAcrossTabs() : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]
 UserSession.withRequestHeaders(ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Remoting.Client.RemoteBuilderOptions
 WebhookAdminUI (class)
 WebhookAdminUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule

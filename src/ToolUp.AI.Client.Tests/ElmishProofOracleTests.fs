@@ -178,6 +178,26 @@ let tests =
                 ($"{List.length mismatches} input(s) on which the transpiled diff and the proved model differed: "
                  + String.concat " | " (List.truncate 5 mismatches)))
 
+        // Phase 900 — the two generators the corpus was drawn from, drawn
+        // HERE and held to the pin the .NET host asserts: the corpus replay
+        // above says the transpiled runtime agrees with recorded verdicts,
+        // and this says this host draws what the .NET host drew.
+        testCase "the ring campaign is the draw both hosts make - its fingerprint is pinned - Phase 900" (fun () ->
+            let violations = ringCampaignPinViolations ()
+
+            Expect.isEmpty
+                violations
+                ("ring campaign drift: pin the printed value in RingCampaignFingerprint if the generator moved on purpose\n"
+                 + String.concat "\n" violations))
+
+        testCase "the diff campaign is the draw both hosts make - its fingerprint is pinned - Phase 900" (fun () ->
+            let violations = diffCampaignPinViolations ()
+
+            Expect.isEmpty
+                violations
+                ("diff campaign drift: pin the printed value in DiffCampaignFingerprint if the generator moved on purpose\n"
+                 + String.concat "\n" violations))
+
         testCase "the corpus exercised the shortcut and the duplicate path" (fun () ->
             let classified = diffCases () |> List.map (fun c -> classifyDiffInput c.Input)
             let fastPath = classified |> List.filter fst |> List.length

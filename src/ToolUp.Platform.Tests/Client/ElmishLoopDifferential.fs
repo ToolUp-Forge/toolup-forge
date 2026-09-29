@@ -89,11 +89,27 @@
 /// message in the ring; the latch set AFTER the sinks and effects ran, as
 /// it was until the boot was restated; the boot as it was until Phase 871,
 /// starting every effect, the subscriptions and `init`'s command after a
-/// sink or an effect had called `Terminate`; and a registry that stores
-/// the handle of a start that terminated the program itself — run over
-/// the same campaign and asserted CAUGHT; the same skeleton, faithful, is
-/// asserted to agree, so the difference each go-red measures is the one
-/// line.
+/// sink or an effect had called `Terminate`; a registry that stores the
+/// handle of a start that terminated the program itself; and Phase 900's
+/// three, the message arm as it was until 900 — the rest of a diff started
+/// after one of its subscriptions terminated the program, the handle of
+/// the start that terminated it held, and the message's command run after
+/// a terminating diff — run over the same campaign and asserted CAUGHT;
+/// the same skeleton, faithful, is asserted to agree, so the difference
+/// each go-red measures is the one line.
+///
+/// ─── The message arm's diff (Phase 900) ─────────────────────────────
+///
+/// A message's model asks for subscriptions of its own (`Subs`): the
+/// diff after the message is FIRST processed starts them, in order, one
+/// start each. Keys only ever accumulate — a subscription a message asks
+/// for is asked for by every later model — so no diff stops anything and
+/// `Held` on both sides counts every start that came up and was not
+/// released; the model's `held` never moves down except at teardown, and
+/// that is the shape the model is exact for (its header says so). Every
+/// message's command is a start too, counted whether or not it raises
+/// anything, so a command run after its diff terminated the program is a
+/// start too many on production's side.
 module ToolUp.Platform.Tests.Client.ElmishLoopDifferential
 
 open ToolUp.Elmish
@@ -142,10 +158,20 @@ type Script = {
     /// Phase 871 — the terminate handler raises. The model has no
     /// transition for this: teardown is the same either way.
     HandlerRaises: bool
+    /// Phase 900 — the subscriptions a message's model asks for, keyed by
+    /// the message: one entry per subscription, the events its start
+    /// function raises. Started by the diff after the message is first
+    /// processed, in this order; forward-only, so every drain finishes.
+    /// Absent means the message asks for none.
+    Subs: Map<int, Ev list list>
 }
 
 let replies (script: Script) (msg: int) : Ev list =
     Map.tryFind msg script.Replies |> Option.defaultValue []
+
+/// Phase 900 — the subscriptions `msg`'s model asks for.
+let subsFor (script: Script) (msg: int) : Ev list list =
+    Map.tryFind msg script.Subs |> Option.defaultValue []
 
 /// What the render hook raises when handed `model` — keyed by the model's
 /// last message, so the SAME model always raises the same events (the
@@ -204,8 +230,9 @@ type Outcome = {
 /// scripts the campaign held before `Pre` existed are the same scripts
 /// with a `Pre` added — the shapes the coverage case counts did not move.
 /// `startRng` is a THIRD, drawn from only for Phase 871's `Sub` and
-/// `HandlerRaises`, for the same reason. A later shape takes a FOURTH.
-let genScript (rng: Lcg) (preRng: Lcg) (startRng: Lcg) : Script =
+/// `HandlerRaises`, for the same reason. `subsRng` is a FOURTH, drawn from
+/// only for Phase 900's `Subs`. A later shape takes a FIFTH.
+let genScript (rng: Lcg) (preRng: Lcg) (startRng: Lcg) (subsRng: Lcg) : Script =
     let n = 3 + rng.Next 6
     let capacity = 2 + rng.Next 4
 
@@ -277,6 +304,26 @@ let genScript (rng: Lcg) (preRng: Lcg) (startRng: Lcg) : Script =
 
     let handlerRaises = startRng.Next 100 < 50
 
+    // Phase 900 — about a third of the messages ask for one or two
+    // subscriptions; each start raises up to two forward-pointing
+    // messages, or Terminate. The last id can only terminate: there is
+    // nothing after it to point at.
+    let genSubEvs (m: int) : Ev list = [
+        for _ in 1 .. subsRng.Next 3 do
+            if subsRng.Next 100 < 12 then
+                ETerm
+            elif m + 1 < n then
+                EMsg(m + 1 + subsRng.Next(n - m - 1))
+    ]
+
+    let subs =
+        [
+            for m in 0 .. n - 1 do
+                if subsRng.Next 100 < 35 then
+                    m, [ for _ in 1 .. 1 + subsRng.Next 2 -> genSubEvs m ]
+        ]
+        |> Map.ofList
+
     {
         Capacity = capacity
         Pre = pre
@@ -288,6 +335,7 @@ let genScript (rng: Lcg) (preRng: Lcg) (startRng: Lcg) : Script =
         Exts = exts
         Sub = sub
         HandlerRaises = handlerRaises
+        Subs = subs
     }
 
 /// How many scripts the campaign draws.
@@ -300,7 +348,8 @@ let campaign: Lazy<Script list> =
         (let rng = Lcg 789_001
          let preRng = Lcg 789_002
          let startRng = Lcg 789_003
-         [ for _ in 1..CampaignSize -> genScript rng preRng startRng ])
+         let subsRng = Lcg 789_004
+         [ for _ in 1..CampaignSize -> genScript rng preRng startRng subsRng ])
 
 // ─── Production ──────────────────────────────────────────────────────
 
@@ -361,28 +410,49 @@ let productionRun (script: Script) : Outcome =
             started <- started + 1
             raise dispatch script.Init)
 
+    let start (evs: Ev list) : Subscribe<int> =
+        fun dispatch ->
+            started <- started + 1
+            raise dispatch evs
+            holding ()
+
     // The init model's subscription, and every later model's: one key, so
-    // the diff after each message keeps it running rather than restarting it.
-    let subscribe (_: int list) : Sub<int> =
-        match script.Sub with
-        | None -> []
-        | Some evs -> [
-            [ "scripted-sub" ],
-            (fun dispatch ->
-                started <- started + 1
-                raise dispatch evs
-                holding ())
-          ]
+    // the diff after each message keeps it running rather than restarting
+    // it. Phase 900: plus the subscriptions each message in the model asks
+    // for, keyed by the message — so the diff after a message is FIRST
+    // processed starts exactly its subscriptions, in order, and a message
+    // processed again finds its keys active (and duplicated in the request,
+    // which the diff reports and dedups). Keys only ever accumulate.
+    let subscribe (model: int list) : Sub<int> =
+        let initial =
+            match script.Sub with
+            | None -> []
+            | Some evs -> [ [ "scripted-sub" ], start evs ]
+
+        let perMessage =
+            model
+            |> List.collect (fun m ->
+                subsFor script m
+                |> List.mapi (fun i evs -> [ "sub"; string m; string i ], start evs))
+
+        initial @ perMessage
 
     // The model cell is what `update` produces — `state <- model'` in the
     // loop. Until 851 the bridge read it off `setState`, which ran after
     // every `update`; a hook that runs once per drain sees the model only
     // when the drain paints, and a drain that terminates paints nothing.
+    // The command is a start (Phase 900): counted when it runs, so a
+    // command run after its diff terminated the program is one start too
+    // many.
     let update (msg: int) (model': int list) =
         trace.Add msg
         let next = model' @ [ msg ]
         model <- next
-        next, Cmd.ofEffect (fun dispatch -> raise dispatch (replies script msg))
+
+        next,
+        Cmd.ofEffect (fun dispatch ->
+            started <- started + 1
+            raise dispatch (replies script msg))
 
     let setState (m: int list) (dispatch: int -> unit) =
         if renders = 0 then
@@ -497,8 +567,18 @@ let private stepOf (st: ElmishLoop.st<int, int list>) : Step = {
 }
 
 let modelRun (script: Script) : Outcome =
-    let update (msg: int) (model: int list) =
-        ElmishRing.Pair(model @ [ msg ], replies script msg |> List.map toModelEv)
+    // Phase 900 — the oracle's reply is split at the diff: the starts the
+    // diff makes (the message's subscriptions, on its first processing;
+    // none on a repeat, whose keys are already active) and the command.
+    let update (msg: int) (model: int list) : ElmishLoop.reply<int, int list> = {
+        ElmishLoop.next = model @ [ msg ]
+        ElmishLoop.starts =
+            if List.contains msg model then
+                []
+            else
+                subsFor script msg |> List.map toModelStart
+        ElmishLoop.cmd = ElmishRing.OSome(replies script msg |> List.map toModelEv)
+    }
 
     let render (model: int list) =
         paints script model |> List.map toModelEv
@@ -601,6 +681,17 @@ type Variant =
     /// program itself has its handle stored after the teardown emptied the
     /// registry, and held for good.
     | KeepsATerminatingStartsHandle
+    /// `Subs.Fx.change` as it was until Phase 900: every subscription of a
+    /// message's diff is started, whether or not an earlier one in the same
+    /// diff called `Terminate`.
+    | StartsTheRestOfADiffAfterTerminate
+    /// The message arm as it was until Phase 900: the handle of a start that
+    /// terminated the program from inside a message's diff is assigned to
+    /// the active set the teardown had already stopped, and held for good.
+    | KeepsATerminatingDiffsHandle
+    /// The message arm as it was until Phase 900: the message's command runs
+    /// after its diff terminated the program.
+    | RunsTheCommandAfterATerminatingDiff
 
 /// `runWithDispatch`'s scheduling skeleton, transcribed by hand with the
 /// callees replaced by the script — the same abstraction the model
@@ -642,7 +733,10 @@ let skeletonRun (variant: Variant) (script: Script) : Outcome =
                 | PaintsWithoutRedrain
                 | LatchesAfterEffects
                 | StartsAfterTerminate
-                | KeepsATerminatingStartsHandle ->
+                | KeepsATerminatingStartsHandle
+                | StartsTheRestOfADiffAfterTerminate
+                | KeepsATerminatingDiffsHandle
+                | RunsTheCommandAfterATerminatingDiff ->
                     reentered <- true
                     processMsgs ()
                     reentered <- false
@@ -668,6 +762,17 @@ let skeletonRun (variant: Variant) (script: Script) : Outcome =
         painted <- Some state
         raise (paints script state)
 
+    // Phase 900 — one start of a message's diff: made only while the
+    // program runs, holding its handle only if it did not terminate the
+    // program itself. The two go-reds are the message arm before 900.
+    and startInDiff (evs: Ev list) =
+        if not terminated || variant = StartsTheRestOfADiffAfterTerminate then
+            started <- started + 1
+            raise evs
+
+            if not terminated || variant = KeepsATerminatingDiffsHandle then
+                held <- held + 1
+
     and stepMsg (msg: int) =
         if script.Terminating.Contains msg then
             terminate ()
@@ -675,7 +780,19 @@ let skeletonRun (variant: Variant) (script: Script) : Outcome =
             dirty <- true
             trace.Add msg
             let model' = state @ [ msg ]
-            raise (replies script msg)
+
+            // The diff: the message's subscriptions on its first processing,
+            // one gated start each (Phase 900).
+            if not (List.contains msg state) then
+                for evs in subsFor script msg do
+                    startInDiff evs
+
+            // The command, only while the program is still running after
+            // the diff (Phase 900); a start that holds nothing.
+            if not terminated || variant = RunsTheCommandAfterATerminatingDiff then
+                started <- started + 1
+                raise (replies script msg)
+
             state <- model'
 
             match variant with
@@ -690,7 +807,10 @@ let skeletonRun (variant: Variant) (script: Script) : Outcome =
         | ClearsLatchBeforeDrain
         | LatchesAfterEffects
         | StartsAfterTerminate
-        | KeepsATerminatingStartsHandle ->
+        | KeepsATerminatingStartsHandle
+        | StartsTheRestOfADiffAfterTerminate
+        | KeepsATerminatingDiffsHandle
+        | RunsTheCommandAfterATerminatingDiff ->
             while not terminated && (Option.isSome nextMsg || dirty) do
                 match nextMsg with
                 | None ->
@@ -750,7 +870,10 @@ let skeletonRun (variant: Variant) (script: Script) : Outcome =
     | PaintsPerMessage
     | PaintsWithoutRedrain
     | StartsAfterTerminate
-    | KeepsATerminatingStartsHandle ->
+    | KeepsATerminatingStartsHandle
+    | StartsTheRestOfADiffAfterTerminate
+    | KeepsATerminatingDiffsHandle
+    | RunsTheCommandAfterATerminatingDiff ->
         reentered <- true
         preboot ()
 
@@ -811,6 +934,14 @@ let private renderMap (m: Map<int, Ev list>) =
     + String.concat "," (Map.toList m |> List.map (fun (k, evs) -> string k + ":" + renderEvs evs))
     + "}"
 
+let private renderSubs (m: Map<int, Ev list list>) =
+    "{"
+    + String.concat
+        ","
+        (Map.toList m
+         |> List.map (fun (k, subs) -> string k + ":" + String.concat "+" (List.map renderEvs subs)))
+    + "}"
+
 let private renderBool (b: bool) = if b then "1" else "0"
 
 let private renderOpt (render: 'a -> string) (o: 'a option) =
@@ -838,6 +969,7 @@ let renderScript (s: Script) : string =
         + "]"
         renderOpt renderEvs s.Sub
         renderBool s.HandlerRaises
+        renderSubs s.Subs
     ]
 
 let private renderStep (st: Step) : string =
@@ -867,28 +999,19 @@ let renderOutcome (o: Outcome) : string =
         "<" + String.concat "|" (List.map renderStep o.Steps) + ">"
     ]
 
-/// Count, total length and a polynomial hash modulo 2^31 - 1, in `int64`
-/// so neither host overflows (Fable carries `int64` exactly). Not a
-/// cryptographic digest — nothing here is adversarial — but any drift in
-/// the draw or the verdicts moves it.
-let fingerprint (rows: string list) : string =
-    let text = String.concat "\n" rows
-    let mutable h = 0L
-
-    for c in text do
-        h <- (h * 131L + int64 (int c)) % 2147483647L
-
-    $"{List.length rows}:{text.Length}:{h}"
-
-/// The campaign's canonical rendering, pinned. Both hosts assert it, so
-/// both run the same 400 scripts.
+/// The campaign's canonical rendering, pinned (`fingerprint` is the
+/// shared one in `ElmishProofDifferential`, since Phase 900 also the
+/// ring's and the diff's). Both hosts assert it, so both run the same
+/// 400 scripts. Moved by Phase 900: the scripts gained `Subs`.
 [<Literal>]
-let CampaignFingerprint = "400:24685:1692033248"
+let CampaignFingerprint = "400:31565:1359516053"
 
 /// The extracted machine's verdicts over the campaign, pinned. The .NET
 /// host computes them over `BigInteger`, the Fable host over `int`.
+/// Moved by Phase 900: the step is split at the diff and every message's
+/// command counts as a start.
 [<Literal>]
-let VerdictFingerprint = "400:114272:1012224852"
+let VerdictFingerprint = "400:108737:2021978336"
 
 // ─── The rows ────────────────────────────────────────────────────────
 
@@ -1056,14 +1179,17 @@ let corpusChecks: Check list = [
                         40
                         "scripts dispatch from outside after a Terminate"
                 yield! above (countRuns reachedPredicate) 40 "scripts reached the termination predicate"
-                // 80, not 100, since Phase 871: about thirty scripts now end
+                // 80, not 100, since Phase 871: about thirty scripts then ended
                 // terminated by a subscription's start at boot (measured 99 of
-                // 400 still active; the other shapes did not move).
-                yield! above (countRuns (fun _ o -> o.Active)) 80 "scripts ended still active"
+                // 400 still active); 60 since Phase 900, whose message-diff
+                // subscriptions terminate fifteen more (measured 84).
+                yield! above (countRuns (fun _ o -> o.Active)) 60 "scripts ended still active"
                 // Phase 851 — the case the render move creates: a paint that
                 // dispatches, so the drain re-opens after the hook ran; and the
                 // quiet scripts, on which `render_once_per_drain` is measured.
-                yield! above (countRuns paintDispatched) 80 "scripts had the render hook dispatch into the loop"
+                // 50 since Phase 900 (measured 68, from over 80): a script a
+                // message's subscription terminates paints nothing after it.
+                yield! above (countRuns paintDispatched) 50 "scripts had the render hook dispatch into the loop"
                 yield! above (countScripts quiet) 60 "scripts kept the render hook quiet"
                 yield!
                     above
@@ -1322,4 +1448,67 @@ let corpusChecks: Check list = [
         KeepsATerminatingStartsHandle
         20
         "shortfall: a start whose handle outlives the teardown was not caught by the held-handle comparison"
+    {
+        Name = "the campaign started subscriptions from a message's diff, and terminated from one with another after it"
+        Explain =
+            "coverage shortfall(s): an agreement over scripts whose diffs never terminate mid-way says nothing about it"
+        // Phase 900. Measured 348, 250, 111 and 25; the floors are below.
+        Violations =
+            fun () ->
+                let diffTerminatesMidWay (s: Script) =
+                    s.Subs
+                    |> Map.exists (fun _ subs ->
+                        let terminating = subs |> List.tryFindIndex (List.contains ETerm)
+
+                        match terminating with
+                        | Some i -> i < List.length subs - 1
+                        | None -> false)
+
+                [
+                    yield!
+                        above
+                            (countScripts (fun s -> not (Map.isEmpty s.Subs)))
+                            150
+                            "scripts ask for subscriptions from a message"
+                    yield!
+                        above
+                            (countScripts (fun s -> s.Subs |> Map.exists (fun _ subs -> List.length subs >= 2)))
+                            80
+                            "scripts ask for two subscriptions from one message"
+                    yield!
+                        above
+                            (countScripts (fun s ->
+                                s.Subs |> Map.exists (fun _ subs -> subs |> List.exists (List.contains ETerm))))
+                            50
+                            "scripts terminate from a subscription a message's diff starts"
+                    yield!
+                        above
+                            (countRuns (fun s o ->
+                                diffTerminatesMidWay s
+                                && s.Subs |> Map.exists (fun m _ -> List.contains m o.Trace)))
+                            15
+                            "scripts reach a diff that terminates with a subscription after the one that terminated it"
+                ]
+    }
+    // `Subs.Fx.change` as it was: the rest of the diff started after one of
+    // its subscriptions called `Terminate`. Caught on the start count.
+    goRed
+        "a diff that starts the rest after one of its subscriptions terminated is caught - go-red, Phase 900"
+        StartsTheRestOfADiffAfterTerminate
+        10
+        "shortfall: a diff that goes on starting after Terminate was not caught by the start-count comparison"
+    // The message arm as it was: the terminating start's handle assigned to
+    // the stopped set, and never disposed. Caught on the held count.
+    goRed
+        "a message arm that keeps a terminating diff's handle is caught - go-red, Phase 900"
+        KeepsATerminatingDiffsHandle
+        10
+        "shortfall: a diff's handle that outlives the teardown was not caught by the held-handle comparison"
+    // The message arm as it was: the command run after its diff terminated
+    // the program. Caught on the start count.
+    goRed
+        "a message arm that runs the command after a terminating diff is caught - go-red, Phase 900"
+        RunsTheCommandAfterATerminatingDiff
+        10
+        "shortfall: a command run after its diff terminated the program was not caught by the start-count comparison"
 ]

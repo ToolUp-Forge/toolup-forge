@@ -961,6 +961,39 @@ let private setRootCssVar (name: string) (value: string) : unit = jsNative
 
 // ─── Side panel component ────────────────────────────────────────
 
+// ─── Phase 859.H — who can see what the member types ─────────────
+
+let private conversationVisibilityApi =
+    Api.makeProxy<TeamConversationVisibilityApi> (customOptions = UserSession.withRequestHeaders)
+
+/// Phase 859.H — one line, where a conversation is started, saying who can
+/// see the member's conversations under the active team's level, so a
+/// member never has to infer it. Renders nothing outside a team scope
+/// (a personal conversation is visible to its owner only) or when the
+/// level cannot be read.
+[<ReactComponent>]
+let ConversationVisibilityNotice () =
+    let view, setView = React.useState<TeamConversationVisibilityView option> None
+
+    React.useEffectOnce (fun () ->
+        async {
+            try
+                let! loaded = conversationVisibilityApi.GetConversationVisibility()
+                setView (Some loaded)
+            with _ ->
+                setView None
+        }
+        |> Async.StartImmediate)
+
+    match view with
+    | Some v when v.InTeamScope ->
+        Html.div [
+            prop.className "mb-2 flex items-center gap-1 text-[11px] text-gray-500"
+            prop.title "Set by your team owner in AI Settings."
+            prop.children [ Html.span [ prop.text (TeamConversationVisibility.describe v.Level) ] ]
+        ]
+    | _ -> Html.none
+
 [<ReactComponent>]
 let View
     (isOpen: bool)
@@ -1321,6 +1354,9 @@ let View
                 Html.div [
                     prop.className "border-t border-gray-200 p-3"
                     prop.children [
+                        // Phase 859.H — who can see what is typed here.
+                        ConversationVisibilityNotice()
+
                         Html.div [
                             prop.className "flex gap-2 items-end"
                             prop.children [

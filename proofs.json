@@ -141,7 +141,24 @@
     "made the Phase 850 Fable arms run different, degenerate sequences, so `elmish-ring-extraction-measured` and",
     "`verified-implementation-road` carry corrected Fable figures and `elmish-model-agrees-with-shipped-code-fable`",
     "says what its live campaign was until now; `elmish-fable-shim-machine-integers` gains the loop verdict pin as a",
-    "second mitigation."
+    "second mitigation.",
+    "",
+    "Phase 900 AMENDED the dispatch-loop model, APPENDED two entries, RETIRED the step-level gap from one and",
+    "moved no rung of an existing claim. The step is split at the diff: the `update` oracle returns a `reply` -",
+    "the model, the diff's starts one at a time, the command - and `step` gates each start and the command as",
+    "the boot gates its starts, because production's `Subs.Fx.change` now reads the loop's flag before each",
+    "start (the gate 871 could not place, in Sub.fs) and the message arm runs the command only while the",
+    "program is still running after its diff. Every theorem was re-proved on the pinned prover with no flag",
+    "change; added is `elmish-loop-diff-terminating-starts-nothing-after` (proved: a diff whose i-th start",
+    "terminates makes exactly i starts, no command, and holds nothing) and `elmish-loop-effect-start-order`",
+    "(tested: effects start in attach order, a contract with a migration note). `elmish-loop-teardown-abstracted`",
+    "no longer names the message-diff gap; it names what remains (a command's effects run as one block; what a",
+    "diff STOPS is not counted; a stop function that terminates). The ring and the diff campaigns are pinned by",
+    "fingerprint on both hosts in the shape of 884's two pins, so the corpus replay's premise - that the Fable",
+    "host draws what the .NET host drew - is asserted rather than inherited from the loop's pin; the diff pin caught",
+    "a divergence on its first Fable run (a shuffle whose sort projection drew from the LCG, applied per element on",
+    ".NET and per comparison under Fable), fixed without moving the corpus. Three production cases pin 900's three",
+    "faults, each shown red on its own on the tree before it."
   ],
   "kind": "proofs",
   "version": 1,
@@ -793,7 +810,7 @@
           "every door reads its scope through ScopeResolution.forRequest and carries none of the old spellings"
         ]
       },
-      "residual": "a caller assembling a ModelInput OUTSIDE the doors writes DisclosedFact.Scope itself and nothing checks it wrote the resolver's - the same shape as model-input-assembly-is-callers-code, and stated there"
+      "residual": "a caller assembling a ModelInput OUTSIDE the doors writes DisclosedFact.Scope itself and nothing checks it wrote the resolver's - the same shape as model-input-assembly-is-callers-code, and stated there. Beyond the doors, scopes the platform CARRIES stay strings: since Phase 818 a job scheduled with a resolver-minted scope runs under it (the in-process scheduler re-mints it through an internal carried mint with one caller, pinned in the same pack), but the reactive recompute path is carried from a string-keyed data write and keys the fact store on that string, as do imports, coherence sweeps, knowledge-base dependency records, the job-admin API and any scheduler outside the platform's server tier"
     },
     {
       "id": "model-input-tool-effect-side",
@@ -1299,7 +1316,7 @@
     {
       "id": "elmish-sub-change-keys",
       "level": "proved",
-      "claim": "After `change`, every active key is a requested key and - when every start succeeds - every requested key is active.",
+      "claim": "After `change`, every active key is a requested key and - when every start succeeds - every requested key is active. Stated of the UNGATED path (Phase 900): `Fx.change` now reads the loop's `terminated` flag before each start, and a start that terminates the program ends the diff; that gate is the loop's (the flag is a cell of `runWithDispatch`), so its theorem is `elmish-loop-diff-terminating-starts-nothing-after`, and the model here is `Fx.change` with the flag clear throughout - what the differential host runs production against, and the path production takes whenever no start terminates the program.",
       "evidence": {
         "theorem": "change_keys",
         "model": "proofs/ElmishSub.fst",
@@ -1321,7 +1338,9 @@
           "a ring that skips the wrap check is caught - go-red",
           "a diff that starts a key it also keeps is caught - go-red",
           "the floor is one number, and the model's precondition covers it",
-          "at capacity one the model loses an item - why the floor exists"
+          "at capacity one the model loses an item - why the floor exists",
+          "the ring campaign is the draw both hosts make - its fingerprint is pinned - Phase 900",
+          "the diff campaign is the draw both hosts make - its fingerprint is pinned - Phase 900"
         ],
         "runner": "proofs/check.ps1 step 7, which asserts a CASE COUNT because a filter matching nothing reports success"
       }
@@ -1329,13 +1348,15 @@
     {
       "id": "elmish-model-agrees-with-shipped-code-fable",
       "level": "tested",
-      "claim": "The same drivers, from the same shared module, replay the models' recorded verdicts (tests/elmish-proof-corpus/, written by the .NET host and held to the live model on every .NET run) against the Fable transpilation of `Ring.fs` / `Sub.fs` - the runtime every browser client actually executes. Since Phase 850 the RING extraction is also compiled under Fable (proofs/oracle/ElmishRing.fs, laid out by proofs/normalise-extraction.fsx, over the machine-integer Prims in proofs/oracle/fable/) and run live: it reproduces the corpus's verdicts, agrees with the transpiled ring on a second campaign the corpus never recorded, and catches the broken ring. (Until Phase 884 that second campaign was degenerate under Fable: the shared LCG transpiled without its modulo-2^32 reduction and drew 0 after its first few draws, so it was nearly all capacity-2, one-op sequences; the LCG is now exact on both hosts and the loop differential pins a draw from it.) Until 850 the extraction compiled on .NET only, because its layout needed a flag Fable reads from no fsproj.",
+      "claim": "The same drivers, from the same shared module, replay the models' recorded verdicts (tests/elmish-proof-corpus/, written by the .NET host and held to the live model on every .NET run) against the Fable transpilation of `Ring.fs` / `Sub.fs` - the runtime every browser client actually executes. Since Phase 850 the RING extraction is also compiled under Fable (proofs/oracle/ElmishRing.fs, laid out by proofs/normalise-extraction.fsx, over the machine-integer Prims in proofs/oracle/fable/) and run live: it reproduces the corpus's verdicts, agrees with the transpiled ring on a second campaign the corpus never recorded, and catches the broken ring. (Until Phase 884 that second campaign was degenerate under Fable: the shared LCG transpiled without its modulo-2^32 reduction and drew 0 after its first few draws, so it was nearly all capacity-2, one-op sequences; the LCG is now exact on both hosts and the loop differential pins a draw from it.) Since Phase 900 the ring and the diff campaigns are pinned the same way, in the shape of 884's two pins: each host DRAWS the campaign the corpus was written from (100 ring sequences, 400 diff inputs, the same seed) and asserts its canonical rendering against one literal, so the replay's premise - that this host draws what the .NET host drew - is checked by name on both hosts rather than inherited from the loop's pin. The diff pin caught a divergence on its first Fable run: the diff generator's shuffle sorted by a projection that drew from the LCG, and Fable's List.sortBy applies the projection per comparison where FSharp.Core's projects each element once, so the Fable host drew a different diff campaign from the same seed (400:32117:2124034832 against .NET's 400:31330:845858784); the shuffle now draws one key per element, which is what .NET always did, and no corpus moved. Until 850 the extraction compiled on .NET only, because its layout needed a flag Fable reads from no fsproj.",
       "evidence": {
         "family": "Phase 788 - the proved Elmish runtime as oracle (Fable)",
         "host": "src/ToolUp.AI.Client.Tests/ElmishProofOracleTests.fs",
         "cases": [
           "the transpiled ring agrees with the proved model over the corpus sequences",
           "the transpiled diff and change agree with the proved model over the corpus inputs",
+          "the ring campaign is the draw both hosts make - its fingerprint is pinned - Phase 900",
+          "the diff campaign is the draw both hosts make - its fingerprint is pinned - Phase 900",
           "a ring that skips the wrap check is caught - go-red",
           "a diff that starts a key it also keeps is caught - go-red",
           "Phase 850 - the extracted ring runs directly under Fable and reproduces the verdicts the .NET host recorded",
@@ -1370,7 +1391,7 @@
       "evidence": {
         "document": "proofs/README.md"
       },
-      "reason": "`Fx.change` calls the host's start and dispose functions and reports their exceptions through `onError`; the theorem is about which keys survive the call, with the start function opaque and its failure modelled as `None`. Whether a start that threw left a resource behind is the subscription author's contract."
+      "reason": "`Fx.change` calls the host's start and dispose functions and reports their exceptions through `onError`; the theorem is about which keys survive the call, with the start function opaque and its failure modelled as `None`. Whether a start that threw left a resource behind is the subscription author's contract. One thing a start CAN do is no longer out, but it is the loop's claim: a start that calls Terminate ends the diff (Phase 900, `Fx.change`'s gate), and what that means is `elmish-loop-diff-terminating-starts-nothing-after`."
     },
     {
       "id": "elmish-loop-exactly-once",
@@ -1502,7 +1523,7 @@
     {
       "id": "elmish-loop-terminated-holds-nothing",
       "level": "proved",
-      "claim": "Phase 871. In every state a program reaches, a terminated program holds nothing: every handle the boot's starts acquired - an effect's IDisposable, the init model's subscriptions - has been released, by the teardown or, for a start that terminated the program from its own start function, as soon as that start returned. It is the invariant's new clause (`terminated ==> held == 0`). Until 871 production stored such an effect's handle in the registry `DisposeAll` had just emptied, and assigned such subscriptions to the set the teardown had already stopped, and nothing ever disposed either. `held` counts what the BOOT acquired; see the assumed row `elmish-loop-teardown-abstracted` for what it does not count.",
+      "claim": "Phase 871. In every state a program reaches, a terminated program holds nothing: every handle the boot's starts acquired - an effect's IDisposable, the init model's subscriptions - and, since Phase 900, every handle a MESSAGE's diff acquired, has been released, by the teardown or, for a start that terminated the program from its own start function, as soon as that start (900: that diff) returned. It is the invariant's new clause (`terminated ==> held == 0`). Until 871 production stored such an effect's handle in the registry `DisposeAll` had just emptied, and assigned such subscriptions to the set the teardown had already stopped, and nothing ever disposed either; until 900 the same held of every subscription a message's diff started after one of them terminated the program. `held` counts what the boot's starts and every diff's starts acquired; see the assumed row `elmish-loop-teardown-abstracted` for what it does not count.",
       "evidence": {
         "theorem": "terminated_holds_nothing",
         "model": "proofs/ElmishLoop.fst",
@@ -1511,7 +1532,28 @@
           "program_inv",
           "terminate_spec",
           "gated_spec",
+          "start_one_spec",
           "start_terminating_releases"
+        ]
+      }
+    },
+    {
+      "id": "elmish-loop-diff-terminating-starts-nothing-after",
+      "level": "proved",
+      "claim": "Phase 900. A message whose subscription diff would start `before`, then a subscription `x` that calls Terminate from its start function, then `after`: `step` makes exactly `length before + 1` starts - all of `before` (none of them terminates), `x`, and none of `after` - the message's command does not run (it would have counted as a start), the machine is terminated and holds nothing (what `before` and `x` returned was stopped as soon as the diff returned), and the new model is still assigned, as a Terminate from a command leaves it. The gate is `start_one_terminated` (a start reached once the program is terminated is not made; state unchanged) and the start that terminates is `start_one_terminating` (counted, nothing held afterwards). Until 900 production started `after`, held all of it past the teardown, and ran the command; the model could not see it because the `update` oracle returned one flattened event list, in which a Terminate from a start was an event among events. The oracle now returns a `reply` - the model, the diff's starts one at a time, the command - and `step` applies them as the boot applies its gated starts. The go-red on the model is the step before 900 (the flattened events applied by `apply_evs`), which fails this lemma on the start count; on production it is the three-case pin in `elmish-loop-model-agrees-with-shipped-code-dotnet`, each shown red on its own on the tree before the phase.",
+      "evidence": {
+        "theorem": "diff_terminating_starts_nothing_after",
+        "model": "proofs/ElmishLoop.fst",
+        "prover": "proofs/fstar-pin.json",
+        "supporting": [
+          "start_one_terminated",
+          "start_all_terminated",
+          "start_one_terminating",
+          "start_all_no_term",
+          "start_all_append",
+          "apply_evs_term_held",
+          "apply_evs_no_term",
+          "step_spec"
         ]
       }
     },
@@ -1564,7 +1606,7 @@
     {
       "id": "elmish-loop-model-agrees-with-shipped-code-dotnet",
       "level": "tested",
-      "claim": "The extracted machine agrees with the real `Program.runWithDispatch` over generated reentrancy scripts - which messages a dispatcher-handle sink and an effect's start function raise before the boot paint, which messages init's command raises during the boot drain, which each message's command raises (including Terminate), which messages the render hook raises when handed a given model (Phase 851: the post-drain setState dispatch), which messages terminate, and what the outside world dispatches afterwards through IDispatcher - on the messages `update` saw in order, the messages `dispatch` accepted (recorded on production through IsActive, so the two-flag encoding is measured), the final model, IsActive, the number of times the render hook was called, the model it was last handed, and the boot paint - the model it was handed and what `update` had seen by then. Since Phase 871 the scripts also say whether the init model subscribes and what the subscription's start raises (including Terminate) and whether the terminate handler raises, and the two are compared on how many of the boot's gated starts ran and how many handles are still held. A faithful hand-transcribed skeleton agrees too; the same skeleton with the latch released before the drain, with the paint made after every message (the pre-851 loop), with one paint after the while and no pop after it, with the latch set after the sinks and effects ran (the boot as it was until it was restated), with every start made after Terminate (the boot before 871), and with a terminating start's handle kept (the registry before 871), are each caught. Five production cases pin Phase 871's three faults directly and were each shown red on the tree before it. Since Phase 884 the campaign rows live in the host-neutral src/ToolUp.Platform.Tests/Client/ElmishLoopDifferential.fs, the comparison is per STEP - the state after the boot and after every external event, not only the final one - and the campaign's canonical rendering and the model's verdicts over it are pinned by fingerprint, so the Fable row below provably runs the same four hundred scripts.",
+      "claim": "The extracted machine agrees with the real `Program.runWithDispatch` over generated reentrancy scripts - which messages a dispatcher-handle sink and an effect's start function raise before the boot paint, which messages init's command raises during the boot drain, which each message's command raises (including Terminate), which messages the render hook raises when handed a given model (Phase 851: the post-drain setState dispatch), which messages terminate, and what the outside world dispatches afterwards through IDispatcher - on the messages `update` saw in order, the messages `dispatch` accepted (recorded on production through IsActive, so the two-flag encoding is measured), the final model, IsActive, the number of times the render hook was called, the model it was last handed, and the boot paint - the model it was handed and what `update` had seen by then. Since Phase 871 the scripts also say whether the init model subscribes and what the subscription's start raises (including Terminate) and whether the terminate handler raises, and the two are compared on how many of the boot's gated starts ran and how many handles are still held. A faithful hand-transcribed skeleton agrees too; the same skeleton with the latch released before the drain, with the paint made after every message (the pre-851 loop), with one paint after the while and no pop after it, with the latch set after the sinks and effects ran (the boot as it was until it was restated), with every start made after Terminate (the boot before 871), and with a terminating start's handle kept (the registry before 871), are each caught. Five production cases pin Phase 871's three faults directly and were each shown red on the tree before it. Since Phase 884 the campaign rows live in the host-neutral src/ToolUp.Platform.Tests/Client/ElmishLoopDifferential.fs, the comparison is per STEP - the state after the boot and after every external event, not only the final one - and the campaign's canonical rendering and the model's verdicts over it are pinned by fingerprint, so the Fable row below provably runs the same four hundred scripts. Since Phase 900 a fourth generator gives about a third of the messages subscriptions of their own, started by the diff after the message is first processed (keys only accumulate, so no diff stops anything), every message's command is a start counted on both sides, the two are compared on the start and held counts through every such diff, a fourth counted case says the campaign reached a diff that terminates with a subscription after the one that terminated it, and three more go-reds are caught - the message arm before 900: the rest of the diff started after Terminate, the terminating start's handle kept, the command run after a terminating diff. Three production cases pin 900's three faults one each (shown red on their own on the tree before it) and a fourth pins the effect start order as a contract.",
       "evidence": {
         "family": "Phase 789 - the proved dispatch loop as oracle",
         "host": "src/ToolUp.Platform.Tests/InProcess/ElmishLoopProofOracleTests.fs",
@@ -1594,7 +1636,15 @@
           "a registry that keeps a terminating start's handle is caught - go-red, Phase 871",
           "a sink that terminates at boot starts no effect, no subscription and no command - run",
           "an effect that terminates from its own start function has its handle disposed - run",
-          "a subscription that terminates from its own start function is stopped - run"
+          "a subscription that terminates from its own start function is stopped - run",
+          "the campaign started subscriptions from a message's diff, and terminated from one with another after it",
+          "a diff that starts the rest after one of its subscriptions terminated is caught - go-red, Phase 900",
+          "a message arm that keeps a terminating diff's handle is caught - go-red, Phase 900",
+          "a message arm that runs the command after a terminating diff is caught - go-red, Phase 900",
+          "a subscription a message's diff starts that terminates stops the rest of the diff starting - Phase 900, run",
+          "a subscription a message's diff starts that terminates has what the diff started disposed - Phase 900, run",
+          "a subscription a message's diff starts that terminates stops the message's command running - Phase 900, run",
+          "effects start in the order they were attached, the order effectIds reports - Phase 900, run"
         ],
         "runner": "proofs/check.ps1 step 7, which asserts a CASE COUNT because a filter matching nothing reports success"
       }
@@ -1625,7 +1675,11 @@
           "a terminated program holds nothing - terminated_holds_nothing, run",
           "a terminate handler that raises changes nothing the loop does - teardown is total, run",
           "a boot that starts after Terminate is caught - go-red, Phase 871",
-          "a registry that keeps a terminating start's handle is caught - go-red, Phase 871"
+          "a registry that keeps a terminating start's handle is caught - go-red, Phase 871",
+          "the campaign started subscriptions from a message's diff, and terminated from one with another after it",
+          "a diff that starts the rest after one of its subscriptions terminated is caught - go-red, Phase 900",
+          "a message arm that keeps a terminating diff's handle is caught - go-red, Phase 900",
+          "a message arm that runs the command after a terminating diff is caught - go-red, Phase 900"
         ],
         "runner": "dotnet run --project Build.fsproj -- VerifyFable (the fable-tier CI job, and the Fable leg of VerifyAll)"
       }
@@ -1642,20 +1696,33 @@
     {
       "id": "elmish-loop-oracle-abstracts-callees",
       "level": "assumed",
-      "claim": "`update`, `setState`, `Subs.Fx.change` and `Cmd.exec` are one oracle returning a model and the events raised before control returns. An exception from any of them is an oracle reply whose model is the old one carrying whatever was dispatched before the throw - admitted by the abstraction, not scripted by the differential. That reply presumes the exception was REPORTED AND THE LOOP WENT ON, which is true only of a reporter that returns; production makes the reporter total by construction and the tested row `elmish-loop-reporter-total` pins it. What the teardown's callees raise is no longer assumed (Phase 871): the flag is set before they run, so it is refused by construction; what remains abstracted about teardown is the row `elmish-loop-teardown-abstracted`.",
+      "claim": "`update`, `subscribe`, `Subs.Fx.change` and `Cmd.exec` are one oracle returning a reply: since Phase 900 the model, the diff's starts one at a time (each the events its start function raises before it returns, and whether it returned a handle) and the command's events; until 900 the model and one flattened event list. An exception from `update` or `subscribe` is an oracle reply whose model is the old one with no starts and no command; a start that throws is a start holding nothing; a command that throws is a command carrying whatever it dispatched before the throw - admitted by the abstraction, not scripted by the differential. Each presumes the exception was REPORTED AND THE LOOP WENT ON, which is true only of a reporter that returns; production makes the reporter total by construction and the tested row `elmish-loop-reporter-total` pins it. What the teardown's callees raise is no longer assumed (Phase 871): the flag is set before they run, so it is refused by construction; what remains abstracted about teardown is the row `elmish-loop-teardown-abstracted`.",
       "evidence": {
-        "assumption": "update, subscribe, Subs.Fx.change and Cmd.exec behave as one oracle returning a model and the events raised before control returns; since Phase 851 setState is a second oracle, a pure function of the model it is handed to the events it raises synchronously"
+        "assumption": "update, subscribe, Subs.Fx.change and Cmd.exec behave as one oracle returning the model, the diff's starts in order and the command's events, each raised before control returns; since Phase 851 setState is a second oracle, a pure function of the model it is handed to the events it raises synchronously"
       },
       "mitigation": "the exception shape is expressible as an oracle reply and could be scripted"
     },
     {
       "id": "elmish-loop-teardown-abstracted",
       "level": "assumed",
-      "claim": "Phase 871. What the model still abstracts about teardown and the starts. WHAT a released handle does when disposed - an effect's Dispose, a subscription's stop - is the effect's contract; the model counts handles and does not look inside them. The gate is at the BLOCK: `Subs.Fx.change` starts the init model's subscriptions together and `Cmd.exec` runs init's command's effects together, so the model has one start for each block, and a Terminate raised by one subscription does not stop the next in the same block from starting (it is then released with the rest). And `held` counts what the BOOT acquired: a message's subscription diff runs inside the `update` oracle, so a subscription that a message's diff starts AFTER an earlier subscription in the same diff called Terminate - which production still assigns to the stopped set, and never disposes - is NOT covered by `terminated_holds_nothing`, and the message's command still runs after it. Closing that needs the gate inside Sub.fs and the step oracle split at the diff; it is not claimed.",
+      "claim": "Phase 871, narrowed by Phase 900. What the model still abstracts about teardown and the starts. WHAT a released handle does when disposed - an effect's Dispose, a subscription's stop - is the effect's contract; the model counts handles and does not look inside them. The subscription gate is per SUBSCRIPTION wherever `Subs.Fx.change` runs (the boot's start and every message's diff) since 900, and `held` counts what both acquired, so what 871 recorded here - a subscription a message's diff starts after an earlier one in the same diff called Terminate, never disposed, the command run after - is CLOSED: `elmish-loop-diff-terminating-starts-nothing-after`. What remains at the block is `Cmd.exec`: a command's effects run together, so a command is one start and a Terminate raised by one effect does not stop the next effect of the same command from running (a command holds nothing, so nothing leaks; its later dispatches are refused, `terminated_absorbing`). What a diff STOPS is not counted: `held` moves down only at teardown, so the model is exact for a program whose subscription keys only accumulate - the shape the differential scripts - and which keys a diff stops is `elmish-sub-stop-exactly-removed`. A stop function that calls Terminate mid-diff is not modelled: the diff's stops run before its starts, and what a stop does is the effect's contract.",
       "evidence": {
-        "assumption": "a disposed handle releases what it holds; within one subscription block or one command a Terminate raised by an element does not gate the elements after it; the step oracle's subscription diff is not observed by `started` or `held`"
+        "assumption": "a disposed handle releases what it holds; within one command a Terminate raised by an effect does not gate the effects after it; the handles a diff releases are not observed by `held`; no stop function terminates the program"
       },
-      "mitigation": "the differential compares production's live handle count with the model's on every script - an effect and a subscription that terminate from their own start, a sink that terminates first - and a production case pins each of the three faults; the step-level gap is named here and in the README's Rung 4 rather than implied closed"
+      "mitigation": "the differential compares production's live handle count with the model's on every script and at every step - an effect and a subscription that terminate from their own start, a sink that terminates first, and since 900 a subscription a message's diff starts that terminates with another after it - and a production case pins each of 871's three faults and each of 900's three; what remains is named here and in the README's Rung 4 rather than implied closed"
+    },
+    {
+      "id": "elmish-loop-effect-start-order",
+      "level": "tested",
+      "claim": "Phase 900. Lifetime-aware effects start in the order they were attached. `Program.withEffect` prepends, as the two sink registrations do; the boot reversed the sinks on the way out and, until 900, not the effects, so three effects attached a, b, c started c, b, a - the reverse of what `Program.effectIds` reported. Stated as a contract with a test rather than proved: the model has one start per effect and no order on the list beyond the order it is given, so the theorem it would be is that a list is iterated in order. Migration note: docs/migrations/900-effect-start-order.md.",
+      "evidence": {
+        "family": "Phase 789 - the proved dispatch loop as oracle",
+        "host": "src/ToolUp.Platform.Tests/InProcess/ElmishLoopProofOracleTests.fs",
+        "cases": [
+          "effects start in the order they were attached, the order effectIds reports - Phase 900, run"
+        ],
+        "runner": "proofs/check.ps1 step 7, which asserts a CASE COUNT because a filter matching nothing reports success"
+      }
     },
     {
       "id": "elmish-loop-render-oracle-quiet",

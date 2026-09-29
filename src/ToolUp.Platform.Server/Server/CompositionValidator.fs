@@ -994,3 +994,368 @@ module CompositionValidator =
                 |> ignore
 
             services
+
+// ─── Phase 887 — declared fact tables: compose-time checks ───────────
+//
+// **Why a sibling family and not five more `CompositionValidator.rules`.**
+// A `CompositionRule` reads `CompositionManifest -> CompositionReferences`,
+// and a table declaration reaches neither: its checks join the table list
+// against the metric and subject registrations and the composition's
+// bindings. Carrying those on `CompositionReferences` would grow that
+// record's constructor (a break under the public-API gate) and would move
+// the published rule manifest for EVERY composition — including the ones
+// that declare no table, which this phase promises stay byte-identical.
+// So the checks follow the `EventTopologyPreflight` shape exactly: declared
+// data, exported as a Phase 294 rule manifest in the same descriptor
+// vocabulary, run by the Phase 9m aggregator at the same startup gate, and
+// registered only when a table is declared (GP 13).
+//
+// **Class (Phase 585): structural.** A pure in-memory join over the
+// composition's own declarations — no socket, no dependency — so
+// `SkipPreflight` has nothing to skip, and an emergency boot must not
+// start a composition whose required output has nowhere to go.
+
+/// Phase 887 — what the fact-table preflight reads: the composition's
+/// table declarations, the metric and subject registrations they must
+/// resolve against, and the bindings that give them a store.
+type FactTableComposition = {
+    /// Every declared table, with its declaring module.
+    Tables: Grounding.FactTableRegistration list
+    /// The composition's metric registrations the columns resolve against.
+    Metrics: Grounding.MetricRegistration list
+    /// The composition's subject registrations the levels resolve against.
+    Subjects: Grounding.SubjectRegistration list
+    /// Where the composition binds its tables.
+    Bindings: Grounding.FactTableBinding list
+}
+
+/// Phase 887 — the compose-time checks over declared fact tables, as
+/// declared rules wired through the `IConfigValidator` aggregator.
+module FactTablePreflight =
+
+    /// Stable `IConfigValidator.Name` for the fact-table checks.
+    [<Literal>]
+    let ValidatorName = "fact-table-declarations"
+
+    /// Two modules declaring one table id.
+    [<Literal>]
+    let DuplicateTableRule = "fact-table-duplicate-id"
+
+    /// A declaration that cannot describe a table at all.
+    [<Literal>]
+    let MalformedTableRule = "fact-table-malformed"
+
+    /// A column naming an unregistered metric.
+    [<Literal>]
+    let UnregisteredMetricRule = "fact-table-unregistered-metric"
+
+    /// A hierarchy or level the subject registry does not hold.
+    [<Literal>]
+    let UnknownSubjectLevelRule = "fact-table-unknown-subject-level"
+
+    /// A `Required` table no binding covers — the construction hole.
+    [<Literal>]
+    let UnboundRequiredRule = "fact-table-unbound-required"
+
+    /// A metric with two homes at one level.
+    [<Literal>]
+    let MetricTwoHomesRule = "fact-table-metric-two-homes"
+
+    /// Phase 294 — the introspectable rule manifest, in the descriptor
+    /// shape `CompositionValidator.ruleManifest` uses.
+    let ruleManifest: CompositionRuleDescriptor list = [
+        {
+            Code = DuplicateTableRule
+            Severity = DefectError
+            Description =
+                "A fact-table id must be declared by exactly one module; two modules declaring one id would write one table's rows from two producers."
+        }
+        {
+            Code = MalformedTableRule
+            Severity = DefectError
+            Description =
+                "A fact-table declaration must carry a non-empty id and producing operation, at least one column, no metric twice, and a positive refresh cadence."
+        }
+        {
+            Code = UnregisteredMetricRule
+            Severity = DefectError
+            Description = "Every fact-table column must name a metric registered in the composition."
+        }
+        {
+            Code = UnknownSubjectLevelRule
+            Severity = DefectError
+            Description =
+                "A fact table's subject hierarchy must be registered in the composition and its level must be one of that hierarchy's levels."
+        }
+        {
+            Code = UnboundRequiredRule
+            Severity = DefectError
+            Description =
+                "A Required fact table must be bound to a store; a composition whose required output has nowhere to be written refuses to start."
+        }
+        {
+            Code = MetricTwoHomesRule
+            Severity = DefectWarning
+            Description =
+                "A metric should have one home per subject level: a fact table, or individual assertions — not both. Two tables carrying one metric at one level, or a table carrying a metric the composition recomputes fact by fact, is flagged."
+        }
+    ]
+
+    /// Phase 585 — the same rules with their class: all structural.
+    let classifiedRuleManifest: ClassifiedCompositionRule list =
+        ruleManifest
+        |> List.map (fun rule -> {
+            Code = rule.Code
+            Severity = rule.Severity
+            Description = rule.Description
+            Class = StructuralRule
+        })
+
+    let private quoted (values: string list) : string =
+        match values |> List.distinct |> List.sort with
+        | [] -> "none"
+        | vs -> vs |> List.map (sprintf "'%s'") |> String.concat ", "
+
+    let private defect (code: string) (severity: CompositionDefectSeverity) (message: string) : CompositionDefect = {
+        RuleCode = code
+        Severity = severity
+        Message = message
+    }
+
+    let private duplicates (composition: FactTableComposition) : CompositionDefect list =
+        composition.Tables
+        |> List.groupBy _.Definition.Id
+        |> List.choose (fun (tableId, group) ->
+            match group |> List.map _.Module |> List.distinct with
+            | []
+            | [ _ ] -> None
+            | modules ->
+                Some(
+                    defect
+                        DuplicateTableRule
+                        DefectError
+                        (sprintf
+                            "Fact table '%s' is declared by modules %s. A table has one producer — rename the table in one module to disambiguate."
+                            tableId
+                            (quoted modules))
+                ))
+
+    let private malformed (composition: FactTableComposition) : CompositionDefect list =
+        composition.Tables
+        |> List.collect (fun r ->
+            let t = r.Definition
+
+            let problems = [
+                if String.IsNullOrWhiteSpace t.Id then
+                    "the table id is empty"
+                if String.IsNullOrWhiteSpace t.ProducingOperation then
+                    "the producing operation is empty"
+                if List.isEmpty t.Columns then
+                    "it declares no columns"
+                if t.RefreshCadence <= TimeSpan.Zero then
+                    "its refresh cadence is not positive"
+                for metricId, count in t.Columns |> List.countBy _.Metric do
+                    if count > 1 then
+                        sprintf "metric '%s' is declared in %d columns" metricId count
+            ]
+
+            match problems with
+            | [] -> []
+            | ps -> [
+                defect
+                    MalformedTableRule
+                    DefectError
+                    (sprintf
+                        "Fact table '%s' declared by module '%s' is malformed: %s."
+                        t.Id
+                        r.Module
+                        (String.concat "; " ps))
+              ])
+
+    let private unregisteredMetrics (composition: FactTableComposition) : CompositionDefect list =
+        let registered = composition.Metrics |> List.map _.Definition.Id |> Set.ofList
+
+        composition.Tables
+        |> List.collect (fun r ->
+            r.Definition.Columns
+            |> List.map _.Metric
+            |> List.distinct
+            |> List.filter (fun metricId -> not (registered.Contains metricId))
+            |> List.map (fun metricId ->
+                defect
+                    UnregisteredMetricRule
+                    DefectError
+                    (sprintf
+                        "Fact table '%s' declared by module '%s' has a column for metric '%s', which no module registers. Register the metric (ServerModule.declareMetrics) or drop the column. Registered metrics: %s."
+                        r.Definition.Id
+                        r.Module
+                        metricId
+                        (quoted (Set.toList registered)))))
+
+    let private unknownSubjectLevels (composition: FactTableComposition) : CompositionDefect list =
+        let subjects =
+            composition.Subjects
+            |> List.map (fun s -> s.Definition.Id, s.Definition)
+            |> List.distinctBy fst
+            |> Map.ofList
+
+        composition.Tables
+        |> List.choose (fun r ->
+            let t = r.Definition
+
+            match subjects |> Map.tryFind t.Hierarchy with
+            | None ->
+                Some(
+                    defect
+                        UnknownSubjectLevelRule
+                        DefectError
+                        (sprintf
+                            "Fact table '%s' declared by module '%s' is over subject hierarchy '%s', which no module registers. Registered hierarchies: %s."
+                            t.Id
+                            r.Module
+                            t.Hierarchy
+                            (quoted (subjects |> Map.toList |> List.map fst)))
+                )
+            | Some hierarchy when (Grounding.FactTableDefinition.levelDepth hierarchy t.Level).IsNone ->
+                Some(
+                    defect
+                        UnknownSubjectLevelRule
+                        DefectError
+                        (sprintf
+                            "Fact table '%s' declared by module '%s' sits at level '%s', which subject hierarchy '%s' does not have. Its levels: %s."
+                            t.Id
+                            r.Module
+                            t.Level
+                            t.Hierarchy
+                            (hierarchy.Levels |> List.map (sprintf "'%s'") |> String.concat ", "))
+                )
+            | Some _ -> None)
+
+    let private unboundRequired (composition: FactTableComposition) : CompositionDefect list =
+        composition.Tables
+        |> List.distinctBy _.Definition.Id
+        |> List.filter (fun r -> r.Definition.Requirement = Grounding.FactTableRequirement.Required)
+        |> List.filter (fun r -> (Grounding.FactTableBinding.destinationOf composition.Bindings r.Definition.Id).IsNone)
+        |> List.map (fun r ->
+            defect
+                UnboundRequiredRule
+                DefectError
+                (sprintf
+                    "Required fact table '%s' declared by module '%s' is bound to no store, so its rows have nowhere to be written. Bind it — compose a fact-table writer (the facts companion's withFactTableWriter binds every declared table) or ServerApp.bindFactTables — or declare the table Optional."
+                    r.Definition.Id
+                    r.Module))
+
+    let private twoHomes (composition: FactTableComposition) : CompositionDefect list =
+        let placements =
+            composition.Tables
+            |> List.distinctBy _.Definition.Id
+            |> List.collect (fun r ->
+                r.Definition.Columns
+                |> List.map _.Metric
+                |> List.distinct
+                |> List.map (fun metricId -> (metricId, r.Definition.Hierarchy, r.Definition.Level), r))
+
+        let tableVsTable =
+            placements
+            |> List.groupBy fst
+            |> List.choose (fun ((metricId, hierarchy, level), group) ->
+                match group |> List.map snd with
+                | []
+                | [ _ ] -> None
+                | tables ->
+                    Some(
+                        defect
+                            MetricTwoHomesRule
+                            DefectWarning
+                            (sprintf
+                                "Metric '%s' at level '%s' of hierarchy '%s' is carried by fact tables %s. A metric has one home per level — the tables' facts would compete for every subject. Carry it in one table."
+                                metricId
+                                level
+                                hierarchy
+                                (tables
+                                 |> List.map (fun r -> sprintf "%s (module %s)" r.Definition.Id r.Module)
+                                 |> quoted))
+                    ))
+
+        // A metric declaring an Eager / OnQuery recompute policy is
+        // re-asserted fact by fact by the reactive recomputation path —
+        // which is the per-subject home the table would compete with.
+        let recomputed =
+            composition.Metrics
+            |> List.choose (fun m ->
+                match m.Definition.RecomputePolicy with
+                | Some Grounding.Eager
+                | Some Grounding.OnQuery -> Some(m.Definition.Id, m)
+                | _ -> None)
+            |> Map.ofList
+
+        let tableVsAssertion =
+            placements
+            |> List.choose (fun ((metricId, _, level), r) ->
+                recomputed
+                |> Map.tryFind metricId
+                |> Option.map (fun m ->
+                    defect
+                        MetricTwoHomesRule
+                        DefectWarning
+                        (sprintf
+                            "Metric '%s' is carried at level '%s' by fact table '%s' (module '%s') and is also recomputed fact by fact under its %A recompute policy (declared by module '%s'). A metric has one home per level — let the table's run own it, or declare the metric Manual."
+                            metricId
+                            level
+                            r.Definition.Id
+                            r.Module
+                            (Grounding.RecomputePolicy.resolve m.Definition.RecomputePolicy)
+                            m.Module)))
+
+        tableVsTable @ tableVsAssertion
+
+    /// Every fact-table defect in a composition. Pure.
+    let defects (composition: FactTableComposition) : CompositionDefect list =
+        List.concat [
+            duplicates composition
+            malformed composition
+            unregisteredMetrics composition
+            unknownSubjectLevels composition
+            unboundRequired composition
+            twoHomes composition
+        ]
+
+    let private renderDefects (defects: CompositionDefect list) : string =
+        defects
+        |> List.map (fun d -> sprintf "[%s] %s" d.RuleCode d.Message)
+        |> String.concat "\n"
+
+    /// Translate defects into a `ValidationResult`: any `DefectError`
+    /// aborts startup, a clean composition is `Ok`, warnings-only surface
+    /// as `Warning`.
+    let toValidationResult (defects: CompositionDefect list) : ValidationResult =
+        let errors = defects |> List.filter (fun d -> d.Severity = DefectError)
+
+        if not errors.IsEmpty then
+            Error(renderDefects errors)
+        else
+            match defects with
+            | [] -> Ok
+            | warnings -> Warning(renderDefects warnings)
+
+    /// The structural-class `IConfigValidator` running the fact-table
+    /// checks at preflight.
+    type FactTableDeclarationValidator(composition: FactTableComposition) =
+        interface IConfigValidator with
+            member _.Name = ValidatorName
+            member _.Timeout = IConfigValidator.defaultTimeout
+            member _.Validate() = async { return toValidationResult (defects composition) }
+
+        interface IStructuralClassValidator
+
+    /// The opt-in registration, in the closure shape
+    /// `CompositionValidator.serviceRegistration` returns. **Nothing is
+    /// registered for a composition that declares no table** (GP 13), so
+    /// such a composition's `services` is byte-for-byte what it was.
+    let serviceRegistration (composition: FactTableComposition) : IServiceCollection -> IServiceCollection =
+        fun services ->
+            if not (List.isEmpty composition.Tables) then
+                services.AddSingleton<IConfigValidator>(FactTableDeclarationValidator(composition) :> IConfigValidator)
+                |> ignore
+
+            services

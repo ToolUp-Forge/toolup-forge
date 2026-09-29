@@ -450,6 +450,7 @@ let tests =
                     AccessContext = AccessContext.unrestricted (AuthenticatedUser "_system")
                     Attempt = 1
                     Trigger = Manual
+                    Scope = ToolUp.Platform.ResolvedScope.anonymous
                     TriggerSource = TriggerSource.ScheduledManually "_system"
                     ScheduledAt = DateTime.UtcNow
                     RunningAt = DateTime.UtcNow

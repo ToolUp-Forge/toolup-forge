@@ -101,6 +101,13 @@ and VectorScope =
 filters out, `RestoreChunk` clears, and `Vacuum` hard-removes past a retention cutoff. That is why
 deletion and vacuuming are two calls rather than one.
 
+**Batched writes are a separate, optional interface.** A store that can write many chunks in one
+round-trip implements `IVectorStoreBatch` (`UpsertBatch: scope -> (chunkId * vector * chunk) list ->
+Async<unit>`) beside `IVectorStore`, so the core interface gains no member and no existing store
+breaks. Callers write through `IVectorStore.upsertBatch store scope chunks`, which probes for the
+batch interface and otherwise falls back to one `Upsert` per chunk, in order — the two paths leave
+the store in the same state. `ToolUp.VectorStores.Pgvector` implements it as one statement per batch.
+
 ### Default `InMemoryVectorStore`
 
 - Pre-normalised vectors (cosine similarity = dot product).
@@ -121,6 +128,8 @@ Still a **single-process** store: the graph lives in process memory and is snaps
 ### `ToolUp.VectorStores.Pgvector`
 
 PostgreSQL + [pgvector](https://github.com/pgvector/pgvector) — the external rung, and the one to reach for when the constraint is *replicas* rather than corpus size. The index is the database, so every replica reads and writes the same rows: retrieval is consistent across replicas with no per-process index state, which is precisely what the single-instance startup validators guard against. Scope is a `scope` column in the composite primary key and every chunk-touching statement carries a `scope = @scope` predicate, so isolation is structural (GP 4) exactly as the per-scope HNSW graph is. Exact cosine search by default; an HNSW / IVFFlat index inside the database is an opt-in at scale. Connection, extension and schema failures are raised at `create` time, never at first query.
+
+At scale, compose it with `createTuned … PgvectorTuning.recommended` rather than `create`. One approximate index serves every scope in the table, and the scope filter is applied as the index is walked, so a small scope in a large shared table is the exposed case: the approximate scan can run out of candidates before it has found `topK` rows from that scope. The tuning answers that in three layers — a per-query search width (`hnsw.ef_search` / `ivfflat.probes`, applied transaction-locally so a pooled connection never carries it), iterative scanning where pgvector supports it (0.8.0 and later), and an exact re-run of any scope whose page comes back short of `topK` — the last of which makes a full top-k a guarantee rather than a tuning outcome. The search statement also orders by distance alone, so the index can serve it, with the total order restored by re-sorting the page. `create` keeps the pre-tuning behaviour exactly. The companion README records the recommended settings and what has been measured.
 
 See [`companions/vector-stores.md`](../companions/vector-stores.md) for the full comparison, the schema, and the composition snippets.
 

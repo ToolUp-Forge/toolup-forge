@@ -767,16 +767,24 @@ module ConversationListing =
                 TotalCount = matching.Length
             }
 
-    /// Read one conversation's listing row. `None` when its UI blob can
-    /// no longer be read — the conversation was deleted or purged after
-    /// the container was enumerated, and must not reappear in the list.
-    let readRow
+    /// A conversation's stored author: the `CreatedBy` its first persisted
+    /// message recorded (Phase 6j.D), `""` when none was recorded. Always
+    /// read from the stored conversation, never from a request (Phase 859).
+    let ownerOf (messages: ConversationMessage list) : string =
+        match messages with
+        | first :: _ when not (String.IsNullOrEmpty first.CreatedBy) -> first.CreatedBy
+        | _ -> ""
+
+    /// Read one conversation's listing row together with its stored author
+    /// (Phase 859 — the visibility filter needs both). `None` when its UI
+    /// blob can no longer be read.
+    let readOwnedRow
         (logger: ILogger)
         (storage: IBlobStorage)
         (container: string)
         (maxTitleChars: int)
         (conversationId: Guid)
-        : Async<ConversationListingRow option> =
+        : Async<(ConversationListingRow * string) option> =
         async {
             let blobName = conversationBlobName conversationId
 
@@ -810,23 +818,64 @@ module ConversationListing =
                     | Some t when not (String.IsNullOrWhiteSpace t) -> Some t
                     | _ -> fallbackTitle maxTitleChars messages
 
-                return
-                    Some {
-                        Conversation = {
-                            Id = conversationId
-                            Title = title
-                            CreatedAt = createdAt
-                            UpdatedAt = updatedAt
-                            MessageCount = messages.Length
-                            OverrideProviderLabel = meta.OverrideProviderLabel
-                        }
-                        SearchText = [
-                            yield! Option.toList title
-                            for m in messages do
-                                if not (String.IsNullOrEmpty m.Content) then
-                                    m.Content
-                        ]
+                let row = {
+                    Conversation = {
+                        Id = conversationId
+                        Title = title
+                        CreatedAt = createdAt
+                        UpdatedAt = updatedAt
+                        MessageCount = messages.Length
+                        OverrideProviderLabel = meta.OverrideProviderLabel
                     }
+                    SearchText = [
+                        yield! Option.toList title
+                        for m in messages do
+                            if not (String.IsNullOrEmpty m.Content) then
+                                m.Content
+                    ]
+                }
+
+                return Some(row, ownerOf messages)
+        }
+
+    /// Read one conversation's listing row. `None` when its UI blob can
+    /// no longer be read — the conversation was deleted or purged after
+    /// the container was enumerated, and must not reappear in the list.
+    let readRow
+        (logger: ILogger)
+        (storage: IBlobStorage)
+        (container: string)
+        (maxTitleChars: int)
+        (conversationId: Guid)
+        : Async<ConversationListingRow option> =
+        async {
+            let! owned = readOwnedRow logger storage container maxTitleChars conversationId
+            return owned |> Option.map fst
+        }
+
+    /// Every conversation in `container` with its stored author, in
+    /// listing order (Phase 859). At most 16 reads are in flight, so a
+    /// large scope does not open one blob read per conversation at once.
+    let readAllOwned
+        (logger: ILogger)
+        (storage: IBlobStorage)
+        (container: string)
+        (maxTitleChars: int)
+        : Async<(ConversationListingRow * string) list> =
+        async {
+            let! ids = ConversationRetention.listConversationIds storage container
+
+            let! rows =
+                Async.Parallel(
+                    ids |> List.map (readOwnedRow logger storage container maxTitleChars),
+                    maxDegreeOfParallelism = 16
+                )
+
+            return
+                rows
+                |> Array.toList
+                |> List.choose id
+                |> List.sortWith (fun (a, _) (b, _) -> compareRows a.Conversation b.Conversation)
         }
 
     /// Every conversation in `container`, in listing order. At most 16
@@ -839,19 +888,8 @@ module ConversationListing =
         (maxTitleChars: int)
         : Async<ConversationListingRow list> =
         async {
-            let! ids = ConversationRetention.listConversationIds storage container
-
-            let! rows =
-                Async.Parallel(
-                    ids |> List.map (readRow logger storage container maxTitleChars),
-                    maxDegreeOfParallelism = 16
-                )
-
-            return
-                rows
-                |> Array.toList
-                |> List.choose id
-                |> List.sortWith (fun a b -> compareRows a.Conversation b.Conversation)
+            let! rows = readAllOwned logger storage container maxTitleChars
+            return rows |> List.map fst
         }
 
 // ─── Phase 516.B — conversation titling ──────────────────────────
@@ -1481,6 +1519,75 @@ let aiAssistantApi
             AccessContext.unrestricted (AnonymousSession userId)
 
     let promptBuilder = config |> Option.bind _.SystemPrompt
+
+    // Phase 859 — the team's conversation visibility policy, read per
+    // request in the team's scope (`None` outside one: a personal container
+    // is owner-only by construction). Every read path below filters through
+    // `ConversationVisibility.canSee`, every write through `canModify`, and
+    // the owner is always the stored conversation's, never the request's.
+    let visibilityState () =
+        TeamConversationPolicyStore.ConversationVisibility.resolveState ctx storage scope.Container
+
+    let viewerIn (state: TeamConversationPolicyStore.TeamVisibilityState) =
+        TeamConversationPolicyStore.ConversationVisibility.resolveViewer ctx userId state.TeamId
+
+    let createdAtOf (messages: ConversationMessage list) =
+        match messages with
+        | [] -> DateTime.MinValue
+        | _ -> messages |> List.map _.Timestamp |> List.min
+
+    /// The listing rows the caller may see. A team that never chose a level
+    /// under a `TeamVisible` default is not filtered at all (no role
+    /// lookup), so it lists exactly what it listed before.
+    let visibleRows (rows: (ConversationListingRow * string) list) : Async<ConversationListingRow list> = async {
+        match! visibilityState () with
+        | Some state when not (TeamConversationPolicyStore.ConversationVisibility.isOpen state) ->
+            let! viewer = viewerIn state
+
+            return
+                rows
+                |> List.filter (fun (row, owner) ->
+                    TeamConversationPolicyStore.ConversationVisibility.canSee
+                        state
+                        viewer
+                        owner
+                        row.Conversation.CreatedAt)
+                |> List.map fst
+        | _ -> return rows |> List.map fst
+    }
+
+    /// Whether the caller may write to (delete, or change) a conversation.
+    /// `Ok true` proceed; `Ok false` the caller cannot see it, so the write
+    /// behaves exactly as it does for an id that does not exist (a no-op),
+    /// and its existence does not leak; `Error` refused, naming the rule.
+    let authoriseWrite (conversationId: Guid) : Async<Result<bool, string>> = async {
+        match! visibilityState () with
+        | None -> return Ok true
+        | Some state ->
+            let! messages = loadConversation logger storage scope.Container conversationId
+            let owner = ConversationListing.ownerOf messages
+
+            match messages with
+            | [] -> return Ok true
+            | _ when owner = userId -> return Ok true
+            | _ ->
+                let! viewer = viewerIn state
+                let createdAt = createdAtOf messages
+
+                if not (TeamConversationPolicyStore.ConversationVisibility.canSee state viewer owner createdAt) then
+                    return Ok false
+                elif TeamConversationPolicyStore.ConversationVisibility.canModify state viewer owner createdAt then
+                    return Ok true
+                else
+                    let elevated =
+                        match TeamConversationPolicyStore.ConversationVisibility.levels state createdAt with
+                        | Some(_, PlatformAdmins) -> "a platform admin"
+                        | _ -> "a team owner or admin"
+
+                    return
+                        Error
+                            $"Only the conversation's author or {elevated} can delete or change another member's conversation."
+    }
 
     // Phase 69c.F — ONE turn implementation, the event sink injected at
     // construction. `makeAssistantApi emit` builds the api record whose turn
@@ -2292,15 +2399,56 @@ let aiAssistantApi
                 return task
             }
 
+        // Phase 859.B/E — a conversation the caller may not see reads as
+        // empty, exactly as a missing id does; opening another member's
+        // conversation under a narrower level than `TeamVisible` is audited.
         GetConversation =
-            fun conversationId -> async { return! loadConversation logger storage scope.Container conversationId }
+            fun conversationId -> async {
+                let! messages = loadConversation logger storage scope.Container conversationId
+
+                match messages with
+                | [] -> return []
+                | _ ->
+                    match! visibilityState () with
+                    | Some state when not (TeamConversationPolicyStore.ConversationVisibility.isOpen state) ->
+                        let owner = ConversationListing.ownerOf messages
+                        let createdAt = createdAtOf messages
+                        let! viewer = viewerIn state
+
+                        if
+                            not (TeamConversationPolicyStore.ConversationVisibility.canSee state viewer owner createdAt)
+                        then
+                            return []
+                        else
+                            match TeamConversationPolicyStore.ConversationVisibility.levels state createdAt with
+                            | Some(_, current) when
+                                TeamConversationPolicyStore.ConversationVisibility.isElevatedRead
+                                    state
+                                    viewer
+                                    owner
+                                    createdAt
+                                ->
+                                do!
+                                    TeamConversationPolicyStore.ConversationVisibilityAudit.elevatedRead
+                                        auditLogOpt
+                                        scope.ScopeId
+                                        viewer.UserId
+                                        owner
+                                        conversationId
+                                        current
+                            | _ -> ()
+
+                            return messages
+                    | _ -> return messages
+            }
 
         // Phase 516.A — real titles, counts and timestamps, newest
         // activity first, read by the same `ConversationListing` the paged
         // endpoint uses.
         ListConversations =
             fun () -> async {
-                let! rows = ConversationListing.readAll logger storage scope.Container titlingPolicy.MaxTitleChars
+                let! owned = ConversationListing.readAllOwned logger storage scope.Container titlingPolicy.MaxTitleChars
+                let! rows = visibleRows owned
                 return rows |> List.map _.Conversation
             }
 
@@ -2335,7 +2483,11 @@ let aiAssistantApi
             }
 
         // Phase 516.D — the polling fallback: the last status the task's
-        // turn emitted, for the caller that submitted it.
+        // turn emitted, for the caller that submitted it. Phase 859 leaves
+        // it as it is: a task is readable by its submitter only, at every
+        // level, which is never wider than `canSee` allows (the author
+        // always sees their own), so another member's task is `None` under
+        // every level without consulting the policy.
         GetTaskStatus =
             fun taskId -> async { return taskRegistry.TryGet(scope.Container, userId, taskId, DateTime.UtcNow) }
 
@@ -2352,32 +2504,50 @@ let aiAssistantApi
                 // exactly the same blobs. The first failure is surfaced
                 // so an incomplete erasure is retryable rather than
                 // silently partial.
-                return! ConversationRetention.deleteSiblings storage scope.Container conversationId
+                //
+                // Phase 859.C — another member's conversation only by the
+                // level's elevated role; one the caller cannot see is a
+                // no-op, as a missing id is.
+                match! authoriseWrite conversationId with
+                | Ok true -> return! ConversationRetention.deleteSiblings storage scope.Container conversationId
+                | Ok false -> return Ok()
+                | Error refusal -> return Error refusal
             }
 
         SetConversationOverride =
             fun (conversationId, label) -> async {
-                try
-                    // Read-modify-write: the meta sibling also carries the
-                    // generated title (Phase 516.B), which an override
-                    // change must not erase.
-                    let! meta = loadConversationMeta logger storage scope.Container conversationId
+                // Phase 859.C — the one other write a caller can aim at a
+                // conversation: the same rule as `DeleteConversation`.
+                match! authoriseWrite conversationId with
+                | Error refusal -> return Error refusal
+                | Ok false -> return Ok()
+                | Ok true ->
+                    try
+                        // Read-modify-write: the meta sibling also carries the
+                        // generated title (Phase 516.B), which an override
+                        // change must not erase.
+                        let! meta = loadConversationMeta logger storage scope.Container conversationId
 
-                    do!
-                        saveConversationMeta storage scope.Container conversationId {
-                            meta with
-                                OverrideProviderLabel = label
-                        }
+                        do!
+                            saveConversationMeta storage scope.Container conversationId {
+                                meta with
+                                    OverrideProviderLabel = label
+                            }
 
-                    return Ok()
-                with ex ->
-                    return Error ex.Message
+                        return Ok()
+                    with ex ->
+                        return Error ex.Message
             }
 
         // Phase 516.C — one page, filtered by title/content search.
+        //
+        // Phase 859.B — filtered BEFORE the search and the page, so a hit
+        // never surfaces a conversation the caller could not open, and the
+        // count and cursor are over what the caller can see.
         ListConversationsPage =
             fun query -> async {
-                let! rows = ConversationListing.readAll logger storage scope.Container titlingPolicy.MaxTitleChars
+                let! owned = ConversationListing.readAllOwned logger storage scope.Container titlingPolicy.MaxTitleChars
+                let! rows = visibleRows owned
                 return ConversationListing.page query rows
             }
     }

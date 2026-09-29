@@ -294,10 +294,29 @@ let genDiffInput (rng: Lcg) : DiffInput =
         match rng.Next 4 with
         | 0 ->
             // Exactly the active key set, possibly reordered — the
-            // shortcut's case.
-            activeKeys
-            |> List.sortBy (fun _ -> rng.Next 1000)
-            |> List.mapi (fun i key -> key, 200 + i)
+            // shortcut's case. The shuffle draws ONE key per element, in
+            // element order, and sorts by it with the index as the tie-break
+            // — and draws nothing for fewer than two elements (Phase 900).
+            // Until 900 this was `List.sortBy (fun _ -> rng.Next 1000)`,
+            // which on .NET projects each element once into a keys array,
+            // and not at all for a list of fewer than two (which is why the
+            // guard is here: the .NET draw is unchanged, draw for draw, so no
+            // corpus moved), but under Fable applies the projection inside
+            // the comparer, once per COMPARISON — so the two hosts consumed
+            // different numbers of draws here and every later input
+            // differed. Nothing noticed, because the Fable host replays the
+            // .NET-written corpus rather than drawing; the campaign pin
+            // below is what caught it.
+            let shuffled =
+                if List.length activeKeys < 2 then
+                    activeKeys
+                else
+                    activeKeys
+                    |> List.mapi (fun i key -> (rng.Next 1000, i), key)
+                    |> List.sortBy fst
+                    |> List.map snd
+
+            shuffled |> List.mapi (fun i key -> key, 200 + i)
         | _ ->
             let count = rng.Next 9
             [ for i in 0 .. count - 1 -> alphabet[rng.Next(List.length alphabet)], 300 + i ]
@@ -362,12 +381,20 @@ let private shapeOf
         ChangeKeys = next |> List.map fst
     }
 
+/// The loop's flag as `Fx.change` reads it here: never set. `change`
+/// gates its starts on it since Phase 900; with the flag clear it is the
+/// pure key algebra `ElmishSub.fst` models, which is what this
+/// differential holds it to. The gated path is the dispatch loop's
+/// (`ElmishLoop.fst`'s `start_all`), and its differential is
+/// `ElmishLoopDifferential`'s.
+let private neverTerminated () = false
+
 /// Production `Sub.Internal.diff` + `Fx.change` over an input, as a
 /// shape.
 let productionDiffShape (input: DiffInput) : DiffShape =
     let active, requested, handleId, subscribeId = materialise input
     let quad = Sub.Internal.diff active requested
-    let next = Sub.Internal.Fx.change (fun _ -> ()) ignore quad
+    let next = Sub.Internal.Fx.change (fun _ -> ()) ignore neverTerminated quad
     shapeOf handleId subscribeId quad next
 
 /// **Go-red.** A diff that computes `toStart` from the requested list
@@ -387,7 +414,7 @@ let brokenDiffShape (input: DiffInput) : DiffShape =
 
             dupes, toStop, toKeep, newSubs
 
-    let next = Sub.Internal.Fx.change (fun _ -> ()) ignore quad
+    let next = Sub.Internal.Fx.change (fun _ -> ()) ignore neverTerminated quad
     shapeOf handleId subscribeId quad next
 
 /// One corpus case: the input, and the shape the PROVED MODEL produced.
@@ -514,3 +541,93 @@ let corpusLines (text: string) : string list =
     |> Array.toList
     |> List.map (fun l -> l.TrimEnd('\r'))
     |> List.filter (fun l -> l <> "" && not (l.StartsWith "#"))
+
+// ─── The generator pins — one draw, two hosts (Phase 900) ───────────
+//
+// Phase 884 found the shared LCG drawing a different, quickly constant
+// sequence under Fable, and pinned the LOOP campaign by fingerprint so
+// both hosts assert they run the same scripts. The ring and the diff
+// campaigns rested on that pin only indirectly: the Fable host replays
+// the .NET-written corpus rather than drawing, so a generator that drew
+// differently under Fable would show only in the ring's live campaign
+// (Phase 850's), and nothing said the two hosts' draws of THESE
+// generators agree. Each campaign now has a pin in the shape of 884's
+// two, asserted on both hosts over a draw each host makes itself.
+//
+// The diff pin caught one on its first Fable run: the shuffle in
+// `genDiffInput` sorted by a projection that drew from the generator, and
+// Fable's `List.sortBy` applies the projection per comparison where
+// FSharp.Core's applies it per element — so the Fable host drew a
+// different diff campaign from the same seed (rendering 400:32117:…
+// against .NET's 400:31330:…). Fixed by drawing the shuffle keys once per
+// element; the .NET draw did not move.
+
+/// Count, total length and a polynomial hash modulo 2^31 - 1, in `int64`
+/// so neither host overflows (Fable carries `int64` exactly). Not a
+/// cryptographic digest — nothing here is adversarial — but any drift in
+/// the draw or the verdicts moves it. Shared with the loop differential.
+let fingerprint (rows: string list) : string =
+    let text = String.concat "\n" rows
+    let mutable h = 0L
+
+    for c in text do
+        h <- (h * 131L + int64 (int c)) % 2147483647L
+
+    $"{List.length rows}:{text.Length}:{h}"
+
+/// A canonical rendering of one ring campaign case — the inputs only, so
+/// the pin is over the DRAW and moves only when the generator does.
+let renderRingDraw (capacity: int, ops: RingOp list) : string =
+    let rendered =
+        ops
+        |> List.map (fun op ->
+            match op with
+            | RPush v -> string v
+            | RPop -> "-")
+        |> String.concat ","
+
+    $"{capacity}:{rendered}"
+
+/// How many base sequences the ring campaign draws, and how many inputs
+/// the diff campaign draws — the .NET host's corpus sizes, so the draw
+/// the pin is over is the draw the corpus was written from.
+[<Literal>]
+let RingCampaignSequences = 100
+
+[<Literal>]
+let DiffCampaignInputs = 400
+
+/// The ring campaign's canonical rendering, pinned. Both hosts draw it
+/// and assert it.
+[<Literal>]
+let RingCampaignFingerprint = "200:62025:1160459319"
+
+/// The diff campaign's canonical rendering, pinned. Both hosts draw it
+/// and assert it.
+[<Literal>]
+let DiffCampaignFingerprint = "400:31330:845858784"
+
+/// The ring campaign drawn on THIS host, against the pin — empty when it
+/// agrees, else the value to pin if the generator moved on purpose.
+let ringCampaignPinViolations () : string list =
+    let drawn = genRingCampaign Seed RingCampaignSequences
+    let actual = fingerprint (List.map renderRingDraw drawn)
+
+    [
+        if List.length drawn <> 2 * RingCampaignSequences then
+            $"the ring campaign drew {List.length drawn} sequence(s), not {2 * RingCampaignSequences}"
+        if actual <> RingCampaignFingerprint then
+            $"the ring campaign renders to {actual}, pinned {RingCampaignFingerprint}"
+    ]
+
+/// The diff campaign drawn on THIS host, against the pin.
+let diffCampaignPinViolations () : string list =
+    let drawn = genDiffCampaign Seed DiffCampaignInputs
+    let actual = fingerprint (List.map describeDiffInput drawn)
+
+    [
+        if List.length drawn <> DiffCampaignInputs then
+            $"the diff campaign drew {List.length drawn} input(s), not {DiffCampaignInputs}"
+        if actual <> DiffCampaignFingerprint then
+            $"the diff campaign renders to {actual}, pinned {DiffCampaignFingerprint}"
+    ]

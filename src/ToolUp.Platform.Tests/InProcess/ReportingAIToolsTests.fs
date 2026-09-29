@@ -73,6 +73,12 @@ type private RecordingScheduler() =
         member _.RegisterHandler(_, _) = ()
         member _.RegisterHandlerAsync(_, _) = async.Return(Ok())
 
+        member this.Schedule(scope: ToolUp.Platform.ResolvedScope, registration: ToolUp.Platform.JobRegistration) =
+            (this :> IJobScheduler).Schedule {
+                registration with
+                    ScopeId = scope.ScopeId
+            }
+
         member _.Schedule registration =
             scheduled.Enqueue registration
             async.Return(Ok jobId)
@@ -746,6 +752,7 @@ let longRenderTests =
                 AccessContext = AccessContext.unrestricted (TeamMember("user-1", "team-a"))
                 Attempt = 1
                 Trigger = Manual
+                Scope = ToolUp.Platform.ResolvedScope.anonymous
                 TriggerSource = ScheduledManually "user-1"
                 ScheduledAt = DateTime.UtcNow
                 RunningAt = DateTime.UtcNow
@@ -821,6 +828,7 @@ let longRenderTests =
                 AccessContext = AccessContext.unrestricted (TeamMember("user-1", "team-a"))
                 Attempt = 1
                 Trigger = Manual
+                Scope = ToolUp.Platform.ResolvedScope.anonymous
                 TriggerSource = ScheduledManually "user-1"
                 ScheduledAt = DateTime.UtcNow
                 RunningAt = DateTime.UtcNow

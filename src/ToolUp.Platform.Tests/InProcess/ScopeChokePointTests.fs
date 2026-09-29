@@ -395,5 +395,131 @@ let private sourceGuardTests =
         }
     ]
 
+// ── D. The carried mint (Phase 818) ───────────────────────────────
+//
+// Phase 818 added a SECOND internal mint, `ofCarried` on the core module, for
+// the one hop where a scope that WAS resolved is carried to a later
+// dispatch: the job scheduler re-minting the scope a typed `Schedule`
+// persisted. A second mint is a second place a string could be promoted,
+// so the guard is widened to pin who may call it — the scheduler's
+// provenance module and nothing else — and that the recompute path, whose
+// scope is carried from a string-keyed data write, never mints at all.
+
+/// Where the carried mint may be called from, by path under `src/`.
+let private carriedMintHome = "ToolUp.Platform.Server/Server/IJobScheduler.fs"
+
+/// Where the mints are DEFINED — excluded from the caller scan.
+let private mintDefinitions = [
+    "ToolUp.Platform.Core/Shared/Types/ResolvedScope.fs"
+    "ToolUp.Platform.Server/Server/Scope/StorageScopeResolver.fs"
+]
+
+/// The recompute path — a carried scope end to end, so no mint belongs in it.
+let private recomputePath = [
+    "ToolUp.Facts.Server/Server/RecomputeJobHandler.fs"
+    "ToolUp.Facts.Server/Server/ReactiveDataChange.fs"
+]
+
+/// A call of the carried mint. Assembled so this file does not match itself.
+let private carriedMintCall = "ResolvedScope." + "ofCarried"
+
+/// Every spelling that would promote a value to a `ResolvedScope`.
+let private mintSpellings = [
+    carriedMintCall, "the carried mint"
+    "ResolvedScope." + "ofStorageScope", "the request-path mint"
+    "ScopeResolution." + "ofStorageScope", "the server-side request-path mint"
+    "ScopeResolution." + "remember", "the middleware's mint-and-record"
+]
+
+/// Pure classifier: the mint spellings a source carries, as (needle, why).
+let private mints (source: string) : (string * string) list =
+    mintSpellings |> List.filter (fun (needle, _) -> source.Contains needle)
+
+let private carriedMintTests =
+    testList "D — the carried mint (Phase 818)" [
+
+        test "the carried mint is internal and has no public spelling" {
+            let moduleType =
+                resolvedScopeType.Assembly.GetType("ToolUp.Platform.ResolvedScopeModule")
+
+            let mint =
+                moduleType.GetMethod("ofCarried", BindingFlags.NonPublic ||| BindingFlags.Static)
+
+            Expect.isNotNull mint "the carried mint exists — the scheduler needs it"
+            Expect.isTrue mint.IsAssembly "and it is INTERNAL: reachable through InternalsVisibleTo, not by a consumer"
+
+            Expect.isNull
+                (moduleType.GetMethod("ofCarried", BindingFlags.Public ||| BindingFlags.Static))
+                "there is no public spelling of the carried mint"
+        }
+
+        test "the mint classifier fires on each spelling (go-red) and is quiet on a typed read" {
+            let planted =
+                mintSpellings
+                |> List.map (fun (needle, _) -> needle + "(x)")
+                |> String.concat "\n"
+
+            Expect.equal (List.length (mints planted)) (List.length mintSpellings) "every mint spelling is caught"
+            Expect.isEmpty (mints "store.Get(ctx.Scope, payload.factId)") "reading ctx.Scope is not a mint"
+        }
+
+        test "the carried mint has exactly one caller — the scheduler's provenance module" {
+            let src = Path.Combine(repoRoot (), "src")
+
+            let excluded =
+                mintDefinitions |> List.map (fun p -> Path.GetFullPath(Path.Combine(src, p)))
+
+            // Build output, npm trees and Fable output hold no source of
+            // record; pruning them is what keeps this scan to a second.
+            let pruned = set [ "bin"; "obj"; "node_modules"; "output"; ".fable" ]
+
+            let rec sources (dir: string) : string seq = seq {
+                yield! Directory.EnumerateFiles(dir, "*.fs")
+
+                for sub in Directory.EnumerateDirectories dir do
+                    if not (pruned.Contains(Path.GetFileName sub)) then
+                        yield! sources sub
+            }
+
+            let callers =
+                sources src
+                |> Seq.filter (fun path -> not (List.contains (Path.GetFullPath path) excluded))
+                |> Seq.filter (fun path -> (File.ReadAllText path).Contains carriedMintCall)
+                |> Seq.map (fun path -> Path.GetRelativePath(src, path).Replace('\\', '/'))
+                |> List.ofSeq
+
+            Expect.equal
+                callers
+                [ carriedMintHome ]
+                "a second caller of the carried mint is a second place a string could become a resolved scope"
+        }
+
+        test "the recompute path mints nothing — its scope is carried from a string-keyed data write" {
+            let src = Path.Combine(repoRoot (), "src")
+
+            for file in recomputePath do
+                let path = Path.Combine(src, file)
+                Expect.isTrue (File.Exists path) (sprintf "%s exists" file)
+
+                match mints (File.ReadAllText path) with
+                | [] -> ()
+                | found ->
+                    failtestf
+                        "%s promotes a value to a ResolvedScope:\n%s"
+                        file
+                        (found |> List.map (fun (_, why) -> "  - " + why) |> String.concat "\n")
+
+            Expect.stringContains
+                (File.ReadAllText(Path.Combine(src, recomputePath.Head)))
+                "store.Get(ctx.Scope, payload.factId)"
+                "the recompute handler reads a re-minted job scope through the typed member"
+        }
+    ]
+
 let tests =
-    testList "Phase 797 — scope as a choke point" [ publicSurfaceTests; requestPathTests; sourceGuardTests ]
+    testList "Phase 797 — scope as a choke point" [
+        publicSurfaceTests
+        requestPathTests
+        sourceGuardTests
+        carriedMintTests
+    ]

@@ -129,6 +129,12 @@ let private registeredTests =
         // Phase 519 — grounding metric & subject registry: dedup / conflict
         // diagnostics, read-surface lookups, ServerModule → ServerApp fan-in.
         MetricRegistryTests.tests
+        // Phase 887 — declared fact tables: the IFactTableWriter contract pack
+        // bound to the default writer, the default writer's audit / binding /
+        // 10,000-subject obligations, and the compose-time fact-table preflight.
+        IFactTableWriterContract.tests "DefaultFactTableWriter" IFactTableWriterContract.defaultWriterFactory
+        IFactTableWriterContract.defaultWriterObligationTests
+        IFactTableWriterContract.preflightTests
         // Phase 520 — grounding fact store: IFactStore contract pack (content-
         // address idempotency, AsOf reconstruction, supersession, competing
         // facts, scope isolation, disclosure/Absent round-trips) + BlobFactStore
@@ -156,6 +162,14 @@ let private registeredTests =
         FactStoreTests.surfacePopulationRegistryTests
         FactStoreTests.metricSurfaceTests
         FactStoreTests.metricSurfaceScaleTests
+        // Phase 890 — the blob fact store's point-read index: the IFactStore
+        // contract with the index forced on, the indexed and enumerating reads
+        // compared across a query matrix, the read counts at two scope sizes,
+        // index deletion / failed writes / out-of-band facts / rebuild and
+        // consistency, the threshold, and the fan-out bound.
+        FactStoreTests.indexTests
+        FactStoreTests.indexPopulationRegistryTests
+        FactStoreTests.pointReadIndexTests
         // Phase 566 — canonical-method selection for competing facts: selector
         // matching, canonical query default, explicit override, undeclared
         // parity, competition indicator.
@@ -2470,6 +2484,9 @@ let private registeredTests =
         // metadata, stable keyset paging, search, titling with fallback, and
         // the GetTaskStatus polling fallback.
         ConversationListingTests.tests
+        // Phase 859 - team conversation visibility: per-team level, every
+        // read/write path filtered, audit, and who may change the level.
+        ConversationVisibilityTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

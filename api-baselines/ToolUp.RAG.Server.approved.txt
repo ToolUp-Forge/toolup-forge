@@ -359,11 +359,19 @@ ToolUp.RAG.RagHealthHandler (class)
 ToolUp.RAG.RagHealthHandler.healthHandler(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
 ToolUp.RAG.RagHealthHandler.route : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]] { get }
 ToolUp.RAG.RagTelemetry (class)
+ToolUp.RAG.RagTelemetry.TotalStage : System.String (literal)
 ToolUp.RAG.RagTelemetry.createDefault() : ToolUp.Platform.IRagTelemetry+IRagTelemetry
 ToolUp.RAG.RagTelemetry.createNoOp() : ToolUp.Platform.IRagTelemetry+IRagTelemetry
 ToolUp.RAG.RagTelemetry.createRolling(System.Int32) : ToolUp.Platform.IRagTelemetry+IRagTelemetry
+ToolUp.RAG.RagTelemetry.meter(ToolUp.Platform.IRagTelemetry+IRagTelemetry, ToolUp.Platform.IRetrievalPipeline+IRetrievalPipeline) : ToolUp.RAG.RagTelemetry+RetrievalMeter
 ToolUp.RAG.RagTelemetry+NoOpRagTelemetry (class)
 ToolUp.RAG.RagTelemetry+NoOpRagTelemetry..ctor()
+ToolUp.RAG.RagTelemetry+RetrievalMeter (class)
+ToolUp.RAG.RagTelemetry+RetrievalMeter..ctor(ToolUp.Platform.IRetrievalPipeline+IRetrievalPipeline, ToolUp.Platform.IRagTelemetry+IRagTelemetry)
+ToolUp.RAG.RagTelemetry+RetrievalMeter.Completed : System.Int64 { get }
+ToolUp.RAG.RagTelemetry+RetrievalMeter.InFlight : System.Int32 { get }
+ToolUp.RAG.RagTelemetry+RetrievalMeter.Inner : ToolUp.Platform.IRetrievalPipeline+IRetrievalPipeline { get }
+ToolUp.RAG.RagTelemetry+RetrievalMeter.PeakInFlight : System.Int32 { get }
 ToolUp.RAG.RagTelemetry+RollingRagTelemetry (class)
 ToolUp.RAG.RagTelemetry+RollingRagTelemetry..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
 ToolUp.RAG.RagVectorStoreLifecycle (class)

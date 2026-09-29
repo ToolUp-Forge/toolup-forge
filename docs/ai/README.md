@@ -104,6 +104,10 @@ See [ui-awareness.md](ui-awareness.md) for the `withInspectState` → `UiStateRe
 
 See [conversation-eval.md](conversation-eval.md) for the conversation / prompt eval harness (`ToolUp.AI.Evaluation`): fixtures, rubric assertions, tool-dispatch replay against recorded tool results, the optional LLM judge, and the `--baseline` regression gate.
 
+## Who can see a team's conversations
+
+See [conversation-visibility.md](conversation-visibility.md) for the per-team conversation visibility policy (`TeamVisible` / `TeamAdmins` / `PlatformAdmins`): the deployment default and allowed set, what each read and write path does with a conversation its caller cannot see, who may change a team's level, why widening never exposes the past, and the two audit rows.
+
 ## Cost-control posture
 
 Even in authenticated modes, deployments should consider:

@@ -82,9 +82,17 @@ let tests =
 
             // Phase 496 — the subject kind now lives in the consolidated
             // `session` state record; the pin tracks the record-update form.
+            // Phase 908 — the body now routes a changed kind through the
+            // identity-change seam before the update, so the signature and
+            // the update are pinned separately.
             Expect.stringContains
                 contents
-                "let configure (kind: SubjectKind) =\n    session <- { session with SubjectKind = kind }"
+                "let configure (kind: SubjectKind) =\n"
+                "UserSession.configure must accept the resolved SubjectKind."
+
+            Expect.stringContains
+                contents
+                "\n    session <- { session with SubjectKind = kind }"
                 "UserSession.configure must accept the resolved SubjectKind, not the \
                  retiring PlatformMode. Phase 66 Stream B.8 retired the per-deployment \
                  Mode in favour of per-render SubjectKind resolution."
