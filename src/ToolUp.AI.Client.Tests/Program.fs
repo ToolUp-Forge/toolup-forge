@@ -136,6 +136,10 @@ let allTests =
         // Phase 908 - every identity-change route clears the declared-read
         // cache: tokens, boot configuration, the team switch, another tab.
         IdentityChangeReadCacheTests.tests
+        // Phase 910 - the sliced store reaches every composer: the HMR
+        // pass-throughs, hydration parity, the AI composer's stable dispatch
+        // and store, and the chrome's memoised context values.
+        ComposerStoreTests.tests
     ]
 
 // Phase 849 — `output/Program.js ClientBench` runs the browser-runtime
