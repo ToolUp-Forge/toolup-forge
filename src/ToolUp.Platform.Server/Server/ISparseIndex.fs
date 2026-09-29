@@ -4,13 +4,24 @@ open ToolUp.Platform.VectorKnowledgeTypes
 
 /// Sparse (lexical) retrieval index. Sibling to `IVectorStore`; together they
 /// support hybrid retrieval. Implementations are companion packages under
-/// `src/SparseIndices/` (e.g., a Tantivy-backed companion); the in-process
-/// default is `ToolUp.RAG.InMemoryBM25Index`.
+/// `src/SparseIndices/` (e.g. `ToolUp.SparseIndices.Postgres`, which holds
+/// the index in the database so it is the same on every replica); the
+/// in-process default is `ToolUp.RAG.InMemoryBM25Index`. A composition picks
+/// one with `RAGServerApp.withSparseIndex` / `withAnalyzedSparseIndex`, or
+/// none with `withoutSparseIndex` (Phase 893).
 ///
-/// Returns `VectorMatch.Score` on a BM25-style scale (typically [0, ~20]).
-/// The retrieval pipeline does not assume scores are bounded or normalised
-/// before fusion — Reciprocal Rank Fusion treats sparse and dense scores
-/// rank-wise, not absolutely.
+/// `VectorMatch.Score` is on the implementation's own scale — BM25 for the
+/// in-process default (typically [0, ~20]), the database's ranking function
+/// for a database-backed one. The retrieval pipeline does not assume scores
+/// are bounded, normalised or comparable across implementations —
+/// Reciprocal Rank Fusion treats sparse and dense scores rank-wise, not
+/// absolutely — so what an implementation changes is the ORDER it ranks in.
+///
+/// **Ordering.** Results are sorted by score descending, and equal scores by
+/// `(Scope, ChunkId)` ascending (`VectorScope`'s structural order, then the
+/// ordinal chunk id), so a tie never depends on hash or storage order. The
+/// `ISparseIndexContract` pack pins this, with scope isolation and delete
+/// semantics, for every implementation.
 ///
 /// Scope semantics are identical to `IVectorStore`: chunks in one scope are
 /// never accessible from another. `IRetrievalPipeline` validates `AccessContext`
