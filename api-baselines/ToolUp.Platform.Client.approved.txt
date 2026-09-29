@@ -2667,6 +2667,8 @@ ToolUp.Elmish.HMR.Program.runWith`4(arg, ToolUp.Elmish.Program`4[arg, model, msg
 ToolUp.Elmish.HMR.Program.run`3(ToolUp.Elmish.Program`4[Microsoft.FSharp.Core.Unit, model, msg, view]) : System.Void
 ToolUp.Elmish.HMR.Program.withReactBatched`3(System.String, ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]) : ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]
 ToolUp.Elmish.HMR.Program.withReactHydrate`3(System.String, ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]) : ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]
+ToolUp.Elmish.HMR.Program.withReactStoreHydrate`3(ToolUp.Elmish.React.ModelStore`2[model, msg], System.String, ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]) : ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]
+ToolUp.Elmish.HMR.Program.withReactStore`3(ToolUp.Elmish.React.ModelStore`2[model, msg], System.String, ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]) : ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]
 ToolUp.Elmish.HMR.Program.withReactSynchronous`3(System.String, ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]) : ToolUp.Elmish.Program`4[arg, model, msg, Fable.React.ReactElement]
 ToolUp.Elmish.IDispatcher`1 (interface)
 ToolUp.Elmish.IDispatcher`1.Dispatch(msg) : System.Void
@@ -3196,9 +3198,11 @@ ToolUp.Platform.Client.prepareModules(ToolUp.Platform.ClientConfig, Microsoft.FS
 ToolUp.Platform.Client.program(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : ToolUp.Elmish.Program`4[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Client+Model, ToolUp.Platform.Client+Msg, Fable.React.ReactElement]
 ToolUp.Platform.Client.programLifetimeEffects(ToolUp.Platform.ClientConfig) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Elmish.EffectHandle`1[ToolUp.Platform.Client+Msg]]
 ToolUp.Platform.Client.run(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : System.Void
+ToolUp.Platform.Client.shellStore`2(ToolUp.Elmish.React.ModelStore`2[model, msg], Microsoft.FSharp.Core.FSharpFunc`2[model, ToolUp.Platform.Client+Model]) : ToolUp.Platform.Client+ShellStore
 ToolUp.Platform.Client.tryDispatchPublicEntry(ToolUp.Platform.ClientConfig) : System.Boolean
 ToolUp.Platform.Client.update(ToolUp.Platform.ClientConfig, ToolUp.Platform.IModuleQueryBus, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], ToolUp.Platform.Client+Msg, ToolUp.Platform.Client+Model) : System.Tuple`2[ToolUp.Platform.Client+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Client+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 ToolUp.Platform.Client.view(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], ToolUp.Platform.Client+ExtraChrome, ToolUp.Platform.Client+Model, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Client+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
+ToolUp.Platform.Client.viewSlicedOver(ToolUp.Platform.Client+ShellStore, ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], ToolUp.Platform.Client+ExtraChrome, ToolUp.Platform.Client+Model, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Client+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 ToolUp.Platform.Client.viewWithSignIn(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], ToolUp.Platform.Client+ExtraChrome, ToolUp.Platform.Client+Model, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Client+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 ToolUp.Platform.Client.withShellLifetimeEffects`4(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Client+Msg, msg], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
 ToolUp.Platform.Client+ExtraChrome (class)
@@ -3389,6 +3393,7 @@ ToolUp.Platform.Client+Msg+Tags.TeamSwitched : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.ToggleShowAllModules : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+TeamSwitched (class)
 ToolUp.Platform.Client+Msg+TeamSwitched.Item : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.Client+ShellStore (class)
 ToolUp.Platform.ClientBoundHostView (class)
 ToolUp.Platform.ClientBoundHostView.withBoundElementPages`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.PageConfig, Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, ToolUp.Platform.PageContent]]]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
 ToolUp.Platform.ClientBoundHostView.withBoundElementPanes`2(ToolUp.Platform.IHostStateProjection`1[Model], Microsoft.FSharp.Core.FSharpFunc`2[Model, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ClientHostCapabilities`1[Msg], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.HostBindingSources, System.Tuple`2[Fable.React.ReactElement, Fable.React.ReactElement]]]]], ToolUp.Platform.ClientModule`2[Model, Msg]) : ToolUp.Platform.ClientModule`2[Model, Msg]
