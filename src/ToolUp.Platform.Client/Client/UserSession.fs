@@ -103,6 +103,10 @@ type private SubjectAndBridgeState = {
     /// re-install (or `uninstallBridge`) can stop the prior loop
     /// instead of leaking one interval per install.
     BridgeRefreshIntervalHandle: int option
+    /// Phase 908 — the dispose thunk of the installed cross-tab identity
+    /// watch (`watchIdentityAcrossTabs`), so a second install is a no-op
+    /// rather than a second listener.
+    CrossTabIdentityWatch: (unit -> unit) option
 }
 
 let mutable private session = {
@@ -114,6 +118,7 @@ let mutable private session = {
     NextBridgeHealthHandlerId = 0
     BridgeHealthHandlers = []
     BridgeRefreshIntervalHandle = None
+    CrossTabIdentityWatch = None
 }
 
 /// Bearer-credential storage state — which storage strategy the
@@ -147,12 +152,37 @@ let mutable private tokenState = {
     ServerCookieToken = None
 }
 
+// ─── Identity-change seam (Phase 908) ──────────────────────────────
+
+/// Phase 908 — the ONE identity-change seam. A declared read's cached
+/// result (Phase 854) belongs to the identity that fetched it, and the
+/// cache key does not carry the identity, so every route that changes
+/// who the server sees — a token for a different subject, sign-out, a
+/// subject-kind or token-storage change, the dev-default identity, an
+/// active-team switch, another tab signing in or out — calls this, and it
+/// drops every cached read. The routes the SDK owns are wired to it
+/// already: `setAuthToken` / `clearAuthToken` (and so the auth bridge and
+/// every auth companion that stores its token through them), `configure`
+/// / `configureDevDefault` / `configureAuthTokenStorage` when the value
+/// actually moves, the shell's `TeamSwitched` reset, and the cross-tab
+/// watch `watchIdentityAcrossTabs`. A caller never has to clear the read
+/// cache itself; this is public for a deployment route the SDK cannot see
+/// (a hand-rolled impersonation, say), which then calls it too.
+let identityChanged () : unit =
+    ToolUp.Remoting.Client.ReadPolicies.clear ()
+
 // ─── Subject kind ──────────────────────────────────────────────────
 
 /// Configure the resolved subject kind. Called once during client
 /// initialisation; updates the cached value the storage / header
-/// helpers branch on. Idempotent — subsequent calls overwrite.
+/// helpers branch on. Idempotent — subsequent calls overwrite. Phase 908:
+/// a DIFFERENT kind changes the identity the requests carry (a bearer
+/// token rather than the local id, or back), so it goes through
+/// `identityChanged`; re-configuring the same kind keeps the read cache.
 let configure (kind: SubjectKind) =
+    if kind <> session.SubjectKind then
+        identityChanged ()
+
     session <- { session with SubjectKind = kind }
 
 /// Read the configured subject kind. Returns `AnonymousKind` until
@@ -163,13 +193,24 @@ let getSubjectKind () = session.SubjectKind
 /// client initialisation by `SDK.Client.run`. `None` (default) preserves
 /// the auto-generated-GUID behaviour; `Some` overrides only the
 /// first-visit generation path (existing localStorage values are
-/// preserved either way).
+/// preserved either way). Phase 908: a DIFFERENT dev identity goes
+/// through `identityChanged`, so no read cached before the change is
+/// served after it.
 let configureDevDefault (id: string option) =
+    if id <> session.DevDefaultUserId then
+        identityChanged ()
+
     session <- { session with DevDefaultUserId = id }
 
 /// Configure the auth-token storage strategy (Phase 133). Idempotent —
 /// subsequent calls overwrite. Called once during client initialisation.
+/// Phase 908: a DIFFERENT strategy changes where `getAuthToken` reads the
+/// bearer from (so, possibly, whether one is sent at all), and goes
+/// through `identityChanged`.
 let configureAuthTokenStorage (storage: AuthTokenStorage) =
+    if storage <> tokenState.Strategy then
+        identityChanged ()
+
     tokenState <- { tokenState with Strategy = storage }
 
 // ─── JWT decode (sub claim only — server validates signature) ──────
@@ -422,12 +463,12 @@ let setAuthToken (token: string) =
     // Phase 854 — a cached read result belongs to the identity that fetched
     // it: a token for a different subject (or one whose subject cannot be
     // read) drops the client read cache. A refresh for the same subject
-    // keeps it.
+    // keeps it. Phase 908: through the one identity-change seam.
     let previousUserId = Browser.Dom.window.localStorage.getItem tokenUserIdKey
 
     match decodeJwtIdentity token with
     | Some identity when identity.UserId = previousUserId -> ()
-    | _ -> ToolUp.Remoting.Client.ReadPolicies.clear ()
+    | _ -> identityChanged ()
 
     // Identity claims (non-secret) persist on both paths.
     match decodeJwtIdentity token with
@@ -478,8 +519,9 @@ let setAuthToken (token: string) =
 /// `DELETE /api/auth/session` — so the next sign-in resolves a fresh
 /// subject and no usable token survives in either store.
 let clearAuthToken () =
-    // Phase 854 — sign-out drops every cached read result.
-    ToolUp.Remoting.Client.ReadPolicies.clear ()
+    // Phase 854 — sign-out drops every cached read result (Phase 908:
+    // through the one identity-change seam).
+    identityChanged ()
     Browser.Dom.window.localStorage.removeItem tokenKey
     Browser.Dom.window.localStorage.removeItem tokenUserIdKey
     Browser.Dom.window.localStorage.removeItem tokenDisplayNameKey
@@ -823,3 +865,86 @@ let identityHeaderPairs () : (string * string)[] =
 /// `DefaultSecurityHardening` for proxies built before sign-in / the
 /// CSRF prefetch. Passthrough.
 let withRequestHeaders (options: RemoteBuilderOptions) = options
+
+// ─── Cross-tab identity changes (Phase 908) ────────────────────────
+//
+// The token, the token-derived user id and the local user id live in
+// `localStorage`, which every tab of the origin shares. Another tab that
+// signs out, or signs in as someone else, therefore changes the identity
+// THIS tab's next request carries without any call reaching this tab's
+// `setAuthToken` / `clearAuthToken` — while this tab's read cache still
+// holds the previous identity's results. The browser's `storage` event
+// (fired in every OTHER tab of the origin on a `localStorage` write) is
+// the route in; the rule below mirrors `setAuthToken`'s own: a token for
+// the same subject (a refresh) keeps the cache, anything else drops it.
+
+/// Whether a `storage` event moved the identity. `key` is `null` when the
+/// other tab called `localStorage.clear ()`.
+let private storageEventMovedIdentity (key: string) (oldValue: string) (newValue: string) : bool =
+    if isNull key then
+        true
+    elif oldValue = newValue then
+        false
+    elif key = storageKey || key = tokenUserIdKey then
+        true
+    elif key = tokenKey then
+        let subject (value: string) =
+            if isNull value then
+                None
+            else
+                decodeJwtIdentity value |> Option.map _.UserId
+
+        match subject oldValue, subject newValue with
+        | Some before, Some after -> before <> after
+        | _ -> true
+    else
+        false
+
+[<Emit("(typeof window !== 'undefined' && window !== null && typeof window.addEventListener === 'function')")>]
+let private canListenToWindow () : bool = jsNative
+
+[<Emit("window.addEventListener('storage', $0)")>]
+let private addStorageListener (handler: obj -> unit) : unit = jsNative
+
+[<Emit("window.removeEventListener('storage', $0)")>]
+let private removeStorageListener (handler: obj -> unit) : unit = jsNative
+
+/// Phase 908 — watch the OTHER tabs of this origin for an identity change
+/// and route it through `identityChanged`: a sign-out, a sign-in as a
+/// different subject, or a replaced local user id in another tab drops
+/// this tab's cached reads; a same-subject token refresh does not.
+/// Installed by `SDK.Client.installRequestSeam`, before any request flies.
+/// Idempotent: while a watch is installed a second call installs nothing
+/// and returns the same dispose thunk. Where there is no `window` to
+/// listen on (a non-browser host) it installs nothing and returns a no-op.
+let watchIdentityAcrossTabs () : unit -> unit =
+    match session.CrossTabIdentityWatch with
+    | Some dispose -> dispose
+    | None when not (canListenToWindow ()) -> ignore
+    | None ->
+        let handler (ev: obj) =
+            if storageEventMovedIdentity (ev?key) (ev?oldValue) (ev?newValue) then
+                identityChanged ()
+
+        addStorageListener handler
+
+        // A spent thunk stays spent: disposing an old watch after a new
+        // one was installed must not uninstall the new one's latch.
+        let live = ref true
+
+        let dispose () =
+            if live.Value then
+                live.Value <- false
+                removeStorageListener handler
+
+                session <- {
+                    session with
+                        CrossTabIdentityWatch = None
+                }
+
+        session <- {
+            session with
+                CrossTabIdentityWatch = Some dispose
+        }
+
+        dispose

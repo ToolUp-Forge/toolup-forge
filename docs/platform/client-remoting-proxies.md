@@ -209,10 +209,24 @@ packs compile.
 ### Identity
 
 The request guard attaches the caller's identity at send time, below the table, so a cached result
-belongs to the identity that fetched it. `UserSession.setAuthToken` (for a different subject, or one
-whose subject cannot be read) and `UserSession.clearAuthToken` call `ReadPolicies.clear`. A
-deployment that changes identity another way calls it too. `ReadPolicies.invalidate` is there for a
-change the client learns of some other way (a notification, say).
+belongs to the identity that fetched it. Every route that changes the identity the server sees goes
+through one seam, `UserSession.identityChanged`, which drops every cached read (Phase 908). The SDK
+wires each route it owns to that seam, so **a caller never clears the read cache itself**:
+
+| Route | Clears when |
+|---|---|
+| `UserSession.setAuthToken` — and so the auth bridge and every auth companion that stores its token through it | the token is for a different subject, or its subject cannot be read; a same-subject refresh keeps the cache |
+| `UserSession.clearAuthToken` | always (sign-out) |
+| `UserSession.configure` | the subject kind changes |
+| `UserSession.configureDevDefault` | the dev-default identity changes |
+| `UserSession.configureAuthTokenStorage` | the token-storage strategy changes |
+| the shell's `TeamSwitched` (a switch, a team created, a membership revoked, a server-set active team) | always, before the reloads issue their reads — the server scopes a read to the active team |
+| another tab of the origin (`UserSession.watchIdentityAcrossTabs`, installed by `installRequestSeam`) | its `storage` event moves the token's subject, the token-derived id or the local id, or clears storage; a same-subject refresh keeps the cache |
+
+Each route is pinned by a case in the Fable pack (`IdentityChangeReadCacheTests`), with a "no change"
+control beside every route that has one. `identityChanged` is public for a route the SDK cannot see —
+a deployment's own impersonation flow, say. `ReadPolicies.invalidate` is there for a change the
+client learns of some other way (a notification, say).
 
 With nothing registered, `Cmd.OfRemoting` runs its pre-854 path exactly — the check is one count.
 Migration notes and the measured before/after: [`docs/migrations/854-client-read-policies.md`](../migrations/854-client-read-policies.md).
