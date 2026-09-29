@@ -734,3 +734,61 @@ type VectorisationHandlerContributor(dataTypeIds: string list, handlerDataTypeId
 
             return "Vectorisation handlers", box payload
         }
+
+/// Phase 893 — warns when more than one replica runs over an in-process
+/// vector store or an in-process keyword index. Each replica then holds
+/// its own index in its own memory, persisted asynchronously: a chunk
+/// ingested on one replica is invisible to another's retrieval until a
+/// flush-and-reload cycle, and the same query returns different results
+/// depending on which replica served the turn. The ingestion queue and the
+/// embedding cache have their own replica validators
+/// (`RagIngestionInstanceValidator`, `TeamModeSharedEmbeddingCacheValidator`);
+/// this one covers the two stores.
+///
+/// `inProcessVectorStore` / `inProcessSparseIndex` name the composed
+/// in-process store, or are `None` when the composed one spans replicas
+/// (e.g. the `ToolUp.VectorStores.Pgvector` / `ToolUp.SparseIndices.Postgres`
+/// companions) — keyed on the composed instance, so composing a
+/// cross-replica store is what lifts the warning. `Warning`, not `Error`:
+/// the deployment still runs, and a composition that deliberately accepts
+/// per-replica retrieval is not refused. Silent at `ReplicaCount = 1`.
+type InProcessIndexReplicaValidator
+    (
+        serverConfig: ServerConfig,
+        inProcessVectorStore: string option,
+        inProcessSparseIndex: string option,
+        ?timeout: TimeSpan
+    ) =
+    let timeout = defaultArg timeout IConfigValidator.defaultTimeout
+
+    interface IConfigValidator with
+        member _.Name = "rag-in-process-index-replicas"
+        member _.Timeout = timeout
+
+        member _.Validate() = async {
+            let findings = [
+                match inProcessVectorStore with
+                | Some name ->
+                    sprintf
+                        "the vector store is the in-process %s (compose ToolUp.VectorStores.Pgvector via RAGServerApp.withVectorStore to share one index across replicas)"
+                        name
+                | None -> ()
+                match inProcessSparseIndex with
+                | Some name ->
+                    sprintf
+                        "the keyword index is the in-process %s (compose ToolUp.SparseIndices.Postgres via RAGServerApp.withSparseIndex or withAnalyzedSparseIndex to share one index across replicas)"
+                        name
+                | None -> ()
+            ]
+
+            if serverConfig.ReplicaCount > 1 && not findings.IsEmpty then
+                return
+                    Warning(
+                        sprintf
+                            "RAG runs with ReplicaCount = %d over process-local retrieval indexes: %s. Each replica keeps its own copy in its own memory, so a chunk ingested on one replica is missing from another's retrieval until a flush-and-reload, and hybrid retrieval returns different results depending on which replica served the turn. Verify in the HealthMonitorUI admin tab or /dev/inspect Validators panel."
+                            serverConfig.ReplicaCount
+                            (String.Join("; ", findings))
+                    )
+            else
+                return Ok
+        }

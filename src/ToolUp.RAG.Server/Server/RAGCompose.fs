@@ -695,6 +695,28 @@ let private makeNullBlobStorage () : IBlobStorage =
 //     |> RAGServerApp.withEmbeddingProvider embedder
 //     |> RAGServerApp.run
 
+/// Phase 893 — which keyword (sparse) index a composition runs hybrid
+/// retrieval over. The default, `InProcessSparseIndex`, constructs exactly
+/// the index every composition constructed before this type existed.
+[<RequireQualifiedAccess>]
+type SparseIndexComposition =
+    /// The in-process `InMemoryBM25Index`, blob-persisted, with the composed
+    /// `SparseAnalyzer` (the identity analyzer when none). Per-process: on
+    /// more than one replica each keeps its own postings.
+    | InProcessSparseIndex
+    /// A supplied `ISparseIndex`, registered verbatim (`withSparseIndex`).
+    /// It tokenises however it was built to, so composing it together with
+    /// `withSparseAnalyzer` is refused at composition — use
+    /// `AnalyzedSparseIndex` to hand the analyzer to the index.
+    | SuppliedSparseIndex of index: ISparseIndex
+    /// An index built at composition for the composed analyzer (the identity
+    /// analyzer when none) — `withAnalyzedSparseIndex`. The seam an index
+    /// that tokenises in its own engine uses to map, or refuse, the analyzer.
+    | AnalyzedSparseIndex of build: (ISparseAnalyzer -> ISparseIndex)
+    /// No keyword index: dense retrieval only (`withoutSparseIndex`). Fusion
+    /// over one list is that list, so the pipeline takes its dense-only path.
+    | NoSparseIndex
+
 /// Record form of `composeWithRAG` arguments. Flat superset of
 /// `AIServerApp` (which is itself a flat superset of `ServerApp`):
 /// every `with*` helper from the inner layers is mirrored here as a
@@ -961,6 +983,13 @@ type RAGServerApp = {
     /// request path, the pre-894 behaviour. Set via
     /// `withRetrievalTraceQueueCapacity`.
     RetrievalTraceQueueCapacity: int
+    /// Phase 893 — the keyword index hybrid retrieval runs over. Default
+    /// `InProcessSparseIndex`, the in-process BM25 index exactly as every
+    /// earlier composition built it. Set via `withSparseIndex` (a supplied
+    /// index, e.g. the `ToolUp.SparseIndices.Postgres` companion, which is
+    /// the same on every replica), `withAnalyzedSparseIndex` (an index built
+    /// for the composed analyzer), or `withoutSparseIndex` (dense only).
+    SparseIndex: SparseIndexComposition
 }
 
 /// Phase 633 — does this app's composed `IEmbeddingCache` span replicas?
@@ -996,6 +1025,20 @@ let hasCrossReplicaEmbeddingCache (app: RAGServerApp) : bool =
 /// member on `IEmbeddingProvider`.
 let hasScopeKeyedEmbeddingProvider (app: RAGServerApp) : bool =
     ScopedEmbedding.isScopeKeyed app.EmbeddingProvider
+
+/// Phase 893 — is `store` one of the in-process vector stores, whose index
+/// lives in one process's memory (and so differs between replicas)? True
+/// for the in-tree `InMemoryVectorStore` and for the HNSW companion's
+/// `HnswVectorStore`, which this assembly cannot reference and so
+/// recognises by type name. Keyed on the composed instance, like
+/// `hasCrossReplicaEmbeddingCache`: what lifts the replica warning is the
+/// store that removes its premise, not a builder having been called.
+let isInProcessVectorStore (store: IVectorStore) : bool =
+    store :? InMemoryVectorStore || store.GetType().Name = "HnswVectorStore"
+
+/// Phase 893 — is `index` the in-process keyword index (`InMemoryBM25Index`),
+/// whose postings live in one process's memory?
+let isInProcessSparseIndex (index: ISparseIndex) : bool = index :? InMemoryBM25Index
 
 // ─── composeRAG ───────────────────────────────────────────────────
 //
@@ -1076,6 +1119,26 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         match app.IngestionQueueStore with
         | Some store -> IngestionQueue(app.IngestionQueueCapacity, app.OverflowPolicy, store)
         | None -> IngestionQueue(app.IngestionQueueCapacity, app.OverflowPolicy)
+
+    // Phase 893 — a supplied or analyzer-built keyword index is resolved
+    // HERE, at composition, rather than inside the service registration: an
+    // index that cannot serve the composed analyzer refuses now, naming it,
+    // and the replica validator below sees the instance the deployment
+    // actually composed. The in-process default is still constructed with
+    // the RAG storage, below, exactly as before.
+    let composedSparseIndex: ISparseIndex option =
+        match app.SparseIndex, app.SparseAnalyzer with
+        | SparseIndexComposition.SuppliedSparseIndex _, Some analyzer ->
+            invalidOp (
+                sprintf
+                    "[RAGCompose] withSparseIndex and withSparseAnalyzer are both composed, but a supplied ISparseIndex tokenises however it was built to — the analyzer '%s' would be silently ignored. Compose the index with RAGServerApp.withAnalyzedSparseIndex so it is built for the analyzer (or refuses it), or drop withSparseAnalyzer."
+                    analyzer.Id
+            )
+        | SparseIndexComposition.SuppliedSparseIndex index, None -> Some index
+        | SparseIndexComposition.AnalyzedSparseIndex build, analyzer ->
+            Some(build (analyzer |> Option.defaultValue ToolUp.RAG.SparseAnalysis.identity))
+        | SparseIndexComposition.InProcessSparseIndex, _
+        | SparseIndexComposition.NoSparseIndex, _ -> None
 
     // Default to a 60-second rolling-window telemetry sink so `/health/rag`
     // is meaningful out-of-the-box. Deployments wanting Prometheus / OTel
@@ -1295,11 +1358,23 @@ let composeRAG (app: RAGServerApp) : ServerApp =
 
                 makeNullBlobStorage ()
 
-        let sparseIndex: ISparseIndex =
-            match app.SparseAnalyzer with
-            | None -> new InMemoryBM25Index(blobStorageForRag, logger = ragLogger) :> ISparseIndex
-            | Some analyzer ->
-                new InMemoryBM25Index(blobStorageForRag, logger = ragLogger, analyzer = analyzer) :> ISparseIndex
+        // Phase 893 — the keyword index is a composition choice. The default
+        // constructs exactly the in-process index every earlier composition
+        // built; a supplied or analyzer-built index was resolved at
+        // composition (`composedSparseIndex`, above); `None` is dense-only.
+        let sparseIndex: ISparseIndex option =
+            match app.SparseIndex with
+            | SparseIndexComposition.InProcessSparseIndex ->
+                match app.SparseAnalyzer with
+                | None -> Some(new InMemoryBM25Index(blobStorageForRag, logger = ragLogger) :> ISparseIndex)
+                | Some analyzer ->
+                    Some(
+                        new InMemoryBM25Index(blobStorageForRag, logger = ragLogger, analyzer = analyzer)
+                        :> ISparseIndex
+                    )
+            | SparseIndexComposition.SuppliedSparseIndex _
+            | SparseIndexComposition.AnalyzedSparseIndex _ -> composedSparseIndex
+            | SparseIndexComposition.NoSparseIndex -> None
 
         // Wrap the supplied embedder so repeated query / chunk text hits a
         // cache rather than the underlying provider. Cache key includes
@@ -1483,9 +1558,9 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                 RetrievalPipeline(
                     vectorStore,
                     cachedEmbedder,
-                    sparseIndex,
-                    pipelineOptions,
-                    retrievalTracer,
+                    ?sparseIndex = sparseIndex,
+                    options = pipelineOptions,
+                    tracer = retrievalTracer,
                     platformKnowledgeBaseSnapshot = snapshot,
                     // Phase 122 — same instance the `/health/rag` endpoint resolves,
                     // so per-stage P50/P95 surface in the snapshot.
@@ -1594,15 +1669,24 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         let indexLifecycle: ToolUp.Platform.IIndexLifecycle.IIndexLifecycle =
             ToolUp.Platform.IIndexLifecycle.DefaultIndexLifecycle(
                 vectorStore,
-                Some sparseIndex,
+                sparseIndex,
                 Some embeddingCache,
                 ragLogger
             )
 
+        let s = s.AddSingleton<IVectorStore>(vectorStore)
+
+        // Phase 893 — registered exactly when a keyword index is composed,
+        // in the position it always held. Dense-only registers none, so a
+        // consumer resolving `ISparseIndex` optionally (the entity store's
+        // full-text leg) sees it absent rather than an empty stand-in.
+        let s =
+            match sparseIndex with
+            | Some index -> s.AddSingleton<ISparseIndex>(index)
+            | None -> s
+
         let s =
             s
-                .AddSingleton<IVectorStore>(vectorStore)
-                .AddSingleton<ISparseIndex>(sparseIndex)
                 .AddSingleton<ToolUp.Platform.IIndexLifecycle.IIndexLifecycle>(indexLifecycle)
                 .AddSingleton<IEmbeddingProvider>(cachedEmbedder)
                 .AddSingleton<IEmbeddingCache>(embeddingCache)
@@ -1929,6 +2013,29 @@ let composeRAG (app: RAGServerApp) : ServerApp =
             IngestionConcurrency = app.IngestionConcurrency
             IngestionQueueCapacity = app.IngestionQueueCapacity
         }
+        // Phase 893 — warn when more than one replica runs over an
+        // in-process vector store or keyword index: each replica keeps its
+        // own, so retrieval differs by which replica served the turn.
+        // Skipped when a retrieval-pipeline override owns the corpus.
+        ToolUp.RAG.RagConfigValidator.InProcessIndexReplicaValidator(
+            finalConfig,
+            (if app.RetrievalPipelineOverride.IsSome then
+                 None
+             else
+                 match app.VectorStore with
+                 | None -> Some "InMemoryVectorStore"
+                 | Some store when isInProcessVectorStore store -> Some(store.GetType().Name)
+                 | Some _ -> None),
+            (if app.RetrievalPipelineOverride.IsSome then
+                 None
+             else
+                 match app.SparseIndex with
+                 | SparseIndexComposition.InProcessSparseIndex -> Some "InMemoryBM25Index"
+                 | _ ->
+                     match composedSparseIndex with
+                     | Some index when isInProcessSparseIndex index -> Some "InMemoryBM25Index"
+                     | _ -> None)
+        )
     ]
 
     // Merge RAG handlers + service config + the "RAG" notification-consumer
@@ -2003,6 +2110,7 @@ module RAGServerApp =
             ScopeEnumerator = None
             RetrievalBudgets = RetrievalBudgets.defaults
             RetrievalTraceQueueCapacity = 1024
+            SparseIndex = SparseIndexComposition.InProcessSparseIndex
         }
 
     /// Phase 1h composition seam — lift an existing `ServerApp` into a
@@ -2053,6 +2161,7 @@ module RAGServerApp =
             ScopeEnumerator = None
             RetrievalBudgets = RetrievalBudgets.defaults
             RetrievalTraceQueueCapacity = 1024
+            SparseIndex = SparseIndexComposition.InProcessSparseIndex
         }
 
     /// Internal helper: prepend a clamp note if `original ≠ clamped`.
@@ -2869,6 +2978,45 @@ module RAGServerApp =
     let withRetrievalTraceQueueCapacity (capacity: int) (app: RAGServerApp) : RAGServerApp = {
         app with
             RetrievalTraceQueueCapacity = max 0 capacity
+    }
+
+    /// Phase 893 — substitute the keyword (sparse) index hybrid retrieval
+    /// runs over, in the shape of `withVectorStore`. Companion packages under
+    /// `src/SparseIndices/<Name>/` provide implementations — the
+    /// `ToolUp.SparseIndices.Postgres` companion holds the index in the
+    /// database, so the keyword leg is the same on every replica. Without
+    /// one, RAG constructs the in-process `InMemoryBM25Index` exactly as
+    /// before (GP 11).
+    ///
+    /// The supplied index tokenises however it was built to, so composing it
+    /// together with `withSparseAnalyzer` is refused at composition; use
+    /// `withAnalyzedSparseIndex` to have the index built for the analyzer.
+    /// Ignored when `withRetrievalPipeline` replaces the whole pipeline.
+    let withSparseIndex (index: ISparseIndex) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            SparseIndex = SparseIndexComposition.SuppliedSparseIndex index
+    }
+
+    /// Phase 893 — substitute the keyword index with one BUILT FOR the
+    /// composed analyzer: `build` receives the analyzer `withSparseAnalyzer`
+    /// composed (the identity analyzer when none) at composition. The seam an
+    /// index that tokenises inside its own engine uses to map the analyzer
+    /// to its own configuration — or to refuse it, naming it, before the
+    /// deployment starts (e.g. `PostgresFullTextIndex.factory`).
+    let withAnalyzedSparseIndex (build: ISparseAnalyzer -> ISparseIndex) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            SparseIndex = SparseIndexComposition.AnalyzedSparseIndex build
+    }
+
+    /// Phase 893 — compose NO keyword index: dense retrieval only. Fusion
+    /// over one list is that list, so the pipeline takes its dense-only path
+    /// (the one it takes with no reranker and no keyword leg), and no
+    /// `ISparseIndex` is registered — the entity store's optional full-text
+    /// leg sees it absent. Index lifecycle and erasure fan out over the
+    /// dense store alone.
+    let withoutSparseIndex (app: RAGServerApp) : RAGServerApp = {
+        app with
+            SparseIndex = SparseIndexComposition.NoSparseIndex
     }
 
     /// Drive the final composition. Returns the process exit code. All

@@ -870,6 +870,11 @@ module Names =
     [<Literal>]
     let pgvectorConnectionString = "TOOLUP_PGVECTOR_CONNECTION_STRING"
 
+    /// Test- and evaluation-only: the live PostgreSQL connection string for
+    /// the full-text keyword-index companion (Phase 893).
+    [<Literal>]
+    let pgFullTextConnectionString = "TOOLUP_PG_FULLTEXT_CONNECTION_STRING"
+
     [<Literal>]
     let remotingAnalyzerAudit = "TOOLUP_REMOTING_ANALYZER_AUDIT"
 
@@ -2728,6 +2733,15 @@ let all: ConfigKeyDescriptor list = [
         EnvVar = Names.pgvectorConnectionString
         Description =
             "Test- and benchmark-only: PostgreSQL (pgvector) connection string; when set, arms the live pgvector legs of the vector-store pack and the RAG load benchmark."
+        Type = StringKey
+        Default = None
+        IsSecret = true
+        Category = ToolingCategory
+    }
+    {
+        EnvVar = Names.pgFullTextConnectionString
+        Description =
+            "Test- and evaluation-only: PostgreSQL connection string; when set, arms the live legs of the full-text keyword-index companion's test pack and the retrieval evaluation's --sparse-index postgres arm."
         Type = StringKey
         Default = None
         IsSecret = true
