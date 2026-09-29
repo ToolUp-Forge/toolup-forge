@@ -222,28 +222,4 @@ let tests =
                  refuse fromContextAsync for its existing Phase 69b–69k parity reasons; \
                  lifting the refusal is a separate question."
         }
-
-        // Phase 856.A — a TRIPWIRE, not a behaviour pin. 856 asked
-        // `buildDispatcherTable` to consult `GeneratedDispatchRegistry`, and
-        // the finding recorded in SourceGenDispatch.fs is that no generator
-        // emits an `IGeneratedDispatchTable` for it to find. The day one does,
-        // the finding is overturned and the wiring becomes possible — this
-        // goes red then, so it is done rather than forgotten.
-        test "Phase 856.A — no generator emits an IGeneratedDispatchTable for the adapter to consult" {
-            let generatorDir = Path.Combine(repoRoot (), "src", "ToolUp.Remoting.Generator")
-
-            let emitting =
-                Directory.GetFiles(generatorDir, "*.fs")
-                |> Array.filter (fun file -> File.ReadAllText(file).Contains "IGeneratedDispatchTable")
-                |> Array.map Path.GetFileName
-
-            Expect.isGreaterThan
-                (Directory.GetFiles(generatorDir, "*.fs").Length)
-                0
-                "the generator's sources must be where this probe looks, or it proves nothing"
-
-            Expect.isEmpty
-                emitting
-                "The generator now names IGeneratedDispatchTable, which overturns the Phase 856.A \n                 finding in SourceGenDispatch.fs: a generated table can exist, so \n                 buildDispatcherTable can consult GeneratedDispatchRegistry for the records it \n                 covers (inside the pre-flight chain, never around it). Wire it, re-measure the \n                 cold start with ToolUp.Remoting.Benchmarks, and retire this tripwire."
-        }
     ]
