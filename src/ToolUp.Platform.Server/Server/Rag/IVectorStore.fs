@@ -172,3 +172,39 @@ let eraseSubject
                         Note = Some(sprintf "%d chunk(s) %s in scope" matched.Length verb)
                     }
     }
+
+/// Phase 892 — optional batched write surface, SEPARATE from
+/// `IVectorStore` so the core interface gains no member and no existing
+/// implementation (in-tree or downstream) breaks. A store that can write
+/// many chunks in one round-trip implements it beside `IVectorStore`;
+/// callers reach it through `upsertBatch`, which probes for it and falls
+/// back to one `Upsert` per chunk.
+///
+/// Portability (GP 12): identity by value, async at the boundary,
+/// stateless, and single-scope — one call writes into exactly one
+/// `scope`, so the batch never widens a caller's reach across scopes.
+type IVectorStoreBatch =
+    /// Store or replace every `(chunkId, vector, chunk)` in `chunks`
+    /// within `scope`, with the per-chunk semantics of
+    /// `IVectorStore.Upsert`: idempotent on `(scope, chunkId)`, clears a
+    /// tombstone, and — for a chunk id repeated inside the batch — the
+    /// LATER entry wins, exactly as sequential upserts would leave it.
+    /// Implementations write the batch in a number of statements that
+    /// does not depend on its size; an empty batch writes nothing.
+    abstract UpsertBatch: scope: VectorScope -> chunks: (string * float32 array * TextChunk) list -> Async<unit>
+
+/// Write `chunks` into `scope` through `IVectorStoreBatch` when `store`
+/// implements it, else one `IVectorStore.Upsert` per chunk, in order. The
+/// two paths leave the store in the same state; only the round-trip
+/// count differs.
+let upsertBatch
+    (store: IVectorStore)
+    (scope: VectorScope)
+    (chunks: (string * float32 array * TextChunk) list)
+    : Async<unit> =
+    match box store with
+    | :? IVectorStoreBatch as batch -> batch.UpsertBatch scope chunks
+    | _ -> async {
+        for chunkId, vector, chunk in chunks do
+            do! store.Upsert scope chunkId vector chunk
+      }

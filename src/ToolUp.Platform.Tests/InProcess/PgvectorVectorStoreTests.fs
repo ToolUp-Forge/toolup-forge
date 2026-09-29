@@ -6,6 +6,7 @@ open Npgsql
 open ToolUp.Platform
 open ToolUp.Platform.IVectorStore
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.RAG.VectorStores.Pgvector
 open ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore
 
 // ─── Phase 507 — Pgvector IVectorStore test pack ─────────────────────
@@ -19,8 +20,8 @@ open ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore
 //    claim a gate rather than a comment: `Sql.scopeBoundStatements`
 //    enumerates every statement that touches chunk rows together with
 //    HOW it binds scope, and the test asserts that binding on each — a
-//    `scope = @scope` predicate for the six that read or mutate rows,
-//    and identity + conflict target for the one INSERT. A future
+//    `scope = @scope` predicate for the seven that read or mutate rows,
+//    and identity + conflict target for the two INSERTs. A future
 //    statement added without a binding fails here, in CI, on a fresh
 //    checkout with no Postgres anywhere near it.
 //
@@ -31,6 +32,12 @@ open ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore
 //    external store. Reported **Pending** when the variable is unset, so
 //    a fresh checkout is green without a database — the same posture the
 //    `ToolUp.AIProviders.Tests` live arms take.
+//
+// Phase 892 adds, to the structural arm, the tuning guards, the
+// per-query settings, the batched-write preparation and the batch-seam
+// probe, and the health / preflight judgements; and to the live arm, the
+// small-scope reproduction, the index-use confirmation (EXPLAIN), recall
+// against the exact scan, and the batched write end to end.
 //
 // Each live case gets its own table (`pgv_test_<guid>`) and drops it on
 // the way out, so the arm is re-runnable and two concurrent runs against
@@ -108,10 +115,11 @@ let private scopeIsolationTests =
                     // is the row identity. Assert BOTH halves — the
                     // written value and the conflict target — because
                     // either alone would let a conflicting row from
-                    // another scope be updated.
-                    Expect.stringContains
-                        sql
-                        "(@scope,"
+                    // another scope be updated. The single write binds it
+                    // in a VALUES row, the batched write (Phase 892) as
+                    // the first column of its SELECT.
+                    Expect.isTrue
+                        (sql.Contains "(@scope," || sql.Contains "SELECT @scope,")
                         (sprintf "%s must write the caller's scope into the row identity" name)
 
                     Expect.stringContains
@@ -131,7 +139,9 @@ let private scopeIsolationTests =
             let expected =
                 Set.ofList [
                     "Upsert"
+                    "UpsertBatch"
                     "Search"
+                    "SearchIndexOrdered"
                     "ListChunks"
                     "DeleteChunk"
                     "RestoreChunk"
@@ -157,11 +167,18 @@ let private scopeIsolationTests =
         }
 
         test "multi-scope search issues one scope-parameterised query, never a scope array" {
-            let searchSql = Sql.search defaultOptions
+            for searchSql in [ Sql.search defaultOptions; Sql.searchIndexOrdered defaultOptions ] do
+                Expect.isFalse
+                    (searchSql.Contains "ANY(" || searchSql.Contains "IN (")
+                    "a scope-set parameter would move the isolation guarantee inside an array — one query per scope instead"
+        }
+
+        test "the batched upsert binds scope once, as a scalar, never as an array" {
+            let batchSql = Sql.upsertBatch defaultOptions
 
             Expect.isFalse
-                (searchSql.Contains "ANY(" || searchSql.Contains "IN (")
-                "a scope-set parameter would move the isolation guarantee inside an array — one query per scope instead"
+                (batchSql.Contains "@scope::text[]" || batchSql.Contains "ANY(")
+                "one batch writes into exactly one scope — the scope must never ride inside the row arrays"
         }
 
         test "search filters tombstones and orders deterministically" {
@@ -396,8 +413,427 @@ let private codecTests =
         }
     ]
 
+// ─── Phase 892 — structural arm ──────────────────────────────────────
+
+let private hnswOptions = {
+    defaultOptions with
+        AnnIndex = HnswAnnIndex(16, 64)
+}
+
+let private ivfOptions = {
+    defaultOptions with
+        AnnIndex = IvfFlatAnnIndex 100
+}
+
+let private tuningTests =
+    testList "Phase 892 tuning" [
+        test "both presets validate against every index family" {
+            for options in [ defaultOptions; hnswOptions; ivfOptions ] do
+                Expect.isOk
+                    (PgvectorTuning.validate options PgvectorTuning.unchanged)
+                    "the unchanged preset must be valid"
+
+                Expect.isOk
+                    (PgvectorTuning.validate options PgvectorTuning.recommended)
+                    "the recommended preset must be valid"
+        }
+
+        test "the unchanged preset is the pre-892 behaviour" {
+            let t = PgvectorTuning.unchanged
+            Expect.isNone t.SearchWidth "no width is applied — the database default stays in force"
+            Expect.isFalse t.IterativeScan "no iterative scan"
+            Expect.isFalse t.IndexOrderedSearch "the two-key ORDER BY is kept"
+            Expect.isFalse t.ExactFallbackOnShortPage "no second query"
+            Expect.equal t.MaxSearchConcurrency 1 "multi-scope search stays sequential"
+
+            Expect.isEmpty
+                (Sql.searchSettings hnswOptions t (Some "0.8.0"))
+                "nothing is applied per query, so search runs outside any transaction, exactly as before"
+        }
+
+        test "an out-of-range search width is refused, per index family" {
+            for bad in [ 0; PgvectorTuning.MaxHnswEfSearch + 1 ] do
+                Expect.isError
+                    (PgvectorTuning.validate hnswOptions {
+                        PgvectorTuning.recommended with
+                            SearchWidth = Some bad
+                    })
+                    (sprintf "hnsw.ef_search = %d is outside pgvector's bounds" bad)
+
+            Expect.isError
+                (PgvectorTuning.validate ivfOptions {
+                    PgvectorTuning.recommended with
+                        SearchWidth = Some 0
+                })
+                "ivfflat.probes = 0 probes nothing"
+
+            Expect.isOk
+                (PgvectorTuning.validate ivfOptions {
+                    PgvectorTuning.recommended with
+                        SearchWidth = Some 2000
+                })
+                "probes above hnsw's ceiling are legal for ivfflat"
+        }
+
+        test "a search width under NoAnnIndex is accepted and applies nothing" {
+            let t = {
+                PgvectorTuning.recommended with
+                    SearchWidth = Some 5000
+            }
+
+            Expect.isOk (PgvectorTuning.validate defaultOptions t) "there is no index for the width to widen"
+            Expect.isEmpty (Sql.searchSettings defaultOptions t (Some "0.8.0")) "an exact scan takes no settings"
+        }
+
+        test "search concurrency and the warning threshold are bounded" {
+            for bad in [ 0; PgvectorTuning.MaxSearchConcurrencyLimit + 1 ] do
+                Expect.isError
+                    (PgvectorTuning.validate defaultOptions {
+                        PgvectorTuning.recommended with
+                            MaxSearchConcurrency = bad
+                    })
+                    (sprintf "MaxSearchConcurrency = %d is refused" bad)
+
+            Expect.isError
+                (PgvectorTuning.validate defaultOptions {
+                    PgvectorTuning.recommended with
+                        ExactScanWarningRows = -1L
+                })
+                "a negative row threshold is a typo"
+        }
+
+        test "createTuned refuses an invalid tuning before any I/O" {
+            expectRaisesNaming
+                "MaxSearchConcurrency"
+                "tuning validation must precede any connection attempt, and name the field"
+                (fun () ->
+                    createTuned
+                        "Host=192.0.2.1;Port=5432;Database=nope;Timeout=1"
+                        hnswOptions
+                        {
+                            PgvectorTuning.recommended with
+                                MaxSearchConcurrency = 0
+                        }
+                        None
+                    |> ignore)
+        }
+    ]
+
+let private searchSettingsTests =
+    testList "Phase 892 per-query settings" [
+        test "extension versions parse, and iterative scanning starts at 0.8.0" {
+            Expect.isTrue (ExtensionVersion.supportsIterativeScan (Some "0.8.0")) "0.8.0 introduced it"
+            Expect.isTrue (ExtensionVersion.supportsIterativeScan (Some "0.10.1")) "later minors keep it"
+            Expect.isTrue (ExtensionVersion.supportsIterativeScan (Some "1.0")) "a major keeps it"
+            Expect.isFalse (ExtensionVersion.supportsIterativeScan (Some "0.7.4")) "0.7 has no iterative scan"
+            Expect.isFalse (ExtensionVersion.supportsIterativeScan None) "unknown is treated as unsupported"
+            Expect.isFalse (ExtensionVersion.supportsIterativeScan (Some "dev")) "unparseable is unsupported"
+        }
+
+        test "hnsw takes ef_search and, when supported, relaxed iterative scanning" {
+            let settings =
+                Sql.searchSettings hnswOptions PgvectorTuning.recommended (Some "0.8.0")
+
+            Expect.equal
+                settings
+                [ "hnsw.ef_search", "100"; "hnsw.iterative_scan", "relaxed_order" ]
+                "the width and the iterative mode of the configured family"
+        }
+
+        test "iterative scanning is never sent to an extension that predates it" {
+            let settings =
+                Sql.searchSettings hnswOptions PgvectorTuning.recommended (Some "0.7.4")
+
+            Expect.equal settings [ "hnsw.ef_search", "100" ] "0.7 rejects the setting, so it is withheld"
+        }
+
+        test "ivfflat takes probes and its own iterative setting" {
+            let settings =
+                Sql.searchSettings ivfOptions PgvectorTuning.recommended (Some "0.8.0")
+
+            Expect.equal
+                settings
+                [ "ivfflat.probes", "100"; "ivfflat.iterative_scan", "relaxed_order" ]
+                "the IVFFlat family's own settings"
+        }
+
+        test "settings are applied transaction-locally and bound as parameters" {
+            let sql = Sql.setLocal 2
+
+            Expect.stringContains
+                sql
+                "set_config(@setting_0, @value_0, true)"
+                "is_local = true is SET LOCAL: the setting ends with the query's own transaction"
+
+            Expect.stringContains sql "set_config(@setting_1, @value_1, true)" "one call per setting"
+
+            Expect.isFalse
+                (sql.Contains "SET hnsw" || sql.Contains "SET ivfflat")
+                "a session-level SET would ride the pooled connection to the next caller"
+        }
+
+        test "the index-ordered search orders by distance alone; the exact one keeps the total order" {
+            let indexOrdered = Sql.searchIndexOrdered defaultOptions
+
+            Expect.stringContains
+                indexOrdered
+                "ORDER BY embedding <=> @embedding::vector\nLIMIT"
+                "an ordering-operator index can serve only a single distance sort key"
+
+            Expect.isFalse (indexOrdered.Contains ", chunk_id") "no secondary sort key in the index-ordered statement"
+            Expect.stringContains indexOrdered "deleted_at IS NULL" "tombstones stay filtered"
+
+            Expect.stringContains
+                (Sql.search defaultOptions)
+                ", chunk_id"
+                "the exact statement (and the short-page fallback) keeps the chunk_id tie-break"
+        }
+    ]
+
+let private tc content : TextChunk = {
+    Content = content
+    Metadata = Map.empty
+}
+
+let private batchTests =
+    testList "Phase 892 batched upsert" [
+        test "one statement whose text does not grow with the batch" {
+            // The batch is bound as arrays, so the statement is the same
+            // text at every size — one statement, one cached plan.
+            let sql = Sql.upsertBatch defaultOptions
+            Expect.stringContains sql "unnest(@chunk_ids::text[]" "rows arrive as arrays"
+            Expect.stringContains sql "@embeddings::real[]" "vectors arrive as one binary float4 array"
+            Expect.stringContains sql Sql.ScopeConflictTarget "the conflict target is the composite key"
+            Expect.stringContains sql "deleted_at = NULL" "re-upserting clears a tombstone, as Upsert does"
+
+            Expect.equal
+                (sql.Split(';', StringSplitOptions.RemoveEmptyEntries)
+                 |> Array.filter (fun s -> s.Trim() <> "")
+                 |> Array.length)
+                1
+                "exactly one statement"
+        }
+
+        test "prepare flattens every size into one set of arrays" {
+            let options = { defaultOptions with Dimensions = 4 }
+
+            for size in [ 1; 10; 1000 ] do
+                let chunks =
+                    List.init size (fun i -> sprintf "c-%04d" i, Array.init 4 (fun j -> float32 (i + j + 1)), tc "x")
+
+                let prepared = BatchUpsert.prepare options chunks
+                Expect.equal prepared.ChunkIds.Length size "one row per chunk"
+                Expect.equal prepared.Embeddings.Length (size * 4) "one flat array of size × dimensions"
+                Expect.equal prepared.Contents.Length size "contents align with ids"
+                Expect.equal prepared.Metadata.Length size "metadata aligns with ids"
+        }
+
+        test "a repeated chunk id keeps its position and its LAST value" {
+            let options = { defaultOptions with Dimensions = 2 }
+
+            let prepared =
+                BatchUpsert.prepare options [
+                    "a", [| 1.0f; 0.0f |], tc "first a"
+                    "b", [| 0.0f; 1.0f |], tc "b"
+                    "a", [| 0.0f; 1.0f |], tc "second a"
+                ]
+
+            Expect.equal prepared.ChunkIds [| "a"; "b" |] "one row per distinct id, first-seen order"
+            Expect.equal prepared.Contents [| "second a"; "b" |] "the later upsert wins, as sequential writes would"
+            Expect.equal prepared.Embeddings[0..1] [| 0.0f; 1.0f |] "the later vector wins too"
+        }
+
+        test "vectors are unit-normalised and the tombstone key is stripped" {
+            let options = { defaultOptions with Dimensions = 2 }
+
+            let chunk = {
+                Content = "x"
+                Metadata = Map.ofList [ ChunkMetadata.DeletedAtKey, "2026-01-01T00:00:00Z"; "tag", "t" ]
+            }
+
+            let prepared = BatchUpsert.prepare options [ "a", [| 3.0f; 4.0f |], chunk ]
+
+            Expect.floatClose Accuracy.medium (float prepared.Embeddings[0]) 0.6 "3/5"
+            Expect.floatClose Accuracy.medium (float prepared.Embeddings[1]) 0.8 "4/5"
+
+            Expect.isFalse
+                (prepared.Metadata[0].Contains ChunkMetadata.DeletedAtKey)
+                "the tombstone lives in the column, never in the metadata"
+
+            Expect.stringContains prepared.Metadata[0] "\"tag\"" "other metadata survives"
+        }
+
+        test "a wrong-dimension vector refuses the whole batch, naming the chunk" {
+            let options = { defaultOptions with Dimensions = 2 }
+
+            expectRaisesNaming "'bad'" "nothing is written when one vector does not fit the column" (fun () ->
+                BatchUpsert.prepare options [ "ok", [| 1.0f; 0.0f |], tc "ok"; "bad", [| 1.0f |], tc "bad" ]
+                |> ignore)
+        }
+
+        testCaseAsync "upsertBatch reaches IVectorStoreBatch in one call when the store implements it"
+        <| async {
+            let singles = ResizeArray<string>()
+            let batches = ResizeArray<int>()
+
+            let store =
+                { new IVectorStore with
+                    member _.Upsert _ chunkId _ _ = async { singles.Add chunkId }
+                    member _.Search _ _ _ = async { return [] }
+                    member _.ListChunks _ _ = async { return [] }
+                    member _.DeleteChunk _ _ = async { return () }
+                    member _.RestoreChunk _ _ = async { return () }
+                    member _.Vacuum _ _ = async { return 0 }
+                    member _.DeleteByScope _ = async { return () }
+                    member _.ListScopes() = async { return [] }
+
+                    member _.Erase(_, _, _, _) = async {
+                        return Result.Error(ErasureError.StoreUnreachable("fake", "unused"))
+                    }
+                  interface IVectorStoreBatch with
+                      member _.UpsertBatch _ chunks = async { batches.Add chunks.Length }
+                }
+
+            let chunks = List.init 25 (fun i -> sprintf "c-%d" i, [| 1.0f |], tc "x")
+            do! upsertBatch store (Team "T") chunks
+
+            Expect.equal (List.ofSeq batches) [ 25 ] "one batch call carrying every chunk"
+            Expect.isEmpty singles "no per-chunk writes when the batch seam is present"
+        }
+
+        testCaseAsync "upsertBatch falls back to ordered single upserts on a store without the seam"
+        <| async {
+            let singles = ResizeArray<string>()
+
+            let store =
+                { new IVectorStore with
+                    member _.Upsert _ chunkId _ _ = async { singles.Add chunkId }
+                    member _.Search _ _ _ = async { return [] }
+                    member _.ListChunks _ _ = async { return [] }
+                    member _.DeleteChunk _ _ = async { return () }
+                    member _.RestoreChunk _ _ = async { return () }
+                    member _.Vacuum _ _ = async { return 0 }
+                    member _.DeleteByScope _ = async { return () }
+                    member _.ListScopes() = async { return [] }
+
+                    member _.Erase(_, _, _, _) = async {
+                        return Result.Error(ErasureError.StoreUnreachable("fake", "unused"))
+                    }
+                }
+
+            do! upsertBatch store (Team "T") [ "a", [| 1.0f |], tc "a"; "b", [| 1.0f |], tc "b" ]
+            Expect.equal (List.ofSeq singles) [ "a"; "b" ] "an existing store keeps working, chunk by chunk, in order"
+        }
+    ]
+
+let private diagnosticsOf options tuning atCreate now methods rows : PgvectorDiagnostics = {
+    Options = options
+    Tuning = tuning
+    ExtensionVersionAtCreate = atCreate
+    ExtensionVersion = now
+    AnnIndexMethods = methods
+    DatabaseHnswEfSearch = Some "40"
+    DatabaseIvfFlatProbes = Some "1"
+    RowEstimate = rows
+}
+
+let private diagnosticsTests =
+    testList "Phase 892 health + preflight" [
+        test "the report names the index kind, the width in force and the extension version" {
+            let d =
+                diagnosticsOf hnswOptions PgvectorTuning.recommended (Some "0.8.0") (Some "0.8.0") [ "hnsw" ] 1234L
+
+            let line = Health.describe d
+            Expect.stringContains line "pgvector 0.8.0" "the extension version"
+            Expect.stringContains line "hnsw (m=16, ef_construction=64) [present]" "the index kind, and that it exists"
+            Expect.stringContains line "hnsw.ef_search = 100 (per query)" "the tuned width"
+            Expect.stringContains line "iterative scan: relaxed_order" "iterative scanning applied"
+            Expect.equal (Health.assess d) HealthChecks.Healthy "nothing to fix"
+        }
+
+        test "an untuned width reports the database default" {
+            let d =
+                diagnosticsOf hnswOptions PgvectorTuning.unchanged (Some "0.8.0") (Some "0.8.0") [ "hnsw" ] 0L
+
+            Expect.stringContains (Health.describe d) "hnsw.ef_search = 40 (database default)" "the default in force"
+        }
+
+        test "iterative scanning requested on an old extension is Degraded, not Unhealthy" {
+            let d =
+                diagnosticsOf hnswOptions PgvectorTuning.recommended (Some "0.7.4") (Some "0.7.4") [ "hnsw" ] 0L
+
+            match Health.assess d with
+            | HealthChecks.Degraded message ->
+                Expect.stringContains message "not applied" "says what is missing"
+                Expect.stringContains message "pgvector 0.7.4" "and carries the whole report"
+            | other -> failtestf "expected Degraded, got %A" other
+        }
+
+        test "a configured index absent from the table is Degraded" {
+            let d =
+                diagnosticsOf hnswOptions PgvectorTuning.recommended (Some "0.8.0") (Some "0.8.0") [] 0L
+
+            match Health.assess d with
+            | HealthChecks.Degraded message -> Expect.stringContains message "absent" "names the missing index"
+            | other -> failtestf "expected Degraded, got %A" other
+        }
+
+        test "an extension upgraded since create is Degraded until restart" {
+            let d =
+                diagnosticsOf hnswOptions PgvectorTuning.recommended (Some "0.7.4") (Some "0.8.0") [ "hnsw" ] 0L
+
+            match Health.assess d with
+            | HealthChecks.Degraded message -> Expect.stringContains message "restart" "names the operator action"
+            | other -> failtestf "expected Degraded, got %A" other
+        }
+
+        test "an exact-scan store is Healthy whatever its tuning" {
+            let d =
+                diagnosticsOf defaultOptions PgvectorTuning.recommended (Some "0.7.4") (Some "0.7.4") [] 10L
+
+            Expect.equal (Health.assess d) HealthChecks.Healthy "no index, so nothing about an index can be wrong"
+            Expect.stringContains (Health.describe d) "search width: n/a (exact scan)" "the width does not apply"
+        }
+
+        test "the validator warns above the row threshold with no approximate index, and only then" {
+            let above =
+                diagnosticsOf defaultOptions PgvectorTuning.unchanged None None [] 500_001L
+
+            match Health.exactScanVerdict above with
+            | ConfigValidation.ValidationResult.Warning message ->
+                Expect.stringContains message "500001" "names the row estimate"
+                Expect.stringContains message "HnswAnnIndex" "names the remedy"
+            | other -> failtestf "expected a Warning, got %A" other
+
+            let atThreshold =
+                diagnosticsOf defaultOptions PgvectorTuning.unchanged None None [] 500_000L
+
+            Expect.equal
+                (Health.exactScanVerdict atThreshold)
+                ConfigValidation.ValidationResult.Ok
+                "at the threshold is not above it"
+
+            let indexed =
+                diagnosticsOf hnswOptions PgvectorTuning.unchanged None None [ "hnsw" ] 50_000_000L
+
+            Expect.equal
+                (Health.exactScanVerdict indexed)
+                ConfigValidation.ValidationResult.Ok
+                "an approximate index answers the warning"
+        }
+    ]
+
 let private structuralTests =
-    testList "structural (no database required)" [ scopeIsolationTests; schemaTests; optionGuardTests; codecTests ]
+    testList "structural (no database required)" [
+        scopeIsolationTests
+        schemaTests
+        optionGuardTests
+        codecTests
+        tuningTests
+        searchSettingsTests
+        batchTests
+        diagnosticsTests
+    ]
 
 // ─── Live arm ────────────────────────────────────────────────────────
 
@@ -435,6 +871,339 @@ let private makeStoreWith (connectionString: string) (dimensions: int) () : IVec
 
 let private eightDim (axis: int) : float32 array =
     Array.init 8 (fun i -> if i = axis then 1.0f else 0.0f)
+
+/// Phase 892 — a tuned store over a fresh table. Returns the table name so
+/// a case can open a second store (or a raw command) against it.
+let private makeTunedStore
+    (connectionString: string)
+    (dimensions: int)
+    (annIndex: PgvectorAnnIndex)
+    (tuning: PgvectorTuning)
+    : IVectorStore * IDisposable * string =
+    let table = freshTableName ()
+
+    let options = {
+        PgvectorOptions.forDimensions dimensions with
+            Table = table
+            AnnIndex = annIndex
+    }
+
+    let store =
+        createTuned connectionString options tuning (Some(SilentLogger() :> ILogger))
+
+    let cleanup =
+        { new IDisposable with
+            member _.Dispose() =
+                (store :?> IDisposable).Dispose()
+                dropTable connectionString table
+        }
+
+    store, cleanup, table
+
+/// Deterministic pseudo-random vectors — the same corpus every run.
+let private randomVectors (seed: int) (count: int) (dimensions: int) : float32 array list =
+    let rng = Random seed
+    List.init count (fun _ -> Array.init dimensions (fun _ -> float32 (rng.NextDouble() * 2.0 - 1.0)))
+
+let private cosine (a: float32 array) (b: float32 array) =
+    let dot = Array.fold2 (fun acc x y -> acc + float x * float y) 0.0 a b
+
+    let norm (v: float32 array) =
+        sqrt (v |> Array.sumBy (fun x -> float x * float x))
+
+    dot / (norm a * norm b)
+
+/// EXPLAIN a search statement with the planner steered off sequential
+/// scans, so the plan shows whether an index CAN serve the statement.
+let private explain (connectionString: string) (sql: string) (scopeKey: string) (query: float32 array) (topK: int) =
+    use dataSource = NpgsqlDataSource.Create connectionString
+    use conn = dataSource.OpenConnection()
+    use tx = conn.BeginTransaction()
+
+    use off = new NpgsqlCommand("SET LOCAL enable_seqscan = off;", conn, tx)
+    off.ExecuteNonQuery() |> ignore
+
+    use cmd = new NpgsqlCommand("EXPLAIN " + sql, conn, tx)
+    cmd.Parameters.AddWithValue("scope", scopeKey) |> ignore
+
+    cmd.Parameters.AddWithValue("embedding", Vector.toLiteral (Vector.normalise query))
+    |> ignore
+
+    cmd.Parameters.AddWithValue("top_k", topK) |> ignore
+    use reader = cmd.ExecuteReader()
+    let lines = ResizeArray<string>()
+
+    while reader.Read() do
+        lines.Add(reader.GetString 0)
+
+    String.concat "\n" lines
+
+/// Phase 892 live cases — the reproduction, the index-use confirmation,
+/// recall against the exact scan, the batched write and the tuned search
+/// paths. Printed figures are the measurement record the README cites.
+let private phase892LiveTests (connectionString: string) =
+    testList "Phase 892 (live)" [
+        testCaseAsync "reproduction: a small scope in a large shared table, approximate index, default width"
+        <| async {
+            // The unmitigated shape the phase set out to reproduce: the
+            // index serves the ORDER BY, nothing widens the scan, no
+            // fallback. What comes back is RECORDED, not asserted — it is
+            // the measurement, and the mitigated case below is the gate.
+            let bare = {
+                PgvectorTuning.unchanged with
+                    IndexOrderedSearch = true
+            }
+
+            let store, dispose, table =
+                makeTunedStore connectionString 16 (HnswAnnIndex(16, 64)) bare
+
+            try
+                let big = randomVectors 892 5000 16
+                let small = randomVectors 893 20 16
+
+                do!
+                    upsertBatch
+                        store
+                        (Team "big")
+                        (big |> List.mapi (fun i v -> sprintf "big-%05d" i, v, chunk "big" "b"))
+
+                do!
+                    upsertBatch
+                        store
+                        (Team "small")
+                        (small |> List.mapi (fun i v -> sprintf "small-%03d" i, v, chunk "small" "s"))
+
+                let query = small.Head
+                let! results = store.Search [ Team "small" ] query 10
+
+                let plan =
+                    explain
+                        connectionString
+                        (Sql.searchIndexOrdered { defaultOptions with Table = table })
+                        "team:small"
+                        query
+                        10
+
+                printfn
+                    "[Phase 892 reproduction] small scope (20 chunks) in a 5020-row table, hnsw(16,64), default ef_search, no iterative scan, no fallback: top-10 returned %d rows.\nPlan:\n%s"
+                    results.Length
+                    plan
+
+                Expect.all results (fun m -> m.Scope = Team "small") "isolation holds whatever the count"
+            finally
+                dispose.Dispose()
+        }
+
+        testCaseAsync "a small scope in a large shared table is returned a full top-k (recommended tuning)"
+        <| async {
+            let store, dispose, _ =
+                makeTunedStore connectionString 16 (HnswAnnIndex(16, 64)) PgvectorTuning.recommended
+
+            try
+                do!
+                    upsertBatch
+                        store
+                        (Team "big")
+                        (randomVectors 892 5000 16
+                         |> List.mapi (fun i v -> sprintf "big-%05d" i, v, chunk "big" "b"))
+
+                let small = randomVectors 893 20 16
+
+                do!
+                    upsertBatch
+                        store
+                        (Team "small")
+                        (small |> List.mapi (fun i v -> sprintf "small-%03d" i, v, chunk "small" "s"))
+
+                for topK in [ 5; 10; 20 ] do
+                    let! results = store.Search [ Team "small" ] small.Head topK
+                    Expect.hasLength results topK (sprintf "the small scope holds 20 chunks, so top-%d is full" topK)
+                    Expect.all results (fun m -> m.Scope = Team "small") "and every match is the small scope's"
+
+                let! overAsk = store.Search [ Team "small" ] small.Head 50
+                Expect.hasLength overAsk 20 "asking for more than the scope holds returns all of it"
+            finally
+                dispose.Dispose()
+        }
+
+        testCaseAsync "the index serves the distance-only ORDER BY, and not the two-key one"
+        <| async {
+            let store, dispose, table =
+                makeTunedStore connectionString 16 (HnswAnnIndex(16, 64)) PgvectorTuning.recommended
+
+            try
+                do!
+                    upsertBatch
+                        store
+                        (Team "T")
+                        (randomVectors 7 500 16
+                         |> List.mapi (fun i v -> sprintf "c-%04d" i, v, chunk "c" "x"))
+
+                let options = { defaultOptions with Table = table }
+                let query = (randomVectors 8 1 16).Head
+                let indexName = table + "_embedding_hnsw_idx"
+
+                let indexOrderedPlan =
+                    explain connectionString (Sql.searchIndexOrdered options) "team:T" query 10
+
+                let totalOrderPlan = explain connectionString (Sql.search options) "team:T" query 10
+
+                printfn
+                    "[Phase 892 ordering] distance-only plan:\n%s\ntwo-key plan:\n%s"
+                    indexOrderedPlan
+                    totalOrderPlan
+
+                Expect.stringContains
+                    indexOrderedPlan
+                    indexName
+                    "a single distance sort key is what an ordering-operator index serves"
+
+                // The falsifier for the exact fallback: if a planner ever
+                // serves the two-key ORDER BY from the approximate index,
+                // the "exact" statement is no longer exact.
+                Expect.isFalse
+                    (totalOrderPlan.Contains indexName)
+                    "the two-key statement must not be served from the approximate index — the exact fallback depends on it"
+            finally
+                dispose.Dispose()
+        }
+
+        testCaseAsync "recall against the exact scan at the recommended settings"
+        <| async {
+            let store, dispose, _ =
+                makeTunedStore connectionString 32 (HnswAnnIndex(16, 64)) PgvectorTuning.recommended
+
+            try
+                let corpus =
+                    randomVectors 42 5000 32 |> List.mapi (fun i v -> sprintf "c-%05d" i, v)
+
+                do! upsertBatch store (Team "T") (corpus |> List.map (fun (id, v) -> id, v, chunk "c" "x"))
+
+                let queries = randomVectors 43 50 32
+                let k = 10
+                let mutable hits = 0
+
+                for q in queries do
+                    let truth =
+                        corpus
+                        |> List.sortBy (fun (id, v) -> -(cosine q v), id)
+                        |> List.truncate k
+                        |> List.map fst
+                        |> Set.ofList
+
+                    let! got = store.Search [ Team "T" ] q k
+                    hits <- hits + (got |> List.filter (fun m -> truth.Contains m.ChunkId) |> List.length)
+
+                let recall = float hits / float (k * queries.Length)
+
+                printfn
+                    "[Phase 892 recall] 5000 x 32-dim, hnsw(16,64), ef_search=100, iterative relaxed: recall@10 = %.3f over %d queries"
+                    recall
+                    queries.Length
+
+                Expect.isGreaterThanOrEqual recall 0.9 "the recommended settings keep recall@10 at or above 0.9"
+            finally
+                dispose.Dispose()
+        }
+
+        testCaseAsync "a batched upsert writes, replaces and clears tombstones like single upserts"
+        <| async {
+            let store, dispose, _ =
+                makeTunedStore connectionString 8 NoAnnIndex PgvectorTuning.recommended
+
+            try
+                let batch =
+                    List.init 300 (fun i -> sprintf "c-%03d" i, eightDim (i % 8), chunk "v1" "x")
+
+                do! upsertBatch store (Team "T") batch
+
+                let! all = store.ListChunks (Team "T") false
+                Expect.hasLength all 300 "every chunk of the batch is written"
+
+                do! store.DeleteChunk (Team "T") "c-000"
+
+                do!
+                    upsertBatch store (Team "T") [
+                        "c-000", eightDim 0, chunk "v2" "x"
+                        "c-001", eightDim 1, chunk "v2" "x"
+                        "c-001", eightDim 1, chunk "v3" "x"
+                    ]
+
+                let! after = store.ListChunks (Team "T") false
+                let byId = after |> Map.ofList
+                Expect.hasLength after 300 "replacing never duplicates"
+                Expect.equal byId["c-000"].Content "v2" "a batched write clears the tombstone and replaces the content"
+                Expect.equal byId["c-001"].Content "v3" "the later entry for a repeated id wins"
+
+                let! other = store.ListChunks (Team "U") true
+                Expect.isEmpty other "the batch wrote into its own scope only"
+            finally
+                dispose.Dispose()
+        }
+
+        testCaseAsync "concurrent multi-scope search returns exactly what sequential search returns"
+        <| async {
+            let concurrent, dispose, table =
+                makeTunedStore connectionString 8 NoAnnIndex {
+                    PgvectorTuning.unchanged with
+                        MaxSearchConcurrency = 4
+                }
+
+            let sequential =
+                create
+                    connectionString
+                    {
+                        PgvectorOptions.forDimensions 8 with
+                            Table = table
+                    }
+                    (Some(SilentLogger() :> ILogger))
+
+            try
+                let scopes = [ for s in 1..6 -> Team(sprintf "t%d" s) ]
+
+                for scope in scopes do
+                    do!
+                        upsertBatch
+                            concurrent
+                            scope
+                            (List.init 20 (fun i -> sprintf "c-%02d" i, eightDim (i % 8), chunk "c" "x"))
+
+                let! a = concurrent.Search scopes (eightDim 3) 15
+                let! b = sequential.Search scopes (eightDim 3) 15
+
+                Expect.equal
+                    (a |> List.map (fun m -> m.Scope, m.ChunkId))
+                    (b |> List.map (fun m -> m.Scope, m.ChunkId))
+                    "concurrency changes latency, never the answer"
+            finally
+                (sequential :?> IDisposable).Dispose()
+                dispose.Dispose()
+        }
+
+        testCaseAsync "the posture read reports the extension, the index and the width"
+        <| async {
+            let store, dispose, _ =
+                makeTunedStore connectionString 8 (HnswAnnIndex(16, 64)) PgvectorTuning.recommended
+
+            try
+                let pg = store :?> PgvectorVectorStore
+                let! d = pg.Diagnose()
+                Expect.isSome d.ExtensionVersion "the installed extension version is read"
+                Expect.contains d.AnnIndexMethods "hnsw" "the index built at create is found on the table"
+
+                let! line = Health.report store
+                printfn "[Phase 892 posture] %s" line
+                Expect.stringContains line "hnsw.ef_search = 100 (per query)" "the width in force is reported"
+
+                let! health = (Health.create store).Check()
+
+                match health with
+                | HealthChecks.Unhealthy message -> failtestf "a reachable store is not Unhealthy: %s" message
+                | _ -> ()
+            finally
+                dispose.Dispose()
+        }
+    ]
 
 let private liveTests (connectionString: string) =
     let makeStore = makeStoreWith connectionString 8
@@ -705,6 +1474,8 @@ let private liveTests (connectionString: string) =
                 (replicaB :?> IDisposable).Dispose()
                 dropTable connectionString table
         }
+
+        phase892LiveTests connectionString
     ]
 
 // ─── Registration ────────────────────────────────────────────────────

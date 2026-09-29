@@ -6147,6 +6147,7 @@ ToolUp.Platform.IUserSchemaStore.List(System.String) : Microsoft.FSharp.Control.
 ToolUp.Platform.IUserSchemaStore.Save(System.String, ToolUp.Platform.UserAuthoredSchema, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.UserAuthoredSchema, ToolUp.Platform.UserSchemaError]]
 ToolUp.Platform.IVectorStore (class)
 ToolUp.Platform.IVectorStore.eraseSubject(ToolUp.Platform.IVectorStore+IVectorStore, ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
+ToolUp.Platform.IVectorStore.upsertBatch(ToolUp.Platform.IVectorStore+IVectorStore, ToolUp.Platform.VectorKnowledgeTypes+VectorScope, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.Single[], ToolUp.Platform.VectorKnowledgeTypes+TextChunk]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IVectorStore+IVectorStore (interface)
 ToolUp.Platform.IVectorStore+IVectorStore.DeleteByScope(ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IVectorStore+IVectorStore.DeleteChunk(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
@@ -6157,6 +6158,8 @@ ToolUp.Platform.IVectorStore+IVectorStore.RestoreChunk(ToolUp.Platform.VectorKno
 ToolUp.Platform.IVectorStore+IVectorStore.Search(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope], System.Single[], System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorMatch]]
 ToolUp.Platform.IVectorStore+IVectorStore.Upsert(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String, System.Single[], ToolUp.Platform.VectorKnowledgeTypes+TextChunk) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IVectorStore+IVectorStore.Vacuum(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.DateTimeOffset) : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
+ToolUp.Platform.IVectorStore+IVectorStoreBatch (interface)
+ToolUp.Platform.IVectorStore+IVectorStoreBatch.UpsertBatch(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.Single[], ToolUp.Platform.VectorKnowledgeTypes+TextChunk]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IWebhookDeliveryLog (interface)
 ToolUp.Platform.IWebhookDeliveryLog.ListRecent(System.String, System.Guid, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WebhookDelivery]]
 ToolUp.Platform.IWebhookDeliveryLog.Prune(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
