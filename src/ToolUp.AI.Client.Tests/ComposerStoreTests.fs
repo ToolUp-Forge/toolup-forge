@@ -27,6 +27,7 @@ open Feliz
 open ToolUp.Elmish
 open ToolUp.Elmish.React
 open ToolUp.Platform
+open ToolUp.AI
 open ToolUp.AI.Client
 open ToolUp.AI.Client.Tests.NodeTest
 open ToolUp.AI.Client.Tests.RenderScope
@@ -308,7 +309,7 @@ let private hydrationTests =
             // One after the other: each installs its own document. The
             // whole-tree mount is the route `Hydration.run` took before
             // Phase 910 (`Program.withReactHydrate`); it is measured and
-            // printed, not asserted — its behaviour is that binding's.
+            // printed here; Phase 931's 931.B asserts that it adopts too.
             hydrate false (fun w ->
                 whole <- Some w
                 hydrate true (fun s -> sliced <- Some s))
@@ -473,6 +474,304 @@ let private contextTests =
                 let r = composer.Value
                 noContextRenders "the chrome message" r.AfterModuleMsg r.AfterChromeMsg
                 noContextRenders "the side-panel message" r.AfterChromeMsg r.AfterExtraMsg
+    ]
+
+// ─── Phase 931 — AI deployments wire the shell dispatcher ───────────────
+//
+//   931.A  in a shell `AIClientConfig.run` composed and mounted, a module's
+//          `OnTeamSwitched` and `OnAccessibleModulesChanged` callbacks
+//          reach the shell's update (and stop reaching it once the program
+//          is torn down).
+//   931.B  the whole-tree hydrating binding (`Program.withReactHydrate`)
+//          adopts the server's markup, as the store binding does.
+//   931.C  the conversation panel's fact link, mounted: shown only when the
+//          fact browse module is composed, and a click publishes the fact
+//          and requests the browse module's rows page.
+
+type private CallbackMsg = | NoOp
+
+type private CallbackModel = { Seen: int }
+
+/// What the mounted AI shell reported for the two callbacks.
+type private CallbackRun = {
+    /// The probe module was initialised with a context carrying both.
+    HadCallbacks: bool
+    /// Shell messages the composed update traced after each invocation.
+    TeamSwitchTraced: bool
+    AccessibleModulesTraced: bool
+    /// Shell messages traced after the program was torn down.
+    TracedAfterTeardown: int
+    Traced: string list
+}
+
+[<Emit("new $0($1)")>]
+let private newEvent (ctor: obj) (kind: string) : obj = jsNative
+
+/// Mount the AI composer exactly as a deployment does (`AIClientConfig.run`,
+/// at `elmish-app`) over a team-scoped config, invoke the two callbacks a
+/// module was handed, and report what reached the composed update. The
+/// update's own trace (`EnableElmishConsoleTrace`) is the observation: it
+/// logs every message the outer loop processes.
+let private runAIShell (report: CallbackRun -> unit) : unit =
+    installDom "elmish-app" |> ignore
+
+    let traced = ResizeArray<string>()
+    let console: obj = readGlobal "console"
+    let priorLog = console?log
+
+    console?log <-
+        allArguments (fun text ->
+            if text.Contains "outerMsg=" then
+                traced.Add text)
+
+    let mutable context: ClientModuleContext option = None
+
+    let probe =
+        ClientModule.create {
+            Init = fun () -> { Seen = 0 }, Cmd.none
+            Update = fun (_: CallbackMsg) (m: CallbackModel) -> m, Cmd.none
+            Name = "Callback probe"
+            Icon = Html.none
+        }
+        |> ClientModule.withContextInit (fun ctx ->
+            context <- Some ctx
+            { Seen = 0 }, Cmd.none)
+        |> ClientModule.withView (fun (_: CallbackModel) _ -> Html.div [ prop.id "callback-probe" ], Html.none)
+        |> ClientModule.withId "_scope931.probe"
+        // The boot validators refuse a module list with no declared group.
+        |> ClientModule.withGroup "Probe"
+        |> ClientModule.register
+
+    let config = {
+        ClientConfig.defaults with
+            Surfaces = Surfaces.team
+            ActiveModule = Some "_scope931.probe"
+            ToastCentre = NoToastCentre
+            EnableElmishConsoleTrace = true
+    }
+
+    AIClientConfig.run NoAIAssistant config [ probe ]
+
+    let invokeBoth () =
+        match context with
+        | Some ctx ->
+            ctx.OnTeamSwitched |> Option.iter (fun switch -> switch "team-931")
+            ctx.OnAccessibleModulesChanged |> Option.iter (fun changed -> changed ())
+        | None -> ()
+
+    let hadCallbacks =
+        match context with
+        | Some ctx -> ctx.OnTeamSwitched.IsSome && ctx.OnAccessibleModulesChanged.IsSome
+        | None -> false
+
+    let tracedBefore = traced.Count
+    invokeBoth ()
+
+    JS.setTimeout
+        (fun () ->
+            let afterInvoke = traced |> Seq.skip tracedBefore |> List.ofSeq
+            let window: obj = readGlobal "window"
+            // The React binding tears the program down on `beforeunload`.
+            window?dispatchEvent (newEvent (window?Event) "beforeunload") |> ignore
+            let tracedAtTeardown = traced.Count
+            invokeBoth ()
+
+            JS.setTimeout
+                (fun () ->
+                    console?log <- priorLog
+
+                    report {
+                        HadCallbacks = hadCallbacks
+                        TeamSwitchTraced = afterInvoke |> List.exists _.Contains("TeamSwitched")
+                        AccessibleModulesTraced = afterInvoke |> List.exists _.Contains("RefreshAccessibleModules")
+                        TracedAfterTeardown = traced.Count - tracedAtTeardown
+                        Traced = afterInvoke
+                    })
+                60
+            |> ignore)
+        100
+    |> ignore
+
+let private dispatcherTests =
+    testList "931.A - an AI-composed shell wires the shell dispatcher" [
+
+        testCaseDeferred "a team switch and an accessible-modules change each reach the composed shell" 600
+        <| fun () ->
+            let mutable result: CallbackRun option = None
+            runAIShell (fun r -> result <- Some r)
+
+            fun () ->
+                let r = result.Value
+                printfn "[931] traced after the callbacks: %A" r.Traced
+                Expect.isTrue r.HadCallbacks "a team-scoped module is handed both callbacks"
+                Expect.isTrue r.TeamSwitchTraced "OnTeamSwitched dispatched TeamSwitched into the composed shell"
+
+                Expect.isTrue
+                    r.AccessibleModulesTraced
+                    "OnAccessibleModulesChanged dispatched RefreshAccessibleModules into the composed shell"
+
+                Expect.equal r.TracedAfterTeardown 0 "and neither reaches a torn-down program"
+    ]
+
+let private wholeTreeHydrationTests =
+    testList "931.B - the whole-tree hydrating binding adopts the server markup" [
+
+        testCaseDeferred "Program.withReactHydrate adopts the server's nodes and updates them in place" 600
+        <| fun () ->
+            let mutable whole: Hydrated option = None
+            hydrate false (fun w -> whole <- Some w)
+
+            fun () ->
+                let w = whole.Value
+
+                Expect.equal
+                    (w.AdoptedRoot, w.AdoptedModule)
+                    (true, true)
+                    "the whole-tree binding adopts the server's nodes"
+
+                Expect.equal
+                    (w.Reports |> List.filter (onlyDndIdsDiffer >> not))
+                    []
+                    "and hydration reports no mismatch (beyond dnd-kit's process-wide id counter)"
+
+                Expect.isTrue w.PatchedInPlace "a module message then patched the server's node in place"
+                Expect.equal w.TextAfter "count 1" "with the new state"
+    ]
+
+// 931.C — the fact link. `MessageSources` keeps its expanded state in a
+// hook, so the link is reachable only in a mounted tree: expand, then click.
+
+[<Import("createRoot", from = "react-dom/client")>]
+let private createRoot (container: obj) : obj = jsNative
+
+let private factSource: VectorKnowledgeTypes.RetrievedSource = {
+    DocumentId = ""
+    DocumentName = "Elasticity by region"
+    Snippet = "UK elasticity is -1.4"
+    Score = 0.9
+    Origin = VectorKnowledgeTypes.ChunkOrigin.Fact
+    LocationHint = None
+    OriginalRef = None
+    Scope = None
+    ChunkId = None
+    FactId = Some "fact-931"
+    FactRendering = Some "UK elasticity is -1.4"
+    FactFreshness = None
+    FactSupersededBy = None
+    Span = None
+}
+
+type private FactLinkRun = {
+    LinkShown: bool
+    Navigated: string list
+    Published: (string * string) list
+}
+
+[<Emit("Array.from($0.querySelectorAll('button')).find(function (b) { return b.textContent.indexOf($1) >= 0; }) || null")>]
+let private buttonWithText (host: obj) (text: string) : obj = jsNative
+
+/// Mount the sources footer for one fact source with the browse module
+/// composed or not, expand it, click the fact link when there is one, and
+/// report what reached the two buses.
+let private mountFactLink (composed: bool) (report: FactLinkRun -> unit) : unit =
+    let document = installDom "fact-link"
+    let host = document?getElementById "fact-link"
+    let before = RegisteredModules.snapshot ()
+
+    let browseEntry: RegisteredModules.ModuleEntry = {
+        ModuleId = VectorKnowledgeTypes.FactBrowseLinks.ModuleId
+        ModuleName = "Facts"
+        PageRoutes = []
+    }
+
+    RegisteredModules.publish (if composed then [ browseEntry ] else [])
+
+    let navigated = ResizeArray<string>()
+    let published = ResizeArray<string * string>()
+    let stopNavigation = NavigationRequest.subscribe navigated.Add
+
+    let stopEvents =
+        ModuleEvents.subscribe (fun topic payload -> published.Add(topic, payload))
+
+    let root = createRoot host
+
+    root?render (ConversationPanel.MessageSources [ factSource ] "UK elasticity is -1.4")
+    |> ignore
+
+    let finish linkShown =
+        stopNavigation ()
+        stopEvents ()
+        RegisteredModules.publish before
+        root?unmount () |> ignore
+
+        report {
+            LinkShown = linkShown
+            Navigated = List.ofSeq navigated
+            Published = List.ofSeq published
+        }
+
+    JS.setTimeout
+        (fun () ->
+            let toggle = buttonWithText host "Sources ("
+
+            if not (isNull toggle) then
+                toggle?click () |> ignore
+
+            JS.setTimeout
+                (fun () ->
+                    let link = buttonWithText host "Open fact row"
+
+                    if isNull link then
+                        finish false
+                    else
+                        link?click () |> ignore
+                        finish true)
+                50
+            |> ignore)
+        50
+    |> ignore
+
+let private factLinkTests =
+    testList "931.C - the conversation panel's fact link, mounted" [
+
+        testCaseDeferred "with the fact browse module composed, the link opens the fact's row" 400
+        <| fun () ->
+            let mutable result: FactLinkRun option = None
+            mountFactLink true (fun r -> result <- Some r)
+
+            fun () ->
+                let r = result.Value
+                Expect.isTrue r.LinkShown "the expanded fact source offers the link"
+
+                Expect.equal
+                    r.Published
+                    [ VectorKnowledgeTypes.FactBrowseLinks.OpenFactTopic, "fact-931" ]
+                    "a click publishes the cited fact on the event bus"
+
+                Expect.equal
+                    r.Navigated
+                    [
+                        VectorKnowledgeTypes.FactBrowseLinks.sidebarId VectorKnowledgeTypes.FactBrowseLinks.RowsRoute
+                    ]
+                    "and asks the shell to open the browse module's rows page"
+
+        testCaseDeferred "without the module, the expanded fact source offers no link" 400
+        <| fun () ->
+            let mutable result: FactLinkRun option = None
+            mountFactLink false (fun r -> result <- Some r)
+
+            fun () ->
+                let r = result.Value
+                Expect.isFalse r.LinkShown "no link to a page the deployment does not have"
+                Expect.equal (r.Navigated, r.Published) ([], []) "and nothing reaches either bus"
+    ]
+
+/// Every Phase 931 case.
+let tests931 =
+    testList "Phase 931 - AI deployments wire the shell dispatcher" [
+        dispatcherTests
+        wholeTreeHydrationTests
+        factLinkTests
     ]
 
 let tests =

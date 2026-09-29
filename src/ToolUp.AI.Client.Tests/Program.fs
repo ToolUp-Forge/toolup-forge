@@ -143,6 +143,10 @@ let allTests =
         // pass-throughs, hydration parity, the AI composer's stable dispatch
         // and store, and the chrome's memoised context values.
         ComposerStoreTests.tests
+        // Phase 931 - an AI-composed shell wires the shell dispatcher, the
+        // whole-tree hydrating binding adopts the server markup, and the
+        // conversation panel's fact link, mounted.
+        ComposerStoreTests.tests931
     ]
 
 // Phase 849 — `output/Program.js ClientBench` runs the browser-runtime
