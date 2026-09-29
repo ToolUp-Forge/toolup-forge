@@ -111,27 +111,61 @@ let store = PgvectorVectorStore.createTuned connectionString options PgvectorTun
 | `AnnIndex` (options) | `HnswAnnIndex(16, 64)` | `NoAnnIndex` | Approximate index; exact scan without one. |
 | `SearchWidth` | `Some 100` | `None` | `hnsw.ef_search` (or `ivfflat.probes`) for each query, set with `set_config(…, true)` inside that query's own transaction — it ends at commit, so a pooled connection never carries one caller's width to the next. |
 | `IterativeScan` | `true` | `false` | `relaxed_order` iterative scanning: pgvector keeps walking the index until the scope filter has yielded `topK` rows. Needs pgvector **0.8.0+**; the version is read at `create`, the setting is never sent to an older server, and the health probe reports it as requested-but-not-applied. |
-| `IndexOrderedSearch` | `true` | `false` | The search statement orders by distance **alone** — the only `ORDER BY` an ordering-operator index can serve — and the `(score, scope, chunkId)` total order is restored by re-sorting the returned page. The original statement's secondary `chunk_id` sort key cannot be served from the index. |
-| `ExactFallbackOnShortPage` | `true` | `false` | A scope whose index-ordered page comes back shorter than `topK` is re-run with the exact statement. A short page means the scope holds fewer live chunks than `topK`, or the filter starved the approximate scan; the exact re-run is cheap in exactly that small-scope case (it reads the scope through its own `(scope)` index), and it makes a **full top-k a guarantee** rather than a tuning outcome. |
+| `IndexOrderedSearch` | `true` | `false` | The search statement orders by distance **alone**, and the `(score, scope, chunkId)` total order is restored by re-sorting the returned page. Measured, the planner serves the original two-key statement from the index as well — through an Incremental Sort presorted on the distance, with identical recall — so this setting saves that sort step; it is not what makes the index usable. |
+| `ExactFallbackOnShortPage` | `true` | `false` | With an approximate index configured, a scope whose page comes back shorter than `topK` is re-run with `Sql.searchExact`, which materialises the scope's live rows before ranking them, so **no** approximate index can serve it. A short page means the scope holds fewer live chunks than `topK`, or the filter starved the approximate scan; the re-run makes a **full top-k a guarantee** rather than a tuning outcome. The two-key statement cannot play this part: it is index-served too (measured). |
 | `MaxSearchConcurrency` | `4` | `1` | A multi-scope `Search` runs its per-scope queries concurrently under this bound — each holds one pooled connection while it runs. The answer is identical; only latency changes. |
 | `ExactScanWarningRows` | `500_000` | `500_000` | The preflight validator warns when a table above this estimated row count has no approximate index. |
 
 ### Scope-respecting indexing — the choice and its ceiling
 
-The shipped choice — **provisional until measured** (see below) — is **one shared index, a filtered scan with a raised width, iterative scanning, and the exact short-page fallback**. It needs no per-scope DDL, keeps one schema for every deployment, and its correctness (a full top-k whenever the scope holds that many live chunks) does not depend on any width being large enough. Its ceiling is cost, not correctness: a scope that is starved pays a second, exact query over its own rows, so the fallback is cheap for small scopes and would be expensive for a large scope that is *also* starved — which the raised width and iterative scanning exist to make rare.
+**One shared index, a filtered scan with a raised width, iterative scanning, and the exact short-page fallback** — decided by measurement (below), no longer provisional. It needs no per-scope DDL, keeps one schema for every deployment (including a `VerifyOnly` one whose role has no DDL grant), and its correctness — a full top-k whenever the scope holds that many live chunks — does not depend on any width being large enough.
 
-A partial index per scope and table partitioning by scope were considered and not adopted: both put per-scope DDL on the hot path of scope creation, and neither has yet been shown by measurement to beat the shipped posture. They remain the escalation if the fallback rate is measured to be high.
+The two alternatives were measured on the same corpus and are faster per query at pgvector's default width, but neither is adopted:
+
+- **A partial HNSW index per scope** (`… WHERE scope = 'x'`): perfect recall at the default width and 0.2–0.7 ms per query. But it puts an index build on the path of every scope's creation, and a partial index is usable only when the planner sees the scope VALUE: under a generic plan (a client that prepares its statements, e.g. Npgsql auto-prepare) the planner falls back to the `(scope)` index and an exact sort, so the index silently stops being used.
+- **Partitioning by scope** (one partition, with its own HNSW index, per scope): recall 0.99–1.00 at the default width and 0.2–1.4 ms per query, and runtime pruning keeps it correct under generic plans. But every new scope is a `CREATE TABLE … PARTITION OF`, the primary key and every index are per partition, and planning cost grows with the partition count: a generic plan over 214 partitions took 22 ms to plan against 0.4 ms to execute.
+
+Its ceiling is cost, not correctness. The shared posture costs 1.8–2.6 ms per query on the scopes it routes to the index, where a per-scope index costs under 1 ms, and a starved page pays a second, exact query over its own rows (0.7 ms for a 2,000-chunk scope, 12 ms for 20,000, 69 ms for 100,000). With iterative scanning on, no page came back short in the measurement. Partitioning is the escalation for a deployment with few, large, long-lived scopes, where the per-scope DDL is affordable and sub-millisecond latency matters more than one schema.
 
 ### What has been measured
 
-Nothing on a live database yet for this posture: the build that introduced it had no PostgreSQL to measure against. The live test arm (`TOOLUP_PGVECTOR_CONNECTION_STRING`) carries the cases that produce the record, each printing its figure:
+All figures below come from a **local container** (Docker Desktop on a Windows laptop), PostgreSQL 17.11 with pgvector 0.8.6 — the image `compose.parity.yml`'s `pgvector` service pins — on 2026-09-30. They describe that machine; a production server will differ in absolute latency, not in which plan it picks or what comes back short.
 
-- **Reproduction** — a 20-chunk scope beside a 5,000-chunk scope, `hnsw(16, 64)`, default width, no iterative scan, no fallback: how many of a top-10 come back, with the query plan.
-- **Full top-k** — the same table under the recommended tuning returns a full top-5 / 10 / 20 (asserted).
-- **Index use** — `EXPLAIN` shows the HNSW index serving the distance-only statement and **not** the two-key one (asserted: the exact fallback depends on the second half).
-- **Recall** — recall@10 against an exact in-memory ranking, 5,000 × 32-dim, recommended settings (asserted ≥ 0.9, printed).
+**Index choice** — [`bench/index-choice.sql`](bench/index-choice.sql), which builds the corpus and prints every figure here. 165,000 rows of 128-dimension vectors clustered around 200 shared topics, so every scope spans every topic; scopes of 100,000, 20,000, 10,000, 5,000, ten of 2,000 and two hundred of 50 rows; `hnsw(m = 16, ef_construction = 64)`; 50 queries, top-10, recall against the exact ranking; latency is server-side execution of one statement.
 
-Record the printed figures here when the arm is first run against a representative database.
+| Scope (share of table) | Planner's choice | Default width (`ef_search` 40): recall@10 · short pages | Recommended (`ef_search` 100, `relaxed_order`): recall@10 · short pages · mean ms |
+|---|---|---|---|
+| 100,000 (61 %) | HNSW index | 0.964 · 0/50 | 0.978 · 0/50 · 1.9 |
+| 20,000 (12 %) | HNSW index | 0.520 · **50/50** | 0.972 · 0/50 · 1.8 |
+| 10,000 (6 %) | HNSW index | 0.222 · **50/50** | 0.964 · 0/50 · 2.0 |
+| 5,000 (3 %) | HNSW index | 0.090 · **50/50** | 0.972 · 0/50 · 2.6 |
+| 2,000 (1.2 %) | HNSW index at the default width; `(scope)` index + exact sort under the recommended settings | 0.046 · **50/50** | 1.000 · 0/50 · 0.5 |
+| 50 (0.03 %) | `(scope)` index + exact sort | 1.000 · 0/50 | 1.000 · 0/50 · 0.05 |
+
+- **The exposed band is not the smallest scopes.** The planner answers a 50-row scope from the `(scope)` index with an exact sort. The starved scopes are the ones large enough for the planner to route them to the approximate index and too small to fill its candidate list — here 1–12 % of the table, every query short.
+- **A raised width alone is not enough.** `ef_search = 400` without iterative scanning still returned 14 of 50 pages short for the 3 % scope (recall 0.900); iterative scanning closed every one at a quarter of that width.
+- **The fallback's exact statement**, for comparison, costs 0.07 ms (50 rows), 0.7 ms (2,000), 2.9 ms (5,000), 12 ms (20,000) and 69 ms (100,000).
+
+**The `ORDER BY` question — both `EXPLAIN` plans.** Phase 892 read the planner and concluded that the two-key `ORDER BY embedding <=> $q, chunk_id` could not be served from the approximate index, so search would be an exact scan. The plans refute it. For a scope the planner routes to the index, the two-key statement is
+
+```text
+Limit
+  ->  Incremental Sort
+        Sort Key: ((embedding <=> '[…]'::vector)), chunk_id
+        Presorted Key: ((embedding <=> '[…]'::vector))
+        ->  Index Scan using bench_embedding_hnsw_idx on bench
+              Order By: (embedding <=> '[…]'::vector)
+              Filter: ((deleted_at IS NULL) AND (scope = 'team:s5k'::text))
+```
+
+and the distance-only statement is the same index scan without the Incremental Sort, with identical recall at every width measured. So `search` is approximate once an index exists, and the store's short-page fallback, which used to re-run it, now runs `Sql.searchExact` instead: the scope's rows are materialised first and ranked after, and its plan never contains the approximate index (`CTE scoped -> Index Scan using …_scope_live_idx`, then `Sort`). The live arm asserts all three plans.
+
+**The live arm** (`TOOLUP_PGVECTOR_CONNECTION_STRING` pointed at the `compose.parity.yml` service; 76 of 76 cases green) prints:
+
+- **Reproduction** — 5,270 rows, 16 dimensions, `hnsw(16, 64)`, default width, no iterative scan, no fallback: a 20-chunk scope and a 250-chunk scope both returned a full top-10, each answered from the `(scope)` index with an exact sort. A table this small does not starve; the index-choice corpus above is where starvation shows.
+- **Fallback** — the same shape with the planner steered to the index (`enable_sort = off` on the connection) and the fallback on: the page before the fallback held 4 of 10 rows, and the store returned the exact top-10 in order. With the fallback re-running the two-key statement, as it did before Phase 928, the case fails.
+- **Recall and latency** — 5,000 × 32 dimensions, recommended settings: recall@10 = 1.000 over 50 queries; one `Search` call, client round-trip included (settings statement, search and commit on one connection), mean 3.8 ms, p95 4.8 ms.
+- **Posture read** — `pgvector 0.8.6; … index: hnsw (m=16, ef_construction=64) [present]; search width: hnsw.ef_search = 100 (per query); iterative scan: relaxed_order (per query); …`.
 
 ### Batched writes
 
