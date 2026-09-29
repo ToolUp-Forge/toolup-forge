@@ -302,110 +302,6 @@ module internal PublicationLedger =
     let signatureName (tableId: string) (originTeam: string) =
         sprintf "%s%s/signatures/%s.json" root tableId originTeam
 
-/// An `IFactStore` over the composed one that turns a consolidation run's
-/// cells into IMPORTED facts: the method names the grant, the evidence
-/// names the origin run, the disclosure is the floor of the source's and
-/// the target's, and a withdrawn origin's absences name the withdrawal.
-/// Every other member passes straight through. Built per run, in the
-/// target's scope, by the default table writer that writes the run.
-type internal ImportingFactStore
-    (
-        inner: IFactStore,
-        table: FactTableDefinition,
-        origins: Map<string, PublishedOrigin>,
-        withdrawals: Map<string, string>,
-        publicationRunId: string
-    ) =
-
-    let cellDisclosures =
-        origins
-        |> Map.toSeq
-        |> Seq.collect (fun (_, origin) ->
-            origin.Rows
-            |> Seq.collect (fun r ->
-                r.Disclosures
-                |> Map.toSeq
-                |> Seq.map (fun (metric, d) -> (r.Row.Subject, metric, r.Row.Period.From, r.Row.Period.To), d)))
-        |> Map.ofSeq
-
-    let rewrite (draft: FactDraft) : FactDraft =
-        match draft.Method, draft.Subject.Path with
-        | Computed(_, _, tableId), originTeam :: _ when tableId = table.Id && draft.Subject.Hierarchy = table.Hierarchy ->
-            match origins.TryFind originTeam with
-            | None -> draft
-            | Some origin ->
-                let value =
-                    match draft.Value, withdrawals.TryFind originTeam with
-                    | Absent _, Some reason -> Absent reason
-                    | value, _ -> value
-
-                let disclosure =
-                    match draft.Value with
-                    | Absent _ -> draft.Disclosure
-                    | _ ->
-                        match
-                            cellDisclosures.TryFind(
-                                draft.Subject.Path,
-                                draft.Metric.Value,
-                                draft.Period.From,
-                                draft.Period.To
-                            )
-                        with
-                        | Some published -> Disclosure.floor published draft.Disclosure
-                        // A cell the ledger cannot place is narrowed to the
-                        // bottom rather than trusted.
-                        | None -> Disclosure.Internal
-
-                {
-                    draft with
-                        Value = value
-                        Method = Imported(PublicationGrant.CertificateRefPrefix + origin.GrantId)
-                        Disclosure = disclosure
-                        Evidence = {
-                            draft.Evidence with
-                                TriggerRef =
-                                    Some(
-                                        sprintf
-                                            "team-publication-run:%s;origin:%s;origin-run:%s;received-in:%s"
-                                            origin.PublicationRunId
-                                            origin.OriginTeam
-                                            (origin.OriginRun |> Option.defaultValue "none")
-                                            publicationRunId
-                                    )
-                        }
-                }
-        | _ -> draft
-
-    interface IFactStore with
-        member _.Assert(scopeId: string, draft: FactDraft) = inner.Assert(scopeId, rewrite draft)
-        member _.Assert(scope: ResolvedScope, draft: FactDraft) = inner.Assert(scope, rewrite draft)
-
-        member _.AssertBatch(scopeId: string, drafts: FactDraft list) =
-            inner.AssertBatch(scopeId, drafts |> List.map rewrite)
-
-        member _.AssertBatch(scope: ResolvedScope, drafts: FactDraft list) =
-            inner.AssertBatch(scope, drafts |> List.map rewrite)
-
-        member _.Get(scopeId: string, factId) = inner.Get(scopeId, factId)
-        member _.Get(scope: ResolvedScope, factId) = inner.Get(scope, factId)
-        member _.Query(scopeId: string, query) = inner.Query(scopeId, query)
-        member _.Query(scope: ResolvedScope, query) = inner.Query(scope, query)
-
-        member _.QueryWithCompetition(scopeId: string, query) =
-            inner.QueryWithCompetition(scopeId, query)
-
-        member _.QueryWithCompetition(scope: ResolvedScope, query) =
-            inner.QueryWithCompetition(scope, query)
-
-        member _.QuerySupersessionChain(scopeId: string, factId) =
-            inner.QuerySupersessionChain(scopeId, factId)
-
-        member _.QuerySupersessionChain(scope: ResolvedScope, factId) =
-            inner.QuerySupersessionChain(scope, factId)
-
-        member _.QueryPopulation(scopeId: string, query) = inner.QueryPopulation(scopeId, query)
-        member _.QueryPopulation(scope: ResolvedScope, query) = inner.QueryPopulation(scope, query)
-
 /// The single-scope half of a consolidation: rewrite the target table from
 /// the origins its ledger holds, dropping every origin whose grant is no
 /// longer in force. Takes ONE scope id — the target's own.
@@ -489,45 +385,94 @@ module internal Consolidation =
                 let inForce =
                     origins |> List.filter (fun o -> not (withdrawals.ContainsKey o.OriginTeam))
 
-                let byOrigin = origins |> List.map (fun o -> o.OriginTeam, o) |> Map.ofList
-
-                let store =
-                    ImportingFactStore(deps.Store, table, byOrigin, withdrawals, publicationRunId) :> IFactStore
-
-                let writer =
-                    DefaultFactTableWriter(
-                        store,
-                        deps.Storage,
-                        deps.Events,
-                        deps.Tables,
-                        deps.Registry,
-                        deps.Clock,
-                        DefaultFactTableWriter.Destination
+                let provenance =
+                    ImportedRun(
+                        origins
+                        |> List.map (fun o -> {
+                            RootMember = o.OriginTeam
+                            CertificateRef = PublicationGrant.CertificateRefPrefix + o.GrantId
+                            TriggerRef =
+                                sprintf
+                                    "team-publication-run:%s;origin:%s;origin-run:%s;received-in:%s"
+                                    o.PublicationRunId
+                                    o.OriginTeam
+                                    (o.OriginRun |> Option.defaultValue "none")
+                                    publicationRunId
+                            Withdrawal = withdrawals.TryFind o.OriginTeam
+                            Cells =
+                                o.Rows
+                                |> List.collect (fun r ->
+                                    r.Disclosures
+                                    |> Map.toList
+                                    |> List.map (fun (metric, d) -> {
+                                        Subject = r.Row.Subject
+                                        Metric = metric
+                                        From = r.Row.Period.From
+                                        To = r.Row.Period.To
+                                        Disclosure = d
+                                    }))
+                        })
                     )
-                    :> IFactTableWriter
+
+                // The run goes through the COMPOSED writer (Phase 932), so its
+                // decorations reach a consolidation run as they reach any
+                // other. The imported provenance is staged on the run, and
+                // only the default writer reads it — so a target bound
+                // anywhere else is refused, as it always was.
+                let writer =
+                    deps.Writer
+                    |> Option.defaultWith (fun () ->
+                        DefaultFactTableWriter(
+                            deps.Store,
+                            deps.Storage,
+                            deps.Events,
+                            deps.Tables,
+                            deps.Registry,
+                            deps.Clock,
+                            DefaultFactTableWriter.Destination
+                        )
+                        :> IFactTableWriter)
 
                 let rows = inForce |> List.collect (fun o -> o.Rows |> List.map _.Row)
 
-                match! writer.OpenRun(targetScopeId, table.Id) with
-                | Error e -> return Error(storageFailure e)
-                | Ok run ->
-                    match! writer.WriteRows(targetScopeId, run.RunId, rows) with
-                    | Error e ->
-                        let! _ = writer.Abandon(targetScopeId, run.RunId, FactTableWriteError.describe e)
-                        return Error(storageFailure e)
-                    | Ok _ ->
-                        match! writer.Commit(targetScopeId, run.RunId) with
-                        | Error e -> return Error(storageFailure e)
-                        | Ok commit ->
-                            // The withdrawn origins' rows are now absences;
-                            // their ledger entries go with them.
-                            for originTeam in withdrawals |> Map.keys do
-                                let! _ =
-                                    deps.Storage.Delete(targetScopeId, PublicationLedger.originName table.Id originTeam)
+                match deps.Tables.DestinationOf table.Id with
+                | boundTo when boundTo <> Some DefaultFactTableWriter.Destination ->
+                    return
+                        Error(
+                            storageFailure (
+                                FactTableNotBoundHere(table.Id, boundTo, DefaultFactTableWriter.Destination)
+                            )
+                        )
+                | _ ->
+                    match! writer.OpenRun(targetScopeId, table.Id) with
+                    | Error e -> return Error(storageFailure e)
+                    | Ok run ->
+                        let! written = async {
+                            match! FactTableRunProvenance.stage deps.Storage targetScopeId run.RunId provenance with
+                            | Error e -> return Error e
+                            | Ok() -> return! writer.WriteRows(targetScopeId, run.RunId, rows)
+                        }
 
-                                ()
+                        match written with
+                        | Error e ->
+                            let! _ = writer.Abandon(targetScopeId, run.RunId, FactTableWriteError.describe e)
+                            return Error(storageFailure e)
+                        | Ok _ ->
+                            match! writer.Commit(targetScopeId, run.RunId) with
+                            | Error e -> return Error(storageFailure e)
+                            | Ok commit ->
+                                // The withdrawn origins' rows are now absences;
+                                // their ledger entries go with them.
+                                for originTeam in withdrawals |> Map.keys do
+                                    let! _ =
+                                        deps.Storage.Delete(
+                                            targetScopeId,
+                                            PublicationLedger.originName table.Id originTeam
+                                        )
 
-                            return Ok(commit, withdrawals |> Map.keys |> List.ofSeq)
+                                    ()
+
+                                return Ok(commit, withdrawals |> Map.keys |> List.ofSeq)
         }
 
     /// Write one audit record under the `_facts` source module.
