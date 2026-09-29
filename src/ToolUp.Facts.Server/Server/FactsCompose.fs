@@ -533,6 +533,8 @@ module FactsCompose =
                     ReactiveDataChange.decorate
                         inner
                         (ReactiveDataChange.gate registry scheduler)
+                        (ReactiveDataChange.requestScope (fun () ->
+                            tryService<Microsoft.AspNetCore.Http.IHttpContextAccessor> sp))
                         react
                         (sp.GetRequiredService<ILogger>()))
             )

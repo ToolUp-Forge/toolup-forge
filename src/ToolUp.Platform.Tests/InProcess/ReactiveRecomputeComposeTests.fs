@@ -701,6 +701,7 @@ let endToEndTests =
                 ReactiveDataChange.decorate
                     inner
                     (fun () -> true)
+                    (fun () -> None)
                     (fun _ _ -> async { return failwith "fact tier is down" })
                     silentLogger
 

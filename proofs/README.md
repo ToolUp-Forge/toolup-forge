@@ -595,10 +595,12 @@ Not proved. *Measured*, on every run of the gate.
   shipped code, so this is the residual, not the rule. Behind the doors, the scopes the platform
   *carries* rather than resolves are still strings, and Phase 818 names them: a job scheduled with a
   resolver-minted scope now runs under it (the in-process scheduler re-mints it through a second
-  internal mint whose one caller is pinned), but the reactive recompute path — carried from a
-  string-keyed data write — imports, coherence sweeps, knowledge-base dependency records, the
-  job-admin API and any scheduler outside the platform's server tier still key the fact store on a
-  carried string.
+  internal mint whose one caller is pinned). Since Phase 930 the job-admin API schedules under the
+  request's resolved scope, and the reactive recompute path runs under the scope a data write was
+  made under whenever that write was made on a request that resolved its shard (the resolver's own
+  value rides the change; nothing is built from the write's string). Still carried as a string: the
+  reactive recompute of a write made off the request path or into another shard, imports, coherence
+  sweeps, knowledge-base dependency records and any scheduler outside the platform's server tier.
 * **The tool-effect side is assumed, not checked here.** This theorem is about what goes *in*. The
   sentence a reader wants — that a model is isolated from knowledge except what is explicitly
   permitted — additionally needs that the tools a model may call cannot fetch what the input side

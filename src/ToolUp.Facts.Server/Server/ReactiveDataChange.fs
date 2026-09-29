@@ -4,6 +4,7 @@
 namespace ToolUp.Facts
 
 open System
+open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 
 // ─── ReactiveDataChange (Phase 623.C — react to data arrival) ─────────
@@ -67,34 +68,56 @@ open ToolUp.Platform
 // root and unobservable in production — the exact shape that let Phase
 // 561's gap sit unnoticed. The cost is bounded by the gate above.
 //
-// **The scope this reaction holds is CARRIED, and stays a string (Phase
-// 818).** Phase 818 gave jobs a typed scope: a job scheduled with a
-// resolver-minted `ResolvedScope` runs under it. The recompute this file
-// enqueues cannot be scheduled that way, because the seam it hangs off —
-// `IDataObjectStore.Save` / `Recover` — hands it a `scopeId: string` and
-// nothing else. A save arrives from a request, from an ingestion job, from
-// an import; the decorator cannot tell which, and no resolved scope rides
-// the call (there is no ambient one: the request's lives on its
-// `HttpContext`, which a store never sees). Minting a `ResolvedScope` here
-// from that string would promote a carried value to a resolved one —
-// precisely the forgery the type exists to make uncompilable — so the
-// enqueue stays on the string `Schedule`, the job runs with the anonymous
-// scope on `JobContext.Scope`, and `RecomputeJobHandler` keys the store on
-// the carried `ScopeId`. Typing this hop needs the ORIGIN typed first: a
-// resolved scope carried into the data-object write path.
+// **The scope rides the change (Phase 930).** Phase 818 gave jobs a typed
+// scope, but could not type this hop: `IDataObjectStore.Save` / `Recover`
+// hand the decorator a `scopeId: string` and nothing else, and minting a
+// `ResolvedScope` from that string would be precisely the forgery Phase 797
+// makes uncompilable. Phase 930 carries the ORIGIN's scope instead. A save
+// made while serving a request is made under the scope the platform resolved
+// for that request, and the decorator is handed that scope, never a string,
+// through `currentScope` (in a composed deployment,
+// `ScopeResolution.forRequest` over the ambient request, see `requestScope`).
+// When the resolved scope names the shard the write landed in, the resolver's
+// own value rides the change as `DataChangeScope.Resolved`, the recompute is
+// scheduled through the typed `Schedule`, and the job runs under it.
+//
+// The equality test SELECTS the resolved scope; it never builds one. A write
+// into any other shard, or one made off the request path (a boot seed, an
+// ingestion or import job), rides as `DataChangeScope.Carried` with its
+// string, and is scheduled through the string overload exactly as before.
+// That arm is not a fallback waiting to be deleted: nothing on those paths
+// holds a resolved scope, so the only way to type them would be the
+// promotion 797 forbids. `RecomputeJobHandler.fs` states the other reason
+// its carried arm stays (a scheduler that cannot re-mint).
 
 /// The reaction a data-object version arrival triggers: given the scope
+/// the write was made under (resolved, or carried as a string — Phase 930)
 /// and the changed input identities, drive whatever the fact tier does
 /// about it. Kept as a function seam (rather than a hard dependency on
 /// `RecomputeJobHandler`) so the decorator is directly testable and the
 /// DI resolution lives in `FactsCompose`.
-type FactDataChangeReaction = string -> string list -> Async<unit>
+type FactDataChangeReaction = DataChangeScope -> string list -> Async<unit>
 
 /// Decorator over the composed `IDataObjectStore` that drives fact
 /// invalidation when a version lands. Every non-version-producing member
-/// delegates verbatim.
+/// delegates verbatim. `currentScope` yields the scope the platform
+/// resolved for the principal making the write, when there is one
+/// (Phase 930); the decorator only ever selects it, never builds one.
 type ReactiveDataObjectStore
-    (inner: IDataObjectStore, armed: unit -> bool, react: FactDataChangeReaction, logger: ILogger) =
+    (
+        inner: IDataObjectStore,
+        armed: unit -> bool,
+        currentScope: unit -> ResolvedScope option,
+        react: FactDataChangeReaction,
+        logger: ILogger
+    ) =
+
+    /// The scope the change rides under: the resolved scope when it names
+    /// the shard the write landed in, the carried string otherwise.
+    let changeScope (scopeId: string) : DataChangeScope =
+        match currentScope () with
+        | Some scope when scope.ScopeId = scopeId -> DataChangeScope.Resolved scope
+        | _ -> DataChangeScope.Carried scopeId
 
     /// Seed the invalidation walk from a landed version. Failures are
     /// contained — the write has already committed.
@@ -113,7 +136,7 @@ type ReactiveDataObjectStore
                     |> List.filter (String.IsNullOrWhiteSpace >> not)
                     |> List.distinct
 
-                do! react scopeId changedIds
+                do! react (changeScope scopeId) changedIds
             with ex ->
                 logger.Warn(
                     sprintf
@@ -227,7 +250,8 @@ module ReactiveDataChange =
     /// resolution can never re-enter this decorator.
     ///
     /// Re-checks the same `gate` conditions the decorator applied, so the
-    /// reaction is safe to call on its own.
+    /// reaction is safe to call on its own. The change's scope form picks
+    /// the walk: typed for a resolved write, string for a carried one.
     let reaction
         (factStore: unit -> IFactStore)
         (lineage: unit -> ILineageStore)
@@ -236,7 +260,7 @@ module ReactiveDataChange =
         : FactDataChangeReaction =
         let armed = gate registry scheduler
 
-        fun scopeId changedIds -> async {
+        fun changeScope changedIds -> async {
             if not (armed ()) || List.isEmpty changedIds then
                 return ()
             else
@@ -244,23 +268,44 @@ module ReactiveDataChange =
                 | None -> return ()
                 | Some jobs ->
                     let! _outcomes =
-                        RecomputeJobHandler.reactToDataChange
+                        RecomputeJobHandler.reactToChange
                             (lineage ())
                             (factStore ())
                             jobs
                             (registry ())
-                            scopeId
+                            changeScope
                             changedIds
 
                     return ()
         }
 
+    /// The scope source a composed deployment hands the decorator (Phase
+    /// 930): the scope the platform's resolution recorded for the request
+    /// being served, read through `ScopeResolution.forRequest`, the doors'
+    /// one read. `None` off the request path (no request, or a request that
+    /// has already completed), so such a write rides as carried.
+    let requestScope (accessor: unit -> IHttpContextAccessor option) : unit -> ResolvedScope option =
+        fun () ->
+            match accessor () with
+            | None -> None
+            | Some accessor ->
+                match accessor.HttpContext with
+                | null -> None
+                | ctx ->
+                    try
+                        Some(StorageScopeResolver.ScopeResolution.forRequest ctx)
+                    with :? ObjectDisposedException ->
+                        None
+
     /// Wrap `inner` so a landed version drives `react`, guarded by
     /// `armed` — which is consulted before the decorator reads anything.
+    /// `currentScope` is the scope source (`requestScope` in a composed
+    /// deployment; `fun () -> None` treats every write as carried).
     let decorate
         (inner: IDataObjectStore)
         (armed: unit -> bool)
+        (currentScope: unit -> ResolvedScope option)
         (react: FactDataChangeReaction)
         (logger: ILogger)
         : IDataObjectStore =
-        ReactiveDataObjectStore(inner, armed, react, logger) :> IDataObjectStore
+        ReactiveDataObjectStore(inner, armed, currentScope, react, logger) :> IDataObjectStore
