@@ -181,6 +181,69 @@ let private registered (config: ServerConfig) : bool =
     ComposeRuntimeServices.registerRemotingAuditQueue services config (QuietLogger())
     services |> Seq.exists (fun d -> d.ServiceType = typeof<RemotingAuditQueue>)
 
+// ─── Phase 905 — an audited method's body is decoded once ─────────────
+//
+// A method audited WITHOUT validators used to be parsed by dispatch and
+// then parsed and decoded a second time after it, with plain STJ
+// (`Validation.parseFirstArgFromBody`), to build the audit payload. The
+// dispatch stage now runs the proxy's own parse ahead of `Invoke` for an
+// audited method, and the payload reads that value. Pinned the 856.B
+// way: a converter for the input type counts the decodes.
+
+type AuditedInput = {
+    [<PiiSafe>]
+    Name: string
+    Count: int
+}
+
+type AuditedApi = {
+    [<AllowAnonymous>]
+    [<Audit "PolicyChanged">]
+    Record: AuditedInput -> Async<string>
+}
+
+/// Counts every decode of `AuditedInput`, delegating to the full set.
+type private CountingAuditedConverter(inner: JsonSerializerOptions, decodes: int ref) =
+    inherit JsonConverter<AuditedInput>()
+
+    override _.Read(reader: byref<Utf8JsonReader>, _typeToConvert: Type, _options: JsonSerializerOptions) =
+        decodes.Value <- decodes.Value + 1
+        JsonSerializer.Deserialize<AuditedInput>(&reader, inner)
+
+    override _.Write(writer: Utf8JsonWriter, value: AuditedInput, _options: JsonSerializerOptions) =
+        JsonSerializer.Serialize(writer, value, inner)
+
+/// An audited API whose input-type decodes are counted, with an emitter
+/// capturing what the dispatcher emits.
+let private countedAuditedApi () =
+    let decodes = ref 0
+    let invoked = ref 0
+    let captured = System.Collections.Concurrent.ConcurrentQueue<AuditEvent>()
+    let options = FableConverters.create ()
+    options.Converters.Insert(0, CountingAuditedConverter(FableConverters.create (), decodes))
+
+    let emitter =
+        { new IAuditEmitter with
+            member _.Emit event = async { captured.Enqueue event }
+        }
+
+    let impl: AuditedApi = {
+        Record =
+            fun input -> async {
+                invoked.Value <- invoked.Value + 1
+                return sprintf "%s:%d" input.Name input.Count
+            }
+    }
+
+    let handler =
+        Remoting.createApi ()
+        |> Remoting.withAudit emitter
+        |> Remoting.fromValue impl
+        |> Remoting.withSerializerOptions options
+        |> Remoting.buildHttpHandler
+
+    handler, decodes, invoked, captured
+
 [<Tests>]
 let tests =
     testList "Phase 856 — the server remoting tail" [
@@ -386,6 +449,42 @@ let tests =
                     "a silo serving no HTTP has no audited calls to queue"
 
                 Expect.isFalse (registered { enabled with AuditLog = NoAuditLog }) "no audit log, no queue (GP 13)"
+            }
+        ]
+
+        testList "905 — an audited method's body is decoded once" [
+
+            testAsync "an audited call decodes its first argument ONCE and the payload carries it" {
+                let handler, decodes, invoked, captured = countedAuditedApi ()
+                use host = buildHost handler
+                let! status, text = post host "/AuditedApi/Record" """[{"Name":"CPG","Count":3}]"""
+
+                Expect.equal status HttpStatusCode.OK "the audited call succeeds"
+                Expect.stringContains text "CPG:3" "the handler got the decoded value"
+                Expect.equal invoked.Value 1 "the handler ran once"
+
+                Expect.equal
+                    decodes.Value
+                    1
+                    "dispatch and the audit payload share ONE decode of the first argument (it was two before Phase 905)"
+
+                let events = List.ofSeq captured
+                Expect.hasLength events 1 "one audit event"
+
+                Expect.equal
+                    (events.Head.Payload |> Map.tryFind "Name")
+                    (Some "CPG")
+                    "the payload is built from the value dispatch decoded"
+            }
+
+            testAsync "an undecodable argument is the proxy's refusal, and nothing is audited" {
+                let handler, _, invoked, captured = countedAuditedApi ()
+                use host = buildHost handler
+                let! status, _ = post host "/AuditedApi/Record" """[{"Name":"CPG","Count":"three"}]"""
+
+                Expect.notEqual status HttpStatusCode.OK "an undecodable argument is refused"
+                Expect.equal invoked.Value 0 "the handler never runs"
+                Expect.isEmpty (List.ofSeq captured) "a refused call emits no audit event"
             }
         ]
     ]
