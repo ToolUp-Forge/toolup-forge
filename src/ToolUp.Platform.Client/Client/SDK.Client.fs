@@ -777,7 +777,8 @@ module Client =
     ///
     /// Typed via `IDispatcher<Msg>` (ToolUp.Elmish primitive — replaces
     /// the legacy `(Msg -> unit) option` shape). Captured at program-start
-    /// via `Program.withDispatcherHandle`; `IsActive` flips to `false`
+    /// via `Program.withDispatcherHandle`, by `withShellLifetimeEffects`
+    /// for the shell and every composer over it; `IsActive` flips to `false`
     /// when `withTermination` triggers, so background callbacks check
     /// before dispatching and no-op cleanly on hot-reload / teardown
     /// rather than spraying messages at a dead loop.
@@ -1493,9 +1494,10 @@ module Client =
         // dispatch the same set.
         let bootLoadCommands = bootLoadCommandsFor _config
 
-        // Shell dispatcher capture lives at the `Program.run` site via
-        // `Program.withDispatcherHandle` (ToolUp.Elmish primitive) — see
-        // the run call below. The previous `Cmd.ofEffect`-capture pattern
+        // Shell dispatcher capture lives at the `Program` site via
+        // `Program.withDispatcherHandle` (ToolUp.Elmish primitive), inside
+        // `withShellLifetimeEffects` below so every composer gets it
+        // (Phase 931). The previous `Cmd.ofEffect`-capture pattern
         // (running once at init, writing the raw `Dispatch<Msg>` into a
         // mutable) is no longer needed: `IDispatcher<Msg>` is captured
         // before `init`'s commands fire, so background callbacks reading
@@ -4807,13 +4809,40 @@ module Client =
     /// its shell-message constructor (e.g. `ShellMsg`). One definition
     /// site, so the shell and every composer attach the same set and a
     /// new shell effect cannot be silently missing from a composed app.
+    ///
+    /// Phase 931 — it also captures the program's dispatcher as the
+    /// shell's (lifted through `wrap`), which is what the
+    /// `ClientModuleContext.OnTeamSwitched` and `OnAccessibleModulesChanged`
+    /// callbacks dispatch through. The capture used to live at
+    /// `Client.run`'s mount alone, so a composer that rebuilt the Program
+    /// from the shell's pieces (ToolUp.AI's `AIClientConfig.run`) handed
+    /// its modules two callbacks that did nothing.
     let withShellLifetimeEffects
         (config: ClientConfig)
         (wrap: Msg -> 'msg)
         (prog: Program<'arg, 'model, 'msg, 'view>)
         : Program<'arg, 'model, 'msg, 'view> =
+        let captureShellDispatcher (dispatcher: IDispatcher<'msg>) =
+            shellDispatcher <-
+                Some
+                    { new IDispatcher<Msg> with
+                        member _.Dispatch msg = dispatcher.Dispatch(wrap msg)
+
+                        member _.DispatchAsync block =
+                            dispatcher.DispatchAsync(
+                                async {
+                                    let! msg = block
+                                    return wrap msg
+                                }
+                            )
+
+                        member _.IsActive = dispatcher.IsActive
+                        member _.Terminate() = dispatcher.Terminate()
+                    }
+
         (prog, programLifetimeEffects config)
         ||> List.fold (fun p effect -> p |> Program.withEffect (EffectHandle.map wrap effect))
+        |> Program.withDispatcherHandle captureShellDispatcher
 
     /// The shell Program over a given shell view (whole-tree or sliced).
     let private programWith
@@ -4911,10 +4940,9 @@ module Client =
             else
                 Program.withReactStore store "elmish-app"
 
-        programWith (viewSliced store) config modules
-        |> Program.withDispatcherHandle (fun dispatcher -> shellDispatcher <- Some dispatcher)
-        |> bind
-        |> Program.run
+        // The shell dispatcher is captured by `withShellLifetimeEffects`,
+        // which `programWith` attaches (Phase 931).
+        programWith (viewSliced store) config modules |> bind |> Program.run
 
     /// Run the client application with the given modules. Convenience entry
     /// point — builds the shell Program and starts React. Applications that
