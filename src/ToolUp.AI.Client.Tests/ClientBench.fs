@@ -45,6 +45,10 @@
 ///     composers) and the sliced store (`Client.run`). Reported as levers,
 ///     not budgeted samples: they are counts that pin a structure, and
 ///     `SlicedStoreTests` asserts them on every run.
+///   * COMPOSITION-ROUTE SCOPE (Phase 910) — the same counts on the AI
+///     composer, whole tree and over its own store, plus renders of the
+///     shell's context readers (flags, branding, tiles, catalog) per
+///     message (`ComposerScope`); levers, asserted by `ComposerStoreTests`.
 ///
 /// ─── Discipline ──────────────────────────────────────────────────────
 ///
@@ -857,6 +861,19 @@ let private runAsync (argv: string[]) : Async<int> = async {
                 (r.AfterNavigation.Sidebar - r.AfterChromeMsg.Sidebar)
         )
 
+    // ── Composition-route scope (Phase 910) ──
+    // The AI composer on both render paths, and the store-bound shell's
+    // context readers. Counts, not times: see `ComposerScope`.
+    let composerScopeOf (route: ComposerScope.Route) =
+        Async.FromContinuations(fun (ok, _, _) -> ComposerScope.run route ok)
+
+    let! composerWholeTree = composerScopeOf ComposerScope.Route.ComposerWholeTree
+    let! composerStore = composerScopeOf ComposerScope.Route.ComposerStore
+    let! shellContexts = composerScopeOf ComposerScope.Route.ShellStore
+
+    for r in [ composerWholeTree; composerStore; shellContexts ] do
+        say (ComposerScope.describe r)
+
     // ── The measurement document ──
     let samples = [|
         sample
@@ -891,6 +908,9 @@ let private runAsync (argv: string[]) : Async<int> = async {
             "asyncHopMsMedian" ==> (hopStats |> optMedian)
             "renderScopeWholeTree" ==> perMessage wholeTree
             "renderScopeSliced" ==> perMessage slicedScope
+            "renderScopeComposerWholeTree" ==> ComposerScope.deltas composerWholeTree
+            "renderScopeComposerStore" ==> ComposerScope.deltas composerStore
+            "renderScopeShellContexts" ==> ComposerScope.deltas shellContexts
         ]
 
     let document =

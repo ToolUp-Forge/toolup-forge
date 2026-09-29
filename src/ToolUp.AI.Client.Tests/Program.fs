@@ -139,6 +139,10 @@ let allTests =
         // Phase 895 - the fact browse client companion and the knowledge
         // base list's fact-table badge.
         FactBrowseClientTests.tests
+        // Phase 910 - the sliced store reaches every composer: the HMR
+        // pass-throughs, hydration parity, the AI composer's stable dispatch
+        // and store, and the chrome's memoised context values.
+        ComposerStoreTests.tests
     ]
 
 // Phase 849 — `output/Program.js ClientBench` runs the browser-runtime

@@ -2807,6 +2807,88 @@ module Client =
             sidebarDispatchCache <- Some(dispatch, dispatchers)
             dispatchers
 
+    // ─── Phase 910 — the chrome's context values, memoised per input ────
+    //
+    // The shell publishes shared state to every view through React
+    // contexts (feature flags, branding, administration tiles, the message
+    // catalog), and a context re-renders every reader whenever its value
+    // changes identity — through any memo boundary. Three of those values
+    // were rebuilt on every chrome render (a fresh `Set`, a fresh `Branding`
+    // record, a fresh tile list), so a chrome message that moved none of
+    // their inputs re-rendered every reader of each, including readers
+    // inside the active module the sliced shell's boundary would otherwise
+    // have held. Each is now the SAME object while its inputs are the same
+    // objects (a one-entry cache per value, as `resolveCatalog` has kept for
+    // the catalog since Phase 852); a change to any input builds a new one.
+
+    let mutable private declaredKeysCache: (obj * obj * Set<string>) option = None
+
+    /// The flag keys the client knows about — every module's declared
+    /// `FeatureFlags` and every key the server resolved — the same `Set`
+    /// while the module list and the resolved map are unchanged.
+    let private declaredFlagKeys (modules: ErasedModule list) (resolved: Map<string, FlagValue>) : Set<string> =
+        match declaredKeysCache with
+        | Some(cachedModules, cachedResolved, keys) when
+            obj.ReferenceEquals(cachedModules, modules)
+            && obj.ReferenceEquals(cachedResolved, resolved)
+            ->
+            keys
+        | _ ->
+            let moduleKeys =
+                modules |> List.collect _.FeatureFlags |> List.map _.Key |> Set.ofList
+
+            let serverKeys = resolved |> Map.toSeq |> Seq.map fst |> Set.ofSeq
+            let keys = Set.union moduleKeys serverKeys
+            declaredKeysCache <- Some(box modules, box resolved, keys)
+            keys
+
+    let mutable private brandingCache: (obj * obj * Branding) option = None
+
+    /// The active team's branding resolved against the composition root's
+    /// defaults — the same record while the config and the team's
+    /// `_platform` config are unchanged.
+    let private resolveBranding (config: ClientConfig) (platformConfig: Map<string, string>) : Branding =
+        match brandingCache with
+        | Some(cachedConfig, cachedPlatform, branding) when
+            obj.ReferenceEquals(cachedConfig, config)
+            && obj.ReferenceEquals(cachedPlatform, platformConfig)
+            ->
+            branding
+        | _ ->
+            let branding =
+                Branding.resolve
+                    {
+                        AppName = config.AppName
+                        PrimaryColor = Branding.DefaultPrimaryColor
+                        LogoUrl = config.AppLogo
+                        FaviconUrl = config.AppLogo
+                        PaletteOverrides = []
+                    }
+                    platformConfig
+
+            brandingCache <- Some(box config, box platformConfig, branding)
+            branding
+
+    let mutable private adminTilesCache: (obj * string list * AdminTile list) option =
+        None
+
+    /// The administration tiles whose owning module is in `visibleIds` — the
+    /// same list while the registered tiles and the visible ids are
+    /// unchanged. The ids are compared by value: the visible-module list is
+    /// re-derived on every chrome render.
+    let private visibleAdminTiles (visibleIds: string list) : AdminTile list =
+        let registered = AdminTileRegistry.tiles ()
+
+        match adminTilesCache with
+        | Some(cachedRegistered, cachedIds, tiles) when
+            obj.ReferenceEquals(cachedRegistered, registered) && cachedIds = visibleIds
+            ->
+            tiles
+        | _ ->
+            let tiles = AdminTiles.forOwners AdminTileRegistry.facts visibleIds registered
+            adminTilesCache <- Some(box registered, visibleIds, tiles)
+            tiles
+
     /// The active module's error boundary around its view — one
     /// construction site for both render paths (the whole-tree `view` and
     /// the Phase 852 store-subscribed host below).
@@ -2878,6 +2960,42 @@ module Client =
     [<Fable.Core.Import("memo", "react")>]
     let private reactMemo (render: obj, areEqual: obj) : obj = Fable.Core.Util.jsNative
 
+    // ─── Phase 910 — the sliced shell over any store that holds the shell ──
+    //
+    // `Client.run` publishes the shell's own `Model` to its store. A
+    // composer that wraps the shell in a model of its own (the AI
+    // assistant's `OuterModel`) publishes THAT, so the sliced shell reads
+    // its slices through a projection: the store, and where the shell's
+    // model sits in what the store publishes. The boundaries compare the
+    // STORE by reference (`Source`), never the reader, so a reader rebuilt
+    // on a later render is the same reader to them.
+
+    /// Where a store-bound shell reads the shell model from: a model store,
+    /// and how to find the shell's `Model` in what that store publishes.
+    /// Build one with `Client.shellStore` and render with
+    /// `Client.viewSlicedOver`.
+    [<Sealed>]
+    type ShellStore internal (source: obj, useShellSlice: (Model -> obj) -> obj) =
+        /// The store read — the identity the shell's boundaries compare.
+        member internal _.Source = source
+
+        /// A React hook: the slice `select` picks from the shell model the
+        /// store last published, re-rendering the caller only when it
+        /// changes by reference.
+        member internal _.UseSlice(select: Model -> obj) : obj = useShellSlice select
+
+    /// Phase 910 — a `ShellStore` over `store`, finding the shell's model in
+    /// each published model with `shellOf`. `shellOf` must be a pure
+    /// projection that returns the SAME `Model` object while the shell's
+    /// model is unchanged (a record field read, e.g. `_.Shell`) — the
+    /// shell's slices are compared by reference. For a program whose model
+    /// IS the shell's, pass `id`.
+    let shellStore (store: ModelStore<'model, 'msg>) (shellOf: 'model -> Model) : ShellStore =
+        ShellStore(
+            box store,
+            fun select -> ModelStore.useSelector store (fun model -> select (shellOf model)) ModelStore.refEquals
+        )
+
     /// The props of the active-module host. Every member is stable across
     /// renders unless the chrome's own slice changed (the config and module
     /// are fixed for the program run; `dispatch` is the loop's own since
@@ -2885,7 +3003,7 @@ module Client =
     /// shallow memo holds whenever the chrome re-renders for a reason of
     /// its own.
     type internal ModuleHostProps = {
-        Store: ModelStore<Model, Msg>
+        Store: ShellStore
         Config: ClientConfig
         // The two catalog sections the host reads, not the catalog: the
         // resolved catalog is a fresh record per chrome render
@@ -2905,13 +3023,10 @@ module Client =
         let p = unbox<ModuleHostProps> props
 
         let state =
-            ModelStore.useSelector
-                p.Store
-                (fun (m: Model) ->
-                    match m.ModuleStates |> Map.tryFind p.ModuleId with
-                    | Some s -> s
-                    | None -> null)
-                ModelStore.refEquals
+            p.Store.UseSlice(fun (m: Model) ->
+                match m.ModuleStates |> Map.tryFind p.ModuleId with
+                | Some s -> s
+                | None -> null)
 
         // Permitted but not yet in `ModuleStates`: the route guard refused
         // this module while one of its inputs was still loading and
@@ -2933,9 +3048,26 @@ module Client =
                 p.Dispatch
                 state
 
-    /// The active module's store-subscribed memo boundary (React's default
-    /// shallow prop compare).
-    let private activeModuleHost: obj = reactMemo (box renderModuleHost, null)
+    /// Equal when every prop is the same object, the store compared by the
+    /// store it reads (see `ShellStore`).
+    let private moduleHostEqual (prev: obj) (next: obj) : bool =
+        let p = unbox<ModuleHostProps> prev
+        let n = unbox<ModuleHostProps> next
+
+        obj.ReferenceEquals(p.Store.Source, n.Store.Source)
+        && obj.ReferenceEquals(p.Config, n.Config)
+        && obj.ReferenceEquals(p.ShellMessages, n.ShellMessages)
+        && obj.ReferenceEquals(p.BoundaryMessages, n.BoundaryMessages)
+        && obj.ReferenceEquals(p.Module, n.Module)
+        && obj.ReferenceEquals(p.ModuleId, n.ModuleId)
+        && obj.ReferenceEquals(p.PageRoute, n.PageRoute)
+        && obj.ReferenceEquals(p.ResetKey, n.ResetKey)
+        && obj.ReferenceEquals(p.Dispatch, n.Dispatch)
+
+    /// The active module's store-subscribed memo boundary. The comparer goes
+    /// to React as a two-argument JS function (see `shellChrome`).
+    let private activeModuleHost: obj =
+        reactMemo (box renderModuleHost, box (System.Func<obj, obj, bool>(moduleHostEqual)))
 
     /// How `view` produces the active module's content.
     [<RequireQualifiedAccess>]
@@ -2944,7 +3076,7 @@ module Client =
         /// path every `Client.view` / `Client.viewWithSignIn` caller gets.
         | Inline
         /// Emit the store-subscribed host.
-        | Subscribed of ModelStore<Model, Msg>
+        | Subscribed of ShellStore
 
     let private viewWith
         (slot: ModuleSlot)
@@ -3438,16 +3570,11 @@ module Client =
         // a `match` returning a constant plus a `None` branch — no map read
         // and no browser call (GP 11 / GP 13) — and the same catalog object
         // while nothing it depends on moved (Phase 852, `resolveCatalog`).
-        let resolvedBranding =
-            Branding.resolve
-                {
-                    AppName = config.AppName
-                    PrimaryColor = Branding.DefaultPrimaryColor
-                    LogoUrl = config.AppLogo
-                    FaviconUrl = config.AppLogo
-                    PaletteOverrides = []
-                }
-                model.PlatformConfig
+        //
+        // Phase 910 — the same record while the config and the team's
+        // `_platform` config are unchanged (`resolveBranding`), so a chrome
+        // render does not re-render every branding reader.
+        let resolvedBranding = resolveBranding config model.PlatformConfig
 
         // Phase 883 — the sidebar renders behind its own memo boundary, on
         // every render path (`view`, `viewWithSignIn` and the sliced
@@ -3588,12 +3715,11 @@ module Client =
         // until `FlagsLoaded` fires, but the warnings are one-shot so
         // a brief mid-boot false alarm is the price of keeping the
         // helper pure and per-render cheap.
-        let declaredKeys =
-            let moduleKeys =
-                modules |> List.collect _.FeatureFlags |> List.map _.Key |> Set.ofList
-
-            let serverKeys = model.ResolvedFlags |> Map.toSeq |> Seq.map fst |> Set.ofSeq
-            Set.union moduleKeys serverKeys
+        //
+        // Phase 910 — the same `Set` while neither input moved
+        // (`declaredFlagKeys`), so a chrome render does not re-render
+        // every flag reader.
+        let declaredKeys = declaredFlagKeys modules model.ResolvedFlags
 
         // Phase 121 — standard dismissible degradation banner. Renders
         // `Html.none` when no boot load has failed (GP 13).
@@ -3632,12 +3758,12 @@ module Client =
         // same "shell distributes shared state" reason
         // `ProcessedDataContext` exists. Empty (and free) for every
         // deployment that contributes no tiles.
+        //
+        // Phase 910 — the same list while the registered tiles and the
+        // visible ids are unchanged (`visibleAdminTiles`).
         let withAdminTiles =
             let tiles =
-                AdminTiles.forOwners
-                    AdminTileRegistry.facts
-                    (visibleModules |> List.map (fun m -> m.Definition.Id))
-                    (AdminTileRegistry.tiles ())
+                visibleAdminTiles (visibleModules |> List.map (fun m -> m.Definition.Id))
 
             AdminTileContext.Context.Provider(tiles, withProcessedData)
 
@@ -3730,7 +3856,7 @@ module Client =
     /// program run fixes (config, module list, chrome, the loop's dispatch,
     /// the store).
     type internal ShellChromeProps = {
-        Store: ModelStore<Model, Msg>
+        Store: ShellStore
         Config: ClientConfig
         Modules: ErasedModule list
         Chrome: ExtraChrome
@@ -3756,7 +3882,7 @@ module Client =
         let p = unbox<ShellChromeProps> prev
         let n = unbox<ShellChromeProps> next
 
-        obj.ReferenceEquals(p.Store, n.Store)
+        obj.ReferenceEquals(p.Store.Source, n.Store.Source)
         && obj.ReferenceEquals(p.Config, n.Config)
         && obj.ReferenceEquals(p.Modules, n.Modules)
         && obj.ReferenceEquals(p.Chrome, n.Chrome)
@@ -3779,14 +3905,21 @@ module Client =
         // returned closure as "equal".
         reactMemo (box renderShellChrome, box (System.Func<obj, obj, bool>(shellChromeEqual)))
 
-    /// Phase 852 — the store-bound shell view (`Client.run`): the same tree
+    /// Phase 852 / 910 — the store-bound shell view: the same tree
     /// `viewWithSignIn` builds, behind two boundaries — the chrome, which
-    /// re-renders only when a model field other than `ModuleStates`
-    /// changes, and the active module, which reads its own state from
-    /// `store`. Mount it with `Program.withReactStore store`: the host reads
-    /// the store, so the store and the binding must be the same one.
-    let internal viewSliced
-        (store: ModelStore<Model, Msg>)
+    /// re-renders only when a shell-model field other than `ModuleStates`
+    /// (or the `chrome` record, or `dispatch`) changes, and the active
+    /// module, which reads its own state from the store `shell` names.
+    /// Mount it on that same store (`Program.withReactStore`): the module
+    /// host reads the store, so the store and the binding must be one.
+    /// `Client.run` renders it over the shell's own store; a composer that
+    /// wraps the shell in a model of its own renders it over its store
+    /// (`Client.shellStore store _.Shell`), passing a `chrome` record and a
+    /// `dispatch` that keep their identity from render to render — a fresh
+    /// one per render re-renders the chrome every time, which is correct
+    /// output at the whole-tree cost.
+    let viewSlicedOver
+        (shell: ShellStore)
         (config: ClientConfig)
         (modules: ErasedModule list)
         (chrome: ExtraChrome)
@@ -3794,7 +3927,7 @@ module Client =
         (dispatch: Msg -> unit)
         : ReactElement =
         let props: ShellChromeProps = {
-            Store = store
+            Store = shell
             Config = config
             Modules = modules
             Chrome = chrome
@@ -3803,6 +3936,18 @@ module Client =
         }
 
         ReactLegacy.createElement (unbox<ReactElement> shellChrome, box props)
+
+    /// Phase 852 — the store-bound shell view over the shell's own store
+    /// (`Client.run`).
+    let internal viewSliced
+        (store: ModelStore<Model, Msg>)
+        (config: ClientConfig)
+        (modules: ErasedModule list)
+        (chrome: ExtraChrome)
+        (model: Model)
+        (dispatch: Msg -> unit)
+        : ReactElement =
+        viewSlicedOver (shellStore store id) config modules chrome model dispatch
 
     // ─── Phase 580 — client-shell module identity gate ────────────────
     //
@@ -4750,6 +4895,27 @@ module Client =
     let tryDispatchPublicEntry (config: ClientConfig) : bool =
         config.PublicEntryDispatchers |> List.exists (fun dispatch -> dispatch config)
 
+    /// Phase 852 / 910 — mount the store-bound shell at `"elmish-app"`: the
+    /// chrome and the active module are separate boundaries over one model
+    /// store, so a message that changes only the active module's state
+    /// re-renders that module and no chrome. One store per run; the view's
+    /// module host and the binding read the same one. `hydrate` adopts a
+    /// server-rendered tree (`hydrateRoot`) instead of rendering from
+    /// scratch — `Bootstrap.Hydration.run`'s prerendered branch.
+    let internal runStoreBound (hydrate: bool) (config: ClientConfig) (modules: ErasedModule list) =
+        let store = ModelStore.create<Model, Msg> ()
+
+        let bind =
+            if hydrate then
+                Program.withReactStoreHydrate store "elmish-app"
+            else
+                Program.withReactStore store "elmish-app"
+
+        programWith (viewSliced store) config modules
+        |> Program.withDispatcherHandle (fun dispatcher -> shellDispatcher <- Some dispatcher)
+        |> bind
+        |> Program.run
+
     /// Run the client application with the given modules. Convenience entry
     /// point — builds the shell Program and starts React. Applications that
     /// layer a companion wrapper (e.g. ToolUp.AI's withAIAssistant) should
@@ -4773,14 +4939,4 @@ module Client =
         if tryDispatchPublicEntry config then
             ()
         else
-            // Phase 852 — the sliced shell: the chrome and the active
-            // module are separate boundaries over one model store, so a
-            // message that changes only the active module's state
-            // re-renders that module and no chrome. One store per run; the
-            // view's module host and the binding read the same one.
-            let store = ModelStore.create<Model, Msg> ()
-
-            programWith (viewSliced store) config modules
-            |> Program.withDispatcherHandle (fun dispatcher -> shellDispatcher <- Some dispatcher)
-            |> Program.withReactStore store "elmish-app"
-            |> Program.run
+            runStoreBound false config modules

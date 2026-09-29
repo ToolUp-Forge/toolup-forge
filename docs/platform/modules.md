@@ -526,12 +526,36 @@ context or hook, which re-render their readers on their own). The shell's own sh
 arrives that way: `ProcessedData.forType`, feature flags, branding and the message catalog are React
 contexts, and a change to any of them re-renders the components that read it, boundary or not.
 
-**Where it does not apply.** The store is the `Client.run` entry point's. An application that builds
-its own program over `Client.program` or `Client.view` — the AI assistant's composer, a custom
-composition root — renders the whole tree per message exactly as before (GP 11), apart from the
-sidebar boundary above; following the rule there costs nothing and changes nothing. Components you write yourself can use the same mechanism
-under any store-bound program: `ModelStore.useSelector store selector ModelStore.refEquals` reads a
-slice and re-renders only when it changes. Migration notes and the measurement:
+**Which entry points render this way (since Phase 910).** Every SDK entry point that mounts the
+shell mounts it on a store: `Client.run`, `Bootstrap.Hydration.run` (its prerendered branch hydrates
+the server's tree from the store's first model, then re-renders by slice) and
+`AIClientConfig.run` (the AI assistant's composer publishes its own model to a store and the shell
+reads its slices of `OuterModel.Shell` from it). The composer's side panel is part of the chrome: a
+side-panel message re-renders the chrome and not your module. `ToolUp.Elmish.HMR` passes both store
+bindings through (`Program.withReactStore` / `withReactStoreHydrate`), so a store-bound app keeps
+hot reload: the reloaded build tears the old loop down and re-renders by slice from its first
+message.
+
+The *program builders* still render the whole tree per message, because they hand you a program to
+mount with any binding: `Client.program`, `AIClientConfig.program` / `withSidePanel`, and a custom
+composition root over `Client.view` / `Client.viewWithSignIn` (GP 11) — apart from the sidebar
+boundary above, which holds there too. A custom composer that wraps the shell in a model of its own
+opts in the way the AI composer does: create a store per run, build `Client.shellStore store
+_.Shell`, render the shell with `Client.viewSlicedOver shell config modules chrome model.Shell
+shellDispatch`, and mount with `Program.withReactStore store`. Pass a `chrome` record and a
+`shellDispatch` that keep their identity from render to render (build the dispatch once per loop,
+not as `ShellMsg >> dispatch` inline; rebuild the chrome only when what it shows changed) — a fresh
+one per render is correct output, but it re-renders the chrome, and a fresh dispatch defeats the
+module's and the sidebar's boundaries as well.
+
+**Shared context values keep their identity.** The shell's React contexts — feature flags,
+branding, administration tiles, the message catalog — hand every reader the same value object while
+the value's inputs are unchanged (a chrome render rebuilds none of them). A reader re-renders when
+its context's value actually changed, through any boundary, and not merely because the chrome did.
+
+Components you write yourself can use the same mechanism under any store-bound program:
+`ModelStore.useSelector store selector ModelStore.refEquals` reads a slice and re-renders only when
+it changes. Migration notes and the measurement:
 [`docs/migrations/852-sliced-model-store.md`](../migrations/852-sliced-model-store.md).
 
 ## Module independence
