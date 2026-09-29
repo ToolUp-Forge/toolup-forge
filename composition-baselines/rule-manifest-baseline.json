@@ -1,5 +1,5 @@
 {
-  "ManifestVersion": "1.1.0",
+  "ManifestVersion": "1.2.0",
   "Rules": [
     {
       "Family": "composition-well-formedness",
@@ -105,6 +105,48 @@
       "Version": "1.0.0",
       "Severity": "warning",
       "RuleDescription": "A deployment declaring ApplianceProfile.Posture = DeclaredOffline composed one or more components whose Phase 432 requirements include a URI-typed config knob. Each named endpoint must resolve from inside the appliance container; an endpoint reachable only from the supplying party's network will fail at first use rather than at preflight."
+    },
+    {
+      "Family": "fact-table-declarations",
+      "Rule": "fact-table-duplicate-id",
+      "Version": "1.0.0",
+      "Severity": "error",
+      "RuleDescription": "A fact-table id must be declared by exactly one module; two modules declaring one id would write one table's rows from two producers."
+    },
+    {
+      "Family": "fact-table-declarations",
+      "Rule": "fact-table-malformed",
+      "Version": "1.0.0",
+      "Severity": "error",
+      "RuleDescription": "A fact-table declaration must carry a non-empty id and producing operation, at least one column, no metric twice, and a positive refresh cadence."
+    },
+    {
+      "Family": "fact-table-declarations",
+      "Rule": "fact-table-unregistered-metric",
+      "Version": "1.0.0",
+      "Severity": "error",
+      "RuleDescription": "Every fact-table column must name a metric registered in the composition."
+    },
+    {
+      "Family": "fact-table-declarations",
+      "Rule": "fact-table-unknown-subject-level",
+      "Version": "1.0.0",
+      "Severity": "error",
+      "RuleDescription": "A fact table's subject hierarchy must be registered in the composition and its level must be one of that hierarchy's levels."
+    },
+    {
+      "Family": "fact-table-declarations",
+      "Rule": "fact-table-unbound-required",
+      "Version": "1.0.0",
+      "Severity": "error",
+      "RuleDescription": "A Required fact table must be bound to a store; a composition whose required output has nowhere to be written refuses to start."
+    },
+    {
+      "Family": "fact-table-declarations",
+      "Rule": "fact-table-metric-two-homes",
+      "Version": "1.0.0",
+      "Severity": "warning",
+      "RuleDescription": "A metric should have one home per subject level: a fact table, or individual assertions — not both. Two tables carrying one metric at one level, or a table carrying a metric the composition recomputes fact by fact, is flagged."
     }
   ]
 }
