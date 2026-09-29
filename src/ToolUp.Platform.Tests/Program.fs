@@ -2515,6 +2515,10 @@ let private registeredTests =
         // the viewer at every egress door, the policy-change check, and the
         // output level in the per-team policy record.
         TeamOutputVisibilityTests.tests
+        // Phase 897 - team-to-team fact publication: a consolidated view by
+        // publishing, the grant and its two consents, the source's gate at the
+        // publication door, withdrawal, both sides' audit, and the one seam.
+        FactPublicationTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

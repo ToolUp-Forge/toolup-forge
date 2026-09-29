@@ -118,6 +118,11 @@
              After the writer (it reuses its row validation and blob I/O),
              before FactsCompose.fs, which composes it. -->
         <Compile Include="Server\DelegatedFactStore.fs" />
+        <!-- Phase 897 — team-to-team publication: the grant service, the one
+             cross-scope write seam and the publication jobs. Compiled after
+             the table writer it writes consolidation runs through and before
+             the compose knob that registers it. -->
+        <Compile Include="Server\FactPublication.fs" />
         <Compile Include="Server\FactsCompose.fs" />
         <!-- Phase 895 — the fact browse read surface (IFactBrowseApi) and its
              per-run notification decoration of the table writer. -->

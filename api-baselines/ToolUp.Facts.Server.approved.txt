@@ -673,6 +673,50 @@ ToolUp.Facts.FactInvalidation.isMintedUnderStaleRun(ToolUp.Facts.DelegateFact, S
 ToolUp.Facts.FactInvalidation.policyFor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Facts.Fact) : ToolUp.Platform.Grounding.RecomputePolicy
 ToolUp.Facts.FactInvalidation.recomputeNow(ToolUp.Facts.IFactStore, ToolUp.Facts.IFactRecomputer, System.String, ToolUp.Facts.Fact) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.Fact], System.String]]
 ToolUp.Facts.FactInvalidation.staleDelegatedHeads(ToolUp.Facts.IFactStore, System.String, ToolUp.Facts.DelegateFact, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]]
+ToolUp.Facts.FactPublication (class)
+ToolUp.Facts.FactPublication.createWith(ToolUp.Facts.FactPublicationConfig, ToolUp.Facts.IFactStore, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, ToolUp.Platform.Grounding.IFactTableRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IFactTableWriter], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole]]]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.ArtefactSigning.IArtefactSigner], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.ArtefactSigning.IArtefactVerifier], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]) : ToolUp.Facts.IFactPublication
+ToolUp.Facts.FactPublication.defects(ToolUp.Facts.FactPublicationConfig, ToolUp.Platform.Grounding.IFactTableRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.FactPublicationConfig (class)
+ToolUp.Facts.FactPublicationConfig..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactPublicationTarget], ToolUp.Facts.PublicationSigning)
+ToolUp.Facts.FactPublicationConfig.Signing : ToolUp.Facts.PublicationSigning { get }
+ToolUp.Facts.FactPublicationConfig.Targets : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactPublicationTarget] { get }
+ToolUp.Facts.FactPublicationConfigModule (class)
+ToolUp.Facts.FactPublicationConfigModule.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactPublicationTarget]) : ToolUp.Facts.FactPublicationConfig
+ToolUp.Facts.FactPublicationConfigModule.signed(ToolUp.Facts.FactPublicationConfig) : ToolUp.Facts.FactPublicationConfig
+ToolUp.Facts.FactPublicationEvent (class)
+ToolUp.Facts.FactPublicationEvent..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32, System.Int32, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Guid], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Facts.FactPublicationEvent.ByUserId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactPublicationEvent.CounterpartRecordId : Microsoft.FSharp.Core.FSharpOption`1[System.Guid] { get }
+ToolUp.Facts.FactPublicationEvent.GrantId : System.String { get }
+ToolUp.Facts.FactPublicationEvent.OriginRun : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactPublicationEvent.PublicationRunId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactPublicationEvent.Reason : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactPublicationEvent.RowsPublished : System.Int32 { get }
+ToolUp.Facts.FactPublicationEvent.RowsWithheld : System.Int32 { get }
+ToolUp.Facts.FactPublicationEvent.Side : System.String { get }
+ToolUp.Facts.FactPublicationEvent.SignatureKeyId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactPublicationEvent.Signing : System.String { get }
+ToolUp.Facts.FactPublicationEvent.SourceTable : System.String { get }
+ToolUp.Facts.FactPublicationEvent.SourceTeam : System.String { get }
+ToolUp.Facts.FactPublicationEvent.TargetRun : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactPublicationEvent.TargetTable : System.String { get }
+ToolUp.Facts.FactPublicationEvent.TargetTeam : System.String { get }
+ToolUp.Facts.FactPublicationEvent.Visibility : System.String { get }
+ToolUp.Facts.FactPublicationEvents (class)
+ToolUp.Facts.FactPublicationEvents.ConsentedType : System.String (literal)
+ToolUp.Facts.FactPublicationEvents.ProposedType : System.String (literal)
+ToolUp.Facts.FactPublicationEvents.PublishedType : System.String (literal)
+ToolUp.Facts.FactPublicationEvents.ReceivedType : System.String (literal)
+ToolUp.Facts.FactPublicationEvents.RefreshedType : System.String (literal)
+ToolUp.Facts.FactPublicationEvents.RefusedType : System.String (literal)
+ToolUp.Facts.FactPublicationEvents.RevokedType : System.String (literal)
+ToolUp.Facts.FactPublicationJobs (class)
+ToolUp.Facts.FactPublicationJobs.PublishHandler : System.String (literal)
+ToolUp.Facts.FactPublicationJobs.RefreshHandler : System.String (literal)
+ToolUp.Facts.FactPublicationJobs.publishHandler(ToolUp.Facts.IFactPublication) : ToolUp.Platform.IJobHandler
+ToolUp.Facts.FactPublicationJobs.refreshHandler(ToolUp.Facts.IFactPublication) : ToolUp.Platform.IJobHandler
+ToolUp.Facts.FactPublicationJobs.schedulePublication(ToolUp.Platform.IJobScheduler, ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.Trigger, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, ToolUp.Platform.ScheduleError]]
+ToolUp.Facts.FactPublicationJobs.scheduleRefresh(ToolUp.Platform.IJobScheduler, ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.Trigger, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, ToolUp.Platform.ScheduleError]]
 ToolUp.Facts.FactPurposeContext (class)
 ToolUp.Facts.FactPurposeContext.claim(System.String) : System.Void
 ToolUp.Facts.FactPurposeContext.clear() : System.Void
@@ -835,6 +879,7 @@ ToolUp.Facts.FactsCompose.withDeclassificationBudgets(ToolUp.Platform.IPrivacyBu
 ToolUp.Facts.FactsCompose.withDelegateFacts(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withDisclosurePurposes(ToolUp.Facts.DisclosurePurposeConfig, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withFactImport(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PeerTrustAnchor], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Facts.FactsCompose.withFactPublication(ToolUp.Facts.FactPublicationConfig, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withFactStore(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withFactStoreImplementation(System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.IServiceProvider, ToolUp.Facts.IFactStore], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Facts.FactsCompose.withFactTableWriter(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
@@ -897,6 +942,13 @@ ToolUp.Facts.IDelegatedFactWalks.CurrentRun(System.String, ToolUp.Facts.MetricRe
 ToolUp.Facts.IDelegatedFactWalks.Delegates : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DelegateFact] { get }
 ToolUp.Facts.IFactImportDoor (interface)
 ToolUp.Facts.IFactImportDoor.Import(System.String, System.String, ToolUp.Facts.ImportedFactOffer, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.Fact, ToolUp.Facts.FactImportRefusal]]
+ToolUp.Facts.IFactPublication (interface)
+ToolUp.Facts.IFactPublication.Consent(ToolUp.Platform.ResolvedScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PublicationGrant, ToolUp.Facts.PublicationRefusal]]
+ToolUp.Facts.IFactPublication.Grants(ToolUp.Platform.ResolvedScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PublicationGrant]]
+ToolUp.Facts.IFactPublication.Propose(ToolUp.Platform.ResolvedScope, ToolUp.Facts.PublicationProposal) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PublicationGrant, ToolUp.Facts.PublicationRefusal]]
+ToolUp.Facts.IFactPublication.Publish(ToolUp.Platform.ResolvedScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PublicationReceipt, ToolUp.Facts.PublicationRefusal]]
+ToolUp.Facts.IFactPublication.Refresh(ToolUp.Platform.ResolvedScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Facts.PublicationRefusal]]
+ToolUp.Facts.IFactPublication.Revoke(ToolUp.Platform.ResolvedScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PublicationGrant, ToolUp.Facts.PublicationRefusal]]
 ToolUp.Facts.IFactRecomputer (interface)
 ToolUp.Facts.IFactRecomputer.Recompute(System.String, ToolUp.Facts.Fact) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactDraft], System.String]]
 ToolUp.Facts.IFactStore (interface)

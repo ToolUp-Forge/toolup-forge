@@ -196,8 +196,9 @@ module ViewerAwareDisclosure =
 
     /// Whether a surface's audience is the requester. Retrieval, tool
     /// results, exports and browsing reach the person asking, so they are
-    /// decided for that person. Publishing a narrative, a webhook and a
-    /// peer answer reach an audience wider than the requester, so they are
+    /// decided for that person. Publishing a narrative, a webhook, a peer
+    /// answer and a team publication (Phase 897) reach an audience wider
+    /// than the requester, so they are
     /// decided for the least-privileged viewer — publishing is never a way
     /// to widen who sees restricted output.
     let audienceIsRequester (surface: FactEgressSurface) : bool =
@@ -208,7 +209,8 @@ module ViewerAwareDisclosure =
         | FactBrowse -> true
         | FactNarrativePublication
         | FactWebhook
-        | FactPeerEgress -> false
+        | FactPeerEgress
+        | FactTeamPublication -> false
 
     /// The team a checked scope belongs to. `scopeTeam` is what the scope's
     /// own resolution says (`Some` for a `ResolvedScope`); a string-keyed

@@ -11071,6 +11071,11 @@ ToolUp.Platform.ResolvedScopeModule (class)
 ToolUp.Platform.ResolvedScopeModule.AnonymousScopeId : System.String (literal)
 ToolUp.Platform.ResolvedScopeModule.anonymous : ToolUp.Platform.ResolvedScope { get }
 ToolUp.Platform.ResolvedScopeModule.scopeId(ToolUp.Platform.ResolvedScope) : System.String
+ToolUp.Platform.ResolvedScopePair (class)
+ToolUp.Platform.ResolvedScopePair.Source : ToolUp.Platform.ResolvedScope { get }
+ToolUp.Platform.ResolvedScopePair.Target : ToolUp.Platform.ResolvedScope { get }
+ToolUp.Platform.ResolvedScopePairModule (class)
+ToolUp.Platform.ResolvedScopePairModule.ofMinted(ToolUp.Platform.ResolvedScope, ToolUp.Platform.ResolvedScope) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ResolvedScopePair, System.String]
 ToolUp.Platform.ResourceEnvelope (class)
 ToolUp.Platform.ResourceEnvelope..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.ResourceEnvelope.MaxJobConcurrency : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
@@ -13310,6 +13315,7 @@ ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.FactExport : ToolUp.Platf
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.FactNarrativePublication : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.FactPeerEgress : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.FactRetrieval : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.FactTeamPublication : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.FactToolResult : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.FactWebhook : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.IsFactBrowse : System.Boolean { get }
@@ -13317,6 +13323,7 @@ ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.IsFactExport : System.Boo
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.IsFactNarrativePublication : System.Boolean { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.IsFactPeerEgress : System.Boolean { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.IsFactRetrieval : System.Boolean { get }
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.IsFactTeamPublication : System.Boolean { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.IsFactToolResult : System.Boolean { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.IsFactWebhook : System.Boolean { get }
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface.Tag : System.Int32 { get }
@@ -13326,6 +13333,7 @@ ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface+Tags.FactExport : System.
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface+Tags.FactNarrativePublication : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface+Tags.FactPeerEgress : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface+Tags.FactRetrieval : System.Int32 (literal)
+ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface+Tags.FactTeamPublication : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface+Tags.FactToolResult : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface+Tags.FactWebhook : System.Int32 (literal)
 ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurfaceModule (class)

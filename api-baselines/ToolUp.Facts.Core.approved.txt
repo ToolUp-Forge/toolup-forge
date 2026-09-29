@@ -284,6 +284,14 @@ ToolUp.Facts.FactModule.isForecast(ToolUp.Facts.Fact) : System.Boolean
 ToolUp.Facts.FactModule.lineageKey(ToolUp.Facts.SubjectRef, ToolUp.Facts.MetricRef, ToolUp.Facts.TemporalExtent, ToolUp.Facts.MethodRef) : System.String
 ToolUp.Facts.FactModule.methodIdentity(ToolUp.Facts.MethodRef) : System.String
 ToolUp.Facts.FactModule.valueHash(ToolUp.Facts.FactValue) : System.String
+ToolUp.Facts.FactPublicationTarget (class)
+ToolUp.Facts.FactPublicationTarget..ctor(System.String, System.String, ToolUp.Facts.PublicationVisibility)
+ToolUp.Facts.FactPublicationTarget.OriginLevel : System.String { get }
+ToolUp.Facts.FactPublicationTarget.Requires : ToolUp.Facts.PublicationVisibility { get }
+ToolUp.Facts.FactPublicationTarget.Table : System.String { get }
+ToolUp.Facts.FactPublicationTargetModule (class)
+ToolUp.Facts.FactPublicationTargetModule.create(System.String, System.String) : ToolUp.Facts.FactPublicationTarget
+ToolUp.Facts.FactPublicationTargetModule.defects(ToolUp.Facts.FactPublicationTarget, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.FactTableDefinition], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.SubjectDefinition]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Facts.FactRendering (class)
 ToolUp.Facts.FactRendering.render(System.String, ToolUp.Facts.FactValue) : System.String
 ToolUp.Facts.FactValue (class)
@@ -530,6 +538,156 @@ ToolUp.Facts.PopulationTripleModule.toCandidate(ToolUp.Facts.PopulationTriple) :
 ToolUp.Facts.PopulationTripleModule.tryOrdering(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PopulationOrdering]
 ToolUp.Facts.PopulationValue (class)
 ToolUp.Facts.PopulationValue.comparable(ToolUp.Facts.FactValue) : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal]
+ToolUp.Facts.PublicationConsent (class)
+ToolUp.Facts.PublicationConsent..ctor(System.String, System.String, System.DateTime)
+ToolUp.Facts.PublicationConsent.At : System.DateTime { get }
+ToolUp.Facts.PublicationConsent.ByUserId : System.String { get }
+ToolUp.Facts.PublicationConsent.TeamId : System.String { get }
+ToolUp.Facts.PublicationGrant (class)
+ToolUp.Facts.PublicationGrant..ctor(System.String, System.String, System.String, System.String, System.String, ToolUp.Facts.PublicationVisibility, System.String, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PublicationConsent], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PublicationConsent], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PublicationRevocation])
+ToolUp.Facts.PublicationGrant.GrantId : System.String { get }
+ToolUp.Facts.PublicationGrant.ProposedAt : System.DateTime { get }
+ToolUp.Facts.PublicationGrant.ProposedBy : System.String { get }
+ToolUp.Facts.PublicationGrant.Revocation : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PublicationRevocation] { get }
+ToolUp.Facts.PublicationGrant.SourceConsent : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PublicationConsent] { get }
+ToolUp.Facts.PublicationGrant.SourceTable : System.String { get }
+ToolUp.Facts.PublicationGrant.SourceTeam : System.String { get }
+ToolUp.Facts.PublicationGrant.TargetConsent : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PublicationConsent] { get }
+ToolUp.Facts.PublicationGrant.TargetTable : System.String { get }
+ToolUp.Facts.PublicationGrant.TargetTeam : System.String { get }
+ToolUp.Facts.PublicationGrant.Visibility : ToolUp.Facts.PublicationVisibility { get }
+ToolUp.Facts.PublicationGrantModule (class)
+ToolUp.Facts.PublicationGrantModule.CertificateRefPrefix : System.String (literal)
+ToolUp.Facts.PublicationGrantModule.certificateRef(ToolUp.Facts.PublicationGrant) : System.String
+ToolUp.Facts.PublicationGrantModule.inForce(ToolUp.Facts.PublicationGrant) : System.Boolean
+ToolUp.Facts.PublicationGrantModule.missingConsents(ToolUp.Facts.PublicationGrant) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PublicationSide]
+ToolUp.Facts.PublicationGrantModule.sideOf(System.String, ToolUp.Facts.PublicationGrant) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.PublicationSide]
+ToolUp.Facts.PublicationProposal (class)
+ToolUp.Facts.PublicationProposal..ctor(System.String, System.String, System.String, System.String, ToolUp.Facts.PublicationVisibility)
+ToolUp.Facts.PublicationProposal.SourceTable : System.String { get }
+ToolUp.Facts.PublicationProposal.SourceTeam : System.String { get }
+ToolUp.Facts.PublicationProposal.TargetTable : System.String { get }
+ToolUp.Facts.PublicationProposal.TargetTeam : System.String { get }
+ToolUp.Facts.PublicationProposal.Visibility : ToolUp.Facts.PublicationVisibility { get }
+ToolUp.Facts.PublicationReceipt (class)
+ToolUp.Facts.PublicationReceipt..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32, System.Int32, System.String, System.Guid, System.Guid, ToolUp.Facts.PublicationSigning)
+ToolUp.Facts.PublicationReceipt.GrantId : System.String { get }
+ToolUp.Facts.PublicationReceipt.OriginRun : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.PublicationReceipt.PublicationRunId : System.String { get }
+ToolUp.Facts.PublicationReceipt.RowsPublished : System.Int32 { get }
+ToolUp.Facts.PublicationReceipt.RowsWithheld : System.Int32 { get }
+ToolUp.Facts.PublicationReceipt.Signing : ToolUp.Facts.PublicationSigning { get }
+ToolUp.Facts.PublicationReceipt.SourceRecordId : System.Guid { get }
+ToolUp.Facts.PublicationReceipt.TargetRecordId : System.Guid { get }
+ToolUp.Facts.PublicationReceipt.TargetRun : System.String { get }
+ToolUp.Facts.PublicationRefusal (class)
+ToolUp.Facts.PublicationRefusal.IsPublicationGrantNotInForce : System.Boolean { get }
+ToolUp.Facts.PublicationRefusal.IsPublicationGrantRevoked : System.Boolean { get }
+ToolUp.Facts.PublicationRefusal.IsPublicationGrantUnknown : System.Boolean { get }
+ToolUp.Facts.PublicationRefusal.IsPublicationNotAParty : System.Boolean { get }
+ToolUp.Facts.PublicationRefusal.IsPublicationNotOwner : System.Boolean { get }
+ToolUp.Facts.PublicationRefusal.IsPublicationSameTeam : System.Boolean { get }
+ToolUp.Facts.PublicationRefusal.IsPublicationShapeMismatch : System.Boolean { get }
+ToolUp.Facts.PublicationRefusal.IsPublicationSignatureRefused : System.Boolean { get }
+ToolUp.Facts.PublicationRefusal.IsPublicationSourceUndeclared : System.Boolean { get }
+ToolUp.Facts.PublicationRefusal.IsPublicationStorageFailure : System.Boolean { get }
+ToolUp.Facts.PublicationRefusal.IsPublicationTargetUndeclared : System.Boolean { get }
+ToolUp.Facts.PublicationRefusal.IsPublicationVisibilityBelowRequired : System.Boolean { get }
+ToolUp.Facts.PublicationRefusal.IsPublicationWrongScope : System.Boolean { get }
+ToolUp.Facts.PublicationRefusal.Tag : System.Int32 { get }
+ToolUp.Facts.PublicationRefusal+PublicationGrantNotInForce (class)
+ToolUp.Facts.PublicationRefusal+PublicationGrantNotInForce.grantId : System.String { get }
+ToolUp.Facts.PublicationRefusal+PublicationGrantNotInForce.missing : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PublicationSide] { get }
+ToolUp.Facts.PublicationRefusal+PublicationGrantRevoked (class)
+ToolUp.Facts.PublicationRefusal+PublicationGrantRevoked.grantId : System.String { get }
+ToolUp.Facts.PublicationRefusal+PublicationGrantUnknown (class)
+ToolUp.Facts.PublicationRefusal+PublicationGrantUnknown.grantId : System.String { get }
+ToolUp.Facts.PublicationRefusal+PublicationNotAParty (class)
+ToolUp.Facts.PublicationRefusal+PublicationNotAParty.grantId : System.String { get }
+ToolUp.Facts.PublicationRefusal+PublicationNotAParty.scopeId : System.String { get }
+ToolUp.Facts.PublicationRefusal+PublicationNotOwner (class)
+ToolUp.Facts.PublicationRefusal+PublicationNotOwner.teamId : System.String { get }
+ToolUp.Facts.PublicationRefusal+PublicationNotOwner.userId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.PublicationRefusal+PublicationSameTeam (class)
+ToolUp.Facts.PublicationRefusal+PublicationSameTeam.teamId : System.String { get }
+ToolUp.Facts.PublicationRefusal+PublicationShapeMismatch (class)
+ToolUp.Facts.PublicationRefusal+PublicationShapeMismatch.detail : System.String { get }
+ToolUp.Facts.PublicationRefusal+PublicationSignatureRefused (class)
+ToolUp.Facts.PublicationRefusal+PublicationSignatureRefused.detail : System.String { get }
+ToolUp.Facts.PublicationRefusal+PublicationSourceUndeclared (class)
+ToolUp.Facts.PublicationRefusal+PublicationSourceUndeclared.tableId : System.String { get }
+ToolUp.Facts.PublicationRefusal+PublicationStorageFailure (class)
+ToolUp.Facts.PublicationRefusal+PublicationStorageFailure.detail : System.String { get }
+ToolUp.Facts.PublicationRefusal+PublicationTargetUndeclared (class)
+ToolUp.Facts.PublicationRefusal+PublicationTargetUndeclared.tableId : System.String { get }
+ToolUp.Facts.PublicationRefusal+PublicationVisibilityBelowRequired (class)
+ToolUp.Facts.PublicationRefusal+PublicationVisibilityBelowRequired.granted : ToolUp.Facts.PublicationVisibility { get }
+ToolUp.Facts.PublicationRefusal+PublicationVisibilityBelowRequired.required : ToolUp.Facts.PublicationVisibility { get }
+ToolUp.Facts.PublicationRefusal+PublicationWrongScope (class)
+ToolUp.Facts.PublicationRefusal+PublicationWrongScope.actual : System.String { get }
+ToolUp.Facts.PublicationRefusal+PublicationWrongScope.expected : System.String { get }
+ToolUp.Facts.PublicationRefusal+PublicationWrongScope.grantId : System.String { get }
+ToolUp.Facts.PublicationRefusal+PublicationWrongScope.side : ToolUp.Facts.PublicationSide { get }
+ToolUp.Facts.PublicationRefusal+Tags (class)
+ToolUp.Facts.PublicationRefusal+Tags.PublicationGrantNotInForce : System.Int32 (literal)
+ToolUp.Facts.PublicationRefusal+Tags.PublicationGrantRevoked : System.Int32 (literal)
+ToolUp.Facts.PublicationRefusal+Tags.PublicationGrantUnknown : System.Int32 (literal)
+ToolUp.Facts.PublicationRefusal+Tags.PublicationNotAParty : System.Int32 (literal)
+ToolUp.Facts.PublicationRefusal+Tags.PublicationNotOwner : System.Int32 (literal)
+ToolUp.Facts.PublicationRefusal+Tags.PublicationSameTeam : System.Int32 (literal)
+ToolUp.Facts.PublicationRefusal+Tags.PublicationShapeMismatch : System.Int32 (literal)
+ToolUp.Facts.PublicationRefusal+Tags.PublicationSignatureRefused : System.Int32 (literal)
+ToolUp.Facts.PublicationRefusal+Tags.PublicationSourceUndeclared : System.Int32 (literal)
+ToolUp.Facts.PublicationRefusal+Tags.PublicationStorageFailure : System.Int32 (literal)
+ToolUp.Facts.PublicationRefusal+Tags.PublicationTargetUndeclared : System.Int32 (literal)
+ToolUp.Facts.PublicationRefusal+Tags.PublicationVisibilityBelowRequired : System.Int32 (literal)
+ToolUp.Facts.PublicationRefusal+Tags.PublicationWrongScope : System.Int32 (literal)
+ToolUp.Facts.PublicationRefusalModule (class)
+ToolUp.Facts.PublicationRefusalModule.describe(ToolUp.Facts.PublicationRefusal) : System.String
+ToolUp.Facts.PublicationRevocation (class)
+ToolUp.Facts.PublicationRevocation..ctor(System.String, System.String, System.DateTime)
+ToolUp.Facts.PublicationRevocation.At : System.DateTime { get }
+ToolUp.Facts.PublicationRevocation.ByTeam : System.String { get }
+ToolUp.Facts.PublicationRevocation.ByUserId : System.String { get }
+ToolUp.Facts.PublicationSide (class)
+ToolUp.Facts.PublicationSide.IsSource : System.Boolean { get }
+ToolUp.Facts.PublicationSide.IsTarget : System.Boolean { get }
+ToolUp.Facts.PublicationSide.Source : ToolUp.Facts.PublicationSide { get }
+ToolUp.Facts.PublicationSide.Tag : System.Int32 { get }
+ToolUp.Facts.PublicationSide.Target : ToolUp.Facts.PublicationSide { get }
+ToolUp.Facts.PublicationSide+Tags (class)
+ToolUp.Facts.PublicationSide+Tags.Source : System.Int32 (literal)
+ToolUp.Facts.PublicationSide+Tags.Target : System.Int32 (literal)
+ToolUp.Facts.PublicationSideModule (class)
+ToolUp.Facts.PublicationSideModule.name(ToolUp.Facts.PublicationSide) : System.String
+ToolUp.Facts.PublicationSigning (class)
+ToolUp.Facts.PublicationSigning.IsRecordedProvenance : System.Boolean { get }
+ToolUp.Facts.PublicationSigning.IsSignedCertificate : System.Boolean { get }
+ToolUp.Facts.PublicationSigning.RecordedProvenance : ToolUp.Facts.PublicationSigning { get }
+ToolUp.Facts.PublicationSigning.SignedCertificate : ToolUp.Facts.PublicationSigning { get }
+ToolUp.Facts.PublicationSigning.Tag : System.Int32 { get }
+ToolUp.Facts.PublicationSigning+Tags (class)
+ToolUp.Facts.PublicationSigning+Tags.RecordedProvenance : System.Int32 (literal)
+ToolUp.Facts.PublicationSigning+Tags.SignedCertificate : System.Int32 (literal)
+ToolUp.Facts.PublicationSigningModule (class)
+ToolUp.Facts.PublicationSigningModule.name(ToolUp.Facts.PublicationSigning) : System.String
+ToolUp.Facts.PublicationVisibility (class)
+ToolUp.Facts.PublicationVisibility.AggregatesOnly : ToolUp.Facts.PublicationVisibility { get }
+ToolUp.Facts.PublicationVisibility.Full : ToolUp.Facts.PublicationVisibility { get }
+ToolUp.Facts.PublicationVisibility.IsAggregatesOnly : System.Boolean { get }
+ToolUp.Facts.PublicationVisibility.IsFull : System.Boolean { get }
+ToolUp.Facts.PublicationVisibility.IsViewOnly : System.Boolean { get }
+ToolUp.Facts.PublicationVisibility.Tag : System.Int32 { get }
+ToolUp.Facts.PublicationVisibility.ViewOnly : ToolUp.Facts.PublicationVisibility { get }
+ToolUp.Facts.PublicationVisibility+Tags (class)
+ToolUp.Facts.PublicationVisibility+Tags.AggregatesOnly : System.Int32 (literal)
+ToolUp.Facts.PublicationVisibility+Tags.Full : System.Int32 (literal)
+ToolUp.Facts.PublicationVisibility+Tags.ViewOnly : System.Int32 (literal)
+ToolUp.Facts.PublicationVisibilityModule (class)
+ToolUp.Facts.PublicationVisibilityModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PublicationVisibility] { get }
+ToolUp.Facts.PublicationVisibilityModule.label(ToolUp.Facts.PublicationVisibility) : System.String
+ToolUp.Facts.PublicationVisibilityModule.rank(ToolUp.Facts.PublicationVisibility) : System.Int32
+ToolUp.Facts.PublicationVisibilityModule.reaches(ToolUp.Facts.PublicationVisibility, ToolUp.Facts.PublicationVisibility) : System.Boolean
 ToolUp.Facts.PurposeTaxonomy (class)
 ToolUp.Facts.PurposeTaxonomy..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DisclosurePurpose])
 ToolUp.Facts.PurposeTaxonomy.Purposes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DisclosurePurpose] { get }

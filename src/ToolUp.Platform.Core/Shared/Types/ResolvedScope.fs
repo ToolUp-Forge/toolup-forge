@@ -112,3 +112,51 @@ module ResolvedScope =
 
     /// The shard key — see `ResolvedScope.ScopeId`.
     let scopeId (scope: ResolvedScope) : string = scope.ScopeId
+// ─── Phase 897 — the two-scope form ─────────────────────────────────
+//
+// Every read and write in the fact tier holds ONE scope. The single place
+// that holds two is the team-to-team publication seam: a run written into a
+// target team's table on the strength of a grant the source team published
+// under. `ResolvedScopePair` is that pair, and it is built from two scopes
+// that were already minted — there is no constructor taking a string, so a
+// pair can name no scope the platform did not resolve (Phase 797's rule
+// carried one step further). The anonymous scope and a pair naming one scope
+// twice are refused: a publication moves rows between two resolved teams.
+//
+// The pair is a CARRIER, not a permission. It says nothing about whether the
+// write is allowed — that is the grant's business — and the source-side
+// guard pack pins that the fact tier's only holder of a pair is the one
+// sanctioned seam.
+
+/// Two minted scopes held together for the one sanctioned cross-scope write
+/// (Phase 897): the SOURCE a publication was read in and the TARGET its run
+/// is written into. Built only from two `ResolvedScope` values, so neither
+/// side can be a scope the platform did not resolve.
+type ResolvedScopePair = private {
+    SourceScope: ResolvedScope
+    TargetScope: ResolvedScope
+} with
+
+    /// The scope the publication was read in.
+    member this.Source = this.SourceScope
+
+    /// The scope the publication's run is written into.
+    member this.Target = this.TargetScope
+
+/// Construction for `ResolvedScopePair`.
+[<RequireQualifiedAccess>]
+module ResolvedScopePair =
+
+    /// Pair two minted scopes: `source` first, `target` second. Refuses the
+    /// anonymous scope on either side and a pair naming one scope twice,
+    /// each with a sentence naming why.
+    let ofMinted (source: ResolvedScope) (target: ResolvedScope) : Result<ResolvedScopePair, string> =
+        if source.IsAnonymous || target.IsAnonymous then
+            Error "a cross-scope pair needs two resolved scopes; the anonymous scope publishes and receives nothing"
+        elif source.ScopeId = target.ScopeId then
+            Error(sprintf "a cross-scope pair names two scopes, but both sides are '%s'" source.ScopeId)
+        else
+            Ok {
+                SourceScope = source
+                TargetScope = target
+            }

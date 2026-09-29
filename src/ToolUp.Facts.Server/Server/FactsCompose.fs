@@ -1657,3 +1657,114 @@ module FactsCompose =
                             PreMiddleware = app.Extensions.PreMiddleware @ [ establishViewer ]
                     }
             }
+    // ─── Phase 897 — team-to-team fact publication (opt-in) ───────────
+    //
+    // A consolidated view is built by PUBLISHING, never by reading across
+    // teams. This knob registers the publication service — grants, the two
+    // consents, the one cross-scope write seam — and the publication and
+    // refresh job handlers on the composed scheduler. The target tables are
+    // declared here, each naming the level of its hierarchy the origin team
+    // occupies; a declaration with a defect fails at startup, naming it.
+    //
+    // Self-contained on purpose: it decorates nothing and replaces nothing,
+    // so the store, the gate, the writer and every facet composed above are
+    // untouched. A deployment that does not call it is unchanged, and one
+    // that calls it but records no grant writes nothing anywhere.
+
+    /// Compose team-to-team fact publication (Phase 897). `config` declares
+    /// the consolidation tables publications may be written into and the
+    /// signing profile: `FactPublicationConfig.create targets` for recorded
+    /// provenance, `FactPublicationConfig.signed` for the regulated profile,
+    /// which additionally needs an `IArtefactSigner` and an
+    /// `IArtefactVerifier` composed.
+    ///
+    /// Requires the fact store, and the table writer for the tables it
+    /// names; owner acts read the team's roles from the composed team store.
+    /// A `NoFactStore` deployment is unchanged. Insert after
+    /// `withFactTableWriter`:
+    ///
+    /// ```fsharp
+    /// ServerApp.empty
+    /// |> ServerApp.withStorage blob
+    /// |> FactsCompose.withFactStore
+    /// |> FactsCompose.withFactTableWriter
+    /// |> FactsCompose.withFactPublication (FactPublicationConfig.create [ FactPublicationTarget.create "group-sales" "region" ])
+    /// |> ServerApp.run
+    /// ```
+    let withFactPublication (config: FactPublicationConfig) (app: ServerApp) : ServerApp =
+        match app.Config.FactStore with
+        | NoFactStore -> app
+        | EnabledFactStore ->
+            let register (s: IServiceCollection) =
+                s.AddSingleton<IFactPublication>(
+                    Func<IServiceProvider, IFactPublication>(fun sp ->
+                        let teams = tryService<ToolUp.Platform.TeamManagement.ITeamStore> sp
+
+                        FactPublication.createWith
+                            config
+                            (sp.GetRequiredService<IFactStore>())
+                            (sp.GetRequiredService<IBlobStorage>())
+                            (sp.GetRequiredService<IEventStore>())
+                            (sp.GetRequiredService<IFactDisclosureGate>())
+                            (tryService<Grounding.IFactTableRegistry> sp
+                             |> Option.defaultValue Grounding.FactTableRegistry.empty)
+                            (tryService<Grounding.IMetricRegistry> sp)
+                            (tryService<IFactTableWriter> sp)
+                            (fun teamId userId ->
+                                match teams with
+                                | Some teams -> teams.GetMemberRole(teamId, userId)
+                                | None -> async.Return None)
+                            (tryService<ToolUp.ArtefactSigning.IArtefactSigner> sp)
+                            (tryService<ToolUp.ArtefactSigning.IArtefactVerifier> sp)
+                            (fun () -> DateTime.UtcNow))
+                )
+                |> ignore
+
+                // The handlers are registered, never scheduled: a publication
+                // is scheduled by the source team's owner under the source's
+                // minted scope, and a refresh by the target's under its own
+                // (`FactPublicationJobs.schedulePublication` / `scheduleRefresh`).
+                s.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
+                    Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
+                        { new Microsoft.Extensions.Hosting.IHostedService with
+                            member _.StartAsync(_ct) =
+                                // Resolving the service here surfaces a
+                                // declaration defect at startup, not at the
+                                // first publication.
+                                let publication = sp.GetRequiredService<IFactPublication>()
+
+                                match tryService<IJobScheduler> sp with
+                                | Some scheduler ->
+                                    scheduler.RegisterHandler(
+                                        FactPublicationJobs.PublishHandler,
+                                        FactPublicationJobs.publishHandler publication
+                                    )
+
+                                    scheduler.RegisterHandler(
+                                        FactPublicationJobs.RefreshHandler,
+                                        FactPublicationJobs.refreshHandler publication
+                                    )
+                                | None -> ()
+
+                                System.Threading.Tasks.Task.CompletedTask
+
+                            member _.StopAsync(_ct) =
+                                System.Threading.Tasks.Task.CompletedTask
+                        })
+                )
+                |> ignore
+
+                s
+
+            let serviceConfig =
+                match app.Extensions.ServiceConfig with
+                | None -> Some register
+                | Some existing -> Some(fun s -> register (existing s))
+
+            {
+                app with
+                    Extensions = {
+                        app.Extensions with
+                            ServiceConfig = serviceConfig
+                    }
+            }
