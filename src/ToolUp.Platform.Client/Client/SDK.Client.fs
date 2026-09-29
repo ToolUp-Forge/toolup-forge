@@ -763,6 +763,13 @@ module Client =
         OccurredAt = System.DateTime.UtcNow
     }
 
+    /// The captured shell dispatcher as the shell reads it (see
+    /// `shellDispatcher`).
+    type private ShellDispatch = {
+        SendToShell: Msg -> unit
+        ShellIsActive: unit -> bool
+    }
+
     /// Module-level capture of the shell's Elmish `dispatch` function.
     /// Set once during `init` via `Cmd.ofEffect` (same pattern as the
     /// notification subscriber). Lets `ClientModuleContext.OnTeamSwitched`
@@ -775,13 +782,17 @@ module Client =
     /// — documented in the platform README's "No new side effects"
     /// exceptions list.
     ///
-    /// Typed via `IDispatcher<Msg>` (ToolUp.Elmish primitive — replaces
-    /// the legacy `(Msg -> unit) option` shape). Captured at program-start
-    /// via `Program.withDispatcherHandle`; `IsActive` flips to `false`
-    /// when `withTermination` triggers, so background callbacks check
-    /// before dispatching and no-op cleanly on hot-reload / teardown
+    /// Read off the program's `IDispatcher` (ToolUp.Elmish primitive —
+    /// replaces the legacy `(Msg -> unit) option` shape), captured at
+    /// program-start via `Program.withDispatcherHandle` by
+    /// `withShellLifetimeEffects`, for the shell and every composer over it
+    /// (Phase 931). A composer's loop takes its own message type, so what is
+    /// held is that dispatcher's `Dispatch` lifted through the composer's
+    /// shell-message constructor, beside its `IsActive` — which flips to
+    /// `false` when `withTermination` triggers, so background callbacks
+    /// check before dispatching and no-op cleanly on hot-reload / teardown
     /// rather than spraying messages at a dead loop.
-    let mutable private shellDispatcher: IDispatcher<Msg> option = None
+    let mutable private shellDispatcher: ShellDispatch option = None
 
     /// Optional caller-supplied UI to inject into the shell. Companion
     /// packages (notably ToolUp.AI) fill these slots from their own
@@ -870,8 +881,8 @@ module Client =
             Some(fun teamId ->
                 shellDispatcher
                 |> Option.iter (fun d ->
-                    if d.IsActive then
-                        d.Dispatch(TeamSwitched(Some teamId))))
+                    if d.ShellIsActive() then
+                        d.SendToShell(TeamSwitched(Some teamId))))
         else
             None
 
@@ -885,8 +896,8 @@ module Client =
             Some(fun () ->
                 shellDispatcher
                 |> Option.iter (fun d ->
-                    if d.IsActive then
-                        d.Dispatch RefreshAccessibleModules))
+                    if d.ShellIsActive() then
+                        d.SendToShell RefreshAccessibleModules))
         else
             None
 
@@ -1493,9 +1504,10 @@ module Client =
         // dispatch the same set.
         let bootLoadCommands = bootLoadCommandsFor _config
 
-        // Shell dispatcher capture lives at the `Program.run` site via
-        // `Program.withDispatcherHandle` (ToolUp.Elmish primitive) — see
-        // the run call below. The previous `Cmd.ofEffect`-capture pattern
+        // Shell dispatcher capture lives at the `Program` site via
+        // `Program.withDispatcherHandle` (ToolUp.Elmish primitive), inside
+        // `withShellLifetimeEffects` below so every composer gets it
+        // (Phase 931). The previous `Cmd.ofEffect`-capture pattern
         // (running once at init, writing the raw `Dispatch<Msg>` into a
         // mutable) is no longer needed: `IDispatcher<Msg>` is captured
         // before `init`'s commands fire, so background callbacks reading
@@ -4807,13 +4819,29 @@ module Client =
     /// its shell-message constructor (e.g. `ShellMsg`). One definition
     /// site, so the shell and every composer attach the same set and a
     /// new shell effect cannot be silently missing from a composed app.
+    ///
+    /// Phase 931 — it also captures the program's dispatcher as the
+    /// shell's (lifted through `wrap`), which is what the
+    /// `ClientModuleContext.OnTeamSwitched` and `OnAccessibleModulesChanged`
+    /// callbacks dispatch through. The capture used to live at
+    /// `Client.run`'s mount alone, so a composer that rebuilt the Program
+    /// from the shell's pieces (ToolUp.AI's `AIClientConfig.run`) handed
+    /// its modules two callbacks that did nothing.
     let withShellLifetimeEffects
         (config: ClientConfig)
         (wrap: Msg -> 'msg)
         (prog: Program<'arg, 'model, 'msg, 'view>)
         : Program<'arg, 'model, 'msg, 'view> =
+        let captureShellDispatcher (dispatcher: IDispatcher<'msg>) =
+            shellDispatcher <-
+                Some {
+                    SendToShell = fun msg -> dispatcher.Dispatch(wrap msg)
+                    ShellIsActive = fun () -> dispatcher.IsActive
+                }
+
         (prog, programLifetimeEffects config)
         ||> List.fold (fun p effect -> p |> Program.withEffect (EffectHandle.map wrap effect))
+        |> Program.withDispatcherHandle captureShellDispatcher
 
     /// The shell Program over a given shell view (whole-tree or sliced).
     let private programWith
@@ -4911,10 +4939,9 @@ module Client =
             else
                 Program.withReactStore store "elmish-app"
 
-        programWith (viewSliced store) config modules
-        |> Program.withDispatcherHandle (fun dispatcher -> shellDispatcher <- Some dispatcher)
-        |> bind
-        |> Program.run
+        // The shell dispatcher is captured by `withShellLifetimeEffects`,
+        // which `programWith` attaches (Phase 931).
+        programWith (viewSliced store) config modules |> bind |> Program.run
 
     /// Run the client application with the given modules. Convenience entry
     /// point — builds the shell Program and starts React. Applications that
