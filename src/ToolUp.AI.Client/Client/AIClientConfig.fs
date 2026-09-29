@@ -696,21 +696,138 @@ let appendAssistantModule (mode: AIAssistantMode) (modules: ErasedModule list) :
             PlatformAIKeysAdminUI.create ()
         ]
 
+// ─── Phase 910 — the composer's view, with one set of dispatchers per loop ──
+//
+// The shell holds two memo boundaries that key on its `dispatch` by
+// reference — the active module's dispatch prop (`moduleDispatchFor`) and
+// the sidebar's callbacks (`sidebarDispatchersFor`) — and each caches its
+// wrappers against the `dispatch` it is handed. Built inline in the view —
+// `ShellMsg >> dispatch` — the shell's `dispatch` was a fresh closure on
+// every render, so both caches missed on every render and neither boundary
+// held in this composer. The loop's own `dispatch` is created once per
+// `Program.runWithDispatch`, so the wrappers can be too: one set per loop,
+// cached against that `dispatch` by reference and rebuilt only when a
+// different loop renders (HMR re-runs the program; the cache follows).
+
+/// The two message routes the composer's view hands out, for one loop.
+type internal ComposerDispatchers = {
+    Shell: Client.Msg -> unit
+    SidePanel: SidePanelMsg -> unit
+}
+
+let mutable private composerDispatchCache: ((OuterMsg -> unit) * ComposerDispatchers) option =
+    None
+
+/// The composer's dispatchers for the loop's `dispatch`: the same functions
+/// every render, for as long as the same loop is running.
+let internal composerDispatchersFor (dispatch: OuterMsg -> unit) : ComposerDispatchers =
+    match composerDispatchCache with
+    | Some(cached, dispatchers) when obj.ReferenceEquals(cached, dispatch) -> dispatchers
+    | _ ->
+        let dispatchers = {
+            Shell = ShellMsg >> dispatch
+            SidePanel = SidePanelMsg >> dispatch
+        }
+
+        composerDispatchCache <- Some(dispatch, dispatchers)
+        dispatchers
+
+// The side-panel chrome handed to the shell, memoised per input. The
+// store-bound shell's chrome is a memo boundary that compares the chrome
+// record by reference, so a record rebuilt on every render would re-render
+// the chrome on a message that changed only a module's state. Every model
+// input the chrome reads is in the key, compared by reference (the
+// narrative too: a module that provides one re-renders the chrome when its
+// extractor returns a new document, which is the chrome reading what it
+// shows). The mode and the module list are fixed for the view's life, so
+// the cache belongs to the view (`composerView`), not to the module.
+
+let private sameInputs (a: obj array) (b: obj array) =
+    a.Length = b.Length && Array.forall2 (fun x y -> obj.ReferenceEquals(x, y)) a b
+
+/// The composer's view over a shell view: the side-panel chrome, and the
+/// shell rendered with the loop's stable shell dispatch. `shellView` is the
+/// whole-tree `Client.viewWithSignIn` (`withSidePanel`) or the store-bound
+/// `Client.viewSlicedOver` (`run`). Build it once per program: the view it
+/// returns keeps the last chrome record it built.
+let internal composerView
+    (mode: AIAssistantMode)
+    (allModules: ErasedModule list)
+    (shellView: Client.ExtraChrome -> Client.Model -> (Client.Msg -> unit) -> ReactElement)
+    : OuterModel -> (OuterMsg -> unit) -> ReactElement =
+    let lastChrome: (obj array * Client.ExtraChrome) option ref = ref None
+
+    let chromeFor (model: OuterModel) (sidePanelDispatch: SidePanelMsg -> unit) : Client.ExtraChrome =
+        let activeModule = Client.activeModuleId model.Shell
+        let activePage = Client.activePageRoute model.Shell
+        let narrative = Client.currentNarrative allModules model.Shell
+
+        let key: obj array = [|
+            box model.SidePanel
+            box activeModule
+            box activePage
+            box narrative
+            box sidePanelDispatch
+        |]
+
+        match lastChrome.Value with
+        | Some(cachedKey, chrome) when sameInputs cachedKey key -> chrome
+        | _ ->
+            let chrome: Client.ExtraChrome = {
+                HeaderAction = sidePanelHeaderAction mode model.SidePanel sidePanelDispatch
+                SidePanel = sidePanelView mode activeModule activePage narrative model.SidePanel sidePanelDispatch
+            }
+
+            lastChrome.Value <- Some(key, chrome)
+            chrome
+
+    fun (model: OuterModel) (dispatch: OuterMsg -> unit) ->
+        let dispatchers = composerDispatchersFor dispatch
+        shellView (chromeFor model dispatchers.SidePanel) model.Shell dispatchers.Shell
+
+/// The composer's update: shell messages to the shell, side-panel messages
+/// to the side panel, and the knowledge-base badge's navigation re-issued
+/// against the shell.
+let internal composerUpdate
+    (config: ClientConfig)
+    (queryBus: IModuleQueryBus)
+    (allModules: ErasedModule list)
+    (msg: OuterMsg)
+    (model: OuterModel)
+    : OuterModel * Cmd<OuterMsg> =
+    match msg with
+    | ShellMsg m ->
+        let s, c = Client.update config queryBus allModules m model.Shell
+        { model with Shell = s }, Cmd.map ShellMsg c
+    // The KB-inventory badge is owned by the side panel but its click
+    // navigates the shell. Intercept here and re-issue against the
+    // shell so the side panel's Msg surface stays free of shell
+    // concerns. Falls through to the generic side-panel handler for
+    // every other Msg.
+    | SidePanelMsg NavigateToKnowledgeBase ->
+        let s, c =
+            Client.update config queryBus allModules (Client.ModuleSelected "KnowledgeBase") model.Shell
+
+        { model with Shell = s }, Cmd.map ShellMsg c
+    | SidePanelMsg m ->
+        let s, c = sidePanelUpdate m model.SidePanel
+        { model with SidePanel = s }, Cmd.map SidePanelMsg c
+
+/// A fresh side-panel model, as the composer's `init` starts it.
+let internal composerSidePanelInit () : SidePanelModel = sidePanelInit ()
+
 // ─── Outer Program construction ──────────────────────────────────
 
-/// Wrap the shell Program with side-panel state, SSE subscription, and
-/// AI chrome. Pass-through behaviour when mode is NoAIAssistant — the
-/// wrapper is still built (so types line up) but the SSE subscription
-/// and chrome are both disabled.
-///
-/// Note: this builds an outer Program from the shell's init/update/view
-/// directly rather than composing over an already-built Program. Elmish
-/// does not expose Program's internal pieces post-construction, so the
-/// shell pieces need to be stitched into the outer Program at build time.
-let withSidePanel
+// The composer's Program over a shell view (whole-tree or store-bound).
+// It builds an outer Program from the shell's init/update/view directly
+// rather than composing over an already-built Program: Elmish does not
+// expose a Program's pieces post-construction, so the shell pieces are
+// stitched into the outer Program at build time.
+let private composerProgram
     (mode: AIAssistantMode)
     (config: ClientConfig)
     (modules: ErasedModule list)
+    (shellViewFor: ErasedModule list -> Client.ExtraChrome -> Client.Model -> (Client.Msg -> unit) -> ReactElement)
     : Program<unit, OuterModel, OuterMsg, ReactElement> =
 
     // Phase 13a — `Client.boot` performs the boot-time composition
@@ -752,53 +869,19 @@ let withSidePanel
 
         {
             Shell = shellModel
-            SidePanel = sidePanelInit ()
+            SidePanel = composerSidePanelInit ()
         },
         Cmd.map ShellMsg shellCmd
 
-    let outerUpdate (msg: OuterMsg) (model: OuterModel) : OuterModel * Cmd<OuterMsg> =
-        match msg with
-        | ShellMsg m ->
-            let s, c = Client.update config queryBus allModules m model.Shell
-            { model with Shell = s }, Cmd.map ShellMsg c
-        // The KB-inventory badge is owned by the side panel but its click
-        // navigates the shell. Intercept here and re-issue against the
-        // shell so the side panel's Msg surface stays free of shell
-        // concerns. Falls through to the generic side-panel handler for
-        // every other Msg.
-        | SidePanelMsg NavigateToKnowledgeBase ->
-            let s, c =
-                Client.update config queryBus allModules (Client.ModuleSelected "KnowledgeBase") model.Shell
+    let outerUpdate = composerUpdate config queryBus allModules
 
-            { model with Shell = s }, Cmd.map ShellMsg c
-        | SidePanelMsg m ->
-            let s, c = sidePanelUpdate m model.SidePanel
-            { model with SidePanel = s }, Cmd.map SidePanelMsg c
-
-    let outerView (model: OuterModel) (dispatch: OuterMsg -> unit) : ReactElement =
-        let sidePanelDispatch = SidePanelMsg >> dispatch
-
-        let chrome: Client.ExtraChrome = {
-            HeaderAction = sidePanelHeaderAction mode model.SidePanel sidePanelDispatch
-            SidePanel =
-                sidePanelView
-                    mode
-                    (Client.activeModuleId model.Shell)
-                    (Client.activePageRoute model.Shell)
-                    (Client.currentNarrative allModules model.Shell)
-                    model.SidePanel
-                    sidePanelDispatch
-        }
-
-        // Phase 3b.B — route through `viewWithSignIn` (not the raw
-        // `Client.view`) so the configured `AuthUI` gates this composer's
-        // shell too. Calling `Client.view` directly bypassed
-        // `AuthUIProvider.gate` entirely, so a deployment that opted into
-        // OIDC sign-in via `ClientConfig.AuthUI = OidcAuthUI _` while
-        // wiring AI via `AIClientConfig.run` never rendered the sign-in
-        // screen — the shell loaded straight through for unauthenticated
-        // visitors and every Remoting call 401'd behind it.
-        Client.viewWithSignIn config allModules chrome model.Shell (ShellMsg >> dispatch)
+    // Phase 3b.B — the shell view routes through the sign-in gate (both
+    // `viewWithSignIn` and the store-bound `viewSlicedOver` do), so the
+    // configured `AuthUI` gates this composer's shell too. Calling the raw
+    // `Client.view` bypassed `AuthUIProvider.gate` entirely, so a
+    // deployment that opted into OIDC sign-in while wiring AI via
+    // `AIClientConfig.run` never rendered the sign-in screen.
+    let outerView = composerView mode allModules (shellViewFor allModules)
 
     // 0.4.1 — structured `withErrorReporter` replaces the upstream-shape
     // `withConsoleTrace` shim (removed in Phase 815) here too. Trace and error routing follow the
@@ -854,6 +937,21 @@ let withSidePanel
     | Some effect -> progWithShellEffects |> Program.withEffect effect
     | None -> progWithShellEffects
 
+/// Wrap the shell Program with side-panel state, SSE subscription, and
+/// AI chrome. Pass-through behaviour when mode is NoAIAssistant — the
+/// wrapper is still built (so types line up) but the SSE subscription
+/// and chrome are both disabled.
+///
+/// Its view renders the whole shell per message (`Client.viewWithSignIn`),
+/// so any React binding can mount it; `run` mounts the store-bound
+/// composition instead (Phase 910).
+let withSidePanel
+    (mode: AIAssistantMode)
+    (config: ClientConfig)
+    (modules: ErasedModule list)
+    : Program<unit, OuterModel, OuterMsg, ReactElement> =
+    composerProgram mode config modules (fun allModules -> Client.viewWithSignIn config allModules)
+
 /// Build the Elmish `Program` with the AI assistant module prepended,
 /// the side-panel state machine wrapped around the shell, the SSE
 /// subscription wired, and the chrome rendered alongside the module
@@ -885,6 +983,16 @@ let run (mode: AIAssistantMode) (config: ClientConfig) (modules: ErasedModule li
     if Client.tryDispatchPublicEntry config then
         ()
     else
-        program mode config modules
-        |> Program.withReactSynchronous "elmish-app"
+        // Phase 910 — the store-bound composition, as `Client.run` mounts
+        // the shell: the composer publishes its model to one store per
+        // run, and the shell's chrome and active module read their slices
+        // of `OuterModel.Shell` from it, so a module message re-renders
+        // that module and no chrome, and a side-panel message re-renders
+        // the chrome and no module.
+        let store = ModelStore.create<OuterModel, OuterMsg> ()
+        let shell = Client.shellStore store _.Shell
+
+        composerProgram mode config (appendAssistantModule mode modules) (fun allModules ->
+            Client.viewSlicedOver shell config allModules)
+        |> Program.withReactStore store "elmish-app"
         |> Program.run
