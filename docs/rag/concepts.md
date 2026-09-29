@@ -135,6 +135,56 @@ See [`companions/vector-stores.md`](../companions/vector-stores.md) for the full
 
 The `IVectorStore` contract is portable; the shared contract cases (deterministic ordering, scope isolation, the tombstone lifecycle) are bound against every implementation, so any impl is drop-in.
 
+## Keyword index
+
+The sparse (lexical) leg of hybrid retrieval is an `ISparseIndex`, composed the way the vector store is (Phase 893):
+
+| Composition | Keyword index |
+|---|---|
+| nothing (the default) | the in-process `InMemoryBM25Index`, with the composed `withSparseAnalyzer` analyzer, exactly as before the builders existed |
+| `withSparseIndex index` | the supplied index, registered verbatim. Composing it together with `withSparseAnalyzer` is refused at composition, because the analyzer would be silently ignored |
+| `withAnalyzedSparseIndex build` | an index built at composition for the composed analyzer (the identity analyzer when none). An index that tokenises in its own engine uses this seam to map the analyzer, or refuse it by name |
+| `withoutSparseIndex` | none: dense retrieval only. Fusion over one list is that list, so the pipeline takes its dense-only path, and no `ISparseIndex` is registered |
+
+`ToolUp.SparseIndices.Postgres` holds the keyword index in PostgreSQL: a `tsvector` column, a GIN index, and
+scope in every predicate. It maps the identity analyzer to the `simple` text-search configuration and the
+Snowball English analyzer to `english`, and refuses anything else at composition. It ranks with PostgreSQL's
+`ts_rank`, not BM25. That function has no IDF term, so the keyword leg's order (the part fusion reads) can
+differ from the in-process index's. The companion README records the retrieval-evaluation numbers for both
+indexes side by side.
+
+The `ISparseIndexContract` pack pins scope isolation, deletes that stay deleted across a restart, and the
+ordering of equal scores (`(Scope, ChunkId)`). It is bound to both implementations.
+
+## Single-instance and multi-replica stores
+
+A retrieval store is **single-instance** when its state lives in one process's memory, even if that memory is
+persisted to blob storage. On more than one replica, each replica then holds its own copy. A chunk ingested on
+one replica is missing from another's retrieval until a flush-and-reload, so the same query returns different
+results depending on which replica served the turn.
+
+| Store | Default | Single-instance? | Replace with, for replicas |
+|---|---|---|---|
+| Vector store | `InMemoryVectorStore` | yes | `ToolUp.VectorStores.Pgvector` (`withVectorStore`) |
+| Vector store | `ToolUp.VectorStores.Hnsw` | yes: the graph is in process memory | `ToolUp.VectorStores.Pgvector` |
+| Vector store | `ToolUp.VectorStores.Pgvector` | no: the index is the database | — |
+| Keyword index | `InMemoryBM25Index` | yes | `ToolUp.SparseIndices.Postgres` (`withSparseIndex` / `withAnalyzedSparseIndex`) |
+| Keyword index | `ToolUp.SparseIndices.Postgres` | no: the index is the database | — |
+| Ingestion queue | process-local channel | yes | `ToolUp.IngestionQueues.Redis` (`withDurableIngestionQueue`) |
+| Embedding cache | `InMemoryEmbeddingCache` | yes (correct, but per replica) | `ToolUp.EmbeddingCaches.Redis` (`withEmbeddingCache`) |
+
+Startup validators hold this table against `ServerConfig.ReplicaCount`. At a replica count above one:
+
+- `rag-in-process-index-replicas` **warns** when the vector store or the keyword index is in-process, naming
+  the store and the companion that replaces it.
+- `rag-ingestion-instance` **refuses** the process-local ingestion queue, because documents are lost, not just
+  served inconsistently.
+- `team-mode-shared-embedding-cache` **warns** about the process-local embedding cache in Team mode.
+
+Each validator is silent at one replica, and each is lifted by composing the store that removes its premise. The
+lift is keyed on the composed instance, not on a builder having been called: an `InMemoryBM25Index` composed by
+hand through `withSparseIndex` still warns.
+
 ## Retrieval pipeline
 
 `IRetrievalPipeline` is the high-level facade:
@@ -169,7 +219,7 @@ and MergeStrategy =
 1. **Scope-access validation** — `authorisedScopes` filters the request's `Scopes` against `AccessContext.TeamId`. A mismatched `Team teamId` is dropped (not errored). `Platform` and `Deployment` scopes survive when enabled.
 2. **Embedding generation** — `IEmbeddingProvider.GenerateEmbedding` produces the query vector. Goes through `CachingEmbeddingProvider` decorator (LRU, keyed by SHA256 of text — raw query never lands in cache key).
 3. **Dense search** — `IVectorStore.Search` against the authorised scopes, top-K with `MinScore` floor.
-4. **Sparse search** (if `MergeStrategy` includes it) — BM25 against the same scopes, top-K. Tokenisation is pluggable via `ISparseAnalyzer` — the shipped default is Unicode word runs, lower-cased, and a language companion adds stemming / stop-word removal / CJK segmentation. See [Sparse analyzers](../companions/sparse-analyzers.md).
+4. **Sparse search** (if `MergeStrategy` includes it and a keyword index is composed, see [Keyword index](#keyword-index)) — BM25 by default, against the same scopes, top-K. Tokenisation is pluggable via `ISparseAnalyzer` — the shipped default is Unicode word runs, lower-cased, and a language companion adds stemming / stop-word removal / CJK segmentation. See [Sparse analyzers](../companions/sparse-analyzers.md).
 5. **Merge** — weighted combination per strategy. Hybrid default: 70% dense + 30% sparse.
 6. **Rerank** (if `IReranker` registered + strategy uses it) — cross-encoder rescore on the merged candidate pool, top-K from reranked.
 7. **Origin filter** — drop chunks whose `Origin` isn't in `OriginFilter`.

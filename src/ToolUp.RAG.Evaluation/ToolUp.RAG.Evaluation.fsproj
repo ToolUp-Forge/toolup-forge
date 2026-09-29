@@ -43,6 +43,9 @@
          language analyzer's retrieval-quality claim rather than assert it. -->
     <ProjectReference Include="..\SparseIndices\Snowball\ToolUp.SparseIndices.Snowball.fsproj" />
     <ProjectReference Include="..\SparseIndices\Cjk\ToolUp.SparseIndices.Cjk.fsproj" />
+    <!-- Phase 893 — the database keyword index, so the harness measures it
+         side by side with the in-process one (the sparse-index postgres arm). -->
+    <ProjectReference Include="..\SparseIndices\Postgres\PostgresFullTextIndex.fsproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="FSharp.Core" />
