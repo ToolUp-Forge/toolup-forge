@@ -862,6 +862,14 @@ module Names =
     [<Literal>]
     let beirCache = "TOOLUP_BEIR_CACHE"
 
+    /// Test- and benchmark-only: the Azurite emulator connection string.
+    [<Literal>]
+    let parityAzurite = "TOOLUP_PARITY_AZURITE"
+
+    /// Test- and benchmark-only: the live pgvector connection string.
+    [<Literal>]
+    let pgvectorConnectionString = "TOOLUP_PGVECTOR_CONNECTION_STRING"
+
     [<Literal>]
     let remotingAnalyzerAudit = "TOOLUP_REMOTING_ANALYZER_AUDIT"
 
@@ -2705,6 +2713,24 @@ let all: ConfigKeyDescriptor list = [
         Type = StringKey
         Default = None
         IsSecret = false
+        Category = ToolingCategory
+    }
+    {
+        EnvVar = Names.parityAzurite
+        Description =
+            "Test- and benchmark-only: Azurite emulator connection string; when set, arms the emulator legs of the cloud-parity pack and the RAG load benchmark."
+        Type = StringKey
+        Default = None
+        IsSecret = true
+        Category = ToolingCategory
+    }
+    {
+        EnvVar = Names.pgvectorConnectionString
+        Description =
+            "Test- and benchmark-only: PostgreSQL (pgvector) connection string; when set, arms the live pgvector legs of the vector-store pack and the RAG load benchmark."
+        Type = StringKey
+        Default = None
+        IsSecret = true
         Category = ToolingCategory
     }
     {

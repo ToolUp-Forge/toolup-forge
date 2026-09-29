@@ -1977,6 +1977,7 @@ ToolUp.Platform.CompositionRuleVersions.ApplianceBootPostureFamily : System.Stri
 ToolUp.Platform.CompositionRuleVersions.CompositionFamily : System.String (literal)
 ToolUp.Platform.CompositionRuleVersions.DataFootprintFamily : System.String (literal)
 ToolUp.Platform.CompositionRuleVersions.EventTopologyFamily : System.String (literal)
+ToolUp.Platform.CompositionRuleVersions.FactTableFamily : System.String (literal)
 ToolUp.Platform.CompositionRuleVersions.ManifestVersion : ToolUp.Platform.RuleVersion { get }
 ToolUp.Platform.CompositionRuleVersions.ScaleReadinessFamily : System.String (literal)
 ToolUp.Platform.CompositionRuleVersions.allRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VersionedCompositionRule] { get }
@@ -1989,6 +1990,7 @@ ToolUp.Platform.CompositionRuleVersions.currentStamp : ToolUp.Platform.RuleEvalu
 ToolUp.Platform.CompositionRuleVersions.dataFootprintRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VersionedCompositionRule] { get }
 ToolUp.Platform.CompositionRuleVersions.driftSince(ToolUp.Platform.RuleEvaluationStamp) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.StampedRuleVersion, ToolUp.Platform.RuleVersionBump]]
 ToolUp.Platform.CompositionRuleVersions.eventTopologyRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VersionedCompositionRule] { get }
+ToolUp.Platform.CompositionRuleVersions.factTableRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VersionedCompositionRule] { get }
 ToolUp.Platform.CompositionRuleVersions.overrides : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.RuleVersion]] { get }
 ToolUp.Platform.CompositionRuleVersions.scaleReadinessRules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VersionedCompositionRule] { get }
 ToolUp.Platform.CompositionRuleVersions.seed(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.RuleVersion]], System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CompositionRuleDescriptor]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VersionedCompositionRule]
