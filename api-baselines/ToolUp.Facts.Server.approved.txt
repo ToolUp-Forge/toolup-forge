@@ -512,6 +512,29 @@ ToolUp.Facts.FactBatchAssertedEvent (class)
 ToolUp.Facts.FactBatchAssertedEvent..ctor(ToolUp.Facts.BatchAssertReceipt, System.DateTime)
 ToolUp.Facts.FactBatchAssertedEvent.AsOf : System.DateTime { get }
 ToolUp.Facts.FactBatchAssertedEvent.Receipt : ToolUp.Facts.BatchAssertReceipt { get }
+ToolUp.Facts.FactBrowseHandler (class)
+ToolUp.Facts.FactBrowseHandler.api(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String) : ToolUp.Facts.IFactBrowseApi
+ToolUp.Facts.FactBrowseHandler.factBrowseApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Facts.IFactBrowseApi
+ToolUp.Facts.FactBrowseHandler.getFact(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactDetailView, System.String]]
+ToolUp.Facts.FactBrowseHandler.getRunMovers(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactRunMovers, System.String]]
+ToolUp.Facts.FactBrowseHandler.getTable(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactTableDetail, System.String]]
+ToolUp.Facts.FactBrowseHandler.handler : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]] { get }
+ToolUp.Facts.FactBrowseHandler.listRuns(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.Int32, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactRunPage, System.String]]
+ToolUp.Facts.FactBrowseHandler.listTables(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableListing], System.String]]
+ToolUp.Facts.FactBrowseHandler.notifyingWriter(ToolUp.Platform.INotificationChannel, ToolUp.Facts.IFactTableWriter) : ToolUp.Facts.IFactTableWriter
+ToolUp.Facts.FactBrowseHandler.queryRows(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, ToolUp.Facts.FactRowQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactRowPage, System.String]]
+ToolUp.Facts.FactBrowseHandler.runNotice(System.String, System.String, ToolUp.Platform.Grounding.FactTableCommit) : ToolUp.Facts.FactTableRunNotice
+ToolUp.Facts.FactBrowseHandler.runTrigger(System.String, System.String) : System.String
+ToolUp.Facts.FactBrowseHandler.tableMethod(ToolUp.Platform.Grounding.FactTableDefinition) : ToolUp.Facts.MethodRef
+ToolUp.Facts.FactBrowseHandler.withFactBrowse(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Facts.FactBrowseHandler+FactBrowseDeps (class)
+ToolUp.Facts.FactBrowseHandler+FactBrowseDeps..ctor(ToolUp.Platform.Grounding.IFactTableRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IFactTableWriter], ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
+ToolUp.Facts.FactBrowseHandler+FactBrowseDeps.Clock : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime] { get }
+ToolUp.Facts.FactBrowseHandler+FactBrowseDeps.Gate : ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate { get }
+ToolUp.Facts.FactBrowseHandler+FactBrowseDeps.Registry : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry] { get }
+ToolUp.Facts.FactBrowseHandler+FactBrowseDeps.Store : ToolUp.Facts.IFactStore { get }
+ToolUp.Facts.FactBrowseHandler+FactBrowseDeps.Tables : ToolUp.Platform.Grounding.IFactTableRegistry { get }
+ToolUp.Facts.FactBrowseHandler+FactBrowseDeps.Writer : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IFactTableWriter] { get }
 ToolUp.Facts.FactDerivationGraph (class)
 ToolUp.Facts.FactDerivationGraph..ctor(Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.Fact], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]])
 ToolUp.Facts.FactDerivationGraph.Facts : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.Fact] { get }

@@ -212,6 +212,7 @@ KnowledgeListView.KnowledgeListView(KnowledgeListView+KnowledgeListConfig, Micro
 KnowledgeListView.formatSize(System.Int64) : System.String
 KnowledgeListView.hasVersionHistory(SharedTypes+KnowledgeDocument) : System.Boolean
 KnowledgeListView+Badges (class)
+KnowledgeListView+Badges.factTableBadge(SharedTypes+KnowledgeSource) : Fable.React.ReactElement
 KnowledgeListView+Badges.fileTypeBadge(System.String) : Fable.React.ReactElement
 KnowledgeListView+Badges.sourceBadge(SharedTypes+KnowledgeSource) : Fable.React.ReactElement
 KnowledgeListView+Badges.sourceBadgeWith(ToolUp.Platform.KnowledgeListMessages, SharedTypes+KnowledgeSource) : Fable.React.ReactElement
