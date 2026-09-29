@@ -136,6 +136,9 @@ let allTests =
         // Phase 908 - every identity-change route clears the declared-read
         // cache: tokens, boot configuration, the team switch, another tab.
         IdentityChangeReadCacheTests.tests
+        // Phase 895 - the fact browse client companion and the knowledge
+        // base list's fact-table badge.
+        FactBrowseClientTests.tests
     ]
 
 // Phase 849 — `output/Program.js ClientBench` runs the browser-runtime
