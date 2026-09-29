@@ -343,6 +343,10 @@ let composeAI (app: AIServerApp) : ServerApp =
             makeApi (aiSettingsApi aiProviderFactory providerProfile)
             // Phase 859 — the active team's conversation visibility level.
             makeApi TeamConversationPolicyStore.teamConversationVisibilityApi
+            // Phase 896 — the active team's output visibility level (held in
+            // the same per-team record; answers "not enabled" unless team
+            // output visibility is composed).
+            makeApi TeamConversationPolicyStore.teamOutputVisibilityApi
             // Phase 70 — Platform Admin AI keys API. Every method
             // is gated server-side on canModifyPlatformConfig; the
             // client-side module is hidden from non-admin sidebars by
@@ -582,6 +586,20 @@ let composeAI (app: AIServerApp) : ServerApp =
                 // the env vars).
                 .AddSingleton<ConfigValidation.IConfigValidator>(AIProviderEnvValidator.create aiProviderFactory)
                 .AddSingleton<ConfigValidation.IConfigValidator>(AIModelEnvValidator.create aiProviderFactory)
+                // Phase 896 — how the disclosure gate reads a team's output
+                // level (the per-team policy record), and the startup check
+                // that the deployment's two visibility defaults do not
+                // already conflict. Both are inert until team output
+                // visibility is composed.
+                .AddSingleton<ITeamOutputVisibilitySource>(
+                    Func<IServiceProvider, ITeamOutputVisibilitySource>(fun sp ->
+                        TeamConversationPolicyStore.TeamPolicyOutputVisibilitySource(sp) :> ITeamOutputVisibilitySource)
+                )
+                .AddSingleton<ConfigValidation.IConfigValidator>(
+                    Func<IServiceProvider, ConfigValidation.IConfigValidator>(fun sp ->
+                        TeamConversationPolicyStore.TeamVisibilityDefaultsValidator(sp)
+                        :> ConfigValidation.IConfigValidator)
+                )
 
         // Phase 47 — the sustained-denial rate monitor. Registered ONLY
         // when the deployment declared a policy via
