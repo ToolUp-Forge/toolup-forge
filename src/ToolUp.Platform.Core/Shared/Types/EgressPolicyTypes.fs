@@ -321,7 +321,7 @@ module DisclosurePolicyRefSnapshot =
     /// report, so an operator reading the report and a composition tier
     /// reading its mirror can say whether they hold the same vocabulary.
     [<Literal>]
-    let Version = "796.1"
+    let Version = "895.1"
 
     /// The token a payload with no computed lineage renders as — the one
     /// value in the vocabulary that is not a policy ref.
@@ -346,6 +346,7 @@ module DisclosurePolicyRefSnapshot =
         "Export"
         "Webhook"
         "PeerEgress"
+        "Browse"
     ]
 
     /// The outbound-call surfaces the egress policy decides over — the

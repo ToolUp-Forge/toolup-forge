@@ -556,6 +556,13 @@ type FactEgressSurface =
     /// federation edge must not have to also narrow what may reach a
     /// webhook, and an audit row must say which one it was.
     | FactPeerEgress
+    /// A fact row served to a person browsing the fact tables (Phase 895).
+    /// Its own door, as exports and webhooks are, so an operator can
+    /// narrow what a browsing user sees without narrowing what the model
+    /// or an export sees, and an audit row says which one it was. A row
+    /// the viewer may not see is ABSENT from the page (the retrieval-door
+    /// posture), and the page reports a withheld count and no value.
+    | FactBrowse
 
 module FactEgressSurface =
     /// Canonical string form, shared by audit events and diagnostics.
@@ -567,6 +574,7 @@ module FactEgressSurface =
         | FactExport -> "Export"
         | FactWebhook -> "Webhook"
         | FactPeerEgress -> "PeerEgress"
+        | FactBrowse -> "Browse"
 
 /// Per-fact outcome of the disclosure predicate at one egress surface.
 type FactDisclosureVerdict =
@@ -1012,3 +1020,96 @@ module FactClausePlanOptions =
         o with
             TimeoutMs = max 1 (min 30_000 o.TimeoutMs)
     }
+// ─── Fact browse links (Phase 895) ───────────────────────────────────
+//
+// The fact tier's browse surface is its own client companion, and two
+// OTHER companions link into it: the knowledge base list (a coverage
+// narrative's fact-table badge) and the conversation panel (a fact
+// citation's "open the row"). Neither may import the fact client — a
+// deployment composes any subset of the three — so the names they share
+// live here, in the tier every client already compiles, as plain data:
+// the browse module's id and page routes, the cross-module event topics
+// the browse module subscribes to, and the provenance keys that identify
+// a coverage narrative. A link is only ever offered when the browse
+// module is in the shell's published module list, so a composition
+// without it renders exactly as it did before this phase (GP 13).
+
+/// Shared names for linking into the fact browse surface (Phase 895)
+/// without taking a dependency on the fact client companion.
+[<RequireQualifiedAccess>]
+module FactBrowseLinks =
+
+    /// The browse module's client id. Reserved under the fact tier's
+    /// `_facts` namespace, so it never collides with an application
+    /// module's RBAC-managed name.
+    [<Literal>]
+    let ModuleId = "_facts.Browse"
+
+    /// Page route of the table list.
+    [<Literal>]
+    let TablesRoute = "/tables"
+
+    /// Page route of one table's detail: run history and population
+    /// summary.
+    [<Literal>]
+    let TableRoute = "/table"
+
+    /// Page route of the drill-down: paged rows of one table and the
+    /// provenance of one fact.
+    [<Literal>]
+    let RowsRoute = "/rows"
+
+    /// The shell sidebar id of one of the browse module's pages — the
+    /// value `NavigationRequest.request` takes.
+    let sidebarId (route: string) : string = ModuleId + route
+
+    /// Whether a published module list (the shell's `RegisteredModules`
+    /// snapshot, as module ids) carries the browse module. Every link
+    /// into the surface is gated on this.
+    let isComposed (moduleIds: string list) : bool = List.contains ModuleId moduleIds
+
+    /// Event topic: open one table's detail page. Payload: the table id.
+    [<Literal>]
+    let OpenTableTopic = "facts/open-table"
+
+    /// Event topic: open the tables that carry one metric. Payload: the
+    /// metric id. The list page filters to those tables, and opens the
+    /// table directly when exactly one carries it.
+    [<Literal>]
+    let OpenMetricTopic = "facts/open-metric"
+
+    /// Event topic: open one fact's row and provenance. Payload: the fact
+    /// id.
+    [<Literal>]
+    let OpenFactTopic = "facts/open-fact"
+
+    /// `NarrativeDocSource.ModuleId` of a coverage narrative (Phase 707) —
+    /// the fact store's `_facts` source suffixed `.coverage`. Pinned
+    /// against the producing constant by the fact tier's tests.
+    [<Literal>]
+    let CoverageNarrativeModuleId = "_facts.coverage"
+
+    /// Prefix of a coverage narrative's settings key; the rest of the key
+    /// is the metric id (`metric-coverage:<metricId>`).
+    [<Literal>]
+    let CoverageSettingsKeyPrefix = "metric-coverage:"
+
+    /// The metric a knowledge document describes, when its narrative
+    /// provenance (module id + settings key) is a coverage narrative's.
+    /// `None` for every other document.
+    let coverageMetric (moduleId: string) (settingsKey: string) : string option =
+        if
+            moduleId = CoverageNarrativeModuleId
+            && not (isNull settingsKey)
+            && settingsKey.StartsWith CoverageSettingsKeyPrefix
+            && settingsKey.Length > CoverageSettingsKeyPrefix.Length
+        then
+            Some(settingsKey.Substring CoverageSettingsKeyPrefix.Length)
+        else
+            None
+
+    /// `CustomNotification` key published once per committed fact-table
+    /// run, never per fact. The payload carries the table id, the run id
+    /// and the run's counts — existence-level figures, never a value.
+    [<Literal>]
+    let RunCommittedNotificationKey = "Facts.TableRunCommitted"
