@@ -16,6 +16,9 @@
         <Compile Include="Shared\PopulationQueryTypes.fs" />
         <Compile Include="Shared\DisclosureTypes.fs" />
         <Compile Include="Shared\PlanTypes.fs" />
+        <!-- Phase 889 — the delegate fact: a population held as one record
+             pointing at a declared fact table. -->
+        <Compile Include="Shared\DelegateFactTypes.fs" />
     </ItemGroup>
     <!-- FSharp.Core is implicit via the .NET SDK. -->
 </Project>

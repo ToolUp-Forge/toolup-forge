@@ -1769,6 +1769,15 @@ let aiAssistantApi
 
                 let bgWork (shutdownToken: System.Threading.CancellationToken) = async {
                     try
+                        // Phase 896 — the turn runs on the chat worker, where the
+                        // request's ambient context does not flow. Re-establish
+                        // the request's viewer from the items carried forward,
+                        // so the disclosure gate decides this turn's retrieval
+                        // and tool results for this user, not for nobody.
+                        use _viewer =
+                            let viewer = RequestViewer.ofItems bgCtx.Items
+                            RequestViewerContext.establish (fun () -> viewer)
+
                         // Phase 6h follow-up — Workstream B. Trace the
                         // user/task fingerprint at bgWork entry so a
                         // `TOOLUP_TRACE_CATEGORIES=ai.agent` operator can

@@ -182,6 +182,17 @@ module internal GiraffeUtil =
         // dispatch path's own decode and hands the result on (see
         // `Proxy.ApiProxy`): one parse, one decode, and validation sees the
         // value the handler receives.
+        //
+        // Phase 906 — for a record whose generated table is registered
+        // (`GeneratedInvocation.register`), the proxy serves each covered
+        // method through its GENERATED invocation, and the rest through the
+        // reflective proxy (built lazily, on the first request that needs
+        // it). The table is composed inside the proxy, not beside it: every
+        // stage below is keyed off this one `apiProxy`, so auth, rate limit,
+        // validation, idempotency, audit and telemetry run around a
+        // generated method exactly as around a reflective one — the
+        // generated call is the chain's innermost stage, never a route of
+        // its own. `GeneratedInvocationChainTests` pins it stage by stage.
         let apiProxy = makeApiProxyWithParse options
         let rmsManager = getRecyclableMemoryStreamManager options
 

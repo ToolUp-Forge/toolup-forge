@@ -2,6 +2,7 @@ namespace ToolUp.Remoting.Server
 
 open System
 open System.Reflection
+open System.Text.Json
 open System.Threading.Tasks
 
 // =============================================================================
@@ -9,63 +10,49 @@ open System.Threading.Tasks
 // =============================================================================
 //
 // This file ships the RUNTIME-side substrate of Phase 69k:
-//   * `IGeneratedDispatchTable<'impl>` — the contract a source-generator
-//     emits one implementation of per API record type.
-//   * `GeneratedDispatchRegistry` — the runtime registry where consumers
-//     (or a generator) register emitted tables. NO adapter consults it:
-//     see "Phase 856.A, refuted" below before wiring one.
+//   * `IGeneratedDispatchTable<'impl>` — the 69k v0 contract. NO adapter
+//     composes it, and none will: see "Phase 906" below.
+//   * `GeneratedDispatchRegistry` — the runtime registry where a generator's
+//     emitted `register ()` places its table.
 //   * `[<DispatcherTarget>]` marker attribute the source-generator would
 //     scan for when emitting tables.
+//   * (Phase 906) `GeneratedArguments`, `GeneratedMethod<'impl>`,
+//     `GeneratedInvocationTable<'impl>` and the `GeneratedInvocation`
+//     builders — the shape the generator's dispatch emission now targets.
 //
-// The actual F# / Roslyn source-generator project is a follow-up; this v0
-// SHIPS THE RUNTIME so consumers (and the generator) have a stable target,
-// and ships a HAND-WRITTEN reference impl (see harness `JobReportDispatchTable`)
-// to prove the runtime composes correctly.
+// ─── Phase 906 — the generated invocation runs INSIDE the pre-flight chain ─
 //
-// Performance promise: when a generated table is registered, the dispatcher
-// skips reflection-driven method lookup and arg deserialisation at startup
-// (the table emits direct compile-time-typed dispatch code). v0 reuses the
-// existing proxy for the actual invocation; a later phase swaps in the
-// generator's emitted invocation thunks for the per-method hot path.
+// Phase 804 measured a cold-start gain from dispatching without the
+// reflective proxy build; Phase 856.A found it unrealisable as then
+// specified, for two reasons, both of which this phase answers:
 //
-// ─── Phase 856.A, refuted: there is no table for the adapter to consult ───
+//   1. Nothing produced a table. The generator's dispatch emission
+//      (`ToolUp.Remoting.Generator`, `Dispatch.fs`) now emits, per API
+//      record, an `invocations: GeneratedInvocationTable<'impl>` and a
+//      `register ()` that places it here.
 //
-// Phase 856 asked for `buildDispatcherTable` to consult this registry for
-// the records the generator covers, to realise the ~30 % cold-start gain
-// Phase 804 measured. Checked against the tree before building it, the
-// premise does not hold, in two independent ways:
+//   2. A route handler that writes its own response would run OUTSIDE the
+//      adapter's pre-flight chain (auth, rate limit, validation,
+//      idempotency, audit, telemetry) — an authorisation bypass. So the
+//      emitted invocation is NOT a route handler. It is one method's
+//      endpoint INSIDE the proxy: the proxy (`Proxy.fs`) consults this
+//      registry when it is built and, for every method the table covers,
+//      composes the generated call where it would otherwise have built a
+//      reflective endpoint. The adapter's chain is keyed off the proxy's
+//      `InvocationResult` exactly as before, so every stage runs around a
+//      generated method as it runs around a reflective one — the invocation
+//      is the chain's innermost stage, never a parallel route.
 //
-//   1. NOTHING PRODUCES AN `IGeneratedDispatchTable`. The Phase 804
-//      generator (`ToolUp.Remoting.Generator`, `ToolUpRemotingDispatch`)
-//      emits a `methods` manifest and one typed ARGUMENT PARSE per method
-//      (`decode<Method>Args`); it deliberately emits no handler invocation
-//      and no result serialisation (docs/migrations/69k-source-generator-
-//      dispatcher.md, "What the generator emits"). The only registration in
-//      the tree is a hand-written table in the remoting harness's tests. A
-//      consumer in the adapter would be a branch no deployment can reach.
-//
-//   2. THE MEASURED GAIN IS NOT A REGISTRY LOOKUP. 804's generated dispatch
-//      arm (src/ToolUp.Remoting.Benchmarks) skips `Proxy.makeApiProxy`
-//      entirely and calls the handler DIRECTLY, with the invocation and the
-//      serialise written by hand in the benchmark. The cold-start delta is
-//      the reflective proxy's build over every method of the record —
-//      re-measured for Phase 856 on 2026-09-27 (Release, min of five fresh
-//      boots, a loaded machine): 106.9 ms generated against 158.7 ms
-//      reflection for the same five methods. The adapter cannot drop that
-//      build by consulting a registry: its pre-flight chain (auth, rate
-//      limit, validation, idempotency, audit, telemetry) is keyed off the
-//      proxy's `InvocationResult`, and a `'TContext -> 'TImpl -> Task` route
-//      handler that writes its own response would run OUTSIDE that chain —
-//      an authorisation bypass, not an optimisation. 69k.C recorded the
-//      same boundary and decided the walk stays.
-//
-// So realising the gain needs, first, a generator that emits invocation
-// returning the proxy's `InvocationResult` shape (a surface 69k declined to
-// widen), and then the adapter composing it inside the chain. That is a
-// phase of its own, not a wiring step; until it exists this registry stays
-// unconsumed, and `FromContextAsyncBuildOnceTests` carries a tripwire that
-// goes red the day the generator starts emitting tables, so the wiring is
-// not forgotten when it becomes possible.
+// What the generated code owns is deliberately small: the typed call of
+// the handler and the static type of its result. Everything else — the
+// verb check, reading the body, the argument-array parse, each argument's
+// decode (the proxy's own record-scoped seam, Phase 839), the arity
+// refusal, the result's serialise and every `InvocationResult` case — is
+// the proxy's own code, shared with the reflective endpoint through
+// `GeneratedArguments`, so the two routes cannot drift. A method the table
+// does not cover (a `Task`-returning or streaming method, or one added to
+// the record after generation) is served by the reflective proxy, built
+// lazily on its first request.
 
 /// Phase 69k — marker attribute on an API record type. The source-
 /// generator (when it ships) scans for this attribute and emits an
@@ -78,7 +65,15 @@ open System.Threading.Tasks
 type DispatcherTargetAttribute() =
     inherit Attribute()
 
-/// Phase 69k — the contract a source-generated table satisfies.
+/// Phase 69k — the v0 contract a source-generated table was to satisfy.
+///
+/// Phase 906 — no adapter composes this shape and none will: a
+/// `'TContext -> 'TImpl -> Task` route handler writes its own response and
+/// so would run outside the pre-flight chain. A generated table is a
+/// `GeneratedInvocationTable<'impl>` instead, which the proxy composes
+/// inside the chain. This type is retained only because removing a public
+/// type is a breaking change.
+///
 /// `ApiType` is the API record type the table dispatches for;
 /// `RouteHandlers` returns an entry per method on that record, each
 /// pre-bound to the typed handler invocation.
@@ -99,10 +94,12 @@ type IGeneratedDispatchTable<'TContext, 'TImpl> =
     abstract RouteHandlers: unit -> (string * ('TContext -> 'TImpl -> Task)) list
 
 /// Phase 69k — process-wide registry of generated dispatch tables.
-/// Consumers (or the generator's emitted `[<ModuleInitializer>]`) call
-/// `register` once per emitted table. No adapter reads it today (see the
-/// Phase 856.A finding above); an adapter composing a generated table
-/// would call `tryGet<'TImpl>()` once, at compose time.
+/// A generated module's `register ()` (Phase 906) calls `register` once
+/// per emitted table; the remoting proxy calls `tryGet<'TImpl>()` once,
+/// when it is built, and composes a `GeneratedInvocationTable<'TImpl>` it
+/// finds there (any other registered shape is ignored — reflection).
+/// Register BEFORE the remoting handler is built: the proxy reads the
+/// registry at build time, never per request.
 ///
 /// Thread-safe; registrations are typically once-per-process at startup.
 /// Re-registration replaces the existing entry (idempotent for hot-reload
@@ -127,10 +124,134 @@ module GeneratedDispatchRegistry =
         | true, table -> Some table
         | false, _ -> None
 
-    /// True if a generated table is registered for `'TImpl`. Read by the
-    /// harness tests; no adapter branches on it today.
+    /// True if a generated table is registered for `'TImpl`.
     let isRegistered<'TImpl> () : bool = tables.ContainsKey(typeof<'TImpl>)
 
     /// Test-only: clear all registrations. Production code never calls
     /// this — registrations are once-per-process at startup.
     let internal clearForTests () = tables.Clear()
+
+/// Phase 906 — the arguments of ONE generated call, walked by the remoting
+/// proxy's own code.
+///
+/// Generated code receives one of these per request and does two things
+/// with it: takes each argument, in declaration order, with `Next<'T>()`,
+/// and hands the handler's `Async<'T>` to `Complete`. Both are the proxy's
+/// own steps, shared with the reflective endpoint: `Next` is its argument
+/// step (the record-scoped decode, the first argument the validation stage
+/// already decoded, a `unit` argument, a multipart binary section, the
+/// arity refusal) and `Complete` is its completion (the refusal of a
+/// surplus argument, the handler awaited, the result serialised as the
+/// options say, the `InvocationResult`). A refusal raised by either is the
+/// proxy's to report, exactly as on the reflective path.
+///
+/// Only the proxy creates one; the constructor is internal.
+[<AbstractClass>]
+type GeneratedArguments internal () =
+    /// The next argument, decoded exactly as the reflective endpoint decodes
+    /// it. `'T` is the method's parameter type at this position.
+    abstract Next<'T> : unit -> 'T
+
+    /// Complete the call: refuse a surplus argument, await the handler,
+    /// write its result to the response as the proxy does.
+    abstract Complete<'T> : call: Async<'T> -> Task<InvocationResult>
+
+/// Phase 906 — one method of a generated invocation table: its name, its
+/// flattened field type (the reflective proxy's `TypeInfo.flattenFuncTypes`
+/// of the record field, emitted rather than computed so building the table
+/// reflects over nothing) and the typed call.
+[<Sealed>]
+type GeneratedMethod<'impl>
+    internal
+    (
+        name: string,
+        flattenedTypes: Type[],
+        decodeFirst: (string -> JsonSerializerBackend -> JsonElement -> Result<obj, DecodeError>) option,
+        call: GeneratedArguments -> 'impl -> Task<InvocationResult>
+    ) =
+    /// The record field's name — the route's method segment.
+    member _.Name = name
+
+    /// The field's type flattened through its curried chain: every domain,
+    /// then the `Async<_>` result.
+    member _.FlattenedTypes = flattenedTypes
+
+    /// The first argument's decode for the validation stage's early parse
+    /// (Phase 856.B), when the method has a JSON first argument.
+    member internal _.DecodeFirst = decodeFirst
+
+    /// The typed call of the handler.
+    member internal _.Call = call
+
+/// Phase 906 — a generated API record's invocations, one per method it
+/// covers. Registered through `GeneratedInvocation.register`; the remoting
+/// proxy composes it when it is built.
+[<Sealed>]
+type GeneratedInvocationTable<'impl> internal (methods: GeneratedMethod<'impl> list) =
+    /// Every covered method, in the record's declaration order.
+    member _.Methods = methods
+
+/// Phase 906 — the builders the generator's dispatch emission calls. Not
+/// meant to be written by hand: a table is emitted from the record it
+/// dispatches for, so its method names and types cannot drift from it
+/// without failing to compile.
+[<RequireQualifiedAccess>]
+module GeneratedInvocation =
+
+    let private isNoJsonFirst (flattenedTypes: Type[]) =
+        flattenedTypes.Length < 2 || flattenedTypes[0] = typeof<unit>
+
+    /// A method with no JSON first argument: an `Async<_>` value, or a
+    /// method whose first parameter is `unit`.
+    let forMethod<'impl>
+        (name: string)
+        (flattenedTypes: Type[])
+        (call: GeneratedArguments -> 'impl -> Task<InvocationResult>)
+        : GeneratedMethod<'impl> =
+        if not (isNoJsonFirst flattenedTypes) then
+            invalidArg
+                (nameof flattenedTypes)
+                (sprintf
+                    "%s.%s takes a JSON first argument (%s); a generated table declares it with forMethodWithFirst"
+                    typeof<'impl>.Name
+                    name
+                    flattenedTypes[0].Name)
+
+        GeneratedMethod<'impl>(name, flattenedTypes, None, call)
+
+    /// A method whose first parameter is `'first`, decoded early for the
+    /// validation stage through the same record-scoped seam the argument
+    /// walk uses (`FableConverters.tryDeserialiseFor`).
+    let forMethodWithFirst<'impl, 'first>
+        (name: string)
+        (flattenedTypes: Type[])
+        (call: GeneratedArguments -> 'impl -> Task<InvocationResult>)
+        : GeneratedMethod<'impl> =
+        if isNoJsonFirst flattenedTypes || flattenedTypes[0] <> typeof<'first> then
+            invalidArg
+                (nameof flattenedTypes)
+                (sprintf
+                    "%s.%s: the declared first argument %s is not the flattened field type's first domain"
+                    typeof<'impl>.Name
+                    name
+                    typeof<'first>.Name)
+
+        let decodeFirst (recordName: string) (backend: JsonSerializerBackend) (element: JsonElement) =
+            match backend with
+            | SystemTextJson options ->
+                ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialiseFor<'first>
+                    (Some recordName)
+                    element
+                    options
+                |> Result.map box
+
+        GeneratedMethod<'impl>(name, flattenedTypes, Some decodeFirst, call)
+
+    /// The table of a record's generated invocations.
+    let table<'impl> (methods: GeneratedMethod<'impl> list) : GeneratedInvocationTable<'impl> =
+        GeneratedInvocationTable<'impl>(methods)
+
+    /// Register a table so the remoting proxy for `'impl` composes it. Call
+    /// once, before the remoting handler is built.
+    let register<'impl> (table: GeneratedInvocationTable<'impl>) : unit =
+        GeneratedDispatchRegistry.register<'impl> (box table)

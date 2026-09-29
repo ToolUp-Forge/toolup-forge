@@ -489,6 +489,59 @@ let private clientTests =
                          name = PerfMetric.key metric && not (String.IsNullOrWhiteSpace text)))
                     $"'client.{PerfMetric.key metric}' has no entry in client.notes — a ceiling nobody can explain is one nobody can safely raise"
         }
+
+        // Phase 909 — the two bundle sizes. A size is not a clock: one
+        // build of one tree against one lockfile gives one number, so the
+        // wallclock metrics' order-of-magnitude slack would let a bundle
+        // double unseen. Their headroom law is the tight one below.
+        test "an over-budget bundle breaches in KiB, and a bundle the run did not measure is unmeasured, not a pass" {
+            let bundleBlock =
+                """ "client": { "subject": "bundles", "statistic": "min", "ceilings": { "minimalBundleKiB": 2800, "shellBundleKiB": 4000 }, "minimumSamples": { "minimalBundleKiB": 1, "shellBundleKiB": 1 }, "baselines": { "minimalBundleKiB": 2700, "shellBundleKiB": 3900 } } """
+
+            let budget =
+                clientBudgetOrFail "bundles.json" (budgetJson (defaultCeilings + "," + bundleBlock))
+
+            // A synthetic over-budget build: the shell grew by a generated
+            // module, and the minimal sample's bundle was never built.
+            let run =
+                runOrFail
+                    "bundle-run.json"
+                    """{ "schema": "toolup.perf-measurements/v1", "appDirectory": "output", "samples": [ { "metric": "shellBundleKiB", "statistic": "min", "value": 4120.5, "samples": 1, "observed": true, "evidence": "fixture" } ] }"""
+
+            let findings = PerfBudgetGate.check budget run
+
+            Expect.equal
+                (PerfBudgetGate.breaches findings)
+                [
+                    MetricNotMeasured ClientMinimalBundleKiB
+                    CeilingBreached(ClientShellBundleKiB, 4120.5, 4000.0)
+                ]
+                "the grown shell breaches and the unbuilt minimal bundle is refused"
+
+            Expect.stringContains
+                (PerfFinding.render (CeilingBreached(ClientShellBundleKiB, 4120.5, 4000.0)))
+                "was 4120.5 KiB, budget allows at most 4000 KiB"
+                "the breach line names both sizes in KiB"
+        }
+
+        test "no shipped bundle ceiling is more than 1.1x its recorded baseline" {
+            let budget = clientBudgetOrFail "shipped-budget.json" (shippedBudgetJson ())
+
+            for metric in [ ClientMinimalBundleKiB; ClientShellBundleKiB ] do
+                let ceiling = budget.Ceilings |> List.tryFind (fun (m, _) -> m = metric)
+                let baseline = budget.Baselines |> List.tryFind (fun (m, _) -> m = metric)
+
+                match ceiling, baseline with
+                | Some(_, c), Some(_, b) ->
+                    Expect.isLessThanOrEqual
+                        c
+                        (b * 1.1)
+                        $"'client.{PerfMetric.key metric}' allows {c} KiB against a {b} KiB baseline — a size has no noise to absorb, so slack beyond a tenth is growth nobody reviews. Re-measure, or justify the new baseline in the client block's notes."
+                | _ ->
+                    failtestf
+                        "'%s' needs both a ceiling and a baseline in the shipped client block"
+                        (PerfMetric.key metric)
+        }
     ]
 
 // ─── Phase 886 — the load block ────────────────────────────────────────

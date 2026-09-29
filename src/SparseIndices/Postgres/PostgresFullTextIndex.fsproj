@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.SparseIndices.Postgres</PackageId>
+    <AssemblyName>ToolUp.SparseIndices.Postgres</AssemblyName>
+    <Description>PostgreSQL full-text ISparseIndex for ToolUp.RAG. The keyword leg of hybrid retrieval held in the database, so it is the same on every replica — the multi-replica rung above the in-process BM25 index. Server-only companion.</Description>
+    <PackageTags>fsharp;sdk;rag;sparse-index;full-text;postgresql;npgsql;provider</PackageTags>
+  </PropertyGroup>
+  <!-- Phase 893 — external ISparseIndex companion. GP 1 — the Npgsql
+       dependency is isolated to this companion; it never reaches
+       ToolUp.Platform.*. GP 2 — PostgreSQL is OSS and Npgsql is
+       PostgreSQL-licensed, so there is no paid default. -->
+  <ItemGroup>
+    <Compile Include="PostgresFullTextIndex.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    <!-- The analyzer seam (ISparseAnalyzer), mapped to a text-search
+         configuration at construction. -->
+    <ProjectReference Include="..\..\ToolUp.RAG.Core\ToolUp.RAG.Core.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+</Project>

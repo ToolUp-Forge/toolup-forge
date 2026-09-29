@@ -188,20 +188,41 @@ shape every ceiling in the SDK has.
 
 `perf-budgets.json` at the repo root is the other thing in this repository called a budget, and it is
 deliberately not on the seam: it bounds what the SDK *costs*, not what a subject may *spend*, and it
-is decided in CI rather than in any deployment. It has two blocks of the same shape — ceiling,
+is decided in CI rather than in any deployment. It has three blocks of the same shape — ceiling,
 baseline, minimum samples, the `min` statistic, and a note per ceiling:
 
 | Block | Measured by | Metrics |
 |---|---|---|
 | top level (server, Phase 192) | `dev-scripts/perf-budget-gate.ps1` booting `samples/MinimalApp` | `coldStartMs`, `hotPathMs`, plus the absent-assembly rule |
-| `client` (Phase 849) | the same script running `ClientBench` in `src/ToolUp.AI.Client.Tests` under Node | `bootMs`, `decodePerResponseUs`, `viewPerDispatchUs` |
+| `client` (Phase 849, 909) | the same script running `ClientBench` in `src/ToolUp.AI.Client.Tests` under Node, after two production `vite build`s of `samples/MinimalClient` | `bootMs`, `decodePerResponseUs`, `viewPerDispatchUs`; `minimalBundleKiB`, `shellBundleKiB` |
+| `load` (Phase 886) | the same script running `load gate` in `src/ToolUp.RAG.Benchmarks` | retrieval p95 and blob reads per query; fact point read, population read, assert and batch assert p95, and blob reads per point read |
 
-Both are decided by `ToolUp.Platform.Build`'s `PerfBudgetGate` (`VerifyPerfBudget` /
-`VerifyClientPerfBudget`), print every ceiling's headroom ratio on a green run, and are held by
-`ToolUp.Platform.Build.Tests` to at most 20x their recorded baselines. The client numbers — and which
-of them transfer from Node to a browser — are recorded in
+All three are decided by `ToolUp.Platform.Build`'s `PerfBudgetGate` (`VerifyPerfBudget` /
+`VerifyClientPerfBudget` / `VerifyLoadPerfBudget`), print every ceiling's headroom ratio on a green
+run, and are held by `ToolUp.Platform.Build.Tests` to at most 20x their recorded baselines. The client
+numbers — and which of them transfer from Node to a browser — are recorded in
 [`../migrations/849-browser-runtime-benchmark.md`](../migrations/849-browser-runtime-benchmark.md);
 the server ones in [`../migrations/192-cold-start-perf-budget-ci-gate.md`](../migrations/192-cold-start-perf-budget-ci-gate.md).
+
+**The two bundle sizes (Phase 909) are the one place the headroom rule differs.** `minimalBundleKiB`
+is the JavaScript a production build of the minimal client sample ships; `shellBundleKiB` is the same
+for the SDK shell's module graph (`SDK.Client` as the entry, every export kept, built by
+`samples/MinimalClient/vite.shell.config.mts`) — the one that holds the remoting proxies and the
+generated client module, so the one that grows when a generated module does. The clocks carry about
+14x slack because wall-clock noise on a shared runner is one-sided; a size has no noise at all (three
+builds from two separate Fable compiles wrote the same bytes), so the bundles carry 1.025x, and the
+build test refuses more than 1.1x. The shell's headroom, about 98 KiB, is deliberately smaller than
+one more generated module the size of Phase 853's (about 110 KiB minified): the next one fails the
+gate and is raised in review, rather than growing every consumer's bundle unseen. The gate script
+builds both into fresh directories under `artifacts/perf-budget/bundles/`, so a failed build is an
+unobserved bundle rather than the last run's size, and its `-TeethCheck` decides the sizes against a
+bundle-only 1 KiB block so they are shown red on their own.
+
+Measured 2026-09-29 against Phase 884's tree: the minimal sample 2,727,355 bytes (790,119 gzipped),
+the SDK shell 3,944,367 bytes (1,058,664 gzipped). The same phase measured building the generated
+module's response decoders on first use rather than at import, and found nothing to buy — the
+figures, and why the decoders stay built at import, are beside the emitter in
+`ToolUp.Remoting.Generator`.
 
 ---
 

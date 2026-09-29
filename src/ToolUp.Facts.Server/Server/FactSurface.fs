@@ -38,21 +38,57 @@ open ToolUp.Platform.BlobStorage
 // **"Never wrong" is structural here, not a discipline.** Maintenance
 // happens on `Assert`, but a read does not *trust* that it happened. The
 // store is append-only and one blob per fact, so the blob *listing* is a
-// census of every fact that exists — and a snapshot records how many fact
-// ids it has folded in. A count that disagrees means something reached the
-// log without reaching the surface (a failed update, a second replica, a
-// restore), and the read reconciles before answering: it folds in the few
-// it is missing, or rebuilds outright. So the failure mode of every
-// maintenance path is a slower read, never a different answer. Note the
-// census is the *same* `List` call the enumeration path already makes
-// first, so the check is free relative to the path it replaces.
+// census of every fact that exists — and a snapshot records the census it
+// has folded in. A census that disagrees means something reached the log
+// without reaching the surface (a failed update, a second replica, a
+// restore) or left it (an erasure), and the read reconciles before
+// answering: it folds in the few it is missing, or rebuilds outright. So
+// the failure mode of every maintenance path is a slower read, never a
+// different answer. Note the census is the *same* `List` call the
+// enumeration path already makes first, so the check is free relative to
+// the path it replaces. The listing itself is the truth and is not
+// bounded: a census kept anywhere else would be derived, and a derived
+// census that missed a write would hide a fact — the one failure this
+// design exists to rule out.
 //
-//   The one shape this cannot see: a fact blob *deleted* out of band
-//   while another is added, leaving the count intact. Nothing in the store
-//   deletes facts (append-only), but `IBlobStorage.Erase` under a GDPR
-//   erasure could — so an erasure that touches `_facts/` must be followed
-//   by `FactSurface.drop`. Stated here because it is the single assumption
-//   the reconcile rests on.
+// **What a snapshot records of that census (Phase 891).** Not the ids.
+// Until Phase 891 a snapshot carried the id of every fact it had folded
+// that was not one of its rows — every superseded head, and every fact of
+// every other metric in the scope — so it grew with the scope's history
+// rather than with its own population (measured at 100,000 heads: a
+// second metric of 100,000 facts added a megabyte of ids to a snapshot
+// whose rows it did not change). It now records a `FactCensus`: the
+// folded COUNT, a DIGEST (the sum of each id's 64-bit key), and a
+// fixed-width invertible Bloom lookup table over the same keys — a count
+// and a digest partitioned into cells, so that the DIFFERENCE between the
+// snapshot's census and the log's can be decoded back into ids when it is
+// small, which is what an incremental fold needs. Its size is fixed by
+// `FactSurfaceOptions.MaxIncrementalFold`, never by history. A difference
+// too large to decode is a rebuild, exactly as a difference larger than
+// `MaxIncrementalFold` always was.
+//
+//   The one assumption the reconcile rests on: **two different sets of
+//   fact ids never share a count and a digest.** A key is the first eight
+//   bytes of the SHA-256 of the id, so a collision is a 2^-64 accident
+//   rather than a shape any sequence of writes can produce, and a decoded
+//   difference is re-checked against the log's count and digest before a
+//   fold is trusted. This REPLACES the assumption the id list rested on —
+//   that an out-of-band deletion was always paired with a
+//   `FactSurface.drop` — because a deletion now changes the digest even
+//   when an addition restores the count, and is rebuilt from the log.
+//   `FactSurface.drop` stays the operator's cache flush.
+//
+// **The parsed snapshot is cached in-process (Phase 891)**, keyed by
+// scope, metric and the census value the reconcile computes anyway, so a
+// population question against an unchanged log parses nothing. A cache
+// entry is only served when the log's census EQUALS the census the cached
+// snapshot was converged against — a condition checked against the log on
+// every read, never against the cache's own memory — so an entry can be
+// missing or out of date but never wrong. A hit also probes that the
+// snapshot blob still EXISTS (an existence check, not a download), so
+// `FactSurface.drop` flushes every replica's cache along with the blob.
+// The cache is bounded in entries and in bytes, evicts oldest first, and
+// does not exist when the surface is disabled.
 //
 // **Historical reads bypass it (task 702.D).** A surface holds current
 // heads, so it can answer "what is true now" and structurally cannot
@@ -71,10 +107,16 @@ open ToolUp.Platform.BlobStorage
 //  2. Async at every boundary — every member returns `Async<_>`.
 //  3. Failure as data — `Update` / `Rebuild` return `Result<_, string>`;
 //     no `OnFailure` callback, and no exception escapes into `Assert`.
-//  4. Stateless between calls — the snapshot is read from and written to
-//     the backing store on every call; the implementation holds nothing.
-//     Two replicas over one blob backend converge because the reconcile is
-//     driven by the log, not by either replica's memory.
+//  4. Stateless between calls — the snapshot's truth is the backing
+//     store, read from and written to it exactly as before; the one thing
+//     the implementation holds between calls is the Phase 891 parse cache,
+//     and it holds nothing a call DEPENDS on. A hit requires the log's
+//     census, taken on that very call, to equal the census the cached
+//     snapshot was converged against, so a second replica, a restart or a
+//     cold cache reads the blob exactly as it did before the cache existed
+//     and reaches the same answer. Two replicas over one blob backend
+//     converge because the reconcile is driven by the log, not by either
+//     replica's memory.
 //  5. No cross-shard ordering — a surface is scoped to one `scopeId` and
 //     one metric; nothing is promised across either.
 //  6. Precision at the lower bound — `AsOf` is carried at the tick
@@ -91,6 +133,236 @@ type internal FactSurfaceRow = {
     Disclosure: string
 }
 
+/// The value a census reduces to for equality: how many fact ids, and the
+/// sum of their keys. Two censuses with equal values hold the same ids —
+/// the one assumption the reconcile rests on (see the header).
+[<Struct>]
+type internal FactCensusValue = { Count: int; Digest: uint64 }
+
+/// A fixed-size census of a set of fact ids (Phase 891): the count, the
+/// digest, and an invertible Bloom lookup table of `3 * Width` cells over
+/// the same 64-bit keys. Adding an id touches one cell in each of three
+/// sub-tables; subtracting one table from another cell by cell leaves a
+/// table of the symmetric difference, which peels back into keys whenever
+/// the difference is small against the width.
+///
+/// The arrays are never mutated once a census is built — every operation
+/// below copies first — so a census is a value like the snapshot around it.
+type internal FactCensus = {
+    Count: int
+    Digest: uint64
+    /// Cells per sub-table.
+    Width: int
+    /// Per cell: the number of ids added.
+    Counts: int[]
+    /// Per cell: the XOR of the keys added.
+    Keys: uint64[]
+    /// Per cell: the XOR of each added key's check value.
+    Checks: uint32[]
+}
+
+/// Building, comparing and differencing censuses.
+module internal FactCensus =
+
+    /// The narrowest sketch: the width a stale marker carries.
+    [<Literal>]
+    let MinimumWidth = 8
+
+    /// The width that decodes a difference of `capacity` ids with high
+    /// probability — one and a half cells per id across the three
+    /// sub-tables, the usual margin over the peeling threshold. A failed
+    /// decode is a rebuild, never a wrong answer, so the margin buys
+    /// speed and nothing else.
+    let widthFor (capacity: int) : int =
+        max MinimumWidth ((max 0 capacity * 3 / 2 + 2) / 3)
+
+    let private fmix64 (value: uint64) : uint64 =
+        let mutable h = value
+        h <- h ^^^ (h >>> 33)
+        h <- h * 0xff51afd7ed558ccdUL
+        h <- h ^^^ (h >>> 33)
+        h <- h * 0xc4ceb9fe1a85ec53UL
+        h ^^^ (h >>> 33)
+
+    /// The 64-bit key of one fact id: the first eight bytes of its SHA-256.
+    /// Cryptographic rather than fast on purpose — the digest's no-collision
+    /// assumption is then an accident's probability, not an adversary's
+    /// opportunity. Measured cost is in `docs/platform/facts.md`.
+    type internal KeyHasher() =
+        let mutable buffer: byte[] = Array.zeroCreate 128
+        let hash: byte[] = Array.zeroCreate 32
+
+        member _.Key(id: string) : uint64 =
+            let needed = Encoding.UTF8.GetMaxByteCount id.Length
+
+            if needed > buffer.Length then
+                buffer <- Array.zeroCreate needed
+
+            let written = Encoding.UTF8.GetBytes(id, 0, id.Length, buffer, 0)
+            SHA256.HashData(ReadOnlySpan(buffer, 0, written), Span(hash)) |> ignore
+            Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(ReadOnlySpan(hash, 0, 8))
+
+    let private checkOf (key: uint64) : uint32 =
+        uint32 (fmix64 (key ^^^ 0x9E3779B97F4A7C15UL) >>> 32)
+
+    let private cellOf (width: int) (key: uint64) (table: int) : int =
+        let spread = fmix64 (key + uint64 (table + 1) * 0xBF58476D1CE4E5B9UL)
+        int (spread % uint64 width) + table * width
+
+    /// An empty census of the given width.
+    let empty (width: int) : FactCensus =
+        let w = max MinimumWidth width
+
+        {
+            Count = 0
+            Digest = 0UL
+            Width = w
+            Counts = Array.zeroCreate (3 * w)
+            Keys = Array.zeroCreate (3 * w)
+            Checks = Array.zeroCreate (3 * w)
+        }
+
+    let private addKey (counts: int[]) (keys: uint64[]) (checks: uint32[]) (width: int) (sign: int) (key: uint64) =
+        let check = checkOf key
+
+        for table in 0..2 do
+            let i = cellOf width key table
+            counts[i] <- counts[i] + sign
+            keys[i] <- keys[i] ^^^ key
+            checks[i] <- checks[i] ^^^ check
+
+    /// `census` with `ids` added. Copies the table once, however many ids
+    /// there are, so a batch fold pays for one table and not one per fact.
+    let addAll (ids: string seq) (census: FactCensus) : FactCensus =
+        let counts = Array.copy census.Counts
+        let keys = Array.copy census.Keys
+        let checks = Array.copy census.Checks
+        let hasher = KeyHasher()
+        let mutable count = census.Count
+        let mutable digest = census.Digest
+
+        for id in ids do
+            let key = hasher.Key id
+            addKey counts keys checks census.Width 1 key
+            count <- count + 1
+            digest <- digest + key
+
+        {
+            census with
+                Count = count
+                Digest = digest
+                Counts = counts
+                Keys = keys
+                Checks = checks
+        }
+
+    /// The census of exactly `ids`, at `width`.
+    let ofIds (width: int) (ids: string seq) : FactCensus = addAll ids (empty width)
+
+    /// The value a census reduces to for equality.
+    let valueOf (census: FactCensus) : FactCensusValue = {
+        Count = census.Count
+        Digest = census.Digest
+    }
+
+    /// The census value of the log's fact ids — what every surface read
+    /// computes from the `List` it takes anyway. One key per id, no table.
+    let valueOfIds (ids: string seq) : FactCensusValue =
+        let hasher = KeyHasher()
+        let mutable count = 0
+        let mutable digest = 0UL
+
+        for id in ids do
+            count <- count + 1
+            digest <- digest + hasher.Key id
+
+        { Count = count; Digest = digest }
+
+    /// Why a difference could not be used for an incremental fold. Every
+    /// case is a rebuild; they are told apart only so the reason is legible.
+    type internal Divergence =
+        /// The difference is too large for this census's width to decode.
+        | Undecodable
+        /// The snapshot folded ids the log no longer holds — an out-of-band
+        /// deletion (an erasure).
+        | Departed of count: int
+        /// Two ids in the log share a key; the digest cannot tell them
+        /// apart, so no decoded answer about them is trusted.
+        | KeyCollision
+
+    /// The ids in `logIds` that `census` has not folded, decoded from the
+    /// difference of the two tables. `Error` when that is not possible or
+    /// not the whole story (see `Divergence`); the caller rebuilds.
+    let unseen (census: FactCensus) (logIds: string seq) : Result<string list, Divergence> =
+        let width = census.Width
+        let counts = Array.zeroCreate (3 * width)
+        let keys = Array.zeroCreate (3 * width)
+        let checks = Array.zeroCreate (3 * width)
+        let byKey = Dictionary<uint64, string>()
+        let hasher = KeyHasher()
+        let mutable collided = false
+
+        for id in logIds do
+            let key = hasher.Key id
+
+            if byKey.TryAdd(key, id) then
+                addKey counts keys checks width 1 key
+            else
+                collided <- true
+
+        if collided then
+            Error KeyCollision
+        else
+            // The log's table minus the snapshot's: +1 cells are ids only
+            // the log holds, -1 cells ids only the snapshot folded.
+            for i in 0 .. counts.Length - 1 do
+                counts[i] <- counts[i] - census.Counts[i]
+                keys[i] <- keys[i] ^^^ census.Keys[i]
+                checks[i] <- checks[i] ^^^ census.Checks[i]
+
+            let pending = Stack<int>(seq { 0 .. counts.Length - 1 })
+            let added = ResizeArray<uint64>()
+            let mutable departed = 0
+            // A true peel removes one id for good, so a decodable table
+            // needs at most one peel per cell. The budget only matters for
+            // a table corrupted into a shape that could cycle.
+            let mutable budget = 2 * counts.Length
+
+            while pending.Count > 0 && budget > 0 do
+                let i = pending.Pop()
+                let sign = counts[i]
+
+                if (sign = 1 || sign = -1) && checks[i] = checkOf keys[i] then
+                    budget <- budget - 1
+                    let key = keys[i]
+
+                    if sign = 1 then added.Add key else departed <- departed + 1
+
+                    addKey counts keys checks width (-sign) key
+
+                    for table in 0..2 do
+                        pending.Push(cellOf width key table)
+
+            let clean =
+                Array.forall ((=) 0) counts
+                && Array.forall ((=) 0UL) keys
+                && Array.forall ((=) 0u) checks
+
+            if not clean then
+                Error Undecodable
+            elif departed > 0 then
+                Error(Departed departed)
+            else
+                let ids = ResizeArray<string>(added.Count)
+                let mutable resolved = true
+
+                for key in added do
+                    match byKey.TryGetValue key with
+                    | true, id -> ids.Add id
+                    | _ -> resolved <- false
+
+                if resolved then Ok(List.ofSeq ids) else Error Undecodable
+
 /// A derived snapshot of one (scope, metric)'s current heads.
 type internal FactSurfaceSnapshot = {
     /// The metric id this surface projects. Carried in the payload as well
@@ -103,12 +375,13 @@ type internal FactSurfaceSnapshot = {
     Stale: bool
     /// The current heads for `Metric`.
     Rows: FactSurfaceRow list
-    /// Fact ids this snapshot has folded in that are **not** rows: heads
-    /// that have since been superseded, and facts belonging to other
-    /// metrics in the same scope. Kept so the census reconcile can tell
-    /// "already seen, not a head of mine" from "never seen" — the two
-    /// answers the count check depends on.
-    Absorbed: string list
+    /// Every fact id this snapshot has folded in — its rows, the heads
+    /// they superseded, and every fact of every other metric in the scope
+    /// — as a fixed-size census rather than a list (Phase 891). The
+    /// reconcile compares it with the log's census to tell "converged"
+    /// from "behind", and decodes the difference to learn which facts to
+    /// fold.
+    Census: FactCensus
 }
 
 /// How a store maintains and consults its metric surfaces.
@@ -125,7 +398,9 @@ type FactSurfaceOptions = {
     /// The largest number of unseen facts a read will fold into an
     /// existing snapshot before giving up and rebuilding from the log.
     /// Folding costs one fact read each; past this many, one enumeration
-    /// is cheaper than many point reads.
+    /// is cheaper than many point reads. It also sizes the census table a
+    /// snapshot carries (Phase 891) — wide enough to decode a difference
+    /// of this many ids — so it bounds the snapshot's census, not history.
     MaxIncrementalFold: int
 }
 
@@ -231,8 +506,24 @@ module internal FactSurfaceCodec =
     [<Literal>]
     let Magic = "toolup.factsurface"
 
+    /// Version 2 (Phase 891) replaced the absorbed-id lines with the fixed
+    /// census. A version-1 snapshot is refused like any other unreadable
+    /// one — it reads as no surface and the next read rebuilds it.
     [<Literal>]
-    let Version = 1
+    let Version = 2
+
+    /// Bytes per census cell on the wire: a 32-bit count, a 64-bit key sum
+    /// and a 32-bit check sum, little-endian.
+    [<Literal>]
+    let CellBytes = 16
+
+    /// The encoded size of a snapshot, estimated without encoding it: the
+    /// weight the parse cache charges an entry. The row term is the one
+    /// `encode` sizes its buffer by; the census term is exact.
+    let estimatedBytes (snapshot: FactSurfaceSnapshot) : int64 =
+        128L
+        + int64 (List.length snapshot.Rows) * 160L
+        + int64 (snapshot.Census.Counts.Length * CellBytes / 3 * 4)
 
     /// Escape the characters the table uses structurally. `>` joins subject
     /// path segments; the empty segment gets its own escape so a one-empty-
@@ -314,12 +605,53 @@ module internal FactSurfaceCodec =
         sb.Append(d.Ticks.ToString CultureInfo.InvariantCulture).Append(kindChar d.Kind)
         |> ignore
 
+    let private encodeCells (census: FactCensus) : string =
+        let bytes = Array.zeroCreate<byte> (census.Counts.Length * CellBytes)
+
+        for i in 0 .. census.Counts.Length - 1 do
+            let at = i * CellBytes
+            Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(Span(bytes, at, 4), census.Counts[i])
+            Buffers.Binary.BinaryPrimitives.WriteUInt64LittleEndian(Span(bytes, at + 4, 8), census.Keys[i])
+            Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(Span(bytes, at + 12, 4), census.Checks[i])
+
+        Convert.ToBase64String bytes
+
+    let private decodeCells (count: int) (digest: uint64) (width: int) (text: string) : FactCensus option =
+        let bytes = Convert.FromBase64String text
+
+        if width < 1 || bytes.Length <> 3 * width * CellBytes then
+            None
+        else
+            let cells = 3 * width
+            let counts = Array.zeroCreate cells
+            let keys = Array.zeroCreate cells
+            let checks = Array.zeroCreate cells
+
+            for i in 0 .. cells - 1 do
+                let at = i * CellBytes
+                counts[i] <- Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(ReadOnlySpan(bytes, at, 4))
+                keys[i] <- Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(ReadOnlySpan(bytes, at + 4, 8))
+                checks[i] <- Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(ReadOnlySpan(bytes, at + 12, 4))
+
+            Some {
+                Count = count
+                Digest = digest
+                Width = width
+                Counts = counts
+                Keys = keys
+                Checks = checks
+            }
+
     /// Render a snapshot. One header line, then one line per row, then one
-    /// line per absorbed id — a shape a reader can bound before parsing.
+    /// line holding the census table — a shape a reader can bound before
+    /// parsing. Every census field is fixed-width, so a snapshot's size
+    /// depends on its own rows and on nothing else in the scope.
     let encode (snapshot: FactSurfaceSnapshot) : byte[] =
         let rowCount = List.length snapshot.Rows
-        let absorbedCount = List.length snapshot.Absorbed
-        let sb = StringBuilder(128 + rowCount * 160 + absorbedCount * 68)
+        let census = snapshot.Census
+
+        let sb =
+            StringBuilder(128 + rowCount * 160 + census.Counts.Length * CellBytes / 3 * 4 + 4)
 
         sb
             .Append(Magic)
@@ -330,9 +662,13 @@ module internal FactSurfaceCodec =
             .Append('\t')
             .Append(rowCount)
             .Append('\t')
-            .Append(absorbedCount)
-            .Append('\t')
             .Append(if snapshot.Stale then '1' else '0')
+            .Append('\t')
+            .Append(census.Count.ToString("x8", CultureInfo.InvariantCulture))
+            .Append('\t')
+            .Append(census.Digest.ToString("x16", CultureInfo.InvariantCulture))
+            .Append('\t')
+            .Append(census.Width.ToString("x8", CultureInfo.InvariantCulture))
             .Append('\n')
         |> ignore
 
@@ -358,8 +694,7 @@ module internal FactSurfaceCodec =
             sb.Append('\t').Append(escape m.MethodIdentity).Append('\t').Append(escape row.Disclosure).Append('\n')
             |> ignore
 
-        for id in snapshot.Absorbed do
-            sb.Append(id).Append('\n') |> ignore
+        sb.Append(encodeCells census).Append('\n') |> ignore
 
         Encoding.UTF8.GetBytes(sb.ToString())
 
@@ -377,7 +712,7 @@ module internal FactSurfaceCodec =
             let mutable pos = 0
 
             // Field boundaries of the current line, as (start, length)
-            // pairs — nine fields on a row line, six on the header.
+            // pairs — nine fields on a row line, eight on the header.
             let bounds = Array.zeroCreate<struct (int * int)> 16
 
             /// Split the next line into `bounds`; returns the field count,
@@ -431,13 +766,19 @@ module internal FactSurfaceCodec =
                 else
                     Some(Decimal.Parse(s.AsSpan(start, length), NumberStyles.Number, CultureInfo.InvariantCulture))
 
-            if nextLine () <> 6 || text 0 <> Magic || int32Field 1 <> Version then
+            let hexField (index: int) =
+                let struct (start, length) = bounds[index]
+                UInt64.Parse(s.AsSpan(start, length), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture)
+
+            if nextLine () <> 8 || text 0 <> Magic || int32Field 1 <> Version then
                 None
             else
                 let metric = textUnescaped 2
                 let rowCount = int32Field 3
-                let absorbedCount = int32Field 4
-                let stale = text 5 = "1"
+                let stale = text 4 = "1"
+                let censusCount = int (hexField 5)
+                let censusDigest = hexField 6
+                let censusWidth = int (hexField 7)
 
                 let rows = ResizeArray<FactSurfaceRow> rowCount
                 let mutable ok = true
@@ -463,24 +804,21 @@ module internal FactSurfaceCodec =
                                 Disclosure = textUnescaped 8
                             }
 
-                let absorbed = ResizeArray<string> absorbedCount
+                let census =
+                    if ok && nextLine () = 1 then
+                        decodeCells censusCount censusDigest censusWidth (text 0)
+                    else
+                        None
 
-                for _ in 1..absorbedCount do
-                    if ok then
-                        if nextLine () <> 1 then
-                            ok <- false
-                        else
-                            absorbed.Add(text 0)
-
-                if not ok then
-                    None
-                else
+                match census with
+                | Some census when ok ->
                     Some {
                         Metric = metric
                         Stale = stale
                         Rows = List.ofSeq rows
-                        Absorbed = List.ofSeq absorbed
+                        Census = census
                     }
+                | _ -> None
         with _ ->
             None
 
@@ -495,12 +833,13 @@ module internal FactSurfaceFold =
         Disclosure = Disclosure.toString f.Disclosure
     }
 
-    /// Absorb `fact` into `snapshot`, which projects `metric`.
+    /// Absorb `facts`, in order, into `snapshot`, which projects `metric`,
+    /// and report how many rows the fold visited (Phase 891).
     ///
-    /// Exactly one fact id joins the folded set per call, whichever branch
-    /// runs — that is the invariant the census reconcile depends on, and
-    /// the reason the superseded head is *moved* to `Absorbed` rather than
-    /// dropped: it is still a blob in the log, so it must still be counted.
+    /// Exactly one fact id joins the census per fact, whichever branch
+    /// runs — that is the invariant the census reconcile depends on. A
+    /// superseded head leaves the rows but not the census: it is still a
+    /// blob in the log, so it must still be counted.
     ///
     /// A fact of another metric is absorbed without becoming a row (a
     /// scope's facts share one blob prefix, so a surface must be able to
@@ -509,33 +848,86 @@ module internal FactSurfaceFold =
     /// same subject supersedes nothing and simply adds a second row —
     /// competition is surfaced, never merged (D19).
     ///
+    /// **Linear in the batch.** A supersession is a keyed removal — the
+    /// retired id is recorded, and the snapshot's own rows are walked ONCE
+    /// at the end — where folding fact by fact walked every row for every
+    /// supersession: measured at 8.2 ms per superseding fact over 100,000
+    /// rows before Phase 891, so a refresh restating 100,000 subjects was
+    /// some fourteen minutes of list filtering. The result is exactly the
+    /// fact-by-fact fold's, row order included, which the test pack holds.
+    ///
     /// **Batch callers fold in `AsOf` order.** Supersession strictly
     /// increases `AsOf` within a lineage (law L3), so ascending `AsOf` is a
     /// topological order over the edges; folding a successor before its
     /// predecessor would leave the predecessor as a row nothing ever
     /// retires.
-    let applyFact (metric: string) (fact: Fact) (snapshot: FactSurfaceSnapshot) : FactSurfaceSnapshot =
-        let retained =
-            match fact.Supersedes with
-            | None -> snapshot.Rows
-            | Some sid -> snapshot.Rows |> List.filter (fun r -> r.Member.FactId <> sid)
+    let applyFacts (metric: string) (facts: Fact list) (snapshot: FactSurfaceSnapshot) : FactSurfaceSnapshot * int =
+        // Ids retired from the snapshot's ORIGINAL rows. A removal reaches
+        // an original row whenever it happens, because that row existed
+        // before the whole batch.
+        let retired = HashSet<string>(StringComparer.Ordinal)
+        // Rows the batch adds, in the order it adds them, and which are
+        // still live. A removal reaches only the added rows that exist at
+        // that moment — the fact-by-fact fold's semantics, kept exactly.
+        let added = ResizeArray<FactSurfaceRow>()
+        let live = ResizeArray<bool>()
+        let addedAt = Dictionary<string, ResizeArray<int>>(StringComparer.Ordinal)
+        let mutable visits = 0
 
-        let retiredIds =
+        for fact in facts do
             match fact.Supersedes with
-            | Some sid when List.length retained <> List.length snapshot.Rows -> [ sid ]
-            | _ -> []
+            | Some sid ->
+                retired.Add sid |> ignore
 
-        let belongs = fact.Metric.Value = metric
+                match addedAt.TryGetValue sid with
+                | true, positions ->
+                    for p in positions do
+                        live[p] <- false
+                        visits <- visits + 1
+
+                    positions.Clear()
+                | _ -> ()
+            | None -> ()
+
+            if fact.Metric.Value = metric then
+                let row = rowOf fact
+
+                match addedAt.TryGetValue row.Member.FactId with
+                | true, positions -> positions.Add added.Count
+                | _ -> addedAt[row.Member.FactId] <- ResizeArray [ added.Count ]
+
+                added.Add row
+                live.Add true
+
+        let original =
+            if retired.Count = 0 then
+                snapshot.Rows
+            else
+                visits <- visits + List.length snapshot.Rows
+
+                snapshot.Rows |> List.filter (fun r -> not (retired.Contains r.Member.FactId))
+
+        // `applyFact` prepends, so the latest addition leads.
+        let mutable rows = original
+
+        for i in 0 .. added.Count - 1 do
+            visits <- visits + 1
+
+            if live[i] then
+                rows <- added[i] :: rows
 
         {
             snapshot with
-                Rows = if belongs then rowOf fact :: retained else retained
-                Absorbed =
-                    if belongs then
-                        retiredIds @ snapshot.Absorbed
-                    else
-                        (fact.FactId :: retiredIds) @ snapshot.Absorbed
-        }
+                Rows = rows
+                Census = FactCensus.addAll (facts |> Seq.map _.FactId) snapshot.Census
+        },
+        visits
+
+    /// Absorb one `fact` into `snapshot` — `applyFacts` over a batch of
+    /// one, so the assert-time path and the batch paths share one
+    /// definition of what absorbing a fact means.
+    let applyFact (metric: string) (fact: Fact) (snapshot: FactSurfaceSnapshot) : FactSurfaceSnapshot =
+        applyFacts metric [ fact ] snapshot |> fst
 
 // ─── The seam ────────────────────────────────────────────────────────
 
@@ -550,21 +942,23 @@ type internal IFactSurface =
     abstract Get: scopeId: string * metric: string -> Async<FactSurfaceSnapshot option>
 
     /// Fold one newly-asserted fact into the existing snapshot, if there
-    /// is one. A fact of another metric is absorbed (its id is recorded)
-    /// without becoming a row; a fact that supersedes a head replaces that
-    /// head's row; a competing method adds a second row under the same
-    /// subject. `Ok` with no snapshot present is a no-op, not a failure —
-    /// a surface that has not been built yet has nothing to maintain.
-    abstract Update: scopeId: string * metric: string * fact: Fact -> Async<Result<unit, string>>
+    /// is one, and return what was written. A fact of another metric joins
+    /// the census without becoming a row; a fact that supersedes a head
+    /// replaces that head's row; a competing method adds a second row under
+    /// the same subject. `Ok None` — no snapshot present — is a no-op, not a
+    /// failure: a surface that has not been built yet has nothing to
+    /// maintain.
+    abstract Update: scopeId: string * metric: string * fact: Fact -> Async<Result<FactSurfaceSnapshot option, string>>
 
     /// Persist a snapshot the caller has already folded — the read-time
     /// reconcile's write, which absorbs a batch and pays one round trip.
     abstract Put: scopeId: string * metric: string * snapshot: FactSurfaceSnapshot -> Async<Result<unit, string>>
 
     /// Replace the snapshot wholesale from the log: `heads` are the
-    /// metric's current heads, `absorbedIds` every other fact id in scope.
+    /// metric's current heads, `foldedIds` EVERY fact id the rebuild read —
+    /// the heads included — which becomes the snapshot's census.
     abstract Rebuild:
-        scopeId: string * metric: string * heads: Fact list * absorbedIds: string list ->
+        scopeId: string * metric: string * heads: Fact list * foldedIds: string list ->
             Async<Result<FactSurfaceSnapshot, string>>
 
     /// Flush the snapshot. Best effort, and safe by definition — the next
@@ -579,8 +973,10 @@ type internal IFactSurface =
     abstract MarkStale: scopeId: string * metric: string -> Async<unit>
 
 /// The blob-backed surface: one snapshot blob per (scope, metric) beside
-/// the facts it projects.
-type internal BlobFactSurface(storage: IBlobStorage) =
+/// the facts it projects. `censusWidth` sizes the census of every snapshot
+/// this instance BUILDS; a snapshot read back keeps the width it was built
+/// with, so replicas configured differently still read each other's.
+type internal BlobFactSurface(storage: IBlobStorage, censusWidth: int) =
 
     let put (scopeId: string) (metric: string) (snapshot: FactSurfaceSnapshot) : Async<Result<unit, string>> = async {
         let! r = storage.Upload(scopeId, FactSurface.blobName metric, FactSurfaceCodec.encode snapshot)
@@ -610,26 +1006,36 @@ type internal BlobFactSurface(storage: IBlobStorage) =
 
         member _.Get(scopeId: string, metric: string) : Async<FactSurfaceSnapshot option> = get scopeId metric
 
-        member _.Update(scopeId: string, metric: string, fact: Fact) : Async<Result<unit, string>> = async {
-            let! existing = get scopeId metric
+        member _.Update
+            (scopeId: string, metric: string, fact: Fact)
+            : Async<Result<FactSurfaceSnapshot option, string>> =
+            async {
+                let! existing = get scopeId metric
 
-            match existing with
-            | None -> return Ok()
-            | Some snapshot -> return! put scopeId metric (FactSurfaceFold.applyFact metric fact snapshot)
-        }
+                match existing with
+                | None -> return Ok None
+                | Some snapshot ->
+                    let folded = FactSurfaceFold.applyFact metric fact snapshot
+                    let! r = put scopeId metric folded
+
+                    return
+                        match r with
+                        | Ok() -> Ok(Some folded)
+                        | Error e -> Error e
+            }
 
         member _.Put(scopeId: string, metric: string, snapshot: FactSurfaceSnapshot) : Async<Result<unit, string>> =
             put scopeId metric snapshot
 
         member _.Rebuild
-            (scopeId: string, metric: string, heads: Fact list, absorbedIds: string list)
+            (scopeId: string, metric: string, heads: Fact list, foldedIds: string list)
             : Async<Result<FactSurfaceSnapshot, string>> =
             async {
                 let snapshot = {
                     Metric = metric
                     Stale = false
                     Rows = heads |> List.map FactSurfaceFold.rowOf
-                    Absorbed = absorbedIds
+                    Census = FactCensus.ofIds censusWidth foldedIds
                 }
 
                 let! r = put scopeId metric snapshot
@@ -655,34 +1061,15 @@ type internal BlobFactSurface(storage: IBlobStorage) =
                     Metric = metric
                     Stale = true
                     Rows = []
-                    Absorbed = []
+                    Census = FactCensus.empty FactCensus.MinimumWidth
                 }
 
             return ()
         }
 
-/// Shared helpers over a snapshot: the census reconcile, and the decidable
-/// pipeline run over rows instead of facts.
+/// Shared helpers over a snapshot: the decidable pipeline run over rows
+/// instead of facts. (The census reconcile's arithmetic is `FactCensus`.)
 module internal FactSurfaceRead =
-
-    /// Every fact id a snapshot has folded in — rows plus absorbed. The
-    /// store is append-only and one blob per fact, so this set is always a
-    /// SUBSET of the scope's fact ids; that is what makes a bare count
-    /// comparison sound, and why it is stated here rather than assumed.
-    let foldedCount (snapshot: FactSurfaceSnapshot) : int =
-        List.length snapshot.Rows + List.length snapshot.Absorbed
-
-    /// The fact ids a snapshot has never seen, given the scope's census.
-    let unseen (snapshot: FactSurfaceSnapshot) (storeIds: string list) : string list =
-        let known = HashSet<string>(StringComparer.Ordinal)
-
-        for row in snapshot.Rows do
-            known.Add row.Member.FactId |> ignore
-
-        for id in snapshot.Absorbed do
-            known.Add id |> ignore
-
-        storeIds |> List.filter (known.Contains >> not)
 
     /// The rows a query's subject / period clauses admit, as members.
     let matching (query: PopulationQuery) (snapshot: FactSurfaceSnapshot) : PopulationMember list =
@@ -696,3 +1083,95 @@ module internal FactSurfaceRead =
                     |> Option.forall (fun p -> p.From < m.PeriodTo && m.PeriodFrom < p.To))
 
             if admits then Some m else None)
+
+// ─── The parse cache (Phase 891) ─────────────────────────────────────
+//
+// A population question used to download and parse the whole snapshot —
+// tens of megabytes at the population tier's cardinality — every time,
+// and concurrent questions were concurrent downloads and parses. The
+// cache keeps the PARSED snapshot per (scope, metric), tagged with the
+// census value it was converged against, and serves it only to a read
+// whose own census — taken from the log on that read — is equal. So it is
+// an optimisation over the stateless seam, never a second source of
+// truth: an entry that is out of date simply does not match, and the read
+// goes to the blob exactly as it would with no cache at all.
+
+/// A bounded, oldest-first cache of converged snapshots, one entry per
+/// (scope, metric). Bounded in entries and in estimated encoded bytes; an
+/// entry heavier than the whole byte budget is never admitted. Safe for
+/// concurrent use.
+type internal FactSurfaceCache(maxEntries: int, maxBytes: int64) =
+
+    let gate = obj ()
+
+    let entries =
+        Dictionary<
+            struct (string * string),
+            struct (FactCensusValue * FactSurfaceSnapshot * int64 * LinkedListNode<struct (string * string)>)
+         >()
+
+    // Insertion order, oldest at the head: the eviction order.
+    let order = LinkedList<struct (string * string)>()
+    let mutable bytes = 0L
+
+    let remove (key: struct (string * string)) =
+        match entries.TryGetValue key with
+        | true, struct (_, _, weight, node) ->
+            entries.Remove key |> ignore
+            order.Remove node
+            bytes <- bytes - weight
+        | _ -> ()
+
+    /// The default bounds: sixteen (scope, metric) pairs and 64 MiB of
+    /// encoded snapshot — room for one population at the tier's stated
+    /// 300,000 subjects, or many smaller ones.
+    static member DefaultMaxEntries = 16
+
+    /// See `DefaultMaxEntries`.
+    static member DefaultMaxBytes = 64L * 1024L * 1024L
+
+    /// The cache every surface-enabled `BlobFactStore` holds.
+    static member CreateDefault() =
+        FactSurfaceCache(FactSurfaceCache.DefaultMaxEntries, FactSurfaceCache.DefaultMaxBytes)
+
+    /// The cached snapshot for `(scopeId, metric)` if, and only if, it was
+    /// converged against exactly `census`. An entry that does not match is
+    /// dropped: it can only be out of date, and it is holding memory.
+    member _.TryGet(scopeId: string, metric: string, census: FactCensusValue) : FactSurfaceSnapshot option =
+        lock gate (fun () ->
+            let key = struct (scopeId, metric)
+
+            match entries.TryGetValue key with
+            | true, struct (cachedCensus, snapshot, _, _) when cachedCensus = census -> Some snapshot
+            | true, _ ->
+                remove key
+                None
+            | _ -> None)
+
+    /// Remember `snapshot` for `(scopeId, metric)`, keyed by its own
+    /// census, replacing any earlier entry for the pair. A stale snapshot
+    /// is never cached — it is not an answer — and clears the pair.
+    member _.Store(scopeId: string, metric: string, snapshot: FactSurfaceSnapshot) : unit =
+        lock gate (fun () ->
+            let key = struct (scopeId, metric)
+            remove key
+            let weight = FactSurfaceCodec.estimatedBytes snapshot
+
+            if not snapshot.Stale && maxEntries > 0 && weight <= maxBytes then
+                let node = order.AddLast key
+                entries[key] <- struct (FactCensus.valueOf snapshot.Census, snapshot, weight, node)
+                bytes <- bytes + weight
+
+                while entries.Count > maxEntries || bytes > maxBytes do
+                    remove order.First.Value)
+
+    /// Forget `(scopeId, metric)` — the read path's response to a snapshot
+    /// blob that has been dropped.
+    member _.Evict(scopeId: string, metric: string) : unit =
+        lock gate (fun () -> remove (struct (scopeId, metric)))
+
+    /// Entries currently held.
+    member _.Count = lock gate (fun () -> entries.Count)
+
+    /// Estimated encoded bytes currently held.
+    member _.Bytes = lock gate (fun () -> bytes)

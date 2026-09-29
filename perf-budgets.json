@@ -24,34 +24,45 @@
     "hotPathMs": "5 ms against a 0.36 ms quiet baseline is deliberately ~14x slack; the loaded run measured min 0.688 ms (median 5.6 ms, which is why the gate reads min and not median). These ceilings exist to catch an ORDER-OF-MAGNITUDE regression - a default path that starts doing I/O, a middleware registered unconditionally, a per-request allocation storm - not a percent-level one. Slack that has gone stale is not left to anyone's memory: every green run prints the measured headroom ratio, and ToolUp.Platform.Build.Tests refuses a ceiling more than 20x its recorded baseline.",
     "statistic": "Wallclock noise on a shared runner is one-sided - a neighbouring job can only make a boot slower - so the minimum over N runs is the least contaminated estimate, and the only statistic whose spread does not widen as the runner gets busier.",
     "absentAssemblies": "The zero-cost-when-unused invariant (GP 13, and the Phase 9y 'default-on DROPPED' conclusion) made byte-level rather than timed. A companion nobody registered should not be in the deployment at all - which is checkable exactly, where 'costs no measurable time' is not.",
+    "remotingDispatchColdStart": "Recorded, not gated (Phase 906). Phase 804's ToolUp.Remoting.Benchmarks re-run after the generated invocation moved INSIDE the proxy: cold start of dispatching five methods of the sample's 40-method echo contract in a fresh process, min of 7 boots, Release, 16 logical cores, .NET 10.0.8, 2026-09-29, on a LOADED machine (other build-and-test sessions beside it). Generated table registered, dispatched through the proxy the adapter builds - the route a deployment takes, inside the pre-flight chain: 89.1 ms (standalone boots) / 109.8 ms (within the full report run). Reflective proxy, nothing registered: 107.7 / 122.7 ms; before the phase, the same arm on the same machine the same day measured 113.2 ms. Phase 804's direct floor - a typed call with no proxy and so no chain, which no deployment may use: 77.4 / 89.6 ms. So the safe route keeps roughly 13-18 ms (12-17 %) of the ~30 ms 804 measured for the bypass; per-request cost is level with reflection. Reproduce: dotnet build src/ToolUp.Remoting.Benchmarks -c Release, then dotnet src/ToolUp.Remoting.Benchmarks/bin/Release/net10.0/ToolUp.Remoting.Benchmarks.dll --boots 7 --rounds 9 (or --cold dispatch generated|reflection|direct for one boot).",
     "reviewing-a-change": "Raising a ceiling is a claim that the SDK is now legitimately slower. Say why in this block, in the same diff."
   },
   "client": {
-    "label": "Browser runtime under Node - boot, decode, dispatch-to-render (Phase 849)",
-    "subject": "samples/MinimalClient (boot) + src/ToolUp.AI.Client.Tests ClientBench (decode over tests/remoting-corpus, dispatch over a 200-row view)",
+    "label": "Browser runtime under Node - boot, decode, dispatch-to-render (Phase 849); production bundle sizes (Phase 909)",
+    "subject": "samples/MinimalClient (boot; its production build and the SDK shell's) + src/ToolUp.AI.Client.Tests ClientBench (decode over tests/remoting-corpus, dispatch over a 200-row view)",
     "statistic": "min",
     "ceilings": {
-      "bootMs": 17500,
-      "decodePerResponseUs": 80,
-      "viewPerDispatchUs": 12500
+      "bootMs": 7500,
+      "decodePerResponseUs": 22,
+      "viewPerDispatchUs": 4400,
+      "minimalBundleKiB": 2730,
+      "shellBundleKiB": 3950
     },
     "minimumSamples": {
       "bootMs": 5,
       "decodePerResponseUs": 9,
-      "viewPerDispatchUs": 9
+      "viewPerDispatchUs": 9,
+      "minimalBundleKiB": 1,
+      "shellBundleKiB": 1
     },
     "baselines": {
-      "bootMs": 1265,
-      "decodePerResponseUs": 5.66,
-      "viewPerDispatchUs": 906
+      "bootMs": 529.77,
+      "decodePerResponseUs": 1.545,
+      "viewPerDispatchUs": 315.29,
+      "minimalBundleKiB": 2663.43,
+      "shellBundleKiB": 3851.92
     },
     "notes": {
-      "bootMs": "Baseline 1265 ms is the minimum over three production-build ClientBench runs (6 fresh-process boots each, node v25.9.0 win32/x64, 2026-09-27): 1315 / 1866 / 1265, the last from the end-to-end perf-budget-gate.ps1 run. It was NOT a quiet machine - the load average read 100% throughout, other builds running beside it - so it overstates the quiet cost, the same way Phase 192's loaded run did. The ceiling is ~14x (Phase 192's slack ratio). Boot is import() of the transpiled samples/MinimalClient to its first commit into #elmish-app under jsdom; import cost transfers to a browser, paint does not (jsdom lays nothing out and AG Charts draws into a no-op canvas).",
-      "decodePerResponseUs": "Baseline 5.66 us is the minimum over four runs (5.66 / 6.87 / 5.83, and 8.57 from a development-build run - React's build does not touch decode) of the proxy's 200 path - SimpleJson.parseNative then Convert.fromJsonAs over createTypeInfo - averaged across the 72 cross-host wire-corpus .json fixtures that decode to their declared value (decimal-max and date-timespan-negative do not, and are excluded by name on every run). JSON.parse alone over the same bytes measured 0.58 us and parseNative alone 1.42 us (minimums over the same runs), so about three-quarters of a response's decode is the reflective Convert.fromJsonAs walk Phase 843 replaces. Ceiling ~14x. Decode is the same JavaScript a browser runs.",
-      "viewPerDispatchUs": "Baseline 906 us is the minimum over the same three production-build runs (1258 / 1908 / 906) of the view the render hook builds per dispatched message - a 200-row Feliz table, one render-hook call per message - with React's production build (the development build is refused by the harness, it validates every element). Ceiling ~14x. View construction is the same JavaScript a browser runs; React's commit and paint are not in this number.",
+      "remeasured": "Phase 909 re-measured every clock below on Phase 884's tree, by the rule Phase 849 set them by (minimum over three production-build ClientBench runs, seed 849001, 6 boots, 9 rounds), because 884 found the seeded generator ClientBench orders its work by had overflowed under Fable - after a few draws every value was 0, so 849's baselines were taken over a near-degenerate decode order and dispatch sequence. Machine: Windows 11, Intel Core Ultra 9 386H, 16 logical processors, node v25.9.0 win32/x64, 2026-09-29. Three runs on 884's own tree while six other build-and-test sessions shared the machine (CPU 51-72%): boot 617.0 / 622.5 / 603.7 ms, decode 3.921 / 2.523 / 1.648 us, view 375.3 / 358.6 / 392.6 us. The three runs the baselines are taken from are on the tree this phase shipped (884's plus the bundle and generated-module legs, which run in child processes and do not touch the in-process decode and view loops), at 9-14% CPU for two of them. Every ceiling moved down, because every baseline did; both numbers are in each note. The two causes cannot be separated after the fact: 849's runs were taken at a load average of 100%, and 884's fix changed the order the rounds walk.",
+      "bootMs": "Baseline 529.77 ms (was 1265): the minimum of three production-build runs, 529.77 / 536.08 / 534.79. Ceiling 7500 ms (was 17500), ~14x, Phase 192's slack ratio - the loaded runs on 884's tree (603.7 min) sit at 12x headroom under it. Boot is import() of the transpiled samples/MinimalClient to its first commit into #elmish-app under jsdom; import cost transfers to a browser, paint does not (jsdom lays nothing out and AG Charts draws into a no-op canvas).",
+      "decodePerResponseUs": "Baseline 1.545 us (was 5.66): the minimum of 1.559 / 1.588 / 1.545, the proxy's 200 path - SimpleJson.parseNative then Convert.fromJsonAs over createTypeInfo - averaged across the 72 cross-host wire-corpus .json fixtures that decode to their declared value (decimal-max and date-timespan-negative do not, and are excluded by name on every run). JSON.parse alone over the same bytes measured 0.236 us and parseNative alone 0.619 us in the same runs. Ceiling 22 us (was 80), ~14x. The loaded runs on 884's tree reached 3.921 us, 5.6x headroom under it. Decode is the same JavaScript a browser runs.",
+      "viewPerDispatchUs": "Baseline 315.29 us (was 906): the minimum of 385.08 / 371.78 / 315.29 of the view the render hook builds per dispatched message - a 200-row Feliz table, one render-hook call per message - with React's production build (the development build is refused by the harness, it validates every element). Ceiling 4400 us (was 12500), ~14x. View construction is the same JavaScript a browser runs; React's commit and paint are not in this number.",
+      "minimalBundleKiB": "Baseline 2663.43 KiB = 2,727,355 bytes: the one .js file `vite build` writes for samples/MinimalClient's index.html (790,119 bytes gzipped, a lever in the measurement file). Nearly all of it is the npm dependencies the sample's view pulls in (AG Grid, React); the sample never reaches the SDK shell, the remoting proxies or the generated client module, so this number moves with the sample's own reach and its dependency pins. A SIZE, not a clock: three builds from two separate Fable compiles wrote the same file byte for byte (same content hash in its name), so there is no noise for slack to absorb. The ceiling is therefore NOT the clocks' 14x: 2730 KiB, 1.025x, about 67 KiB of growth before a reviewed raise.",
+      "shellBundleKiB": "Baseline 3851.92 KiB = 3,944,367 bytes: `vite build --config vite.shell.config.mts` in samples/MinimalClient - the SDK shell's module graph (SDK.Client as the entry, every export kept), which holds the remoting proxies and the Phase 853 generated client module (1,058,664 bytes gzipped). Byte-identical across three builds, like the minimal bundle. Ceiling 3950 KiB, 1.025x: about 98 KiB of headroom, which is LESS than one more generated module the size of Phase 853's (its transpiled module minifies alone to 113,152 bytes), so the next one fails this gate instead of growing the bundle unseen. Measured on Windows; if the Linux runner's build differs by more than the headroom on its first run, re-take the baseline from that run's artefact and say so here - a platform difference is not a regression.",
+      "bundle-headroom": "Why the two sizes do not use the clocks' ~14x: that slack exists because wallclock noise on a shared runner is one-sided, and a size has none. ToolUp.Platform.Build.Tests holds every shipped bundle ceiling to at most 1.1x its baseline, beside the 20x law every client ceiling is held to.",
       "statistic": "Min over rounds (decode, view) and over fresh-process boots (boot), for Phase 192's reason: wallclock noise is one-sided.",
-      "reproducing": "cd src/ToolUp.AI.Client.Tests; NODE_ENV=production node --import ./register-loader.mjs output/Program.js ClientBench --seed 849001. The seed orders the fixtures and the dispatch sequence, and is printed beside the runtime on every run.",
-      "reviewing-a-change": "Raising a client ceiling is a claim that the client runtime is now legitimately slower. Say why here, in the same diff; ToolUp.Platform.Build.Tests refuses any ceiling more than 20x its baseline."
+      "reproducing": "pwsh ./dev-scripts/perf-budget-gate.ps1 -SkipServer -SkipLoad runs the whole client half: the two production builds into artifacts/perf-budget/bundles/, then, in src/ToolUp.AI.Client.Tests, NODE_ENV=production node --import ./register-loader.mjs output/Program.js ClientBench --seed 849001 --minimal-bundle <dir> --shell-bundle <dir>. The seed orders the fixtures and the dispatch sequence, and is printed beside the runtime on every run.",
+      "reviewing-a-change": "Raising a client ceiling is a claim that the client runtime is now legitimately slower, or its bundle legitimately larger. Say why here, in the same diff; ToolUp.Platform.Build.Tests refuses any ceiling more than 20x its baseline, and any bundle ceiling more than 1.1x."
     }
   },
   "load": {

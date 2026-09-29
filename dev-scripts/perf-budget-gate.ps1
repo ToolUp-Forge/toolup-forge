@@ -42,6 +42,15 @@
 # construction) — each printed with its headroom ratio on a green run, exactly
 # as the server ceilings are. -SkipClient runs the server half alone.
 #
+# Phase 909 added the client BUNDLE sizes to the same half: the script
+# Fable-compiles samples/MinimalClient, builds it for production with Vite
+# twice — its own index.html entry (the minimal sample) and the SDK shell's
+# module graph with every export kept (vite.shell.config.mts) — into fresh
+# directories under artifacts/perf-budget/bundles/, and ClientBench measures
+# the JavaScript each build wrote. A size is decided like any other client
+# metric; its teeth check below is a bundle-only block, so the bundle budget
+# is shown red on its own rather than behind the boot clock.
+#
 # ── The load half (Phase 886) ────────────────────────────────────────────
 #
 # Last, the script measures the FACT and RETRIEVAL paths under concurrent
@@ -143,6 +152,11 @@ param(
 
     # Measure and decide the server half only.
     [switch] $SkipClient,
+
+    # Phase 909 — the sample whose production builds the bundle budget
+    # measures, and where the two builds are written.
+    [string] $BundleSample = "samples/MinimalClient",
+    [string] $BundleDirectory = "artifacts/perf-budget/bundles",
 
     # Phase 886 — the load harness, and where its measurement file is
     # written.
@@ -468,6 +482,14 @@ function Invoke-Npm {
     & $cmd.Source @Arguments
 }
 
+function Invoke-Npx {
+    # Same shim, same bug — npx.ps1 mirrors npm.ps1. Same multi-shim hazard — pin to the first match.
+    [CmdletBinding()]
+    param([Parameter(ValueFromRemainingArguments = $true)] $Arguments)
+    $cmd = Get-Command npx.cmd -CommandType Application -ErrorAction Stop | Select-Object -First 1
+    & $cmd.Source @Arguments
+}
+
 function Invoke-NpmAnyOs {
     <#
       The canonical helper above resolves `npm.cmd`, which exists only on
@@ -486,9 +508,59 @@ function Invoke-NpmAnyOs {
     }
 }
 
+function Invoke-NpxAnyOs {
+    # Windows takes the canonical helper (the shim bug it dodges is Windows-only); elsewhere resolve the
+    # npx APPLICATION on PATH explicitly — never a bare `& npx`. Pin to the first match, as above.
+    param([Parameter(ValueFromRemainingArguments = $true)] $Arguments)
+    if ($IsWindows) {
+        Invoke-Npx @Arguments
+    }
+    else {
+        $cmd = Get-Command npx -CommandType Application -ErrorAction Stop | Select-Object -First 1
+        & $cmd.Source @Arguments
+    }
+}
+
 $clientMeasurementsPath = Join-Path $repoRoot $ClientMeasurementsFile
+$minimalBundlePath = Join-Path $repoRoot (Join-Path $BundleDirectory "minimal")
+$shellBundlePath = Join-Path $repoRoot (Join-Path $BundleDirectory "shell")
 
 if (-not $SkipClient -and -not $EvaluateOnly) {
+    # ── The client bundles (Phase 909) ──
+    #
+    # Both build directories are REMOVED first, so a build that fails or
+    # writes elsewhere leaves nothing behind for ClientBench to measure: a
+    # missing directory is an unobserved bundle, never last run's size.
+    $sampleDir = Join-Path $repoRoot $BundleSample
+    foreach ($dir in @($minimalBundlePath, $shellBundlePath)) {
+        if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
+    }
+
+    Push-Location $sampleDir
+    try {
+        if (-not $SkipBuild -or -not (Test-Path "output/Client.js")) {
+            Write-Host "== perf-budget: client bundles — Fable-compile $BundleSample" -ForegroundColor Cyan
+            dotnet tool restore
+            if ($LASTEXITCODE -ne 0) { Write-Error "perf-budget: dotnet tool restore failed in $BundleSample."; exit 1 }
+            Invoke-NpmAnyOs ci --no-fund --no-audit
+            if ($LASTEXITCODE -ne 0) { Write-Error "perf-budget: npm ci failed in $BundleSample."; exit 1 }
+            dotnet fable -o output --noCache
+            if ($LASTEXITCODE -ne 0) {
+                Write-Error "perf-budget: $BundleSample did not transpile; there is no bundle to measure."
+                exit 1
+            }
+        }
+
+        Write-Host "== perf-budget: client bundles — production builds of the minimal sample and the SDK shell" -ForegroundColor Cyan
+        Invoke-NpxAnyOs --no-install vite build --outDir $minimalBundlePath --emptyOutDir --logLevel warn | Out-Host
+        if ($LASTEXITCODE -ne 0) { Write-Error "perf-budget: the minimal sample's production build failed."; exit 1 }
+        Invoke-NpxAnyOs --no-install vite build --config vite.shell.config.mts --outDir $shellBundlePath --emptyOutDir --logLevel warn | Out-Host
+        if ($LASTEXITCODE -ne 0) { Write-Error "perf-budget: the SDK shell's production build failed."; exit 1 }
+    }
+    finally {
+        Pop-Location
+    }
+
     $harnessDir = Join-Path $repoRoot $ClientHarness
     $bench = Join-Path $harnessDir "output/Program.js"
 
@@ -517,7 +589,8 @@ if (-not $SkipClient -and -not $EvaluateOnly) {
         $env:NODE_ENV = "production"
         try {
             node --import ./register-loader.mjs output/Program.js ClientBench `
-                --out $clientMeasurementsPath --seed $ClientSeed --boot-samples $ClientBoots | Out-Host
+                --out $clientMeasurementsPath --seed $ClientSeed --boot-samples $ClientBoots `
+                --minimal-bundle $minimalBundlePath --shell-bundle $shellBundlePath | Out-Host
             $benchExit = $LASTEXITCODE
         }
         finally {
@@ -673,6 +746,36 @@ if ($TeethCheck) {
         $clientTeeth = Invoke-Decider -BudgetPath $teethBudget -Target "VerifyClientPerfBudget" -Measurements $clientMeasurementsPath
     }
 
+    # Phase 909 — the bundle budget on its own. The client block above goes
+    # red on its clocks first, which says nothing about the sizes; this one
+    # budgets ONLY the two bundles, at 1 KiB, so its red is theirs.
+    $bundleTeethBudget = Join-Path ([IO.Path]::GetTempPath()) "toolup-perf-teeth-bundle-budget.json"
+
+    @'
+{
+  "schema": "toolup.perf-budget/v1",
+  "label": "TEETH CHECK - bundle sizes only, deliberately unreachable, generated by dev-scripts/perf-budget-gate.ps1",
+  "subject": "teeth check",
+  "statistic": "min",
+  "ceilings": { "coldStartMs": 0.001 },
+  "minimumSamples": { "coldStartMs": 1 },
+  "client": {
+    "label": "TEETH CHECK - bundle sizes only",
+    "subject": "teeth check",
+    "statistic": "min",
+    "ceilings": { "minimalBundleKiB": 1, "shellBundleKiB": 1 },
+    "minimumSamples": { "minimalBundleKiB": 1, "shellBundleKiB": 1 }
+  }
+}
+'@ | Set-Content -Path $bundleTeethBudget -Encoding utf8
+
+    $bundleTeeth = 1
+    if ($decideClient) {
+        $bundleTeeth = Invoke-Decider -BudgetPath $bundleTeethBudget -Target "VerifyClientPerfBudget" -Measurements $clientMeasurementsPath
+    }
+
+    Remove-Item $bundleTeethBudget -ErrorAction SilentlyContinue
+
     $loadTeeth = 1
     if ($decideLoad) {
         $loadTeeth = Invoke-Decider -BudgetPath $teethBudget -Target "VerifyLoadPerfBudget" -Measurements $loadMeasurementsPath
@@ -695,7 +798,12 @@ if ($TeethCheck) {
         exit 1
     }
 
-    Write-Host "== perf-budget: teeth check passed — the gate went red ($(if (-not $SkipServer) { "server exit $teeth" } else { "server skipped" })$(if ($decideClient) { ", client exit $clientTeeth" })$(if ($decideLoad) { ", load exit $loadTeeth" })) on the unreachable budget" -ForegroundColor Green
+    if ($bundleTeeth -eq 0) {
+        Write-Error "perf-budget: TEETH CHECK FAILED — the client gate passed a 1 KiB bundle budget. The bundle sizes are not being decided; do not trust their green."
+        exit 1
+    }
+
+    Write-Host "== perf-budget: teeth check passed — the gate went red ($(if (-not $SkipServer) { "server exit $teeth" } else { "server skipped" })$(if ($decideClient) { ", client exit $clientTeeth, bundles exit $bundleTeeth" })$(if ($decideLoad) { ", load exit $loadTeeth" })) on the unreachable budget" -ForegroundColor Green
 }
 
 if ($verdict -ne 0) {

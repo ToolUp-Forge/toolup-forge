@@ -45,6 +45,17 @@
 ///     composers) and the sliced store (`Client.run`). Reported as levers,
 ///     not budgeted samples: they are counts that pin a structure, and
 ///     `SlicedStoreTests` asserts them on every run.
+///   * GENERATED-MODULE IMPORT (Phase 909) — `import()` alone of the
+///     generated client-proxy module (`PlatformClientProxies`), in fresh
+///     processes: the lever that shows what building its decoders at import
+///     costs. Phase 909 measured building them on first use instead and
+///     found nothing to buy (the reasoning sits beside the emitter,
+///     `ToolUp.Remoting.Generator` `Emit.clientCompilationUnit`).
+///   * BUNDLE SIZE (Phase 909) — the JavaScript a production build ships,
+///     for the minimal client sample and for the SDK shell's module graph:
+///     every `.js` file under the build directory `--minimal-bundle` /
+///     `--shell-bundle` names, minified and uncompressed (gzip beside it as
+///     a lever). A size, not a clock; the gate script runs the builds.
 ///   * COMPOSITION-ROUTE SCOPE (Phase 910) — the same counts on the AI
 ///     composer, whole tree and over its own store, plus renders of the
 ///     shell's context readers (flags, branding, tiles, catalog) per
@@ -69,7 +80,7 @@
 ///
 ///   node --import ./register-loader.mjs output/Program.js ClientBench
 ///        [--out <measurements.json>] [--seed <n>] [--boot-samples <n>]
-///        [--rounds <n>]
+///        [--rounds <n>] [--minimal-bundle <dir>] [--shell-bundle <dir>]
 ///
 /// With `--out`, the run is written as a `toolup.perf-measurements/v1`
 /// document the `VerifyClientPerfBudget` target decides against the
@@ -138,6 +149,21 @@ let private dirname (path: string) : string = jsNative
 [<Import("resolve", from = "node:path")>]
 let private resolvePath (path: string) : string = jsNative
 
+[<Import("readdirSync", from = "node:fs")>]
+let private readdirSync (path: string, options: obj) : string[] = jsNative
+
+[<Import("statSync", from = "node:fs")>]
+let private statSync (path: string) : obj = jsNative
+
+[<Import("join", from = "node:path")>]
+let private joinPath (a: string, b: string) : string = jsNative
+
+[<Import("gzipSync", from = "node:zlib")>]
+let private gzipSync (data: obj) : obj = jsNative
+
+[<Import("readFileSync", from = "node:fs")>]
+let private readBytes (path: string) : obj = jsNative
+
 [<Import("spawnSync", from = "node:child_process")>]
 let private spawnSync (command: string, args: string[], options: obj) : obj = jsNative
 
@@ -152,6 +178,10 @@ type private Options = {
     Seed: int
     BootSamples: int
     Rounds: int
+    /// Phase 909 — the production build directories of the minimal client
+    /// sample and of the SDK shell, when the caller built them.
+    MinimalBundle: string option
+    ShellBundle: string option
 }
 
 let private parseOptions (argv: string[]) : Options =
@@ -173,6 +203,8 @@ let private parseOptions (argv: string[]) : Options =
         Seed = intOf "--seed" DefaultSeed
         BootSamples = intOf "--boot-samples" 6
         Rounds = intOf "--rounds" 9
+        MinimalBundle = valueOf "--minimal-bundle"
+        ShellBundle = valueOf "--shell-bundle"
     }
 
 type private Stats = {
@@ -243,6 +275,11 @@ let private testDir () = fileURLToPath (beside "../")
 let private minimalClientModule = "./samples/MinimalClient/Client.js"
 
 let private shellModule = "./ToolUp.Platform.Client/Client/SDK.Client.js"
+
+/// Phase 909 — the generated client-proxy module on its own: its import is
+/// where decoders built at module initialisation would be paid.
+let private generatedModule =
+    "./ToolUp.Platform.Client/Client/Remoting/PlatformClientProxies.js"
 
 type private BootChild = {
     Ok: bool
@@ -324,6 +361,65 @@ let private runBootChild (moduleRelative: string) (mode: string) : BootChild =
             CounterState = r?counterState
             Detail = if isNull error then "" else error
         }
+
+// ─── Bundle size (Phase 909) ───────────────────────────────────────────
+
+type private BundleMeasure = {
+    /// Total bytes of every `.js` file under the directory, in KiB.
+    RawKiB: float
+    /// The same files gzipped one by one, summed, in KiB — a lever.
+    GzipKiB: float
+    Files: int
+    Observed: bool
+    Evidence: string
+}
+
+/// Every `.js` file a production build wrote under `dir`, measured. A
+/// directory that is missing or holds no JavaScript is UNOBSERVED rather
+/// than a zero-byte bundle: the build did not run, or wrote elsewhere, and
+/// a size of nothing is the suspiciously good result the gate refuses.
+let private measureBundle (label: string) (dir: string) : BundleMeasure =
+    let full = resolvePath dir
+
+    let unobserved why = {
+        RawKiB = 0.0
+        GzipKiB = 0.0
+        Files = 0
+        Observed = false
+        Evidence = sprintf "%s bundle NOT observed: %s (%s)" label why full
+    }
+
+    if not (existsSync full) then
+        unobserved "the build directory does not exist"
+    else
+        let files =
+            readdirSync (full, createObj [ "recursive" ==> true ])
+            |> Array.filter _.EndsWith(".js")
+            |> Array.map (fun f -> joinPath (full, f))
+            |> Array.sort
+
+        if Array.isEmpty files then
+            unobserved "the build directory holds no .js file"
+        else
+            let raw = files |> Array.sumBy (fun f -> unbox<float> (statSync f)?size)
+
+            let gzip =
+                files |> Array.sumBy (fun f -> unbox<float> (gzipSync (readBytes f))?length)
+
+            {
+                RawKiB = raw / 1024.0
+                GzipKiB = gzip / 1024.0
+                Files = files.Length
+                Observed = true
+                Evidence =
+                    sprintf
+                        "%s production build: %d .js file(s), %.0f bytes minified (%.0f gzipped) under %s"
+                        label
+                        files.Length
+                        raw
+                        gzip
+                        full
+            }
 
 // ─── Decode per response ───────────────────────────────────────────────
 
@@ -611,6 +707,49 @@ let private runAsync (argv: string[]) : Async<int> = async {
         )
     | None -> say "shell import: NOT observed"
 
+    // Phase 909 — the generated proxy module alone, fresh process each.
+    let generatedImports = [ for _ in 1..5 -> runBootChild generatedModule "import" ]
+
+    let generatedImportStats =
+        generatedImports |> List.filter _.Ok |> List.map _.ImportMs |> stats
+
+    match generatedImportStats with
+    | Some s ->
+        say (
+            sprintf
+                "generated proxy module import (PlatformClientProxies and what it imports, no render): min %s ms  median %s ms  (n=%d)"
+                (fmt s.Min)
+                (fmt s.Median)
+                s.Count
+        )
+    | None -> say "generated proxy module import: NOT observed"
+
+    // ── Bundle size (Phase 909) ──
+    let bundles =
+        [
+            "minimalBundleKiB", "samples/MinimalClient", options.MinimalBundle
+            "shellBundleKiB", "SDK shell (SDK.Client)", options.ShellBundle
+        ]
+        |> List.choose (fun (metric, label, dir) ->
+            match dir with
+            | Some d -> Some(metric, measureBundle label d)
+            | None ->
+                say (
+                    sprintf
+                        "%s: not measured (no build directory passed; the perf-budget gate script builds the bundles)"
+                        metric
+                )
+
+                None)
+
+    for _, b in bundles do
+        say (
+            if b.Observed then
+                sprintf "bundle: %s KiB · %s" (fmt (round3 b.RawKiB)) b.Evidence
+            else
+                b.Evidence
+        )
+
     // ── Decode per response ──
     let fixtures, excluded = loadDecodeFixtures ()
     let passes = 20
@@ -884,6 +1023,21 @@ let private runAsync (argv: string[]) : Async<int> = async {
             (bootEvidence + buildEvidence)
         sample "decodePerResponseUs" "us" decodeStats decodeObserved decodeEvidence
         sample "viewPerDispatchUs" "us" viewStats (reactProduction && viewObserved) (viewEvidence + buildEvidence)
+        for metric, b in bundles do
+            // One build, one observation: a size has no noise for a
+            // minimum to see through.
+            let s =
+                if b.Observed then
+                    Some {
+                        Min = b.RawKiB
+                        Median = b.RawKiB
+                        Max = b.RawKiB
+                        Count = 1
+                    }
+                else
+                    None
+
+            sample metric "KiB" s b.Observed b.Evidence
     |]
 
     let levers =
@@ -897,6 +1051,12 @@ let private runAsync (argv: string[]) : Async<int> = async {
             "deferredProxiesAtShellImport" ==> Array.ofList shellDeferred
             "proxyCounterAtShellImport" ==> Array.ofList shellCounter
             "shellImportMsMin" ==> (shellStats |> optMin)
+            "generatedModuleImportMsMin" ==> (generatedImportStats |> optMin)
+            "generatedModuleImportMsMedian" ==> (generatedImportStats |> optMedian)
+            "bundleGzipKiB"
+            ==> createObj [
+                for metric, b in bundles -> metric ==> (if b.Observed then box (round3 b.GzipKiB) else null)
+            ]
             "serialisePerCallReflectiveUsMin" ==> (stats reflectiveEncodeRounds |> optMin)
             "serialisePerCallGeneratedUsMin" ==> (stats generatedEncodeRounds |> optMin)
             "decodeParseNativeUsMin" ==> (stats nativeRounds |> optMin)
@@ -939,6 +1099,7 @@ let private runAsync (argv: string[]) : Async<int> = async {
         && rendered.Length = boots.Length
         && decodeObserved
         && viewObserved
+        && (bundles |> List.forall (fun (_, b) -> b.Observed))
 
     if not observed then
         say "one or more measurements were NOT observed — see the lines above"

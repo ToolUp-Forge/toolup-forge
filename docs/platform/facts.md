@@ -219,6 +219,73 @@ correctness. Choose the policy with `BlobFactStore.createWithIndex`:
 index at every size. Every parallel blob read or write in the store runs at
 most 16 at a time.
 
+### How the blob store serves a population read (Phases 702, 891)
+
+At or above `FactSurfaceOptions.MinimumHeads` (512 by default) a population
+read answers from the **metric surface**: one derived snapshot blob per
+(scope, metric) under `_factsurface/`, holding one row per current head and
+nothing else. The fact log stays the truth — the surface is a derived cache, slow to
+rebuild, never wrong, safe to delete — and only the top-k the ranking
+returns are read as facts.
+
+**Never wrong.** Every surface read lists the scope's `_facts/` prefix (the
+census the enumeration takes anyway) and compares it with the census the
+snapshot has folded in. Equal: answer. Behind: fold the missing facts in,
+or rebuild from the log. So a failed maintenance write, a second replica's
+write, a restore or an erasure costs a slower read and never a different
+answer.
+
+**What a snapshot records of the census (Phase 891).** A count, a digest
+(the sum of each fact id's 64-bit key — the first eight bytes of its
+SHA-256), and a fixed-width invertible Bloom lookup table over the same
+keys, which decodes a small difference back into the ids to fold. Its width
+is set by `FactSurfaceOptions.MaxIncrementalFold` — never by history — and a
+difference too large to decode is a rebuild, as a difference larger than
+`MaxIncrementalFold` always was. It rests on one assumption: two different
+sets of fact ids never share a count and a digest (a 2^-64 accident, and a
+decoded difference is re-checked against the log before it is trusted).
+Because a deletion moves the digest even when an addition restores the
+count, an out-of-band erasure is now detected and rebuilt without help;
+`FactSurface.drop` remains the operator's flush.
+
+**Linear folds.** A batch — `AssertBatch`'s maintenance, or the read-time
+reconcile — retires superseded rows by key and walks the snapshot once,
+however many heads it supersedes.
+
+**The parse cache.** Each surface-enabled store keeps parsed snapshots in
+process, keyed by scope, metric and the census value above, and serves one
+only to a read whose census — taken from the log on that read — is equal.
+A hit also checks that the snapshot blob still exists (a probe, not a
+download), so `FactSurface.drop` flushes every replica's cache too. It is
+bounded at 16 (scope, metric) entries and 64 MiB of estimated encoded
+snapshot, evicts oldest first, and does not exist under
+`FactSurfaceOptions.disabled`. A second replica, a restart or a cold cache
+reads the blob exactly as before; the seam stays stateless (GP 12 rule 4).
+
+Measured at 100,000 heads of one metric seeded into the log (in-memory
+backend, on a loaded machine; before is the Phase 702 format):
+
+| | Before (Phase 702) | After (Phase 891) |
+|---|---|---|
+| Census entries | 100,000 | 100,000 |
+| Snapshot bytes | 13,288,933 | 13,420,039 (the fixed census table) |
+| … after a second metric of 100,000 facts | 14,288,938 | 13,420,039 |
+| Superseding batch folded over 100,000 rows | 8.2 ms **per fact** (4,000 facts: 33.5 s) | 100,000 facts in one fold, 200,000 row visits |
+| Superseding fold, three runs | — | 177 / 293 / 386 ms |
+| Census digest per surface read | — | 17–23 ms |
+| Repeat population read, same log | download + parse every time | no snapshot download; 381–415 ms against 455–599 ms for the same read with a cold cache |
+
+The id list the before-column carried was ten bytes an id in that test; a
+real content-addressed id is about 68, so in a deployment the growth is
+roughly seven times larger. The repeat-read saving is small here because the
+backend is in memory: what the cache removes is one download and one parse
+of a 13 MB blob, and against object storage the download is the larger half.
+What remains of a cached read is the census listing, the digest, and the
+decidable pipeline over the rows.
+
+A snapshot written before Phase 891 (format version 1) reads as no surface
+and is rebuilt on the first population read after the upgrade.
+
 ## The indexed store: `ToolUp.FactStores.Postgres` (Phase 888)
 
 The implementation the paragraphs above have promised since Phase 520: an
@@ -282,9 +349,15 @@ below its index threshold).
 blob store composed, `FactsCompose.withFactStore` registers
 `BlobFactStoreScaleValidator`: it counts each scope's fact census, warns
 above `BlobFactStoreScale.WarnAboveFacts` (50,000) facts in one scope, and
-refuses startup above `BlobFactStoreScale.RefuseAboveFacts` (300,000),
-naming this companion as the remedy. A single-replica deployment registers
-nothing, and the guard stands down once another store is composed.
+warns again, in stronger terms, above `BlobFactStoreScale.RefuseAboveFacts`
+(300,000), naming this companion as the remedy both times. **It is
+warn-only in this release** (operator decision, 2026-09-29): Phase 888
+shipped the upper threshold as a startup refusal, and it now reports a
+warning instead — both thresholds and the advice to move to this companion
+stand, the constant keeps its name so no caller breaks, and nothing the
+guard reports stops a deployment starting. A single-replica deployment
+registers nothing, and the guard stands down once another store is
+composed.
 
 ## Fact vs result vs model artifact
 

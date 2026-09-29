@@ -1228,6 +1228,11 @@
         <Compile Include="InProcess\I18nCoverageTests.fs" />
         <Compile Include="InProcess\MultimodalAIProviderTests.fs" />
         <Compile Include="InProcess\CitationNormaliserTests.fs" />
+        <!-- Phase 893 — the ISparseIndex contract pack. Compiled BEFORE
+             InProcess\InMemoryBM25IndexTests.fs, which binds it to the
+             in-process index; InProcess\PostgresFullTextIndexTests.fs binds
+             it to the database companion. -->
+        <Compile Include="Contracts\ISparseIndexContract.fs" />
         <!-- BM25 snapshot persistence regression — private CLIMutable
              records through FableConverters (save → load round-trip,
              legacy/corrupt blob degradation). -->
@@ -2038,6 +2043,7 @@
              AspNetCore-side refusal scope. Same TestServer-scaffold
              deferral as the prior 69 perf-shrink packs. -->
         <Compile Include="InProcess\FromContextAsyncBuildOnceTests.fs" />
+        <Compile Include="InProcess\GeneratedInvocationChainTests.fs" />
         <!-- Phase 26 — deploy-plane substrate bindings. Real
              EntityStoreTenantFleet (over BlobEntityStore + in-memory
              mocks for the injected IContainerScheduler / IDeployPipeline)
@@ -2450,6 +2456,10 @@
              file's shared `deterministicOrderingContract` rather than
              restating it. -->
         <Compile Include="InProcess\PgvectorVectorStoreTests.fs" />
+        <!-- Phase 893 — PostgreSQL full-text ISparseIndex companion, and the
+             keyword-index composition seam + replica validator. -->
+        <Compile Include="InProcess\PostgresFullTextIndexTests.fs" />
+        <Compile Include="InProcess\SparseIndexCompositionTests.fs" />
         <!-- Phase 513 — Redis IEmbeddingCache companion. Structural arm
              always on (key derivation, wire codec, option guards); live
              arm env-gated on TOOLUP_REDIS_CONNECTION, the same server the
@@ -2749,6 +2759,14 @@
              the FactBrowse egress door, the population tool's ranking, runs and
              movers, one fact's provenance, and the per-run notification. -->
         <Compile Include="InProcess\FactBrowseTests.fs" />
+        <!-- Phase 889 — the delegate fact: decorator-versus-plain equivalence,
+             materialise-on-read, AsOf exactness and refusal, refresh
+             supersession, the delegated whole-store walks, composition. -->
+        <Compile Include="InProcess\DelegateFactTests.fs" />
+        <!-- Phase 896 — team output visibility: the rule and the policy-change check,
+             the viewer-aware resolver, the gate at every egress surface, the request
+             viewer, the tool and browse doors, and the per-team record. -->
+        <Compile Include="InProcess\TeamOutputVisibilityTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />
@@ -2878,6 +2896,7 @@
         <ProjectReference Include="..\AuditSinks\ChainedLedger\ToolUp.AuditSinks.ChainedLedger.fsproj" />
         <ProjectReference Include="..\VectorStores\Hnsw\HnswVectorStore.fsproj" />
         <ProjectReference Include="..\VectorStores\Pgvector\PgvectorVectorStore.fsproj" />
+        <ProjectReference Include="..\SparseIndices\Postgres\PostgresFullTextIndex.fsproj" />
         <ProjectReference Include="..\EmbeddingCaches\Redis\ToolUp.EmbeddingCaches.Redis.fsproj" />
         <!-- Phase 14z — the local TF-IDF embedder, for its scope-keyed
              factory. Dev-only companion; no external dependency. -->

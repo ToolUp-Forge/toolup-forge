@@ -1684,19 +1684,17 @@ let tests =
                 ToolUp.Platform.ServedApiRecords.resetForTests ()
                 JsonDecoders.resetForTests ()
         ]
-        // ─── Phase 845 — decide the Fable `Long` object form on `asInt64` ──
+        // ─── Phase 911 — the Fable `Long` object form is refused ───────────
         //
-        // The decision (see `docs/migrations/799-json-wire-decoder-algebra.md`):
-        // ADMIT the Fable/Long.js runtime shape `{"high","low","unsigned"}` in
-        // `asInt64` / `asUInt64`, matching what the pre-existing STJ
-        // `Int64Converter` / `UInt64Converter` already reconstructed a value
-        // from. The rejected alternative was to leave the algebra narrower
-        // than the converter set it replaces — a consumer whose hand-built
-        // request currently works against STJ would silently start being
-        // refused the moment its argument type moved onto the algebra, which
-        // is a regression the algebra opts a consumer INTO rather than one it
-        // asked for.
-        testList "Phase 845 — decide the Fable `Long` object form on `asInt64`" [
+        // Phase 845 admitted the Fable/Long.js runtime shape
+        // `{"high","low","unsigned"}` in `asInt64` / `asUInt64` (STJ parity).
+        // Phase 911 reverses it on every profile (see
+        // `docs/migrations/799-json-wire-decoder-algebra.md`): no writer the
+        // gates verify against emits the shape, its `unsigned` tag was read
+        // by nothing, and v0.23.0 refused it. These are 845's pins turned
+        // into refusal pins over the same population, beside the two forms
+        // that ARE accepted and both writer oracles over each arm.
+        testList "Phase 911 — the Fable `Long` object form is refused on every profile" [
             let longObjectJson (low: int32) (high: int32) (isUnsigned: bool) =
                 sprintf """{"high":%d,"low":%d,"unsigned":%b}""" high low isUnsigned
 
@@ -1710,18 +1708,32 @@ let tests =
             let signedString (value: int64) =
                 (if value >= 0L then "+" else "") + string value
 
+            // The refusal names both accepted forms, so a caller reading it
+            // knows what to send instead.
+            let expectFormsRefusal (typeName: string) (text: string) (result: Result<'T, DecodeError>) =
+                match result with
+                | Error e ->
+                    let rendered = DecodeError.render e
+                    Expect.stringContains rendered typeName (sprintf "`%s`: names the type" text)
+                    Expect.stringContains rendered "a JSON number" (sprintf "`%s`: names the number form" text)
+                    Expect.stringContains rendered "string" (sprintf "`%s`: names the string form" text)
+                | Ok decoded -> failtestf "`%s` should have been refused, decoded to %A" text decoded
+
             testCase
-                "845.A/B/C — the object form decodes `asInt64` to the same value as the number and signed-string forms, over the same population"
+                "911 — `asInt64` refuses the object form, naming both accepted forms; the number and signed-string forms still decode, over 845's population"
             <| fun () ->
                 let population = [ 0L; 1L; -1L; 42L; -42L; 9007199254740993L; Int64.MinValue; Int64.MaxValue ]
 
                 for value in population do
                     let low, high = bitsOfInt64 value
-                    let objectText = longObjectJson low high (value >= 0L)
 
-                    match JsonRead.tryParse objectText |> Result.bind JsonDecode.asInt64 with
-                    | Ok decoded -> Expect.equal decoded value (sprintf "object form decodes %d" value)
-                    | Error e -> failtestf "object form for %d was refused: %s" value (DecodeError.render e)
+                    for isUnsigned in [ false; true ] do
+                        let objectText = longObjectJson low high isUnsigned
+
+                        expectFormsRefusal
+                            "Int64"
+                            objectText
+                            (JsonRead.tryParse objectText |> Result.bind JsonDecode.asInt64)
 
                     Expect.equal
                         (JsonRead.tryParse (string value) |> Result.bind JsonDecode.asInt64)
@@ -1734,17 +1746,20 @@ let tests =
                         (Ok value)
                         "agrees with the signed-string form"
 
-            testCase "845.B — the reciprocal `asUInt64` admits the object form identically"
+            testCase "911 — the reciprocal `asUInt64` refuses the object form identically"
             <| fun () ->
                 let population = [ 0UL; 1UL; 42UL; 9007199254740993UL; UInt64.MaxValue ]
 
                 for value in population do
                     let low, high = bitsOfUInt64 value
-                    let objectText = longObjectJson low high true
 
-                    match JsonRead.tryParse objectText |> Result.bind JsonDecode.asUInt64 with
-                    | Ok decoded -> Expect.equal decoded value (sprintf "object form decodes %d" value)
-                    | Error e -> failtestf "object form for %d was refused: %s" value (DecodeError.render e)
+                    for isUnsigned in [ false; true ] do
+                        let objectText = longObjectJson low high isUnsigned
+
+                        expectFormsRefusal
+                            "UInt64"
+                            objectText
+                            (JsonRead.tryParse objectText |> Result.bind JsonDecode.asUInt64)
 
                     Expect.equal
                         (JsonRead.tryParse (string value) |> Result.bind JsonDecode.asUInt64)
@@ -1756,12 +1771,32 @@ let tests =
                         (Ok value)
                         "agrees with the digit-string form"
 
-            testCase "845 — a malformed object form (missing / non-numeric `low` or `high`) is refused, never thrown"
+            testCase "911 — every object, well-formed or not, and every non-number non-string is refused, never thrown"
             <| fun () ->
-                for text in [ """{"high":1}"""; """{"low":1}"""; """{"low":"x","high":1}"""; "{}" ] do
-                    match JsonRead.tryParse text |> Result.bind JsonDecode.asInt64 with
-                    | Error _ -> ()
-                    | Ok decoded -> failtestf "`%s` should have been refused, decoded to %d" text decoded
+                for text in
+                    [
+                        """{"high":1}"""
+                        """{"low":1}"""
+                        """{"low":"x","high":1}"""
+                        "{}"
+                        "null"
+                        "true"
+                        "[1,2]"
+                    ] do
+                    expectFormsRefusal "Int64" text (JsonRead.tryParse text |> Result.bind JsonDecode.asInt64)
+                    expectFormsRefusal "UInt64" text (JsonRead.tryParse text |> Result.bind JsonDecode.asUInt64)
+
+            testCase "911 — both writer oracles stay green over `asInt64` and `asUInt64`"
+            <| fun () ->
+                match JsonDecoders.verifyBothWith gateOracle gateDraws gateSeed JsonDecode.asInt64 with
+                | Ok _ -> ()
+                | Error refusal ->
+                    failtestf "asInt64 refused a writer's text: %s" (JsonDecoders.describeRefusal refusal)
+
+                match JsonDecoders.verifyBothWith gateOracle gateDraws gateSeed JsonDecode.asUInt64 with
+                | Ok _ -> ()
+                | Error refusal ->
+                    failtestf "asUInt64 refused a writer's text: %s" (JsonDecoders.describeRefusal refusal)
         ]
 
         testList "Phase 885 — the JSON gate verifies against the browser's writer" [

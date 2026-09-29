@@ -59,25 +59,36 @@ Every refusal is a `validation`-category 400 with a path, before the handler run
 handler would have had to guard against; it now hears about it by name.
 
 **The `{high, low, unsigned}` form of `int64`** that raw `JSON.stringify` of a Fable `Long` produces
-**is admitted by `asInt64` and `asUInt64` (decided Phase 845)**. Neither wire writer emits it on the
-happy path — `Fable.SimpleJson` writes a number or the signed string, same as `Int64Converter.Write`
-— but the server's pre-existing STJ `Int64Converter` / `UInt64Converter` already reconstructed a
-value from it, for a consumer that serialises an `int64` argument by hand (`JSON.stringify` over a
-plain object holding a `Long`) rather than through the SDK's own writer. Phase 845 admits the shape
-in the algebra too, rather than narrowing what a working client could rely on: refusing a shape the
-converter set already accepted would be a regression the algebra opts a consumer into, not one it
-asked for. `unsigned` is read by neither reconstruction — the low/high bit pattern is the same 64
-bits regardless of the tag. None of the four records above takes an `int64` argument, so no traffic
-changes for them; a consumer registering a decoder for a record that does may rely on this shape.
+**is refused by `asInt64` and `asUInt64` on every profile (Phase 911)**, with a refusal that names
+the two accepted forms: a JSON number, or the signed string (`"+42"`, `"-7"`; a digit string for
+`uint64`). Phase 845 had admitted the shape, for parity with the server's STJ `Int64Converter` /
+`UInt64Converter`, which reconstruct a value from it; Phase 911 reverses that. No writer the gates
+verify against emits the shape — `Fable.SimpleJson` and the generated `JsonEncode` both write a
+number or the signed string, same as `Int64Converter.Write` — so nothing but hand-written pins stood
+behind it, and its `unsigned` tag was read by nothing, a lenient read no oracle could see. One
+accepted form per type is also simpler than a profile branch. v0.23.0 refused the shape too, so
+against the last tagged release nothing narrows; only a tree built between Phases 845 and 911
+accepted it. An argument type left on the STJ path (no decoder registered) still reads the shape
+through the converter set, unchanged.
 
-> **Being withdrawn (Phase 911) — do not build on the object form.** The admission above is reversed:
-> a coming release refuses the `{high, low, unsigned}` form in `asInt64` and `asUInt64` on **every**
-> profile, restoring the behaviour of v0.23.0, so against the last tagged release nothing narrows. The
-> reasons: no writer the gates verify against emits the shape, so nothing but hand-written pins stands
-> behind it; `unsigned` is silently ignored, a lenient read no oracle can see; and one accepted form per
-> type is simpler than a profile branch. Until that release lands the shape is still accepted. A
-> request body built by hand should carry an `int64` / `uint64` as a JSON number or the signed string
-> (`"+42"`, `"-7"`) — or, better, go through the SDK's own proxy, which already does.
+**Callers were checked before the refusal landed.** Every consuming application known to the
+maintainers was searched for request bodies built by hand — raw `fetch` / `XMLHttpRequest` bodies,
+`JSON.stringify` over values carrying an `int64` / `uint64`. The hits were page-script calls to
+non-remoting endpoints (a consent choice, a subscription email, a push-subscription string), local
+storage, and a debug log line; none sends an `int64` / `uint64` to a remoting method, so nothing
+needed converting. If you build a remoting request body by hand, carry an `int64` / `uint64` as a
+JSON number or the signed string — or, better, go through the SDK's own proxy, which already does.
+
+**The reflective client reads an `int64` exactly, or refuses (Phase 911).** A response whose return
+type has no registered JSON decoder is read by `Fable.SimpleJson`, which read an `int64` JSON
+*number* through `int`: anything outside int32 wrapped (`5000000000` read as `705032704`, 2^53 + 1 as
+`0`), and a negative number at `uint64` wrapped to near 2^64. The server's writer sends the signed
+string, which was always exact, so SDK-to-SDK traffic was never affected; a number token comes from
+any other writer. The proxy now rewrites a number at an `int64` / `uint64` position into the digit
+string the library reads exactly, and refuses — as a `DecodeError` on `ProxyRequestException`, with
+the path — a number it cannot carry exactly: fractional, negative at `uint64`, or beyond ±(2^53 − 1),
+where `JSON.parse` may already have rounded it. A return type with no `int64` / `uint64` anywhere
+takes the unchanged path at no cost. Streaming chunks (`IAsyncEnumerable` fields) take the same pass.
 
 **A quoted `decimal` is admitted by `asDecimal` (decided Phase 885)**, because that is how the
 browser writes one: `Fable.SimpleJson` sends `"1234.50"`, which the converter set always read and
@@ -88,10 +99,13 @@ companions from the same phase: on the Fable client `asDateTime` now keeps the t
 the generated `registerAllVerified` now verify against the browser's writer as well as the server's**
 (`JsonDecoders.browserOracle`). A decoder you register through them that reads the server's text but
 refuses the browser's — the pre-885 `asDecimal` was one — is now refused at registration, naming the
-draw; that refusal is a real browser call that would have failed. One such shape is known and not
-yet closed: a `Map` keyed by a union with fields (or a tuple/record) arrives from the browser as an
-array of `[key, value]` pairs, which `asMap` does not read; keep such an argument type on the STJ
-path until its successor phase lands. See `docs/platform/remoting-decoder-algebra.md` §8.
+draw; that refusal is a real browser call that would have failed. The one such shape 885 measured
+is closed by Phase 899: a `Map` keyed by a union with fields (or a tuple/record) arrives from the
+browser as an array of `[key, value]` pairs, which `asMap` does not read — `JsonDecode.asMapOf`
+takes a key decoder and reads both that form and the server's, and the generator plans such a map
+through it (and writes it with `JsonEncode.mapOf`). A map keyed by an enum-like union, or by a
+primitive outside `JsonDecode.Key`'s four, is still refused by name. See
+`docs/platform/remoting-decoder-algebra.md` §8, "The two map forms".
 
 ## Registering your own
 

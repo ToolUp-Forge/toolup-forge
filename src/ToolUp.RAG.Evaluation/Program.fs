@@ -13,6 +13,7 @@ open ToolUp.RAG.RetrievalTracers
 open ToolUp.RAG.SparseAnalysis
 open ToolUp.SparseIndices.Snowball
 open ToolUp.SparseIndices.Cjk
+open ToolUp.SparseIndices.Postgres
 open ToolUp.RAG.Evaluation.EvalTypes
 
 // ─── Wiring helpers ───────────────────────────────────────────────
@@ -40,10 +41,68 @@ let private resolveAnalyzer (name: string) : Result<ISparseAnalyzer, string> =
     | "cjk" -> Ok(CjkAnalyzer.bigrams ())
     | other -> Error(sprintf "Unknown analyzer '%s'. Known: %s" other (String.Join(", ", analyzerNames)))
 
+// ─── Phase 893 — keyword-index selection ──────────────────────────
+//
+// `--sparse-index postgres` swaps the in-process BM25 leg for the
+// `ToolUp.SparseIndices.Postgres` companion (connection string from
+// `TOOLUP_PG_FULLTEXT_CONNECTION_STRING`; each fixture gets its own table,
+// dropped afterwards), so the two keyword indexes' retrieval quality is
+// MEASURED side by side over the same fixtures rather than asserted. The
+// companion runs its own ranking function, so the numbers differ by design;
+// the companion README records them.
+//
+//   dotnet run --project src/ToolUp.RAG.Evaluation -- --sparse-index postgres //       src/ToolUp.RAG.Evaluation/fixtures/eval-morphology.json
+//
+// Default is `inprocess`, so every pre-existing invocation measures exactly
+// what it measured before.
+
+let private sparseIndexNames = [ "inprocess"; "postgres" ]
+
+/// The keyword leg for one fixture run: the index, and the teardown that
+/// runs after the fixture (a no-op in process; dropping the table for the
+/// database companion).
+type private SparseLeg = {
+    Index: ISparseIndex.ISparseIndex
+    Teardown: unit -> unit
+}
+
+let private postgresLeg (analyzer: ISparseAnalyzer) : Result<SparseLeg, string> =
+    match Environment.GetEnvironmentVariable ConfigKeys.Names.pgFullTextConnectionString with
+    | null
+    | "" ->
+        Error(
+            sprintf
+                "--sparse-index postgres needs %s (a PostgreSQL connection string)."
+                ConfigKeys.Names.pgFullTextConnectionString
+        )
+    | connectionString ->
+        let table = "rag_eval_" + Guid.NewGuid().ToString("N").Substring(0, 16)
+
+        let options = {
+            PostgresFullTextIndex.PostgresFullTextOptions.defaults with
+                Table = table
+        }
+
+        let index = PostgresFullTextIndex.create connectionString options analyzer None
+
+        Ok {
+            Index = index
+            Teardown =
+                fun () ->
+                    (index :?> IDisposable).Dispose()
+                    use dataSource = Npgsql.NpgsqlDataSource.Create connectionString
+                    use cmd = dataSource.CreateCommand(sprintf "DROP TABLE IF EXISTS %s;" table)
+                    cmd.ExecuteNonQuery() |> ignore
+        }
+
 /// Build a fresh in-memory pipeline rooted at `tempDir`. Each invocation
 /// gets its own `LocalFileStorage` directory so eval runs are independent
 /// — the BM25/vector indices don't leak across fixtures.
-let private buildPipeline (tempDir: string) (analyzer: ISparseAnalyzer) : IRetrievalPipeline =
+let private buildPipeline
+    (tempDir: string)
+    (analyzer: ISparseAnalyzer)
+    (sparseLeg: (ISparseAnalyzer -> Result<SparseLeg, string>) option)
+    : Result<IRetrievalPipeline * (unit -> unit), string> =
     Directory.CreateDirectory tempDir |> ignore
 
     let storage = LocalFileStorage.LocalFileStorage(tempDir) :> BlobStorage.IBlobStorage
@@ -55,8 +114,16 @@ let private buildPipeline (tempDir: string) (analyzer: ISparseAnalyzer) : IRetri
     // to the next Retrieve without waiting on a 2-second timer.
     let vectorStore = new InMemoryVectorStore(storage, logger, flushIntervalMs = 50)
 
-    let sparseIndex =
-        new InMemoryBM25Index(storage, logger, flushIntervalMs = 50, analyzer = analyzer)
+    let sparse =
+        match sparseLeg with
+        | Some build -> build analyzer
+        | None ->
+            Ok {
+                Index =
+                    new InMemoryBM25Index(storage, logger, flushIntervalMs = 50, analyzer = analyzer)
+                    :> ISparseIndex.ISparseIndex
+                Teardown = ignore
+            }
 
     let tracer = createNoOp ()
 
@@ -66,14 +133,17 @@ let private buildPipeline (tempDir: string) (analyzer: ISparseAnalyzer) : IRetri
     // the pipeline early-returns `[]` for every query and the harness
     // scores 0.000 (the regression this restores: the eval is a
     // measurement tool, it must enable the KB scope its fixture lives in).
-    RetrievalPipeline(
-        store = vectorStore,
-        embedder = embedder,
-        sparseIndex = sparseIndex,
-        tracer = tracer,
-        platformKnowledgeBase = EnabledPlatformKnowledgeBase
-    )
-    :> IRetrievalPipeline
+    sparse
+    |> Result.map (fun leg ->
+        RetrievalPipeline(
+            store = vectorStore,
+            embedder = embedder,
+            sparseIndex = leg.Index,
+            tracer = tracer,
+            platformKnowledgeBase = EnabledPlatformKnowledgeBase
+        )
+        :> IRetrievalPipeline,
+        leg.Teardown)
 
 // ─── Reporting ────────────────────────────────────────────────────
 
@@ -144,11 +214,12 @@ let main argv =
     | "ablation" :: rest -> runAblation rest
     | _ ->
 
-        let fixturesArg, baselineArg, outArg, analyzerArg =
+        let fixturesArg, baselineArg, outArg, analyzerArg, sparseIndexArg =
             let mutable fixtures = []
             let mutable baseline: string option = None
             let mutable out: string option = None
             let mutable analyzer = "identity"
+            let mutable sparseIndex = "inprocess"
             let mutable i = 0
 
             while i < argv.Length do
@@ -162,11 +233,14 @@ let main argv =
                 | "--analyzer" when i + 1 < argv.Length ->
                     analyzer <- argv[i + 1]
                     i <- i + 2
+                | "--sparse-index" when i + 1 < argv.Length ->
+                    sparseIndex <- argv[i + 1]
+                    i <- i + 2
                 | f ->
                     fixtures <- fixtures @ [ f ]
                     i <- i + 1
 
-            fixtures, baseline, out, analyzer
+            fixtures, baseline, out, analyzer, sparseIndex
 
         let fixtures =
             if List.isEmpty fixturesArg then
@@ -189,7 +263,20 @@ let main argv =
                 regressionFound <- true
                 None
 
-        for fixturePath in (if analyzer.IsNone then [] else fixtures) do
+        // Phase 893 — the keyword index, resolved up front for the same
+        // reason: an unknown name must fail, never fall back.
+        let sparseLeg =
+            match sparseIndexArg.Trim().ToLowerInvariant() with
+            | "inprocess" -> Some None
+            | "postgres" ->
+                printfn "Sparse index: ToolUp.SparseIndices.Postgres"
+                Some(Some postgresLeg)
+            | other ->
+                eprintfn "Unknown sparse index '%s'. Known: %s" other (String.Join(", ", sparseIndexNames))
+                regressionFound <- true
+                None
+
+        for fixturePath in (if analyzer.IsNone || sparseLeg.IsNone then [] else fixtures) do
             if not (File.Exists fixturePath) then
                 eprintfn "Fixture not found: %s" fixturePath
                 regressionFound <- true
@@ -199,48 +286,62 @@ let main argv =
                 let tempDir =
                     Path.Combine(Path.GetTempPath(), "rag-eval-" + Guid.NewGuid().ToString("N"))
 
+                let built = buildPipeline tempDir analyzer.Value sparseLeg.Value
+
                 try
-                    let pipeline = buildPipeline tempDir analyzer.Value
-                    let report = RetrievalEval.evaluate pipeline fixture |> Async.RunSynchronously
-                    printReport report
-
-                    // Phase 502.E — a filter leak fails the run outright, and
-                    // is checked BEFORE the baseline comparison because it is
-                    // not a quality metric with a tolerance: a filter is a
-                    // narrowing / isolation intent (GP 4), so returning
-                    // content the query asked to exclude is wrong at any
-                    // recall. There is no `--baseline` in which it is
-                    // acceptable, and no fixture-declared floor to breach —
-                    // the correct count is always zero.
-                    if report.FilterViolationCount > 0 then
-                        eprintfn
-                            "✗ %d filtered query/queries returned out-of-filter chunks in %s"
-                            report.FilterViolationCount
-                            fixture.Name
-
+                    match built with
+                    | Error message ->
+                        eprintfn "%s" message
                         regressionFound <- true
+                    | Ok(pipeline, _) ->
+                        let report = RetrievalEval.evaluate pipeline fixture |> Async.RunSynchronously
+                        printReport report
 
-                    match outArg with
-                    | Some path -> writeReport path report
-                    | None -> ()
+                        // Phase 502.E — a filter leak fails the run outright, and
+                        // is checked BEFORE the baseline comparison because it is
+                        // not a quality metric with a tolerance: a filter is a
+                        // narrowing / isolation intent (GP 4), so returning
+                        // content the query asked to exclude is wrong at any
+                        // recall. There is no `--baseline` in which it is
+                        // acceptable, and no fixture-declared floor to breach —
+                        // the correct count is always zero.
+                        if report.FilterViolationCount > 0 then
+                            eprintfn
+                                "✗ %d filtered query/queries returned out-of-filter chunks in %s"
+                                report.FilterViolationCount
+                                fixture.Name
 
-                    match baselineArg with
-                    | None -> ()
-                    | Some path when not (File.Exists path) ->
-                        eprintfn "Baseline not found: %s — skipping regression check" path
-                    | Some path ->
-                        let json = File.ReadAllText path
-
-                        let options = FableConverters.create ()
-
-                        let baseline = JsonSerializer.Deserialize<EvalReport>(json, options)
-
-                        match RetrievalEval.detectRegression 0.05 baseline report with
-                        | Ok() -> printfn "✓ No regression vs baseline (%s)" path
-                        | Error msg ->
-                            eprintfn "✗ Regression detected: %s" msg
                             regressionFound <- true
+
+                        match outArg with
+                        | Some path -> writeReport path report
+                        | None -> ()
+
+                        match baselineArg with
+                        | None -> ()
+                        | Some path when not (File.Exists path) ->
+                            eprintfn "Baseline not found: %s — skipping regression check" path
+                        | Some path ->
+                            let json = File.ReadAllText path
+
+                            let options = FableConverters.create ()
+
+                            let baseline = JsonSerializer.Deserialize<EvalReport>(json, options)
+
+                            match RetrievalEval.detectRegression 0.05 baseline report with
+                            | Ok() -> printfn "✓ No regression vs baseline (%s)" path
+                            | Error msg ->
+                                eprintfn "✗ Regression detected: %s" msg
+                                regressionFound <- true
                 finally
+                    match built with
+                    | Ok(_, teardown) ->
+                        try
+                            teardown ()
+                        with ex ->
+                            eprintfn "Sparse-index teardown failed: %s" ex.Message
+                    | Error _ -> ()
+
                     try
                         Directory.Delete(tempDir, recursive = true)
                     with _ ->

@@ -5,6 +5,9 @@
 //   Phase 69k.B — typed argument parse for ICorpusApi.
 //   Every argument decodes through the Phase 783 statically-typed STJ
 //   seam, never a reflective MethodInfo walk over a boxed obj.
+//   Phase 906 — and the generated invocation of every method, which
+//   the server's remoting proxy composes inside the adapter's
+//   pre-flight chain once `register ()` has run.
 // </auto-generated>
 
 namespace HelloWorld.AOT
@@ -504,3 +507,257 @@ module ICorpusApiDispatch =
         | _ ->
             Error(DecodeError.at [ "Tree(args)" ] "1 argument(s)" (sprintf "%d" (List.length args)))
 
+    /// Phase 906 — every method's generated invocation. The server's
+    /// remoting proxy composes it as the INNERMOST stage of the adapter's
+    /// pre-flight chain (auth, rate limit, validation, idempotency and
+    /// audit all run around it); arguments decode through the proxy's
+    /// own seam, and only the call and the result's type are typed here.
+    let invocations: ToolUp.Remoting.Server.GeneratedInvocationTable<HelloWorld.AOT.Contract.ICorpusApi> =
+        ToolUp.Remoting.Server.GeneratedInvocation.table [
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, bool>
+                "Bool"
+                [| typeof<bool>; typeof<Async<bool>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<bool>()
+                    args.Complete(api.Bool a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, int>
+                "Int32"
+                [| typeof<int>; typeof<Async<int>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<int>()
+                    args.Complete(api.Int32 a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, string>
+                "String"
+                [| typeof<string>; typeof<Async<string>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<string>()
+                    args.Complete(api.String a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, char>
+                "Char"
+                [| typeof<char>; typeof<Async<char>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<char>()
+                    args.Complete(api.Char a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, byte>
+                "Byte"
+                [| typeof<byte>; typeof<Async<byte>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<byte>()
+                    args.Complete(api.Byte a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, sbyte>
+                "SByte"
+                [| typeof<sbyte>; typeof<Async<sbyte>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<sbyte>()
+                    args.Complete(api.SByte a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, int16>
+                "Int16"
+                [| typeof<int16>; typeof<Async<int16>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<int16>()
+                    args.Complete(api.Int16 a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, uint16>
+                "UInt16"
+                [| typeof<uint16>; typeof<Async<uint16>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<uint16>()
+                    args.Complete(api.UInt16 a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, uint32>
+                "UInt32"
+                [| typeof<uint32>; typeof<Async<uint32>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<uint32>()
+                    args.Complete(api.UInt32 a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, int64>
+                "Int64"
+                [| typeof<int64>; typeof<Async<int64>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<int64>()
+                    args.Complete(api.Int64 a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, uint64>
+                "UInt64"
+                [| typeof<uint64>; typeof<Async<uint64>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<uint64>()
+                    args.Complete(api.UInt64 a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, float>
+                "Float"
+                [| typeof<float>; typeof<Async<float>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<float>()
+                    args.Complete(api.Float a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, float32>
+                "Float32"
+                [| typeof<float32>; typeof<Async<float32>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<float32>()
+                    args.Complete(api.Float32 a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, decimal>
+                "Decimal"
+                [| typeof<decimal>; typeof<Async<decimal>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<decimal>()
+                    args.Complete(api.Decimal a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, DateTime>
+                "DateTime"
+                [| typeof<DateTime>; typeof<Async<DateTime>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<DateTime>()
+                    args.Complete(api.DateTime a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, DateTimeOffset>
+                "DateTimeOffset"
+                [| typeof<DateTimeOffset>; typeof<Async<DateTimeOffset>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<DateTimeOffset>()
+                    args.Complete(api.DateTimeOffset a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, TimeSpan>
+                "TimeSpan"
+                [| typeof<TimeSpan>; typeof<Async<TimeSpan>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<TimeSpan>()
+                    args.Complete(api.TimeSpan a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, DateOnly>
+                "DateOnly"
+                [| typeof<DateOnly>; typeof<Async<DateOnly>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<DateOnly>()
+                    args.Complete(api.DateOnly a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, TimeOnly>
+                "TimeOnly"
+                [| typeof<TimeOnly>; typeof<Async<TimeOnly>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<TimeOnly>()
+                    args.Complete(api.TimeOnly a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, Guid>
+                "Guid"
+                [| typeof<Guid>; typeof<Async<Guid>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<Guid>()
+                    args.Complete(api.Guid a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, byte[]>
+                "Bytes"
+                [| typeof<byte[]>; typeof<Async<byte[]>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<byte[]>()
+                    args.Complete(api.Bytes a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, int option>
+                "OptionInt"
+                [| typeof<int option>; typeof<Async<int option>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<int option>()
+                    args.Complete(api.OptionInt a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, string option>
+                "OptionString"
+                [| typeof<string option>; typeof<Async<string option>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<string option>()
+                    args.Complete(api.OptionString a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, WireCorpus.Address option>
+                "OptionAddress"
+                [| typeof<WireCorpus.Address option>; typeof<Async<WireCorpus.Address option>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<WireCorpus.Address option>()
+                    args.Complete(api.OptionAddress a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, int list>
+                "ListInt"
+                [| typeof<int list>; typeof<Async<int list>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<int list>()
+                    args.Complete(api.ListInt a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, WireCorpus.Address list>
+                "ListAddress"
+                [| typeof<WireCorpus.Address list>; typeof<Async<WireCorpus.Address list>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<WireCorpus.Address list>()
+                    args.Complete(api.ListAddress a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, string[]>
+                "ArrayString"
+                [| typeof<string[]>; typeof<Async<string[]>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<string[]>()
+                    args.Complete(api.ArrayString a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, Map<string, int>>
+                "MapStringInt"
+                [| typeof<Map<string, int>>; typeof<Async<Map<string, int>>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<Map<string, int>>()
+                    args.Complete(api.MapStringInt a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, Map<int, string>>
+                "MapIntString"
+                [| typeof<Map<int, string>>; typeof<Async<Map<int, string>>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<Map<int, string>>()
+                    args.Complete(api.MapIntString a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, Set<string>>
+                "SetString"
+                [| typeof<Set<string>>; typeof<Async<Set<string>>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<Set<string>>()
+                    args.Complete(api.SetString a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, Set<int>>
+                "SetInt"
+                [| typeof<Set<int>>; typeof<Async<Set<int>>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<Set<int>>()
+                    args.Complete(api.SetInt a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, int * string>
+                "TuplePair"
+                [| typeof<int * string>; typeof<Async<int * string>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<int * string>()
+                    args.Complete(api.TuplePair a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, int * string * bool>
+                "TupleTriple"
+                [| typeof<int * string * bool>; typeof<Async<int * string * bool>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<int * string * bool>()
+                    args.Complete(api.TupleTriple a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, WireCorpus.Priority>
+                "Priority"
+                [| typeof<WireCorpus.Priority>; typeof<Async<WireCorpus.Priority>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<WireCorpus.Priority>()
+                    args.Complete(api.Priority a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, WireCorpus.Outcome>
+                "Outcome"
+                [| typeof<WireCorpus.Outcome>; typeof<Async<WireCorpus.Outcome>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<WireCorpus.Outcome>()
+                    args.Complete(api.Outcome a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, WireCorpus.Address>
+                "Address"
+                [| typeof<WireCorpus.Address>; typeof<Async<WireCorpus.Address>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<WireCorpus.Address>()
+                    args.Complete(api.Address a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, WireCorpus.Consignment>
+                "Consignment"
+                [| typeof<WireCorpus.Consignment>; typeof<Async<WireCorpus.Consignment>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<WireCorpus.Consignment>()
+                    args.Complete(api.Consignment a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, WireCorpus.Customer>
+                "Customer"
+                [| typeof<WireCorpus.Customer>; typeof<Async<WireCorpus.Customer>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<WireCorpus.Customer>()
+                    args.Complete(api.Customer a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, WireCorpus.ApiEnvelope>
+                "Envelope"
+                [| typeof<WireCorpus.ApiEnvelope>; typeof<Async<WireCorpus.ApiEnvelope>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<WireCorpus.ApiEnvelope>()
+                    args.Complete(api.Envelope a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, WireCorpus.Tree>
+                "Tree"
+                [| typeof<WireCorpus.Tree>; typeof<Async<WireCorpus.Tree>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<WireCorpus.Tree>()
+                    args.Complete(api.Tree a0))
+        ]
+
+    /// Register `invocations` with the server's remoting proxy. Call
+    /// once from the composition root, BEFORE the remoting handler is
+    /// built: the proxy reads the registry when it is built.
+    let register () =
+        ToolUp.Remoting.Server.GeneratedInvocation.register invocations

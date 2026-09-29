@@ -5,6 +5,8 @@ namespace ToolUp.Facts
 
 open System
 open System.Text.Json
+open System.Threading.Tasks
+open Microsoft.AspNetCore.Http
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
@@ -96,18 +98,194 @@ module FactPurposeContext =
     /// Clear the current chain's claim.
     let clear () : unit = claimed.Value <- None
 
+// ─── Phase 896 — the viewer a disclosure decision is made for ─────────
+//
+// The gate decides a `Restricted` fact for a VIEWER once team output
+// visibility is composed. Who the viewer is comes from the request's
+// platform-resolved access context through the ambient
+// `RequestViewerContext` — established by the middleware below for an HTTP
+// request, and by a background worker for a turn it runs on a user's
+// behalf — never from an argument the calling door passes. A check with no
+// established viewer (a job or a webhook over a carried scope) evaluates as
+// the least-privileged viewer, and so does a door whose output reaches an
+// audience wider than the requester.
+
+/// Establishes the ambient request viewer for an HTTP request (Phase 896).
+module FactViewerContext =
+
+    // The request's viewer, read lazily off the items scope resolution
+    // stamps (this middleware runs before it), and snapshotted when the
+    // request ends, so work the request started that outlives it still
+    // reads the same viewer — and never reads a recycled context.
+    type private ViewerCell(ctx: HttpContext) =
+        let sync = obj ()
+        let mutable live = ctx
+        let mutable snapshot: RequestViewer option = None
+        let mutable closed = false
+
+        member _.Read() : RequestViewer option =
+            lock sync (fun () ->
+                match snapshot with
+                | Some _ -> snapshot
+                | None when not closed ->
+                    let viewer = RequestViewer.ofItems live.Items
+
+                    if viewer.IsSome then
+                        snapshot <- viewer
+
+                    viewer
+                | None -> None)
+
+        member _.Close() =
+            lock sync (fun () ->
+                if not closed then
+                    if snapshot.IsNone then
+                        snapshot <- RequestViewer.ofItems live.Items
+
+                    closed <- true
+                    live <- null)
+
+    /// The middleware body: establish the request's viewer for everything
+    /// the request runs. Registered by `FactsCompose.withTeamOutputVisibility`
+    /// ahead of scope resolution, which is why the viewer is read lazily.
+    let middleware (ctx: HttpContext) (next: Func<Task>) : Task = task {
+        let cell = ViewerCell ctx
+        use _ = RequestViewerContext.establish cell.Read
+
+        try
+            do! next.Invoke()
+        finally
+            cell.Close()
+    }
+
+/// The lookups the gate resolves a viewer through (Phase 896). The viewer's
+/// IDENTITY is never among them — that is the ambient request viewer — only
+/// facts about teams: a team's output level, a member's role, and whether a
+/// scope id names a team at all.
+type DisclosureViewerSources = {
+    /// The output level in force for a team: its own choice, else the
+    /// deployment default. `Error` when it cannot be read — every
+    /// `Restricted` fact is then denied.
+    OutputVisibility: string -> Async<Result<TeamVisibilityLevel, string>>
+    /// A user's role in a team (`teamId`, then `userId`); `None` when not a
+    /// member.
+    TeamRole: string -> string -> Async<TeamRole option>
+    /// Whether a scope id names a team — consulted only for a string-keyed
+    /// check whose scope the requester's own active team does not explain.
+    IsTeam: string -> Async<bool>
+}
+
+/// The gate's viewer-aware facet (Phase 896), armed by
+/// `FactsCompose.withTeamOutputVisibility`.
+type ViewerAwareDisclosure = {
+    /// The viewer-aware resolver. `None` uses the shipped rule over the
+    /// gate's own resolver:
+    /// `ViewerAwareDisclosurePolicyResolver.withTeamOutputVisibility`.
+    Resolver: ViewerAwareDisclosurePolicyResolver option
+    /// Where team facts are read.
+    Sources: DisclosureViewerSources
+}
+
+/// Viewer resolution for the gate (Phase 896).
+module ViewerAwareDisclosure =
+
+    /// The policy ref a `Restricted` fact is denied under when the team's
+    /// output level cannot be read (fail closed).
+    [<Literal>]
+    let UnreadableRef = "team-output-visibility-unreadable"
+
+    /// Whether a surface's audience is the requester. Retrieval, tool
+    /// results, exports and browsing reach the person asking, so they are
+    /// decided for that person. Publishing a narrative, a webhook and a
+    /// peer answer reach an audience wider than the requester, so they are
+    /// decided for the least-privileged viewer — publishing is never a way
+    /// to widen who sees restricted output.
+    let audienceIsRequester (surface: FactEgressSurface) : bool =
+        match surface with
+        | FactRetrieval
+        | FactToolResult
+        | FactExport
+        | FactBrowse -> true
+        | FactNarrativePublication
+        | FactWebhook
+        | FactPeerEgress -> false
+
+    /// The team a checked scope belongs to. `scopeTeam` is what the scope's
+    /// own resolution says (`Some` for a `ResolvedScope`); a string-keyed
+    /// check falls back to the requester's active team, then to the team
+    /// store.
+    let private teamOf
+        (sources: DisclosureViewerSources)
+        (requester: RequestViewer option)
+        (scopeId: string)
+        (scopeTeam: string option option)
+        : Async<string option> =
+        match scopeTeam with
+        | Some team -> async.Return team
+        | None ->
+            match requester with
+            | Some viewer when viewer.ActiveTeamId = Some scopeId -> async.Return(Some scopeId)
+            | _ -> async {
+                let! isTeam = sources.IsTeam scopeId
+                return if isTeam then Some scopeId else None
+              }
+
+    /// The viewer a check is decided for. Outside a team scope no team
+    /// level applies (`TeamVisible`). Under `TeamVisible` no role is looked
+    /// up — the level admits every viewer, so a team that has chosen
+    /// nothing costs one level read and is decided exactly as before. Under
+    /// a narrower level the requester's role is read from the team store;
+    /// with no requester, or at a wider-audience surface, the check is
+    /// decided for the least-privileged viewer.
+    let resolveViewer
+        (sources: DisclosureViewerSources)
+        (requester: RequestViewer option)
+        (scopeId: string)
+        (scopeTeam: string option option)
+        (surface: FactEgressSurface)
+        : Async<Result<DisclosureViewer, string>> =
+        async {
+            let requester = if audienceIsRequester surface then requester else None
+
+            match! teamOf sources requester scopeId scopeTeam with
+            | None ->
+                return
+                    Ok {
+                        DisclosureViewer.leastPrivileged TeamVisible with
+                            IsPlatformAdmin = requester |> Option.exists _.IsPlatformAdmin
+                    }
+            | Some team ->
+                match! sources.OutputVisibility team with
+                | Error message -> return Error message
+                | Ok TeamVisible -> return Ok(DisclosureViewer.leastPrivileged TeamVisible)
+                | Ok level ->
+                    match requester with
+                    | None -> return Ok(DisclosureViewer.leastPrivileged level)
+                    | Some viewer ->
+                        let! role = sources.TeamRole team viewer.UserId
+
+                        return
+                            Ok {
+                                TeamRole = role
+                                IsPlatformAdmin = viewer.IsPlatformAdmin
+                                OutputVisibility = level
+                            }
+        }
+
 /// The default `IFactDisclosureGate` over the composed fact store.
 /// Construct via `FactDisclosureGate.create`; registered in DI by
 /// `FactsCompose.withFactStore` alongside the store itself, so the fact
 /// tier can never be composed without its egress gate.
 type FactDisclosureGate
+    private
     (
         store: IFactStore,
         events: IEventStore,
-        ?resolvePolicy: DisclosurePolicyResolver,
-        ?taint: DisclosureTaintConfig,
-        ?purpose: DisclosurePurposeConfig,
-        ?budgets: DeclassificationBudgetConfig
+        resolvePolicy: DisclosurePolicyResolver option,
+        taint: DisclosureTaintConfig option,
+        purpose: DisclosurePurposeConfig option,
+        budgets: DeclassificationBudgetConfig option,
+        viewerAware: ViewerAwareDisclosure option
     ) =
 
     static let jsonOptions = FableConverters.create ()
@@ -136,6 +314,17 @@ type FactDisclosureGate
         | Some r -> r
         | None when not (DisclosureTaintConfig.isEmpty taintConfig) -> DisclosureTaintConfig.resolver taintConfig
         | None -> DisclosurePolicyResolver.denyUnknown
+
+    // Phase 896 — the viewer-aware facet. `None` (team output visibility
+    // not composed) keeps it absent: no viewer is resolved and every
+    // `Restricted` fact is decided by `resolve` alone, byte-for-byte as
+    // before (GP 11 / GP 13).
+    let resolveForViewer =
+        viewerAware
+        |> Option.map (fun facet ->
+            facet,
+            facet.Resolver
+            |> Option.defaultValue (ViewerAwareDisclosurePolicyResolver.withTeamOutputVisibility resolve))
 
     // Best-effort audit write under the reserved `_facts` source module — a
     // failed write is swallowed (the verdict already stands; auditing must
@@ -197,12 +386,55 @@ type FactDisclosureGate
         (getFact: string -> Async<Fact option>)
         (queryAll: unit -> Async<Fact list>)
         (scopeId: string)
+        (scopeTeam: string option option)
         (principal: string)
         (surface: FactEgressSurface)
         (factIds: string list)
         : Async<Map<string, FactDisclosureVerdict>> =
         async {
             let ids = factIds |> List.distinct
+
+            // Phase 896 — the viewer, resolved at most once per check and
+            // only when a `Restricted` fact actually needs it. Started on
+            // first demand; the ambient request viewer flows into it.
+            let viewer =
+                lazy
+                    (match resolveForViewer with
+                     | Some(facet, _) ->
+                         async {
+                             // A lookup that throws fails closed, exactly
+                             // like an unreadable level.
+                             try
+                                 return!
+                                     ViewerAwareDisclosure.resolveViewer
+                                         facet.Sources
+                                         (RequestViewerContext.current ())
+                                         scopeId
+                                         scopeTeam
+                                         surface
+                             with ex ->
+                                 return Error ex.Message
+                         }
+                         |> Async.StartAsTask
+                     | None -> Task.FromResult(Ok(DisclosureViewer.leastPrivileged TeamVisible)))
+
+            let verdictFor (fact: Fact option) : Async<FactDisclosureVerdict * string> =
+                match resolveForViewer, fact with
+                | Some(_, resolveViewerAware), Some f ->
+                    match f.Disclosure with
+                    | Restricted _ -> async {
+                        let! resolved = viewer.Force() |> Async.AwaitTask
+
+                        match resolved with
+                        | Ok v ->
+                            return
+                                DisclosureEgress.evaluateForViewer resolveViewerAware surface v f.Disclosure,
+                                f.Metric.Value
+                        | Error _ -> return FactNotDisclosable ViewerAwareDisclosure.UnreadableRef, f.Metric.Value
+                      }
+                    | Surfaceable
+                    | Disclosure.Internal -> async.Return(baseVerdict surface fact)
+                | _ -> async.Return(baseVerdict surface fact)
 
             // Phase 592 — the purpose facet, evaluated once per check
             // (the claim and the surface's allowed set are check-level,
@@ -253,7 +485,7 @@ type FactDisclosureGate
                 ids
                 |> List.map (fun factId -> async {
                     let! fact = getFact factId
-                    let baseV, metric = baseVerdict surface fact
+                    let! baseV, metric = verdictFor fact
 
                     // Phase 592 — a purpose refusal denies every fact in
                     // the check before per-fact evaluation (the claim is
@@ -423,6 +655,30 @@ type FactDisclosureGate
     // traded a recorded, source-compatible baseline retype for a genuine
     // consumer break, which is the wrong direction.
 
+    // Phase 896 — the public constructor, unchanged in shape. The primary
+    // constructor above is private and takes every facet explicitly, so the
+    // viewer-aware facet adds no optional argument here: a trailing optional
+    // would widen this constructor's token (see the note above), and an
+    // explicit overload differing only in a trailing optional would be
+    // ambiguous. The facet is added with `WithViewerAwareness` instead.
+    new
+        (
+            store: IFactStore,
+            events: IEventStore,
+            ?resolvePolicy: DisclosurePolicyResolver,
+            ?taint: DisclosureTaintConfig,
+            ?purpose: DisclosurePurposeConfig,
+            ?budgets: DeclassificationBudgetConfig
+        ) =
+        FactDisclosureGate(store, events, resolvePolicy, taint, purpose, budgets, None)
+
+    /// This gate with the Phase 896 viewer-aware facet armed: every other
+    /// facet (resolver, taint, purpose, budgets) is kept as it is, and a
+    /// `Restricted` fact is decided for the viewer. Composed by
+    /// `FactsCompose.withTeamOutputVisibility`.
+    member _.WithViewerAwareness(facet: ViewerAwareDisclosure) : IFactDisclosureGate =
+        FactDisclosureGate(store, events, resolvePolicy, taint, purpose, budgets, Some facet) :> IFactDisclosureGate
+
     interface IFactDisclosureGate with
 
         member _.Check(scopeId: string, principal, surface, factIds) =
@@ -437,6 +693,7 @@ type FactDisclosureGate
                         }
                     ))
                 scopeId
+                None
                 principal
                 surface
                 factIds
@@ -456,6 +713,11 @@ type FactDisclosureGate
                         }
                     ))
                 scope.ScopeId
+                (Some(
+                    scope.Storage
+                    |> Option.filter (fun storage -> storage.Container.StartsWith("team-", StringComparison.Ordinal))
+                    |> Option.map _.ScopeId
+                ))
                 principal
                 surface
                 factIds

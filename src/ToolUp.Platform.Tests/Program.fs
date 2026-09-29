@@ -389,6 +389,13 @@ let private registeredTests =
         // create-time guards, codecs); live arm Pending unless
         // TOOLUP_PGVECTOR_CONNECTION_STRING is set.
         PgvectorVectorStoreTests.tests
+        // Phase 893 — PostgreSQL full-text ISparseIndex companion. Structural
+        // arm always on; live arm Pending unless
+        // TOOLUP_PG_FULLTEXT_CONNECTION_STRING is set.
+        PostgresFullTextIndexTests.tests
+        // Phase 893 — withSparseIndex / withAnalyzedSparseIndex /
+        // withoutSparseIndex and the in-process-index replica validator.
+        SparseIndexCompositionTests.tests
         // Phase 513 — Redis IEmbeddingCache companion. Structural arm
         // always on; live arm Pending unless TOOLUP_REDIS_CONNECTION is set.
         RedisEmbeddingCacheTests.tests
@@ -1562,6 +1569,9 @@ let private registeredTests =
         // Source-audit pack pinning the `buildDispatcherTable` carve +
         // the compose-time bind in the FromContextAsync arm.
         FromContextAsyncBuildOnceTests.tests
+        // Phase 906 — a generated invocation runs inside the pre-flight
+        // chain, stage by stage, against its reflective twin.
+        GeneratedInvocationChainTests.tests
         IAIProviderContract.tests
         // Phase 26 — deploy-plane substrate contract packs bound to
         // their single-node defaults + in-memory mocks. The
@@ -2497,6 +2507,14 @@ let private registeredTests =
         // 100,000-subject table, the FactBrowse egress door, one ranking with
         // the population tool, tables and runs, per-run notification.
         FactBrowseTests.tests
+        // Phase 889 - the delegate fact: a population held as a pointer to a
+        // table, only the quoted rows minted, AsOf exact or refused, refresh
+        // supersession, and the delegated coherence / coverage walks.
+        DelegateFactTests.tests
+        // Phase 896 - team output visibility: a Restricted fact decided for
+        // the viewer at every egress door, the policy-change check, and the
+        // output level in the per-team policy record.
+        TeamOutputVisibilityTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

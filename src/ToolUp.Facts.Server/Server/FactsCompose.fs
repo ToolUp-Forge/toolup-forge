@@ -39,9 +39,15 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // It speaks only when BOTH hold: more than one replica is configured
 // (`ServerConfig.ReplicaCount > 1`), and the composed store is the blob
 // default. A single-replica deployment does not register it at all, so its
-// composition is byte-for-byte unchanged (GP 11). It warns first — above
-// `BlobFactStoreScale.WarnAboveFacts` facts in any one scope — and refuses
-// startup only above `BlobFactStoreScale.RefuseAboveFacts`.
+// composition is byte-for-byte unchanged (GP 11). It warns above
+// `BlobFactStoreScale.WarnAboveFacts` facts in any one scope, and warns
+// again, in stronger terms, above `BlobFactStoreScale.RefuseAboveFacts`.
+//
+// **Warn-only in this release (operator decision, 2026-09-29).** Phase 888
+// shipped the upper threshold as a startup REFUSAL. It is a warning for
+// now: both thresholds and the advice to move to the indexed companion
+// stand, and nothing this guard reports stops a deployment starting. The
+// upper constant keeps its name so no caller breaks.
 //
 // The count is the census `BlobFactStore` keeps (`_facts/{factId}.json`,
 // one blob per fact): one `List` per scope, no download.
@@ -56,9 +62,11 @@ module BlobFactStoreScale =
     let WarnAboveFacts = 50_000
 
     /// Above this many facts in one scope, with more than one replica, the
-    /// guard refuses startup. Sized at the grounding plane's stated
-    /// population (300,000 subjects), where one blob-store population read
-    /// is 300,000 blob reads per replica per question.
+    /// guard's warning becomes the stronger one. Sized at the grounding
+    /// plane's stated population (300,000 subjects), where one blob-store
+    /// population read is 300,000 blob reads per replica per question.
+    /// Warn-only in this release (operator decision, 2026-09-29): Phase 888
+    /// refused startup here, and the name is kept from then.
     [<Literal>]
     let RefuseAboveFacts = 300_000
 
@@ -72,8 +80,10 @@ module BlobFactStoreScale =
     let FactsPrefix = "_facts/"
 
     /// The guard's verdict over per-scope fact counts. `Ok` below the warn
-    /// threshold or at one replica; `Warning` above it; `Error` above the
-    /// refusal threshold. The largest scope decides, and is named.
+    /// threshold or at one replica; `Warning` above it, and a stronger
+    /// `Warning` above the upper threshold — never `Error` in this release
+    /// (operator decision, 2026-09-29). The largest scope decides, and is
+    /// named.
     let verdict
         (replicaCount: int)
         (warnAboveFacts: int)
@@ -84,9 +94,9 @@ module BlobFactStoreScale =
         | _ when replicaCount <= 1 -> ConfigValidation.ValidationResult.Ok
         | None -> ConfigValidation.ValidationResult.Ok
         | Some(scope, count) when count > refuseAboveFacts ->
-            ConfigValidation.ValidationResult.Error(
+            ConfigValidation.ValidationResult.Warning(
                 sprintf
-                    "ReplicaCount = %d and scope '%s' holds %d facts in BlobFactStore, above the %d-fact refusal threshold. Every replica reads the whole scope for a population read, an assert and every whole-store walk, so each question costs %d blob reads per replica. Compose %s (PostgresFactStoreCompose.withPostgresFactStore) behind the same IFactStore contract, or run a single replica."
+                    "ReplicaCount = %d and scope '%s' holds %d facts in BlobFactStore, above the %d-fact upper threshold. Every replica reads the whole scope for a population read, an assert and every whole-store walk, so each question costs %d blob reads per replica. Move to %s (PostgresFactStoreCompose.withPostgresFactStore) behind the same IFactStore contract, or run a single replica. This check warns and does not refuse startup in this release."
                     replicaCount
                     scope
                     count
@@ -97,7 +107,7 @@ module BlobFactStoreScale =
         | Some(scope, count) when count > warnAboveFacts ->
             ConfigValidation.ValidationResult.Warning(
                 sprintf
-                    "ReplicaCount = %d and scope '%s' holds %d facts in BlobFactStore, above the %d-fact warning threshold (startup is refused above %d). Population reads and asserts read the whole scope on every replica. Plan the move to %s (PostgresFactStoreCompose.withPostgresFactStore), which indexes each read."
+                    "ReplicaCount = %d and scope '%s' holds %d facts in BlobFactStore, above the %d-fact warning threshold (the stronger warning is at %d). Population reads and asserts read the whole scope on every replica. Plan the move to %s (PostgresFactStoreCompose.withPostgresFactStore), which indexes each read."
                     replicaCount
                     scope
                     count
@@ -113,11 +123,12 @@ module BlobFactStoreScale =
 /// blob store from a replacement even when a decorator wraps it.
 type internal FactStoreBackend = { Backend: string }
 
-/// Startup guard (Phase 888): warns, then refuses, a multi-replica
-/// deployment whose blob fact store holds more facts in one scope than the
-/// blob layout serves well, naming `ToolUp.FactStores.Postgres` as the
-/// remedy. Registered by `FactsCompose.withFactStore` only when
-/// `ServerConfig.ReplicaCount > 1`.
+/// Startup guard (Phase 888): warns a multi-replica deployment whose blob
+/// fact store holds more facts in one scope than the blob layout serves
+/// well, in stronger terms past the upper threshold, naming
+/// `ToolUp.FactStores.Postgres` as the remedy. Warn-only in this release
+/// (operator decision, 2026-09-29) — it never refuses startup. Registered
+/// by `FactsCompose.withFactStore` only when `ServerConfig.ReplicaCount > 1`.
 type BlobFactStoreScaleValidator
     /// The guard over `storage`'s census of the scopes `scopes` enumerates,
     /// at explicit thresholds. `isBlobStore` is whether the composed store
@@ -1107,6 +1118,16 @@ module FactsCompose =
         | :? Grounding.IMetricRegistry as r -> Some r
         | _ -> None
 
+    // Phase 889 — the store a coherence sweep reads. When delegate facts are
+    // composed it is the delegated store itself, so the sweep takes the
+    // delegated path (`CoherenceCheck.findings`) whatever decorates it above;
+    // the sweep only reads, so bypassing an assertion-hook decorator costs
+    // nothing. Otherwise it is the composed store, exactly as before.
+    let private coherenceStore (sp: IServiceProvider) : IFactStore =
+        match sp.GetService(typeof<IDelegatedFactWalks>) with
+        | :? IDelegatedFactWalks as walks -> walks :> IFactStore
+        | _ -> sp.GetRequiredService<IFactStore>()
+
     let private registerCoherenceChecks
         (config: CoherenceConfig)
         (cadence: Trigger)
@@ -1118,7 +1139,7 @@ module FactsCompose =
             // `config.HealthScope` — a fresh re-scan per call (GP 12 rule 4).
             .AddSingleton<HealthChecks.IHealthCheck>(
                 Func<IServiceProvider, HealthChecks.IHealthCheck>(fun sp ->
-                    CoherenceHealthCheck.create (sp.GetRequiredService<IFactStore>()) (tryRegistry sp) config)
+                    CoherenceHealthCheck.create (coherenceStore sp) (tryRegistry sp) config)
             )
             // Schedule the standing check on the opt-in cadence. The
             // scheduler + metric registry are only resolvable from the built
@@ -1133,7 +1154,7 @@ module FactsCompose =
                             | :? IJobScheduler as scheduler ->
                                 let handler =
                                     CoherenceJobHandler.create
-                                        (sp.GetRequiredService<IFactStore>())
+                                        (coherenceStore sp)
                                         (tryRegistry sp)
                                         (sp.GetRequiredService<INotificationChannel>())
                                         (sp.GetRequiredService<IEventStore>())
@@ -1344,5 +1365,295 @@ module FactsCompose =
                     Extensions = {
                         app.Extensions with
                             ServiceConfig = serviceConfig
+                    }
+            }
+    // ─── Phase 889 — delegate facts (opt-in) ──────────────────────────
+    //
+    // A declared fact table can hold its metric populations as delegates:
+    // the table is kept as rows (one image per committed run), the fact tier
+    // holds one record per delegate plus exactly what an answer quoted, and
+    // a read of a delegated metric is pushed down to the table. Everything is
+    // a DECORATION of what the composition already registered — the fact
+    // store and the table writer — so the tools, the planner, the disclosure
+    // gate and the coverage narrative resolve the same `IFactStore` they
+    // always did. A composition that never calls this is byte-for-byte
+    // unchanged (GP 11 / GP 13).
+
+    // The last registration of `'T` as a factory, captured from the
+    // collection before it is replaced — never resolved from the built
+    // provider, where `'T` is by then the decorator and would recurse (the
+    // Phase 707 coverage-narrative shape, for the same reason).
+    let private capturedFactory<'T> (services: IServiceCollection) : (IServiceProvider -> 'T) option =
+        match
+            services
+            |> Seq.filter (fun descriptor -> descriptor.ServiceType = typeof<'T>)
+            |> Seq.tryLast
+        with
+        | Some descriptor when not (isNull (box descriptor.ImplementationFactory)) ->
+            let factory = descriptor.ImplementationFactory
+            Some(fun sp -> factory.Invoke sp :?> 'T)
+        | Some descriptor when not (isNull descriptor.ImplementationInstance) ->
+            let instance = descriptor.ImplementationInstance :?> 'T
+            Some(fun _ -> instance)
+        | _ -> None
+
+    let private registerDelegateFacts (tableIds: string list) (services: IServiceCollection) : IServiceCollection =
+        match capturedFactory<IFactStore> services with
+        // No fact store to decorate: left untouched, as the coverage
+        // narrative does — the fact tier's own registrations surface that
+        // composition defect far more clearly than a decorator would.
+        | None -> services
+        | Some resolveInner ->
+            let resolveWriter = capturedFactory<IFactTableWriter> services
+
+            // The delegate records, resolved once from the composed table and
+            // metric registries. A table that cannot be delegated fails the
+            // first resolution, naming the table, rather than serving reads
+            // over a declaration it does not understand.
+            let delegatesOf (sp: IServiceProvider) : DelegateFact list =
+                let tables =
+                    tryService<Grounding.IFactTableRegistry> sp
+                    |> Option.defaultValue Grounding.FactTableRegistry.empty
+
+                match DelegateFacts.resolve tables (tryService<Grounding.IMetricRegistry> sp) tableIds with
+                | Ok delegates -> delegates
+                | Error reason -> invalidOp reason
+
+            services.AddSingleton<DelegatedFactStore>(
+                Func<IServiceProvider, DelegatedFactStore>(fun sp ->
+                    DelegatedFactStore.create
+                        (resolveInner sp)
+                        (sp.GetRequiredService<IBlobStorage>())
+                        (delegatesOf sp)
+                        (tryService<Grounding.IMetricRegistry> sp)
+                        (fun () -> DateTime.UtcNow))
+            )
+            |> ignore
+
+            services.AddSingleton<IFactStore>(
+                Func<IServiceProvider, IFactStore>(fun sp -> sp.GetRequiredService<DelegatedFactStore>() :> IFactStore)
+            )
+            |> ignore
+
+            services.AddSingleton<IDelegatedFactWalks>(
+                Func<IServiceProvider, IDelegatedFactWalks>(fun sp ->
+                    sp.GetRequiredService<DelegatedFactStore>() :> IDelegatedFactWalks)
+            )
+            |> ignore
+
+            services.AddSingleton<IFactTableWriter>(
+                Func<IServiceProvider, IFactTableWriter>(fun sp ->
+                    let delegated = sp.GetRequiredService<DelegatedFactStore>()
+
+                    DelegatedFactStore.writer
+                        (resolveWriter |> Option.map (fun resolve -> resolve sp))
+                        (sp.GetRequiredService<IBlobStorage>())
+                        (sp.GetRequiredService<IEventStore>())
+                        (tryService<Grounding.IFactTableRegistry> sp
+                         |> Option.defaultValue Grounding.FactTableRegistry.empty)
+                        (tryService<Grounding.IMetricRegistry> sp)
+                        delegated.Delegates
+                        // The COMPOSED store at commit time, so the refresh
+                        // reaches whatever decorates it.
+                        (fun () -> tryService<IFactStore> sp)
+                        (fun () -> DateTime.UtcNow))
+            )
+
+    /// Hold the named declared fact tables as delegate facts (Phase 889):
+    /// each table is bound to the delegate destination and kept as rows;
+    /// each of its columns becomes one delegate record in the fact tier; and
+    /// a point or population read of a delegated metric is answered from the
+    /// table, minting as ordinary facts only the rows it returns.
+    ///
+    /// Requires the fact store (`ServerConfig.FactStore = EnabledFactStore`);
+    /// under `NoFactStore` this returns the app unchanged. Insert AFTER
+    /// `withFactStore` (and after `withFactStoreImplementation`, which drops
+    /// every registration made before it) — it decorates what they
+    /// registered. `withFactTableWriter` may come before or after: tables
+    /// bound here are held by the delegate writer, and every other table is
+    /// handed to the writer that composed it.
+    ///
+    /// ```fsharp
+    /// ServerApp.empty
+    /// |> ServerApp.withConfig { ServerConfig.defaults with FactStore = EnabledFactStore }
+    /// |> ServerApp.addModules [ salesModule ]
+    /// |> FactsCompose.withFactStore
+    /// |> FactsCompose.withFactTableWriter
+    /// |> FactsCompose.withDelegateFacts [ "sku-sales" ]
+    /// ```
+    let withDelegateFacts (tableIds: string list) (app: ServerApp) : ServerApp =
+        match app.Config.FactStore, tableIds with
+        | NoFactStore, _
+        | _, [] -> app
+        | EnabledFactStore, _ ->
+            let register = registerDelegateFacts tableIds
+
+            let serviceConfig =
+                match app.Extensions.ServiceConfig with
+                | None -> Some register
+                | Some existing -> Some(fun s -> register (existing s))
+
+            let bound =
+                tableIds
+                |> List.distinct
+                |> List.fold
+                    (fun a tableId ->
+                        ServerApp.bindFactTables (Grounding.BindFactTable(tableId, DelegateFact.Destination)) a)
+                    app
+
+            {
+                bound with
+                    Extensions = {
+                        bound.Extensions with
+                            ServiceConfig = serviceConfig
+                    }
+            }
+
+    // ─── Phase 896 — team output visibility (opt-in) ──────────────────
+    //
+    // Module permission governs USE; the team's policy governs who sees the
+    // OUTPUT modules published. This knob arms the second axis at the one
+    // place every egress door already passes: the disclosure gate decides a
+    // `Restricted` fact for the viewer — the requester as the platform
+    // resolved them, or the least-privileged viewer when there is none.
+    //
+    // The team's level is read through `ITeamOutputVisibilitySource`, whose
+    // implementation lives with the per-team policy record that also holds
+    // the team's conversation level; with no source composed every team
+    // sits at the deployment default declared here.
+    //
+    // Self-contained on purpose: the gate registered by `withFactStore` is
+    // decorated in place (`FactDisclosureGate.WithViewerAwareness`), so the
+    // registration above is untouched and every facet it composed (taint,
+    // purpose, budgets) is kept.
+
+    /// The viewer-aware facet over the composed substrate.
+    let private viewerAwareFacet
+        (settings: TeamOutputVisibilitySettings)
+        (sp: IServiceProvider)
+        : ViewerAwareDisclosure =
+        let source = tryService<ITeamOutputVisibilitySource> sp
+        let teams = tryService<ToolUp.Platform.TeamManagement.ITeamStore> sp
+
+        {
+            Resolver = None
+            Sources = {
+                OutputVisibility =
+                    fun teamId ->
+                        match source with
+                        | Some source -> source.Current teamId
+                        | None -> async.Return(Ok settings.Default)
+                TeamRole =
+                    fun teamId userId ->
+                        match teams with
+                        | Some teams -> teams.GetMemberRole(teamId, userId)
+                        | None -> async.Return None
+                IsTeam =
+                    fun scopeId ->
+                        match teams with
+                        | Some teams -> async {
+                            let! team = teams.GetTeam scopeId
+                            return team.IsSome
+                          }
+                        | None -> async.Return false
+            }
+        }
+
+    /// Compose team output visibility (Phase 896): a team may limit who
+    /// sees the `Restricted` output its modules publish to the whole team,
+    /// the team's admins, or platform admins — the same three levels as
+    /// conversation visibility. `defaultLevel` is the level a team starts
+    /// with, `allowed` the levels a team owner may choose from; the
+    /// declaration is validated here, and an empty allowed set or a default
+    /// outside it fails composition.
+    ///
+    /// Arms three things: the settings (read by the store that holds each
+    /// team's choice), the gate's viewer-aware facet, and the middleware
+    /// that establishes the request's viewer. `Surfaceable` facts stay
+    /// visible to every viewer the scope admits and `Internal` facts are
+    /// never disclosed, exactly as before; module permission is not
+    /// consulted, because permission governs use, not sight.
+    ///
+    /// **Not composing this is the default**, and so is composing it with
+    /// `TeamVisible` as the default and no team choosing otherwise: every
+    /// check is then decided exactly as before (GP 11). A `NoFactStore`
+    /// deployment is unchanged. Insert after `withFactStore`:
+    ///
+    /// ```fsharp
+    /// ServerApp.empty
+    /// |> ServerApp.withStorage blob
+    /// |> FactsCompose.withFactStore
+    /// |> FactsCompose.withTeamOutputVisibility TeamVisible [ TeamVisible; TeamAdmins ]
+    /// |> ServerApp.run
+    /// ```
+    let withTeamOutputVisibility
+        (defaultLevel: TeamVisibilityLevel)
+        (allowed: TeamVisibilityLevel list)
+        (app: ServerApp)
+        : ServerApp =
+        match app.Config.FactStore with
+        | NoFactStore -> app
+        | EnabledFactStore ->
+            let settings =
+                match TeamOutputVisibilitySettings.create defaultLevel allowed with
+                | Ok settings -> settings
+                | Error message -> failwith message
+
+            let register (s: IServiceCollection) =
+                s.RemoveAll<TeamOutputVisibilitySettings>() |> ignore
+                s.AddSingleton<TeamOutputVisibilitySettings>(settings) |> ignore
+
+                match
+                    s
+                    |> Seq.filter (fun d -> d.ServiceType = typeof<IFactDisclosureGate>)
+                    |> Seq.tryLast
+                with
+                | None ->
+                    failwith
+                        "withTeamOutputVisibility: no IFactDisclosureGate is registered; compose FactsCompose.withFactStore first."
+                | Some descriptor ->
+                    let inner: IServiceProvider -> obj =
+                        if not (isNull descriptor.ImplementationFactory) then
+                            descriptor.ImplementationFactory.Invoke
+                        elif not (isNull descriptor.ImplementationInstance) then
+                            fun _ -> descriptor.ImplementationInstance
+                        else
+                            fun sp -> ActivatorUtilities.CreateInstance(sp, descriptor.ImplementationType)
+
+                    s.Remove descriptor |> ignore
+
+                    s.AddSingleton<IFactDisclosureGate>(
+                        Func<IServiceProvider, IFactDisclosureGate>(fun sp ->
+                            match inner sp with
+                            | :? FactDisclosureGate as gate -> gate.WithViewerAwareness(viewerAwareFacet settings sp)
+                            | other ->
+                                failwithf
+                                    "withTeamOutputVisibility: the composed IFactDisclosureGate is %s, not the platform's FactDisclosureGate, so team output visibility cannot be applied to it."
+                                    (other.GetType().FullName))
+                    )
+
+            let serviceConfig =
+                match app.Extensions.ServiceConfig with
+                | None -> Some register
+                | Some existing -> Some(fun s -> register (existing s))
+
+            let establishViewer (builder: Microsoft.AspNetCore.Builder.IApplicationBuilder) =
+                Microsoft.AspNetCore.Builder.UseExtensions.Use(
+                    builder,
+                    Func<
+                        Microsoft.AspNetCore.Http.HttpContext,
+                        Func<System.Threading.Tasks.Task>,
+                        System.Threading.Tasks.Task
+                     >(
+                        FactViewerContext.middleware
+                    )
+                )
+
+            {
+                app with
+                    Extensions = {
+                        app.Extensions with
+                            ServiceConfig = serviceConfig
+                            PreMiddleware = app.Extensions.PreMiddleware @ [ establishViewer ]
                     }
             }
