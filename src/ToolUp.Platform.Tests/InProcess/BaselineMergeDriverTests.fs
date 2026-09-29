@@ -27,9 +27,11 @@ module ToolUp.Platform.Tests.InProcess.BaselineMergeDriverTests
 // baseline diff six merges later.
 //
 // The conflict cases are the more important half. A merge driver that
-// resolves a REMOVAL, or reconciles two coverage deltas whose arithmetic
-// cannot both be right, is worse than no driver at all: it presents a
-// judgement as a merge. Those cases assert exit 1 AND the standard markers
+// decides between two sides that BOTH changed one row — deleted here and
+// retyped there, or retyped two ways — or reconciles two coverage deltas
+// whose arithmetic cannot both be right, is worse than no driver at all: it
+// presents a judgement as a merge. (A removal on ONE side, the other side
+// untouched, is not such a case — Phase 933 below.) Those cases assert exit 1 AND the standard markers
 // in the output, because either alone can be produced by accident.
 
 open System
@@ -316,7 +318,10 @@ let private driverTests =
             Expect.equal r.Merged theirs "one side untouched means the other side's addition is the answer"
         }
 
-        test "members: a removal on one side stays CONFLICTED" {
+        test "members: a removal on one side, the other side untouched, is taken" {
+            // Phase 933. The removing side's own baseline already carried the
+            // removal past its human (Phase 618); the other side has nothing to
+            // say about the row, so the three-way answer is the removal.
             let ours =
                 membersFixture [
                     "Demo.T (class)"
@@ -325,15 +330,29 @@ let private driverTests =
                     "Demo.U.Zed : System.String { get }"
                 ]
 
-            let r = mergeWith "members" (membersFixture baseBody) ours (membersFixture baseBody)
+            let theirs =
+                membersFixture [
+                    "Demo.T (class)"
+                    "Demo.T.Alpha() : System.Int32"
+                    "Demo.U (class)"
+                    "Demo.U.Zed : System.String { get }"
+                    "Demo.U.Zulu : System.Int32 { get }"
+                ]
 
-            Expect.equal r.Exit 1 "a removal is BREAKING (Phase 618) and must reach a human"
-            Expect.isTrue (conflicted r) "the driver leaves standard conflict markers so git records a conflict"
+            let r = mergeWith "members" (membersFixture baseBody) ours theirs
 
-            Expect.stringContains
-                r.Stderr
-                "Demo.T.Alpha() : System.Int32"
-                "the reason names the member that was lost, not just that something was"
+            Expect.equal r.Exit 0 (sprintf "expected a clean merge; stderr was: %s" r.Stderr)
+
+            Expect.equal
+                r.Merged
+                (membersFixture [
+                    "Demo.T (class)"
+                    "Demo.T.Beta() : System.Int32"
+                    "Demo.U (class)"
+                    "Demo.U.Zed : System.String { get }"
+                    "Demo.U.Zulu : System.Int32 { get }"
+                ])
+                "ours' removal of Alpha survives the union with theirs' untouched copy of it"
         }
 
         test "coverage: both sides' deltas are summed per row" {
@@ -392,6 +411,224 @@ let private driverTests =
                     r.Merged
                     text
                     (sprintf "%s did not survive an untouched three-way merge" (Path.GetFileName file))
+        }
+    ]
+
+// ─── Phase 933 — one-sided retypes, and the rows no rule can decide ──
+//
+// On 2026-09-29 the driver refused the merge of Phase 818 over Phase 887 on
+// two baselines. The cause was not a key collision: the Phase 805 driver
+// refused EVERY base line missing from either side, so a constructor retyped
+// on one side — a removal plus an addition — read as a breaking removal even
+// though the other side had not touched that row. The excerpt below is the
+// real `ToolUp.Platform.Core` rows of that merge.
+
+let private jobContextBase = [
+    "ToolUp.Platform.JobContext (class)"
+    "ToolUp.Platform.JobContext..ctor(System.Guid, System.String, ToolUp.Platform.AccessContext, System.Int32, ToolUp.Platform.Trigger, ToolUp.Platform.TriggerSource, System.DateTime, System.DateTime, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])"
+    "ToolUp.Platform.JobContext.AccessContext : ToolUp.Platform.AccessContext { get }"
+    "ToolUp.Platform.JobContext.ScheduledAt : System.DateTime { get }"
+    "ToolUp.Platform.JobContext.ScopeId : System.String { get }"
+]
+
+/// Phase 818's side: the constructor gains a `ResolvedScope`, and a `Scope` property appears.
+let private jobContext818 = [
+    "ToolUp.Platform.JobContext (class)"
+    "ToolUp.Platform.JobContext..ctor(System.Guid, System.String, ToolUp.Platform.ResolvedScope, ToolUp.Platform.AccessContext, System.Int32, ToolUp.Platform.Trigger, ToolUp.Platform.TriggerSource, System.DateTime, System.DateTime, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])"
+    "ToolUp.Platform.JobContext.AccessContext : ToolUp.Platform.AccessContext { get }"
+    "ToolUp.Platform.JobContext.ScheduledAt : System.DateTime { get }"
+    "ToolUp.Platform.JobContext.Scope : ToolUp.Platform.ResolvedScope { get }"
+    "ToolUp.Platform.JobContext.ScopeId : System.String { get }"
+]
+
+/// Phase 887's side: additions only, in another type.
+let private factTableBinding887 = [
+    "ToolUp.Platform.Grounding.FactTableBinding (class)"
+    "ToolUp.Platform.Grounding.FactTableBinding.IsBindAllFactTables : System.Boolean { get }"
+    "ToolUp.Platform.Grounding.FactTableBinding.Tag : System.Int32 { get }"
+]
+
+let private retypeTests =
+    testList "one-sided retypes (Phase 933)" [
+        test "members: the 818-over-887 replay (Core excerpt) merges with no conflict" {
+            let r =
+                mergeWith
+                    "members"
+                    (membersFixture jobContextBase)
+                    (membersFixture (sortSurfaceBody (factTableBinding887 @ jobContextBase)))
+                    (membersFixture jobContext818)
+
+            Expect.equal r.Exit 0 (sprintf "expected a clean merge; stderr was: %s" r.Stderr)
+
+            Expect.equal
+                r.Merged
+                (membersFixture (sortSurfaceBody (factTableBinding887 @ jobContext818)))
+                "818's retype and 887's additions both survive, and the old constructor does not"
+        }
+
+        test "members: a row deleted on one side and retyped on the other stays CONFLICTED" {
+            let deleted = jobContextBase |> List.filter (fun l -> not (l.Contains "..ctor"))
+
+            let r =
+                mergeWith
+                    "members"
+                    (membersFixture jobContextBase)
+                    (membersFixture deleted)
+                    (membersFixture jobContext818)
+
+            Expect.equal
+                r.Exit
+                1
+                "one side dropped the constructor, the other retyped it — no three-way rule decides that"
+
+            Expect.isTrue (conflicted r) "the driver leaves standard conflict markers so git records a conflict"
+
+            Expect.stringContains
+                r.Stderr
+                "row 'ToolUp.Platform.JobContext..ctor' was removed on one side and changed on the other"
+                "the reason names the row both sides touched"
+        }
+
+        test "members: a row retyped two different ways stays CONFLICTED" {
+            let otherRetype =
+                jobContextBase
+                |> List.map (fun l ->
+                    if l.Contains "..ctor" then
+                        "ToolUp.Platform.JobContext..ctor(System.Guid)"
+                    else
+                        l)
+
+            let r =
+                mergeWith
+                    "members"
+                    (membersFixture jobContextBase)
+                    (membersFixture otherRetype)
+                    (membersFixture jobContext818)
+
+            Expect.equal r.Exit 1 "two different replacements for one row are a disagreement, not a merge"
+            Expect.isTrue (conflicted r) "the driver leaves standard conflict markers so git records a conflict"
+            Expect.stringContains r.Stderr "ToolUp.Platform.JobContext..ctor" "the reason names the row"
+        }
+
+        test "members: the same retype on both sides merges to it" {
+            let r =
+                mergeWith
+                    "members"
+                    (membersFixture jobContextBase)
+                    (membersFixture jobContext818)
+                    (membersFixture jobContext818)
+
+            Expect.equal r.Exit 0 (sprintf "expected a clean merge; stderr was: %s" r.Stderr)
+            Expect.equal r.Merged (membersFixture jobContext818) "both sides agree, so the answer is what they agree on"
+        }
+
+        test "members: a marker added to a member the other side removed stays CONFLICTED" {
+            let obsoleted =
+                baseBody
+                |> List.collect (fun l ->
+                    if l = "Demo.T.Alpha() : System.Int32" then
+                        [ l; l + "  (obsolete)" ]
+                    else
+                        [ l ])
+
+            let removed =
+                baseBody |> List.filter (fun l -> l <> "Demo.T.Alpha() : System.Int32")
+
+            let r =
+                mergeWith "members" (membersFixture baseBody) (membersFixture removed) (membersFixture obsoleted)
+
+            Expect.equal r.Exit 1 "one side deleted Alpha while the other obsoleted it"
+            Expect.isTrue (conflicted r) "the driver leaves standard conflict markers so git records a conflict"
+            Expect.stringContains r.Stderr "Demo.T.Alpha" "the reason names the row"
+        }
+
+        test "members: a member added under a type the other side removed stays CONFLICTED" {
+            let withoutU = [ "Demo.T (class)"; "Demo.T.Alpha() : System.Int32" ]
+            let grownU = baseBody @ [ "Demo.U.Yak : System.Int32 { get }" ]
+
+            let r =
+                mergeWith "members" (membersFixture baseBody) (membersFixture withoutU) (membersFixture grownU)
+
+            Expect.equal r.Exit 1 "one side deleted Demo.U while the other added to it"
+            Expect.isTrue (conflicted r) "the driver leaves standard conflict markers so git records a conflict"
+            Expect.stringContains r.Stderr "Demo.U" "the reason names the type"
+        }
+
+        test "members: the recorded 818-over-887 merge replays to the resolution the batch gate passed" {
+            // The whole files, from history: base 76dc4262, 887 at d12d7320
+            // (ours), 818 at fdacaf8e (theirs), and a07e9aeb — the integration
+            // merge whose hand-resolved baselines the batch gate went green on.
+            let git args = run "git" args root
+
+            let reachable =
+                [ "76dc4262"; "d12d7320"; "fdacaf8e"; "a07e9aeb" ]
+                |> List.forall (fun sha ->
+                    let exit, _, _ = git [ "cat-file"; "-e"; sha + "^{commit}" ]
+                    exit = 0)
+
+            if not reachable then
+                skiptest "the Phase 818/887 commits are not in this clone (a shallow checkout) — nothing to replay"
+
+            let blob sha (path: string) =
+                let exit, out, err = git [ "show"; sprintf "%s:%s" sha path ]
+                Expect.equal exit 0 (sprintf "git show %s:%s failed: %s" sha path err)
+                out.Replace("\r\n", "\n")
+
+            for assembly in [ "ToolUp.Platform.Core"; "ToolUp.Platform.Server" ] do
+                let path = sprintf "api-baselines/%s.approved.txt" assembly
+
+                let r =
+                    mergeWith "members" (blob "76dc4262" path) (blob "d12d7320" path) (blob "fdacaf8e" path)
+
+                Expect.equal r.Exit 0 (sprintf "%s: expected a clean merge; stderr was: %s" assembly r.Stderr)
+
+                Expect.equal
+                    r.Merged
+                    (blob "a07e9aeb" path)
+                    (sprintf "%s: the driver's merge differs from the resolution the gate passed" assembly)
+        }
+    ]
+
+// ─── Phase 933 — approve mode writes what check mode reads ───────────
+//
+// Whether an F# `exception` type carries the legacy
+// `(SerializationInfo, StreamingContext)` constructor depends on the SDK
+// feature band that built the DLL. Check mode drops it on both sides
+// (`SurfaceDiff.isCompilerVersionDependent`); a regen that WROTE it left a
+// line in the baseline the gate never compares, which every scoped regen on
+// such a band then stripped by hand, and which two branches regenerated on
+// different bands then disagreed about in a merge.
+
+let private approveWriteTests =
+    testList "approve mode writes what check mode reads (Phase 933)" [
+        test "the rendered baseline text carries no SDK-band-dependent constructor" {
+            let config = activeConfig ()
+
+            let core =
+                discoverPackable root
+                |> List.tryFind (fun a -> a.Name = "ToolUp.Platform.Core")
+                |> Option.defaultWith (fun () -> failtest "ToolUp.Platform.Core is not a discovered packable assembly")
+
+            match resolveDll config core with
+            | None -> skiptest "ToolUp.Platform.Core is not built — the 'the solution is built' precondition names it"
+            | Some dll ->
+                let text = (renderSurfaceDetail dll (resolverPool root config)).Text
+
+                // Non-vacuity: the F# exception whose band-dependent ctor
+                // this is about must be IN the render, or an empty or
+                // truncated render would pass the assertion below.
+                Expect.stringContains
+                    text
+                    "ToolUp.Remoting.DecodeException (class)"
+                    "the render should include the F# exception type the band-dependent constructor belongs to"
+
+                let written =
+                    text.Split('\n')
+                    |> Array.filter ToolUp.Platform.Tests.Contracts.SurfaceDiff.isCompilerVersionDependent
+
+                Expect.isEmpty
+                    written
+                    "approve mode wrote a line check mode filters out — the regen would need a hand strip"
         }
     ]
 
@@ -505,12 +742,14 @@ let private gitMergeTest =
 let tests =
     testList "Phase 805 — generated-baseline merge drivers" [
         specTests
+        approveWriteTests
 
         // The driver is a `.ps1`. Where no `pwsh` exists there is nothing to
         // invoke — but the link-1 cases above are pure F# and still run, so
         // the generator's own order stays pinned on any machine.
         if pwsh.Value.IsSome then
             driverTests
+            retypeTests
             gitMergeTest
         else
             testList "the merge driver" [ ptest "pwsh is not on PATH — the merge-driver cases cannot run here" { () } ]

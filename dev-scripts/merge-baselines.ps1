@@ -34,10 +34,18 @@
                        sides' additions over base, re-emitted in the generator's
                        own order (types by ordinal FullName, members by ordinal
                        token within their type, an `(obsolete)` marker following
-                       the token it marks). A member REMOVED on either side leaves
-                       the file CONFLICTED — a removal is the breaking direction
-                       Phase 618 exists to put in front of a human, and no
-                       automatic resolution of it is correct.
+                       the token it marks). A line REMOVED on one side while the
+                       other side left it untouched is taken as removed (Phase
+                       933): that side's own baseline already carried the
+                       removal, so the breaking change reached its human
+                       (Phase 618) on the branch that made it — and a retype is
+                       exactly such a removal plus an addition. What stays
+                       CONFLICTED is the case no three-way rule can decide: a
+                       row removed on BOTH sides whose replacements differ —
+                       deleted on one side and retyped on the other, or retyped
+                       two different ways. A row is keyed by the line's leading
+                       name (`Type.Member`, `Type..ctor`, or the type itself),
+                       so an overload set shares one key.
 
     Exit 0 with the merged bytes in %A, or exit 1 with %A carrying standard
     conflict markers and the reason on stderr.
@@ -294,6 +302,8 @@ function Invoke-CoverageMerge() {
 # identifiable without tracking which type is open.
 $script:TypeHeader = [regex]'^(?<name>\S+) \((?:enum|interface|delegate|struct|class)\)$'
 $script:ObsoleteSuffix = '  (obsolete)'
+# A member's row name: everything before its parameter list or its ` : type`.
+$script:RowName = [regex]'^[^ (]+'
 
 function New-TypeBlock() {
     @{
@@ -391,6 +401,80 @@ function Write-TypeBlocks($types) {
     , [string[]]$out.ToArray()
 }
 
+function New-OrdinalSet([string[]]$lines) {
+    $set = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($l in $lines) { if ($l -ne '') { [void]$set.Add($l) } }
+    , $set
+}
+
+# The row a line belongs to: a type header by its type, a member (and its
+# `(obsolete)` marker) by its leading `Type.Member` / `Type..ctor` name. A
+# retype rewrites the line but keeps its key, which is what lets the removal
+# check tell "retyped" from "deleted".
+function Get-RowKey([string]$line) {
+    $m = $script:TypeHeader.Match($line)
+    if ($m.Success) { return 'type ' + $m.Groups['name'].Value }
+
+    $l = if ($line.EndsWith($script:ObsoleteSuffix)) { $line.Substring(0, $line.Length - $script:ObsoleteSuffix.Length) } else { $line }
+    $n = $script:RowName.Match($l)
+    if ($n.Success) { return $n.Value }
+    $l
+}
+
+# A side's added lines (absent from base), grouped by row key.
+function Group-AddedByRowKey([string[]]$body, $baseSet) {
+    $groups = [System.Collections.Generic.Dictionary[string, System.Collections.Generic.HashSet[string]]]::new([System.StringComparer]::Ordinal)
+
+    foreach ($l in $body) {
+        if ($l -eq '' -or $baseSet.Contains($l)) { continue }
+        $key = Get-RowKey $l
+        if (-not $groups.ContainsKey($key)) { $groups[$key] = New-OrdinalSet @() }
+        [void]$groups[$key].Add($l)
+    }
+
+    , $groups
+}
+
+# Take the removals out of the union. A dropped line can take nothing with it
+# that the other side changed: a marker the other side ADDED to a member this
+# side removed, or members the other side added under a type this side removed,
+# are a removal on one side and a change on the other.
+function Remove-DroppedLines($types, $drop) {
+    foreach ($name in @($types.Keys)) {
+        $block = $types[$name]
+
+        foreach ($h in @($block.Header)) { if ($drop.Contains($h)) { [void]$block.Header.Remove($h) } }
+
+        foreach ($token in @($block.Members.Keys)) {
+            $entry = $block.Members[$token]
+
+            if ($drop.Contains($token)) {
+                foreach ($line in $entry) {
+                    if (-not $drop.Contains($line)) {
+                        Exit-Conflict "row '$(Get-RowKey $token)' was removed on one side and changed on the other"
+                    }
+                }
+
+                [void]$block.Members.Remove($token)
+                continue
+            }
+
+            foreach ($line in @($entry)) { if ($drop.Contains($line)) { [void]$entry.Remove($line) } }
+        }
+
+        $hasHeader = $false
+        foreach ($h in $block.Header) { if ($script:TypeHeader.IsMatch($h)) { $hasHeader = $true } }
+
+        if (-not $hasHeader) {
+            if ($block.Header.Count -gt 0 -or $block.Members.Count -gt 0) {
+                Exit-Conflict "row 'type $name' was removed on one side and changed on the other"
+            }
+
+            [void]$types.Remove($name)
+        }
+    }
+}
+
 function Invoke-MembersMerge() {
     $b = Split-Header (Read-LfLines $Base)
     $o = Split-Header (Read-LfLines $Ours)
@@ -399,23 +483,48 @@ function Invoke-MembersMerge() {
     $header = Merge-Header $b.Header $o.Header $t.Header
     if ($null -eq $header) { Exit-Conflict 'both sides rewrote the generated header differently' }
 
-    $oSet = [System.Collections.Generic.HashSet[string]]::new([string[]]$o.Body, [System.StringComparer]::Ordinal)
-    $tSet = [System.Collections.Generic.HashSet[string]]::new([string[]]$t.Body, [System.StringComparer]::Ordinal)
+    $bSet = New-OrdinalSet $b.Body
+    $oSet = New-OrdinalSet $o.Body
+    $tSet = New-OrdinalSet $t.Body
 
-    $removed = [System.Collections.Generic.List[string]]::new()
+    $oAdded = Group-AddedByRowKey $o.Body $bSet
+    $tAdded = Group-AddedByRowKey $t.Body $bSet
+
+    # Every base line one side no longer carries. Missing from ONE side only,
+    # the other side left that line untouched, so the removal (or the removal
+    # half of a retype) is that side's alone and is taken. Missing from BOTH,
+    # the two sides must agree on what replaced the row.
+    $drop = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
 
     foreach ($line in $b.Body) {
         if ($line -eq '') { continue }
-        if (-not $oSet.Contains($line) -or -not $tSet.Contains($line)) { $removed.Add($line) }
-    }
+        $inO = $oSet.Contains($line)
+        $inT = $tSet.Contains($line)
+        if ($inO -and $inT) { continue }
 
-    if ($removed.Count -gt 0) {
-        $sample = (($removed | Select-Object -First 5) -join '; ')
-        $more = if ($removed.Count -gt 5) { " (and $($removed.Count - 5) more)" } else { '' }
-        Exit-Conflict "$($removed.Count) member(s) present in the merge base are missing from one side — a removal is a BREAKING change and is never merged automatically: $sample$more"
+        [void]$drop.Add($line)
+        if ($inO -or $inT) { continue }
+
+        $key = Get-RowKey $line
+        # Assigned, not `$x = if (...) { $set }`: an `if` used as an
+        # expression enumerates the set into its output, and a one-line
+        # replacement arrives as a bare string.
+        $ro = New-OrdinalSet @()
+        $rt = New-OrdinalSet @()
+        if ($oAdded.ContainsKey($key)) { $ro = $oAdded[$key] }
+        if ($tAdded.ContainsKey($key)) { $rt = $tAdded[$key] }
+
+        if ($ro.SetEquals($rt)) { continue }
+
+        if ($ro.Count -eq 0 -or $rt.Count -eq 0) {
+            Exit-Conflict "row '$key' was removed on one side and changed on the other"
+        }
+
+        Exit-Conflict "row '$key' was changed differently on the two sides"
     }
 
     $merged = Join-TypeBlocks (ConvertFrom-MembersBody $o.Body 'ours') (ConvertFrom-MembersBody $t.Body 'theirs')
+    Remove-DroppedLines $merged $drop
     Write-LfFile $Ours (Join-Lines $header (Write-TypeBlocks $merged))
     exit 0
 }

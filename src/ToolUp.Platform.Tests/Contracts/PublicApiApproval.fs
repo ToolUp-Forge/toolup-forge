@@ -971,8 +971,15 @@ let renderSurfaceDetail (dllPath: string) (resolverPaths: string seq) : SurfaceR
 
     sb.AppendLine "# still be folded into this file in the same PR." |> ignore
 
+    // Phase 933 — the text written is the text compared. Check mode reads
+    // a baseline through `SurfaceDiff.significantLines`, which drops the
+    // SDK-band-dependent constructor on both sides; an approve run that
+    // wrote it anyway put a line in the file the gate never reads, and
+    // every scoped regen on a band that emits it asked for a hand strip.
+    // Same predicate, not a second copy of its literal.
     for line in body do
-        sb.AppendLine line |> ignore
+        if not (isCompilerVersionDependent line) then
+            sb.AppendLine line |> ignore
 
     {
         Text = sb.ToString().Replace("\r\n", "\n")
