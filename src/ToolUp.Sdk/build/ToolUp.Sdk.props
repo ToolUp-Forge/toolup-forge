@@ -200,6 +200,7 @@
     <PackageVersion Include="ToolUp.Experiments.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Experiments.Server" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.ExternalCompute.Http" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.FactStores.Postgres" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Facts.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Facts.Server" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.FeatureFlagProviders.OpenFeature" Version="$(ToolUpSdkVersion)" />
