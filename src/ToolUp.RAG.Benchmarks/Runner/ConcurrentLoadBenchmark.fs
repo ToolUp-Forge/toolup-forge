@@ -389,6 +389,10 @@ type VectorBackend =
     | Hnsw
     | Pgvector
 
+/// The local PostgreSQL the harness's database arm runs against. Phase 929:
+/// the fact half's `postgres` store reads it too — one local server serves
+/// the pgvector store and the database-backed fact store, each in tables of
+/// its own, so the database arm needs one service and one variable.
 [<Literal>]
 let PgvectorVariable = "TOOLUP_PGVECTOR_CONNECTION_STRING"
 
@@ -474,12 +478,12 @@ let private buildStore
     (backend: VectorBackend)
     (storage: IBlobStorage)
     (dimensions: int)
-    : Result<IVectorStore, string> =
+    : Result<IVectorStore * (unit -> unit), string> =
     let logger = SilentLogger() :> ILogger
 
     match backend with
-    | Flat -> Ok(new InMemoryVectorStore(storage, logger, flushIntervalMs = 50) :> IVectorStore)
-    | Hnsw -> Ok(HnswVectorStore.create storage (Some logger))
+    | Flat -> Ok(new InMemoryVectorStore(storage, logger, flushIntervalMs = 50) :> IVectorStore, ignore)
+    | Hnsw -> Ok(HnswVectorStore.create storage (Some logger), ignore)
     | Pgvector ->
         match Environment.GetEnvironmentVariable PgvectorVariable with
         | null
@@ -493,7 +497,18 @@ let private buildStore
                     AnnIndex = PgvectorVectorStore.HnswAnnIndex(16, 64)
             }
 
-            Ok(PgvectorVectorStore.create connectionString options (Some logger))
+            // Phase 929 — the run's table is dropped when the run ends, so a
+            // local database the harness is pointed at again and again does
+            // not accumulate a table per run.
+            let drop () =
+                try
+                    use dataSource = Npgsql.NpgsqlDataSource.Create connectionString
+                    use command = dataSource.CreateCommand($"DROP TABLE IF EXISTS {options.Table}")
+                    command.ExecuteNonQuery() |> ignore
+                with ex ->
+                    eprintfn "[load] could not drop %s: %s" options.Table ex.Message
+
+            Ok(PgvectorVectorStore.create connectionString options (Some logger), drop)
 
 /// Run one retrieval cell. Seeds `Chunks` synthetic chunks straight into
 /// the vector store and the BM25 index (embedding through the local
@@ -512,7 +527,7 @@ let runRetrievalCell (cell: RetrievalCell) : Async<Result<RetrievalResult, strin
 
             match buildStore cell.Backend storage embedder.Dimensions with
             | Error e -> return Error e
-            | Ok store ->
+            | Ok(store, dropStore) ->
                 let sparse =
                     new InMemoryBM25Index(storage, (SilentLogger() :> ILogger), flushIntervalMs = 50) :> ISparseIndex
 
@@ -640,6 +655,7 @@ let runRetrievalCell (cell: RetrievalCell) : Async<Result<RetrievalResult, strin
                 | :? IDisposable as disposable -> disposable.Dispose()
                 | _ -> ()
 
+                dropStore ()
                 arm.Cleanup()
 
                 return
