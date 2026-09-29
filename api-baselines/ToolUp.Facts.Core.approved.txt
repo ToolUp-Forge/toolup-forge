@@ -67,6 +67,7 @@ ToolUp.Facts.DisclosureContributorScope.unsatisfiedRef(Microsoft.FSharp.Collecti
 ToolUp.Facts.DisclosureEgress (class)
 ToolUp.Facts.DisclosureEgress.evaluate(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Facts.Disclosure) : ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict
 ToolUp.Facts.DisclosureEgress.evaluateFact(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Facts.Fact) : ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict
+ToolUp.Facts.DisclosureEgress.evaluateForViewer(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.DisclosureViewer, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]]], ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Facts.DisclosureViewer, ToolUp.Facts.Disclosure) : ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict
 ToolUp.Facts.DisclosureEvents (class)
 ToolUp.Facts.DisclosureEvents.AccessedType : System.String (literal)
 ToolUp.Facts.DisclosureEvents.DeclassifiedType : System.String (literal)
@@ -125,6 +126,13 @@ ToolUp.Facts.DisclosureTaintConfigModule.resolver(ToolUp.Facts.DisclosureTaintCo
 ToolUp.Facts.DisclosureTaintConfigModule.routineClears(ToolUp.Facts.DisclosureTaintConfig, ToolUp.Facts.DeclassificationRoutine, System.String) : System.Boolean
 ToolUp.Facts.DisclosureTaintConfigModule.scopeOf(ToolUp.Facts.DisclosureTaintConfig, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Facts.DisclosureTaintConfigModule.taintVocabulary(ToolUp.Facts.DisclosureTaintConfig) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Facts.DisclosureViewer (class)
+ToolUp.Facts.DisclosureViewer..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], System.Boolean, ToolUp.Platform.TeamVisibilityLevel)
+ToolUp.Facts.DisclosureViewer.IsPlatformAdmin : System.Boolean { get }
+ToolUp.Facts.DisclosureViewer.OutputVisibility : ToolUp.Platform.TeamVisibilityLevel { get }
+ToolUp.Facts.DisclosureViewer.TeamRole : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole] { get }
+ToolUp.Facts.DisclosureViewerModule (class)
+ToolUp.Facts.DisclosureViewerModule.leastPrivileged(ToolUp.Platform.TeamVisibilityLevel) : ToolUp.Facts.DisclosureViewer
 ToolUp.Facts.Evidence (class)
 ToolUp.Facts.Evidence..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Facts.Evidence.InputHashes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
@@ -514,3 +522,6 @@ ToolUp.Facts.ValueThreshold+Tags.Between : System.Int32 (literal)
 ToolUp.Facts.ValueThresholdModule (class)
 ToolUp.Facts.ValueThresholdModule.satisfies(ToolUp.Facts.ValueThreshold, ToolUp.Facts.FactValue) : System.Boolean
 ToolUp.Facts.ValueThresholdModule.satisfiesMagnitude(ToolUp.Facts.ValueThreshold, Microsoft.FSharp.Core.FSharpOption`1[System.Decimal]) : System.Boolean
+ToolUp.Facts.ViewerAwareDisclosurePolicyResolverModule (class)
+ToolUp.Facts.ViewerAwareDisclosurePolicyResolverModule.ofResolver(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Facts.DisclosureViewer) : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]
+ToolUp.Facts.ViewerAwareDisclosurePolicyResolverModule.withTeamOutputVisibility(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]]], System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Facts.DisclosureViewer) : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]

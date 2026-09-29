@@ -2497,6 +2497,10 @@ let private registeredTests =
         // 100,000-subject table, the FactBrowse egress door, one ranking with
         // the population tool, tables and runs, per-run notification.
         FactBrowseTests.tests
+        // Phase 896 - team output visibility: a Restricted fact decided for
+        // the viewer at every egress door, the policy-change check, and the
+        // output level in the per-team policy record.
+        TeamOutputVisibilityTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

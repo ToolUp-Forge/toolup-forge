@@ -8903,6 +8903,16 @@ ToolUp.Platform.RequestContextBuilder.ofHttpContext(Microsoft.AspNetCore.Http.Ht
 ToolUp.Platform.RequestTimingMiddleware (class)
 ToolUp.Platform.RequestTimingMiddleware..ctor(Microsoft.AspNetCore.Http.RequestDelegate, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger)
 ToolUp.Platform.RequestTimingMiddleware.InvokeAsync(Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.RequestViewer (class)
+ToolUp.Platform.RequestViewer..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean)
+ToolUp.Platform.RequestViewer.ActiveTeamId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.RequestViewer.IsPlatformAdmin : System.Boolean { get }
+ToolUp.Platform.RequestViewer.UserId : System.String { get }
+ToolUp.Platform.RequestViewerContext (class)
+ToolUp.Platform.RequestViewerContext.current() : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RequestViewer]
+ToolUp.Platform.RequestViewerContext.establish(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RequestViewer]]) : System.IDisposable
+ToolUp.Platform.RequestViewerModule (class)
+ToolUp.Platform.RequestViewerModule.ofItems(System.Collections.Generic.IDictionary`2[System.Object, System.Object]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RequestViewer]
 ToolUp.Platform.ResilientBlobStorage (class)
 ToolUp.Platform.ResilientBlobStorage.applyStorageResilience(ToolUp.Platform.TransientFault+ResilienceMode, ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.BlobStorage+IBlobStorage
 ToolUp.Platform.ResilientBlobStorage+ResilientBlobStorage (class)

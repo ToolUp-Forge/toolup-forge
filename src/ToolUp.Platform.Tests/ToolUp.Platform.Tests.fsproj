@@ -2749,6 +2749,10 @@
              the FactBrowse egress door, the population tool's ranking, runs and
              movers, one fact's provenance, and the per-run notification. -->
         <Compile Include="InProcess\FactBrowseTests.fs" />
+        <!-- Phase 896 — team output visibility: the rule and the policy-change check,
+             the viewer-aware resolver, the gate at every egress surface, the request
+             viewer, the tool and browse doors, and the per-team record. -->
+        <Compile Include="InProcess\TeamOutputVisibilityTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />
