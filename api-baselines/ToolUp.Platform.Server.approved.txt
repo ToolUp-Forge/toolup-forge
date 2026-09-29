@@ -5579,6 +5579,38 @@ ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider.ProviderId : System.String
 ToolUp.Platform.IEmbeddingProvider+IScopedEmbeddingProviderFactory (interface)
 ToolUp.Platform.IEmbeddingProvider+IScopedEmbeddingProviderFactory.For(ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider
 ToolUp.Platform.IEmbeddingProvider+IScopedEmbeddingProviderFactory.ResetScope(ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedGate (class)
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedGate..ctor(ToolUp.Platform.IEmbeddingProvider+QueryEmbedPolicy)
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedGate.Embed(ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.IEmbeddingProvider+QueryEmbedOutcome]
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedGate.Policy : ToolUp.Platform.IEmbeddingProvider+QueryEmbedPolicy { get }
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedOutcome (class)
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedOutcome.IsEmbedded : System.Boolean { get }
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedOutcome.IsFailed : System.Boolean { get }
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedOutcome.IsRefused : System.Boolean { get }
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedOutcome.IsTimedOut : System.Boolean { get }
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedOutcome.Tag : System.Int32 { get }
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedOutcome+Embedded (class)
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedOutcome+Embedded.vector : System.Single[] { get }
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedOutcome+Failed (class)
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedOutcome+Failed.message : System.String { get }
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedOutcome+Refused (class)
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedOutcome+Refused.ceiling : System.Int32 { get }
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedOutcome+Tags (class)
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedOutcome+Tags.Embedded : System.Int32 (literal)
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedOutcome+Tags.Failed : System.Int32 (literal)
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedOutcome+Tags.Refused : System.Int32 (literal)
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedOutcome+Tags.TimedOut : System.Int32 (literal)
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedOutcome+TimedOut (class)
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedOutcome+TimedOut.budget : System.TimeSpan { get }
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedOutcomeModule (class)
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedOutcomeModule.label(ToolUp.Platform.IEmbeddingProvider+QueryEmbedOutcome) : System.String
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedPolicy (class)
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedPolicy..ctor(System.Int32, System.TimeSpan, Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedPolicy.MaxAttempts : System.Int32 { get }
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedPolicy.MaxConcurrentCalls : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedPolicy.Timeout : System.TimeSpan { get }
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedPolicyModule (class)
+ToolUp.Platform.IEmbeddingProvider+QueryEmbedPolicyModule.defaults : ToolUp.Platform.IEmbeddingProvider+QueryEmbedPolicy { get }
 ToolUp.Platform.IEmbeddingProvider+ScopedEmbedding (class)
 ToolUp.Platform.IEmbeddingProvider+ScopedEmbedding.forScope(ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider
 ToolUp.Platform.IEmbeddingProvider+ScopedEmbedding.isScopeKeyed(ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider) : System.Boolean
