@@ -11342,10 +11342,23 @@ ToolUp.Remoting.Server.FieldViolation..ctor(System.String, System.String, System
 ToolUp.Remoting.Server.FieldViolation.Code : System.String { get }
 ToolUp.Remoting.Server.FieldViolation.Message : System.String { get }
 ToolUp.Remoting.Server.FieldViolation.Path : System.String { get }
+ToolUp.Remoting.Server.GeneratedArguments (class)
+ToolUp.Remoting.Server.GeneratedArguments.Complete`1(Microsoft.FSharp.Control.FSharpAsync`1[T]) : System.Threading.Tasks.Task`1[ToolUp.Remoting.Server.InvocationResult]
+ToolUp.Remoting.Server.GeneratedArguments.Next`1() : T
 ToolUp.Remoting.Server.GeneratedDispatchRegistry (class)
 ToolUp.Remoting.Server.GeneratedDispatchRegistry.isRegistered`1() : System.Boolean
 ToolUp.Remoting.Server.GeneratedDispatchRegistry.register`1(System.Object) : System.Void
 ToolUp.Remoting.Server.GeneratedDispatchRegistry.tryGet`1() : Microsoft.FSharp.Core.FSharpOption`1[System.Object]
+ToolUp.Remoting.Server.GeneratedInvocation (class)
+ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst`2(System.String, System.Type[], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Server.GeneratedArguments, Microsoft.FSharp.Core.FSharpFunc`2[impl, System.Threading.Tasks.Task`1[ToolUp.Remoting.Server.InvocationResult]]]) : ToolUp.Remoting.Server.GeneratedMethod`1[impl]
+ToolUp.Remoting.Server.GeneratedInvocation.forMethod`1(System.String, System.Type[], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Server.GeneratedArguments, Microsoft.FSharp.Core.FSharpFunc`2[impl, System.Threading.Tasks.Task`1[ToolUp.Remoting.Server.InvocationResult]]]) : ToolUp.Remoting.Server.GeneratedMethod`1[impl]
+ToolUp.Remoting.Server.GeneratedInvocation.register`1(ToolUp.Remoting.Server.GeneratedInvocationTable`1[impl]) : System.Void
+ToolUp.Remoting.Server.GeneratedInvocation.table`1(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Server.GeneratedMethod`1[impl]]) : ToolUp.Remoting.Server.GeneratedInvocationTable`1[impl]
+ToolUp.Remoting.Server.GeneratedInvocationTable`1 (class)
+ToolUp.Remoting.Server.GeneratedInvocationTable`1.Methods : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Remoting.Server.GeneratedMethod`1[impl]] { get }
+ToolUp.Remoting.Server.GeneratedMethod`1 (class)
+ToolUp.Remoting.Server.GeneratedMethod`1.FlattenedTypes : System.Type[] { get }
+ToolUp.Remoting.Server.GeneratedMethod`1.Name : System.String { get }
 ToolUp.Remoting.Server.IAuditEmitter (interface)
 ToolUp.Remoting.Server.IAuditEmitter.Emit(ToolUp.Remoting.Server.AuditEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Remoting.Server.IAuthContext (interface)
