@@ -28,12 +28,18 @@ open HelloWorld.AOT.Contract
 //   typed entry, which walks the type's shape through its caches.
 //
 //   DISPATCH — the server's request path, for five representative methods
-//   of the sample's echo contract. Generated: parse the argument array,
-//   the typed argument parse the generator emitted, a direct call of the
-//   handler, serialise the result. Reflection: the proxy the adapter builds
-//   today, invoked with the same bytes — argument parse through a
-//   `MethodInfo` walk over boxed values, handler invocation through the
-//   shape visitor, the same serialiser.
+//   of the sample's echo contract, three arms (Phase 906):
+//     * generated — the proxy the adapter builds with the generator's
+//       invocation table registered (`ICorpusApiDispatch.register ()`): the
+//       proxy's own verb check, parse, record-scoped decode and serialise
+//       around the generated typed call. This is the route a deployment
+//       takes, inside the adapter's pre-flight chain.
+//     * reflection — the same proxy with nothing registered: every method's
+//       endpoint built by the shape visitor, over every method of the record.
+//     * direct — Phase 804's hand-written floor: the emitted typed parse, a
+//       direct call of the handler and a serialise, with NO proxy at all.
+//       It is what a route outside the pre-flight chain would cost, kept
+//       only as the lower bound; no deployment may dispatch this way.
 //
 // COLD START is measured in a FRESH PROCESS per arm (min of five): a warm
 // loop cannot see what the first call pays — reflection's shape caches
@@ -235,8 +241,8 @@ type private DispatchArm = {
     Label: string
     Endpoint: string
     Body: byte[]
-    /// The generated path: typed parse, direct call, serialise.
-    Generated: MemoryStream -> unit
+    /// Phase 804's floor: typed parse, direct call, serialise, no proxy.
+    Direct: MemoryStream -> unit
 }
 
 let private arm
@@ -252,7 +258,7 @@ let private arm
         Label = label
         Endpoint = options.RouteBuilder typeof<ICorpusApi>.Name methodName
         Body = body
-        Generated =
+        Direct =
             fun output ->
                 output.SetLength 0L
 
@@ -295,9 +301,10 @@ let private dispatchArms (fixtures: Fixture list) : DispatchArm list =
             impl.Consignment
     ]
 
-/// The reflective path: the proxy the adapter builds, invoked as the
-/// adapter invokes it (body bytes cached, JSON content type, POST).
-let private invokeReflection
+/// A dispatch through the proxy the adapter builds — generated or
+/// reflective, whichever it composed — invoked as the adapter invokes it
+/// (body bytes cached, JSON content type, POST).
+let private invokeProxy
     (proxy: InvocationProps<ICorpusApi> -> Task<InvocationResult>)
     (arm: DispatchArm)
     (output: MemoryStream)
@@ -317,7 +324,7 @@ let private invokeReflection
 
     match (proxy props).Result with
     | InvocationResult.Success _ -> ()
-    | other -> failwithf "reflective dispatch of %s did not succeed: %A" arm.Label other
+    | other -> failwithf "dispatch of %s through the proxy did not succeed: %A" arm.Label other
 
 // ─── Cold start: one arm, in this (fresh) process ───────────────────────
 
@@ -339,7 +346,7 @@ let private cold (path: string) (armName: string) : float =
         timeOnce (fun () ->
             for f in set do
                 decodeReflection f.Case.ClrType f.MsgPack)
-    | "dispatch", "generated" ->
+    | "dispatch", "direct" ->
         let arms = dispatchArms fixtures
         use output = new MemoryStream()
 
@@ -347,7 +354,17 @@ let private cold (path: string) (armName: string) : float =
             ICorpusApiDispatch.methods |> List.length |> ignore
 
             for a in arms do
-                a.Generated output)
+                a.Direct output)
+    | "dispatch", "generated" ->
+        let arms = dispatchArms fixtures
+        use output = new MemoryStream()
+
+        timeOnce (fun () ->
+            ICorpusApiDispatch.register ()
+            let proxy = Proxy.makeApiProxy options
+
+            for a in arms do
+                invokeProxy proxy a output)
     | "dispatch", "reflection" ->
         let arms = dispatchArms fixtures
         use output = new MemoryStream()
@@ -356,7 +373,7 @@ let private cold (path: string) (armName: string) : float =
             let proxy = Proxy.makeApiProxy options
 
             for a in arms do
-                invokeReflection proxy a output)
+                invokeProxy proxy a output)
     | _ -> failwithf "unknown cold arm %s %s" path armName
 
 /// Spawn this program `boots` times for one arm; the child's own first-pass
@@ -419,16 +436,32 @@ let private report (boots: int) (rounds: int) =
     }
 
     let arms = dispatchArms fixtures
-    let proxy = Proxy.makeApiProxy options
+    // The reflective proxy is built BEFORE the table is registered — the
+    // proxy reads the registry when it is built — and the generated one
+    // after, so one process holds both.
+    let reflective = Proxy.makeApiProxy options
+    ICorpusApiDispatch.register ()
+    let generated = Proxy.makeApiProxy options
     use output = new MemoryStream()
+    use reflectiveOutput = new MemoryStream()
+
+    // Checked, not just timed: the two routes must write the same bytes.
+    for a in arms do
+        invokeProxy generated a output
+        invokeProxy reflective a reflectiveOutput
+
+        if output.ToArray() <> reflectiveOutput.ToArray() then
+            failwithf "dispatch of %s: the generated and reflective routes wrote different responses" a.Label
 
     let dispatch =
         arms
         |> List.map (fun a ->
             let g, r =
-                measurePair rounds 2000 (fun () -> a.Generated output) (fun () -> invokeReflection proxy a output)
+                measurePair rounds 2000 (fun () -> invokeProxy generated a output) (fun () ->
+                    invokeProxy reflective a output)
 
-            a.Label, g, r)
+            let d = measure rounds 2000 (fun () -> a.Direct output)
+            a.Label, g, r, d)
 
     let coldDecodeGenerated, wallDecodeGenerated = coldStart boots "decode" "generated"
 
@@ -440,6 +473,8 @@ let private report (boots: int) (rounds: int) =
 
     let coldDispatchReflection, wallDispatchReflection =
         coldStart boots "dispatch" "reflection"
+
+    let coldDispatchDirect, wallDispatchDirect = coldStart boots "dispatch" "direct"
 
     let optimised =
         let attr =
@@ -524,12 +559,20 @@ let private report (boots: int) (rounds: int) =
         + " | see below |"
     )
 
-    line ""
-    line "| Dispatch per request | generated | reflection |"
-    line "|---|---|---|"
+    line (
+        "| Dispatch, five methods | direct (804 floor, no proxy) | "
+        + ms coldDispatchDirect
+        + " | "
+        + ms wallDispatchDirect
+        + " | see below |"
+    )
 
-    for label, g, r in dispatch do
-        line ("| " + label + " | " + us g + " | " + us r + " |")
+    line ""
+    line "| Dispatch per request | generated | reflection | direct (floor) |"
+    line "|---|---|---|---|"
+
+    for label, g, r, d in dispatch do
+        line ("| " + label + " | " + us g + " | " + us r + " | " + us d + " |")
 
 /// Where a generated dispatch's microseconds go, stage by stage, for the
 /// `int` echo: the argument-array parse, the typed parse, the handler bound
@@ -564,8 +607,8 @@ let private probe (rounds: int) =
             }
 
             run.Wait())
-        "generated arm, whole", (fun () -> intArm.Generated output)
-        "reflective proxy, whole", (fun () -> invokeReflection proxy intArm output)
+        "direct (804 floor), whole", (fun () -> intArm.Direct output)
+        "reflective proxy, whole", (fun () -> invokeProxy proxy intArm output)
     ]
 
     for _, op in stages do
