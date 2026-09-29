@@ -74,15 +74,15 @@ let SamplePayload =
 /// Note what the writer chose: `int64` as a SIGNED STRING, the two
 /// decimals and the TimeSpan's milliseconds as number tokens.
 let sampleModel: JsonValue =
-    JsonValue.Object [
+    JsonValue.Object [|
         "Id", JsonValue.String "+9007199254740993"
         "Amount", JsonValue.Number "79228162514264337593543950335"
         "Tiny", JsonValue.Number "0.0000000000000000000000000001"
         "Elapsed", JsonValue.Number "51211215.8396"
         "Label", JsonValue.String "café \"quoted\" \\ tab\t"
         "Note", JsonValue.String "exact"
-        "Tags", JsonValue.Array [ JsonValue.String "a"; JsonValue.String "b" ]
-    ]
+        "Tags", JsonValue.Array [| JsonValue.String "a"; JsonValue.String "b" |]
+    |]
 
 /// Texts the two hosts must read identically — each with the model both
 /// must produce, or `None` where both must refuse. Chosen at the edges
@@ -93,37 +93,37 @@ let agreementCases: (string * string * JsonValue option) list = [
     "numbers stay as written",
     "[1.0, -0, 1e400, 0.10000000000000000555, 9007199254740993]",
     Some(
-        JsonValue.Array [
+        JsonValue.Array [|
             JsonValue.Number "1.0"
             JsonValue.Number "-0"
             JsonValue.Number "1e400"
             JsonValue.Number "0.10000000000000000555"
             JsonValue.Number "9007199254740993"
-        ]
+        |]
     )
 
     "array-index keys keep wire order",
     """{"b":1,"10":2,"2":3}""",
     Some(
-        JsonValue.Object [
+        JsonValue.Object [|
             "b", JsonValue.Number "1"
             "10", JsonValue.Number "2"
             "2", JsonValue.Number "3"
-        ]
+        |]
     )
 
     "a duplicate key stays visible",
     """{"Ok":1,"Ok":2}""",
-    Some(JsonValue.Object [ "Ok", JsonValue.Number "1"; "Ok", JsonValue.Number "2" ])
+    Some(JsonValue.Object [| "Ok", JsonValue.Number "1"; "Ok", JsonValue.Number "2" |])
 
     "every escape, and a surrogate pair",
     "[\"a\\\"b\\\\c\\/d\\b\\f\\n\\r\\t\", \"\\u00e9\\u00C9\", \"\\uD83D\\uDE00\"]",
     Some(
-        JsonValue.Array [
+        JsonValue.Array [|
             JsonValue.String "a\"b\\c/d\b\f\n\r\t"
             JsonValue.String "\u00e9\u00c9"
             JsonValue.String "\uD83D\uDE00"
-        ]
+        |]
     )
 
     // An unpaired surrogate ESCAPE is not valid UTF-16, and
@@ -135,13 +135,13 @@ let agreementCases: (string * string * JsonValue option) list = [
     "literals, empty containers, and the four whitespace characters",
     " \t\r\n{ \"t\" : true , \"f\":false,\"n\":null,\"a\":[ ],\"o\":{ } } \n",
     Some(
-        JsonValue.Object [
+        JsonValue.Object [|
             "t", JsonValue.Bool true
             "f", JsonValue.Bool false
             "n", JsonValue.Null
-            "a", JsonValue.Array []
-            "o", JsonValue.Object []
-        ]
+            "a", JsonValue.Array [||]
+            "o", JsonValue.Object [||]
+        |]
     )
 
     "a trailing comma is refused", "[1,]", None
@@ -161,6 +161,6 @@ let agreementCases: (string * string * JsonValue option) list = [
     "a truncated literal is refused", "tru", None
     "sixty-four nested containers are read",
     String.replicate 64 "[" + String.replicate 64 "]",
-    Some(List.fold (fun inner _ -> JsonValue.Array [ inner ]) (JsonValue.Array []) [ 1..63 ])
+    Some(List.fold (fun inner _ -> JsonValue.Array [| inner |]) (JsonValue.Array [||]) [ 1..63 ])
     "sixty-five nested containers are refused", String.replicate 65 "[" + String.replicate 65 "]", None
 ]

@@ -401,3 +401,31 @@ The `IOcrProvider`, `ITableExtractor`, and `IImageEmbedder` extension points car
 - `IImageEmbedder` — CLIP-style image vectors in a shared modality space. No default registered (no honest no-op).
 
 When `IAIProvider.AIProviderMessage.Content` is widened to support multimodal content blocks (future SDK version), the image-embedding path will plug in alongside text embedding for cross-modal retrieval.
+
+## Latency budgets and ingestion capacity (Phase 894)
+
+A slow embedding provider, a slow fact store or a slow audit write degrades a chat turn's retrieval; it never stalls the turn. Each bound below is a `RAGServerApp` builder with a default. A composition that sets none of them gets the defaults, and a healthy provider's results are unchanged.
+
+| Bound | Builder | Default | On overrun or fault |
+|---|---|---|---|
+| Query-embed wall-clock budget | `withQueryEmbedTimeout` | 5 s | The dense branch returns nothing and the sparse branch, when composed, answers alone. Stage mark `DenseDegraded:TimedOut`; the trace's `DenseUsed` is `false`. |
+| Query-embed attempts | `withQueryEmbedAttempts` | 1 | No retry inside a turn. Stage mark `DenseDegraded:Failed`. Any retry the provider performs internally still happens, inside the budget. |
+| Concurrent query embeds | `withQueryEmbedConcurrency` | no ceiling | A call that finds the ceiling reached is refused at once, as a value (`QueryEmbedOutcome.Refused`), and makes no provider call. Stage mark `DenseDegraded:Refused`. |
+| Fact resolution plus disclosure check | `withFactStageTimeout` | 3 s | The turn proceeds without pushed facts. Stage mark `FactsDegraded:TimedOut` or `FactsDegraded:Failed`. |
+| Retrieval-trace queue | `withRetrievalTraceQueueCapacity` | 1,024 | The trace is dropped and counted (`BackgroundRetrievalTracer.Lost`, plus a Warn line at each power-of-two loss count). `0` writes traces inline, which was the behaviour before this phase. |
+
+`withRetrievalBudgets` replaces the whole `RetrievalBudgets` record in one call.
+
+**The disclosure check never fails open.** Fact resolution and the disclosure check share one budget. If the check has not completed when the budget expires, no fact from that stage is admitted. A fault behaves the same way.
+
+**Coalescing.** The caching embedder sends concurrent misses for the same key to one provider call. One hundred identical cold queries therefore cost one embed.
+
+**A pipeline constructed directly is unbounded unless you pass `budgets`.** `RetrievalPipeline(..., budgets = RetrievalBudgets.defaults)` applies the bounds. Omit the argument and the pipeline behaves as before this phase, including a provider failure raising out of `Retrieve`.
+
+**Ingestion capacity is real.** The drain loop acquires a worker slot before it dequeues a document. The queue's depth is therefore exactly what is waiting, and `withIngestionQueueCapacity` bounds what is held in memory. For example, with `withIngestionConcurrency 1` and a capacity of two, one document runs, two wait, and the fourth enqueue is refused.
+
+Before this phase, the loop dequeued eagerly and each document waited for a slot outside the queue's accounting. All ten of ten enqueues were accepted.
+
+An in-process retry gives its slot back for the backoff sleep and takes one again before the next attempt. If no permit is free when it wakes, it takes the drain loop's idle permit, so it cannot starve behind a loop that is waiting for work.
+
+When the vector store implements `IVectorStoreBatch`, the drainer writes a whole document in one `UpsertBatch` round-trip and falls back to per-chunk indexing on any failure.

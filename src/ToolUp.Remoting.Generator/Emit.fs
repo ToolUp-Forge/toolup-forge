@@ -334,9 +334,11 @@ module Emit =
         // registrations. `verifyAll` runs every decoder this module
         // registers beside the reflection reader over draws of its own
         // type, and `registerAllVerified` registers ONLY when every one
-        // agrees. .NET only, because drawing and encoding a value need
-        // reflection and the shipped writer; the browser registers what a
-        // build gate verified.
+        // agrees. Phase 902 — the gate is an ARGUMENT (`DecoderGate`):
+        // drawing and encoding a value need reflection and the shipped
+        // writer, which live in the server tier, so the module names no
+        // server symbol and compiles unguarded wherever its decoders do,
+        // including a project that references Platform.Core alone.
         let verifications =
             coveredSpellings plan
             |> List.map (fun (spelling, decoder) ->
@@ -346,7 +348,7 @@ module Emit =
                     else
                         decoder
 
-                sprintf "        RemotingDecoders.verify<%s> draws seed %s" spelling d)
+                sprintf "        RemotingDecoders.verifyThrough<%s> gate draws seed %s" spelling d)
 
         [
             "    /// Register every decoder above. Idempotent, and explicit —"
@@ -357,12 +359,12 @@ module Emit =
         @ registrations
         @ [
             ""
-            "#if !FABLE_COMPILER"
             "    /// Phase 801 — every decoder above beside the reflection reader,"
-            "    /// over `draws` draws of its own type from `seed`. One outcome per"
-            "    /// registration, in registration order; a refusal names the type"
-            "    /// and the first diverging draw."
-            "    let verifyAll (draws: int) (seed: int) : Result<DecoderVerification, DecoderRefusal> list = ["
+            "    /// over `draws` draws of its own type from `seed`, through `gate`"
+            "    /// (the shipped one is `RemotingDecoders.gate`, in the server tier)."
+            "    /// One outcome per registration, in registration order; a refusal"
+            "    /// names the type and the first diverging draw."
+            "    let verifyAll (gate: DecoderGate) (draws: int) (seed: int) : Result<DecoderVerification, DecoderRefusal> list = ["
         ]
         @ verifications
         @ [
@@ -371,8 +373,12 @@ module Emit =
             "    /// Phase 801 — `registerAll`, gated: registers every decoder above"
             "    /// only when every one verifies, and registers NOTHING otherwise, so"
             "    /// a disagreement can never leave the table half-adopted."
-            "    let registerAllVerified (draws: int) (seed: int) : Result<DecoderVerification list, DecoderRefusal list> ="
-            "        let outcomes = verifyAll draws seed"
+            "    let registerAllVerified"
+            "        (gate: DecoderGate)"
+            "        (draws: int)"
+            "        (seed: int)"
+            "        : Result<DecoderVerification list, DecoderRefusal list> ="
+            "        let outcomes = verifyAll gate draws seed"
             ""
             "        let refusals ="
             "            outcomes"
@@ -391,7 +397,6 @@ module Emit =
             "            )"
             "        else"
             "            Error refusals"
-            "#endif"
             ""
         ]
 
@@ -642,7 +647,7 @@ module Emit =
             registrations
             |> List.map (fun (record, spelling, decoder) ->
                 sprintf
-                    "            (Some \"%s\", typeof<%s>.FullName), JsonDecoders.verifyBothWith<%s> oracle draws seed %s"
+                    "            (Some \"%s\", typeof<%s>.FullName), JsonDecoders.verifyThrough<%s> gate draws seed %s"
                     record
                     spelling
                     spelling
@@ -678,14 +683,13 @@ module Emit =
                registers)
         @ [
             ""
-            "#if !FABLE_COMPILER"
-            "    /// Phase 840's gate over every registration above: each decoder beside"
-            "    /// `oracle` (the shipped one is `FableConverters.decoderOracle`) over"
-            "    /// `draws` draws of its own type from `seed`, keyed as `covered` is —"
-            "    /// every draw written by the server's writer AND the browser's"
-            "    /// (Phase 885, `JsonDecoders.verifyBothWith`)."
+            "    /// Phase 840's gate over every registration above: each decoder through"
+            "    /// `gate` over `draws` draws of its own type from `seed`, keyed as"
+            "    /// `covered` is. The shipped gate is `JsonDecoders.gateWith"
+            "    /// FableConverters.decoderOracle`, in the server tier: every draw"
+            "    /// written by the server's writer AND the browser's (Phase 885)."
             "    let verifyAll"
-            "        (oracle: JsonDecoderOracle)"
+            "        (gate: JsonDecoderGate)"
             "        (draws: int)"
             "        (seed: int)"
             "        : ((string option * string) * Result<JsonDecoderVerification, DecoderRefusal>) list ="
@@ -696,14 +700,14 @@ module Emit =
             "        ]"
             ""
             "    /// `registerAll`, gated: registers every decoder above only when every"
-            "    /// one agrees with `oracle`, and registers NOTHING otherwise, so a"
+            "    /// one passes `gate`, and registers NOTHING otherwise, so a"
             "    /// disagreement can never leave the table half-adopted."
             "    let registerAllVerified"
-            "        (oracle: JsonDecoderOracle)"
+            "        (gate: JsonDecoderGate)"
             "        (draws: int)"
             "        (seed: int)"
             "        : Result<JsonDecoderVerification list, DecoderRefusal list> ="
-            "        let outcomes = verifyAll oracle draws seed |> List.map snd"
+            "        let outcomes = verifyAll gate draws seed |> List.map snd"
             ""
             "        let refusals ="
             "            outcomes"
@@ -722,7 +726,6 @@ module Emit =
             "            )"
             "        else"
             "            Error refusals"
-            "#endif"
             ""
         ]
 

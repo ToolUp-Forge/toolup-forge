@@ -12,6 +12,8 @@
         <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
         <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
         <ProjectReference Include="..\ToolUp.Facts.Core\ToolUp.Facts.Core.fsproj" />
+        <!-- Phase 895 — the Fable-safe wire tier (IFactBrowseApi + views). -->
+        <ProjectReference Include="..\ToolUp.Facts.Shared\ToolUp.Facts.Shared.fsproj" />
     <!-- Phase 791 — the answer planner's question compiler is a provider
          entry, so it constructs a `ModelInput` like every other. AI.Core
          depends on Platform.Core alone, so the edge adds no cycle and no
@@ -106,6 +108,9 @@
              IFactStore. Before FactsCompose.fs, which composes it. -->
         <Compile Include="Server\IFactTableWriter.fs" />
         <Compile Include="Server\FactsCompose.fs" />
+        <!-- Phase 895 — the fact browse read surface (IFactBrowseApi) and its
+             per-run notification decoration of the table writer. -->
+        <Compile Include="Server\FactBrowseHandler.fs" />
     </ItemGroup>
     <!-- PackageReferences flow transitively from ToolUp.Platform.Server.
          FSharp.Core is implicit via the .NET SDK. -->

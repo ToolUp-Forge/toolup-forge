@@ -763,58 +763,17 @@ type FableGuardPin = {
     Reason: string
 }
 
-/// Core's pinned exceptions, as Phase 880 left them. Every `deferred` entry
-/// is the reflection engine and its verify arms: the TypeShape-backed
-/// MsgPack writer is what `RemotingDecoders.verify` and the generator's
-/// emitted `verifyAll` call, so none of it moves until the verify gate takes
-/// its reflective writer as an argument (as the JSON wire's `verifyWith`
-/// already takes its oracle) and the generator emits against that.
-///
-/// The two JSON pins were raised when Phases 880 and 885 met: 885 made the
-/// JSON gate verify against the browser's writer, which grew the .NET-only
-/// verify arm of `JsonDecoderRegistry` from 229 lines to 430 and the emitted
-/// one in `PlatformJsonDecoders` from 127 to 129. Both are server-only code
-/// of the `deferred` kind, and Phase 902 carries their move with the rest.
+/// Core's pinned exceptions. Phase 880 pinned eight; Phase 902 moved the
+/// seven `deferred` ones to the server tier — the TypeShape reflection
+/// engine, the .NET MessagePack writer it backs, and the registries' verify
+/// arms, which became gates passed as arguments (`DecoderGate`,
+/// `JsonDecoderGate`) so the generated modules carry no guarded arm at all.
+/// What remains is a dual implementation both tiers run.
 let coreFableGuardPins: FableGuardPin list = [
-    {
-        File = "Shared/Remoting/MsgPack/TypeShape.fs"
-        LargestArm = 1635
-        Reason = "deferred: the reflection engine behind the .NET MsgPack writer"
-    }
-    {
-        File = "Shared/Remoting/MsgPack/TypeShapeUtils.fs"
-        LargestArm = 506
-        Reason = "deferred: the reflection engine's utilities"
-    }
-    {
-        File = "Shared/Remoting/MsgPack/Write.fs"
-        LargestArm = 612
-        Reason = "deferred: the TypeShape-backed .NET MsgPack writer"
-    }
     {
         File = "Shared/Remoting/MsgPack/Read.fs"
         LargestArm = 76
         Reason = "dual: the .NET arms of the MsgPack reader both tiers run"
-    }
-    {
-        File = "Shared/Remoting/DecoderRegistry.fs"
-        LargestArm = 308
-        Reason = "deferred: the Phase 801 verify arm and its shape generator"
-    }
-    {
-        File = "Shared/Remoting/Json/JsonDecoderRegistry.fs"
-        LargestArm = 430
-        Reason = "deferred: the Phase 840 verify arm and the Phase 885 browser-writer oracle it checks against"
-    }
-    {
-        File = "Shared/Remoting/PlatformDecoders.fs"
-        LargestArm = 351
-        Reason = "deferred: the generator's emitted verifyAll / registerAllVerified"
-    }
-    {
-        File = "Shared/Remoting/Json/PlatformJsonDecoders.fs"
-        LargestArm = 129
-        Reason = "deferred: the generator's emitted verifyAll / registerAllVerified"
     }
 ]
 

@@ -346,6 +346,57 @@ module RetrievalPipelineOptions =
         QueryRewriteTimeoutMs = 2_000
     }
 
+/// Phase 894 — the wall-clock budgets a chat turn's retrieval runs under.
+/// A slow embedding provider or a slow fact store degrades the turn's
+/// retrieval and never stalls the turn: each bounded stage that overruns
+/// or faults contributes nothing, and says so with a stage mark (GP 9 —
+/// a degraded retrieval is marked, never silent).
+///
+/// Supplied to `RetrievalPipeline` as the optional `budgets` argument.
+/// Omitting it leaves every stage unbounded — the pipeline's pre-894
+/// behaviour, byte for byte, including a provider failure raising out of
+/// `Retrieve` (GP 11). `RAGServerApp` supplies `defaults` unless a
+/// deployment sets its own.
+type RetrievalBudgets = {
+    /// Policy for the query embed (the dense branch). On any outcome but
+    /// `Embedded`, the dense branch returns nothing and the sparse branch,
+    /// when one is composed, answers alone; the trace carries a
+    /// `DenseDegraded:<TimedOut|Refused|Failed>` stage mark.
+    QueryEmbed: QueryEmbedPolicy
+    /// Budget for fact resolution and the disclosure check TOGETHER. On
+    /// overrun or fault the turn proceeds without pushed facts and the
+    /// trace carries `FactsDegraded:<TimedOut|Failed>`. Fail-closed by
+    /// construction: a fact whose disclosure check did not complete is
+    /// absent, never admitted.
+    FactStage: System.TimeSpan
+}
+
+module RetrievalBudgets =
+    /// SDK default: `QueryEmbedPolicy.defaults` (one attempt, 5 s, no
+    /// concurrency ceiling) and a 3 s fact stage.
+    let defaults: RetrievalBudgets = {
+        QueryEmbed = QueryEmbedPolicy.defaults
+        FactStage = System.TimeSpan.FromSeconds 3.0
+    }
+
+/// Phase 894 (carrying 892.t6) — an optional batched write path beside
+/// `IRetrievalPipeline.Index`. The ingestion drainer probes for it and,
+/// when `SupportsBatch` holds, indexes a whole document in one call —
+/// one batched embed and one `IVectorStoreBatch.UpsertBatch` round-trip
+/// instead of one upsert per chunk. A pipeline without it, or whose store
+/// cannot batch, keeps the per-chunk path unchanged (GP 11).
+type IBatchIndexer =
+    /// `true` when `IndexBatch` is cheaper than per-chunk `Index` — i.e.
+    /// the underlying vector store implements `IVectorStoreBatch`.
+    abstract SupportsBatch: bool
+
+    /// Index every `(chunkId, chunk)` of one document into `scope`, with
+    /// the per-chunk semantics of `Index` (the same embedding-version
+    /// stamp, the same sparse-index upsert). All-or-nothing from the
+    /// caller's view: on an exception the caller falls back to per-chunk
+    /// `Index`, which is idempotent over whatever the batch wrote.
+    abstract IndexBatch: chunks: (string * TextChunk) list -> scope: VectorScope -> Async<unit>
+
 // ─── Pipeline implementation ──────────────────────────────────────
 
 /// Default candidate-pool inflation when hybrid retrieval or rerank is
@@ -493,7 +544,12 @@ type RetrievalPipeline
         // `RetrievalPipelineOptions.QueryRewriteTimeoutMs` and degrades to
         // the raw query on any failure — retrieval never fails because a
         // rewrite did.
-        ?queryRewriter: IQueryRewriter
+        ?queryRewriter: IQueryRewriter,
+        // Phase 894 — the per-turn budgets (query embed, fact stage). `None`
+        // ⇒ every stage unbounded, the pre-894 pipeline byte for byte
+        // (GP 11); `RAGServerApp` passes `RetrievalBudgets.defaults` unless
+        // configured otherwise.
+        ?budgets: RetrievalBudgets
     ) =
 
     let sparse = sparseIndex
@@ -538,6 +594,36 @@ type RetrievalPipeline
     // cost lands on the in-process dev embedder alone.
     let scopedEmbedderFactory = ScopedEmbedding.tryFactory embedder
 
+    // Phase 894 — one gate per pipeline, so the concurrency ceiling spans
+    // every request it serves. `None` when no budgets were supplied.
+    let embedGate = budgets |> Option.map (fun b -> QueryEmbedGate(b.QueryEmbed))
+
+    /// Embed the query. With a gate: bounded, and every non-vector outcome
+    /// is returned as `Error` for the caller to degrade on. Without one:
+    /// the direct pre-894 call, which raises on a provider failure.
+    let embedQuery (provider: IEmbeddingProvider) (query: string) : Async<Result<float32 array, QueryEmbedOutcome>> =
+        match embedGate with
+        | None -> async {
+            let! vector = provider.GenerateEmbedding query
+            return Ok vector
+          }
+        | Some gate -> async {
+            match! gate.Embed provider query with
+            | QueryEmbedOutcome.Embedded vector -> return Ok vector
+            | other -> return Error other
+          }
+
+    /// The per-chunk write shared by `Index` and `IndexBatch`: the chunk
+    /// stamped with the embedding version of the scope's embedder.
+    let stampFor (scopeEmbedder: IEmbeddingProvider) (chunk: TextChunk) = {
+        chunk with
+            Metadata =
+                chunk.Metadata
+                |> Map.add EmbeddingVersion.MetadataProviderKey scopeEmbedder.ProviderId
+                |> Map.add EmbeddingVersion.MetadataModelKey scopeEmbedder.ModelId
+                |> Map.add EmbeddingVersion.MetadataDimensionsKey (string scopeEmbedder.Dimensions)
+    }
+
     /// Dense candidate retrieval. Single-vector when the embedder is not
     /// scope-keyed; one embed + one search per authorised scope, merged,
     /// when it is.
@@ -557,28 +643,46 @@ type RetrievalPipeline
     /// downstream, and it is the right tool for genuinely incomparable
     /// *retrievers*; applying it here would flatten the score signal the
     /// boosts and MMR stages read.)
-    let denseSearch (query: string) (permitted: VectorScope list) (pool: int) : Async<VectorMatch list> =
+    ///
+    /// Phase 894 — returns the degradation alongside the matches: `Some`
+    /// when a bounded query embed produced no vector (for any authorised
+    /// scope, on the scope-keyed branch), in which case that scope
+    /// contributes nothing. Always `None` when no budgets were supplied.
+    let denseSearch
+        (query: string)
+        (permitted: VectorScope list)
+        (pool: int)
+        : Async<VectorMatch list * QueryEmbedOutcome option> =
         match scopedEmbedderFactory with
         | None -> async {
-            let! queryVector = embedder.GenerateEmbedding query
-            return! store.Search permitted queryVector pool
+            match! embedQuery embedder query with
+            | Ok queryVector ->
+                let! results = store.Search permitted queryVector pool
+                return results, None
+            | Error degraded -> return [], Some degraded
           }
         | Some factory -> async {
             let! perScope =
                 permitted
                 |> List.map (fun scope -> async {
                     let scopedEmbedder = factory.For scope
-                    let! queryVector = scopedEmbedder.GenerateEmbedding query
-                    return! store.Search [ scope ] queryVector pool
+
+                    match! embedQuery scopedEmbedder query with
+                    | Ok queryVector ->
+                        let! results = store.Search [ scope ] queryVector pool
+                        return results, None
+                    | Error degraded -> return [], Some degraded
                 })
                 |> Async.Parallel
 
-            return
+            let merged =
                 perScope
                 |> Array.toList
-                |> List.concat
+                |> List.collect fst
                 |> List.sortBy (fun m -> -m.Score, m.Scope, m.ChunkId)
                 |> List.truncate pool
+
+            return merged, perScope |> Array.tryPick snd
           }
 
     // Phase 14y — emit the `KnowledgeQueryRejected` audit for an over-length
@@ -658,40 +762,79 @@ type RetrievalPipeline
                 | Some resolver, Some clause -> async {
                     stages.Add "FactResolve"
                     let factScopeId = ctx.TeamId |> Option.defaultValue ctx.UserId
-                    let! resolved = resolver.Resolve(factScopeId, clause)
 
-                    // Phase 525.B — disclosure egress filter, applied to the
-                    // resolved facts BEFORE merge. Default-deny at retrieval:
-                    // a fact the gate does not affirmatively disclose (denied,
-                    // or missing from the verdict map) never enters the
-                    // result set, the `RetrievedSource`s, or the prompt block
-                    // — absent, not annotated. The gate is handed the same
-                    // caller-derived fact scope as the resolver (GP 4), so
-                    // scope never overrides a deny and disclosure never
-                    // widens scope. No gate wired ⇒ pass-through (GP 11).
-                    let! disclosed =
-                        match disclosureGate, resolved with
-                        | Some gate, _ :: _ -> async {
-                            let ids = resolved |> List.map _.FactId
-                            let! verdicts = gate.Check(factScopeId, ctx.UserId, FactRetrieval, ids)
+                    // Phase 894 — the stage body touches no shared state:
+                    // an overrunning run is abandoned under a budget and may
+                    // still be executing when the turn moves on, so it
+                    // returns its stage marks instead of appending them.
+                    let resolveAndDisclose = async {
+                        let! resolved = resolver.Resolve(factScopeId, clause)
 
-                            let permitted =
-                                resolved
-                                |> List.filter (fun rf ->
-                                    match verdicts.TryFind rf.FactId with
-                                    | Some FactDisclosable -> true
-                                    | Some(FactNotDisclosable _)
-                                    | None -> false)
+                        // Phase 525.B — disclosure egress filter, applied to the
+                        // resolved facts BEFORE merge. Default-deny at retrieval:
+                        // a fact the gate does not affirmatively disclose (denied,
+                        // or missing from the verdict map) never enters the
+                        // result set, the `RetrievedSource`s, or the prompt block
+                        // — absent, not annotated. The gate is handed the same
+                        // caller-derived fact scope as the resolver (GP 4), so
+                        // scope never overrides a deny and disclosure never
+                        // widens scope. No gate wired ⇒ pass-through (GP 11).
+                        let! disclosed =
+                            match disclosureGate, resolved with
+                            | Some gate, _ :: _ -> async {
+                                let ids = resolved |> List.map _.FactId
+                                let! verdicts = gate.Check(factScopeId, ctx.UserId, FactRetrieval, ids)
 
-                            if permitted.Length < resolved.Length then
-                                stages.Add "DisclosureFilter"
+                                let permitted =
+                                    resolved
+                                    |> List.filter (fun rf ->
+                                        match verdicts.TryFind rf.FactId with
+                                        | Some FactDisclosable -> true
+                                        | Some(FactNotDisclosable _)
+                                        | None -> false)
 
-                            return permitted
-                          }
-                        | _ -> async.Return resolved
+                                let marks =
+                                    if permitted.Length < resolved.Length then
+                                        [ "DisclosureFilter" ]
+                                    else
+                                        []
 
-                    let scope = factScopeFor request.Scopes
-                    return disclosed |> List.map (factToMatch scope)
+                                return permitted, marks
+                              }
+                            | _ -> async.Return(resolved, [])
+
+                        let disclosed, marks = disclosed
+                        let scope = factScopeFor request.Scopes
+                        return disclosed |> List.map (factToMatch scope), marks
+                    }
+
+                    match budgets with
+                    | None ->
+                        // Unbounded — the pre-894 stage: a fault raises out
+                        // of `Retrieve` (fail-closed, and loud).
+                        let! matches, marks = resolveAndDisclose
+                        stages.AddRange marks
+                        return matches
+                    | Some b ->
+                        let bounded = async {
+                            let! child = Async.StartChild(resolveAndDisclose, max 1 (int b.FactStage.TotalMilliseconds))
+
+                            return! child
+                        }
+
+                        match! Async.Catch bounded with
+                        | Choice1Of2(matches, marks) ->
+                            stages.AddRange marks
+                            return matches
+                        | Choice2Of2(:? System.TimeoutException) ->
+                            // Fail-closed: nothing the stage produced is
+                            // admitted — a fact whose disclosure check did
+                            // not complete is absent.
+                            stages.Add "FactsDegraded:TimedOut"
+                            return []
+                        | Choice2Of2 _ ->
+                            stages.Add "FactsDegraded:Failed"
+                            return []
                   }
                 | _ -> async.Return []
 
@@ -709,6 +852,9 @@ type RetrievalPipeline
             // rewrite stage ran" state every pre-506 deployment stays in.
             let rewriteDecision: string option ref = ref None
             let rewrittenQueryHash: string option ref = ref None
+            // Phase 894 — set when a bounded query embed produced no vector,
+            // so the trace reports the dense branch as not used.
+            let denseDegraded: bool ref = ref false
 
             let emitTrace (results: VectorMatch list) (poolSize: int) (sparseRan: bool) (rerankerName: string option) = async {
                 match tracer with
@@ -728,7 +874,7 @@ type RetrievalPipeline
                             match results with
                             | top :: _ -> top.Score
                             | [] -> 0.0
-                        DenseUsed = true
+                        DenseUsed = not denseDegraded.Value
                         SparseUsed = sparseRan
                         RerankerName = rerankerName
                         LatencyMs = stopwatch.ElapsedMilliseconds
@@ -855,6 +1001,17 @@ type RetrievalPipeline
 
                 stages.Add "Dense"
 
+                // Phase 894 — a bounded query embed that produced no vector
+                // leaves the dense branch empty; mark it so the degradation
+                // is visible on the trace (GP 9). Called from the join, never
+                // from a concurrent branch.
+                let markDenseDegraded (degraded: QueryEmbedOutcome option) =
+                    match degraded with
+                    | Some outcome ->
+                        denseDegraded.Value <- true
+                        stages.Add("DenseDegraded:" + QueryEmbedOutcome.label outcome)
+                    | None -> ()
+
                 let! rawInitial =
                     match sparse with
                     | None -> async {
@@ -862,9 +1019,10 @@ type RetrievalPipeline
                         // reranker is wired, this is byte-equivalent to the
                         // pre-Phase-14e pipeline.
                         let denseSw = System.Diagnostics.Stopwatch.StartNew()
-                        let! results = denseSearch effectiveQuery permitted pool
+                        let! results, degraded = denseSearch effectiveQuery permitted pool
                         denseSw.Stop()
                         timings.Add("Dense", denseSw.Elapsed.TotalMilliseconds)
+                        markDenseDegraded degraded
                         return results
                       }
 
@@ -876,9 +1034,9 @@ type RetrievalPipeline
                         // keep `timings` single-threaded.
                         let denseAsync = async {
                             let sw = System.Diagnostics.Stopwatch.StartNew()
-                            let! results = denseSearch effectiveQuery permitted pool
+                            let! results, degraded = denseSearch effectiveQuery permitted pool
                             sw.Stop()
-                            return results, sw.Elapsed.TotalMilliseconds
+                            return results, degraded, sw.Elapsed.TotalMilliseconds
                         }
 
                         let sparseAsync = async {
@@ -888,11 +1046,12 @@ type RetrievalPipeline
                             return results, sw.Elapsed.TotalMilliseconds
                         }
 
-                        let! both = Async.Parallel [ denseAsync; sparseAsync ]
-                        let denseResults, denseMs = both[0]
-                        let sparseResults, sparseMs = both[1]
+                        let! denseChild = Async.StartChild denseAsync
+                        let! sparseResults, sparseMs = sparseAsync
+                        let! denseResults, degraded, denseMs = denseChild
                         timings.Add("Dense", denseMs)
                         timings.Add("Sparse", sparseMs)
+                        markDenseDegraded degraded
 
                         stages.Add "RRF"
                         let fuseSw = System.Diagnostics.Stopwatch.StartNew()
@@ -1103,14 +1262,7 @@ type RetrievalPipeline
             let scopeEmbedder = ScopedEmbedding.forScope embedder scope
             let! vector = scopeEmbedder.GenerateEmbedding chunk.Content
 
-            let stamped = {
-                chunk with
-                    Metadata =
-                        chunk.Metadata
-                        |> Map.add EmbeddingVersion.MetadataProviderKey scopeEmbedder.ProviderId
-                        |> Map.add EmbeddingVersion.MetadataModelKey scopeEmbedder.ModelId
-                        |> Map.add EmbeddingVersion.MetadataDimensionsKey (string scopeEmbedder.Dimensions)
-            }
+            let stamped = stampFor scopeEmbedder chunk
 
             do! store.Upsert scope chunkId vector stamped
 
@@ -1125,4 +1277,39 @@ type RetrievalPipeline
             match sparse with
             | Some idx -> do! idx.DeleteByScope scope
             | None -> ()
+        }
+
+    // Phase 894 (carrying 892.t6) — the batched write path. Same stamp and
+    // the same sparse upsert as `Index`; the difference is one batched embed
+    // (a cache hit after the drainer's warm-up) and one `upsertBatch`, which
+    // reaches `IVectorStoreBatch.UpsertBatch` in a single round-trip.
+    interface IBatchIndexer with
+        member _.SupportsBatch = store :? IVectorStoreBatch
+
+        member _.IndexBatch chunks scope = async {
+            match chunks with
+            | [] -> ()
+            | _ ->
+                let scopeEmbedder = ScopedEmbedding.forScope embedder scope
+                let! vectors = scopeEmbedder.GenerateEmbeddings(chunks |> List.map (fun (_, c) -> c.Content))
+
+                if vectors.Length <> chunks.Length then
+                    failwithf
+                        "Embedding provider '%s/%s' returned %d embeddings for %d chunks; refusing the batched write."
+                        scopeEmbedder.ProviderId
+                        scopeEmbedder.ModelId
+                        vectors.Length
+                        chunks.Length
+
+                let stamped =
+                    chunks
+                    |> List.mapi (fun i (chunkId, chunk) -> chunkId, vectors[i], stampFor scopeEmbedder chunk)
+
+                do! upsertBatch store scope stamped
+
+                match sparse with
+                | Some idx ->
+                    for chunkId, _, chunk in stamped do
+                        do! idx.Upsert scope chunkId chunk
+                | None -> ()
         }

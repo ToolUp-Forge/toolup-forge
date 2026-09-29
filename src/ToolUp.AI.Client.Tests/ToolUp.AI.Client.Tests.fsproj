@@ -183,6 +183,10 @@
              module-level `Api.makeProxy`, so it cannot be touched from
              the .NET harness at all. Must follow ViewMount.fs. -->
         <Compile Include="KnowledgeVersionHistoryTests.fs" />
+        <!-- Phase 895 — the fact browse client companion (model, pages)
+             and the knowledge base list's fact-table badge. Must follow
+             ViewMount.fs. -->
+        <Compile Include="FactBrowseClientTests.fs" />
         <!-- Phase 784 — the remoting wire corpus's parity leg. WireCorpus.fs
              is COMPILED IN from ToolUp.Platform.Tests rather than
              transcribed, so the value a committed fixture must decode to is
@@ -260,6 +264,12 @@
         <Compile Include="SlicedStoreTests.fs" />
         <!-- Phase 537 - the UI-awareness companion's inspect_active_module executor. -->
         <Compile Include="UiAwarenessInspectTests.fs" />
+        <!-- Phase 910 - the composition routes' render scope (the AI composer
+             on both render paths, the shell's context readers; ComposerScope.fs
+             is shared with ClientBench, so it precedes it) and the pack that
+             asserts it. -->
+        <Compile Include="ComposerScope.fs" />
+        <Compile Include="ComposerStoreTests.fs" />
         <!-- Phase 849 — the browser runtime, measured. MinimalClient's entry
              module is COMPILED IN so its transpiled output sits beside the
              harness; nothing in this pack references it, so no test imports
@@ -292,6 +302,9 @@
              have to re-derive the loader, the jsdom mount and the
              node:test facade. -->
         <ProjectReference Include="..\ToolUp.KnowledgeBase.Client\ToolUp.KnowledgeBase.Client.fsproj" />
+        <!-- Phase 895 — the fact browse client companion, transpiled here so
+             the fable-tier gate compiles it. -->
+        <ProjectReference Include="..\ToolUp.Facts.Client\ToolUp.Facts.Client.fsproj" />
         <!-- Phase 537 - the UI-awareness companion's Fable client tier. -->
         <ProjectReference Include="..\AIExtensions\UiAwareness\ToolUp.AI.UiAwareness.Client\ToolUp.AI.UiAwareness.Client.fsproj" />
         <!-- Phase 850 — the proved Elmish ring's extraction over a

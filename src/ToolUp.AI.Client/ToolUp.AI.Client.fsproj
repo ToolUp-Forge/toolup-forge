@@ -41,6 +41,14 @@
         <Compile Include="Client\PlatformAIKeysAdminUI.fs" />
         <Compile Include="Client\AIClientConfig.fs" />
     </ItemGroup>
+    <ItemGroup>
+        <!-- Phase 910 — the Fable-tier pack mounts the composer's internal
+             view and update (`AIClientConfig.composerView` /
+             `composerUpdate`) to measure its render scope without booting
+             a server. Test-only visibility; no shipped public surface
+             (the ToolUp.Platform.Client precedent). -->
+        <InternalsVisibleTo Include="ToolUp.AI.Client.Tests" />
+    </ItemGroup>
     <!-- Fable.Core / ToolUp.Remoting.Client / Fable.SimpleJson /
          Fable.SimpleHttp / Feliz flow transitively from
          ToolUp.Platform.Client. The elmish runtime (formerly the three

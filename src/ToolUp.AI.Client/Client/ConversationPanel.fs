@@ -599,6 +599,38 @@ let ViewOriginalButton (originalRef: OriginalDocumentRef) =
             ]
         ]
 
+// ─── Fact citation link (Phase 895) ──────────────────────────────
+//
+// A source carrying a `FactId` is a fact the answer cited. When the fact
+// browse companion is composed (its module is in the shell's published
+// list), the source card offers to open that fact's row and provenance.
+// The link rides the cross-module event bus and the shell's navigation
+// request — this package never imports the fact client — so a
+// deployment without it renders the card exactly as before.
+
+let private factRowLink (factId: string) =
+    if FactBrowseLinks.isComposed (RegisteredModules.snapshot () |> List.map _.ModuleId) then
+        Html.div [
+            prop.className "mt-1"
+            prop.children [
+                Html.button [
+                    prop.className
+                        "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-teal-700 hover:bg-teal-50 border border-teal-100 transition-colors"
+                    prop.title factId
+                    prop.onClick (fun _ ->
+                        // The publish is a Cmd; run it here, outside any
+                        // update loop, with a dispatch that is never called.
+                        for effect in ModuleEvents.publish FactBrowseLinks.OpenFactTopic factId do
+                            effect ignore
+
+                        NavigationRequest.request (FactBrowseLinks.sidebarId FactBrowseLinks.RowsRoute))
+                    prop.children [ Html.span [ prop.text "▦" ]; Html.span [ prop.text "Open fact row" ] ]
+                ]
+            ]
+        ]
+    else
+        Html.none
+
 [<ReactComponent>]
 let MessageSources (sources: RetrievedSource list) (content: string) =
     let isExpanded, setExpanded = React.useState false
@@ -817,6 +849,14 @@ let MessageSources (sources: RetrievedSource list) (content: string) =
                                         // nothing.
                                         match src.OriginalRef with
                                         | Some r -> ViewOriginalButton r
+                                        | None -> Html.none
+                                        // Phase 895 — a fact citation opens
+                                        // its row in the fact browse surface.
+                                        // A non-fact source, or a deployment
+                                        // without the browse module, renders
+                                        // nothing here.
+                                        match src.FactId with
+                                        | Some factId -> factRowLink factId
                                         | None -> Html.none
                                     ]
                                 ]

@@ -27,6 +27,154 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // resolved from the built provider on first use, so this composes cleanly
 // regardless of the order `ServerApp` registers its substrate.
 
+// ─── Phase 888 — the blob fact store's multi-replica scale guard ─────
+//
+// `BlobFactStore` is correct at any size and distributed-ready, but its
+// population read, its asserts and its whole-store walks read every fact
+// in the scope, and every replica pays that read separately. Past a size
+// the right answer is the indexed companion, `ToolUp.FactStores.Postgres`,
+// behind the same `IFactStore` contract. This guard says so at startup
+// rather than leaving an operator to find out from latency.
+//
+// It speaks only when BOTH hold: more than one replica is configured
+// (`ServerConfig.ReplicaCount > 1`), and the composed store is the blob
+// default. A single-replica deployment does not register it at all, so its
+// composition is byte-for-byte unchanged (GP 11). It warns first — above
+// `BlobFactStoreScale.WarnAboveFacts` facts in any one scope — and refuses
+// startup only above `BlobFactStoreScale.RefuseAboveFacts`.
+//
+// The count is the census `BlobFactStore` keeps (`_facts/{factId}.json`,
+// one blob per fact): one `List` per scope, no download.
+
+/// The fact counts at which the blob fact store's scale guard speaks, and
+/// the pure verdict it reaches (Phase 888).
+module BlobFactStoreScale =
+
+    /// Above this many facts in one scope, with more than one replica, the
+    /// guard warns and names the indexed companion.
+    [<Literal>]
+    let WarnAboveFacts = 50_000
+
+    /// Above this many facts in one scope, with more than one replica, the
+    /// guard refuses startup. Sized at the grounding plane's stated
+    /// population (300,000 subjects), where one blob-store population read
+    /// is 300,000 blob reads per replica per question.
+    [<Literal>]
+    let RefuseAboveFacts = 300_000
+
+    /// The package the guard names as the remedy.
+    [<Literal>]
+    let Remedy = "ToolUp.FactStores.Postgres"
+
+    /// The blob layout's fact prefix — `BlobFactStore` writes each fact at
+    /// `_facts/{factId}.json`, so listing it counts the scope's facts.
+    [<Literal>]
+    let FactsPrefix = "_facts/"
+
+    /// The guard's verdict over per-scope fact counts. `Ok` below the warn
+    /// threshold or at one replica; `Warning` above it; `Error` above the
+    /// refusal threshold. The largest scope decides, and is named.
+    let verdict
+        (replicaCount: int)
+        (warnAboveFacts: int)
+        (refuseAboveFacts: int)
+        (counts: (string * int) list)
+        : ConfigValidation.ValidationResult =
+        match counts |> List.sortByDescending snd |> List.tryHead with
+        | _ when replicaCount <= 1 -> ConfigValidation.ValidationResult.Ok
+        | None -> ConfigValidation.ValidationResult.Ok
+        | Some(scope, count) when count > refuseAboveFacts ->
+            ConfigValidation.ValidationResult.Error(
+                sprintf
+                    "ReplicaCount = %d and scope '%s' holds %d facts in BlobFactStore, above the %d-fact refusal threshold. Every replica reads the whole scope for a population read, an assert and every whole-store walk, so each question costs %d blob reads per replica. Compose %s (PostgresFactStoreCompose.withPostgresFactStore) behind the same IFactStore contract, or run a single replica."
+                    replicaCount
+                    scope
+                    count
+                    refuseAboveFacts
+                    count
+                    Remedy
+            )
+        | Some(scope, count) when count > warnAboveFacts ->
+            ConfigValidation.ValidationResult.Warning(
+                sprintf
+                    "ReplicaCount = %d and scope '%s' holds %d facts in BlobFactStore, above the %d-fact warning threshold (startup is refused above %d). Population reads and asserts read the whole scope on every replica. Plan the move to %s (PostgresFactStoreCompose.withPostgresFactStore), which indexes each read."
+                    replicaCount
+                    scope
+                    count
+                    warnAboveFacts
+                    refuseAboveFacts
+                    Remedy
+            )
+        | Some _ -> ConfigValidation.ValidationResult.Ok
+
+/// Which `IFactStore` implementation the composition registered — a DI
+/// marker `withFactStore` sets to the blob default and
+/// `withFactStoreImplementation` replaces, so the scale guard can tell the
+/// blob store from a replacement even when a decorator wraps it.
+type internal FactStoreBackend = { Backend: string }
+
+/// Startup guard (Phase 888): warns, then refuses, a multi-replica
+/// deployment whose blob fact store holds more facts in one scope than the
+/// blob layout serves well, naming `ToolUp.FactStores.Postgres` as the
+/// remedy. Registered by `FactsCompose.withFactStore` only when
+/// `ServerConfig.ReplicaCount > 1`.
+type BlobFactStoreScaleValidator
+    /// The guard over `storage`'s census of the scopes `scopes` enumerates,
+    /// at explicit thresholds. `isBlobStore` is whether the composed store
+    /// is the blob default — the guard stands down for a replacement.
+    (
+        replicaCount: int,
+        storage: IBlobStorage,
+        scopes: unit -> Async<string list>,
+        isBlobStore: bool,
+        warnAboveFacts: int,
+        refuseAboveFacts: int
+    ) =
+
+    /// The guard at the stated thresholds (`BlobFactStoreScale`).
+    new(replicaCount: int, storage: IBlobStorage, scopes: unit -> Async<string list>, isBlobStore: bool) =
+        BlobFactStoreScaleValidator(
+            replicaCount,
+            storage,
+            scopes,
+            isBlobStore,
+            BlobFactStoreScale.WarnAboveFacts,
+            BlobFactStoreScale.RefuseAboveFacts
+        )
+
+    interface ConfigValidation.IConfigValidator with
+        member _.Name = "blob-fact-store-scale"
+        member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
+
+        member _.Validate() = async {
+            if replicaCount <= 1 || not isBlobStore then
+                return ConfigValidation.ValidationResult.Ok
+            else
+                try
+                    let! scopeIds = scopes ()
+
+                    let! counts =
+                        scopeIds
+                        |> List.distinct
+                        |> List.map (fun scope -> async {
+                            let! names = storage.List(scope, BlobFactStoreScale.FactsPrefix)
+                            return scope, List.length names
+                        })
+                        |> BlobFanOut.run
+
+                    return BlobFactStoreScale.verdict replicaCount warnAboveFacts refuseAboveFacts (List.ofArray counts)
+                with ex ->
+                    return
+                        ConfigValidation.ValidationResult.Warning(
+                            sprintf
+                                "ReplicaCount = %d with BlobFactStore, and the fact count could not be read (%s), so the multi-replica scale guard could not decide. Above %d facts in one scope, compose %s."
+                                replicaCount
+                                ex.Message
+                                BlobFactStoreScale.WarnAboveFacts
+                                BlobFactStoreScale.Remedy
+                        )
+        }
+
 module FactsCompose =
 
     // ─── Phase 623 — shared optional-substrate lookups ────────────────
@@ -308,6 +456,33 @@ module FactsCompose =
     // returns before `registerFactStore` is ever composed into
     // `ServiceConfig` (GP 13).
 
+    // Phase 888 — the blob store's multi-replica scale guard. Registers
+    // nothing at one replica (GP 11). The scopes it counts come from the
+    // composed `IScopeEnumerator`, else from the team store, else the two
+    // well-known containers.
+    let private registerBlobScaleGuard (replicaCount: int) (services: IServiceCollection) : IServiceCollection =
+        if replicaCount <= 1 then
+            services
+        else
+            services.TryAddSingleton<FactStoreBackend>({ Backend = "blob" })
+
+            services.AddSingleton<ConfigValidation.IConfigValidator>(
+                Func<IServiceProvider, ConfigValidation.IConfigValidator>(fun sp ->
+                    let scopes () =
+                        match tryService<IScopeEnumerator> sp, tryService<TeamManagement.ITeamStore> sp with
+                        | Some enumerator, _ -> enumerator.ListScopes()
+                        | None, Some teams -> (ScopeEnumeration.fromTeamStore teams).ListScopes()
+                        | None, None -> async { return ScopeEnumeration.wellKnownContainers }
+
+                    let isBlob =
+                        match tryService<FactStoreBackend> sp with
+                        | Some marker -> marker.Backend = "blob"
+                        | None -> true
+
+                    BlobFactStoreScaleValidator(replicaCount, sp.GetRequiredService<IBlobStorage>(), scopes, isBlob)
+                    :> ConfigValidation.IConfigValidator)
+            )
+
     let private registerReactiveRecomputation (services: IServiceCollection) : IServiceCollection =
         // (1) The default recompute engine — TryAdd so a deployment-
         //     supplied `IFactRecomputer` registered anywhere in the
@@ -408,6 +583,9 @@ module FactsCompose =
             // engine + handler + data-arrival hook over it.
             let register (s: IServiceCollection) =
                 registerReactiveRecomputation (registerFactStore s)
+                // Phase 888 — the backend marker and, for a multi-replica
+                // deployment only, the blob store's scale guard.
+                |> registerBlobScaleGuard app.Config.ReplicaCount
 
             let serviceConfig =
                 match app.Extensions.ServiceConfig with
@@ -1105,3 +1283,66 @@ module FactsCompose =
                     }
             }
             |> ServerApp.bindFactTables (Grounding.BindAllFactTables DefaultFactTableWriter.Destination)
+    // ─── Phase 888 — a replacement IFactStore behind the same knob ─────
+    //
+    // `withFactStore` composes the blob default. A deployment that has
+    // outgrown it swaps in another `IFactStore` — the indexed companion
+    // `ToolUp.FactStores.Postgres` is the shipped one — without losing a
+    // single registration built over the store: the evidence source, the
+    // disclosure gate, the resolver, the provenance graph, reactive
+    // recomputation and the fact tools all resolve `IFactStore` from DI, so
+    // they follow the replacement.
+
+    /// Replace the composed `IFactStore` with `factory`'s store, keeping
+    /// every registration built over it (Phase 888). `backend` names the
+    /// implementation for introspection and for the blob store's
+    /// multi-replica scale guard, which stands down once the blob store is
+    /// no longer the one composed.
+    ///
+    /// Requires the fact store (`ServerConfig.FactStore = EnabledFactStore`);
+    /// under `NoFactStore` this returns the app unchanged, exactly as
+    /// `withFactStore` does. Insert straight AFTER `withFactStore` and
+    /// before any knob that decorates the store (`withCoverageNarratives`):
+    /// the replacement removes every `IFactStore` registration made before
+    /// it, so a later `withFactStore` would put the blob store back and an
+    /// earlier decorator would be dropped:
+    ///
+    /// ```fsharp
+    /// ServerApp.empty
+    /// |> ServerApp.withStorage blob
+    /// |> FactsCompose.withFactStore
+    /// |> FactsCompose.withFactStoreImplementation "postgres" (fun sp -> myStore sp)
+    /// |> ServerApp.run
+    /// ```
+    ///
+    /// A companion normally wraps this in its own builder
+    /// (`PostgresFactStoreCompose.withPostgresFactStore`).
+    let withFactStoreImplementation
+        (backend: string)
+        (factory: IServiceProvider -> IFactStore)
+        (app: ServerApp)
+        : ServerApp =
+        match app.Config.FactStore with
+        | NoFactStore -> app
+        | EnabledFactStore ->
+            let register (s: IServiceCollection) =
+                s.RemoveAll<IFactStore>() |> ignore
+
+                s.AddSingleton<IFactStore>(Func<IServiceProvider, IFactStore>(factory))
+                |> ignore
+
+                s.RemoveAll<FactStoreBackend>() |> ignore
+                s.AddSingleton<FactStoreBackend>({ Backend = backend })
+
+            let serviceConfig =
+                match app.Extensions.ServiceConfig with
+                | None -> Some register
+                | Some existing -> Some(fun s -> register (existing s))
+
+            {
+                app with
+                    Extensions = {
+                        app.Extensions with
+                            ServiceConfig = serviceConfig
+                    }
+            }

@@ -533,7 +533,8 @@ let tests =
 
                 let perturbed (value: obj) =
                     match apply encoder value :?> JsonValue with
-                    | JsonValue.Object((name, _) :: rest) -> JsonValue.Object((name, JsonValue.Null) :: rest)
+                    | JsonValue.Object members when members.Length > 0 ->
+                        JsonValue.Object(Array.append [| fst members[0], JsonValue.Null |] members[1..])
                     | other -> other
 
                 let caught =

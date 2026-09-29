@@ -113,6 +113,13 @@
          source-linked (not copied) into ToolUp.Platform.Build.Tests so the
          targets and their go-red proofs run one implementation. -->
     <Compile Include="TemplateGatePackages.fs" />
+    <!-- Phase 904 — the samples gate's pure half: finding the sample
+         projects, deciding which Fable transpiles, and reconciling the
+         built count with the directory. Behind the VerifySamples target
+         and the `Samples` leg of VerifyAll in Build.fs; source-linked into
+         ToolUp.Platform.Build.Tests so the target and its go-red proofs
+         run one implementation. -->
+    <Compile Include="SampleGate.fs" />
     <Compile Include="Build.fs" />
   </ItemGroup>
   <ItemGroup>

@@ -25,6 +25,10 @@ let private registeredTests =
         // declared gate id the repo's own pack did not emit. Pure, so
         // both directions are probed without packing anything.
         TemplateGateTests.tests
+        // Phase 904 - the samples gate's discovery, Fable classification
+        // and count reconciliation; pure over strings plus a scan of the
+        // committed samples/ directory.
+        SampleGateTests.tests
         // Phase 326 — the ToolUp.Sdk meta-manifest lists exactly the
         // package ids the Publish target pushes. Pure file scanning over
         // the checkout; no build output, no network.

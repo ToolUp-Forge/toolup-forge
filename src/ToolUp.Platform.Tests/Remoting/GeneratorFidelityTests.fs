@@ -1009,7 +1009,7 @@ let tests =
 
                 Expect.stringContains
                     source
-                    (sprintf "JsonDecoders.verifyBothWith<%s> oracle draws seed jsonShapeArgument" shape)
+                    (sprintf "JsonDecoders.verifyThrough<%s> gate draws seed jsonShapeArgument" shape)
                     "every registration has its Phase 840 verification beside it"
 
                 Expect.stringContains source "let registerAllVerified" "the gated registration is emitted"
@@ -1024,7 +1024,7 @@ let tests =
 
                 match
                     ToolUp.Remoting.Json.PlatformJsonDecoders.registerAllVerified
-                        oracle
+                        (ToolUp.Remoting.Json.JsonDecoders.gateWith oracle)
                         RemotingDecoders.DefaultDraws
                         RemotingDecoders.DefaultSeed
                 with
@@ -1056,7 +1056,7 @@ let tests =
 
                 match
                     ToolUp.Remoting.Json.PlatformJsonDecoders.registerAllVerified
-                        refusing
+                        (ToolUp.Remoting.Json.JsonDecoders.gateWith refusing)
                         RemotingDecoders.DefaultDraws
                         RemotingDecoders.DefaultSeed
                 with

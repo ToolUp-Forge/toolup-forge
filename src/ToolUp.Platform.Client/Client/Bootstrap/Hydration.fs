@@ -40,14 +40,20 @@ let isPrerendered () : bool = hasPrerenderMarker ()
 /// rest of the boot sequence (PublicEntryDispatchers, request seam
 /// install, auth bridge, boot-line summary log) runs identically.
 ///
+/// Both branches mount the store-bound shell `Client.run` mounts
+/// (Phase 910): the prerendered branch hydrates the server's tree from
+/// the store's first published model — `init`'s, the one the prerender
+/// pass rendered — and then re-renders by slice exactly as `Client.run`
+/// does. The store-bound tree emits the same markup as the whole-tree
+/// view, so a prerendered page adopts rather than replaces the DOM.
+///
 /// PublicEntryDispatchers are consulted only on the non-prerender
 /// branch — token-gated public-entry URLs (e.g. `/r/{token}` for
 /// publishable forms) are never prerendered by design, so the
 /// dispatcher path stays SPA-only.
 let run (config: ClientConfig) (modules: ErasedModule list) =
     if isPrerendered () then
-        Client.program config modules
-        |> Program.withReactHydrate "elmish-app"
-        |> Program.run
+        Client.installRequestSeam config
+        Client.runStoreBound true config modules
     else
         Client.run config modules

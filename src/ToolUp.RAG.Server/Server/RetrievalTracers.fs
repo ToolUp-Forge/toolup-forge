@@ -177,3 +177,107 @@ let createNoOp () : IRetrievalTracer = NoOpRetrievalTracer() :> _
 
 let createEventStore (eventStore: IEventStore) (logger: ILogger) : IRetrievalTracer =
     EventStoreRetrievalTracer(eventStore, logger) :> _
+// ─── Off-request-path tracer (Phase 894) ──────────────────────────
+
+/// One queued tracer emission.
+[<RequireQualifiedAccess>]
+type private TraceWork =
+    | Trace of RetrievalTrace * AccessContext
+    | Miss of RetrievalMiss * AccessContext
+
+/// Decorator that takes the trace write off the request path (Phase 894).
+/// `Trace` / `Miss` enqueue onto a bounded in-process channel and return
+/// at once; a single background loop drains the channel into `inner`. A
+/// chat turn therefore never waits on the audit write behind its trace.
+///
+/// **A lost trace is counted, never silent.** When the channel is full
+/// the emission is dropped and `Lost` is incremented; so is an emission
+/// the inner tracer raised on. Traces are diagnostics, not the record of
+/// the answer, so under pressure the turn wins and the loss is visible
+/// (`Lost`, plus one Warn line per power-of-two loss count so a sustained
+/// overflow cannot flood the log).
+///
+/// Process-local and best-effort: emissions still queued when the process
+/// stops are not flushed (shutdown draining is a separate concern).
+/// `Dispose` completes the channel and lets the loop finish what is queued.
+type BackgroundRetrievalTracer(inner: IRetrievalTracer, capacity: int, logger: ILogger) =
+    let channel =
+        System.Threading.Channels.Channel.CreateBounded<TraceWork>(
+            System.Threading.Channels.BoundedChannelOptions(
+                max 1 capacity,
+                FullMode = System.Threading.Channels.BoundedChannelFullMode.Wait,
+                SingleReader = true,
+                SingleWriter = false
+            )
+        )
+
+    let mutable lost = 0L
+    let mutable written = 0L
+
+    let countLoss (why: string) =
+        let n = System.Threading.Interlocked.Increment(&lost)
+
+        if n &&& (n - 1L) = 0L then
+            logger.Warn(
+                sprintf
+                    "[RetrievalTracer] event=trace_lost total=%d reason=%s: retrieval traces are being dropped rather than delaying chat turns; raise the trace queue capacity if this recurs."
+                    n
+                    why
+            )
+
+    let drain =
+        System.Threading.Tasks.Task.Run(fun () ->
+            task {
+                let reader = channel.Reader
+                let mutable go = true
+
+                while go do
+                    let! more = reader.WaitToReadAsync()
+
+                    if not more then
+                        go <- false
+                    else
+                        let mutable item = Unchecked.defaultof<TraceWork>
+
+                        while reader.TryRead(&item) do
+                            try
+                                match item with
+                                | TraceWork.Trace(trace, ctx) -> do! inner.Trace trace ctx |> Async.StartAsTask
+                                | TraceWork.Miss(miss, ctx) -> do! inner.Miss miss ctx |> Async.StartAsTask
+
+                                System.Threading.Interlocked.Increment(&written) |> ignore
+                            with ex ->
+                                countLoss ("the tracer raised: " + ex.Message)
+            }
+            :> System.Threading.Tasks.Task)
+
+    let enqueue (work: TraceWork) =
+        if not (channel.Writer.TryWrite work) then
+            countLoss "the trace queue is full"
+
+    /// Emissions dropped (queue full) or lost (the inner tracer raised).
+    member _.Lost = System.Threading.Interlocked.Read(&lost)
+
+    /// Emissions the inner tracer accepted.
+    member _.Written = System.Threading.Interlocked.Read(&written)
+
+    /// The queue bound this decorator was built with.
+    member _.Capacity = max 1 capacity
+
+    /// Complete the channel and wait (up to `timeout`) for the queued
+    /// emissions to drain. Returns `true` when the drain finished.
+    member _.Flush(timeout: TimeSpan) : bool =
+        channel.Writer.TryComplete() |> ignore
+        drain.Wait timeout
+
+    interface IRetrievalTracer with
+        member _.Trace trace ctx = async { enqueue (TraceWork.Trace(trace, ctx)) }
+        member _.Miss miss ctx = async { enqueue (TraceWork.Miss(miss, ctx)) }
+
+    interface IDisposable with
+        member _.Dispose() = channel.Writer.TryComplete() |> ignore
+
+/// Phase 894 — wrap `inner` so its writes leave the request path, through
+/// a bounded queue of `capacity` emissions (see `BackgroundRetrievalTracer`).
+let createBackground (inner: IRetrievalTracer) (capacity: int) (logger: ILogger) : BackgroundRetrievalTracer =
+    new BackgroundRetrievalTracer(inner, capacity, logger)

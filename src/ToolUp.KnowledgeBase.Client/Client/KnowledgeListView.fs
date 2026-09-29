@@ -154,6 +154,51 @@ module Badges =
                 prop.text msgs.Note
             ]
 
+    /// Phase 895 — the fact-table badge on a coverage narrative (Phase
+    /// 707): the one document the fact tier commits per metric, shown as
+    /// one item that links to the fact tables carrying that metric.
+    ///
+    /// Renders nothing — a null React element, so the row's markup is
+    /// byte-for-byte what it was — unless BOTH hold: the document's
+    /// narrative provenance is a coverage narrative's, and the fact browse
+    /// module is in the shell's published module list. A deployment that
+    /// composes the knowledge base without the fact browse companion never
+    /// sees a link to a page it does not have. The link goes through the
+    /// cross-module event bus and the shell's navigation request, so this
+    /// package takes no dependency on the fact client.
+    ///
+    /// The badge's text is the metric id — data, not prose — beside a
+    /// glyph, so it needs no catalog entry.
+    let factTableBadge (source: KnowledgeSource) =
+        let links = VectorKnowledgeTypes.FactBrowseLinks.coverageMetric
+
+        match source with
+        | FromNarrative src ->
+            match links src.ModuleId src.SettingsKey with
+            | Some metric when
+                VectorKnowledgeTypes.FactBrowseLinks.isComposed (RegisteredModules.snapshot () |> List.map _.ModuleId)
+                ->
+                Html.button [
+                    prop.className
+                        "ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-teal-50 text-teal-700 hover:bg-teal-100"
+                    prop.title metric
+                    prop.onClick (fun e ->
+                        e.stopPropagation ()
+
+                        // The publish is a Cmd; run it here, outside any
+                        // update loop, with a dispatch that is never called.
+                        for effect in ModuleEvents.publish VectorKnowledgeTypes.FactBrowseLinks.OpenMetricTopic metric do
+                            effect ignore
+
+                        NavigationRequest.request (
+                            VectorKnowledgeTypes.FactBrowseLinks.sidebarId
+                                VectorKnowledgeTypes.FactBrowseLinks.TablesRoute
+                        ))
+                    prop.children [ Html.span [ prop.text "▦" ]; Html.span [ prop.text metric ] ]
+                ]
+            | _ -> Html.none
+        | _ -> Html.none
+
     /// Phase 751 — pre-existing public signature; see `statusBadge`.
     let sourceBadge (source: KnowledgeSource) =
         sourceBadgeWith MessageCatalog.english.KnowledgeBase.List source
@@ -514,7 +559,13 @@ let KnowledgeListView (config: KnowledgeListConfig) (documents: KnowledgeDocumen
                     ]
                     Html.td [
                         prop.className "px-4 py-3"
-                        prop.children [ Badges.sourceBadgeWith msgs doc.Source ]
+                        prop.children [
+                            Badges.sourceBadgeWith msgs doc.Source
+                            // Phase 895 — renders nothing unless the document
+                            // is a coverage narrative AND the fact browse
+                            // module is composed.
+                            Badges.factTableBadge doc.Source
+                        ]
                     ]
                     Html.td [ prop.className "px-4 py-3 text-xs text-gray-500"; prop.text doc.UploadedBy ]
                     Html.td [

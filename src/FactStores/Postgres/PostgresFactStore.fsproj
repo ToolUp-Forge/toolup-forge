@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ToolUp.FactStores.Postgres</PackageId>
+    <AssemblyName>ToolUp.FactStores.Postgres</AssemblyName>
+    <Description>PostgreSQL-backed IFactStore for ToolUp.Facts. Facts are rows; point reads, lineage-head lookups, population reads and batch writes are each an indexed query, so the cost of a question scales with its answer rather than with the scope's history. Server-only companion.</Description>
+    <PackageTags>fsharp;sdk;facts;fact-store;grounding;postgresql;npgsql;provider</PackageTags>
+  </PropertyGroup>
+  <!-- Phase 888 - the indexed IFactStore companion. GP 1: the Npgsql
+       dependency is isolated to this companion and never reaches
+       ToolUp.Platform.* or ToolUp.Facts.*. GP 2: PostgreSQL and Npgsql
+       are free, and the default composition (BlobFactStore) is unchanged. -->
+  <ItemGroup>
+    <Compile Include="PostgresFactStore.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Facts.Core\ToolUp.Facts.Core.fsproj" />
+    <ProjectReference Include="..\..\ToolUp.Facts.Server\ToolUp.Facts.Server.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+</Project>

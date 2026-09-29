@@ -307,10 +307,20 @@ RemotingDecoders.registerVerified<Address> address
 
 The check is **differential, .NET-only, and seeded** — the Fable client has no reflection reader to
 compare against, so it registers what the .NET side verified, and a seed makes a refusal
-reproducible. A generated module carries the whole set as `verifyAll draws seed` and
-`registerAllVerified ()`; `PlatformDecoders` is such a module, and the SDK's test pack runs its
-`verifyAll` over every registration before the file is allowed to differ from the generator's
-emission.
+reproducible. A generated module carries the whole set as `verifyAll gate draws seed` and
+`registerAllVerified gate draws seed`; `PlatformDecoders` is such a module, and the SDK's test pack
+runs its `verifyAll` over every registration before the file is allowed to differ from the
+generator's emission.
+
+**The gate is an argument (Phase 902).** Drawing and writing a value need .NET reflection and the
+TypeShape-backed writer, which live in `ToolUp.Platform.Server` — so do `RemotingDecoders.verify`,
+`registerVerified` and `DecoderShapes`, under the same names. A generated module takes the gate as a
+`DecoderGate` (declared in Core) instead of naming it, so it compiles unguarded in a project that
+references Core alone; a server-side build gate hands it `RemotingDecoders.gate` (the shipped writer)
+or `RemotingDecoders.gateWith writer`. `verifyWith writer` / `verifyByTypeWith writer` are the
+writer-injected primitives, the MessagePack twins of the JSON wire's oracle-taking forms, and the
+JSON wire's generated `verifyAll` takes a `JsonDecoderGate` the same way
+(`JsonDecoders.gateWith FableConverters.decoderOracle`).
 
 ---
 
@@ -451,6 +461,12 @@ measure — and **`Number of lexical: string`**: the token text as written, neve
 width a decoder needs from the text, exactly. The number grammar is RFC 8259's, checked by hand
 so both hosts run the same code.
 
+**`Array` and `Object` carry arrays (Phase 905)**, as `MsgPack.Value.Arr` has since Phase 856:
+`index` reads by position, and on .NET a wide object's member names resolve through an index
+memoised against the value, so a record decode costs the same per field at 8 fields as at 256 on
+this wire too. Code that built or matched these cases with list syntax moves to array syntax
+(`[| … |]`); the combinators' `list` returns (`items`, `exactly`) are unchanged.
+
 ### The pass — `JsonRead`
 
 `JsonRead.tryRead` builds the model from a `JsonElement` System.Text.Json has already parsed (the
@@ -577,7 +593,8 @@ call. So the gate now runs **two references**:
   `BrowserLossPrefix`, so a `JsonDeclaredDifference` names the writer whose text it was. The
   registration gate (`registerVerifiedWith` / `registerVerifiedForWith`, and so the server's
   `FableConverters.registerVerified` / `registerVerifiedFor` / `verifyDecoder`) and the generated
-  `verifyAll` / `registerAllVerified` (the emitter calls `verifyBothWith`) all run both, so every
+  `verifyAll` / `registerAllVerified` (through `JsonDecoders.gateWith`, which is `verifyBothByTypeWith`
+  since Phase 902) all run both, so every
   platform and generated decoder is verified against both writers. `verifyWith` /
   `verifyByTypeWith` stay the one-reference primitive.
 

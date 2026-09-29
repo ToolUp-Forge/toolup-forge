@@ -157,3 +157,24 @@ module Program =
         (program: Program<'arg, 'model, 'msg, Fable.React.ReactElement>)
         =
         ToolUp.Elmish.React.Program.withReactHydrate placeholderId program
+
+    /// Phase 910 — HMR-aware `withReactStore`: passes through to the store
+    /// binding, so an app that opens `ToolUp.Elmish.HMR` keeps the store
+    /// (and the slices its components read) across a hot reload. The HMR
+    /// teardown is wired at `Program.run`, as for the other bindings: the
+    /// reloaded build tears the previous loop down, mounts its own store
+    /// and re-renders by slice from its first message.
+    let inline withReactStore
+        (store: ToolUp.Elmish.React.ModelStore<'model, 'msg>)
+        (placeholderId: string)
+        (program: Program<'arg, 'model, 'msg, Fable.React.ReactElement>)
+        =
+        ToolUp.Elmish.React.Program.withReactStore store placeholderId program
+
+    /// Phase 910 — HMR-aware `withReactStoreHydrate`.
+    let inline withReactStoreHydrate
+        (store: ToolUp.Elmish.React.ModelStore<'model, 'msg>)
+        (placeholderId: string)
+        (program: Program<'arg, 'model, 'msg, Fable.React.ReactElement>)
+        =
+        ToolUp.Elmish.React.Program.withReactStoreHydrate store placeholderId program

@@ -340,6 +340,9 @@
              agreement cases. The fixture is compiled into the Fable pack too. -->
         <Compile Include="Remoting\JsonClientDecodeFixture.fs" />
         <Compile Include="Remoting\JsonTextTests.fs" />
+        <!-- Phase 905 - the JSON value model's indexed reads, pinned against a
+             forward scan either side of the memoised-index width. -->
+        <Compile Include="Remoting\JsonWideValueTests.fs" />
         <!-- Phase 854 - the client read-policy attributes, read on .NET and pinned
              equal to the declaration the Fable pack registers (shared fixture). -->
         <Compile Include="Remoting\ReadPolicyFixture.fs" />
@@ -600,6 +603,10 @@
         <!-- Phase 531 — Postgres IEntityStore companion (contract + query
              pushdown; env-gated on TOOLUP_TEST_POSTGRES). -->
         <Compile Include="InProcess\PostgresEntityStoreTests.fs" />
+        <!-- Phase 888 - Postgres IFactStore companion (both contract packs,
+             the differential against BlobFactStore, the scale read; the live
+             arm is env-gated on TOOLUP_TEST_POSTGRES). -->
+        <Compile Include="InProcess\PostgresFactStoreTests.fs" />
         <Compile Include="InProcess\TelemetrySinkTests.fs" />
         <Compile Include="InProcess\InMemoryNotificationChannelTests.fs" />
         <Compile Include="InProcess\RedisNotificationChannelTests.fs" />
@@ -2738,6 +2745,10 @@
              write path per level and role, per-team records and the deployment
              default, elevated-read and level-change audit, and who may change it. -->
         <Compile Include="InProcess\ConversationVisibilityTests.fs" />
+        <!-- Phase 895 — the fact browse surface (IFactBrowseApi): page ceiling,
+             the FactBrowse egress door, the population tool's ranking, runs and
+             movers, one fact's provenance, and the per-run notification. -->
+        <Compile Include="InProcess\FactBrowseTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />
@@ -2776,6 +2787,7 @@
         <!-- Phase 161 — Timescale time-series companion (env-gated live contract pack). -->
         <ProjectReference Include="..\TimeSeriesStores\Timescale\TimescaleTimeSeriesStore.fsproj" />
         <ProjectReference Include="..\EntityStores\Postgres\PostgresEntityStore.fsproj" />
+        <ProjectReference Include="..\FactStores\Postgres\PostgresFactStore.fsproj" />
         <!-- Phase 449 — reference IModelFitProvider for the model-fit contract pack. -->
         <ProjectReference Include="..\ModelProviders\Reference\ToolUp.ModelProviders.Reference.fsproj" />
         <!-- Phase 163 — GA4 telemetry companion (env-gated live contract pack). -->

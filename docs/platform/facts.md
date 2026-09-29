@@ -219,6 +219,73 @@ correctness. Choose the policy with `BlobFactStore.createWithIndex`:
 index at every size. Every parallel blob read or write in the store runs at
 most 16 at a time.
 
+## The indexed store: `ToolUp.FactStores.Postgres` (Phase 888)
+
+The implementation the paragraphs above have promised since Phase 520: an
+opt-in companion package in which facts are rows and every read is a keyed
+query, so the cost of a question scales with its answer rather than with the
+scope's history. `BlobFactStore` stays the default; a deployment that does
+not reference the package is unchanged, and `perf-budgets.json` lists the
+package among the assemblies the minimal deployment must not contain.
+
+```fsharp skip=fragment
+ServerApp.empty
+|> ServerApp.withStorage blob
+|> FactsCompose.withFactStore
+|> PostgresFactStoreCompose.withPostgresFactStore connectionString PostgresFactStoreOptions.defaults
+|> ServerApp.run
+```
+
+`FactsCompose.withFactStoreImplementation` is the seam underneath: it
+replaces the composed `IFactStore`, and every registration built over it —
+the evidence source, the disclosure gate, the resolver, the provenance
+graph, reactive recomputation, the fact tools — follows the replacement.
+
+**What is keyed.** The content address is the primary key within a scope,
+so a replayed assert is a no-op by constraint. Point reads use
+(scope, subject, metric, period); the lineage-head lookup uses a unique
+index on (scope, lineage) over current heads only; the population read uses
+(scope, metric, current-head flag). Supersession clears the old head's flag
+and inserts the successor in one transaction, and a batch is one
+transaction, all-or-nothing. Concurrent writers of one lineage serialise on
+advisory locks, and the unique index is the guarantee behind them: a writer
+that loses a race rolls back and re-derives against the winner, so
+supersession chains stay linear across replicas.
+
+**AsOf from the same table.** A fact is visible at `t` when it was written
+by `t` and no successor written by `t` names it — the current-head flag
+answers the common case, and the predecessors of successors written after
+`t` come from the transaction-time index. There is no separate read model,
+so a head whose transaction time is ahead of the reading clock is simply
+not yet visible, and its predecessor is.
+
+**What the database decides, and what the shared pipeline decides.** The
+subject set, the metric, the period, visibility, a single named method and
+— when no canonical-method selection can apply — the value threshold run
+in SQL, where the arithmetic is provably the pipeline's. Canonical
+selection, the ranking (its decimal tie order), and every statistic (the
+mean, the first-extreme minimum and maximum, the method mix, the freshness
+histogram) run over the projected rows through `PopulationQueryTypes`, so
+the answer is the blob store's by construction. Only the ranked top-k are
+read in full.
+
+**Held to the blob store.** Both `IFactStore` contract packs bind to it
+unmodified, and `IFactStoreContract.differentialTests` asserts one seeded
+fact base into both stores and compares every population shape of the
+Phase 702 matrix and every point-read shape of Phase 890's, value for
+value. At 300,000 subjects in one scope a subject-and-metric point read
+touched 5 rows by its executed plan, with no sequential scan (Phase 888,
+the live test arm; the same read enumerates the scope on the blob store
+below its index threshold).
+
+**The multi-replica guard.** With `ServerConfig.ReplicaCount > 1` and the
+blob store composed, `FactsCompose.withFactStore` registers
+`BlobFactStoreScaleValidator`: it counts each scope's fact census, warns
+above `BlobFactStoreScale.WarnAboveFacts` (50,000) facts in one scope, and
+refuses startup above `BlobFactStoreScale.RefuseAboveFacts` (300,000),
+naming this companion as the remedy. A single-replica deployment registers
+nothing, and the guard stands down once another store is composed.
+
 ## Fact vs result vs model artifact
 
 The fact store sits **above** the analysis-result and model-artifact
@@ -272,8 +339,9 @@ is blob-backed, append-only, and stateless between calls — distributed-ready
 by construction (the content-addressed id makes concurrent writes
 idempotent), and it indexes its own point reads above a threshold (see
 [How the blob store serves a point read](#how-the-blob-store-serves-a-point-read-phase-890)).
-A large deployment can still swap in another implementation behind the same
-six-rule-audited `IFactStore` contract.
+A large deployment swaps in the indexed implementation,
+[`ToolUp.FactStores.Postgres`](#the-indexed-store-toolupfactstorespostgres-phase-888),
+behind the same six-rule-audited `IFactStore` contract.
 
 ### Facts reach the model two ways, and only one needs the model's consent
 

@@ -406,7 +406,7 @@ let private gateSeed = RemotingDecoders.DefaultSeed
 let private platformVerifications
     ()
     : ((string option * string) * Result<JsonDecoderVerification, DecoderRefusal>) list =
-    PlatformJsonDecoders.verifyAll gateOracle gateDraws gateSeed
+    PlatformJsonDecoders.verifyAll (JsonDecoders.gateWith gateOracle) gateDraws gateSeed
 
 /// 840.D — the go-red: total, correct-looking, and WRONG. Two same-typed
 /// fields read in each other's place, so every text is accepted and the
@@ -781,13 +781,13 @@ let tests =
                 | Ok(JsonValue.Array items) ->
                     Expect.equal
                         items
-                        [
+                        [|
                             JsonValue.Number "1"
                             JsonValue.Number "1.0"
                             JsonValue.Number "1e2"
                             JsonValue.Number "-0"
                             JsonValue.Number "12345678901234567890123456789"
-                        ]
+                        |]
                         "each token as written"
                 | Ok other -> failtestf "not an array: %A" other
         ]
@@ -805,12 +805,12 @@ let tests =
                     JsonValue.String ""
                     JsonValue.String "x"
                     JsonValue.String "+1"
-                    JsonValue.Array []
-                    JsonValue.Array [ JsonValue.Null ]
-                    JsonValue.Array [ JsonValue.Number "1"; JsonValue.String "a" ]
-                    JsonValue.Object []
-                    JsonValue.Object [ "Case", JsonValue.Null ]
-                    JsonValue.Object [ "a", JsonValue.Number "1"; "b", JsonValue.Number "2" ]
+                    JsonValue.Array [||]
+                    JsonValue.Array [| JsonValue.Null |]
+                    JsonValue.Array [| JsonValue.Number "1"; JsonValue.String "a" |]
+                    JsonValue.Object [||]
+                    JsonValue.Object [| "Case", JsonValue.Null |]
+                    JsonValue.Object [| "a", JsonValue.Number "1"; "b", JsonValue.Number "2" |]
                 ]
 
                 for _, decoder in covered do
@@ -1868,7 +1868,7 @@ let tests =
 
                 Expect.isEmpty refusals (String.Join("\n", refusals))
 
-                for key, result in PlatformJsonDecoders.verifyAll browserGate gateDraws gateSeed do
+                for key, result in PlatformJsonDecoders.verifyAll (JsonDecoders.gateWith browserGate) gateDraws gateSeed do
                     match result with
                     | Ok verification ->
                         for d in verification.DeclaredDifferences do

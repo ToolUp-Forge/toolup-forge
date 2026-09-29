@@ -1056,7 +1056,7 @@ module internal GiraffeUtil =
 
                     // 0.1.16 — lazy body cache built on a shared bytes
                     // cell. Materialised once on first downstream demand,
-                    // then text + hash derive from the cached bytes
+                    // then the hash derives from the cached bytes
                     // without re-reading ctx.Request.Body. The 0.1.15 fix
                     // read the body unconditionally for every non-streaming
                     // request even when no downstream stage needed it,
@@ -1065,7 +1065,6 @@ module internal GiraffeUtil =
                     // make this eager: the body stays lazy, and the stream
                     // it reads stays alive (see the buffering stage above).
                     let cachedBodyBytesCell: byte[] option ref = ref None
-                    let cachedBodyTextCell: string option ref = ref None
                     let cachedBodyHashCell: string option ref = ref None
 
                     // Phase 461.D — a timestamp for the cold-path telemetry
@@ -1135,16 +1134,6 @@ module internal GiraffeUtil =
                                     }
 
                                 return raise fault
-                    }
-
-                    let readCachedBodyText () = task {
-                        match cachedBodyTextCell.Value with
-                        | Some txt -> return txt
-                        | None ->
-                            let! bytes = readCachedBodyBytes ()
-                            let txt = System.Text.Encoding.UTF8.GetString bytes
-                            cachedBodyTextCell.Value <- Some txt
-                            return txt
                     }
 
                     // 0.1.16 — body-hash is raw-bytes SHA-256, lazy, and
@@ -1737,6 +1726,47 @@ module internal GiraffeUtil =
                                             InputBytes = cachedBodyBytesCell.Value
                                     }
 
+                                    // Phase 905 — an AUDITED method's argument is
+                                    // decoded once, by the dispatch path, and the
+                                    // audit payload below reads that value. Until
+                                    // 905 a method audited without validators was
+                                    // parsed here by dispatch and then parsed and
+                                    // decoded AGAIN after it, with plain STJ, to
+                                    // build the payload. Validated methods already
+                                    // arrive with `validationParsedArguments` set
+                                    // (Phase 856.B), so this runs only when the
+                                    // validation stage did not parse. The bytes
+                                    // were prefetched by `postDispatchBodyConsumerArmed`.
+                                    // A multipart body is not an argument array;
+                                    // `ValueNone` (or a parse that throws) leaves the
+                                    // parse and its refusal to dispatch, as before.
+                                    if
+                                        validationParsedArguments.Value.IsNone
+                                        && options.AuditEmitter.IsSome
+                                        && auditInputTypes.ContainsKey methodName
+                                        && not (validationInputTypes.ContainsKey methodName)
+                                        && not (
+                                            props.InputContentType.StartsWith(
+                                                "multipart/form-data",
+                                                System.StringComparison.Ordinal
+                                            )
+                                        )
+                                    then
+                                        match cachedBodyBytesCell.Value with
+                                        | Some bytes ->
+                                            let parsed =
+                                                try
+                                                    apiProxy.ParseFirst endpointName bytes
+                                                with _ ->
+                                                    ValueNone
+
+                                            match parsed with
+                                            | ValueSome p ->
+                                                validationParsedArguments.Value <- parsed
+                                                validationParsedFirstArg.Value <- Some p.First
+                                            | ValueNone -> ()
+                                        | None -> ()
+
                                     match! apiProxy.Invoke propsWithCache validationParsedArguments.Value with
                                     | Success isBinaryOutput ->
                                         ctx.Response.StatusCode <- 200
@@ -1817,13 +1847,6 @@ module internal GiraffeUtil =
                                                 | Some authCtx -> authCtx.SubjectId
                                                 | None -> "anonymous"
 
-                                            // 0.1.16 — audit payload via the
-                                            // lazy body reader. First call
-                                            // materialises the body string;
-                                            // subsequent reads (validation,
-                                            // idempotency mismatch) return
-                                            // the cached value.
-                                            //
                                             // Phase 69m — when validation
                                             // parsed the first-arg value
                                             // earlier in the same request,
@@ -1836,33 +1859,27 @@ module internal GiraffeUtil =
                                             // from the audit classifier's own input-type map
                                             // otherwise — audited methods without validators
                                             // used to emit empty payloads.
-                                            let! payload = task {
-                                                match validationInputTypes |> Map.tryFind methodName with
+                                            //
+                                            // Phase 905 — and when validation did
+                                            // not parse it, the dispatch stage did,
+                                            // just before `Invoke` (see there). No
+                                            // second STJ parse remains on this path:
+                                            // an empty cache means the argument was
+                                            // not an array this path could decode
+                                            // (a multipart body), and the payload is
+                                            // empty, which is what the re-parse
+                                            // answered for one.
+                                            let payload =
+                                                match
+                                                    validationInputTypes
+                                                    |> Map.tryFind methodName
+                                                    |> Option.orElse (auditInputTypes |> Map.tryFind methodName)
+                                                with
                                                 | Some inputT ->
                                                     match validationParsedFirstArg.Value with
-                                                    | Some v -> return Audit.payloadFromInputRecord inputT v
-                                                    | None ->
-                                                        let (SystemTextJson stjOpts) = options.JsonSerializer
-                                                        let! bodyText = readCachedBodyText ()
-
-                                                        match
-                                                            Validation.parseFirstArgFromBody bodyText inputT stjOpts
-                                                        with
-                                                        | Some v -> return Audit.payloadFromInputRecord inputT v
-                                                        | None -> return Map.empty
-                                                | None ->
-                                                    match auditInputTypes |> Map.tryFind methodName with
-                                                    | Some inputT ->
-                                                        let (SystemTextJson stjOpts) = options.JsonSerializer
-                                                        let! bodyText = readCachedBodyText ()
-
-                                                        match
-                                                            Validation.parseFirstArgFromBody bodyText inputT stjOpts
-                                                        with
-                                                        | Some v -> return Audit.payloadFromInputRecord inputT v
-                                                        | None -> return Map.empty
-                                                    | None -> return Map.empty
-                                            }
+                                                    | Some v -> Audit.payloadFromInputRecord inputT v
+                                                    | None -> Map.empty
+                                                | None -> Map.empty
 
                                             let evt = {
                                                 Kind = kind

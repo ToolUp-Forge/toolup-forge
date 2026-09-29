@@ -30,8 +30,11 @@ cost, **scope**.
 2. **The SDK shell uses it (`Client.run`).** The shell's chrome is a memo boundary over the model
    with `ModuleStates` masked out; the active module is a memo boundary that reads
    `ModuleStates[activeId]` from the store **by reference**. `Client.program`, `Client.view` and
-   `Client.viewWithSignIn` keep the whole-tree path, so every outer composer (the AI assistant's
-   `withAIAssistant`, a custom composition root, `Bootstrap.Hydration.run`) is unchanged.
+   `Client.viewWithSignIn` keep the whole-tree path. When this phase shipped, every outer composer
+   (the AI assistant's `withAIAssistant`, a custom composition root, `Bootstrap.Hydration.run`) was
+   unchanged; Phase 910 later carried the sliced store to hydration, the AI composer, HMR and the
+   chrome contexts, so read [`docs/platform/modules.md`](../platform/modules.md) for where each
+   composer stands now.
 3. **Two per-render allocations that defeated the boundaries are gone.** `Model.ProcessedData` was
    re-aggregated into a new list on every message, and the resolved message catalog was a new record
    on every render (`MessageCatalog.resolve` stamps the locale onto a copy). Both now keep their

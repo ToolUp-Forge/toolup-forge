@@ -944,6 +944,23 @@ type RAGServerApp = {
     /// divergence **and lifts that warning**, because the premise it rests
     /// on no longer holds. Set via `RAGServerApp.withEmbeddingCache`.
     EmbeddingCache: IEmbeddingCache option
+    /// Phase 894 — the per-turn retrieval budgets: the query-time embed
+    /// policy (attempts, wall-clock budget, concurrency ceiling) and the
+    /// fact-stage budget. Default `RetrievalBudgets.defaults` (one attempt,
+    /// 5 s, no ceiling; 3 s for facts): a healthy provider's results are
+    /// unchanged, a stalled one costs the turn its dense branch or its
+    /// pushed facts — marked on the trace — never the turn. Set via
+    /// `withRetrievalBudgets` / `withQueryEmbedTimeout` /
+    /// `withQueryEmbedAttempts` / `withQueryEmbedConcurrency` /
+    /// `withFactStageTimeout`.
+    RetrievalBudgets: RetrievalBudgets
+    /// Phase 894 — bound on retrieval-trace emissions queued for the
+    /// background writer that takes the trace write off the request path.
+    /// Default 1,024. A full queue drops the trace and counts it
+    /// (`BackgroundRetrievalTracer.Lost`). `0` writes traces inline on the
+    /// request path, the pre-894 behaviour. Set via
+    /// `withRetrievalTraceQueueCapacity`.
+    RetrievalTraceQueueCapacity: int
 }
 
 /// Phase 633 — does this app's composed `IEmbeddingCache` span replicas?
@@ -1391,9 +1408,19 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         // Pick the registered tracer if any; default to the event-store tracer
         // so retrieval traces are persisted out-of-the-box.
         let retrievalTracer: IRetrievalTracer =
-            match probe.GetService(typeof<IRetrievalTracer>) with
-            | :? IRetrievalTracer as t -> t
-            | _ -> ToolUp.RAG.RetrievalTracers.createEventStore eventStore ragLogger
+            let composedTracer =
+                match probe.GetService(typeof<IRetrievalTracer>) with
+                | :? IRetrievalTracer as t -> t
+                | _ -> ToolUp.RAG.RetrievalTracers.createEventStore eventStore ragLogger
+
+            // Phase 894 — take the trace write off the request path: the
+            // pipeline enqueues, a background loop writes, a full queue drops
+            // and counts. `0` keeps the inline pre-894 write.
+            if app.RetrievalTraceQueueCapacity > 0 then
+                ToolUp.RAG.RetrievalTracers.createBackground composedTracer app.RetrievalTraceQueueCapacity ragLogger
+                :> IRetrievalTracer
+            else
+                composedTracer
 
         let pipeline: IRetrievalPipeline =
             // Phase 63.A — an override (e.g. the static-corpus pipeline) is
@@ -1472,7 +1499,9 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                     ?disclosureGate = disclosureGateOpt,
                     // Phase 506 — present exactly when a deployment registered
                     // an IQueryRewriter; absent otherwise.
-                    ?queryRewriter = queryRewriterOpt
+                    ?queryRewriter = queryRewriterOpt,
+                    // Phase 894 — the per-turn budgets (query embed, facts).
+                    budgets = app.RetrievalBudgets
                 )
                 :> IRetrievalPipeline
 
@@ -1972,6 +2001,8 @@ module RAGServerApp =
             IngestionQueueStore = None
             IngestionRecoveryScopes = []
             ScopeEnumerator = None
+            RetrievalBudgets = RetrievalBudgets.defaults
+            RetrievalTraceQueueCapacity = 1024
         }
 
     /// Phase 1h composition seam — lift an existing `ServerApp` into a
@@ -2020,6 +2051,8 @@ module RAGServerApp =
             IngestionQueueStore = None
             IngestionRecoveryScopes = []
             ScopeEnumerator = None
+            RetrievalBudgets = RetrievalBudgets.defaults
+            RetrievalTraceQueueCapacity = 1024
         }
 
     /// Internal helper: prepend a clamp note if `original ≠ clamped`.
@@ -2764,6 +2797,78 @@ module RAGServerApp =
     let withVacuumScheduleCron (cron: string) (app: RAGServerApp) : RAGServerApp = {
         app with
             VacuumSchedule = Some cron
+    }
+
+    // ─── Phase 894 — per-turn retrieval budgets ─────────────────────
+
+    /// Phase 894 — replace the whole per-turn budget record. Default
+    /// `RetrievalBudgets.defaults`.
+    let withRetrievalBudgets (budgets: RetrievalBudgets) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            RetrievalBudgets = budgets
+    }
+
+    /// Phase 894 — wall-clock budget for the query-time embed. On overrun
+    /// the dense branch returns nothing and the sparse branch, when
+    /// composed, answers alone (stage mark `DenseDegraded:TimedOut`).
+    /// Default 5 s. Non-positive disables the budget.
+    let withQueryEmbedTimeout (timeout: System.TimeSpan) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            RetrievalBudgets = {
+                app.RetrievalBudgets with
+                    QueryEmbed = {
+                        app.RetrievalBudgets.QueryEmbed with
+                            Timeout = timeout
+                    }
+            }
+    }
+
+    /// Phase 894 — attempts the query-time embed makes inside its budget.
+    /// Default 1 (no retry inside a chat turn); clamped to at least 1.
+    let withQueryEmbedAttempts (attempts: int) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            RetrievalBudgets = {
+                app.RetrievalBudgets with
+                    QueryEmbed = {
+                        app.RetrievalBudgets.QueryEmbed with
+                            MaxAttempts = max 1 attempts
+                    }
+            }
+    }
+
+    /// Phase 894 — ceiling on query-time embeds in flight at once. A call
+    /// that finds it reached is refused at once, as a value — the dense
+    /// branch degrades (stage mark `DenseDegraded:Refused`) rather than
+    /// queueing. Default: no ceiling. Clamped to at least 1.
+    let withQueryEmbedConcurrency (maxConcurrentCalls: int) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            RetrievalBudgets = {
+                app.RetrievalBudgets with
+                    QueryEmbed = {
+                        app.RetrievalBudgets.QueryEmbed with
+                            MaxConcurrentCalls = Some(max 1 maxConcurrentCalls)
+                    }
+            }
+    }
+
+    /// Phase 894 — budget for fact resolution plus the disclosure check.
+    /// On overrun or fault the turn proceeds without pushed facts (stage
+    /// mark `FactsDegraded:TimedOut` / `FactsDegraded:Failed`); a fact whose
+    /// disclosure check did not complete is never admitted. Default 3 s.
+    let withFactStageTimeout (timeout: System.TimeSpan) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            RetrievalBudgets = {
+                app.RetrievalBudgets with
+                    FactStage = timeout
+            }
+    }
+
+    /// Phase 894 — bound on retrieval traces queued for the background
+    /// writer. Default 1,024; a full queue drops and counts the trace.
+    /// `0` writes traces inline on the request path (pre-894).
+    let withRetrievalTraceQueueCapacity (capacity: int) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            RetrievalTraceQueueCapacity = max 0 capacity
     }
 
     /// Drive the final composition. Returns the process exit code. All

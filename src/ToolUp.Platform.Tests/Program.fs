@@ -353,6 +353,9 @@ let private registeredTests =
         TimescaleTimeSeriesStoreTests.tests
         // Phase 531 — Postgres IEntityStore companion (env-gated).
         PostgresEntityStoreTests.tests
+        // Phase 888 — Postgres IFactStore companion (the live arm is env-gated).
+        PostgresFactStoreTests.offlineTests
+        PostgresFactStoreTests.tests
         TelemetrySinkTests.tests
         InMemoryNotificationChannelTests.tests
         RedisNotificationChannelTests.tests
@@ -2396,6 +2399,9 @@ let private registeredTests =
         // Phase 843 - JsonText, the client's JSON reader, differential
         // against JsonRead, plus the .NET half of the pinned payload.
         JsonTextTests.tests
+        // Phase 905 - the JSON value model's indexed reads answer what the
+        // scans they replaced answered, narrow or wide.
+        JsonWideValueTests.tests
         // Phase 854 - client read-policy attributes read on .NET, pinned to
         // the declaration the Fable pack registers.
         ReadPolicyAttributeTests.tests
@@ -2487,6 +2493,10 @@ let private registeredTests =
         // Phase 859 - team conversation visibility: per-team level, every
         // read/write path filtered, audit, and who may change the level.
         ConversationVisibilityTests.tests
+        // Phase 895 - the fact browse surface: bounded pages over a
+        // 100,000-subject table, the FactBrowse egress door, one ranking with
+        // the population tool, tables and runs, per-run notification.
+        FactBrowseTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

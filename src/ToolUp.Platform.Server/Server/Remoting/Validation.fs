@@ -651,6 +651,13 @@ module internal Validation =
     /// `inputType`. Returns `None` when the body isn't a parseable
     /// array with at least one element (defensive — the proxy handles
     /// these cases too).
+    ///
+    /// Not on the Giraffe adapter's request path since Phase 905: the
+    /// validation stage (Phase 856.B) and the audit payload (Phase 905)
+    /// both read the argument the dispatch path decodes, once. Kept for a
+    /// host that validates a body outside that dispatcher; note it is a
+    /// plain `JsonSerializer.Deserialize` by `Type`, not the dispatch
+    /// path's decode.
     let parseFirstArgFromBody
         (bodyText: string)
         (inputType: Type)
