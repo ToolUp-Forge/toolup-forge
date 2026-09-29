@@ -331,18 +331,22 @@ type PgvectorTuning = {
     /// health probe when requested but unavailable.
     IterativeScan: bool
     /// With an approximate index configured, order the search statement
-    /// by distance ALONE so the index can serve its `ORDER BY … LIMIT`,
-    /// and restore the `(score, scope, chunkId)` total order by re-sorting
-    /// the returned page. `false` keeps the pre-892 statement, whose
-    /// secondary `chunk_id` sort key PostgreSQL cannot serve from an
-    /// ordering-operator index scan. Has no effect under `NoAnnIndex`.
+    /// by distance ALONE, and restore the `(score, scope, chunkId)` total
+    /// order by re-sorting the returned page. `false` keeps the pre-892
+    /// two-key statement. Phase 928 measured both on pgvector 0.8.6 /
+    /// PostgreSQL 17: the planner serves EITHER from the approximate index
+    /// (the two-key one through an Incremental Sort presorted on the
+    /// distance), with identical recall, so this setting saves that sort
+    /// step and changes neither which index is used nor the answer. Has no
+    /// effect under `NoAnnIndex`.
     IndexOrderedSearch: bool
-    /// When an index-ordered page for one scope comes back SHORTER than
-    /// `topK`, re-run that scope with the exact statement. A short page
+    /// With an approximate index configured, when one scope's page comes
+    /// back SHORTER than `topK`, re-run that scope with `Sql.searchExact`,
+    /// the one statement no approximate index can serve. A short page
     /// means either the scope holds fewer live chunks than `topK`, or the
-    /// scope filter starved the approximate scan; the exact re-run is
-    /// cheap in exactly the small-scope case where starvation happens, and
-    /// it makes a full top-k a guarantee rather than a tuning outcome.
+    /// scope filter starved the approximate scan; the exact re-run makes a
+    /// full top-k a guarantee rather than a tuning outcome. Has no effect
+    /// under `NoAnnIndex`, where every search is already exact.
     ExactFallbackOnShortPage: bool
     /// Upper bound on the per-scope queries a multi-scope `Search` runs
     /// concurrently. `1` is sequential (the pre-892 behaviour). Each
@@ -384,7 +388,7 @@ module PgvectorTuning =
 
     /// The recommended production posture for a shared table holding many
     /// scopes: a raised search width, iterative scanning where the
-    /// extension supports it, an index-servable `ORDER BY` with the page
+    /// extension supports it, a distance-only `ORDER BY` with the page
     /// re-sorted, the exact fallback on a short page, and a bounded
     /// concurrent multi-scope search. See the companion README for what
     /// each value buys and what has been measured.
@@ -577,16 +581,39 @@ LIMIT @top_k;"""
             o.Table
 
     /// Phase 892 — per-scope KNN whose `ORDER BY` is the distance operator
-    /// ALONE, the only shape an ordering-operator index (HNSW / IVFFlat)
-    /// can serve. The total order `search` states in SQL is restored by the
+    /// alone. The total order `search` states in SQL is restored by the
     /// caller re-sorting the returned page. Used only when an approximate
     /// index is configured and `PgvectorTuning.IndexOrderedSearch` is set.
+    /// Phase 928's `EXPLAIN` showed the approximate index serves `search`
+    /// too (an Incremental Sort presorted on the distance), so this saves
+    /// the sort step; it is not what makes the index usable.
     let searchIndexOrdered (o: PgvectorOptions) =
         sprintf
             """SELECT chunk_id, content, metadata, 1 - (embedding <=> @embedding::vector) AS score
 FROM %s
 WHERE scope = @scope AND deleted_at IS NULL
 ORDER BY embedding <=> @embedding::vector
+LIMIT @top_k;"""
+            o.Table
+
+    /// Phase 928 — per-scope KNN that NO approximate index can serve: the
+    /// scope's live rows are materialised first, and only then ranked, so
+    /// the ordering operator never reaches an index scan. This is the
+    /// short-page fallback's statement. `search` is not exact once an
+    /// approximate index exists — measured on pgvector 0.8.6 / PostgreSQL
+    /// 17, the planner serves its two-key `ORDER BY` from the HNSW index
+    /// through an Incremental Sort — so a fallback re-running `search`
+    /// could come back as short as the page it was meant to repair.
+    let searchExact (o: PgvectorOptions) =
+        sprintf
+            """WITH scoped AS MATERIALIZED (
+    SELECT chunk_id, content, metadata, embedding
+    FROM %s
+    WHERE scope = @scope AND deleted_at IS NULL
+)
+SELECT chunk_id, content, metadata, 1 - (embedding <=> @embedding::vector) AS score
+FROM scoped
+ORDER BY embedding <=> @embedding::vector, chunk_id
 LIMIT @top_k;"""
             o.Table
 
@@ -734,6 +761,7 @@ WHERE scope = @scope AND deleted_at IS NOT NULL AND deleted_at < @older_than;"""
         "UpsertBatch", ScopeKeyed, upsertBatch o
         "Search", ScopePredicated, search o
         "SearchIndexOrdered", ScopePredicated, searchIndexOrdered o
+        "SearchExact", ScopePredicated, searchExact o
         "ListChunks", ScopePredicated, listChunks o
         "DeleteChunk", ScopePredicated, deleteChunk o
         "RestoreChunk", ScopePredicated, restoreChunk o
@@ -869,6 +897,7 @@ type PgvectorVectorStore
     let sqlUpsertBatch = Sql.upsertBatch options
     let sqlSearch = Sql.search options
     let sqlSearchIndexOrdered = Sql.searchIndexOrdered options
+    let sqlSearchExact = Sql.searchExact options
     let sqlListChunks = Sql.listChunks options
     let sqlDeleteChunk = Sql.deleteChunk options
     let sqlRestoreChunk = Sql.restoreChunk options
@@ -1012,9 +1041,10 @@ type PgvectorVectorStore
         return rows
     }
 
-    /// One scope's page. Index-ordered when configured; a page that comes
-    /// back short of `topK` is re-run with the exact statement when the
-    /// fallback is on (see `PgvectorTuning.ExactFallbackOnShortPage`).
+    /// One scope's page. Index-ordered when configured; with an approximate
+    /// index configured, a page that comes back short of `topK` is re-run
+    /// with the exact statement when the fallback is on (see
+    /// `PgvectorTuning.ExactFallbackOnShortPage`).
     let searchScope (scope: VectorScope) (queryLiteral: string) (topK: int) = async {
         let sql = if indexOrdered then sqlSearchIndexOrdered else sqlSearch
 
@@ -1024,8 +1054,8 @@ type PgvectorVectorStore
             else
                 runWithSettings sql scope queryLiteral topK
 
-        if indexOrdered && tuning.ExactFallbackOnShortPage && page.Length < topK then
-            return! runPlain sqlSearch scope queryLiteral topK
+        if annConfigured && tuning.ExactFallbackOnShortPage && page.Length < topK then
+            return! runPlain sqlSearchExact scope queryLiteral topK
         else
             return page
     }
