@@ -370,3 +370,144 @@ module EmbedderMetrics =
     /// name for the given provider id.
     let latencyMetricName (providerId: string) : string =
         sprintf "embedder.%s.latency_ms" providerId
+// ─── Phase 894 — the query-time embed policy ──────────────────────
+//
+// A chat turn embeds its query exactly once, and that embed is the one
+// network call every retrieval makes. It must not inherit the INGESTION
+// posture: an ingest worker can afford several attempts with backoff
+// capped at tens of seconds, a user waiting on an answer cannot. So the
+// query path gets its own policy, applied at the call boundary by
+// `QueryEmbedGate` — one attempt, a short wall-clock budget, and an
+// optional ceiling on concurrent calls — and every way the embed can
+// fail to produce a vector comes back as a VALUE the caller branches on
+// (GP 12: failure as data), never as a stalled turn.
+
+/// Query-time embedding policy (Phase 894). Separate from
+/// `EmbedderRetryPolicy`, which governs ingestion-side calls inside an
+/// API-backed provider.
+type QueryEmbedPolicy = {
+    /// Attempts made at the call boundary, inclusive of the first. `1`
+    /// (the default) is one attempt: a failed query embed degrades the
+    /// turn rather than retrying inside it. Any retry a provider performs
+    /// internally still happens, inside `Timeout`.
+    MaxAttempts: int
+    /// Wall-clock budget for the whole query embed, every attempt
+    /// included. On overrun the caller receives `QueryEmbedOutcome.TimedOut`
+    /// and proceeds without a dense vector; the overrunning call is
+    /// abandoned, not cancelled, and finishes on its own.
+    Timeout: TimeSpan
+    /// Ceiling on query embeds in flight at once, across every request
+    /// the gate serves. `None` is unbounded. A call that finds the
+    /// ceiling reached is refused at once as `QueryEmbedOutcome.Refused`
+    /// — it does not queue. A slot is held until the provider call
+    /// actually finishes, so an abandoned overrun still counts against it:
+    /// the bound is on real provider concurrency, not on waiting callers.
+    MaxConcurrentCalls: int option
+}
+
+module QueryEmbedPolicy =
+    /// SDK default for a composed deployment: one attempt, a 5 s budget,
+    /// no concurrency ceiling. A healthy provider answers well inside the
+    /// budget, so results are unchanged; a stalled one costs the turn its
+    /// dense branch, never the turn.
+    let defaults: QueryEmbedPolicy = {
+        MaxAttempts = 1
+        Timeout = TimeSpan.FromSeconds 5.0
+        MaxConcurrentCalls = None
+    }
+
+/// What a bounded query embed produced (Phase 894).
+[<RequireQualifiedAccess>]
+type QueryEmbedOutcome =
+    /// The provider answered inside the budget.
+    | Embedded of vector: float32 array
+    /// The budget elapsed first.
+    | TimedOut of budget: TimeSpan
+    /// The concurrency ceiling was reached; no provider call was made.
+    | Refused of ceiling: int
+    /// Every attempt failed; carries the last error's message.
+    | Failed of message: string
+
+module QueryEmbedOutcome =
+    /// Short, stable label for a stage mark or a log line —
+    /// `"TimedOut"` / `"Refused"` / `"Failed"`, or `"Embedded"`.
+    let label (outcome: QueryEmbedOutcome) : string =
+        match outcome with
+        | QueryEmbedOutcome.Embedded _ -> "Embedded"
+        | QueryEmbedOutcome.TimedOut _ -> "TimedOut"
+        | QueryEmbedOutcome.Refused _ -> "Refused"
+        | QueryEmbedOutcome.Failed _ -> "Failed"
+
+/// Applies a `QueryEmbedPolicy` to query-time embeds (Phase 894). One gate
+/// per pipeline: it owns the concurrency ceiling, so every request the
+/// pipeline serves shares it. Stateless apart from that counter (GP 12
+/// rule 4 holds for the provider behind it).
+type QueryEmbedGate(policy: QueryEmbedPolicy) =
+    let attempts = max 1 policy.MaxAttempts
+
+    let ceiling = policy.MaxConcurrentCalls |> Option.map (fun n -> max 1 n)
+
+    let slots =
+        ceiling |> Option.map (fun n -> new System.Threading.SemaphoreSlim(n, n))
+
+    /// The policy this gate applies.
+    member _.Policy = policy
+
+    /// Embed `text` through `provider` under the policy. Never raises for
+    /// a provider failure, an overrun or a refusal — each is a case of
+    /// the returned `QueryEmbedOutcome`.
+    member _.Embed (provider: IEmbeddingProvider) (text: string) : Async<QueryEmbedOutcome> = async {
+        let acquired =
+            match slots with
+            | None -> true
+            | Some s -> s.Wait 0
+
+        if not acquired then
+            return QueryEmbedOutcome.Refused(defaultArg ceiling 0)
+        else
+            let work = async {
+                try
+                    let mutable result = None
+                    let mutable lastError = ""
+                    let mutable attempt = 1
+
+                    while result.IsNone && attempt <= attempts do
+                        try
+                            let! vector = provider.GenerateEmbedding text
+                            result <- Some vector
+                        with ex ->
+                            lastError <- ex.Message
+                            attempt <- attempt + 1
+
+                    return
+                        match result with
+                        | Some vector -> QueryEmbedOutcome.Embedded vector
+                        | None -> QueryEmbedOutcome.Failed lastError
+                finally
+                    match slots with
+                    | Some s -> s.Release() |> ignore
+                    | None -> ()
+            }
+
+            // The call runs detached from the caller so an overrun can be
+            // abandoned: the caller races it against the budget and takes
+            // whichever finishes first. `Timeout <= 0` disables the budget.
+            let call = Async.StartAsTask work
+
+            if policy.Timeout <= TimeSpan.Zero then
+                return! Async.AwaitTask call
+            else
+                use cts = new System.Threading.CancellationTokenSource()
+
+                let budget = System.Threading.Tasks.Task.Delay(policy.Timeout, cts.Token)
+
+                let! first =
+                    System.Threading.Tasks.Task.WhenAny(call :> System.Threading.Tasks.Task, budget)
+                    |> Async.AwaitTask
+
+                if obj.ReferenceEquals(first, call) then
+                    cts.Cancel()
+                    return call.Result
+                else
+                    return QueryEmbedOutcome.TimedOut policy.Timeout
+    }

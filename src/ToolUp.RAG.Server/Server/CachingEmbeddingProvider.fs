@@ -40,6 +40,16 @@ type CachingEmbeddingProvider(inner: IEmbeddingProvider, cache: IEmbeddingCache)
         Dimensions = inner.Dimensions
     }
 
+    // Phase 894 — single-key provider calls in flight, for coalescing.
+    // An entry lives exactly as long as its call: the call removes it on
+    // completion, success or failure, so the map never outgrows the
+    // concurrency of the moment.
+    let inFlight =
+        System.Collections.Concurrent.ConcurrentDictionary<
+            EmbeddingCacheKey,
+            Lazy<System.Threading.Tasks.Task<Choice<float32 array, exn>>>
+         >()
+
     interface IEmbeddingProvider with
         member _.Dimensions = inner.Dimensions
         member _.ProviderId = inner.ProviderId
@@ -54,9 +64,45 @@ type CachingEmbeddingProvider(inner: IEmbeddingProvider, cache: IEmbeddingCache)
             match! cache.TryGet key with
             | Some hit -> return hit
             | None ->
-                let! embedding = inner.GenerateEmbedding text
-                do! cache.Set key embedding
-                return embedding
+                // Phase 894 — coalesce concurrent misses for one key onto a
+                // single provider call. The first miss registers the call;
+                // every miss that arrives while it is in flight awaits the
+                // same task. The call re-probes the cache before reaching the
+                // provider, so a miss that raced the previous call's
+                // completion (it probed before `Set`, registered after the
+                // entry was removed) is served from the cache rather than
+                // paying for a second call.
+                let call =
+                    inFlight.GetOrAdd(
+                        key,
+                        fun _ ->
+                            lazy
+                                (Async.StartAsTask(
+                                    async {
+                                        try
+                                            try
+                                                match! cache.TryGet key with
+                                                | Some hit -> return Choice1Of2 hit
+                                                | None ->
+                                                    let! embedding = inner.GenerateEmbedding text
+                                                    do! cache.Set key embedding
+                                                    return Choice1Of2 embedding
+                                            with ex ->
+                                                return Choice2Of2 ex
+                                        finally
+                                            inFlight.TryRemove key |> ignore
+                                    }
+                                ))
+                    )
+
+                match! Async.AwaitTask call.Value with
+                | Choice1Of2 embedding -> return embedding
+                | Choice2Of2 ex ->
+                    // Re-raise the provider's own exception, unwrapped and with
+                    // its original stack — the ingestion path classifies
+                    // failures by exception type.
+                    System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex).Throw()
+                    return Unchecked.defaultof<_>
         }
 
         // Cache-aware batch path: probe every key, then issue one batched
