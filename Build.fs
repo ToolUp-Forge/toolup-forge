@@ -387,6 +387,158 @@ let main args =
             runVerifyFable ()
             0)
 
+    // Phase 904 — every sample builds under a gate.
+    //
+    // `samples/` is not in the solution, so nothing compiled it:
+    // `FormsAndAI.Server` was broken (FS0764) from Phase 6g.F until this
+    // phase and no gate noticed, and `samples/MinimalClient`'s Fable
+    // compile "has never been a gate" (CLAUDE.md). This is that gate.
+    //
+    // Every `*.fsproj` under `samples/` is BUILT (`dotnet build`, one
+    // project at a time, aggregated so a red run names every broken
+    // sample rather than the first); every sample Fable compiles for the
+    // browser is also TRANSPILED (`dotnet fable`), because a .NET build
+    // cannot see what Fable refuses. Afterwards `SampleGate.reconcile`
+    // compares what was built with an independent enumeration of the
+    // directory, so a discovery that quietly found fewer projects goes
+    // red rather than green — and a sample that is deliberately skipped
+    // is named, with its reason, in `SampleGate.excluded`.
+    //
+    // Usage: `dotnet run --project Build.fsproj -- VerifySamples`
+    let runVerifySamples () =
+        let root = Path.getFullName "."
+        let samplesDir = Path.Combine(root, "samples")
+        let onDisk = SampleGate.discover root samplesDir
+        let plan = SampleGate.plan onDisk SampleGate.excluded
+
+        for stale in plan.StaleExclusions do
+            Trace.traceError (sprintf "VerifySamples: exclusion `%s` names a project that is not on disk." stale)
+
+        for ex in SampleGate.excluded do
+            Trace.tracefn "▶ VerifySamples: excluding %s — %s" ex.Project ex.Reason
+
+        let run workDir exe args =
+            CreateProcess.fromRawCommand exe args
+            |> CreateProcess.withWorkingDirectory workDir
+            |> Proc.run
+            |> _.ExitCode
+
+        // A Fable transpile of one sample costs ~1.5-2 minutes (it cracks
+        // and compiles the whole client tier, ~400 source files), so the
+        // six Fable samples are ~10 minutes: the FULL lane only. The fast
+        // lane still BUILDS every sample on .NET and asserts the count.
+        let transpile =
+            match TestLane.current with
+            | TestLane.Lane.Full -> true
+            | _ -> false
+
+        // Fable resolves its own tool from the nearest `.config/
+        // dotnet-tools.json` above the directory it runs in, and it must
+        // run IN the sample's directory: pointed at a project from
+        // elsewhere (or with `--cwd`) it mis-resolves the Feliz
+        // references and fails with hundreds of errors. So each Fable
+        // sample carries its own manifest, and a Fable sample without one
+        // is a named failure rather than a mystery one.
+        let hasToolManifest (projDir: string) =
+            let rec up (dir: DirectoryInfo) =
+                if isNull dir || dir.FullName.Length <= root.Length then
+                    false
+                elif File.Exists(Path.Combine(dir.FullName, ".config", "dotnet-tools.json")) then
+                    true
+                else
+                    up dir.Parent
+
+            up (DirectoryInfo projDir)
+
+        let built = ResizeArray<string>()
+        let mutable skippedTranspile = 0
+
+        let legs =
+            plan.ToBuild
+            |> List.map (fun proj ->
+                Aggregate.leg proj (fun () ->
+                    Trace.tracefn "▶ VerifySamples: building %s" proj
+                    built.Add proj
+
+                    let build = run root "dotnet" [ "build"; proj; "-m:1"; "--nologo"; "-v:q" ]
+
+                    if build <> 0 then
+                        build
+                    elif SampleGate.isFableProject (File.ReadAllText(Path.Combine(root, proj))) then
+                        let projDir = Path.GetDirectoryName(Path.Combine(root, proj))
+
+                        if not transpile then
+                            skippedTranspile <- skippedTranspile + 1
+
+                            Trace.tracefn
+                                "▶ VerifySamples: %s is a Fable sample; transpile runs in the full lane only."
+                                proj
+
+                            0
+                        elif not (hasToolManifest projDir) then
+                            Trace.traceError (
+                                sprintf
+                                    "VerifySamples: %s is a Fable sample with no `.config/dotnet-tools.json` at or above its directory, so `dotnet fable` cannot run there. Add a manifest pinning `fable`."
+                                    proj
+                            )
+
+                            1
+                        else
+                            run projDir "dotnet" [ "tool"; "restore" ] |> ignore
+                            Trace.tracefn "▶ VerifySamples: transpiling %s (Fable)" proj
+
+                            // `-o output`, relative, and nothing else: an
+                            // absolute output directory outside the sample
+                            // makes Fable mis-resolve the Feliz references
+                            // (hundreds of FS0039s, measured on 2026-09-29),
+                            // which no sample deserves to be blamed for.
+                            // `output/` is gitignored; it is removed either
+                            // way so a gate run leaves the tree as it found it.
+                            let outDir = Path.Combine(projDir, "output")
+                            Shell.deleteDir outDir
+
+                            try
+                                run projDir "dotnet" [ "fable"; "-o"; "output"; "--noCache" ]
+                            finally
+                                Shell.deleteDir outDir
+                    else
+                        0))
+
+        // The count leg is a leg of its own so a mismatch shows up in the
+        // summary block by name, alongside any red sample.
+        let legs =
+            legs
+            @ [
+                Aggregate.leg "sample count matches the directory" (fun () ->
+                    let findings = SampleGate.reconcile onDisk SampleGate.excluded (List.ofSeq built)
+
+                    Trace.tracefn
+                        "▶ VerifySamples: %d sample project(s) on disk, %d built, %d excluded; %d Fable transpile(s) deferred to the full lane."
+                        onDisk.Length
+                        built.Count
+                        SampleGate.excluded.Length
+                        skippedTranspile
+
+                    for f in findings do
+                        Trace.traceError ("VerifySamples: " + f)
+
+                    if List.isEmpty findings then 0 else 1)
+            ]
+
+        Aggregate.runAll "VerifySamples" "sample leg" legs
+
+    Target.create "VerifySamples" (fun _ -> runVerifySamples ())
+
+    // Phase 904 — the samples gate IN the canonical gate.
+    match TestLane.current with
+    | TestLane.Lane.Pure -> ()
+    | TestLane.Lane.Fast
+    | TestLane.Lane.Full ->
+        VerifyLeg.register "Samples" (fun () ->
+            Trace.tracefn "▶ VerifyAll: Samples (samples/, via the VerifySamples recipe)"
+            runVerifySamples ()
+            0)
+
     // Phase 761 — the browser-level smoke gate.
     //
     // The repo's first REAL-BROWSER tier. Two scenarios, both of which

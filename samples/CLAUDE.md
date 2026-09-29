@@ -4,6 +4,22 @@ Conventions shared by the runnable samples under `samples/`. Each sample's
 own README carries its run + verify procedure; this file holds only what
 crosses samples.
 
+## Every sample builds under a gate
+
+`samples/` is not in `ToolUp.Forge.sln`, so `dotnet build ToolUp.Forge.sln` never compiled it. The
+`Samples` leg of `VerifyAll` (also `dotnet run --project Build.fsproj -- VerifySamples`) does:
+
+- It enumerates every `*.fsproj` under `samples/` (skipping `obj/`, `bin/`, `node_modules/`,
+  `output/`) and `dotnet build`s each one, so a red run names every broken sample.
+- A sample that Fable compiles (it declares `Fable.Core` or references `ToolUp.Platform.Client`) is
+  also **transpiled** with `dotnet fable`, in the **full lane only** — about two minutes each. It runs
+  IN the sample's directory, so **a Fable sample carries its own `.config/dotnet-tools.json`** pinning
+  `fable`; one without it fails the leg by name.
+- The leg asserts what it built against the directory. A project deliberately not built is listed in
+  `SampleGate.excluded` (root `SampleGate.fs`) with its reason; today the list is empty.
+- **Adding a sample needs no edit here** — it is discovered. Do keep it building: a new sample that
+  does not is a red gate, which is the point.
+
 ## Port allocation (samples band)
 
 Every sample that binds a fixed network listener claims a **10-port band**
