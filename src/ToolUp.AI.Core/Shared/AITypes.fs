@@ -552,20 +552,18 @@ type AIAssistantApi = {
 /// storage (Phase 859). A property of the TEAM: the deployment declares the
 /// default a team starts with and the levels a team may choose from, and
 /// the team's `Owner` chooses within that set.
-type TeamConversationVisibility =
-    /// Every member of the team. The default, and the behaviour before
-    /// Phase 859 — a team that has chosen nothing is unchanged.
-    | TeamVisible
-    /// The team's `Owner` and `Admin` roles only.
-    | TeamAdmins
-    /// Holders of `PlatformRole.PlatformAdmin` only.
-    | PlatformAdmins
+///
+/// The level type itself is `ToolUp.Platform.TeamVisibilityLevel`
+/// (`TeamVisible` | `TeamAdmins` | `PlatformAdmins`), shared with team output
+/// visibility (Phase 896) so a team has one vocabulary for both axes. This
+/// name is kept for the conversation axis.
+type TeamConversationVisibility = TeamVisibilityLevel
 
 /// The Phase 859 visibility rule. `canSee` is the single place the read
 /// rule lives; every read path in the handler filters through it.
 module TeamConversationVisibility =
     /// Every level, widest first.
-    let all: TeamConversationVisibility list = [ TeamVisible; TeamAdmins; PlatformAdmins ]
+    let all: TeamConversationVisibility list = TeamVisibilityLevel.all
 
     let private isTeamAdmin (viewerTeamRole: TeamRole option) =
         match viewerTeamRole with
@@ -626,11 +624,7 @@ module TeamConversationVisibility =
             && isElevated policy viewerTeamRole viewerIsPlatformAdmin)
 
     /// Stable name of a level, as a refusal or an audit row names it.
-    let name (level: TeamConversationVisibility) : string =
-        match level with
-        | TeamVisible -> "TeamVisible"
-        | TeamAdmins -> "TeamAdmins"
-        | PlatformAdmins -> "PlatformAdmins"
+    let name (level: TeamConversationVisibility) : string = TeamVisibilityLevel.name level
 
     /// The sentence a member reads to know who can see what they type.
     let describe (level: TeamConversationVisibility) : string =
@@ -667,6 +661,47 @@ type TeamConversationVisibilityApi = {
     /// outside the deployment's allowed set is refused, naming the set.
     [<RequiresClaim "scope">]
     SetConversationVisibility: TeamConversationVisibility -> Async<Result<TeamConversationVisibilityView, string>>
+}
+
+// ─── Phase 896 — team output visibility ──────────────────────────
+//
+// Module permission governs USE of a module; the team's output level
+// governs who sees the restricted output its modules publish. Held in the
+// same per-team policy record as the conversation level, so it is set here,
+// beside it.
+
+/// The output-visibility level in force for the caller's active team
+/// (Phase 896).
+type TeamOutputVisibilityView = {
+    /// False outside a team scope: there is no team level to show or set.
+    InTeamScope: bool
+    /// False when the deployment has not composed team output visibility:
+    /// the level shown is `TeamVisible` and cannot be changed.
+    Enabled: bool
+    /// The level in force now.
+    Level: TeamVisibilityLevel
+    /// The levels this deployment lets a team choose from.
+    Allowed: TeamVisibilityLevel list
+    /// The levels THIS caller may select now. Empty when the caller may not
+    /// change the level at all.
+    Selectable: TeamVisibilityLevel list
+}
+
+/// Read and set the active team's output visibility (Phase 896). Mounted
+/// beside `TeamConversationVisibilityApi`; the team is always the caller's
+/// active team, never a request field.
+type TeamOutputVisibilityApi = {
+    /// The level in force for the caller's active team, and what the caller
+    /// may change it to.
+    [<AllowAnonymous>]
+    GetOutputVisibility: unit -> Async<TeamOutputVisibilityView>
+    /// Set the active team's level. Only the team `Owner` may; selecting
+    /// `PlatformAdmins`, or leaving it, also needs a platform admin. A level
+    /// outside the deployment's allowed set is refused, naming the set, and
+    /// so is a level that would leave conversation visibility wider than
+    /// output visibility, naming both.
+    [<RequiresClaim "scope">]
+    SetOutputVisibility: TeamVisibilityLevel -> Async<Result<TeamOutputVisibilityView, string>>
 }
 
 // ─── Branding ─────────────────────────────────────────────────────

@@ -1508,3 +1508,152 @@ module FactsCompose =
                             ServiceConfig = serviceConfig
                     }
             }
+
+    // ─── Phase 896 — team output visibility (opt-in) ──────────────────
+    //
+    // Module permission governs USE; the team's policy governs who sees the
+    // OUTPUT modules published. This knob arms the second axis at the one
+    // place every egress door already passes: the disclosure gate decides a
+    // `Restricted` fact for the viewer — the requester as the platform
+    // resolved them, or the least-privileged viewer when there is none.
+    //
+    // The team's level is read through `ITeamOutputVisibilitySource`, whose
+    // implementation lives with the per-team policy record that also holds
+    // the team's conversation level; with no source composed every team
+    // sits at the deployment default declared here.
+    //
+    // Self-contained on purpose: the gate registered by `withFactStore` is
+    // decorated in place (`FactDisclosureGate.WithViewerAwareness`), so the
+    // registration above is untouched and every facet it composed (taint,
+    // purpose, budgets) is kept.
+
+    /// The viewer-aware facet over the composed substrate.
+    let private viewerAwareFacet
+        (settings: TeamOutputVisibilitySettings)
+        (sp: IServiceProvider)
+        : ViewerAwareDisclosure =
+        let source = tryService<ITeamOutputVisibilitySource> sp
+        let teams = tryService<ToolUp.Platform.TeamManagement.ITeamStore> sp
+
+        {
+            Resolver = None
+            Sources = {
+                OutputVisibility =
+                    fun teamId ->
+                        match source with
+                        | Some source -> source.Current teamId
+                        | None -> async.Return(Ok settings.Default)
+                TeamRole =
+                    fun teamId userId ->
+                        match teams with
+                        | Some teams -> teams.GetMemberRole(teamId, userId)
+                        | None -> async.Return None
+                IsTeam =
+                    fun scopeId ->
+                        match teams with
+                        | Some teams -> async {
+                            let! team = teams.GetTeam scopeId
+                            return team.IsSome
+                          }
+                        | None -> async.Return false
+            }
+        }
+
+    /// Compose team output visibility (Phase 896): a team may limit who
+    /// sees the `Restricted` output its modules publish to the whole team,
+    /// the team's admins, or platform admins — the same three levels as
+    /// conversation visibility. `defaultLevel` is the level a team starts
+    /// with, `allowed` the levels a team owner may choose from; the
+    /// declaration is validated here, and an empty allowed set or a default
+    /// outside it fails composition.
+    ///
+    /// Arms three things: the settings (read by the store that holds each
+    /// team's choice), the gate's viewer-aware facet, and the middleware
+    /// that establishes the request's viewer. `Surfaceable` facts stay
+    /// visible to every viewer the scope admits and `Internal` facts are
+    /// never disclosed, exactly as before; module permission is not
+    /// consulted, because permission governs use, not sight.
+    ///
+    /// **Not composing this is the default**, and so is composing it with
+    /// `TeamVisible` as the default and no team choosing otherwise: every
+    /// check is then decided exactly as before (GP 11). A `NoFactStore`
+    /// deployment is unchanged. Insert after `withFactStore`:
+    ///
+    /// ```fsharp
+    /// ServerApp.empty
+    /// |> ServerApp.withStorage blob
+    /// |> FactsCompose.withFactStore
+    /// |> FactsCompose.withTeamOutputVisibility TeamVisible [ TeamVisible; TeamAdmins ]
+    /// |> ServerApp.run
+    /// ```
+    let withTeamOutputVisibility
+        (defaultLevel: TeamVisibilityLevel)
+        (allowed: TeamVisibilityLevel list)
+        (app: ServerApp)
+        : ServerApp =
+        match app.Config.FactStore with
+        | NoFactStore -> app
+        | EnabledFactStore ->
+            let settings =
+                match TeamOutputVisibilitySettings.create defaultLevel allowed with
+                | Ok settings -> settings
+                | Error message -> failwith message
+
+            let register (s: IServiceCollection) =
+                s.RemoveAll<TeamOutputVisibilitySettings>() |> ignore
+                s.AddSingleton<TeamOutputVisibilitySettings>(settings) |> ignore
+
+                match
+                    s
+                    |> Seq.filter (fun d -> d.ServiceType = typeof<IFactDisclosureGate>)
+                    |> Seq.tryLast
+                with
+                | None ->
+                    failwith
+                        "withTeamOutputVisibility: no IFactDisclosureGate is registered; compose FactsCompose.withFactStore first."
+                | Some descriptor ->
+                    let inner: IServiceProvider -> obj =
+                        if not (isNull descriptor.ImplementationFactory) then
+                            descriptor.ImplementationFactory.Invoke
+                        elif not (isNull descriptor.ImplementationInstance) then
+                            fun _ -> descriptor.ImplementationInstance
+                        else
+                            fun sp -> ActivatorUtilities.CreateInstance(sp, descriptor.ImplementationType)
+
+                    s.Remove descriptor |> ignore
+
+                    s.AddSingleton<IFactDisclosureGate>(
+                        Func<IServiceProvider, IFactDisclosureGate>(fun sp ->
+                            match inner sp with
+                            | :? FactDisclosureGate as gate -> gate.WithViewerAwareness(viewerAwareFacet settings sp)
+                            | other ->
+                                failwithf
+                                    "withTeamOutputVisibility: the composed IFactDisclosureGate is %s, not the platform's FactDisclosureGate, so team output visibility cannot be applied to it."
+                                    (other.GetType().FullName))
+                    )
+
+            let serviceConfig =
+                match app.Extensions.ServiceConfig with
+                | None -> Some register
+                | Some existing -> Some(fun s -> register (existing s))
+
+            let establishViewer (builder: Microsoft.AspNetCore.Builder.IApplicationBuilder) =
+                Microsoft.AspNetCore.Builder.UseExtensions.Use(
+                    builder,
+                    Func<
+                        Microsoft.AspNetCore.Http.HttpContext,
+                        Func<System.Threading.Tasks.Task>,
+                        System.Threading.Tasks.Task
+                     >(
+                        FactViewerContext.middleware
+                    )
+                )
+
+            {
+                app with
+                    Extensions = {
+                        app.Extensions with
+                            ServiceConfig = serviceConfig
+                            PreMiddleware = app.Extensions.PreMiddleware @ [ establishViewer ]
+                    }
+            }

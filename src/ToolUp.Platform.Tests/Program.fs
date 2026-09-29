@@ -2511,6 +2511,10 @@ let private registeredTests =
         // table, only the quoted rows minted, AsOf exact or refused, refresh
         // supersession, and the delegated coherence / coverage walks.
         DelegateFactTests.tests
+        // Phase 896 - team output visibility: a Restricted fact decided for
+        // the viewer at every egress door, the policy-change check, and the
+        // output level in the per-team policy record.
+        TeamOutputVisibilityTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

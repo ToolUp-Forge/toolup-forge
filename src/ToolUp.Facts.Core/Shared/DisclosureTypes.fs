@@ -37,6 +37,71 @@ module DisclosurePolicyResolver =
     /// every `Restricted` policy ref resolves as unknown ⇒ deny.
     let denyUnknown: DisclosurePolicyResolver = fun _ _ -> None
 
+// ─── Viewer-aware resolution (Phase 896) ─────────────────────────────
+//
+// `DisclosurePolicyResolver` receives no principal and no role, so a
+// `Restricted` fact is visible to everyone or to no one at a surface. The
+// viewer-aware resolver below sits BESIDE it — the existing type and every
+// composition supplying it are untouched — and additionally sees who is
+// looking. The gate, never the caller, builds the `DisclosureViewer`: from
+// the platform-resolved access context of the request, or, for a carried
+// scope with no request (a job, a webhook), as the least-privileged viewer.
+
+/// Who a disclosure decision is made for (Phase 896). Built by the
+/// disclosure gate from the request's resolved access context and the
+/// team's output-visibility level; a caller can neither supply nor widen it.
+type DisclosureViewer = {
+    /// The viewer's role in the team whose scope is being read. `None` when
+    /// the viewer is not a member, when no team store is composed to say, or
+    /// when there is no resolved viewer at all.
+    TeamRole: ToolUp.Platform.TeamRole option
+    /// Whether the viewer holds `PlatformRole.PlatformAdmin`.
+    IsPlatformAdmin: bool
+    /// The output-visibility level in force for the team whose scope is
+    /// being read; `TeamVisible` outside a team scope.
+    OutputVisibility: ToolUp.Platform.TeamVisibilityLevel
+}
+
+/// Constructors for `DisclosureViewer`.
+module DisclosureViewer =
+    /// The viewer a check evaluates as when no viewer was resolved — a job
+    /// or a webhook running over a carried scope, or a door whose output
+    /// reaches an audience wider than the requester. No team role, not a
+    /// platform admin: it sees exactly what `TeamVisible` output admits.
+    let leastPrivileged (outputVisibility: ToolUp.Platform.TeamVisibilityLevel) : DisclosureViewer = {
+        TeamRole = None
+        IsPlatformAdmin = false
+        OutputVisibility = outputVisibility
+    }
+
+/// Resolves a `Restricted` policy ref at an egress surface FOR A VIEWER
+/// (Phase 896). Same answers as `DisclosurePolicyResolver` — `Some true`
+/// permits, `Some false` forbids, `None` is an unknown policy and denies —
+/// with the viewer as a further input.
+type ViewerAwareDisclosurePolicyResolver = string -> FactEgressSurface -> DisclosureViewer -> bool option
+
+/// Constructors for `ViewerAwareDisclosurePolicyResolver`.
+module ViewerAwareDisclosurePolicyResolver =
+    /// Lift a viewer-blind resolver: the viewer is ignored, so a gate given
+    /// this decides exactly as it did with the resolver alone.
+    let ofResolver (resolve: DisclosurePolicyResolver) : ViewerAwareDisclosurePolicyResolver =
+        fun policyRef surface _ -> resolve policyRef surface
+
+    /// The shipped viewer-aware rule: the deployment's policy must permit
+    /// the surface (an unknown policy still denies), AND the team's output
+    /// visibility must admit the viewer (`TeamOutputVisibility.canSee`).
+    /// Module permission is deliberately not consulted: permission governs
+    /// USE of a module, the team's policy governs who sees its output.
+    let withTeamOutputVisibility (resolve: DisclosurePolicyResolver) : ViewerAwareDisclosurePolicyResolver =
+        fun policyRef surface viewer ->
+            resolve policyRef surface
+            |> Option.map (fun permitted ->
+                permitted
+                && ToolUp.Platform.TeamOutputVisibility.canSee
+                    viewer.OutputVisibility
+                    viewer.TeamRole
+                    viewer.IsPlatformAdmin)
+
 module DisclosureEgress =
 
     /// The one disclosure predicate (Phase 525.A). Pure — evaluation over
@@ -66,6 +131,25 @@ module DisclosureEgress =
     /// The predicate over a full fact — sugar for gate implementations.
     let evaluateFact (resolvePolicy: DisclosurePolicyResolver) (surface: FactEgressSurface) (fact: Fact) =
         evaluate resolvePolicy surface fact.Disclosure
+
+    /// The predicate for a viewer (Phase 896) — `evaluate` with a
+    /// viewer-aware resolver. `Surfaceable` and `Internal` are decided
+    /// exactly as `evaluate` decides them; only a `Restricted` fact consults
+    /// the viewer, and a denial names its policy ref, never the value.
+    let evaluateForViewer
+        (resolvePolicy: ViewerAwareDisclosurePolicyResolver)
+        (surface: FactEgressSurface)
+        (viewer: DisclosureViewer)
+        (disclosure: Disclosure)
+        : FactDisclosureVerdict =
+        match disclosure with
+        | Surfaceable -> FactDisclosable
+        | Internal -> FactNotDisclosable "Internal"
+        | Restricted policyRef ->
+            match resolvePolicy policyRef surface viewer with
+            | Some true -> FactDisclosable
+            | Some false
+            | None -> FactNotDisclosable policyRef
 
 /// Reserved event-type discriminator for the disclosure-deny audit trail.
 /// Rides the fact store's `_facts` source module (`FactEvents.SourceModule`)
