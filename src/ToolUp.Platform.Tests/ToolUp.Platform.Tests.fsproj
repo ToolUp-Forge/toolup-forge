@@ -600,6 +600,10 @@
         <!-- Phase 531 — Postgres IEntityStore companion (contract + query
              pushdown; env-gated on TOOLUP_TEST_POSTGRES). -->
         <Compile Include="InProcess\PostgresEntityStoreTests.fs" />
+        <!-- Phase 888 - Postgres IFactStore companion (both contract packs,
+             the differential against BlobFactStore, the scale read; the live
+             arm is env-gated on TOOLUP_TEST_POSTGRES). -->
+        <Compile Include="InProcess\PostgresFactStoreTests.fs" />
         <Compile Include="InProcess\TelemetrySinkTests.fs" />
         <Compile Include="InProcess\InMemoryNotificationChannelTests.fs" />
         <Compile Include="InProcess\RedisNotificationChannelTests.fs" />
@@ -2776,6 +2780,7 @@
         <!-- Phase 161 — Timescale time-series companion (env-gated live contract pack). -->
         <ProjectReference Include="..\TimeSeriesStores\Timescale\TimescaleTimeSeriesStore.fsproj" />
         <ProjectReference Include="..\EntityStores\Postgres\PostgresEntityStore.fsproj" />
+        <ProjectReference Include="..\FactStores\Postgres\PostgresFactStore.fsproj" />
         <!-- Phase 449 — reference IModelFitProvider for the model-fit contract pack. -->
         <ProjectReference Include="..\ModelProviders\Reference\ToolUp.ModelProviders.Reference.fsproj" />
         <!-- Phase 163 — GA4 telemetry companion (env-gated live contract pack). -->

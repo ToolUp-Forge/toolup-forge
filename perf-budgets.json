@@ -16,7 +16,8 @@
     "hotPathMs": 0.36
   },
   "absentAssemblies": [
-    "ToolUp.Metrics.OpenTelemetry"
+    "ToolUp.Metrics.OpenTelemetry",
+    "ToolUp.FactStores.Postgres"
   ],
   "notes": {
     "coldStartMs": "Baseline 420 ms is the minimum of six Release boots of samples/MinimalApp on a QUIET 2026-09-12 dev machine (420/445/456/458/459/477). The same six boots on the SAME machine under load measured 1378/1461/1599/1645/2388/2564 - min 1378, over 3x the quiet minimum. That second run is why the ceiling is 6000 and not Phase 16's 2000: 2 s was measured once by hand on a deployment target and is a fine claim about a deployment, but as a CI ceiling on a shared runner it would flake, and a gate that flakes is a gate people disable. 6000 is ~14x the quiet baseline and ~4.4x the loaded one.",

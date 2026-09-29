@@ -90,8 +90,9 @@ ToolUp.EntityStores.Postgres 11/17
 ToolUp.Experiments.Core 9/41
 ToolUp.Experiments.Server 5/10
 ToolUp.ExternalCompute.Http 100/144
+ToolUp.FactStores.Postgres 34/46
 ToolUp.Facts.Core 282/511
-ToolUp.Facts.Server 564/934
+ToolUp.Facts.Server 574/944
 ToolUp.FeatureFlagProviders.OpenFeature 5/9
 ToolUp.Forms.Client 4/19
 ToolUp.Forms.Core 155/533

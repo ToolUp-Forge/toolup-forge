@@ -353,6 +353,9 @@ let private registeredTests =
         TimescaleTimeSeriesStoreTests.tests
         // Phase 531 — Postgres IEntityStore companion (env-gated).
         PostgresEntityStoreTests.tests
+        // Phase 888 — Postgres IFactStore companion (the live arm is env-gated).
+        PostgresFactStoreTests.offlineTests
+        PostgresFactStoreTests.tests
         TelemetrySinkTests.tests
         InMemoryNotificationChannelTests.tests
         RedisNotificationChannelTests.tests
