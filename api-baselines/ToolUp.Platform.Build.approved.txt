@@ -349,20 +349,26 @@ ToolUp.Platform.PerfBudget.Subject : System.String { get }
 ToolUp.Platform.PerfBudgetGate (class)
 ToolUp.Platform.PerfBudgetGate.BudgetSchemaToken : System.String (literal)
 ToolUp.Platform.PerfBudgetGate.ClientBlockProperty : System.String (literal)
+ToolUp.Platform.PerfBudgetGate.LoadAzuriteBlockProperty : System.String (literal)
 ToolUp.Platform.PerfBudgetGate.LoadBlockProperty : System.String (literal)
+ToolUp.Platform.PerfBudgetGate.LoadPostgresBlockProperty : System.String (literal)
 ToolUp.Platform.PerfBudgetGate.MeasurementSchemaToken : System.String (literal)
 ToolUp.Platform.PerfBudgetGate.MinStatistic : System.String (literal)
 ToolUp.Platform.PerfBudgetGate.breaches(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]
 ToolUp.Platform.PerfBudgetGate.check(ToolUp.Platform.PerfBudget, ToolUp.Platform.PerfMeasurementRun) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]
 ToolUp.Platform.PerfBudgetGate.parseBudget(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.PerfBudgetGate.parseClientBudget(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.PerfBudgetGate.parseLoadAzuriteBudget(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.PerfBudgetGate.parseLoadBudget(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.PerfBudgetGate.parseLoadPostgresBudget(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.PerfBudgetGate.parseMeasurements(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PerfMeasurementRun, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.PerfBudgetGate.registerTarget() : System.Void
 ToolUp.Platform.PerfBudgetGate.report(ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]) : System.String
 ToolUp.Platform.PerfBudgetGate.verify(ToolUp.Platform.PerfBudgetGateOptions) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]], Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.PerfBudgetGate.verifyClient(ToolUp.Platform.PerfBudgetGateOptions) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]], Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.PerfBudgetGate.verifyLoad(ToolUp.Platform.PerfBudgetGateOptions) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]], Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.PerfBudgetGate.verifyLoadAzurite(ToolUp.Platform.PerfBudgetGateOptions) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]], Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.PerfBudgetGate.verifyLoadPostgres(ToolUp.Platform.PerfBudgetGateOptions) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]], Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.PerfBudgetGateOptions (class)
 ToolUp.Platform.PerfBudgetGateOptions..ctor(System.String, System.String)
 ToolUp.Platform.PerfBudgetGateOptions.BudgetFile : System.String { get }

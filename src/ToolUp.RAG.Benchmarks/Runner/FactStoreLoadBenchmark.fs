@@ -11,6 +11,7 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Facts
+open ToolUp.FactStores.Postgres
 open ToolUp.RAG.Benchmarks.ConcurrentLoadBenchmark
 
 // ─── Phase 886 — the concurrent load harness (fact half) ─────────────
@@ -44,6 +45,11 @@ open ToolUp.RAG.Benchmarks.ConcurrentLoadBenchmark
 
 /// One cell of the fact matrix.
 type FactCell = {
+    /// Phase 929 — which `IFactStore` the cell drives: `blob`
+    /// (`BlobFactStore` over `BlobArm`) or `postgres` (the
+    /// `ToolUp.FactStores.Postgres` companion, armed by
+    /// `TOOLUP_PGVECTOR_CONNECTION_STRING`; `BlobArm` is then unused).
+    Store: string
     BlobArm: string
     Subjects: int
     Metrics: int
@@ -69,6 +75,9 @@ type FactOpResult = {
 /// What one fact cell measured.
 type FactResult = {
     Cell: FactCell
+    /// `blob` or `postgres` — printed on every row.
+    StoreLabel: string
+    /// The blob arm's label, or `none` for a store that reads no blob.
     BlobLabel: string
     Facts: int
     SeedSeconds: float
@@ -121,6 +130,23 @@ let private seededFact (subject: int) (metric: int) (w: int) : Fact =
         Disclosure = Surfaceable
     }
 
+/// The draft whose assert stores `seededFact subject metric w` (the same
+/// content address) — how a store with no blob format of its own is
+/// seeded.
+let private seededDraft (subject: int) (metric: int) (w: int) : FactDraft =
+    let fact = seededFact subject metric w
+
+    {
+        Subject = fact.Subject
+        Metric = fact.Metric
+        Value = fact.Value
+        Period = fact.Period
+        Method = fact.Method
+        Evidence = fact.Evidence
+        Confidence = None
+        Disclosure = Surfaceable
+    }
+
 let private draftFor (subject: int) (metric: int) (w: int) (tag: string) : FactDraft = {
     Subject = subjectOf subject
     Metric = metricOf metric
@@ -162,51 +188,168 @@ let private measureOperation
         BlobListsPerOp = float counting.Lists / ops
     }
 
+// ─── Phase 929 — the fact store a cell drives ───────────────────────
+//
+// `blob` is the shipped default, `BlobFactStore`, over one of the blob
+// arms; it is seeded by writing each fact's blob in its own format.
+// `postgres` is the Phase 888 companion over a real local database; it has
+// no blob format to write, so it is seeded through `AssertBatch` — which
+// on that store is an indexed write, linear in the seed, so seeding
+// through the contract is affordable there where it is quadratic on the
+// blob store. A store that is named but not armed is an error, exactly as
+// a blob arm is.
+
+/// A fact store resolved for one run.
+type private FactBackend = {
+    StoreLabel: string
+    BlobLabel: string
+    Store: IFactStore
+    /// Counts the blob reads the store makes. For `postgres` it wraps a
+    /// dictionary nothing reads, so its counts are a measured zero.
+    Counting: CountingBlobStorage
+    /// Seed facts `0 .. total - 1` (fact `n` is `seededFact` of its
+    /// subject, metric and week) into `scope`.
+    Seed: string -> int -> (int -> int * int * int) -> Async<unit>
+    Cleanup: unit -> unit
+}
+
+let private seedBlobs (storage: IBlobStorage) (scope: string) (total: int) (coords: int -> int * int * int) = async {
+    for start in 0..4096 .. total - 1 do
+        let! _ =
+            [ start .. min total (start + 4096) - 1 ]
+            |> List.map (fun n -> async {
+                let subject, metric, w = coords n
+                let fact = seededFact subject metric w
+                let payload = JsonSerializer.Serialize(fact, json) |> Encoding.UTF8.GetBytes
+                let! r = storage.Upload(scope, sprintf "_facts/%s.json" fact.FactId, payload)
+
+                match r with
+                | Ok _ -> ()
+                | Error e -> failwithf "seeding failed: %s" e
+            })
+            |> fun seeds -> Async.Parallel(seeds, maxDegreeOfParallelism = 64)
+
+        ()
+}
+
+let private seedThroughBatches (store: IFactStore) (scope: string) (total: int) (coords: int -> int * int * int) = async {
+    let batch = 1_000
+
+    let! _ =
+        [ 0..batch .. total - 1 ]
+        |> List.map (fun start -> async {
+            let drafts = [
+                for n in start .. min total (start + batch) - 1 do
+                    let subject, metric, w = coords n
+                    seededDraft subject metric w
+            ]
+
+            match! store.AssertBatch(scope, drafts) with
+            | Ok _ -> ()
+            | Error e -> failwithf "seeding failed: %s" e
+        })
+        |> fun batches -> Async.Parallel(batches, maxDegreeOfParallelism = 8)
+
+    ()
+}
+
+let private resolveFactBackend (cell: FactCell) : Result<FactBackend, string> =
+    match cell.Store.Trim().ToLowerInvariant() with
+    | "blob" ->
+        resolveBlobArm cell.BlobArm
+        |> Result.map (fun arm ->
+            let counting = CountingBlobStorage(arm.Storage)
+            let storage = counting :> IBlobStorage
+
+            {
+                StoreLabel = "blob"
+                BlobLabel = arm.Label
+                Store = BlobFactStore.create storage (InMemoryEventStore.InMemoryEventStore())
+                Counting = counting
+                Seed = seedBlobs storage
+                Cleanup = arm.Cleanup
+            })
+    | "postgres" ->
+        match Environment.GetEnvironmentVariable PgvectorVariable with
+        | null
+        | "" ->
+            Error
+                $"the 'postgres' fact store was requested but {PgvectorVariable} is not set — start a local Postgres (docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=<password> pgvector/pgvector:pg17) and point it there"
+        | connectionString ->
+            // A table of its own per run, dropped afterwards: the indexes
+            // are measured as the run built them, never over an earlier
+            // run's rows.
+            let options = {
+                PostgresFactStoreOptions.defaults with
+                    Table = "toolup_load_" + Guid.NewGuid().ToString("N").Substring(0, 12)
+            }
+
+            let store =
+                PostgresFactStore.create
+                    connectionString
+                    options
+                    (InMemoryEventStore.InMemoryEventStore())
+                    None
+                    (fun () -> DateTime.UtcNow)
+
+            Ok {
+                StoreLabel = "postgres"
+                BlobLabel = "none"
+                Store = store :> IFactStore
+                Counting = CountingBlobStorage(MemoryBlobStorage())
+                Seed = seedThroughBatches store
+                Cleanup =
+                    fun () ->
+                        (store :> IDisposable).Dispose()
+
+                        try
+                            use dataSource = Npgsql.NpgsqlDataSource.Create connectionString
+                            use drop = dataSource.CreateCommand($"DROP TABLE IF EXISTS {options.Table}")
+                            drop.ExecuteNonQuery() |> ignore
+                        with ex ->
+                            eprintfn "[load] could not drop %s: %s" options.Table ex.Message
+            }
+    | other -> Error $"unknown fact store '{other}' (expected blob|postgres)"
+
 /// Run one fact cell: seed, prove the seed readable, then measure the four
 /// operations in turn — reads first, so the writes do not change what the
 /// reads were measured over.
 let runFactCell (cell: FactCell) : Async<Result<FactResult, string>> = async {
-    match resolveBlobArm cell.BlobArm with
+    match
+        (try
+            resolveFactBackend cell
+         with ex ->
+             Error ex.Message)
+    with
     | Error e -> return Error e
-    | Ok arm ->
+    | Ok backend ->
         try
-            let counting = CountingBlobStorage(arm.Storage)
-            let storage = counting :> IBlobStorage
-            let store = BlobFactStore.create storage (InMemoryEventStore.InMemoryEventStore())
+            let counting = backend.Counting
+            let store = backend.Store
             let scope = "load-" + Guid.NewGuid().ToString("N").Substring(0, 12)
             let latest = cell.Weeks - 1
 
-            // Seed, in parallel batches, in the store's own format.
+            // Seed, in parallel batches.
             let seedClock = Stopwatch.StartNew()
             let total = cell.Subjects * cell.Metrics * cell.Weeks
 
-            for start in 0..4096 .. total - 1 do
-                let! _ =
-                    [ start .. min total (start + 4096) - 1 ]
-                    |> List.map (fun n -> async {
-                        let subject = n / (cell.Metrics * cell.Weeks)
-                        let metric = (n / cell.Weeks) % cell.Metrics
-                        let fact = seededFact subject metric (n % cell.Weeks)
-                        let payload = JsonSerializer.Serialize(fact, json) |> Encoding.UTF8.GetBytes
-                        let! r = storage.Upload(scope, sprintf "_facts/%s.json" fact.FactId, payload)
-
-                        match r with
-                        | Ok _ -> ()
-                        | Error e -> failwithf "seeding failed: %s" e
-                    })
-                    |> fun seeds -> Async.Parallel(seeds, maxDegreeOfParallelism = 64)
-
-                ()
+            do!
+                backend.Seed scope total (fun n ->
+                    n / (cell.Metrics * cell.Weeks), (n / cell.Weeks) % cell.Metrics, n % cell.Weeks)
 
             seedClock.Stop()
 
-            // Verify the probe before trusting any verdict: the seeded blobs
-            // must read back through the store as the facts written.
+            // Verify the probe before trusting any verdict: the seeded facts
+            // must read back through the store as the facts written. The
+            // transaction time is the store's to stamp (the blob seed
+            // writes it; the database stamps its own clock), so it is the
+            // one field not compared.
             let probe = seededFact (cell.Subjects / 2) 0 latest
             let! readBack = store.Get(scope, probe.FactId)
 
-            if readBack <> Some probe then
-                failwith "a seeded fact does not read back through the store — the seed format has drifted"
+            match readBack with
+            | Some found when { found with AsOf = probe.AsOf } = probe -> ()
+            | _ -> failwith "a seeded fact does not read back through the store — the seed format has drifted"
 
             let pointRead =
                 measureOperation "point read (subject + metric, latest week)" counting cell (fun round i -> async {
@@ -281,18 +424,19 @@ let runFactCell (cell: FactCell) : Async<Result<FactResult, string>> = async {
                     | Error e -> failwithf "batch assert failed: %s" e
                 })
 
-            arm.Cleanup()
+            backend.Cleanup()
 
             return
                 Ok {
                     Cell = cell
-                    BlobLabel = arm.Label
+                    StoreLabel = backend.StoreLabel
+                    BlobLabel = backend.BlobLabel
                     Facts = total
                     SeedSeconds = seedClock.Elapsed.TotalSeconds
                     Operations = [ pointRead; byId; population; single; batch ]
                 }
         with ex ->
-            arm.Cleanup()
+            backend.Cleanup()
 
             let inner =
                 match ex with
@@ -301,7 +445,7 @@ let runFactCell (cell: FactCell) : Async<Result<FactResult, string>> = async {
 
             return
                 Error
-                    $"facts/{cell.BlobArm} at {cell.Subjects} subjects x {cell.Metrics} metrics x {cell.Weeks} weeks failed: {inner}"
+                    $"facts/{cell.Store}/{cell.BlobArm} at {cell.Subjects} subjects x {cell.Metrics} metrics x {cell.Weeks} weeks failed: {inner}"
 }
 
 /// The printed rows for one fact result — one per operation, each naming
@@ -309,7 +453,8 @@ let runFactCell (cell: FactCell) : Async<Result<FactResult, string>> = async {
 let renderFacts (r: FactResult) : string list = [
     for op in r.Operations do
         sprintf
-            "facts | store=blob blob=%s | subjects=%d metrics=%d weeks=%d (%d facts) | concurrency=%d | %s | %d ops x %d rounds | latency ms p50=%.2f p95=%.2f p99=%.2f max=%.2f | min-over-rounds p95=%.2f | throughput=%.1f ops/s | blob reads/op=%.1f lists/op=%.2f | seed=%.1fs"
+            "facts | store=%s blob=%s | subjects=%d metrics=%d weeks=%d (%d facts) | concurrency=%d | %s | %d ops x %d rounds | latency ms p50=%.2f p95=%.2f p99=%.2f max=%.2f | min-over-rounds p95=%.2f | throughput=%.1f ops/s | blob reads/op=%.1f lists/op=%.2f | seed=%.1fs"
+            r.StoreLabel
             r.BlobLabel
             r.Cell.Subjects
             r.Cell.Metrics
@@ -335,6 +480,7 @@ let renderFacts (r: FactResult) : string list = [
 /// read enumerates the whole scope, so this is sized to finish in seconds
 /// on a shared runner, not to be representative of the stated scale.
 let gateFactCell: FactCell = {
+    Store = "blob"
     BlobArm = "memory"
     Subjects = 1_000
     Metrics = 3
@@ -348,7 +494,7 @@ let gateFactCell: FactCell = {
 /// The gated samples one fact result yields.
 let factGateSamples (r: FactResult) : GateSample list =
     let where =
-        $"store=blob blob={r.BlobLabel} subjects={r.Cell.Subjects} metrics={r.Cell.Metrics} weeks={r.Cell.Weeks} facts={r.Facts} concurrency={r.Cell.Concurrency} ops={r.Cell.OpsPerRound}x{r.Cell.Rounds}"
+        $"store={r.StoreLabel} blob={r.BlobLabel} subjects={r.Cell.Subjects} metrics={r.Cell.Metrics} weeks={r.Cell.Weeks} facts={r.Facts} concurrency={r.Cell.Concurrency} ops={r.Cell.OpsPerRound}x{r.Cell.Rounds}"
 
     let op (prefix: string) =
         r.Operations
@@ -385,6 +531,52 @@ let factGateSamples (r: FactResult) : GateSample list =
         }
     ]
 
+/// Phase 929 — the fact gate's configuration over the object-storage
+/// emulator. Smaller than the memory arm's: on object storage every blob
+/// read is a request, and the store's whole-scope paths (the index build a
+/// point read triggers, the population surface) read the scope.
+let azuriteGateFactCell: FactCell = {
+    gateFactCell with
+        BlobArm = "azurite"
+        Subjects = 250
+        OpsPerRound = 10
+}
+
+/// Phase 929 — the fact gate's configuration over the database-backed
+/// store (Phase 888): the memory arm's population, so the two rows compare.
+let postgresGateFactCell: FactCell = { gateFactCell with Store = "postgres" }
+
+/// The gate configuration each arm runs: its measurement label, the
+/// retrieval cell (optional, so an arm may budget facts alone) and the fact
+/// cell. `memory` is the configuration CI runs; `azurite` moves the blob arm
+/// onto the emulator; `postgres` puts retrieval on the pgvector store and
+/// the facts on the database-backed fact store, both over one local
+/// PostgreSQL. The two are armed by the same variables as the matrix
+/// (`TOOLUP_PARITY_AZURITE`, `TOOLUP_PGVECTOR_CONNECTION_STRING`) and refuse
+/// when they are not set.
+let gateArm (arm: string) : Result<string * RetrievalCell option * FactCell, string> =
+    match arm.Trim().ToLowerInvariant() with
+    | "memory" -> Ok("Phase 886 load harness - gate configurations", Some gateRetrievalCell, gateFactCell)
+    | "azurite" ->
+        Ok(
+            "Phase 929 load harness - gate configurations, azurite arm",
+            Some {
+                gateRetrievalCell with
+                    BlobArm = "azurite"
+            },
+            azuriteGateFactCell
+        )
+    | "postgres" ->
+        Ok(
+            "Phase 929 load harness - gate configurations, postgres arm",
+            Some {
+                gateRetrievalCell with
+                    Backend = Pgvector
+            },
+            postgresGateFactCell
+        )
+    | other -> Error $"unknown gate arm '{other}' (expected memory|azurite|postgres)"
+
 // ─── The `load` command ─────────────────────────────────────────────
 
 /// `dotnet run --project src/ToolUp.RAG.Benchmarks -- load <mode> [options]`.
@@ -398,16 +590,23 @@ module LoadCommand =
             "Usage: dotnet run --project src/ToolUp.RAG.Benchmarks -c Release -- load <gate|retrieval|facts> [options]"
 
         eprintfn ""
-        eprintfn "  load gate      [--measurements <path>]   the gate configurations; writes the measurement file"
+        eprintfn "  load gate      [--arm memory|azurite|postgres] [--measurements <path>]"
+        eprintfn "                 the gate configuration of one arm; writes the measurement file"
 
         eprintfn
             "  load retrieval [--stores flat,hnsw,pgvector] [--blob memory|disk|azurite] [--sizes 10000,100000,1000000]"
 
         eprintfn "                 [--concurrency 8] [--queries 200] [--rounds 5] [--recall 50] [--out <path>]"
-        eprintfn "  load facts     [--blob memory|disk|azurite] [--subjects 300000] [--metrics 3] [--weeks 52]"
+
+        eprintfn
+            "  load facts     [--store blob|postgres] [--blob memory|disk|azurite] [--subjects 300000] [--metrics 3] [--weeks 52]"
+
         eprintfn "                 [--concurrency 4] [--ops 20] [--rounds 5] [--batch 50] [--out <path>]"
         eprintfn ""
-        eprintfn "  azurite reads TOOLUP_PARITY_AZURITE; pgvector reads TOOLUP_PGVECTOR_CONNECTION_STRING."
+
+        eprintfn
+            "  azurite reads TOOLUP_PARITY_AZURITE; pgvector and the postgres fact store read TOOLUP_PGVECTOR_CONNECTION_STRING."
+
         eprintfn "  An arm that is named but not armed is an error, never a fallback to memory."
 
     let private options (args: string array) : Map<string, string> =
@@ -439,37 +638,67 @@ module LoadCommand =
         | None -> ()
 
     let private gate (o: Map<string, string>) =
-        let path =
-            o.TryFind "measurements"
-            |> Option.defaultValue "artifacts/perf-budget/load-measurements.json"
+        let arm = o.TryFind "arm" |> Option.defaultValue "memory"
 
-        printfn "[load] gate: retrieval %A" gateRetrievalCell
-        let retrieval = runRetrievalCell gateRetrievalCell |> Async.RunSynchronously
-        printfn "[load] gate: facts %A" gateFactCell
-        let facts = runFactCell gateFactCell |> Async.RunSynchronously
+        match gateArm arm with
+        | Error e ->
+            eprintfn "[load] %s" e
+            1
+        | Ok(label, retrievalCell, factCell) ->
+            let path =
+                o.TryFind "measurements"
+                |> Option.defaultValue (
+                    if arm = "memory" then
+                        "artifacts/perf-budget/load-measurements.json"
+                    else
+                        $"artifacts/perf-budget/load-{arm}-measurements.json"
+                )
 
-        match retrieval, facts with
-        | Ok r, Ok f ->
-            let rows = renderRetrieval r :: renderFacts f
-            rows |> List.iter (printfn "%s")
+            let retrieval =
+                retrievalCell
+                |> Option.map (fun cell ->
+                    printfn "[load] gate (%s): retrieval %A" arm cell
+                    runRetrievalCell cell |> Async.RunSynchronously)
 
-            writeMeasurements
-                path
-                "Phase 886 load harness - gate configurations"
-                (retrievalGateSamples r @ factGateSamples f)
-                rows
+            printfn "[load] gate (%s): facts %A" arm factCell
+            let facts = runFactCell factCell |> Async.RunSynchronously
 
-            printfn "[load] measurements written to %s" path
-            0
-        | r, f ->
-            // Every half that failed is named; nothing is written, so the
-            // decider refuses on a missing file rather than reading half a run.
-            [ r |> Result.map ignore; f |> Result.map ignore ]
-            |> List.iter (function
-                | Error e -> eprintfn "[load] %s" e
-                | Ok() -> ())
+            match retrieval, facts with
+            | (None | Some(Ok _)), Ok f ->
+                let rows = [
+                    match retrieval with
+                    | Some(Ok r) -> renderRetrieval r
+                    | _ -> ()
+                    yield! renderFacts f
+                ]
 
-            2
+                rows |> List.iter (printfn "%s")
+
+                let samples = [
+                    match retrieval with
+                    | Some(Ok r) -> yield! retrievalGateSamples r
+                    | _ -> ()
+                    yield! factGateSamples f
+                ]
+
+                writeMeasurements path label samples rows
+                printfn "[load] measurements written to %s" path
+                0
+            | r, f ->
+                // Every half that failed is named; nothing is written, so the
+                // decider refuses on a missing file rather than reading half a run.
+                [
+                    match r with
+                    | Some(Error e) -> Some e
+                    | _ -> None
+                    match f with
+                    | Error e -> Some e
+                    | Ok _ -> None
+                ]
+                |> List.choose id
+                |> List.iter (eprintfn "[load] %s")
+
+                2
 
     let private retrieval (o: Map<string, string>) =
         let stores = list o "stores" "flat,hnsw" |> List.map parseBackend
@@ -508,6 +737,7 @@ module LoadCommand =
 
     let private facts (o: Map<string, string>) =
         let cell: FactCell = {
+            Store = o.TryFind "store" |> Option.defaultValue "blob"
             BlobArm = o.TryFind "blob" |> Option.defaultValue "memory"
             Subjects = int' o "subjects" 300_000
             Metrics = int' o "metrics" 3

@@ -321,11 +321,15 @@ module PerfFinding =
     let private num (v: float) =
         v.ToString("0.###", Globalization.CultureInfo.InvariantCulture)
 
+    // Phase 929 — three decimals, not one: a bundle ceiling set at 1.025x
+    // its baseline (Phase 909) printed as "1.0x" headroom, indistinguishable
+    // from a ceiling already reached. Trailing zeros are dropped, so a
+    // clock's "14.0x" still reads as it did.
     let private ratio (observed: float) (ceiling: float) =
         if observed <= 0.0 then
             "-"
         else
-            (ceiling / observed).ToString("0.0", Globalization.CultureInfo.InvariantCulture)
+            (ceiling / observed).ToString("0.0##", Globalization.CultureInfo.InvariantCulture)
             + "x"
 
     /// One line, naming the subject and both numbers.
@@ -666,6 +670,28 @@ module PerfBudgetGate =
     let parseLoadBudget (label: string) (json: string) : Result<PerfBudget, string list> =
         parseNestedBlock LoadBlockProperty "load" PerfMetric.load label json
 
+    /// Phase 929 — the property the load harness's object-storage arm is
+    /// budgeted under: the same measurements as the `load` block, taken
+    /// with the blob arm pointed at the local Azure Blob emulator.
+    [<Literal>]
+    let LoadAzuriteBlockProperty = "loadAzurite"
+
+    /// Phase 929 — the property the load harness's database arm is
+    /// budgeted under: the fact measurements of the `load` block, taken
+    /// against the database-backed fact store over a local PostgreSQL.
+    [<Literal>]
+    let LoadPostgresBlockProperty = "loadPostgres"
+
+    /// Phase 929 — parse the budget document's `loadAzurite` block. Same
+    /// shape and metric set as the `load` block, and REFUSED when absent.
+    let parseLoadAzuriteBudget (label: string) (json: string) : Result<PerfBudget, string list> =
+        parseNestedBlock LoadAzuriteBlockProperty "load (azurite arm)" PerfMetric.load label json
+
+    /// Phase 929 — parse the budget document's `loadPostgres` block. Same
+    /// shape and metric set as the `load` block, and REFUSED when absent.
+    let parseLoadPostgresBudget (label: string) (json: string) : Result<PerfBudget, string list> =
+        parseNestedBlock LoadPostgresBlockProperty "load (postgres arm)" PerfMetric.load label json
+
     /// Parse a measurement run. Same all-defects-at-once contract as
     /// the budget parser.
     let parseMeasurements (label: string) (json: string) : Result<PerfMeasurementRun, string list> =
@@ -879,6 +905,16 @@ module PerfBudgetGate =
     let verifyLoad (options: PerfBudgetGateOptions) : Result<PerfBudget * PerfFinding list, string list> =
         verifyWith parseLoadBudget options
 
+    /// Phase 929 — the same load-and-check against the budget file's
+    /// `loadAzurite` block and a run of the harness's azurite arm.
+    let verifyLoadAzurite (options: PerfBudgetGateOptions) : Result<PerfBudget * PerfFinding list, string list> =
+        verifyWith parseLoadAzuriteBudget options
+
+    /// Phase 929 — the same load-and-check against the budget file's
+    /// `loadPostgres` block and a run of the harness's postgres arm.
+    let verifyLoadPostgres (options: PerfBudgetGateOptions) : Result<PerfBudget * PerfFinding list, string list> =
+        verifyWith parseLoadPostgresBudget options
+
     /// FAKE's `Target` module cannot be reached fully-qualified from
     /// here — the same binding collision the Core-Web-Vitals target
     /// documents — so the FAKE surface is reached through a nested
@@ -936,7 +972,9 @@ module PerfBudgetGate =
     /// The client target reads the SAME budget file — its `client` block —
     /// so both halves' ceilings live in one reviewable document. Phase 886
     /// added a third, `VerifyLoadPerfBudget`, deciding the load harness's
-    /// run against the same file's `load` block.
+    /// run against the same file's `load` block; Phase 929 its two arms,
+    /// `VerifyLoadAzuritePerfBudget` (the `loadAzurite` block) and
+    /// `VerifyLoadPostgresPerfBudget` (the `loadPostgres` block).
     ///
     /// Options are resolved INSIDE the target body, not at
     /// registration: a repo registering this target must stay runnable
@@ -945,3 +983,5 @@ module PerfBudgetGate =
         decideTarget "VerifyPerfBudget" verify
         decideTarget "VerifyClientPerfBudget" verifyClient
         decideTarget "VerifyLoadPerfBudget" verifyLoad
+        decideTarget "VerifyLoadAzuritePerfBudget" verifyLoadAzurite
+        decideTarget "VerifyLoadPostgresPerfBudget" verifyLoadPostgres
