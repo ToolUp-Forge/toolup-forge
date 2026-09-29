@@ -1185,6 +1185,9 @@
         <Compile Include="Server\ISessionRegistry.fs" />
         <Compile Include="Server\SessionRegistry.fs" />
         <Compile Include="Server\Scope\StorageScopeResolver.fs" />
+        <!-- Phase 896 — the ambient request viewer (who is asking, as scope
+             resolution resolved it) the disclosure gate decides for. -->
+        <Compile Include="Server\Scope\RequestViewer.fs" />
         <Compile Include="Server\Scope\DefaultSubjectResolver.fs" />
         <Compile Include="Server\NoOpAnonymousSessionMigrator.fs" />
         <Compile Include="Server\Files\FileNameSanitiser.fs" />
