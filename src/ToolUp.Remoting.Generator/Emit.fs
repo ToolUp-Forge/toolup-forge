@@ -773,6 +773,19 @@ module Emit =
     // then the lookup `Api.makeProxy` consults and the `registerAll` a
     // consumer's own module is mounted by. Nothing in it reflects: no
     // `createTypeInfo`, no `Convert.serialize`, no `typeof`.
+    //
+    // Its decoders are BUILT AT IMPORT, deliberately (Phase 909). Building
+    // each on first use instead — the body inside a `lazy`, the binding
+    // forcing it on the first decode — was emitted, regenerated and measured
+    // under Node, interleaved A/B in fresh processes with only this module's
+    // output swapped: evaluating the module ROSE from 9.3 to 10.7 ms (min of
+    // 8), its import with everything it imports went 149.3 -> 147.5 ms and
+    // the whole SDK shell's import 615 -> 604 ms (min of 10, both inside the
+    // run-to-run spread), and the shell's production bundle grew 10.7 KB. A
+    // combinator chain is a handful of closure allocations; a `Lazy` plus
+    // its wrapper costs about as much as it defers, and the larger source
+    // costs more to parse. Re-measure with ClientBench's generated-module
+    // import lever (`generatedModuleImportMsMin`) before changing this.
 
     let private clientHeader (options: ClientEmitOptions) =
         [
