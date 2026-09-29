@@ -7,8 +7,6 @@
 // so we use a top-level internal module
 module internal TypeShape
 
-#if !FABLE_COMPILER
-
 #nowarn "4224"
 
 open System
@@ -1643,4 +1641,3 @@ module Shape =
                 |> Some
         else
             None
-#endif

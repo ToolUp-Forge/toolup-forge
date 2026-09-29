@@ -53,6 +53,24 @@
         <Compile Include="Server\BlobStorageSignedUrl.fs" />
     </ItemGroup>
     <ItemGroup>
+        <!-- Phase 902 — the MessagePack reflection engine and the decoder
+             gates, moved out of ToolUp.Platform.Core with the same rule as
+             Phase 880: Fable never compiled them. TypeShape.fs and
+             TypeShapeUtils.fs moved whole (`module internal`, as before);
+             `ToolUp.Remoting.MsgPack.Write` is split, the Fable writer
+             staying in Core and the .NET writer declared here in a module
+             of the same name; `RemotingDecoders` and `JsonDecoders` are
+             split the same way, the registration tables in Core and the
+             gates (the verify arms, the shape generator, the JSON oracle
+             and the browser-writer mirror) here. Ahead of the remoting
+             block, whose converter set and dispatcher consume them. -->
+        <Compile Include="Server\Remoting\MsgPack\TypeShape.fs" />
+        <Compile Include="Server\Remoting\MsgPack\TypeShapeUtils.fs" />
+        <Compile Include="Server\Remoting\MsgPack\Write.fs" />
+        <Compile Include="Server\Remoting\DecoderVerification.fs" />
+        <Compile Include="Server\Remoting\Json\JsonDecoderVerification.fs" />
+    </ItemGroup>
+    <ItemGroup>
         <!-- 0.4.4 — ToolUp.Remoting.{Json,Server,Giraffe,AspNetCore}
              folded in from a formerly-separate repository. The
              transport is a forge implementation detail; one package
