@@ -278,6 +278,7 @@
     <PackageVersion Include="ToolUp.Secrets.HashiCorpVault" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.ShareTokenStoreDecorators.RevokeOnIssuerRemoved" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.SparseIndices.Cjk" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.SparseIndices.Postgres" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.SparseIndices.Snowball" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Storage.AwsS3" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Storage.AzureBlob" Version="$(ToolUpSdkVersion)" />

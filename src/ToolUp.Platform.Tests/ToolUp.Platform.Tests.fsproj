@@ -1228,6 +1228,11 @@
         <Compile Include="InProcess\I18nCoverageTests.fs" />
         <Compile Include="InProcess\MultimodalAIProviderTests.fs" />
         <Compile Include="InProcess\CitationNormaliserTests.fs" />
+        <!-- Phase 893 — the ISparseIndex contract pack. Compiled BEFORE
+             InProcess\InMemoryBM25IndexTests.fs, which binds it to the
+             in-process index; InProcess\PostgresFullTextIndexTests.fs binds
+             it to the database companion. -->
+        <Compile Include="Contracts\ISparseIndexContract.fs" />
         <!-- BM25 snapshot persistence regression — private CLIMutable
              records through FableConverters (save → load round-trip,
              legacy/corrupt blob degradation). -->
@@ -2450,6 +2455,10 @@
              file's shared `deterministicOrderingContract` rather than
              restating it. -->
         <Compile Include="InProcess\PgvectorVectorStoreTests.fs" />
+        <!-- Phase 893 — PostgreSQL full-text ISparseIndex companion, and the
+             keyword-index composition seam + replica validator. -->
+        <Compile Include="InProcess\PostgresFullTextIndexTests.fs" />
+        <Compile Include="InProcess\SparseIndexCompositionTests.fs" />
         <!-- Phase 513 — Redis IEmbeddingCache companion. Structural arm
              always on (key derivation, wire codec, option guards); live
              arm env-gated on TOOLUP_REDIS_CONNECTION, the same server the
@@ -2878,6 +2887,7 @@
         <ProjectReference Include="..\AuditSinks\ChainedLedger\ToolUp.AuditSinks.ChainedLedger.fsproj" />
         <ProjectReference Include="..\VectorStores\Hnsw\HnswVectorStore.fsproj" />
         <ProjectReference Include="..\VectorStores\Pgvector\PgvectorVectorStore.fsproj" />
+        <ProjectReference Include="..\SparseIndices\Postgres\PostgresFullTextIndex.fsproj" />
         <ProjectReference Include="..\EmbeddingCaches\Redis\ToolUp.EmbeddingCaches.Redis.fsproj" />
         <!-- Phase 14z — the local TF-IDF embedder, for its scope-keyed
              factory. Dev-only companion; no external dependency. -->

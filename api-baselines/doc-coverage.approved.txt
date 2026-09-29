@@ -136,13 +136,13 @@ ToolUp.OpenXml.Spreadsheet 45/141
 ToolUp.OpenXml.SvgRasterizer.Skia 3/3
 ToolUp.Platform.Build 272/548
 ToolUp.Platform.Client 2723/6977
-ToolUp.Platform.Core 6420/14794
+ToolUp.Platform.Core 6421/14795
 ToolUp.Platform.Server 6159/11773
 ToolUp.Platform.Testing 115/264
 ToolUp.Platform.UI 71/183
 ToolUp.PublicRendering 597/1062
 ToolUp.RAG.Core 71/124
-ToolUp.RAG.Server 256/463
+ToolUp.RAG.Server 266/488
 ToolUp.RAG.StaticCorpus.Build 23/40
 ToolUp.RAG.StaticCorpus.Core 5/19
 ToolUp.RAG.StaticCorpus.Server 7/9
@@ -164,6 +164,7 @@ ToolUp.Secrets.GcpSecretManager 5/10
 ToolUp.Secrets.HashiCorpVault 10/18
 ToolUp.ShareTokenStoreDecorators.RevokeOnIssuerRemoved 2/5
 ToolUp.SparseIndices.Cjk 10/15
+ToolUp.SparseIndices.Postgres 45/60
 ToolUp.SparseIndices.Snowball 21/63
 ToolUp.Storage.AwsS3 8/19
 ToolUp.Storage.AzureBlob 9/19

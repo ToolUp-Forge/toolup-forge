@@ -8,6 +8,7 @@ open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.ISparseIndex
+open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.RAG.InMemoryBM25Index
@@ -172,4 +173,18 @@ let tests =
                 (logger.Warnings |> List.filter (fun w -> w.Contains "Corrupt index"))
                 "corrupt snapshot must be surfaced with the starting-empty warning"
         }
+        // Phase 893 — the ISparseIndex contract pack, bound first to the
+        // in-process index. Each case gets its own blob storage; re-opening
+        // disposes the index (its final synchronous flush) and constructs
+        // another over the same storage — a restart.
+        ISparseIndexContract.tests "InMemoryBM25Index" (fun () ->
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+
+            let harness: ISparseIndexContract.SparseIndexHarness = {
+                Open = fun () -> new InMemoryBM25Index(storage, flushIntervalMs = 60000) :> ISparseIndex
+                Close = fun index -> (index :?> IDisposable).Dispose()
+                Dispose = ignore
+            }
+
+            harness)
     ]

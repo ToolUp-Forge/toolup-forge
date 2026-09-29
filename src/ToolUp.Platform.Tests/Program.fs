@@ -389,6 +389,13 @@ let private registeredTests =
         // create-time guards, codecs); live arm Pending unless
         // TOOLUP_PGVECTOR_CONNECTION_STRING is set.
         PgvectorVectorStoreTests.tests
+        // Phase 893 — PostgreSQL full-text ISparseIndex companion. Structural
+        // arm always on; live arm Pending unless
+        // TOOLUP_PG_FULLTEXT_CONNECTION_STRING is set.
+        PostgresFullTextIndexTests.tests
+        // Phase 893 — withSparseIndex / withAnalyzedSparseIndex /
+        // withoutSparseIndex and the in-process-index replica validator.
+        SparseIndexCompositionTests.tests
         // Phase 513 — Redis IEmbeddingCache companion. Structural arm
         // always on; live arm Pending unless TOOLUP_REDIS_CONNECTION is set.
         RedisEmbeddingCacheTests.tests
