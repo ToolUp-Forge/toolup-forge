@@ -45,6 +45,28 @@
 ///     untouched; `change` calls them, and its lemma is about which keys
 ///     survive it, not what they do.
 ///
+/// # What `change` models, and what it does not (Phase 900)
+///
+/// Since Phase 900 `Fx.change` takes the loop's `terminated` flag and
+/// reads it before each start: a start function that calls
+/// `IDispatcher.Terminate` ends the diff — nothing after it is started,
+/// what the call had started is stopped, and the next active list is
+/// empty. That gate is the LOOP's, not the diff's: the flag is a cell of
+/// `Program.runWithDispatch`, set by a teardown the diff neither owns nor
+/// observes, and the theorem about it — which starts a terminating diff
+/// makes, what it holds afterwards, that the message's command does not
+/// run — needs the loop's counters and its `terminate` transition. So it
+/// is `ElmishLoop.fst`'s (`start_all` and
+/// `diff_terminating_starts_nothing_after`), stated over the same `start`
+/// records the boot's gate uses. `change` HERE is `Fx.change` with the
+/// flag clear throughout — the pure key algebra, which is what the
+/// differential host runs production against (`terminated = fun () ->
+/// false`), and which is exactly the path production takes whenever no
+/// start terminates the program. `change_keys` is about that path;
+/// extending it with a gate would restate the loop's theorem over a
+/// second copy of its state, which is the thing the 789 split of ring
+/// and loop exists to avoid.
+///
 /// F#'s `Set<SubId>` is modelled as a duplicate-free key list; set
 /// equality is mutual membership, which is what `Set.(=)` decides.
 ///

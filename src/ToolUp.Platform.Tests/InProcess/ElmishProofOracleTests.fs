@@ -308,6 +308,26 @@ let tests =
                 "a one-slot ring returns the second item first — the first was overwritten before the grow step ran"
         }
 
+        // ─── The generators, pinned across hosts (Phase 900) ─────────
+
+        test "the ring campaign is the draw both hosts make - its fingerprint is pinned - Phase 900" {
+            let violations = ringCampaignPinViolations ()
+
+            Expect.isEmpty
+                violations
+                ("ring campaign drift: pin the printed value in RingCampaignFingerprint if the generator moved on purpose\n"
+                 + String.concat "\n" violations)
+        }
+
+        test "the diff campaign is the draw both hosts make - its fingerprint is pinned - Phase 900" {
+            let violations = diffCampaignPinViolations ()
+
+            Expect.isEmpty
+                violations
+                ("diff campaign drift: pin the printed value in DiffCampaignFingerprint if the generator moved on purpose\n"
+                 + String.concat "\n" violations)
+        }
+
         // ─── The corpus the Fable host replays ───────────────────────
 
         test "tests/elmish-proof-corpus/ring-cases.txt matches the model (regenerable)" {

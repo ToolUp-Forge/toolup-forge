@@ -62,11 +62,35 @@ module Sub =
 
             let stop onError subs = subs |> List.iter (tryStop onError)
 
-            let change onError dispatch (dupes, toStop, toKeep, toStart) =
+            /// Apply a diff: warn the duplicates, stop what is no longer
+            /// asked for, start what is new, and return the next active
+            /// list. `terminated` is the loop's flag, read before EACH
+            /// start (Phase 900): a start function may call
+            /// `IDispatcher.Terminate`, and the teardown that runs then
+            /// stops the active list as it stood BEFORE this diff and never
+            /// runs again — so a start made after it would be held by
+            /// nobody. Once the flag is set, nothing further is started,
+            /// what this call had already started is stopped, and the next
+            /// active list is empty: a terminated program holds nothing.
+            /// Until 900 every entry of `toStart` was started whatever the
+            /// flag said, and the loop assigned the lot to the stopped set.
+            let change onError dispatch (terminated: unit -> bool) (dupes, toStop, toKeep, toStart) =
                 dupes |> List.iter (warnDupe onError)
                 toStop |> List.iter (tryStop onError)
-                let started = toStart |> List.choose (tryStart onError dispatch)
-                List.append toKeep started
+
+                let started =
+                    toStart
+                    |> List.choose (fun sub ->
+                        if terminated () then
+                            None
+                        else
+                            tryStart onError dispatch sub)
+
+                if terminated () then
+                    stop onError started
+                    []
+                else
+                    List.append toKeep started
 
         module NewSubs =
 
