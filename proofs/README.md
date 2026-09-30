@@ -86,6 +86,15 @@ is the loop's `terminated` negated in every reachable state, with the one produc
 breaks the encoding computed as the exception. Its ladder is
 [after the runtime's](#the-claims-ladder--the-dispatch-loop-phase-789).
 
+**The array ring (Phase 955).** The same ring as a stateful array, written in Pulse and proved to
+**refine** the ring model: each of its operations does to the abstract ring exactly what the list
+model's does, so the ring theorems hold of it without being proved again, and over any operation
+sequence in which no push is refused it is the reference FIFO queue. It is the first thing here
+extracted to be *run as* the implementation rather than beside one — through the prover's newer F#
+backend, to generic F# over a .NET array — and both hosts run it beside the shipped ring. It does
+not replace the shipped ring; whether it could is
+[the question that section answers](#the-verified-implementation-question-asked-again-phase-955).
+
 **The machinery**, because a theorem about a model is worth what the tie to the code is worth:
 
 | File | What it is |
@@ -97,8 +106,9 @@ breaks the encoding computed as the exception. Its ladder is
 | `TaintFlow.fst` | the taint-flow model — the label lattice, `AssemblyLabelling.contributedBy` / `label`, `DisclosureTaintConfig.routineClears` and the derivation walk clause for clause, each definition naming its F# counterpart |
 | `ElmishRing.fst` | the ring-buffer model — `RingBuffer<'item>`'s two-case state, `Push`, `Pop` and `doubleSize` clause for clause, the backing array as a slot list with the placeholder a constructor, and the `run` driver both hosts execute |
 | `ElmishSub.fst` | the subscription-diff model — `Sub.Internal.diff`, `NewSubs.calculate` and the active-list half of `Fx.change` clause for clause, the key and the start function opaque |
-| `fstar-pin.json` | the pinned prover (an F\* release, which bundles Z3), with its hash |
-| `check.ps1` | the whole proof leg, over a module list: resolve the pin, then per module check, extract, normalise and byte-diff; build the two oracle projects; run each module's differential host |
+| `ElmishRingArray.fst` | **Phase 955** — the ring over a mutable ARRAY, in Pulse (`Pulse.Lib.Vec` and `Pulse.Lib.Box`), proved to refine `ElmishRing.fst`: `create`, `pop`, `push` and the doubling `grow`, each doing to the abstract ring what the list model's operation does, and `run`, which says the array ring is a FIFO queue over any operation sequence |
+| `fstar-pin.json` | the pinned prover (an F\* release, which bundles Z3), with its hash, and the flag sets for the two extraction routes |
+| `check.ps1` | the whole proof leg, over a module list: resolve the pin, then per module check, extract (the legacy F# printer, or Custard's F# backend for a module that says so), normalise the legacy extractions and byte-diff; build the two oracle projects and any Custard-generated project as generated; run each module's differential host |
 | `normalise-extraction.fsx` | **Phase 850** — the layout normaliser the leg runs between extract and byte-diff: a parser for exactly the dialect the F# backend emits and a printer for indentation-clean F#, so every committed extraction compiles on both hosts with no flag (the section [below](#the-verified-implementation-spike-phase-850) says why the alternatives were not available) |
 | `oracle/RemotingDecode.fs` | **generated** — the decoder model extracted to F#, committed so the repository never needs a prover to build |
 | `oracle/DisclosureFold.fs` | **generated** — the disclosure model extracted to F#, committed for the same reason |
@@ -109,6 +119,8 @@ breaks the encoding computed as the exception. Its ladder is
 | [`../tests/elmish-proof-corpus/`](../tests/elmish-proof-corpus/) | **generated** — the two Elmish models' verdicts over the seeded campaign, written by the .NET host and replayed by the **Fable** host against the transpiled runtime; since Phase 850 also the check that the two hosts' `Prims` shims compute the same ring |
 | `oracle/Prims.fs` | the nine-name runtime the extractions need, because F\*'s F# backend ships none; every later model references a subset of the same nine |
 | `oracle/fable/Prims.fs`, `oracle/fable/ToolUp.Remoting.Proofs.Oracle.Fable.fsproj` | **Phase 850** — the same shim over machine integers, and the project that compiles the committed `oracle/ElmishRing.fs` — and since Phase 884 `oracle/ElmishLoop.fs` — against it for the **Fable** host; `ToolUp.AI.Client.Tests` references it and runs the ring model and the dispatch-loop model live beside the transpiled runtime |
+| `oracle/custard/ElmishRingArray.fs`, `oracle/custard/FStarCustard.fs`, `oracle/custard/ElmishRingArray.fsproj` | **generated, Phase 955** — the project Custard's F# backend wrote for `ElmishRingArray.fst`: the array ring as generic F# over a .NET array and `ref` cells, the support library that backend writes beside every module, and the project file. All three are byte-held; the leg builds the project as generated, and both oracle projects compile the ring's source |
+| `oracle/fable/FStarCustard.fs` | **Phase 955** — the Fable host's stand-in for that support library, which Fable cannot compile. Empty on purpose: the array ring uses nothing from the library, and an extraction that did would fail to compile here rather than run against a second implementation |
 | [`../proofs.json`](../proofs.json) | both ladders below, declared as **data** — hand-authored, never generated, so a registry can read what a human decided rather than parse this prose |
 
 ```powershell
@@ -1455,7 +1467,10 @@ backend can realise:
   *stated* against this release without pulling the effect modules from elsewhere, and its theorems
   would move from linear arithmetic over indices into a heap logic. `FStar.ImmutableArray` is
   present but is an interface (`val t`, "implemented in OCaml by an array"), has no `upd`, and no
-  F# realisation.
+  F# realisation. **Corrected by Phase 955 (2026-09-30):** this is about `ulib`, and it is still
+  true of it — the release of 2026-09-27 drops the heap model altogether. It is no longer the whole
+  of the matter: the release ships a mutable array in the Pulse library (`Pulse.Lib.Vec`, as this
+  one did), and what was missing was a backend that realises it in F#, which that release has.
 * **Machine integers buy nothing here.** A probe over `FStar.UInt32` extracts to references to a
   `FStar_UInt32` module — `add`, `mul`, `v`, `uint_to_t` — with every literal routed through
   `uint_to_t (Prims.parse_int "1")`: a hand-written shim per host, and no representation the
@@ -1466,7 +1481,10 @@ release with a stateful array the F# backend can realise (the release does ship 
 `lib/fstar/pulse/`, but it targets C and Rust through KaRaMeL, not F#), or an axiomatised array
 interface realised by hand on each host — at which point the ring's O(1) rests on unverified host
 code and every theorem becomes conditional on the axioms, which is the refinement tie wearing a
-different coat.
+different coat. **Corrected by Phase 955 (2026-09-30):** "it targets C and Rust through KaRaMeL, not
+F#" was true of the release pinned then. On the release of 2026-09-27 Pulse reaches F# through
+Custard's F# backend, which is the toolchain event this paragraph names, and
+[the second answer](#the-verified-implementation-question-asked-again-phase-955) is what followed.
 
 **The measurement.** The extraction that *can* be built, against the shipped `Ring.fs`, on both
 hosts, with a local stopwatch (Phase 849's harness was in flight): capacity 10, the same 4,000-op
@@ -1493,7 +1511,264 @@ by the differential on both hosts, which this phase made stronger on the browser
 replacing the shipped code with an extraction. Recorded in [`../proofs.json`](../proofs.json) as
 `verified-implementation-road`. What would reopen it is named above and is a toolchain event, not a
 proof one; until then, the ladder's Rung 2 is the tie, and it is what the two go-red cases and the
-grow-step floor exist to keep honest.
+grow-step floor exist to keep honest. **Phase 955 reopened it on exactly that event**, the same
+week: the next section is the second answer, and the policy row now carries both.
+
+## The verified-implementation question, asked again (Phase 955)
+
+Phase 850 closed by naming what would reopen it: "an F\* release with a stateful array the F#
+backend can realise". The release of 2026-09-27 is one. This section is the **second answer**, dated
+2026-09-30, on the pin this phase moved to (`v2026.09.27`, commit `7deb38a2`). Phase 850's text
+above stands as the first answer; where the new pin makes one of its sentences false the sentence is
+kept and marked.
+
+**The answer is yes, for the ring.** An array-backed ring written in Pulse, proved to refine the
+list model, extracted to F# by the prover and run on both hosts beside the shipped `Ring.fs`, agrees
+with it on every sequence both campaigns draw and costs less per operation than it does, on .NET
+and under Fable. `Ring.fs` is unchanged by this phase: replacing it is a successor's work, and the
+yes carries three conditions that successor inherits, each set out below — a capacity ceiling the
+shipped ring does not have, a support library the Fable host cannot compile and does not need, and
+an extractor whose F# backend was twelve days old when this was written.
+
+**What changed upstream.** F\* gained a second extraction pipeline, Custard, and with it an F#
+backend (`--codegen Custard --custard_backend FSharp`; its printer's first commit upstream is dated
+2026-09-18). It writes a *project* — the module, a support library `FStarCustard.fs` and an
+`.fsproj` targeting `net10.0` — and it realises Pulse's heap types in the target's own: a
+`Pulse.Lib.Vec` is a .NET array, a `Pulse.Lib.Box` an F# `ref` cell, `FStar.SizeT.t` a `uint64`.
+The release ships the Pulse library on the prover's own include path, so a Pulse module checks with
+the flags every other model here uses. Upstream's reference describes the route this directory has
+used since Phase 787 (`--codegen FSharp`) as "unmaintained for long enough that its output no longer
+compiles" against a current F# compiler — the defect `normalise-extraction.fsx` exists to repair. It
+is still in the release and its output did not move: all eight legacy extractions are byte-identical
+across the pin.
+
+**The pin move.** `fstar-pin.json` names the new release with the Windows archive's hash re-computed
+locally and equal to the digest the release publishes; the Linux entry stays unhashed. The leg is
+green on it, hosts included, three cold runs under `--quake 3`. Two things in `check.ps1` that the
+move made live were fixed with it: the closing line printed the *pinned* version whatever prover
+`-FStarHome` supplied (it now prints what ran, by release and commit), and a release already
+downloaded under `proofs/.fstar/` was reused whatever the pin had since become (it is now replaced
+when it is not the pin).
+
+### The eight models on Custard — measured, not migrated
+
+Each model was put through Custard's F# backend three ways: rooted as a module
+(`--custard_entry_module`), rooted at every definition the legacy extraction emits
+(`--custard_entry <name>`, once per name), and then built.
+
+| Model | a module root emits | every definition named as a root | .NET 10, project as generated | Fable, the module over a support library cut to what Fable accepts |
+|---|---|---|---|---|
+| `RemotingDecode` | 9 definitions | 65 of 72; 7 refused (error 370) | builds (the 65) | transpiles |
+| `DisclosureFold` | 5 | 14 of 14 | builds | transpiles |
+| `ToolGate` | 9 | 9 of 9 | builds | transpiles |
+| `ModelInput` | 28 | 28 of 28 | **does not build** (FS0058, FS0010) | does not transpile (the same layout) |
+| `TaintFlow` | 19 | 36 of 36 | builds | transpiles |
+| `ElmishRing` | 3 | 15 of 15 | builds | transpiles |
+| `ElmishSub` | none | 12 of 12 | builds | transpiles |
+| `ElmishLoop` | none | 26 of 26 (with the ring's, 40) | builds | transpiles |
+
+What the columns found:
+
+* **The root.** A module root emits only the definitions that are already monomorphic — for
+  `ElmishRing`, `succ`, `minimum_capacity` and `capacity_of`, and for the two models that are generic
+  throughout, nothing. Naming a definition as a root emits it whatever its type, generic where the
+  source is generic. So a migration names every entry point, one flag each.
+* **What is refused.** Seven `RemotingDecode` definitions — `as_date_time_with`,
+  `as_date_time_offset_with`, `as_decimal_with` and the four `decode_*` fixtures — reach a decoder
+  that is a parameterless polymorphic value (`as_int32`, `as_int64`), which F#'s value restriction
+  cannot express; Custard refuses it by name (error 370) rather than emit it. The remedy is in the
+  model — give those values a parameter — and so moves a byte-held extraction.
+* **What does not build.** `ModelInput`'s generated module is refused by the F# compiler: in
+  `render`, a `match` that is the value of a record field is printed with its arms to the left of
+  the expression it belongs to (`ModelInput.fs(126,6)`: FS0058, then FS0010). That is a defect in
+  the new backend's layout, the thing it was written to get right, and it is in the release this
+  directory pins.
+* **The names.** `ElmishRing.succ` becomes `elmishRing_succ`: every value and type carries its
+  module as a lower-cased prefix, constructors as an upper-cased one (`ModelInput_ONone`), and an
+  inductive with one constructor and named fields becomes an F# record. Every differential host's
+  bridge is written against the legacy names.
+* **The integers and the support library.** `Prims.int` is `bigint` on both hosts, where the Fable
+  host's Elmish extractions run over machine integers today. `FStarCustard.fs` as generated does
+  **not** transpile: Fable refuses nine uses in it — `System.UInt128` / `System.Int128` arithmetic
+  (five), `TextWriter.Write` / `Flush`, `exit`, and the `UTF8Encoding` constructor. The modules
+  transpile over a copy of it cut down to the `Prims`, list, character and string parts; that copy
+  would be a hand-maintained fork of generated code.
+
+**The decision: the eight stay on the legacy printer.** One of the eight does not compile through
+Custard and one cannot be extracted whole without reshaping its model; a migration would rename
+every name the hosts bind, move the Fable host onto `bigint` and a forked support library, and
+change eight byte-held files at once — on a backend twelve days old. The legacy route is green and
+byte-stable across the pin move, and the normaliser that keeps it compiling refuses what it does not
+recognise. What upstream says about that route is now on this ladder: it is unmaintained, so a
+future release may drop it, and the normaliser is this repository's to carry until then. What would
+reopen the decision is a release in which `ModelInput`'s project builds as generated; the table is
+the measurement to repeat.
+
+### How a generic ring leaves the extractor
+
+Phase 955's first question was how a ring generic in its item type survives an extractor that
+"monomorphises the whole program". Settled by experiment, and the premise was half wrong: on the F#
+backend **type parameters are not monomorphised** (upstream's rule: only type-class dictionaries and
+marked binders are, unless a backend asks for all of them, and only the C backend does). What
+produced nothing in the trial was the *root*: `--custard_entry_module` does not root a polymorphic
+definition, and `--custard_entry ElmishRingArray.push` does. Three candidates, measured:
+
+| Candidate | What is emitted | Cost at the call site | What joins the trusted base |
+|---|---|---|---|
+| Name the generic definitions as roots | `elmishRingArray_push (rb : elmishRingArray_ring<'t>) (x : 't) : bool` — generic F# | none: called at any `'item`, nothing boxed | nothing beyond the wrapper below |
+| A root at an abstract carrier realised as `obj` (`custard_extern`), on a two-definition probe | `type carrier = obj` and the root at the type instantiated with it; the generic definition is emitted beside it anyway | every value-type item boxed going in and unboxed coming out | the `assume val` for the carrier and an unchecked `unbox` per pop |
+| A ring of boxed items behind a typed hand-written wrapper | not built: it is the second, written by hand | the same | the wrapper's `box` / `unbox` pair |
+
+The first is the one used. The wrapper a host writes is three lines of substance, and they are all
+of it that is hand-written rather than proved: the constructor's `int` capacity widened to the
+extraction's `uint64`, the placeholder value unwritten slots hold (`Unchecked.defaultof`), and a
+refused push surfaced as an exception.
+
+### The array ring, and its ladder
+
+`ElmishRingArray.fst` is the ring over `Pulse.Lib.Vec` — a backing array in a box (the grow step
+replaces it), the capacity, the write and read indices and the state flag each in a box of their
+own — with `create`, `pop`, `push` and the doubling `grow`.
+
+**Proved.** On the pinned prover, with `--report_assumes error`, no `admit` and no `assume`; 305
+queries, the slowest using 0.30 of the `--z3rlimit 60` the pin allows.
+
+* **The refinement relation** is `is_ring rb m`: the array ring `rb` represents the list-model ring
+  `m`. It is a relation indexed by the model state rather than a function from the array, and that
+  is forced: the array holds bare items, so it cannot tell a slot the write head has filled from a
+  placeholder, and only the model says which is which. Its pure half, `repr`, says same length, same
+  indices, same state, and every slot the model calls `Written v` holds `v`. The abstract contents
+  of the array ring are the model's `unread`.
+* **One lemma per operation says the diagram commutes** — `create_refines`, `pop_refines` /
+  `pop_empty_refines`, and `push_writable_refines` / `push_readable_refines` / `push_grow_refines`
+  for the three shapes a push takes — and each Pulse function's postcondition is its model operation
+  applied to the model state: `create` yields a ring representing `ElmishRing.create size`; `pop`
+  leaves one representing the model's popped ring and returns the model's output, a written slot and
+  never a placeholder; `push` leaves one representing `ElmishRing.push x m`. Through the grow step:
+  the copy loop's invariant is that the new array's first `n` slots are the old array read
+  cyclically from the read index, which is `doubleSize` (`nth_double_size`).
+* **`run` — the array ring is a FIFO queue.** Driving the array ring's own `push` and `pop` over
+  *any* operation sequence in which no push is refused, the outputs are exactly the model's
+  (`ElmishRing.run`) and therefore exactly the reference queue's from the ring's unread contents,
+  and the ring ends holding exactly what that queue holds: every pushed item popped once, in push
+  order, nothing lost and nothing invented, through every grow. The six theorems of `ElmishRing.fst`
+  are statements about the model state, so they hold of the array ring through `is_ring`; `run`'s
+  proof is three calls to `ring_is_queue`, and nothing about queues is proved twice.
+* **Ten mutants are refused.** The write index left at 0 after a grow, the copy loop reading slot 0
+  on the wrap, a pop that does not advance, the ceiling check moved past what the size lemma
+  covers, the read index mis-set on the first push, the old array not freed, the emptiness test
+  against the wrong index, and three on `run` — an output dropped, a refusal reported as success, a
+  double pop — each fails the prover. A proof that goes through first time, as this one did, is the
+  proof most in need of being shown able to fail.
+
+**Differentially tested, on both hosts.** `Phase 955 - the extracted array ring as implementation`
+in the platform pack and its `(Fable)` twin, eight cases each: the extracted array ring agrees with
+the shipped ring **and** with the list model's verdicts over the corpus campaign (200 sequences) and
+with the shipped ring over a second campaign the corpus never had (120); on .NET its backing array
+is held to the model's *length* after every sequence, so the grow step is `2n + 1` slot for slot,
+and under Fable to the sequence of sizes the grow step can produce; the broken ring is caught
+against it; over a reference type no pop returns the placeholder; and the ceiling case below. The
+extraction the hosts compile is `oracle/custard/ElmishRingArray.fs`, and `check.ps1` byte-holds all
+three files of the project Custard wrote and builds that project **as generated**.
+
+**Assumed, and stated.**
+
+* **A capacity ceiling the shipped ring does not have.** The model grows without bound. An array
+  of `2n + 1` slots needs that number to be one the platform can index, and the only bound F\*
+  states unconditionally is that `SizeT` holds 16 bits. So the grow step is taken only from a
+  capacity of at most 32,767 slots (`max_growable`), reaching at most 65,535; past that `push`
+  changes nothing and returns `false`, and every theorem above is about pushes that returned `true`.
+  A ring built at capacity 10 refuses its 45,055th unread item; the hosts assert that the refusal
+  comes there, that nothing already accepted is lost by it and that the ring goes on working. The
+  shipped ring would go on doubling. Lifting the ceiling is a stated platform assumption
+  (`SizeT.fits_u32`), not a proof.
+* **The extractor.** That Custard's F# backend prints the program the prover checked, and that a
+  .NET array, a `ref` cell and `uint64` are what `Pulse.Lib.Vec`, `Pulse.Lib.Box` and `SizeT` mean.
+  One realisation is unchecked narrowing — an index is `int` of a `uint64` — which is exact below
+  2^31 and which the ceiling keeps four orders of magnitude inside. `Vec.free` extracts to nothing;
+  the old array is the collector's. This backend is new, and the table above holds one defect found
+  in it in a day.
+* **The support library on the Fable host.** `FStarCustard.fs` does not transpile. The array ring
+  uses nothing from it, so the Fable oracle compiles an **empty** module of that name
+  (`oracle/fable/FStarCustard.fs`) in its place: an extraction that came to need a name from the
+  library would fail to compile there, naming it, rather than run against a second implementation.
+  Under Fable the extraction's `uint64` indices are JavaScript BigInts.
+* **The wrapper**, as set out above: three lines, duplicated in the two host files for this phase.
+
+**Not claimed.** That the array ring *is* the shipped ring: `Ring.fs` is unchanged and nothing in
+the client tier calls the extraction. That the Pulse checker is as small a trusted base as the
+first-order models' — it is a plugin in the same release, and a larger one. Custard's C and Rust
+backends, the dispatch loop and the decoder in Pulse.
+
+### The measurement, and its falsifier
+
+Phase 850's case under Phase 849's discipline — the sequence from the corpus's generator by seed,
+every arm's output asserted equal before anything is timed, the minimum over rounds — in both
+packs: `Phase 955 - shipped ring, list extraction and array extraction, measured (informational)`.
+Capacity 10, 4,000 operations at 65 % pushes — 2,560 pushes and 1,440 pops, the ring growing seven
+times to 1,407 slots — Debug builds, one Windows 11 machine, 2026-09-30.
+
+| Host | shipped `Ring.fs` | list extraction | array extraction | array ÷ shipped |
+|---|---|---|---|---|
+| .NET 10.0.8 (four runs) | 35.7–40.2 ns/op | 67–82 µs/op | 19.0–21.4 ns/op | 0.53–0.54 |
+| Fable on node v25.9.0 | 184.6 ns/op | 175 µs/op | 140.5 ns/op | 0.76 |
+
+Those three figures use the differential's own driver, which builds the list of popped values, so
+each includes that allocation. The two rings walked alone over the same sequence, nothing collected:
+
+| Host | shipped `Ring.fs` | array extraction | array ÷ shipped |
+|---|---|---|---|
+| .NET 10.0.8 (four runs) | 31.7–34.3 ns/op | 14.2–15.5 ns/op | 0.45–0.46 |
+| Fable on node v25.9.0 | 98.9 ns/op | 46.4 ns/op | 0.47 |
+
+**The falsifier.** The claim is that the array extraction costs no more per operation than the
+shipped ring on either host. It is false if a run on a quiet machine puts the array arm's minimum
+above the shipped arm's. What keeps the comparison honest: all three arms are asserted to pop the
+same values from the same sequence before timing, so none skipped its work; the sequence is asserted
+to pop more than a thousand items and, on .NET, to grow the ring past a thousand slots, so the grow
+step is inside the number; and **the two hosts are held to one sequence by a pinned fingerprint**
+(`1:14575:1899911031`, asserted in both packs), which is the check Phase 850's Fable figure lacked
+and Phase 884 found it needed. The list extraction's figure is the one Phase 850 recorded, again:
+three to four thousand times the array's on .NET, over a thousand times under Fable.
+
+Why the extraction is the faster one is not subtle: the shipped grow step builds its new array
+through a sequence expression, and the shipped state is a struct union rewritten on every
+operation; the extraction's is five cells and a copy loop. The Fable arm pays for `uint64` as
+BigInt and is ahead anyway.
+
+### The verdict
+
+**Yes: the extracted array ring can replace `Ring.fs` on both hosts within the client budgets.** The
+budgets in `perf-budgets.json` are boot, decode per response, view per dispatch and two bundle
+sizes. A ring operation is between 14 and 185 nanoseconds in the tables above, against a view
+budget whose baseline is 315 microseconds, and the extraction's are the cheaper. For the bundles:
+the transpiled extraction is 4,720 bytes unminified against `Ring.js`'s 4,886, which it would
+replace; the BigInt helper it imports is 11,564 bytes unminified and is the one Fable's own date,
+time and decimal modules import, so a bundle that touches those already carries it; the narrower
+bundle ceiling has about 67 KiB of headroom. None of that is the gate itself, which cannot be
+run over a replacement this phase does not make — the successor runs `perf-budget-gate.ps1` first,
+and a red there falsifies this paragraph.
+
+**What the replacement would make of Rung 2.** For the ring, the differential stops being the tie
+between a proved model and hand-written code, because there is no hand-written ring left to tie: the
+correctness of the code that runs moves to Rung 1, through `is_ring` and `run`. What Rung 2 then
+holds is the extraction pipeline and the wrapper — the same cases, asking whether the code the
+extractor wrote behaves as the model it was extracted beside — and the measurement. The loop, the
+decoder and the rest stay on the refinement tie exactly as Phase 850 left them.
+
+**What joins the trusted base, against what leaves it.** Joining: Custard's F# backend and its
+realisation of the Pulse heap types (new code, one defect found here); the Pulse checker; the
+three-line wrapper; on the Fable host the empty stand-in and BigInt arithmetic for indices; and a
+capacity ceiling, which is a behaviour change — a push refused once the ring is full at more than
+32,767 slots — rather than a trust question. Leaving: the hand-written ring (`Ring.fs`, 81 lines
+with its comments), and with it the bridge assumption for the ring's half of the differential. **Not** leaving: the layout normaliser, which the eight models still need. For a
+structure this small the trade is close to even in trusted lines and clearly better in kind — what
+is trusted afterwards is a general tool with a test suite and an upstream, not one ring — and it is
+the extractor's age that argues for landing the replacement behind the differential and the
+perf gate rather than on this verdict alone.
+
+Recorded in [`../proofs.json`](../proofs.json): `verified-implementation-road` carries both answers,
+and the array ring's rows are `elmish-array-ring-*`.
 
 ## Method, and where it comes from
 
@@ -1593,11 +1868,36 @@ rather than add a module to it:
 * **`FStar.Seq` extracts as a list, and the pinned `ulib` has no mutable array.** `seq` is
   `MkSeq of list`; `FStar.ST` / `FStar.Array` / `LowStar.Buffer` are not in the release; the F#
   backend ships no runtime for anything. A model that needs constant-time indexing has nowhere to
-  get it from on this toolchain — the section above is the record.
+  get it from on this toolchain — the section above is the record. **Corrected by Phase 955:** on
+  the release of 2026-09-27 it has: `Pulse.Lib.Vec`, realised as a .NET array by Custard's F#
+  backend. `FStar.Seq` still extracts as a list, on either route.
 * **The F# backend names a foreign module with underscores.** `FStar.Seq.Base.create` comes out as
   `FStar_Seq_Base.create`, `FStar.UInt32.add` as `FStar_UInt32.add`; a shim for either would be a
   module of that spelling. `Prims` is the one module whose name has no dots, which is why the shim
   never had to know this.
+
+And six from the second spike (Phase 955), the first to add a second ROUTE to the leg:
+
+* **A Pulse module checks with the flags every other model uses.** The Pulse library is on the
+  release's own include path; `--report_assumes error`, `--z3rlimit 60` and `--quake 3` apply
+  unchanged. Keeping the diagram lemmas pure — over the existing list model, called from the Pulse
+  functions — kept every query small: the slowest used half a percent of the limit.
+* **`--custard_entry_module` roots nothing polymorphic.** It emits the monomorphic definitions of a
+  module and is silent about the rest, which for a generic model is an empty file and exit 0. Name
+  the definitions (`--custard_entry M.f`); they come out generic.
+* **Custard writes a project, so the byte-diff is over three files.** The support library and the
+  `.fsproj` are the prover's output as much as the module is. Its output is deterministic and
+  LF-only, so it is compared as written, with no normalising step to hide a change in.
+* **Custard's layout is not yet to be trusted unseen.** One of the eight existing models comes out
+  with a `match` in a record field laid out offside (FS0058) — the shape the normaliser's own note
+  above says it had to learn. The leg builds a Custard module's project as generated for that
+  reason.
+* **`SizeT` promises 16 bits and no more.** An array that grows needs its new size shown to fit,
+  and without a platform assumption only sizes below 2^16 are. The choice is a ceiling in the code
+  or an assumption in the statement; the array ring takes the ceiling and says so.
+* **A proof that passes first time is the one to break on purpose.** Every function of the array
+  ring checked on its first run. Ten one-line mutants were then run through the prover and each was
+  refused, which is the only evidence that the statements constrain anything.
 
 The 790 note above predicted a third model would be one `$modules` entry and no other edit. That
 held for the leg itself. It is not the whole cost of a model: the oracle project gains a `<Compile>`,
