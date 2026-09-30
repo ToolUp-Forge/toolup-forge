@@ -1065,6 +1065,34 @@ type FSharpMapNonStringKeyConverterFactory() =
 // =============================================================================
 //
 // Wire: JSON string. Int64 has a leading '+' sign for non-negative; UInt64 does not.
+//
+// Phase 937 — the read accepts exactly the two forms `JsonDecode.asInt64` /
+// `asUInt64` accept: a JSON number or the writer's string. The Fable/Long.js
+// runtime object `{"high","low","unsigned"}` — which these converters used to
+// rebuild from `high` and `low`, ignoring `unsigned` — is refused, as is any
+// other token, naming the type and both accepted forms. No SDK writer emits
+// the object form (Phase 911), and v0.23.0 refused it.
+
+/// Phase 937 — the refusal both wide-integer converters raise, in the words
+/// the JSON algebra's `asInt64` / `asUInt64` use. A `JsonException` so the
+/// argument seam (`refusalOf`) carries STJ's path to the offending member.
+module private WideIntegerRefusal =
+
+    let int64Forms = "Int64 as a JSON number or a signed string (\"+42\", \"-7\")"
+
+    let uint64Forms = "UInt64 as a JSON number or a digit string (\"42\")"
+
+    let private describe (token: JsonTokenType) =
+        match token with
+        | JsonTokenType.StartObject -> "object"
+        | JsonTokenType.StartArray -> "array"
+        | JsonTokenType.True -> "bool true"
+        | JsonTokenType.False -> "bool false"
+        | JsonTokenType.Null -> "null"
+        | other -> string other
+
+    let fail (forms: string) (token: JsonTokenType) : 'T =
+        raise (JsonException(sprintf "expected %s, got %s" forms (describe token)))
 
 type Int64Converter() =
     inherit JsonConverter<int64>()
@@ -1076,16 +1104,7 @@ type Int64Converter() =
         match reader.TokenType with
         | JsonTokenType.String -> Int64.Parse(reader.GetString())
         | JsonTokenType.Number -> reader.GetInt64()
-        | JsonTokenType.StartObject ->
-            // Fable runtime form: {"high": int, "low": int, "unsigned": bool}
-            use doc = JsonDocument.ParseValue(&reader)
-            let root = doc.RootElement
-            let low = root.GetProperty("low").GetInt32()
-            let high = root.GetProperty("high").GetInt32()
-            let lowBytes = BitConverter.GetBytes(low)
-            let highBytes = BitConverter.GetBytes(high)
-            BitConverter.ToInt64(Array.append lowBytes highBytes, 0)
-        | other -> failwithf "Unexpected token %A when reading int64" other
+        | other -> WideIntegerRefusal.fail WideIntegerRefusal.int64Forms other
 
 type UInt64Converter() =
     inherit JsonConverter<uint64>()
@@ -1097,15 +1116,7 @@ type UInt64Converter() =
         match reader.TokenType with
         | JsonTokenType.String -> UInt64.Parse(reader.GetString())
         | JsonTokenType.Number -> reader.GetUInt64()
-        | JsonTokenType.StartObject ->
-            use doc = JsonDocument.ParseValue(&reader)
-            let root = doc.RootElement
-            let low = root.GetProperty("low").GetInt32()
-            let high = root.GetProperty("high").GetInt32()
-            let lowBytes = BitConverter.GetBytes(low)
-            let highBytes = BitConverter.GetBytes(high)
-            BitConverter.ToUInt64(Array.append lowBytes highBytes, 0)
-        | other -> failwithf "Unexpected token %A when reading uint64" other
+        | other -> WideIntegerRefusal.fail WideIntegerRefusal.uint64Forms other
 
 type BigIntConverter() =
     inherit JsonConverter<System.Numerics.BigInteger>()
