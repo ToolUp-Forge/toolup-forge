@@ -61,7 +61,7 @@ hop. The documented local invocation above is how they are held to their budgets
 | blob `azurite` | the Azure Blob companion against the local Azurite emulator | `TOOLUP_PARITY_AZURITE` |
 | store `flat` | `InMemoryVectorStore` (exact scan) | always available |
 | store `hnsw` | the HNSW companion | always available |
-| store `pgvector` | the pgvector companion, HNSW index (m=16, ef_construction=64), a table of its own per run, dropped afterwards | `TOOLUP_PGVECTOR_CONNECTION_STRING` |
+| store `pgvector` | the pgvector companion, HNSW index (m=16, ef_construction=64), built with plain `create`, a table of its own per run, dropped afterwards. Since Phase 939 `create` composes `PgvectorTuning.recommended`, so this arm now measures the tuned posture; the Phase 929 rows below predate that | `TOOLUP_PGVECTOR_CONNECTION_STRING` |
 | fact store `blob` | `BlobFactStore`, the default `IFactStore`, over whichever blob arm is named | always available |
 | fact store `postgres` | the database-backed fact store (`ToolUp.FactStores.Postgres`, Phase 888), a table of its own per run, dropped afterwards; its rows print `blob=none` | `TOOLUP_PGVECTOR_CONNECTION_STRING` |
 
@@ -136,17 +136,30 @@ azurite runs' round-minimum p95 was 40.03 / 28.35 / 37.81 ms against the memory 
 37.42 / 40.49 ms. The 250,000-chunk run used 40 queries x 3 rounds; the pgvector 100,000 run 100 x 3.
 The pgvector seed is one upsert per chunk: 64 s at 10,000 chunks, 1,002 s at 100,000.)
 
+The two pgvector rows were measured before Phase 939, when `create` composed `PgvectorTuning.unchanged`:
+pgvector's own untuned defaults (the server's default `ef_search`, no iterative scan, no exact fallback
+on a short page). They are not the behaviour of today's `create`. Phase 939 made
+`PgvectorTuning.recommended` the default (`ef_search` 100 per query, `relaxed_order` iterative scanning,
+an exact re-run of a scope whose page comes back short, up to four scopes searched concurrently). The
+companion README records what that posture measured: recall@10 of 0.964 to 1.000 across scopes of a
+165,000-row table where the untuned default gave 0.05 to 0.52, and 1.000 over 50 queries on 5,000 rows
+in Phase 939's own re-run. See [the migration note](../migrations/939-pgvector-tuned-default.md). The
+harness's own 10,000 and 100,000-chunk cells have not been re-run under the tuned default, so this page
+carries no latency or recall figure for them.
+
 Four findings from Phase 929, each out of its scope to fix:
 
 - **The azurite arm moves nothing on the retrieval path.** Its gate figure sits inside the memory
   arm's noise, because once the warm-up has loaded the scope's index the flat store and the BM25
   index answer from memory; the emulator is paid in the seed and the warm-up.
-- **pgvector is the fastest store measured under concurrency, and its recall falls with size.** At
+- **pgvector, at its untuned defaults, is the fastest store measured under concurrency, and its
+  recall falls with size.** At
   10,000 chunks it answered at 3.67 ms p50 against the flat store's 30.71; at 100,000 at 24.77 ms p95
   against the flat store's 537.57 (886). But recall of its own search against the exact scan was
   0.810 at 10,000 chunks and 0.670 at 100,000 — the store's HNSW index at the companion's defaults
   (m=16, ef_construction=64, the server's default `ef_search`) trades a third of the true top 10 at
-  100,000 chunks for that speed.
+  100,000 chunks for that speed. Phase 939 has since made the tuned posture the default (above); this
+  finding describes `PgvectorTuning.unchanged`, which a deployment now opts into.
 - **pgvector's first rounds after a seed are an order of magnitude slower than its last.** In the
   three gate runs over 10,000 chunks, the p50 over all 1,000 queries was 51.24 / 49.84 / 3.59 ms
   while every run's fastest round had a p95 under 4.1 ms. A standalone run seconds apart measured
@@ -182,7 +195,7 @@ truth is computed correctly, and it reads 1.000 too.
 |---|---|
 | flat, 500,000 chunks (Phase 14k's deferred p95) | **Attempted and stopped; extrapolated.** Phase 929 ran `load retrieval --stores flat --sizes 500000` (CPU 97%, 12.1 GB free at start). 172 s in, still seeding, the process's working set was 7.56 GB and the machine had 2.3 GB free; it was stopped before it could take the memory of the five sessions beside it. The 250,000-chunk run peaked at about 6.5 GB, so 500,000 needs about 13 GB — more than this machine had free on either day. On the slope measured at three sizes (about 5.5 µs per chunk), the p95 at eight callers is **~2.75 s**, the figure 886 extrapolated from two. The largest size measured is 250,000 chunks: **p95 1,371 ms**. |
 | flat, 1,000,000 chunks | **Extrapolated** on the same slope: p95 near 5.5 s at eight callers, over ~26 GB of process memory at the 250,000-chunk run's density. Not run, for the reason above. |
-| pgvector, 500,000 chunks | **Not run.** The harness seeds the pgvector store one upsert at a time, which took 1,002 s for 100,000 chunks, so 500,000 is over an hour of seeding before the first query. Its p95 rose from 6.50 to 24.77 ms between 10,000 and 100,000 chunks; its recall fell from 0.810 to 0.670. |
+| pgvector, 500,000 chunks | **Not run.** The harness seeds the pgvector store one upsert at a time, which took 1,002 s for 100,000 chunks, so 500,000 is over an hour of seeding before the first query. At pgvector's untuned defaults (before Phase 939) its p95 rose from 6.50 to 24.77 ms between 10,000 and 100,000 chunks, and its recall fell from 0.810 to 0.670. |
 | hnsw, 10,000 and above | **Not measurable** on this machine within a working session: the graph build did not finish (see above). Phase 929 did not retry it: nothing in the store has changed since. |
 
 ## Facts — measured
