@@ -217,7 +217,14 @@ type ScopeAtCapacity = {
 /// Per-connection ORDER is preserved (one reader, FIFO channel), which
 /// is what SSE delta streams require. Cross-connection order never was
 /// guaranteed and still is not.
-type private ConnectionWriter(sink: IConnectionSink, queueCapacity: int, perWriteTimeoutMs: int, onDead: unit -> unit) =
+///
+/// Phase 870 — `internal` rather than private so the live-session
+/// endpoint (`LiveSessionHandler`) writes its frames through the same
+/// writer. It depends on `IConnectionSink` alone, so sharing it couples
+/// that endpoint to nothing of this manager's: no registry, no keepalive
+/// timer, no trace.
+type internal ConnectionWriter(sink: IConnectionSink, queueCapacity: int, perWriteTimeoutMs: int, onDead: unit -> unit)
+    =
 
     let channel =
         Channel.CreateBounded<byte[]>(
@@ -322,6 +329,16 @@ type private ConnectionWriter(sink: IConnectionSink, queueCapacity: int, perWrit
     /// host is tearing down.
     member _.Completion: Task = loop
 
+/// Phase 870 — the two `ConnectionWriter` bounds, named once so every
+/// endpoint that writes through one uses the same answer. The reasoning
+/// for each value is on the `SSEConnectionManager` fields that read them.
+module internal ConnectionWriterDefaults =
+    [<Literal>]
+    let PerWriteTimeoutMs = 5_000
+
+    [<Literal>]
+    let QueueCapacity = 256
+
 type SSEConnectionManager(?maxConnectionsPerScope: int) =
     let connections = ConcurrentDictionary<string, ConnectionWriter list>()
 
@@ -339,7 +356,7 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
     /// dead-connection eviction path removes it. Phase 6k will
     /// replace the WhenAll fan-out with a per-connection writer
     /// queue; this is the bounded-by-default fix in the meantime.
-    let perWriteTimeoutMs = 5_000
+    let perWriteTimeoutMs = ConnectionWriterDefaults.PerWriteTimeoutMs
 
     /// Phase 6k — how many frames one connection may fall behind
     /// before it is treated as dead. Deliberately an internal constant
@@ -349,7 +366,7 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
     /// notification channel. 256 frames is several seconds of the
     /// densest stream the SDK produces (AI message deltas) and a few
     /// KB per idle connection.
-    let queueCapacity = 256
+    let queueCapacity = ConnectionWriterDefaults.QueueCapacity
 
     /// Phase 6h follow-up — Workstream B. Bounded ring-buffer of recent
     /// broadcasts. Capacity 100 (we keep the most-recent 100 entries

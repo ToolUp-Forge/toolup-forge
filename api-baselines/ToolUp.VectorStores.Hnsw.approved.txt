@@ -20,6 +20,11 @@ ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore+HnswParameters.NeighbourHeuristic :
 ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore+HnswParametersModule (class)
 ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore+HnswParametersModule.defaults : ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore+HnswParameters { get }
 ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore+HnswParametersModule.validate(ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore+HnswParameters) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
+ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore+HnswScopeSnapshotUnreadableException (class)
+ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore+HnswScopeSnapshotUnreadableException..ctor(System.String, System.String, System.String)
+ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore+HnswScopeSnapshotUnreadableException.BlobLocation : System.String { get }
+ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore+HnswScopeSnapshotUnreadableException.Reason : System.String { get }
+ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore+HnswScopeSnapshotUnreadableException.ScopeKey : System.String { get }
 ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore+HnswVectorStore (class)
 ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore+HnswVectorStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore+HnswParameters])
 ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore+IndexEntry (class)

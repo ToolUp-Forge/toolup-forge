@@ -149,7 +149,7 @@ caused it is the cheaper outcome.
 | Knob | Setter | Range | Default | Notes |
 |---|---|---|---|---|
 | `TopK` | `withTopK` | `[1, 100]` | `5` | `> 50` warns rather than refuses — legal, but the retrieval block starts dominating the prompt budget. |
-| `MinScore` | `withMinScore` | `[0.0, 1.0]` or `None` | `None` | Cosine-similarity gate. `None` disables it. |
+| `MinScore` | `withMinScore` | `[0.0, 1.0]` or `None` | `None` | Gates the composed pipeline's score space: the fused score normalised onto `[0, 1]` within each query's pool (the default, hybrid composition), or cosine similarity (`withoutSparseIndex`). `None` disables it. The `rag-min-score-space` validator warns when a threshold cannot be met, or cannot be confirmed reachable (a composed reranker, a supplied pipeline). See `docs/migrations/866-retrieval-score-scale.md`. |
 | `MmrLambda` | `withMmrLambda` | `[0.0, 1.0]` | `0.5` | Only checked when MMR is enabled — an inert λ is not a misconfiguration. |
 | `SnippetCharLimit` | `withSnippetCharLimit` | `[32, 8192]` | `240` | Below 32 a Sources-panel preview is unidentifiable; above 8192 it ships whole documents to every client. |
 | `IngestionConcurrency` | `withIngestionConcurrency` | `[1, 64]` | `8` | Effective upstream embedding-call concurrency; above 64 hosted providers rate-limit you into the retry path. |

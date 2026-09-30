@@ -626,6 +626,356 @@ let private decoratorTests =
         }
     ]
 
+// ─── Phase 865 — the budget decorators forward the override ─────
+//
+// Phase 661 taught metering and the quota gate to forward
+// `IAIProviderModelOverride`; the two budget decorators (Phase 9s's
+// per-user token hour, Phase 499's monetary spend gate) implemented
+// `IAIProvider` only. The `SendMessageWith` extension dispatches on the
+// OUTERMOST provider's runtime type, so one budget decorator anywhere in
+// the chain turned every override into the configured model's plain
+// send — triage paid full price on any deployment that also set a
+// budget. These cases compose the four decorators the way
+// `wrapFactoryForDI` does, and then in every other order.
+
+let private budgetConfigOver (values: Map<string, string>) =
+    { new IConfigStore with
+        member _.GetRaw(_scope, moduleKey) = async {
+            return
+                if moduleKey = AIBudgetConfigKey.value then
+                    values
+                else
+                    Map.empty
+        }
+
+        member _.Get<'T>(_scope, _moduleKey) : Async<'T option> = failwith "not used by the budget path"
+
+        member _.GetEffective<'T>(_scope, _moduleKey, _schema) : Async<'T> = failwith "not used by the budget path"
+
+        member _.Set<'T>(_scope, _moduleKey, _value: 'T, _schema) = failwith "not used by the budget path"
+
+        member _.SetRaw(_scope, _moduleKey, _values, _schema) = failwith "not used by the budget path"
+
+        member _.Clear(_scope, _moduleKey) = failwith "not used by the budget path"
+
+        member _.Erase(_scopeId, _subjectUserId, _policy, _dryRun) = failwith "not used by the budget path"
+    }
+
+/// A fixed instant, so the budget windows are not a function of when
+/// the suite runs.
+let private noon = DateTime(2026, 9, 16, 12, 30, 0, DateTimeKind.Utc)
+
+let private latencyJson =
+    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+
+/// One recorded turn by `userId` on `(acme, model)` — what both budget
+/// windows sum.
+let private writeTurn (store: IEventStore) (userId: string) (model: string) (prompt: int) (output: int) =
+    let record: AILatencyRecord = {
+        TaskId = Guid.NewGuid()
+        ConversationId = Guid.NewGuid()
+        UserId = userId
+        TurnNumber = 1
+        ProviderName = "acme"
+        ProviderModel = model
+        TtftMs = None
+        TurnDurationMs = 10.0
+        ToolCalls = []
+        StopReason = "end_turn"
+        PromptTokens = Some prompt
+        CachedPromptTokens = Some 0
+        OutputTokens = Some output
+        CacheCreationTokens = Some 0
+    }
+
+    store.Write {
+        Id = Guid.NewGuid()
+        OccurredAt = noon
+        ScopeId = scopeId
+        SourceModule = AILatencyRecord.SourceModule
+        EventType = AILatencyRecord.EventType
+        Payload = System.Text.Json.JsonSerializer.Serialize(record, latencyJson)
+    }
+    |> Async.RunSynchronously
+
+let private tokenBudget (values: Map<string, string>) (store: IEventStore) =
+    AIBudgetEnforcer.AIBudgetEnforcer(
+        budgetConfigOver values,
+        store,
+        AIBudgetEnforcer.AIBudgetWindowCache(30),
+        AIBudgetEnforcer.eventStoreAccount store (fun () -> noon),
+        fun () -> noon
+    )
+
+let private spendBudget (values: Map<string, string>) (store: IEventStore) =
+    AIBudgetEnforcer.AISpendEnforcer(
+        budgetConfigOver values,
+        store,
+        rateCard,
+        AIBudgetEnforcer.AISpendWindowCache(30),
+        AIBudgetEnforcer.spendEventStoreAccount store rateCard.Currency (fun () -> noon),
+        ignore,
+        fun () -> noon
+    )
+
+/// Ceilings generous enough never to bind, but CONFIGURED — so each
+/// budget gate runs its real check rather than the unconfigured
+/// short-circuit, and the forwarding is exercised through the gate.
+let private generousTokenCap =
+    Map.ofList [ AIBudgetConfigKey.maxTokensPerUserPerHour, "10000000" ]
+
+let private generousSpendCap =
+    Map.ofList [
+        AIBudgetConfigKey.maxSpendPerUser, "1000"
+        AIBudgetConfigKey.spendPerUserPeriod, "daily"
+    ]
+
+/// The four decorators, keyed by the name a failure reports.
+let private decoratorLayers () : (string * (IAIProviderFactory -> IAIProviderFactory)) list =
+    let store = ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore
+
+    let metering (f: IAIProviderFactory) =
+        AIProviderUsageMiddleware.MeteringProviderFactory(f, CollectingUsageLog(), emptyProviderProfile, Some rateCard)
+        :> IAIProviderFactory
+
+    let quota (f: IAIProviderFactory) =
+        AIProviderUsageMiddleware.QuotaEnforcingProviderFactory(f, quotaPolicy false) :> IAIProviderFactory
+
+    let tokens (f: IAIProviderFactory) =
+        AIProviderUsageMiddleware.BudgetEnforcingProviderFactory(f, tokenBudget generousTokenCap store)
+        :> IAIProviderFactory
+
+    let spend (f: IAIProviderFactory) =
+        AIProviderUsageMiddleware.SpendEnforcingProviderFactory(f, spendBudget generousSpendCap store)
+        :> IAIProviderFactory
+
+    [
+        ("metering", metering)
+        ("quota", quota)
+        ("token budget", tokens)
+        ("spend", spend)
+    ]
+
+/// Every ordering of `xs`.
+let rec private orderings (xs: int list) : int list list =
+    match xs with
+    | [] -> [ [] ]
+    | _ ->
+        xs
+        |> List.collect (fun x -> orderings (List.filter ((<>) x) xs) |> List.map (fun rest -> x :: rest))
+
+/// The chain `order` builds, named outermost first.
+let private chainName (order: int list) : string =
+    let layers = decoratorLayers ()
+    order |> List.rev |> List.map (fun i -> fst layers[i]) |> String.concat " > "
+
+/// Stack `order` over `inner`, FIRST element innermost — the order
+/// `wrapFactoryForDI` builds in.
+let private stack (order: int list) (inner: IAIProvider) : IAIProvider * string =
+    let layers = decoratorLayers ()
+
+    let factory =
+        order
+        |> List.fold (fun (f: IAIProviderFactory) i -> (snd layers[i]) f) (factoryOver inner)
+
+    resolveThrough factory, chainName order
+
+/// Both override entry points through `provider`, each asserted to have
+/// reached `native` with the options it was sent.
+let private assertOverrideSurvives (provider: IAIProvider) (native: NativeProvider) (chain: string) = async {
+    let before = native.NativeCalls
+
+    let! plain =
+        provider.SendMessageWith(
+            AIProviderCallOptions.forModel "acme-mini",
+            [ userMessage "hi" ],
+            [],
+            None,
+            None,
+            RetryPolicy.defaults
+        )
+
+    Expect.equal (okCall plain).Model (OverrideHonoured "acme-mini") $"SendMessageWith honoured through {chain}"
+
+    let! structured =
+        provider.SendStructuredMessageWith(
+            AIProviderCallOptions.forModel "acme-mini",
+            [ userMessage "hi" ],
+            [],
+            None,
+            "{}",
+            RetryPolicy.defaults
+        )
+
+    Expect.equal
+        (okCall structured).Model
+        (OverrideHonoured "acme-mini")
+        $"SendStructuredMessageWith honoured through {chain}"
+
+    Expect.equal native.NativeCalls (before + 2) $"the innermost provider's override path served both, through {chain}"
+    Expect.equal native.SendCalls 0 $"the plain send was never substituted for it, through {chain}"
+    Expect.equal native.LastOptions (Some(AIProviderCallOptions.forModel "acme-mini")) "the options arrived"
+}
+
+let private budgetForwardingTests =
+    testList "Phase 865 — budget decorators forward the model override" [
+        testCaseAsync "the deployment chain — metering, quota, token budget, spend — delivers the override"
+        <| async {
+            let native = NativeProvider("acme", "acme-1", isAcme)
+            // `wrapFactoryForDI`'s order: metering innermost, spend outermost.
+            let provider, chain = stack [ 0; 1; 2; 3 ] native
+            do! assertOverrideSurvives provider native chain
+        }
+
+        testList
+            "every order of the four decorators"
+            (orderings [ 0; 1; 2; 3 ]
+             |> List.map (fun order ->
+                 testCaseAsync (chainName order)
+                 <| async {
+                     let native = NativeProvider("acme", "acme-1", isAcme)
+                     let provider, chain = stack order native
+                     do! assertOverrideSurvives provider native chain
+                 }))
+
+        testCaseAsync "the token budget still refuses an over-budget call on the override path"
+        <| async {
+            let store = ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            writeTurn store alice "acme-mini" 900 200
+            let native = NativeProvider("acme", "acme-1", isAcme)
+
+            let provider =
+                AIProviderUsageMiddleware.BudgetEnforcingProviderFactory(
+                    factoryOver native,
+                    tokenBudget (Map.ofList [ AIBudgetConfigKey.maxTokensPerUserPerHour, "1000" ]) store
+                )
+                :> IAIProviderFactory
+                |> resolveThrough
+
+            let! r =
+                provider.SendMessageWith(
+                    AIProviderCallOptions.forModel "acme-mini",
+                    [ userMessage "hi" ],
+                    [],
+                    None,
+                    None,
+                    RetryPolicy.defaults
+                )
+
+            match r with
+            | Error(PermanentClient(429, msg)) ->
+                Expect.stringContains msg "Token budget exceeded for this user this hour" "the per-user hour refused"
+            | other -> failtestf "expected the token budget to refuse, got %A" other
+
+            Expect.equal native.NativeCalls 0 "the override path was never reached"
+            Expect.equal native.SendCalls 0 "nor the plain one"
+        }
+
+        testCaseAsync "the spend gate still refuses an over-budget call on the override path"
+        <| async {
+            let store = ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            // 1M in @ 3.00 + 1M out @ 15.00 = 18.00 spent against a 5.00 ceiling.
+            writeTurn store alice "acme-1" 1_000_000 1_000_000
+            let native = NativeProvider("acme", "acme-1", isAcme)
+
+            let provider =
+                AIProviderUsageMiddleware.SpendEnforcingProviderFactory(
+                    factoryOver native,
+                    spendBudget
+                        (Map.ofList [
+                            AIBudgetConfigKey.maxSpendPerUser, "5.00"
+                            AIBudgetConfigKey.spendPerUserPeriod, "daily"
+                        ])
+                        store
+                )
+                :> IAIProviderFactory
+                |> resolveThrough
+
+            let! r =
+                provider.SendStructuredMessageWith(
+                    AIProviderCallOptions.forModel "acme-mini",
+                    [ userMessage "hi" ],
+                    [],
+                    None,
+                    "{}",
+                    RetryPolicy.defaults
+                )
+
+            match r with
+            | Error(PermanentClient(429, msg)) ->
+                Expect.stringContains msg "AI spend budget exceeded" "the monetary gate refused"
+            | other -> failtestf "expected the spend gate to refuse, got %A" other
+
+            Expect.equal native.NativeCalls 0 "the override path was never reached"
+            Expect.equal native.SendCalls 0 "nor the plain one"
+        }
+
+        testCaseAsync "the spend gate estimates the override path against the model that will run"
+        <| async {
+            // Nothing spent. One call's estimate is ~1 prompt token plus
+            // `AssumedOutputTokens` of output: ~0.015 on the frontier
+            // rate card entry, ~0.0005 on the cheap one. A 0.01 ceiling
+            // sits between them, so the verdict names the model priced.
+            let store = ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let native = NativeProvider("acme", "acme-1", isAcme)
+
+            let provider =
+                AIProviderUsageMiddleware.SpendEnforcingProviderFactory(
+                    factoryOver native,
+                    spendBudget
+                        (Map.ofList [
+                            AIBudgetConfigKey.maxSpendPerUser, "0.01"
+                            AIBudgetConfigKey.spendPerUserPeriod, "daily"
+                        ])
+                        store
+                )
+                :> IAIProviderFactory
+                |> resolveThrough
+
+            // The probe that the ceiling discriminates at all: the plain
+            // send runs on the frontier model and is refused.
+            let! plain = provider.SendMessage([ userMessage "hi" ], [], None, None, RetryPolicy.defaults)
+
+            match plain with
+            | Error(PermanentClient(429, _)) -> ()
+            | other -> failtestf "expected the frontier-priced plain call to be refused, got %A" other
+
+            // The same request naming the cheap model is priced on the
+            // cheap model, and fits.
+            let! cheap =
+                provider.SendMessageWith(
+                    AIProviderCallOptions.forModel "acme-mini",
+                    [ userMessage "hi" ],
+                    [],
+                    None,
+                    None,
+                    RetryPolicy.defaults
+                )
+
+            Expect.equal (okCall cheap).Model (OverrideHonoured "acme-mini") "admitted and served on the cheap model"
+
+            // An override naming a model the rate card does not price for
+            // this provider is estimated at the configured model — the one
+            // it falls back to — never at a count-only zero.
+            let! unpriced =
+                provider.SendMessageWith(
+                    AIProviderCallOptions.forModel "acme-unlisted",
+                    [ userMessage "hi" ],
+                    [],
+                    None,
+                    None,
+                    RetryPolicy.defaults
+                )
+
+            match unpriced with
+            | Error(PermanentClient(429, _)) -> ()
+            | other -> failtestf "expected an unpriced override to be estimated at the configured model, got %A" other
+
+            Expect.equal native.NativeCalls 1 "only the admitted call reached the provider"
+            Expect.equal native.SendCalls 0 "and no refused call leaked through the plain path"
+        }
+    ]
+
 // ─── The conformance pack, bound per implementation ──────────────
 //
 // `IAIProviderModelOverride` is a replaceable seam (Phase 259: a public
@@ -675,6 +1025,32 @@ let private contractBindings =
                 )
                 :> IAIProviderFactory
                 |> resolveThrough))
+
+        // Phase 865 — the two budget decorators, with configured ceilings
+        // so the pack runs through their real gates.
+        IAIProviderModelOverrideContract.tests
+            "BudgetEnforcingProvider (AI.Server)"
+            (wrapped (fun inner ->
+                AIProviderUsageMiddleware.BudgetEnforcingProviderFactory(
+                    factoryOver inner,
+                    tokenBudget
+                        generousTokenCap
+                        (ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore)
+                )
+                :> IAIProviderFactory
+                |> resolveThrough))
+
+        IAIProviderModelOverrideContract.tests
+            "SpendEnforcingProvider (AI.Server)"
+            (wrapped (fun inner ->
+                AIProviderUsageMiddleware.SpendEnforcingProviderFactory(
+                    factoryOver inner,
+                    spendBudget
+                        generousSpendCap
+                        (ToolUp.Platform.InMemoryEventStore.InMemoryEventStore() :> IEventStore)
+                )
+                :> IAIProviderFactory
+                |> resolveThrough))
     ]
 
 let tests =
@@ -683,5 +1059,6 @@ let tests =
         familyTests
         dispatchTests
         decoratorTests
+        budgetForwardingTests
         contractBindings
     ]

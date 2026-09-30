@@ -36,8 +36,33 @@ module ServerConfig =
     /// and the coverage test holds the declaration to this call graph.
     let private envVar (name: string) = ConfigResolution.tryValue name
 
+    /// Phase 868 — the raw text of a boolean key, surrounding whitespace
+    /// trimmed. A value that is only whitespace reads as unset, like the
+    /// empty string the seam already folds to `None`. Every boolean parser
+    /// below matches on this, so they agree on what `"yes "` means.
+    let private envFlagText (name: string) : string option =
+        envVar name
+        |> Option.map _.Trim()
+        |> Option.filter (not << String.IsNullOrEmpty)
+
+    // ── THE DIRECTION RULE — which boolean parser a new flag takes ──────
+    //
+    // Ask what `true` does. If `true` turns a protection or a behaviour ON
+    // (`RequireHttps`, `MigrateWebhookSecretsAtRest`, `BackfillMissedTicks`),
+    // a mistyped value that read as `false` would silently leave it off, so
+    // the flag takes `envFlagOrFail`: a malformed value stops startup. If
+    // `true` DISABLES a check or acknowledges a refusal (every `Accept*`
+    // escape hatch, `SkipPreflight`), a mistyped value that reads as `false`
+    // leaves the check running, which is the safe direction, so the flag takes
+    // the lenient `envFlag`. Both trim surrounding whitespace and read
+    // whitespace-only as unset (Phase 868; the table is in DEPLOYMENT.md).
+
+    /// Lenient boolean: `1` / `true` / `yes` / `on` (case-insensitive,
+    /// trimmed) → `true`; anything else, including unset and a typo, →
+    /// `false`. For the flags whose `true` DISABLES a check — see the
+    /// direction rule above before reaching for it on a new flag.
     let private envFlag (name: string) =
-        match envVar name |> Option.map _.ToLowerInvariant() with
+        match envFlagText name |> Option.map _.ToLowerInvariant() with
         | Some("1" | "true" | "yes" | "on") -> true
         | _ -> false
 
@@ -48,20 +73,30 @@ module ServerConfig =
     /// misreports client IPs and breaks HTTPS redirects). Missing →
     /// `defaultWhenMissing`. Recognised: `1` / `true` / `yes` / `on`
     /// → `true`; `0` / `false` / `no` / `off` → `false` (all case-
-    /// insensitive). Any other value throws at startup, mirroring the
-    /// `SERVER_PORT` fail-fast pattern in `SDK.Server.compose` — names
-    /// the offending value and points at the recognised set.
+    /// insensitive, surrounding whitespace ignored). Any other value
+    /// throws at startup, mirroring the `SERVER_PORT` fail-fast pattern
+    /// in `SDK.Server.compose` — names the offending value as written and
+    /// points at the recognised set. Phase 868 moved every flag whose
+    /// `true` turns a protection ON here (direction rule above).
     let private envFlagOrFail (name: string) (defaultWhenMissing: bool) =
-        match envVar name |> Option.map _.ToLowerInvariant() with
+        match envFlagText name with
         | None -> defaultWhenMissing
-        | Some("1" | "true" | "yes" | "on") -> true
-        | Some("0" | "false" | "no" | "off") -> false
-        | Some other ->
-            failwithf
-                "%s=%s is not a recognised boolean value. Expected one of: 1, true, yes, on (case-insensitive) → on; 0, false, no, off → off. Unset the variable to use the default (%b)."
-                name
-                other
-                defaultWhenMissing
+        | Some raw ->
+            match raw.ToLowerInvariant() with
+            | "1"
+            | "true"
+            | "yes"
+            | "on" -> true
+            | "0"
+            | "false"
+            | "no"
+            | "off" -> false
+            | _ ->
+                failwithf
+                    "%s=%s is not a recognised boolean value. Expected one of: 1, true, yes, on (case-insensitive) → on; 0, false, no, off → off. Unset the variable to use the default (%b)."
+                    name
+                    raw
+                    defaultWhenMissing
 
     /// Phase 66 Stream A.8 — parse a single token from
     /// `TOOLUP_PLATFORM_SURFACES` into a `SurfaceProfile`. Accepts
@@ -329,28 +364,44 @@ module ServerConfig =
     /// like `IncludePlatformDefaults` (default `true`) where a plain
     /// `envFlag` (false-when-unset) would wrongly flip an unset var off.
     let private envFlagTri (name: string) (overrideVal: bool option) (fallback: bool) : bool =
-        match envVar name |> Option.map _.ToLowerInvariant() with
-        | Some("1" | "true" | "yes" | "on") -> true
-        | Some("0" | "false" | "no" | "off") -> false
-        | Some other ->
-            failwithf
-                "%s=%s is not a recognised boolean value. Expected 1/true/yes/on or 0/false/no/off (case-insensitive). Unset the variable to use the configured value."
-                name
-                other
+        match envFlagText name with
         | None -> overrideVal |> Option.defaultValue fallback
+        | Some raw ->
+            match raw.ToLowerInvariant() with
+            | "1"
+            | "true"
+            | "yes"
+            | "on" -> true
+            | "0"
+            | "false"
+            | "no"
+            | "off" -> false
+            | _ ->
+                failwithf
+                    "%s=%s is not a recognised boolean value. Expected 1/true/yes/on or 0/false/no/off (case-insensitive). Unset the variable to use the configured value."
+                    name
+                    raw
 
     /// Phase 71.A.6 — optional boolean: `Some` when set (fail loud on
     /// garbage), `None` when unset (preserves a `bool option` default).
     let private envFlagOpt (name: string) : bool option =
-        match envVar name |> Option.map _.ToLowerInvariant() with
+        match envFlagText name with
         | None -> None
-        | Some("1" | "true" | "yes" | "on") -> Some true
-        | Some("0" | "false" | "no" | "off") -> Some false
-        | Some other ->
-            failwithf
-                "%s=%s is not a recognised boolean value. Expected 1/true/yes/on or 0/false/no/off (case-insensitive). Unset the variable to leave it unset."
-                name
-                other
+        | Some raw ->
+            match raw.ToLowerInvariant() with
+            | "1"
+            | "true"
+            | "yes"
+            | "on" -> Some true
+            | "0"
+            | "false"
+            | "no"
+            | "off" -> Some false
+            | _ ->
+                failwithf
+                    "%s=%s is not a recognised boolean value. Expected 1/true/yes/on or 0/false/no/off (case-insensitive). Unset the variable to leave it unset."
+                    name
+                    raw
 
     /// Phase 71.A.6 — optional positive int64: parse when set, warn + `None`
     /// on garbage, `None` (or `none`/`0`) when unset.
@@ -591,7 +642,7 @@ module ServerConfig =
                 Surfaces = surfaces
                 ModuleFilter = envVar ConfigKeys.Names.moduleFilter
                 ModuleBindingTrust = moduleBindingTrust
-                RequireHttps = envFlag ConfigKeys.Names.requireHttps
+                RequireHttps = envFlagOrFail ConfigKeys.Names.requireHttps defaults.RequireHttps
                 TrustForwardedHeaders =
                     envFlagOrFail ConfigKeys.Names.trustForwardedHeaders defaults.TrustForwardedHeaders
                 // Phase 325 — trusted-proxy CIDR allowlist + its escape hatch.
@@ -699,7 +750,8 @@ module ServerConfig =
                 AcceptInviteByEmailWithoutDirectory = envFlag ConfigKeys.Names.acceptInviteByEmailWithoutDirectory
                 // Phase 547.C — inviter notification on invite expiry.
                 // Same GP 11 shape: unset ⇒ `false` (off).
-                NotifyInviterOnInviteExpiry = envFlag ConfigKeys.Names.notifyInviterOnInviteExpiry
+                NotifyInviterOnInviteExpiry =
+                    envFlagOrFail ConfigKeys.Names.notifyInviterOnInviteExpiry defaults.NotifyInviterOnInviteExpiry
                 // Phase 460 — the share-token ephemeral-key acknowledgement.
                 // Same GP 11 shape as the rest of the family: unset ⇒ `false`,
                 // and the provenance validator still refuses a production-shaped
@@ -711,13 +763,14 @@ module ServerConfig =
                 PublicBaseUrl = parsePublicBaseUrl logger
                 // Phase 71.A.6 — boolean / scalar bundle. Each is additive and
                 // preserves GP 11: unset → the prior `defaults.X` value.
-                BackfillMissedTicks = envFlag ConfigKeys.Names.backfillMissedTicks
+                BackfillMissedTicks = envFlagOrFail ConfigKeys.Names.backfillMissedTicks defaults.BackfillMissedTicks
                 // Phase 598 tail — env lift for the event-trigger catch-up
                 // opt-in, 71.A.6 parity with TOOLUP_BACKFILL_MISSED_TICKS.
-                EventTriggerCatchUp = envFlag ConfigKeys.Names.eventTriggerCatchUp
-                MigrateWebhookSecretsAtRest = envFlag ConfigKeys.Names.migrateWebhookSecretsAtRest
+                EventTriggerCatchUp = envFlagOrFail ConfigKeys.Names.eventTriggerCatchUp defaults.EventTriggerCatchUp
+                MigrateWebhookSecretsAtRest =
+                    envFlagOrFail ConfigKeys.Names.migrateWebhookSecretsAtRest defaults.MigrateWebhookSecretsAtRest
                 SkipPreflight = envFlag ConfigKeys.Names.skipPreflight
-                HealthStateTracking = envFlag ConfigKeys.Names.healthStateTracking
+                HealthStateTracking = envFlagOrFail ConfigKeys.Names.healthStateTracking defaults.HealthStateTracking
                 EnableCitationDevEndpoint = envFlagOpt ConfigKeys.Names.enableCitationDevEndpoint
                 MaxRequestBodyBytes = envInt64Opt logger ConfigKeys.Names.maxRequestBodyBytes
                 SlowRateLimitThreshold =

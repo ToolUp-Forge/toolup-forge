@@ -13,6 +13,7 @@ open KnowledgeBase.ServerIndexStorage
 open KnowledgeBase.ServerApiDeps
 open KnowledgeBase.ServerApiDocuments
 open KnowledgeBase.ServerOriginalSourceResolver
+open KnowledgeBase.ServerIngestionObserver
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 
 // ─── Phase 510 — KB document versioning + incremental re-index ───────
@@ -548,5 +549,178 @@ let tests =
                 Expect.equal doc.ContentHash None "the pre-14x missing option property still absorbs to None"
                 Expect.equal doc.Version 1 "the missing Version number is coerced to 1 at the store, never left at 0"
             | other -> failtest $"expected the single legacy document, got %A{other}"
+        }
+    ]
+
+// ─── Phase 867 — ingestion status is truthful ────────────────────────
+//
+// The status surface the KB client polls every two seconds had two
+// faults that no test above could see, because every test above stops at
+// the ENQUEUE and never drives the ingestion observer:
+//
+//   * an incremental re-index stamps the document's FULL chunk count but
+//     enqueues only the changed positions, and the observer completed at
+//     `processed >= ChunkCount` — so a re-upload that changed a strict
+//     subset sat at `Embedding(k, n)` until a restart marked it failed;
+//   * `Failed` was not terminal: a chunk failure followed by a chunk
+//     success wrote `Embedding(1, n)` over it.
+//
+// These drive the observer exactly as the ingestion service does — one
+// `OnChunkIndexed` / `OnChunkFailed` per enqueued chunk — and read the
+// status the index persisted, which is what `GetStatus` and a restart see.
+
+/// The per-chunk projection the ingestion service hands its observers.
+let private chunkJobsOf (doc: DocumentIngestionJob) : IngestionJob list =
+    doc.Chunks
+    |> List.map (fun (chunkId, chunk) -> {
+        DocumentId = doc.DocumentId
+        DocumentName = doc.DocumentName
+        ChunkId = chunkId
+        Chunk = chunk
+        Scope = doc.Scope
+        ScopeId = doc.ScopeId
+        Container = doc.Container
+        OriginatingUserId = doc.OriginatingUserId
+        Attempt = doc.Attempt
+    })
+
+/// `uploadDocument` enqueues from a background pass; wait for the job
+/// itself rather than for a status, which a supersede reaches before the
+/// enqueue lands.
+let private awaitJobs (queue: IngestionQueue) : Async<DocumentIngestionJob list> = async {
+    let deadline = DateTimeOffset.UtcNow.AddSeconds 30.0
+    let mutable jobs = []
+
+    while jobs.IsEmpty && DateTimeOffset.UtcNow < deadline do
+        jobs <- drain queue
+
+        if jobs.IsEmpty then
+            do! Async.Sleep 25
+
+    if jobs.IsEmpty then
+        return failtest "no ingestion job was enqueued within 30s"
+    else
+        return jobs
+}
+
+let private persistedDoc (storage: IBlobStorage) (container: string) (docId: string) = async {
+    let! index = loadIndex storage container
+
+    match index |> List.tryFind (fun d -> d.Id = docId) with
+    | Some doc -> return doc
+    | None -> return failtest (sprintf "document %s is not in the index" docId)
+}
+
+let ingestionStatusTruth =
+    testList "Phase 867 — ingestion status is truthful" [
+
+        testCaseAsync
+            "an incremental re-index that re-embeds a strict subset reaches Complete, reporting the document's full chunk count"
+        <| async {
+            let container = "team-867-a"
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let queue = IngestionQueue()
+
+            let deps = mkDeps storage queue None KnowledgeVersioningPolicy.enabled container
+
+            let observer = makeIngestionStatusObserver storage None noopLogger
+
+            let! first = uploadDocument deps (csvOf 300 "0299") "data.csv"
+            let! firstJobs = awaitJobs queue
+
+            for job in firstJobs |> List.collect chunkJobsOf do
+                do! observer.OnChunkIndexed job
+
+            let! v1 = persistedDoc storage container first.Id
+            Expect.equal v1.Status (Complete v1.ChunkCount) "precondition: the first, full ingest completes"
+
+            let! second = uploadDocument deps (csvOf 300 "9999") "data.csv"
+            Expect.equal second.Id first.Id "precondition: the edit supersedes in place"
+            let! secondJobs = awaitJobs queue
+            let reEnqueued = secondJobs |> List.collect chunkJobsOf
+
+            Expect.isLessThan
+                reEnqueued.Length
+                v1.ChunkCount
+                "precondition: the re-index enqueued a strict subset of the document's chunks"
+
+            for job in reEnqueued do
+                do! observer.OnChunkIndexed job
+
+            let! v2 = persistedDoc storage container second.Id
+
+            Expect.equal
+                v2.Status
+                (Complete v1.ChunkCount)
+                "every enqueued chunk was indexed, so the document is Complete — and Complete reports the document's full chunk count, not the re-embedded subset"
+
+            Expect.equal v2.ChunkCount v1.ChunkCount "the index keeps the document's full ChunkCount for display"
+        }
+
+        testCaseAsync "a chunk failure followed by a chunk success leaves the document Failed"
+        <| async {
+            let container = "team-867-b"
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let queue = IngestionQueue()
+
+            let deps = mkDeps storage queue None KnowledgeVersioningPolicy.disabled container
+
+            let observer = makeIngestionStatusObserver storage None noopLogger
+
+            let! doc = uploadDocument deps (csvOf 300 "0299") "data.csv"
+            let! jobs = awaitJobs queue
+            let chunks = jobs |> List.collect chunkJobsOf
+            Expect.isGreaterThan chunks.Length 1 "precondition: the fixture produces several chunks"
+
+            do! observer.OnChunkFailed(chunks[0], "embedding provider unavailable")
+            do! observer.OnChunkIndexed chunks[1]
+
+            let! persisted = persistedDoc storage container doc.Id
+
+            match persisted.Status with
+            | Failed _ -> ()
+            | other -> failtestf "Failed must be terminal for the attempt; a later success moved it to %A" other
+
+            match statusCache.TryGetValue doc.Id with
+            | true, Failed _ -> ()
+            | _, other -> failtestf "the status cache must agree with the index; it holds %A" other
+        }
+
+        testCaseAsync "a late callback from a superseded ingestion attempt does not advance the current one"
+        <| async {
+            let container = "team-867-c"
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let queue = IngestionQueue()
+
+            let deps = mkDeps storage queue None KnowledgeVersioningPolicy.enabled container
+
+            let observer = makeIngestionStatusObserver storage None noopLogger
+
+            // Attempt one is enqueued and never indexed — its chunks are
+            // still in flight (a scheduled retry, a slow drainer) when the
+            // edited re-upload starts attempt two.
+            let! first = uploadDocument deps (csvOf 300 "0299") "data.csv"
+            let! staleJobs = awaitJobs queue
+            let stale = staleJobs |> List.collect chunkJobsOf
+
+            let! _ = uploadDocument deps (csvOf 300 "9999") "data.csv"
+            let! currentJobs = awaitJobs queue
+            let current = currentJobs |> List.collect chunkJobsOf
+
+            // Every chunk of the superseded attempt now reports success.
+            for job in stale do
+                do! observer.OnChunkIndexed job
+
+            let! afterStale = persistedDoc storage container first.Id
+
+            match afterStale.Status with
+            | Embedding(0, total) -> Expect.equal total current.Length "attempt two's own total is unchanged"
+            | other -> failtestf "the superseded attempt's callbacks moved the current attempt to %A" other
+
+            for job in current do
+                do! observer.OnChunkIndexed job
+
+            let! settled = persistedDoc storage container first.Id
+            Expect.equal settled.Status (Complete settled.ChunkCount) "attempt two completes on its own chunks"
         }
     ]

@@ -5,7 +5,8 @@
 # still be folded into this file in the same PR.
 ToolUp.RAG.IngestionTypes (class)
 ToolUp.RAG.IngestionTypes+DocumentIngestionJob (class)
-ToolUp.RAG.IngestionTypes+DocumentIngestionJob..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.VectorKnowledgeTypes+TextChunk]], ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.RAG.IngestionTypes+DocumentIngestionJob..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.VectorKnowledgeTypes+TextChunk]], ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IngestionAttempt])
+ToolUp.RAG.IngestionTypes+DocumentIngestionJob.Attempt : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IngestionAttempt] { get }
 ToolUp.RAG.IngestionTypes+DocumentIngestionJob.Chunks : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.VectorKnowledgeTypes+TextChunk]] { get }
 ToolUp.RAG.IngestionTypes+DocumentIngestionJob.Container : System.String { get }
 ToolUp.RAG.IngestionTypes+DocumentIngestionJob.DocumentId : System.String { get }
@@ -49,11 +50,16 @@ ToolUp.RAG.IngestionTypes+InMemoryIngestionQueueStore (class)
 ToolUp.RAG.IngestionTypes+InMemoryIngestionQueueStore..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.RAG.IngestionTypes+InMemoryIngestionQueueStore.Dropped : System.Int32 { get }
 ToolUp.RAG.IngestionTypes+InMemoryIngestionQueueStore.MaxDeliveryAttempts : System.Int32 { get }
+ToolUp.RAG.IngestionTypes+IngestionAttempt (class)
+ToolUp.RAG.IngestionTypes+IngestionAttempt..ctor(System.String, System.Int32)
+ToolUp.RAG.IngestionTypes+IngestionAttempt.AttemptId : System.String { get }
+ToolUp.RAG.IngestionTypes+IngestionAttempt.EnqueuedChunks : System.Int32 { get }
 ToolUp.RAG.IngestionTypes+IngestionEventTypes (class)
 ToolUp.RAG.IngestionTypes+IngestionEventTypes.EmbeddingProviderUnavailable : System.String (literal)
 ToolUp.RAG.IngestionTypes+IngestionEventTypes.IngestionDeadLettered : System.String (literal)
 ToolUp.RAG.IngestionTypes+IngestionJob (class)
-ToolUp.RAG.IngestionTypes+IngestionJob..ctor(System.String, System.String, System.String, ToolUp.Platform.VectorKnowledgeTypes+TextChunk, ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.RAG.IngestionTypes+IngestionJob..ctor(System.String, System.String, System.String, ToolUp.Platform.VectorKnowledgeTypes+TextChunk, ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IngestionAttempt])
+ToolUp.RAG.IngestionTypes+IngestionJob.Attempt : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IngestionAttempt] { get }
 ToolUp.RAG.IngestionTypes+IngestionJob.Chunk : ToolUp.Platform.VectorKnowledgeTypes+TextChunk { get }
 ToolUp.RAG.IngestionTypes+IngestionJob.ChunkId : System.String { get }
 ToolUp.RAG.IngestionTypes+IngestionJob.Container : System.String { get }
@@ -95,7 +101,8 @@ ToolUp.RAG.IngestionTypes+IngestionQueue.Reader : System.Threading.Channels.Chan
 ToolUp.RAG.IngestionTypes+IngestionQueue.RecordDequeue() : System.Void
 ToolUp.RAG.IngestionTypes+IngestionQueue.RecordDrop() : System.Void
 ToolUp.RAG.IngestionTypes+IngestionRetryPayload (class)
-ToolUp.RAG.IngestionTypes+IngestionRetryPayload..ctor(System.String, System.String, System.String, System.Int32, ToolUp.Platform.VectorKnowledgeTypes+TextChunk, ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.RAG.IngestionTypes+IngestionRetryPayload..ctor(System.String, System.String, System.String, System.Int32, ToolUp.Platform.VectorKnowledgeTypes+TextChunk, ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IngestionAttempt])
+ToolUp.RAG.IngestionTypes+IngestionRetryPayload.Attempt : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IngestionAttempt] { get }
 ToolUp.RAG.IngestionTypes+IngestionRetryPayload.Chunk : ToolUp.Platform.VectorKnowledgeTypes+TextChunk { get }
 ToolUp.RAG.IngestionTypes+IngestionRetryPayload.ChunkId : System.String { get }
 ToolUp.RAG.IngestionTypes+IngestionRetryPayload.ChunkIndex : System.Int32 { get }

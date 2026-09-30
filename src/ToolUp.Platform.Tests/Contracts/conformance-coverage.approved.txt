@@ -15,7 +15,7 @@
 # interface (api-baselines) with two or more production implementations.
 # A new seam therefore arrives here on its own rather than being forgotten.
 #
-# At generation: 74 of 165 replaceable seams packed; 59 of 127 bindable packs bound twice or more.
+# At generation: 76 of 166 replaceable seams packed; 61 of 129 bindable packs bound twice or more.
 
 # Replaceable seams carrying no contract pack. Author the pack and drop the row.
 [UNPACKED]
@@ -35,7 +35,6 @@ ICitationCounters
 ICommutativeCipher
 ICompositionCapabilityGate
 IComputeBudgetStore
-IConditionalBlobStorage
 IConfigStore
 IContentScanner
 ICspContributor
@@ -106,7 +105,6 @@ ITraceLogger
 ITranscriptionProvider
 IUserDirectory
 IValidationContext
-IVectorStore
 IWebhookIdempotencyStore
 IWorkerKeyRegistry
 
@@ -186,3 +184,4 @@ ModuleContract
 # Hand-authored; a regeneration preserves these rows.
 [EXEMPT]
 IIsolatedEntryPoint: one unit of native work per implementation (an OCR pass, a Skia decode, a Verovio render), never a substitutable service — implementations are different operations by design and no law spans them; the one law they share (bytes in, bytes or a typed rejection out, never an exception across the seam) belongs to the seam and is pinned by ICompanionIsolationContract, which drives every kind of entry point through both implementations of the seam.
+IConnectionSink: one substitutable implementation (SseSink over HttpResponse, private to SSEConnectionManager.fs); the second the scanner counts is Phase 870's open-gate wrapper in LiveSessionsCompose.fs, an object expression built inside the subscribe closure that defers writes until the SSE headers are on the wire and otherwise forwards to that same SseSink — a decorator that cannot be constructed from a test, not a substitute. The one law across the seam (a write honours the linked cancellation token and a dead connection surfaces as a fault, never a hang) is pinned by the ConnectionWriter tests and by LiveSessionHostTests' faulting-body fake, which drives the wrapper through the writer.

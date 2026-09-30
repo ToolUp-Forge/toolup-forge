@@ -909,6 +909,10 @@ ToolUp.Platform.BlobBackedPublisherKeyStoreModule (class)
 ToolUp.Platform.BlobBackedPublisherKeyStoreModule.create(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.IPublisherKeyStore
 ToolUp.Platform.BlobBudgetLedger (class)
 ToolUp.Platform.BlobBudgetLedger..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.BudgetUsage, ToolUp.Platform.BudgetDenial]])
+ToolUp.Platform.BlobCodec`1 (class)
+ToolUp.Platform.BlobCodec`1..ctor(Microsoft.FSharp.Core.FSharpFunc`2[T, System.Byte[]], Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpResult`2[T, System.String]])
+ToolUp.Platform.BlobCodec`1.Decode : Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpResult`2[T, System.String]] { get }
+ToolUp.Platform.BlobCodec`1.Encode : Microsoft.FSharp.Core.FSharpFunc`2[T, System.Byte[]] { get }
 ToolUp.Platform.BlobComputeBudgetStore (class)
 ToolUp.Platform.BlobComputeBudgetStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime]])
 ToolUp.Platform.BlobCountersignatureRegistry (class)
@@ -932,6 +936,43 @@ ToolUp.Platform.BlobExternalHandleStore (class)
 ToolUp.Platform.BlobExternalHandleStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
 ToolUp.Platform.BlobExternalHandleStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
 ToolUp.Platform.BlobExternalHandleStore.TryCreate(ToolUp.Platform.BlobStorage+IBlobStorage) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IExternalHandleStore]
+ToolUp.Platform.BlobMapStoreError (class)
+ToolUp.Platform.BlobMapStoreError.IsContended : System.Boolean { get }
+ToolUp.Platform.BlobMapStoreError.IsQuarantined : System.Boolean { get }
+ToolUp.Platform.BlobMapStoreError.IsUnreadable : System.Boolean { get }
+ToolUp.Platform.BlobMapStoreError.IsWriteFailed : System.Boolean { get }
+ToolUp.Platform.BlobMapStoreError.Tag : System.Int32 { get }
+ToolUp.Platform.BlobMapStoreError+Contended (class)
+ToolUp.Platform.BlobMapStoreError+Contended.attempts : System.Int32 { get }
+ToolUp.Platform.BlobMapStoreError+Contended.blobName : System.String { get }
+ToolUp.Platform.BlobMapStoreError+Quarantined (class)
+ToolUp.Platform.BlobMapStoreError+Quarantined.blobName : System.String { get }
+ToolUp.Platform.BlobMapStoreError+Quarantined.quarantinedTo : System.String { get }
+ToolUp.Platform.BlobMapStoreError+Quarantined.reason : System.String { get }
+ToolUp.Platform.BlobMapStoreError+Tags (class)
+ToolUp.Platform.BlobMapStoreError+Tags.Contended : System.Int32 (literal)
+ToolUp.Platform.BlobMapStoreError+Tags.Quarantined : System.Int32 (literal)
+ToolUp.Platform.BlobMapStoreError+Tags.Unreadable : System.Int32 (literal)
+ToolUp.Platform.BlobMapStoreError+Tags.WriteFailed : System.Int32 (literal)
+ToolUp.Platform.BlobMapStoreError+Unreadable (class)
+ToolUp.Platform.BlobMapStoreError+Unreadable.blobName : System.String { get }
+ToolUp.Platform.BlobMapStoreError+Unreadable.reason : System.String { get }
+ToolUp.Platform.BlobMapStoreError+WriteFailed (class)
+ToolUp.Platform.BlobMapStoreError+WriteFailed.blobName : System.String { get }
+ToolUp.Platform.BlobMapStoreError+WriteFailed.reason : System.String { get }
+ToolUp.Platform.BlobMapStoreErrorModule (class)
+ToolUp.Platform.BlobMapStoreErrorModule.describe(ToolUp.Platform.BlobMapStoreError) : System.String
+ToolUp.Platform.BlobMapStoreOptions (class)
+ToolUp.Platform.BlobMapStoreOptions..ctor(System.Int32, System.TimeSpan)
+ToolUp.Platform.BlobMapStoreOptions.InitialBackoff : System.TimeSpan { get }
+ToolUp.Platform.BlobMapStoreOptions.MaxRetries : System.Int32 { get }
+ToolUp.Platform.BlobMapStoreOptionsModule (class)
+ToolUp.Platform.BlobMapStoreOptionsModule.defaults : ToolUp.Platform.BlobMapStoreOptions { get }
+ToolUp.Platform.BlobMapStore`1 (class)
+ToolUp.Platform.BlobMapStore`1..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.BlobCodec`1[T], ToolUp.Platform.ILogger)
+ToolUp.Platform.BlobMapStore`1..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.BlobCodec`1[T], ToolUp.Platform.ILogger, ToolUp.Platform.BlobMapStoreOptions)
+ToolUp.Platform.BlobMapStore`1.Read(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[T], ToolUp.Platform.BlobMapStoreError]]
+ToolUp.Platform.BlobMapStore`1.Update`1(System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[T], ToolUp.Platform.BlobUpdate`2[T, R]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[R, ToolUp.Platform.BlobMapStoreError]]
 ToolUp.Platform.BlobModelRegistry (class)
 ToolUp.Platform.BlobModelRegistry..ctor(ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILineageStore], ToolUp.Platform.ProvenanceAttachmentLimits)
 ToolUp.Platform.BlobModelRegistryModule (class)
@@ -963,6 +1004,18 @@ ToolUp.Platform.BlobStorageErasureHandler+BlobStorageErasureHandler..ctor(ToolUp
 ToolUp.Platform.BlobStorageSelectionValidator (class)
 ToolUp.Platform.BlobStorageSelectionValidator+BlobStorageSelectionValidator (class)
 ToolUp.Platform.BlobStorageSelectionValidator+BlobStorageSelectionValidator..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.BlobUpdate`2 (class)
+ToolUp.Platform.BlobUpdate`2.IsKeep : System.Boolean { get }
+ToolUp.Platform.BlobUpdate`2.IsWrite : System.Boolean { get }
+ToolUp.Platform.BlobUpdate`2.Tag : System.Int32 { get }
+ToolUp.Platform.BlobUpdate`2+Keep (class)
+ToolUp.Platform.BlobUpdate`2+Keep.result : R { get }
+ToolUp.Platform.BlobUpdate`2+Tags (class)
+ToolUp.Platform.BlobUpdate`2+Tags.Keep : System.Int32 (literal)
+ToolUp.Platform.BlobUpdate`2+Tags.Write : System.Int32 (literal)
+ToolUp.Platform.BlobUpdate`2+Write (class)
+ToolUp.Platform.BlobUpdate`2+Write.result : R { get }
+ToolUp.Platform.BlobUpdate`2+Write.value : T { get }
 ToolUp.Platform.BlobUserSchemaStore (class)
 ToolUp.Platform.BlobUserSchemaStore+BlobUserSchemaStore (class)
 ToolUp.Platform.BlobUserSchemaStore+BlobUserSchemaStore..ctor(ToolUp.Platform.IDataObjectStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog])
@@ -10212,6 +10265,7 @@ ToolUp.Platform.TeamManagement+StoredMembership.Role : ToolUp.Platform.TeamRole 
 ToolUp.Platform.TeamManagement+StoredMembership.TeamId : System.String { get }
 ToolUp.Platform.TeamManagement+TeamStore (class)
 ToolUp.Platform.TeamManagement+TeamStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.INotificationChannel)
+ToolUp.Platform.TeamManagement+TeamStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger)
 ToolUp.Platform.TeamManagement+TeamStore.AddMember(System.String, System.String, ToolUp.Platform.TeamRole) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.TeamManagement+TeamStore.ChangeMemberRole(System.String, System.String, ToolUp.Platform.TeamRole) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.TeamManagement+TeamStore.CreateTeam(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamInfo, System.String]]

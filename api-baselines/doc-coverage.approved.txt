@@ -113,7 +113,7 @@ ToolUp.IngestionQueues.Redis 27/39
 ToolUp.JobSchedulers.Quartz 26/35
 ToolUp.KnowledgeBase.Client 52/395
 ToolUp.KnowledgeBase.Core 192/454
-ToolUp.KnowledgeBase.Server 192/327
+ToolUp.KnowledgeBase.Server 196/333
 ToolUp.Media.CloudTranscode 2/3
 ToolUp.Media.FFmpeg 4/5
 ToolUp.MediaLibrary 276/665
@@ -137,12 +137,12 @@ ToolUp.OpenXml.SvgRasterizer.Skia 3/3
 ToolUp.Platform.Build 308/560
 ToolUp.Platform.Client 2825/6986
 ToolUp.Platform.Core 7009/14880
-ToolUp.Platform.Server 6514/11881
+ToolUp.Platform.Server 6535/11935
 ToolUp.Platform.Testing 118/264
 ToolUp.Platform.UI 71/183
 ToolUp.PublicRendering 610/1062
-ToolUp.RAG.Core 74/124
-ToolUp.RAG.Server 276/488
+ToolUp.RAG.Core 80/131
+ToolUp.RAG.Server 291/512
 ToolUp.RAG.StaticCorpus.Build 23/40
 ToolUp.RAG.StaticCorpus.Core 5/19
 ToolUp.RAG.StaticCorpus.Server 7/9
@@ -175,7 +175,7 @@ ToolUp.Stripe.Webhook 30/88
 ToolUp.Tabular 103/273
 ToolUp.TelemetrySinks.Ga4 2/4
 ToolUp.TimeSeriesStores.Timescale 3/5
-ToolUp.VectorStores.Hnsw 4/26
+ToolUp.VectorStores.Hnsw 9/31
 ToolUp.VectorStores.Pgvector 102/142
 ToolUp.Voice.Client 6/18
 ToolUp.Voice.Core 31/77

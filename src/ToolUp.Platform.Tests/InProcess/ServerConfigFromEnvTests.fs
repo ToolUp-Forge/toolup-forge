@@ -55,6 +55,37 @@ let private sixAcceptFlags: (string * (ServerConfig -> bool)) list = [
     "TOOLUP_ACCEPT_PENDING_INVITE_STORE_MULTI_INSTANCE", _.AcceptPendingInviteStoreInMultiInstance
 ]
 
+/// Phase 868 — the positive-direction flags: `true` turns a protection or a
+/// behaviour ON, so a silently-`false` typo fails open. These parse strictly.
+let private positiveFlags: (string * (ServerConfig -> bool)) list = [
+    "TOOLUP_REQUIRE_HTTPS", _.RequireHttps
+    "TOOLUP_MIGRATE_WEBHOOK_SECRETS", _.MigrateWebhookSecretsAtRest
+    "TOOLUP_BACKFILL_MISSED_TICKS", _.BackfillMissedTicks
+    "TOOLUP_EVENT_TRIGGER_CATCHUP", _.EventTriggerCatchUp
+    "TOOLUP_HEALTH_STATE_TRACKING", _.HealthStateTracking
+    "TOOLUP_NOTIFY_INVITER_ON_INVITE_EXPIRY", _.NotifyInviterOnInviteExpiry
+]
+
+/// Phase 868 — the lenient-direction flags: `Accept*` escape hatches and
+/// `SkipPreflight`, where `true` DISABLES a check. A malformed value reads as
+/// `false`, which leaves the check running — the safe direction.
+let private lenientFlags: (string * (ServerConfig -> bool)) list = [
+    "TOOLUP_ACCEPT_HEADER_AUTH_IN_AUTH_MODE", _.AcceptHeaderAuthWhenAuthRequired
+    "TOOLUP_ACCEPT_INPROCESS_SCHEDULER_MULTI_INSTANCE", _.AcceptInProcessSchedulerInMultiInstance
+    "TOOLUP_ACCEPT_NO_RATE_LIMIT_IN_AUTH_MODE", _.AcceptNoRateLimitWhenAuthRequired
+    "TOOLUP_ACCEPT_UNSIGNED_PUBLISHABLE", _.AcceptUnsignedPublishable
+    "TOOLUP_ACCEPT_EPHEMERAL_SHARE_TOKEN_KEY", _.AcceptEphemeralShareTokenKey
+    "TOOLUP_SKIP_PREFLIGHT", _.SkipPreflight
+]
+
+/// The failure message `fromEnv` raises for the current environment, or `None` when it binds.
+let private startupFailure () : string option =
+    try
+        ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty |> ignore
+        None
+    with ex ->
+        Some ex.Message
+
 let tests =
     testSequenced (
         testList "ServerConfig.fromEnv (Phase 71.A)" [
@@ -555,6 +586,77 @@ let tests =
                 withEnv [ "TOOLUP_ACCEPT_EPHEMERAL_SHARE_TOKEN_KEY", None ] (fun () ->
                     let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
                     Expect.isFalse cfg.AcceptEphemeralShareTokenKey "unset must not acknowledge anything")
+            }
+
+            // ── Phase 868 — positive hardening flags fail loud ──
+            //
+            // The direction rule: a flag whose `true` turns something ON parses
+            // strictly (a typo must stop the process), a flag whose `true`
+            // DISABLES a check parses leniently (a typo leaves the check on).
+            test "Phase 868: TOOLUP_REQUIRE_HTTPS=Ture fails startup naming the key, the value and the accepted set" {
+                withEnv [ "TOOLUP_REQUIRE_HTTPS", Some "Ture" ] (fun () ->
+                    match startupFailure () with
+                    | None -> failtest "a mistyped protection flag must stop startup, not bind false"
+                    | Some msg ->
+                        Expect.stringContains msg "TOOLUP_REQUIRE_HTTPS" "names the key"
+                        Expect.stringContains msg "Ture" "names the value as written"
+                        Expect.stringContains msg "1, true, yes, on" "names the accepted truthy set"
+                        Expect.stringContains msg "0, false, no, off" "names the accepted falsy set")
+            }
+
+            test "Phase 868: every positive-direction flag fails startup on a malformed value" {
+                for key, _ in positiveFlags do
+                    for bad in [ "Ture"; "enabled"; "2"; "yes please" ] do
+                        withEnv [ key, Some bad ] (fun () ->
+                            match startupFailure () with
+                            | None -> failtestf "%s=%s must stop startup" key bad
+                            | Some msg ->
+                                Expect.stringContains msg key "names the key"
+                                Expect.stringContains msg bad "names the value as written")
+            }
+
+            test "Phase 868: every positive-direction flag binds well-formed values as before, trimmed" {
+                for key, read in positiveFlags do
+                    for raw, expected in
+                        [
+                            "1", true
+                            "true", true
+                            "YES", true
+                            "On", true
+                            "  yes ", true
+                            "0", false
+                            "false", false
+                            "No", false
+                            "OFF", false
+                            "\toff\t", false
+                        ] do
+                        withEnv [ key, Some raw ] (fun () ->
+                            let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                            Expect.equal (read cfg) expected (sprintf "%s=%A" key raw))
+            }
+
+            test "Phase 868: every positive-direction flag reads unset and whitespace-only as its default (false)" {
+                for key, read in positiveFlags do
+                    for raw in [ None; Some ""; Some "   "; Some "\t" ] do
+                        withEnv [ key, raw ] (fun () ->
+                            let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                            Expect.isFalse (read cfg) (sprintf "%s=%A must keep the default" key raw))
+            }
+
+            test "Phase 868: every escape hatch still reads a malformed value as false (the safe direction)" {
+                for key, read in lenientFlags do
+                    for bad in [ "Ture"; "enabled"; "2" ] do
+                        withEnv [ key, Some bad ] (fun () ->
+                            let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                            Expect.isFalse (read cfg) (sprintf "%s=%s must not acknowledge anything" key bad))
+            }
+
+            test "Phase 868: every escape hatch trims surrounding whitespace before matching" {
+                for key, read in lenientFlags do
+                    for raw, expected in [ "  yes ", true; "1 ", true; " TRUE", true; "   ", false; "no", false ] do
+                        withEnv [ key, Some raw ] (fun () ->
+                            let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                            Expect.equal (read cfg) expected (sprintf "%s=%A" key raw))
             }
         ]
     )

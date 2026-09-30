@@ -10,6 +10,7 @@ open SharedTypes
 open KnowledgeBase.ServerExtractors
 open KnowledgeBase.ServerExtractionErrors
 open KnowledgeBase.ServerIndexStorage
+open KnowledgeBase.ServerIngestionObserver
 open KnowledgeBase.ServerJsonHelpers
 open KnowledgeBase.ServerBulkImport
 open KnowledgeBase.ServerApiDeps
@@ -609,23 +610,43 @@ let private persistAndIngest
                     | Some prior -> do! deleteOrphanTail deps docId chunks.Length prior.ChunkCount
                     | None -> ()
 
-                    // Stamp ChunkCount BEFORE enqueue: the observer reads
-                    // it from the index to compute progress, and the first
-                    // chunk callback can fire before this method returns.
+                    // Stamp ChunkCount BEFORE enqueue: it is the
+                    // document's FULL chunk count, the figure `Complete`
+                    // reports, and the first chunk callback can fire
+                    // before this method returns.
                     do! updateIndexChunkCount deps.Storage deps.Scope.Container docId chunks.Length
 
-                    let initialStatus = Embedding(0, chunks.Length)
+                    // Phase 867 — the attempt completes against what it
+                    // ENQUEUED, which an incremental re-index makes a
+                    // strict subset of `chunks`. Counting against the full
+                    // chunk count left such a re-upload at
+                    // `Embedding(k, n)` for good.
+                    let! attempt =
+                        if List.isEmpty chunkPairs then
+                            async.Return None
+                        else
+                            async {
+                                let initialStatus = Embedding(0, chunkPairs.Length)
 
-                    // Seed the cache; the observer's `AddOrUpdate` won't
-                    // overwrite a fresher value (e.g. one already advanced
-                    // to Embedding(1, n) by a racing callback).
-                    updateStatus docId initialStatus (fun existing ->
-                        match existing with
-                        | Queued
-                        | ExtractingText -> initialStatus
-                        | other -> other)
+                                // Seed the cache; the observer's `AddOrUpdate` won't
+                                // overwrite a fresher value (e.g. one already advanced
+                                // to Embedding(1, n) by a racing callback).
+                                updateStatus docId initialStatus (fun existing ->
+                                    match existing with
+                                    | Queued
+                                    | ExtractingText -> initialStatus
+                                    | other -> other)
 
-                    do! updateIndexStatus deps.Storage deps.Scope.Container docId initialStatus
+                                let! attempt =
+                                    beginIngestionAttempt
+                                        deps.Storage
+                                        deps.Logger
+                                        deps.Scope.Container
+                                        docId
+                                        chunkPairs.Length
+
+                                return Some attempt
+                            }
 
                     let job: DocumentIngestionJob = {
                         DocumentId = docId
@@ -635,6 +656,7 @@ let private persistAndIngest
                         ScopeId = deps.Scope.ScopeId
                         Container = deps.Scope.Container
                         OriginatingUserId = Some deps.UserId
+                        Attempt = attempt
                     }
 
                     // An unchanged re-upload can leave nothing to
@@ -668,7 +690,7 @@ let private persistAndIngest
                     if accepted && List.isEmpty chunkPairs then
                         // Nothing changed — the observer will never fire,
                         // so settle the terminal status here rather than
-                        // leaving the document stuck at `Embedding(0, n)`.
+                        // leaving the document at an in-flight status.
                         let terminal = Complete chunks.Length
                         setStatus docId terminal
                         do! updateIndexStatus deps.Storage deps.Scope.Container docId terminal
@@ -1501,6 +1523,8 @@ let deleteDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<unit,
 
                     let! _ = deps.Storage.Delete(deps.Scope.Container, versionsBlobName docId)
                     let! _ = deps.Storage.Delete(deps.Scope.Container, chunkHashesBlobName docId)
+                    // Phase 867 — and the current ingestion attempt.
+                    do! forgetIngestionAttempt deps.Storage deps.Scope.Container docId
 
                     let updated = existing |> List.filter (fun d -> d.Id <> docId)
                     do! saveIndex deps.Storage deps.Scope.Container updated
@@ -1668,7 +1692,16 @@ let setDocumentTags (deps: KnowledgeApiDeps) (req: SetDocumentTagsRequest) : Asy
 
                                 setStatus doc.Id initialStatus
 
-                                do! updateIndexStatus deps.Storage deps.Scope.Container doc.Id initialStatus
+                                // Phase 867 — a new attempt: seeds the
+                                // persisted status and retires any attempt
+                                // still reporting for this document.
+                                let! attempt =
+                                    beginIngestionAttempt
+                                        deps.Storage
+                                        deps.Logger
+                                        deps.Scope.Container
+                                        doc.Id
+                                        chunkPairs.Length
 
                                 let job: DocumentIngestionJob = {
                                     DocumentId = doc.Id
@@ -1678,6 +1711,7 @@ let setDocumentTags (deps: KnowledgeApiDeps) (req: SetDocumentTagsRequest) : Asy
                                     ScopeId = deps.Scope.ScopeId
                                     Container = deps.Scope.Container
                                     OriginatingUserId = Some deps.UserId
+                                    Attempt = Some attempt
                                 }
 
                                 // Phase 723 — async enqueue; see the

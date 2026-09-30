@@ -85,7 +85,6 @@ type KnowledgeBaseLifecycle(services: IServiceProvider) =
 
                 for doc in docs do
                     clearStatus doc.Id
-                    progressCache.TryRemove doc.Id |> ignore
 
                 invalidateInventoryCache container
 

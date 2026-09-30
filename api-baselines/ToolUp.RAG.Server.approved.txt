@@ -111,6 +111,11 @@ ToolUp.RAG.InMemoryVectorStore+IndexEntry.Content : System.String { get; set }
 ToolUp.RAG.InMemoryVectorStore+IndexEntry.Metadata : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get; set }
 ToolUp.RAG.InMemoryVectorStore+IndexEntry.ScopeTag : System.String { get; set }
 ToolUp.RAG.InMemoryVectorStore+IndexEntry.Vector : System.Single[] { get; set }
+ToolUp.RAG.InMemoryVectorStore+RagScopeSnapshotUnreadableException (class)
+ToolUp.RAG.InMemoryVectorStore+RagScopeSnapshotUnreadableException..ctor(System.String, System.String, System.String)
+ToolUp.RAG.InMemoryVectorStore+RagScopeSnapshotUnreadableException.BlobLocation : System.String { get }
+ToolUp.RAG.InMemoryVectorStore+RagScopeSnapshotUnreadableException.Reason : System.String { get }
+ToolUp.RAG.InMemoryVectorStore+RagScopeSnapshotUnreadableException.ScopeKey : System.String { get }
 ToolUp.RAG.IngestionRetryJobHandler (class)
 ToolUp.RAG.IngestionRetryJobHandler.create(ToolUp.RAG.IngestionService+IngestionRetryDeps) : ToolUp.Platform.IJobHandler
 ToolUp.RAG.IngestionRetryJobHandler+IngestionRetryJobHandler (class)
@@ -449,6 +454,25 @@ ToolUp.RAG.RetrievalPipeline+RetrievalPipelineOptions.Reranker : Microsoft.FShar
 ToolUp.RAG.RetrievalPipeline+RetrievalPipelineOptions.SummaryBoost : System.Double { get }
 ToolUp.RAG.RetrievalPipeline+RetrievalPipelineOptionsModule (class)
 ToolUp.RAG.RetrievalPipeline+RetrievalPipelineOptionsModule.defaults : ToolUp.RAG.RetrievalPipeline+RetrievalPipelineOptions { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpace (class)
+ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpace.Cosine : ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpace { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpace.Fused : ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpace { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpace.IsCosine : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpace.IsFused : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpace.IsReranked : System.Boolean { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpace.Reranked : ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpace { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpace.Tag : System.Int32 { get }
+ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpace+Tags (class)
+ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpace+Tags.Cosine : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpace+Tags.Fused : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpace+Tags.Reranked : System.Int32 (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpaceModule (class)
+ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpaceModule.NormaliseStage : System.String (literal)
+ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpaceModule.label(ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpace) : System.String
+ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpaceModule.ofComposition(System.Boolean, System.Boolean) : ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpace
+ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpaceModule.stageMark(ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpace) : System.String
+ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpaceModule.thresholdFinding(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpace], Microsoft.FSharp.Core.FSharpOption`1[System.Double]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpaceModule.upperBound(ToolUp.RAG.RetrievalPipeline+RetrievalScoreSpace) : Microsoft.FSharp.Core.FSharpOption`1[System.Double]
 ToolUp.RAG.RetrievalTracers (class)
 ToolUp.RAG.RetrievalTracers.createBackground(ToolUp.Platform.IRetrievalTracer+IRetrievalTracer, System.Int32, ToolUp.Platform.ILogger) : ToolUp.RAG.RetrievalTracers+BackgroundRetrievalTracer
 ToolUp.RAG.RetrievalTracers.createEventStore(ToolUp.Platform.IEventStore, ToolUp.Platform.ILogger) : ToolUp.Platform.IRetrievalTracer+IRetrievalTracer

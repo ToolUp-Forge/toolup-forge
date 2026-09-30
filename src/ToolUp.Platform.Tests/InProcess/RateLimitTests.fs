@@ -2,6 +2,7 @@ module ToolUp.Platform.Tests.InProcess.RateLimitTests
 
 open System
 open System.IO
+open System.Threading
 open Expecto
 open ToolUp.Remoting.Server
 
@@ -281,5 +282,58 @@ let tests =
                 auditIdx
                 deniedIdx
                 "the RateLimitExceeded audit row is emitted inside the denial branch"
+        }
+        // ── Phase 870 — atomic admit under a simultaneous burst ──
+        test "N callers released at once against one remaining slot: exactly one is admitted" {
+            // Budget K with K - 1 already admitted leaves exactly one slot.
+            // N callers are released together through one barrier — the
+            // burst the gate exists for. A check-then-act store lets
+            // several of them read "one slot left" before any records its
+            // admission.
+            //
+            // The gap between that read and that write is a few
+            // instructions, so what widens it is preemption: callers are
+            // four per core, and a caller descheduled inside the gap lets
+            // the others through. The same threads run every round (one
+            // barrier phase per round), so 500 rounds cost thread start-up
+            // once. Measured against the unfixed (check-then-act) store on a
+            // 16-core machine: red in 8 runs of 8, over-admitting 7 to 62 of
+            // the 500 rounds per run, in about half a second.
+            let budget = 5
+            let callers = 4 * max 4 Environment.ProcessorCount
+            let rounds = 500
+            let window = TimeSpan.FromMinutes 1.0
+            let key = "subject:burst"
+
+            let stores =
+                Array.init rounds (fun _ ->
+                    let store = InMemoryRateLimitStore() :> IRateLimitStore
+
+                    for _ in 1 .. budget - 1 do
+                        run (store.TryAcquire(key, budget, window)) |> ignore
+
+                    store)
+
+            let admitted = Array.zeroCreate<int> rounds
+            use gate = new Barrier(callers)
+
+            let caller () =
+                for round in 0 .. rounds - 1 do
+                    gate.SignalAndWait()
+
+                    match run (stores[round].TryAcquire(key, budget, window)) with
+                    | RateLimitAllowed -> Interlocked.Increment(&admitted[round]) |> ignore
+                    | RateLimitDenied _ -> ()
+
+            let threads = Array.init callers (fun _ -> Thread(caller))
+            threads |> Array.iter _.Start()
+            threads |> Array.iter _.Join()
+
+            let overAdmitted =
+                admitted |> Array.indexed |> Array.filter (fun (_, n) -> n <> 1) |> Array.toList
+
+            Expect.isEmpty
+                overAdmitted
+                $"every round admits exactly the one remaining slot (round, admitted) — %d{overAdmitted.Length} of %d{rounds} rounds over-admitted"
         }
     ]

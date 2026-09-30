@@ -23,9 +23,13 @@ open KnowledgeBase.ServerIndexStorage
 // the stores under test.
 //
 // SCOPE NOTE. Phase 116's ETag-conditional-write half — the generic guarded
-// `BlobMapStore` decorator — is **deferred**: it is gated on Phase 9c half-2
-// (`IBlobStorage.UploadWithETag`), which has not shipped, so `BlobMapStore.fs`
-// does not exist. This pack therefore drives the *shipped* halves of Phase 116:
+// `BlobMapStore` helper — shipped in Phase 864, and its cross-replica
+// properties (a failed read never written back, concurrent writers on two
+// replicas both landing, N replicas spending a `UseLimit = 1` token once) are
+// pinned by the `IConditionalBlobStorageContract` pack over every conditional
+// backend. The decorator used here is NOT conditional, so this pack still
+// drives the single-instance halves of Phase 116 (the stores take
+// `BlobMapStore`'s unconditional fallback over it):
 //   • `InMemoryPendingInviteStore` — fail-closed decode + quarantine of a
 //     corrupt full-blob map (never a map derived from a failed decode).
 //   • `BlobShareTokenStore.MarkUsed` — the single-instance `claimWriteLock`
@@ -33,9 +37,9 @@ open KnowledgeBase.ServerIndexStorage
 //     and its fail-closed corrupt-claim read.
 //   • KB `IndexStorage.upsertIndexEntry` — the per-container lock that keeps
 //     concurrent additive writers from losing index entries.
-// The cross-replica CAS properties (a *dropped* write surfaced as an error
-// rather than silently lost) are the deferred ETag story; the lost-write case
-// below characterises the current single-instance boundary honestly.
+// A *dropped* write (the backend reports success and stores nothing) is not
+// detectable by a store on a non-conditional backend; the lost-write case
+// below characterises that single-instance boundary honestly.
 //
 // DETERMINISM. The decorator is seeded with a fixed value, so byte-corruption
 // is reproducible. The concurrency knob (`WidenReadWriteGap`) only makes an

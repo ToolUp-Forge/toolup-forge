@@ -231,6 +231,33 @@ acknowledgement only with a specific medium-level control in mind, and record
 which one in your deployment notes — the next operator reading the warning
 will need it.
 
+## Boolean flags — which ones refuse a typo
+
+Every boolean environment key is read by one of two parsers, chosen by what
+`true` does. The same tokens are accepted by both (`1` / `true` / `yes` / `on`,
+case-insensitive, surrounding whitespace ignored); what differs is what they do
+with anything else. A value that is only whitespace counts as unset.
+
+| Direction of `true` | Parser | A malformed value (`Ture`, `enabled`, `2`) | Keys |
+|---|---|---|---|
+| Turns a protection or a behaviour **on** | strict | **Stops startup**, naming the key, the value as written, and the accepted set | `TOOLUP_REQUIRE_HTTPS`, `TOOLUP_MIGRATE_WEBHOOK_SECRETS`, `TOOLUP_BACKFILL_MISSED_TICKS`, `TOOLUP_EVENT_TRIGGER_CATCHUP`, `TOOLUP_HEALTH_STATE_TRACKING`, `TOOLUP_NOTIFY_INVITER_ON_INVITE_EXPIRY` |
+| **Disables** a check or acknowledges a refusal | lenient | Reads as `false`, so the check keeps running | every `TOOLUP_ACCEPT_*` escape hatch, `TOOLUP_SKIP_PREFLIGHT` |
+
+The strict keys also accept `0` / `false` / `no` / `off`, and all of them default
+to off when unset. Keys that already parsed strictly before (for example
+`TOOLUP_TRUST_FORWARDED_HEADERS` and `TOOLUP_ENABLE_DEV_ENDPOINTS`) are
+unchanged.
+
+The split exists because a typo has a different cost in each direction. A
+mistyped `TOOLUP_REQUIRE_HTTPS` that read as `false` would run the server
+without the HTTPS requirement and say nothing; a mistyped
+`TOOLUP_ACCEPT_*` that reads as `false` only leaves a refusal standing, which
+is the safe failure. A new flag takes the strict parser when `true` turns
+something on, and the lenient one when `true` switches a check off.
+
+Upgrading a deployment whose environment may hold a malformed strict value:
+[`docs/migrations/868-hardening-flags-fail-loud.md`](docs/migrations/868-hardening-flags-fail-loud.md).
+
 ## Steady-state storage cost
 
 Two SDK subsystems produce residue that is **reclaimed only by a scheduled

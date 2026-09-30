@@ -77,6 +77,42 @@ let private toJson o =
 let private fromJson<'T> (s: string) =
     JsonSerializer.Deserialize<'T>(s, jsonOptions)
 
+// ─── Phase 861 — the typed refusal ────────────────────────────────
+
+/// Raised by a mutating member of `InMemoryVectorStore` or
+/// `InMemoryBM25Index` when the scope's persisted snapshot EXISTS but could
+/// not be read (the storage returned an error for a blob it still reports
+/// as present). Both stores persist a scope by writing back everything they
+/// hold for it in memory, so mutating a scope they could not load would
+/// replace the snapshot at the next flush with only what arrived since.
+/// Nothing is written; the scope stays unloaded and the next access retries
+/// the load. An ABSENT snapshot is not this error: that scope is
+/// loaded-and-empty.
+[<Sealed>]
+type RagScopeSnapshotUnreadableException
+    /// Refuse a mutation of `scopeKey`, whose snapshot at `blobLocation`
+    /// could not be read for `reason` (the storage's own error text).
+    (scopeKey: string, blobLocation: string, reason: string) =
+    inherit
+        Exception(
+            $"The persisted snapshot '{blobLocation}' for RAG scope '{scopeKey}' exists but could not be read ({reason}); the mutation was refused so the scope's corpus is not replaced by an empty one. Retry once the storage can read the blob."
+        )
+
+    /// The scope whose mutation was refused (`team:<id>`, `user:<id>`, …).
+    member _.ScopeKey = scopeKey
+
+    /// The blob name of the snapshot that could not be read.
+    member _.BlobLocation = blobLocation
+
+    /// The storage's own reason the read failed.
+    member _.Reason = reason
+
+/// Re-raise an exception caught through `Async.Catch` with its original
+/// stack trace, where `reraise ()` is not available.
+let internal rethrow (ex: exn) : 'a =
+    System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex).Throw()
+    Unchecked.defaultof<'a>
+
 // ─── In-memory store ──────────────────────────────────────────────
 
 /// In-memory vector store backed by IBlobStorage for persistence.
@@ -346,23 +382,81 @@ type InMemoryVectorStore
                     store.AddOrUpdate((e.ScopeTag, e.ChunkId), (unit, chunk), fun _ _ -> (unit, chunk))
                     |> ignore
             | Error reason -> do! handleCorruption scope bytes.Length reason
-        | Error _ -> ()
+        | Error reason ->
+            // Phase 861 — a failed download is ABSENT only when the blob is
+            // not there. One that is there but could not be read (a storage
+            // fault, not a missing file) must not be taken for an empty
+            // scope: this store persists a scope by writing back everything
+            // it holds for it, so the next mutation's flush would replace
+            // the whole corpus. Refuse, and leave the scope unloaded so the
+            // next access retries. (The `BackupCoordinator` distinction:
+            // download failed, then ask whether the blob still exists.)
+            let! present = storage.Exists(ragContainer, blobName scope)
+
+            if present then
+                raise (RagScopeSnapshotUnreadableException(scopeToKey scope, blobName scope, reason))
 
         // Phase 726 — mark loaded only after a COMPLETED attempt, and only
         // here, so every load path agrees on what "loaded" means. Under the
         // fail-loud toggle `handleCorruption` raises, so a refused scope is
-        // never marked and every subsequent read re-attempts and re-refuses.
-        // A scope whose blob is absent is loaded-and-empty, which is exactly
-        // right: there is nothing at rest for a later read to resurrect.
+        // never marked and every subsequent read re-attempts and re-refuses;
+        // an unreadable snapshot (above) is never marked either. A scope
+        // whose blob is absent is loaded-and-empty, which is exactly right:
+        // there is nothing at rest for a later read to resurrect.
         loadedScopes[scopeToKey scope] <- 0uy
+    }
+
+    // Phase 861 — cold loads are single-flight. Without it, a mutation that
+    // lands between a concurrent load's `Download` and its replay into
+    // `store` is overwritten by the snapshot's older copy of the same chunk.
+    // Loads happen once per scope per process, so one gate costs nothing.
+    let loadGate = new SemaphoreSlim(1, 1)
+
+    /// Guarantee this scope's persisted snapshot has been read into memory.
+    ///
+    /// Team AND User scopes are lazy-loaded on first access — neither id is
+    /// known at construction time, so only Platform/Deployment are loaded
+    /// eagerly (see the eager `do` block below). Phase 726 removed the
+    /// special-casing: the eager loads mark themselves loaded like any other,
+    /// so one uniform lookup answers for every scope and there is no second
+    /// place encoding which scopes are lazy.
+    ///
+    /// Phase 861 — EVERY mutating member calls this first, so a mutation
+    /// never lands on an un-hydrated scope (whose flush would replace the
+    /// persisted corpus). It raises `RagScopeSnapshotUnreadableException`
+    /// when the snapshot exists but cannot be read.
+    let ensureScopeLoaded (scope: VectorScope) = async {
+        if not (loadedScopes.ContainsKey(scopeToKey scope)) then
+            do! loadGate.WaitAsync() |> Async.AwaitTask
+
+            try
+                if not (loadedScopes.ContainsKey(scopeToKey scope)) then
+                    do! loadScope scope
+            finally
+                loadGate.Release() |> ignore
+    }
+
+    /// The retrieval path's load: an unreadable snapshot degrades the scope
+    /// to no results for this call (with a warning) instead of failing the
+    /// whole search, and — because the scope stays unloaded — the next
+    /// access retries and every mutation still refuses.
+    let ensureScopeLoadedForSearch (scope: VectorScope) = async {
+        match! ensureScopeLoaded scope |> Async.Catch with
+        | Choice1Of2() -> ()
+        | Choice2Of2(:? RagScopeSnapshotUnreadableException as refused) ->
+            log.Warn
+                $"[InMemoryVectorStore] Snapshot '{refused.BlobLocation}' for {refused.ScopeKey} exists but could not be read ({refused.Reason}) — searching without it; mutations of the scope are refused until it reads."
+        | Choice2Of2 ex -> rethrow ex
     }
 
     // Load Platform and Deployment scopes eagerly at construction.
     // Team and User scopes are loaded lazily on first access (team/user
-    // IDs are not known at construction time).
+    // IDs are not known at construction time). Phase 861 — an unreadable
+    // eager snapshot does not fail construction: the scope stays unloaded
+    // and the first access retries, exactly as for a lazy scope.
     do
-        loadScope Platform |> Async.RunSynchronously
-        loadScope Deployment |> Async.RunSynchronously
+        ensureScopeLoadedForSearch Platform |> Async.RunSynchronously
+        ensureScopeLoadedForSearch Deployment |> Async.RunSynchronously
 
     // Background flush loop: waits for either the periodic `flushMs` timer or
     // a `flushSignal.Release()` from `markDirty` once the dirty-chunk count
@@ -397,22 +491,38 @@ type InMemoryVectorStore
         else
             Team(sk.Substring("team:".Length))
 
-    /// Guarantee this scope's persisted snapshot has been read into memory.
-    ///
-    /// Team AND User scopes are lazy-loaded on first access — neither id is
-    /// known at construction time, so only Platform/Deployment are loaded
-    /// eagerly (see the eager `do` block above). Phase 726 removed the
-    /// special-casing: the eager loads mark themselves loaded like any other,
-    /// so one uniform lookup answers for every scope and there is no second
-    /// place encoding which scopes are lazy.
-    let ensureScopeLoaded (scope: VectorScope) = async {
-        if not (loadedScopes.ContainsKey(scopeToKey scope)) then
-            do! loadScope scope
-    }
+    /// Phase 861 — the scope key a persisted index blob belongs to, for
+    /// `ListScopes`: `_rag/{scopeKey}/index.json`, and only a key this store
+    /// writes (the BM25 and HNSW snapshots under the same prefix are other
+    /// files and never match).
+    let scopeKeyOfBlob (name: string) =
+        let prefix = "_rag/"
+        let suffix = "/index.json"
+
+        if name.StartsWith prefix && name.EndsWith suffix then
+            let key = name.Substring(prefix.Length, name.Length - prefix.Length - suffix.Length)
+
+            if
+                not (key.Contains "/")
+                && (key = "platform"
+                    || key = "deployment"
+                    || key.StartsWith "team:"
+                    || key.StartsWith "user:")
+            then
+                Some key
+            else
+                None
+        else
+            None
 
     interface IVectorStore with
 
         member _.Upsert scope chunkId vector chunk = async {
+            // Phase 861 — hydrate first. An upload that is the first thing a
+            // restarted process does to a lazily-loaded scope would otherwise
+            // land on an empty map, and the next flush would replace the
+            // persisted corpus with just the new document's chunks.
+            do! ensureScopeLoaded scope
             let unit = normalise vector
             // Re-upserting clears any pre-existing tombstone — new content
             // supersedes the old whether or not it's been vacuumed.
@@ -433,7 +543,7 @@ type InMemoryVectorStore
             // Ensure requested team scopes are loaded — lazy hydration from blob.
             // Platform/Deployment are already loaded at construction.
             for scope in scopes do
-                do! ensureScopeLoaded scope
+                do! ensureScopeLoadedForSearch scope
 
             let scopeKeys = scopes |> List.map scopeToKey |> Set.ofList
 
@@ -544,6 +654,9 @@ type InMemoryVectorStore
         }
 
         member _.RestoreChunk scope chunkId = async {
+            // Phase 861 — hydrate first: a restore issued before any read of
+            // this scope would find no tombstone to lift and silently no-op.
+            do! ensureScopeLoaded scope
             let key = makeKey scope chunkId
 
             match store.TryGetValue key with
@@ -560,6 +673,9 @@ type InMemoryVectorStore
         }
 
         member _.Vacuum scope olderThan = async {
+            // Phase 861 — hydrate first: an un-hydrated scope purges nothing
+            // and reports zero while the tombstones stay at rest.
+            do! ensureScopeLoaded scope
             let scopeKey = scopeToKey scope
 
             let toPurge =
@@ -590,12 +706,36 @@ type InMemoryVectorStore
         }
 
         member _.ListScopes() = async {
-            let keys = store.Keys |> Seq.map fst |> Seq.distinct |> Seq.toList
-            return keys |> List.map scopeFromKey
+            // Phase 861 — persisted scopes too, not only the ones this process
+            // has loaded: after a restart a cold scope holds nothing in memory
+            // yet, and a re-embed sweep driven from this list would skip it.
+            // A LOADED scope answers from memory (so a wipe not yet flushed is
+            // not listed); an unloaded one is listed because it is at rest.
+            let! persisted = storage.List(ragContainer, "_rag/")
+
+            let cold =
+                persisted
+                |> List.choose scopeKeyOfBlob
+                |> List.filter (fun sk -> not (loadedScopes.ContainsKey sk))
+
+            let inMemory = store.Keys |> Seq.map fst
+
+            return Seq.append inMemory cold |> Seq.distinct |> Seq.map scopeFromKey |> Seq.toList
         }
 
-        member this.Erase(scope, subjectUserId, policy, dryRun) =
-            ToolUp.Platform.IVectorStore.eraseSubject (this :> IVectorStore) scope subjectUserId policy dryRun
+        member this.Erase(scope, subjectUserId, policy, dryRun) = async {
+            // Phase 861 — an unreadable snapshot surfaces as the interface's
+            // own typed failure rather than an exception out of the erasure
+            // fan-out; the orchestrator retries `StoreUnreachable`.
+            match!
+                ToolUp.Platform.IVectorStore.eraseSubject (this :> IVectorStore) scope subjectUserId policy dryRun
+                |> Async.Catch
+            with
+            | Choice1Of2 result -> return result
+            | Choice2Of2(:? RagScopeSnapshotUnreadableException as ex) ->
+                return Result.Error(ErasureError.StoreUnreachable("vector-store", ex.Message))
+            | Choice2Of2 ex -> return rethrow ex
+        }
 
     interface IDisposable with
         member _.Dispose() =

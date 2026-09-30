@@ -59,6 +59,7 @@ let private jobToIngestionJob (p: IngestionRetryPayload) : IngestionJob = {
     ScopeId = p.ScopeId
     Container = p.Container
     OriginatingUserId = p.OriginatingUserId
+    Attempt = p.Attempt
 }
 
 /// `IJobHandler` for `_platform.rag.ingestion-retry`. `deps` is the same
