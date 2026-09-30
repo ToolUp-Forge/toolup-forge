@@ -110,6 +110,11 @@
              precede AIAssistantHandler, which filters every conversation
              read and write through it, and AICompose, which mounts its API. -->
         <Compile Include="Server\TeamConversationPolicyStore.fs" />
+        <!-- Phase 862 - the conversation + provider-history blobs: names,
+             load, save and the ownership gate, over the canonical wire
+             types. MUST precede both of its writers, AIAssistantHandler and
+             FastPathBeaconHandler. `internal`, so it adds no public surface. -->
+        <Compile Include="Server\ConversationBlobs.fs" />
         <Compile Include="Server\AIAssistantHandler.fs" />
         <Compile Include="Server\ConversationReplay.fs" />
         <Compile Include="Server\AIProviderSurface.fs" />
