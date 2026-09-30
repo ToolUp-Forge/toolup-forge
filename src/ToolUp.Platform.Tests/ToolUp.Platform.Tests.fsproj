@@ -1616,6 +1616,10 @@
              DeploymentVerificationReportTests.fs, which binds both. -->
         <Compile Include="Contracts\IRemotingDecoderEvidenceContract.fs" />
         <Compile Include="Contracts\IRemotingArgumentDecoderEvidenceContract.fs" />
+        <!-- Phase 944 — the three remaining evidence facets' contract packs. -->
+        <Compile Include="Contracts\ISeamAuthorityEvidenceContract.fs" />
+        <Compile Include="Contracts\IEvidenceChainEvidenceContract.fs" />
+        <Compile Include="Contracts\IEgressEvidenceContract.fs" />
         <!-- Phase 686 — the one-command deployment verification report: the
              full/bare/seeded-failure probes over the composed five sections,
              the outcome + exit-code + canonical-form folds, the CLI flag, and
