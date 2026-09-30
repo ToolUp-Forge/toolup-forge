@@ -36,6 +36,11 @@ open ToolUp.Platform.Tests.Remoting.WireCorpus
 /// uncovered".
 type private ProbeApi = { DoThing: string -> Async<unit> }
 
+/// Phase 937 — an argument record with an `int64` and a `uint64` position,
+/// deliberately never registered, so its decode is the STJ converter set's
+/// (`Int64Converter` / `UInt64Converter`) rather than the algebra's.
+type WideArgument = { Count: int64; Size: uint64 }
+
 // ─── The corpus types' decoders ──────────────────────────────────────
 
 let private priority: JsonDecoder<Priority> =
@@ -2294,5 +2299,92 @@ let tests =
                     | _, Ok _ -> failtestf "%s: the pre-899 decoder read the browser's pairs" name
 
                 JsonDecoders.resetForTests ()
+        ]
+
+        // ─── Phase 937 — the Long object form is refused on the STJ path too ─
+        //
+        // Phase 911 closed the object form in `asInt64` / `asUInt64`; an
+        // argument type with NO registered decoder still reached STJ's
+        // `Int64Converter` / `UInt64Converter`, whose `StartObject` arm
+        // rebuilt the value from `high` and `low`. These pins went red
+        // against that arm (both object texts decoded, to 5000000000 and
+        // 18446744073709551615) and stay as the refusal pins.
+        testList "Phase 937 — the Long object form is refused on the STJ argument path" [
+            let decodeArgument (text: string) =
+                JsonDecoders.resetForTests ()
+                use doc = JsonDocument.Parse text
+
+                ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialise<WideArgument>
+                    doc.RootElement
+                    jsonOptions
+
+            // The algebra's own refusal of the same object, so the STJ
+            // converter is held to the words `asInt64` / `asUInt64` use.
+            let algebraExpected (decoder: JsonDecoder<'T>) (text: string) =
+                match JsonRead.tryParse text |> Result.bind decoder with
+                | Error e -> e.Expected
+                | Ok decoded -> failtestf "the algebra accepted `%s` as %A" text decoded
+
+            let expectRefused (typeName: string) (forms: string) (text: string) =
+                match decodeArgument text with
+                | Error e ->
+                    let rendered = DecodeError.render e
+                    // No path assertion: the record converter reads each
+                    // member through a nested `Deserialize`, so STJ reports
+                    // the refusal at the root (`$`) on this path — the same
+                    // as for every other converter refusal it carries.
+                    Expect.isTrue (e.Expected = "WideArgument") (sprintf "`%s`: names the argument type" text)
+                    Expect.stringContains rendered typeName (sprintf "`%s`: names the type" text)
+
+                    Expect.stringContains
+                        rendered
+                        forms
+                        (sprintf "`%s`: names both accepted forms, in the algebra's words" text)
+
+                    Expect.stringContains rendered "object" (sprintf "`%s`: names what was found" text)
+                | Ok decoded -> failtestf "`%s` should have been refused, decoded to %A" text decoded
+
+            testCase "937 — an object at an int64 position is refused, naming the type and both accepted forms"
+            <| fun () ->
+                let longObject = """{"high":1,"low":705032704,"unsigned":false}"""
+
+                expectRefused
+                    "Int64"
+                    (algebraExpected JsonDecode.asInt64 longObject)
+                    (sprintf """{"Count":%s,"Size":"1"}""" longObject)
+
+            testCase "937 — an object at a uint64 position is refused, naming the type and both accepted forms"
+            <| fun () ->
+                let longObject = """{"high":-1,"low":-1,"unsigned":true}"""
+
+                expectRefused
+                    "UInt64"
+                    (algebraExpected JsonDecode.asUInt64 longObject)
+                    (sprintf """{"Count":"+1","Size":%s}""" longObject)
+
+            testCase "937 — the digit string and an in-range number still decode on the STJ path"
+            <| fun () ->
+                for text, expected in
+                    [
+                        """{"Count":"+5000000000","Size":"18446744073709551615"}""",
+                        {
+                            Count = 5000000000L
+                            Size = UInt64.MaxValue
+                        }
+                        """{"Count":"-9007199254740993","Size":"0"}""",
+                        {
+                            Count = -9007199254740993L
+                            Size = 0UL
+                        }
+                        """{"Count":-42,"Size":42}""", { Count = -42L; Size = 42UL }
+                        """{"Count":9007199254740991,"Size":9007199254740991}""",
+                        {
+                            Count = 9007199254740991L
+                            Size = 9007199254740991UL
+                        }
+                    ] do
+                    match decodeArgument text with
+                    | Ok decoded -> Expect.equal decoded expected (sprintf "`%s` decodes" text)
+                    | Error e -> failtestf "`%s` was refused: %s" text (DecodeError.render e)
         ]
     ]
