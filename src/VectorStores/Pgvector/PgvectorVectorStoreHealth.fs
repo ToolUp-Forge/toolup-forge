@@ -89,10 +89,9 @@ let describe (d: PgvectorDiagnostics) : string =
         | Some _ -> " [ABSENT from the table]"
 
     let ordering =
-        match d.Options.AnnIndex, d.Tuning.IndexOrderedSearch with
-        | NoAnnIndex, _ -> "exact, total order in SQL"
-        | _, true -> "index-ordered, page re-sorted"
-        | _, false -> "total order in SQL (two sort keys)"
+        match d.Options.AnnIndex with
+        | NoAnnIndex -> "exact, total order in SQL"
+        | _ -> "index-ordered, page re-sorted"
 
     sprintf
         "pgvector %s; table %s; index: %s%s; search width: %s; iterative scan: %s; ordering: %s; exact fallback on a short page: %s; multi-scope concurrency: %d; rows ≈ %d"

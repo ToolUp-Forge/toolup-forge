@@ -80,10 +80,9 @@ ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorStoreException..cto
 ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorStoreException..ctor(System.String)
 ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorStoreException.message : System.String { get }
 ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorTuning (class)
-ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorTuning..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, System.Boolean, System.Boolean, System.Int32, System.Int64)
+ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorTuning..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Boolean, System.Boolean, System.Int32, System.Int64)
 ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorTuning.ExactFallbackOnShortPage : System.Boolean { get }
 ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorTuning.ExactScanWarningRows : System.Int64 { get }
-ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorTuning.IndexOrderedSearch : System.Boolean { get }
 ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorTuning.IterativeScan : System.Boolean { get }
 ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorTuning.MaxSearchConcurrency : System.Int32 { get }
 ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorTuning.SearchWidth : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }

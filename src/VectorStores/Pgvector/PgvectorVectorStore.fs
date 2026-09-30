@@ -307,15 +307,29 @@ module PgvectorOptions =
 //
 // Search-time and write-time posture, kept OUT of `PgvectorOptions` so a
 // deployment that constructs the options record in full keeps compiling,
-// and so the pre-892 behaviour is one named value (`unchanged`) rather
-// than a set of defaults spread across a widened record (GP 11). The
-// original `create` / `createWithDataSource` entry points compose
-// `PgvectorTuning.unchanged`; `createTuned` / `createTunedWithDataSource`
-// take one explicitly.
+// and so each posture is one named value rather than a set of defaults
+// spread across a widened record. Since Phase 939 the `create` /
+// `createWithDataSource` entry points compose `PgvectorTuning.recommended`
+// (the posture Phase 928 measured to return full, correct pages), and
+// `createTuned` / `createTunedWithDataSource` take one explicitly, which is
+// how a deployment keeps `PgvectorTuning.unchanged`. That departs from
+// GP 11 on purpose: the old default returned short pages and wrong answers
+// for mid-sized scopes, silently, so keeping it would preserve a defect
+// rather than a contract (docs/migrations/939-pgvector-tuned-default.md).
 
 /// Search-time and write-time tuning for `PgvectorVectorStore`. Start
-/// from `PgvectorTuning.recommended` (or `PgvectorTuning.unchanged`, the
-/// pre-Phase-892 behaviour) and override fields with `with`.
+/// from `PgvectorTuning.recommended` (what `create` composes) or
+/// `PgvectorTuning.unchanged` (pgvector's own defaults) and override fields
+/// with `with`.
+///
+/// With an approximate index configured, the search statement always
+/// orders by distance ALONE and the `(score, scope, chunkId)` total order
+/// is restored by re-sorting the returned page (Phase 939 retired the
+/// `IndexOrderedSearch` switch). Phase 928 measured the two-key statement
+/// on pgvector 0.8.6 / PostgreSQL 17: the planner served it from the same
+/// index through an Incremental Sort, with identical recall, so the switch
+/// changed only that sort step. Under `NoAnnIndex` the statement keeps the
+/// total order in SQL, and every search is exact.
 type PgvectorTuning = {
     /// Per-query search width — `hnsw.ef_search` under an HNSW index,
     /// `ivfflat.probes` under IVFFlat. `None` leaves the database default
@@ -330,16 +344,6 @@ type PgvectorTuning = {
     /// 0.8.0 and later) — detected at `create` time, and reported by the
     /// health probe when requested but unavailable.
     IterativeScan: bool
-    /// With an approximate index configured, order the search statement
-    /// by distance ALONE, and restore the `(score, scope, chunkId)` total
-    /// order by re-sorting the returned page. `false` keeps the pre-892
-    /// two-key statement. Phase 928 measured both on pgvector 0.8.6 /
-    /// PostgreSQL 17: the planner serves EITHER from the approximate index
-    /// (the two-key one through an Incremental Sort presorted on the
-    /// distance), with identical recall, so this setting saves that sort
-    /// step and changes neither which index is used nor the answer. Has no
-    /// effect under `NoAnnIndex`.
-    IndexOrderedSearch: bool
     /// With an approximate index configured, when one scope's page comes
     /// back SHORTER than `topK`, re-run that scope with `Sql.searchExact`,
     /// the one statement no approximate index can serve. A short page
@@ -374,28 +378,34 @@ module PgvectorTuning =
     [<Literal>]
     let MaxSearchConcurrencyLimit = 64
 
-    /// The pre-Phase-892 behaviour, exactly: database-default search width,
-    /// no iterative scan, the two-key `ORDER BY`, no fallback, sequential
-    /// multi-scope search. What `create` / `createWithDataSource` compose.
+    /// pgvector's own defaults, with nothing added: the database-default
+    /// search width, no iterative scan, no fallback, sequential multi-scope
+    /// search. This was the store's posture before Phase 892, and what
+    /// `create` composed until Phase 939, with one difference: with an
+    /// approximate index configured, the search now orders by distance
+    /// alone and re-sorts the page, which Phase 928 measured as the same
+    /// index path with the same recall. Compose it with `createTuned` to
+    /// keep the old behaviour. Measured, it returns short pages and a low
+    /// recall for scopes of about 1-12 percent of a shared table (see the
+    /// companion README).
     let unchanged: PgvectorTuning = {
         SearchWidth = None
         IterativeScan = false
-        IndexOrderedSearch = false
         ExactFallbackOnShortPage = false
         MaxSearchConcurrency = 1
         ExactScanWarningRows = 500_000L
     }
 
-    /// The recommended production posture for a shared table holding many
-    /// scopes: a raised search width, iterative scanning where the
-    /// extension supports it, a distance-only `ORDER BY` with the page
-    /// re-sorted, the exact fallback on a short page, and a bounded
-    /// concurrent multi-scope search. See the companion README for what
-    /// each value buys and what has been measured.
+    /// The production posture for a shared table holding many scopes, and
+    /// what `create` / `createWithDataSource` compose since Phase 939: a
+    /// raised search width (100, as `hnsw.ef_search` or `ivfflat.probes`),
+    /// iterative scanning where the extension supports it, the exact
+    /// fallback on a short page, and a bounded concurrent multi-scope
+    /// search. See the companion README for what each value buys and what
+    /// has been measured, for both index families.
     let recommended: PgvectorTuning = {
         SearchWidth = Some 100
         IterativeScan = true
-        IndexOrderedSearch = true
         ExactFallbackOnShortPage = true
         MaxSearchConcurrency = 4
         ExactScanWarningRows = 500_000L
@@ -567,10 +577,12 @@ SET content = EXCLUDED.content,
     deleted_at = NULL;"""
             o.Table
 
-    /// Per-scope KNN. `<=>` is pgvector's cosine distance, so
-    /// `1 - distance` is the cosine similarity the other stores report.
-    /// Tie-broken on `chunk_id` inside the scope; the caller applies the
-    /// cross-scope total order.
+    /// Per-scope KNN under `NoAnnIndex`, where only an exact scan can serve
+    /// it. `<=>` is pgvector's cosine distance, so `1 - distance` is the
+    /// cosine similarity the other stores report. Tie-broken on `chunk_id`
+    /// inside the scope; the caller applies the cross-scope total order.
+    /// With an approximate index configured the store runs
+    /// `searchIndexOrdered` instead.
     let search (o: PgvectorOptions) =
         sprintf
             """SELECT chunk_id, content, metadata, 1 - (embedding <=> @embedding::vector) AS score
@@ -582,8 +594,8 @@ LIMIT @top_k;"""
 
     /// Phase 892 — per-scope KNN whose `ORDER BY` is the distance operator
     /// alone. The total order `search` states in SQL is restored by the
-    /// caller re-sorting the returned page. Used only when an approximate
-    /// index is configured and `PgvectorTuning.IndexOrderedSearch` is set.
+    /// caller re-sorting the returned page. Since Phase 939 it is the
+    /// statement for every search with an approximate index configured.
     /// Phase 928's `EXPLAIN` showed the approximate index serves `search`
     /// too (an Incremental Sort presorted on the distance), so this saves
     /// the sort step; it is not what makes the index usable.
@@ -895,8 +907,6 @@ type PgvectorVectorStore
 
     let sqlUpsert = Sql.upsert options
     let sqlUpsertBatch = Sql.upsertBatch options
-    let sqlSearch = Sql.search options
-    let sqlSearchIndexOrdered = Sql.searchIndexOrdered options
     let sqlSearchExact = Sql.searchExact options
     let sqlListChunks = Sql.listChunks options
     let sqlDeleteChunk = Sql.deleteChunk options
@@ -960,7 +970,14 @@ type PgvectorVectorStore
         | NoAnnIndex -> false
         | _ -> true
 
-    let indexOrdered = annConfigured && tuning.IndexOrderedSearch
+    // Phase 939: with an approximate index configured, the statement
+    // orders by distance alone and `Search` re-sorts the page; under
+    // `NoAnnIndex` it keeps the total order in SQL.
+    let sqlSearch =
+        if annConfigured then
+            Sql.searchIndexOrdered options
+        else
+            Sql.search options
 
     // Fixed for the store's lifetime: the settings depend only on the
     // options, the tuning and the extension version read at `create`.
@@ -1041,18 +1058,15 @@ type PgvectorVectorStore
         return rows
     }
 
-    /// One scope's page. Index-ordered when configured; with an approximate
-    /// index configured, a page that comes back short of `topK` is re-run
-    /// with the exact statement when the fallback is on (see
-    /// `PgvectorTuning.ExactFallbackOnShortPage`).
+    /// One scope's page. With an approximate index configured, a page that
+    /// comes back short of `topK` is re-run with the exact statement when
+    /// the fallback is on (see `PgvectorTuning.ExactFallbackOnShortPage`).
     let searchScope (scope: VectorScope) (queryLiteral: string) (topK: int) = async {
-        let sql = if indexOrdered then sqlSearchIndexOrdered else sqlSearch
-
         let! page =
             if List.isEmpty settings then
-                runPlain sql scope queryLiteral topK
+                runPlain sqlSearch scope queryLiteral topK
             else
-                runWithSettings sql scope queryLiteral topK
+                runWithSettings sqlSearch scope queryLiteral topK
 
         if annConfigured && tuning.ExactFallbackOnShortPage && page.Length < topK then
             return! runPlain sqlSearchExact scope queryLiteral topK
@@ -1111,8 +1125,11 @@ type PgvectorVectorStore
         }
     }
 
-    /// The pre-Phase-892 constructor: `PgvectorTuning.unchanged` and no
-    /// recorded extension version, so the store behaves exactly as it did.
+    /// The I/O-free constructor over a schema the caller has provisioned:
+    /// `PgvectorTuning.unchanged` and no recorded extension version, since
+    /// it reads nothing from the database. It does NOT take the posture
+    /// `create` composes; build through `create` / `createWithDataSource`
+    /// (or `createTuned`) for that.
     new(dataSource: NpgsqlDataSource, options: PgvectorOptions, ownsDataSource: bool, ?logger: ILogger) =
         new PgvectorVectorStore(dataSource, options, PgvectorTuning.unchanged, None, ownsDataSource, logger)
 
@@ -1423,54 +1440,6 @@ let private warnIfIterativeUnavailable
                 ExtensionVersion.iterativeScanSince
         )
 
-/// Build a store over a data source the CALLER owns (a shared pool, or a
-/// data source configured with TLS / logging the deployment supplies).
-/// Disposing the store leaves the data source open.
-///
-/// Options are validated and the database probed before the store is
-/// returned, so a `create` that returns has a store that works.
-let createWithDataSource
-    (dataSource: NpgsqlDataSource)
-    (options: PgvectorOptions)
-    (logger: ILogger option)
-    : IVectorStore =
-    validateOrFail options
-    probeAndMigrate dataSource options |> Async.RunSynchronously
-
-    match logger with
-    | Some l -> new PgvectorVectorStore(dataSource, options, false, l) :> IVectorStore
-    | None -> new PgvectorVectorStore(dataSource, options, false) :> IVectorStore
-
-/// Build a store from a connection string. The store owns the resulting
-/// `NpgsqlDataSource` and disposes it with itself.
-///
-/// ```
-/// let store =
-///     PgvectorVectorStore.create connectionString (PgvectorOptions.forDimensions 1536) (Some logger)
-/// ```
-let create (connectionString: string) (options: PgvectorOptions) (logger: ILogger option) : IVectorStore =
-    validateOrFail options
-
-    if String.IsNullOrWhiteSpace connectionString then
-        fail
-            "[PgvectorVectorStore] The connection string is empty. Supply it from ISecretStore / configuration at compose time."
-
-    let dataSource =
-        try
-            NpgsqlDataSource.Create connectionString
-        with ex ->
-            fail (sprintf "[PgvectorVectorStore] The connection string could not be parsed: %s" ex.Message)
-
-    try
-        probeAndMigrate dataSource options |> Async.RunSynchronously
-    with _ ->
-        dataSource.Dispose()
-        reraise ()
-
-    match logger with
-    | Some l -> new PgvectorVectorStore(dataSource, options, true, l) :> IVectorStore
-    | None -> new PgvectorVectorStore(dataSource, options, true) :> IVectorStore
-
 /// Phase 892 — `createWithDataSource` with an explicit `PgvectorTuning`
 /// (start from `PgvectorTuning.recommended`). The tuning is validated with
 /// the options before any I/O, and the extension version is read once so
@@ -1539,3 +1508,36 @@ let createTuned
 
     warnIfIterativeUnavailable logger tuning options version
     new PgvectorVectorStore(dataSource, options, tuning, version, true, logger) :> IVectorStore
+
+/// Build a store over a data source the CALLER owns (a shared pool, or a
+/// data source configured with TLS / logging the deployment supplies).
+/// Disposing the store leaves the data source open. The returned store
+/// also implements `IVectorStoreBatch`.
+///
+/// Options are validated and the database probed before the store is
+/// returned, so a `create` that returns has a store that works. Since
+/// Phase 939 it composes `PgvectorTuning.recommended`, including the
+/// extension-version read, so iterative scanning is sent only to pgvector
+/// 0.8.0 or later. Under `NoAnnIndex` (the `forDimensions` default) every
+/// search is exact and the one change is that a multi-scope search runs up
+/// to four scopes concurrently. Use `createTunedWithDataSource` with
+/// `PgvectorTuning.unchanged` to keep the pre-939 posture.
+let createWithDataSource
+    (dataSource: NpgsqlDataSource)
+    (options: PgvectorOptions)
+    (logger: ILogger option)
+    : IVectorStore =
+    createTunedWithDataSource dataSource options PgvectorTuning.recommended logger
+
+/// Build a store from a connection string. The store owns the resulting
+/// `NpgsqlDataSource` and disposes it with itself. Since Phase 939 it
+/// composes `PgvectorTuning.recommended` (see `createWithDataSource`); use
+/// `createTuned` with `PgvectorTuning.unchanged` to keep the pre-939
+/// posture.
+///
+/// ```
+/// let store =
+///     PgvectorVectorStore.create connectionString (PgvectorOptions.forDimensions 1536) (Some logger)
+/// ```
+let create (connectionString: string) (options: PgvectorOptions) (logger: ILogger option) : IVectorStore =
+    createTuned connectionString options PgvectorTuning.recommended logger

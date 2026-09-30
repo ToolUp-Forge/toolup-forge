@@ -89,11 +89,11 @@ let options = {
 
 `IvfFlatAnnIndex lists` is the alternative; it must be built *after* the table holds representative data, so provision it out of band rather than at first `create` on an empty table.
 
-## Production posture — `createTuned` and `PgvectorTuning`
+## Production posture — what `create` composes, and `PgvectorTuning`
 
 One approximate index serves every scope in the table, and the `scope = @scope` filter is applied while the index is walked. A **small scope in a large shared table** is therefore the exposed case: the approximate scan can exhaust its candidate list before it has found `topK` rows from that scope, and return fewer than it could. A deployment that separates teams into many small scopes has many such scopes.
 
-`create` keeps the original behaviour exactly. For a production table, compose the tuned entry point instead:
+Since Phase 939, `create` and `createWithDataSource` compose `PgvectorTuning.recommended`, the posture measured below to return full, correct pages. Configuring an index is all a production table needs:
 
 ```fsharp skip=fragment
 let options = {
@@ -101,17 +101,20 @@ let options = {
         AnnIndex = HnswAnnIndex(16, 64)
 }
 
-let store = PgvectorVectorStore.createTuned connectionString options PgvectorTuning.recommended (Some logger)
+let store = PgvectorVectorStore.create connectionString options (Some logger)
 ```
+
+`createTuned` / `createTunedWithDataSource` take a tuning explicitly. `PgvectorTuning.unchanged` is pgvector's own defaults with nothing added, the posture `create` used before Phase 939; pass it to keep that behaviour (see [the migration note](../../../docs/migrations/939-pgvector-tuned-default.md)). Under `NoAnnIndex`, the `forDimensions` default, every search is an exact scan whichever tuning is composed, so the only difference `create` makes there is that a multi-scope search runs up to four scopes concurrently.
+
+With an approximate index configured, the search statement orders by distance **alone**, and the `(score, scope, chunkId)` total order is restored by re-sorting the returned page. Measured, the planner served the older two-key statement from the same index, through an Incremental Sort presorted on the distance, with identical recall, so the `IndexOrderedSearch` switch that chose between them saved only that sort step, and Phase 939 retired it. Under `NoAnnIndex` the statement keeps the total order in SQL.
 
 ### Recommended settings (`PgvectorTuning.recommended`)
 
-| Setting | Recommended | `unchanged` (what `create` uses) | What it does |
+| Setting | Recommended (what `create` uses) | `unchanged` | What it does |
 |---|---|---|---|
-| `AnnIndex` (options) | `HnswAnnIndex(16, 64)` | `NoAnnIndex` | Approximate index; exact scan without one. |
-| `SearchWidth` | `Some 100` | `None` | `hnsw.ef_search` (or `ivfflat.probes`) for each query, set with `set_config(…, true)` inside that query's own transaction — it ends at commit, so a pooled connection never carries one caller's width to the next. |
+| `AnnIndex` (options) | `HnswAnnIndex(16, 64)` | `NoAnnIndex` | Approximate index; exact scan without one. Set on the options, not the tuning: `create` does not configure one for you. |
+| `SearchWidth` | `Some 100` | `None` | `hnsw.ef_search` (or `ivfflat.probes`) for each query, set with `set_config(…, true)` inside that query's own transaction — it ends at commit, so a pooled connection never carries one caller's width to the next. The same 100 serves both families; see [IVFFlat width](#ivfflat-width) for why. |
 | `IterativeScan` | `true` | `false` | `relaxed_order` iterative scanning: pgvector keeps walking the index until the scope filter has yielded `topK` rows. Needs pgvector **0.8.0+**; the version is read at `create`, the setting is never sent to an older server, and the health probe reports it as requested-but-not-applied. |
-| `IndexOrderedSearch` | `true` | `false` | The search statement orders by distance **alone**, and the `(score, scope, chunkId)` total order is restored by re-sorting the returned page. Measured, the planner serves the original two-key statement from the index as well — through an Incremental Sort presorted on the distance, with identical recall — so this setting saves that sort step; it is not what makes the index usable. |
 | `ExactFallbackOnShortPage` | `true` | `false` | With an approximate index configured, a scope whose page comes back shorter than `topK` is re-run with `Sql.searchExact`, which materialises the scope's live rows before ranking them, so **no** approximate index can serve it. A short page means the scope holds fewer live chunks than `topK`, or the filter starved the approximate scan; the re-run makes a **full top-k a guarantee** rather than a tuning outcome. The two-key statement cannot play this part: it is index-served too (measured). |
 | `MaxSearchConcurrency` | `4` | `1` | A multi-scope `Search` runs its per-scope queries concurrently under this bound — each holds one pooled connection while it runs. The answer is identical; only latency changes. |
 | `ExactScanWarningRows` | `500_000` | `500_000` | The preflight validator warns when a table above this estimated row count has no approximate index. |
@@ -160,12 +163,30 @@ Limit
 
 and the distance-only statement is the same index scan without the Incremental Sort, with identical recall at every width measured. So `search` is approximate once an index exists, and the store's short-page fallback, which used to re-run it, now runs `Sql.searchExact` instead: the scope's rows are materialised first and ranked after, and its plan never contains the approximate index (`CTE scoped -> Index Scan using …_scope_live_idx`, then `Sort`). The live arm asserts all three plans.
 
+### IVFFlat width
+
+`SearchWidth = Some 100` was measured for HNSW (`ef_search`). Under `IvfFlatAnnIndex` it sets `ivfflat.probes` to 100, which Phase 939 measured separately (same container and date as above): 100,000 rows of 32-dimension vectors clustered around 100 shared topics, scopes of 1,000, 5,000 and 12,000 rows spread across every topic, 30 queries per scope, top-10, the store's distance-only statement, one statement's round-trip.
+
+| `lists`, index built | pgvector default (`probes` 1): recall@10 · short pages | `probes` 10 (√lists) + iterative: recall@10 | `probes` 100 + iterative: recall@10 · mean ms |
+|---|---|---|---|
+| 1,000, after the load | 0.08–0.24 · 8–30 of 30 | 0.92–0.97 | 1.000 · 5.3–6.8 |
+| 100, after the load | 0.89–0.98 · 0–9 of 30 | 0.997–1.000 | 1.000 · 4.7–10.8 |
+| 100, on the empty table (as `AutoMigrate` builds it) | 0.42–0.53 · 0–10 of 30 | 0.90–0.997 | 1.000 · 6.2–9.7 |
+
+The default stays at 100 for both families. At 1,000 lists, 100 probes is a tenth of the lists and the plan still uses the index, at 1.000 recall where the √lists rule of thumb gives 0.92–0.97. Where `lists` is 100 or fewer, 100 probes reaches every list, and the planner stopped using the index: it answered from the `(scope)` index with an exact sort. That is exact, and costs what the fallback's exact statement costs (above), growing with the scope. Iterative scanning alone does not fix recall: at 1 probe it filled every page, but recall stayed at 0.28–0.86 for 1,000 lists. A deployment with many lists and a latency budget tighter than recall can lower the width with `{ PgvectorTuning.recommended with SearchWidth = Some 10 }`.
+
 **The live arm** (`TOOLUP_PGVECTOR_CONNECTION_STRING` pointed at the `compose.parity.yml` service; 76 of 76 cases green) prints:
 
 - **Reproduction** — 5,270 rows, 16 dimensions, `hnsw(16, 64)`, default width, no iterative scan, no fallback: a 20-chunk scope and a 250-chunk scope both returned a full top-10, each answered from the `(scope)` index with an exact sort. A table this small does not starve; the index-choice corpus above is where starvation shows.
 - **Fallback** — the same shape with the planner steered to the index (`enable_sort = off` on the connection) and the fallback on: the page before the fallback held 4 of 10 rows, and the store returned the exact top-10 in order. With the fallback re-running the two-key statement, as it did before Phase 928, the case fails.
 - **Recall and latency** — 5,000 × 32 dimensions, recommended settings: recall@10 = 1.000 over 50 queries; one `Search` call, client round-trip included (settings statement, search and commit on one connection), mean 3.8 ms, p95 4.8 ms.
 - **Posture read** — `pgvector 0.8.6; … index: hnsw (m=16, ef_construction=64) [present]; search width: hnsw.ef_search = 100 (per query); iterative scan: relaxed_order (per query); …`.
+
+**Phase 939 re-run** — the same image, served on a spare port, on 2026-09-30; 79 of 79 cases green:
+
+- **`create`, red first** — `create` over `hnsw(16, 64)`, with the same 250-chunk scope in 5,250 rows and the same `enable_sort = off` steering as the fallback case. The page from pgvector's default posture held 4 of 10 rows. Before this phase, `create` returned exactly those 4. It now returns the exact top-10, in order.
+- **Defaults** — `create` and `createWithDataSource` both report `PgvectorTuning.recommended`, a recorded extension version (0.8.6, so iterative scanning is applied) and `hnsw.ef_search = 100 (per query)`. Under `NoAnnIndex`, `create` sends no per-query settings.
+- **Recall and latency** — the recommended case above measured recall@10 = 1.000, mean 5.8 ms, p95 6.8 ms on this run.
 
 ### Batched writes
 

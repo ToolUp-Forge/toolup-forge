@@ -451,11 +451,10 @@ let private tuningTests =
                     "the recommended preset must be valid"
         }
 
-        test "the unchanged preset is the pre-892 behaviour" {
+        test "the unchanged preset is pgvector's own defaults" {
             let t = PgvectorTuning.unchanged
             Expect.isNone t.SearchWidth "no width is applied — the database default stays in force"
             Expect.isFalse t.IterativeScan "no iterative scan"
-            Expect.isFalse t.IndexOrderedSearch "the two-key ORDER BY is kept"
             Expect.isFalse t.ExactFallbackOnShortPage "no second query"
             Expect.equal t.MaxSearchConcurrency 1 "multi-scope search stays sequential"
 
@@ -1025,10 +1024,7 @@ let private phase892LiveTests (connectionString: string) =
             // `(scope)` index (exact, full page), and the exposed band is a
             // scope large enough for the planner to route it to the
             // approximate index yet too small to fill its candidate list.
-            let bare = {
-                PgvectorTuning.unchanged with
-                    IndexOrderedSearch = true
-            }
+            let bare = PgvectorTuning.unchanged
 
             let store, dispose, table =
                 makeTunedStore connectionString 16 (HnswAnnIndex(16, 64)) bare
@@ -1320,13 +1316,16 @@ let private phase892LiveTests (connectionString: string) =
                         MaxSearchConcurrency = 4
                 }
 
+            // Phase 939: `create` composes the recommended posture, whose
+            // search is concurrent too, so the sequential reference is named.
             let sequential =
-                create
+                createTuned
                     connectionString
                     {
                         PgvectorOptions.forDimensions 8 with
                             Table = table
                     }
+                    PgvectorTuning.unchanged
                     (Some(SilentLogger() :> ILogger))
 
             try
@@ -1371,6 +1370,125 @@ let private phase892LiveTests (connectionString: string) =
                 match health with
                 | HealthChecks.Unhealthy message -> failtestf "a reachable store is not Unhealthy: %s" message
                 | _ -> ()
+            finally
+                dispose.Dispose()
+        }
+    ]
+
+/// Phase 939 live cases — `create`, with nothing tuned, over a configured
+/// approximate index: the starved mid-sized scope Phase 928 measured, now
+/// answered in full and exactly.
+let private phase939LiveTests (connectionString: string) =
+    testList "Phase 939 (live)" [
+        testCaseAsync "create over an HNSW index returns the exact top-k for a starved mid-sized scope"
+        <| async {
+            // The same corpus and the same planner steering as the Phase 928
+            // fallback case: a 250-chunk scope in a 5,250-row table, routed
+            // to the approximate index. Built with plain `create` — no
+            // tuning named — because that is what a deployment composes.
+            let steered =
+                let b = NpgsqlConnectionStringBuilder connectionString
+                b.Options <- "-c enable_sort=off"
+                b.ConnectionString
+
+            let table = freshTableName ()
+
+            let options = {
+                PgvectorOptions.forDimensions 16 with
+                    Table = table
+                    AnnIndex = HnswAnnIndex(16, 64)
+            }
+
+            let store = create steered options (Some(SilentLogger() :> ILogger))
+
+            try
+                do!
+                    upsertBatch
+                        store
+                        (Team "big")
+                        (randomVectors 892 5000 16
+                         |> List.mapi (fun i v -> sprintf "big-%05d" i, v, chunk "big" "b"))
+
+                let mid = randomVectors 894 250 16 |> List.mapi (fun i v -> sprintf "mid-%03d" i, v)
+
+                do! upsertBatch store (Team "mid") (mid |> List.map (fun (id, v) -> id, v, chunk "mid" "m"))
+                analyze steered table
+                let query = (randomVectors 895 1 16).Head
+
+                // The case's own premise: at pgvector's defaults the index
+                // path starves this scope. If the corpus stops starving, the
+                // case proves nothing about the default, so it says so.
+                let starved = rawCount steered (Sql.search options) "team:mid" query 10
+                printfn "[Phase 939 red] the untuned index path returned %d of 10 rows for the 250-chunk scope" starved
+                Expect.isLessThan starved 10 "precondition: pgvector's default posture starves this scope"
+
+                let truth =
+                    mid
+                    |> List.sortBy (fun (id, v) -> -(cosine query v), id)
+                    |> List.truncate 10
+                    |> List.map fst
+
+                let! results = store.Search [ Team "mid" ] query 10
+                Expect.equal (results |> List.map _.ChunkId) truth "create returns the exact top-10, in order"
+            finally
+                (store :?> IDisposable).Dispose()
+                dropTable connectionString table
+        }
+
+        testCaseAsync "create and createWithDataSource compose the recommended tuning and read the extension version"
+        <| async {
+            let table = freshTableName ()
+
+            let options = {
+                PgvectorOptions.forDimensions 8 with
+                    Table = table
+                    AnnIndex = HnswAnnIndex(16, 64)
+            }
+
+            let logger = Some(SilentLogger() :> ILogger)
+            let owned = create connectionString options logger
+            use dataSource = NpgsqlDataSource.Create connectionString
+            let borrowed = createWithDataSource dataSource options logger
+
+            try
+                for store in [ owned; borrowed ] do
+                    let pg = store :?> PgvectorVectorStore
+                    Expect.equal pg.Tuning PgvectorTuning.recommended "the default posture is the recommended one"
+
+                    Expect.isTrue
+                        (ExtensionVersion.supportsIterativeScan pg.ExtensionVersionAtCreate)
+                        "the extension version is read at create, so iterative scanning is applied on 0.8.0+"
+
+                    let! line = Health.report store
+                    Expect.stringContains line "hnsw.ef_search = 100 (per query)" "the raised width is in force"
+                    Expect.stringContains line "index-ordered, page re-sorted" "the one ANN statement shape"
+            finally
+                (owned :?> IDisposable).Dispose()
+                (borrowed :?> IDisposable).Dispose()
+                dropTable connectionString table
+        }
+
+        testCaseAsync "create under NoAnnIndex stays exact and applies no per-query settings"
+        <| async {
+            let store, dispose = makeStoreWith connectionString 8 ()
+
+            try
+                let pg = store :?> PgvectorVectorStore
+                Expect.equal pg.Tuning PgvectorTuning.recommended "the same default posture"
+
+                Expect.isEmpty
+                    (Sql.searchSettings pg.Options pg.Tuning pg.ExtensionVersionAtCreate)
+                    "an exact scan takes no settings, so search runs outside any transaction as before"
+
+                do!
+                    upsertBatch
+                        store
+                        (Team "T")
+                        (List.init 40 (fun i -> sprintf "c-%02d" i, eightDim (i % 8), chunk "c" "x"))
+
+                let! results = store.Search [ Team "T" ] (eightDim 2) 5
+                Expect.hasLength results 5 "a full page"
+                Expect.all results (fun m -> m.Score > 0.99) "the five exact matches of the queried axis"
             finally
                 dispose.Dispose()
         }
@@ -1647,6 +1765,7 @@ let private liveTests (connectionString: string) =
         }
 
         phase892LiveTests connectionString
+        phase939LiveTests connectionString
     ]
 
 // ─── Registration ────────────────────────────────────────────────────
