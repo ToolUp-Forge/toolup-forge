@@ -1715,16 +1715,16 @@ times to 1,407 slots — Debug builds, one Windows 11 machine, 2026-09-30.
 
 | Host | shipped `Ring.fs` | list extraction | array extraction | array ÷ shipped |
 |---|---|---|---|---|
-| .NET 10.0.8 (four runs) | 35.7–40.2 ns/op | 67–82 µs/op | 19.0–21.4 ns/op | 0.53–0.54 |
-| Fable on node v25.9.0 | 184.6 ns/op | 175 µs/op | 140.5 ns/op | 0.76 |
+| .NET 10.0.8 (seven runs) | 35.6–40.2 ns/op | 67–88 µs/op | 19.0–23.9 ns/op | 0.53–0.61 |
+| Fable on node v25.9.0 (two runs) | 184.6–191.9 ns/op | 134–175 µs/op | 136.7–140.5 ns/op | 0.71–0.76 |
 
 Those three figures use the differential's own driver, which builds the list of popped values, so
 each includes that allocation. The two rings walked alone over the same sequence, nothing collected:
 
 | Host | shipped `Ring.fs` | array extraction | array ÷ shipped |
 |---|---|---|---|
-| .NET 10.0.8 (four runs) | 31.7–34.3 ns/op | 14.2–15.5 ns/op | 0.45–0.46 |
-| Fable on node v25.9.0 | 98.9 ns/op | 46.4 ns/op | 0.47 |
+| .NET 10.0.8 (seven runs) | 31.6–34.3 ns/op | 14.2–18.6 ns/op | 0.45–0.55 |
+| Fable on node v25.9.0 (two runs) | 98.9–102.5 ns/op | 44.0–46.4 ns/op | 0.43–0.47 |
 
 **The falsifier.** The claim is that the array extraction costs no more per operation than the
 shipped ring on either host. It is false if a run on a quiet machine puts the array arm's minimum
@@ -1734,7 +1734,7 @@ to pop more than a thousand items and, on .NET, to grow the ring past a thousand
 step is inside the number; and **the two hosts are held to one sequence by a pinned fingerprint**
 (`1:14575:1899911031`, asserted in both packs), which is the check Phase 850's Fable figure lacked
 and Phase 884 found it needed. The list extraction's figure is the one Phase 850 recorded, again:
-three to four thousand times the array's on .NET, over a thousand times under Fable.
+three to four thousand times the array's on .NET, about a thousand times under Fable.
 
 Why the extraction is the faster one is not subtle: the shipped grow step builds its new array
 through a sequence expression, and the shipped state is a struct union rewritten on every
@@ -1745,7 +1745,7 @@ BigInt and is ahead anyway.
 
 **Yes: the extracted array ring can replace `Ring.fs` on both hosts within the client budgets.** The
 budgets in `perf-budgets.json` are boot, decode per response, view per dispatch and two bundle
-sizes. A ring operation is between 14 and 185 nanoseconds in the tables above, against a view
+sizes. A ring operation is between 14 and 192 nanoseconds in the tables above, against a view
 budget whose baseline is 315 microseconds, and the extraction's are the cheaper. For the bundles:
 the transpiled extraction is 4,720 bytes unminified against `Ring.js`'s 4,886, which it would
 replace; the BigInt helper it imports is 11,564 bytes unminified and is the one Fable's own date,
