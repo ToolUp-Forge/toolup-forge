@@ -1939,7 +1939,9 @@ measurement:
    the premise this phase took, and refuses the flag on every other backend. The F# backend honouring
    it would make the extraction's indices `uint32`, which Fable carries as numbers; the probe above
    says that recovers the shipped ring's steady-state speed and keeps the array ring's lead
-   everywhere else. The ask belongs upstream.
+   everywhere else. The ask belongs upstream, and was made on 2026-09-30 as
+   [FStarLang/FStar#4624](https://github.com/FStarLang/FStar/issues/4624); that issue is what to
+   watch for this route.
 
 **Left for whoever makes the replacement.** The three premises the driver set for it — what public
 surface the generated `module ElmishRingArray` and `open FStarCustard` would add to
