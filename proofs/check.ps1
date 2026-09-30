@@ -17,8 +17,9 @@
 
       1. Resolve the pinned F* release named in `fstar-pin.json` — an
          existing $env:FSTAR_HOME first, then a previous download under
-         `proofs/.fstar/`, then a fresh download whose SHA-256 must match
-         the pin.
+         `proofs/.fstar/` IF it is the pinned release (one left by an
+         older pin is replaced), then a fresh download whose SHA-256
+         must match the pin.
       2. CHECK each module on it, with `--report_assumes error` so an
          `assume` or an `admit` fails the leg rather than quietly
          weakening a theorem.
@@ -67,7 +68,7 @@
     lucky seed, and three cold runs of three seeds is cheap evidence
     that it is not.
 
-    **The toolchain is a 198 MB download and is NOT a build dependency.**
+    **The toolchain is a download of roughly 215 MB and is NOT a build dependency.**
     Nothing in `VerifyAll`, `dotnet build`, or the ordinary CI matrix
     needs it — the extractions are committed precisely so a contributor
     with no interest in proofs never installs a prover. This script is
@@ -208,6 +209,25 @@ function Fail {
     exit 1
 }
 
+# What a prover says it is, read out of its own `--version` text: the
+# release label and the commit it was built from. The pin is compared on
+# BOTH (Phase 955), because the commit is the identity the pin records
+# and a version string alone is only a label for it.
+function Get-ProverIdentity {
+    param([string] $Exe)
+    $text = (& $Exe --version) -join " "
+    [pscustomobject]@{
+        Text    = $text
+        Version = if ($text -match 'F\*\s+(\S+)') { "v$($Matches[1])" } else { "" }
+        Commit  = if ($text -match 'commit=([0-9a-f]+)') { $Matches[1] } else { "" }
+    }
+}
+
+function Test-IsPinnedProver {
+    param($Identity)
+    ($Identity.Version -eq $pin.version) -and ($Identity.Commit -eq $pin.commit)
+}
+
 # ─── 1. Resolve the pinned prover ────────────────────────────────────
 
 Write-Step "1/7  Resolving the pinned prover ($($pin.version), Z3 $($pin.z3version))"
@@ -244,6 +264,22 @@ elseif ($env:FSTAR_HOME) {
 else {
     $home_ = Join-Path $PSScriptRoot ".fstar"
     $candidate = Join-Path $home_ $platform.bin
+
+    # A previous download is reused only if it IS the pin (Phase 955).
+    # This branch is the one that resolves the pin, so a directory left
+    # by an OLDER pin must not answer for the new one: before this check
+    # a checkout that had run the leg once kept running the release it
+    # had first downloaded, whatever the pin went on to say. `-FStarHome`
+    # and `$env:FSTAR_HOME` are different — there the caller chose the
+    # prover, and the run says so rather than replacing it.
+    if (Test-Path $candidate) {
+        $held = Get-ProverIdentity $candidate
+
+        if (-not (Test-IsPinnedProver $held)) {
+            Write-Host "    proofs/.fstar holds $($held.Version)$(if ($held.Commit) { " at $($held.Commit)" }), not the pin ($($pin.version) at $($pin.commit)); replacing it"
+            Remove-Item (Join-Path $home_ ($platform.bin -split '/')[0]) -Recurse -Force
+        }
+    }
 
     if (-not (Test-Path $candidate)) {
         if (-not $platform.sha256) {
@@ -284,11 +320,20 @@ else {
     if (-not (Test-Path $fstarExe)) { Fail "the extracted release has no $($platform.bin)." }
 }
 
-$reported = (& $fstarExe --version) -join " "
-Write-Host "    $reported"
+# What RAN, as the prover names itself — the closing line prints this and
+# not the pin (Phase 955). `-FStarHome` and `$env:FSTAR_HOME` both supply
+# a prover the pin did not choose, and a closing line that printed the
+# pinned version over such a run said the leg was green on a release it
+# had not touched.
+$ran = Get-ProverIdentity $fstarExe
+Write-Host "    $($ran.Text)"
 
-if ($reported -notmatch [regex]::Escape($pin.version.TrimStart("v"))) {
-    Write-Host "    WARNING: this is NOT the pinned release ($($pin.version)). A green run here is a claim about THIS prover." -ForegroundColor Yellow
+$ranVersion = if ($ran.Version) { $ran.Version } else { "an F* that did not report a version" }
+$ranCommit = $ran.Commit
+$ranIsPinned = Test-IsPinnedProver $ran
+
+if (-not $ranIsPinned) {
+    Write-Host "    WARNING: this is NOT the pinned release ($($pin.version), commit $($pin.commit)). A green run here is a claim about THIS prover." -ForegroundColor Yellow
 }
 
 # ─── 2..5. Check, extract, normalise, byte-diff — per module ─────────
@@ -454,5 +499,9 @@ else {
 }
 
 Write-Host ""
-Write-Host "PROOF LEG GREEN — $($pin.version), $Runs cold check(s) of $($modules.Count) module(s), every extraction identical to its committed oracle." -ForegroundColor Green
+$ranLabel =
+    if ($ranIsPinned) { "$ranVersion (the pinned release)" }
+    else { "$ranVersion$(if ($ranCommit) { " at $ranCommit" }), which is NOT the pinned release ($($pin.version))" }
+
+Write-Host "PROOF LEG GREEN — $ranLabel, $Runs cold check(s) of $($modules.Count) module(s), every extraction identical to its committed oracle." -ForegroundColor Green
 exit 0

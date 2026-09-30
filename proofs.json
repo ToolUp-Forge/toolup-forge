@@ -168,7 +168,7 @@
     "fstar-pinned": {
       "tool": "fstar",
       "pin": "proofs/fstar-pin.json",
-      "version": "v2026.09.06",
+      "version": "v2026.09.27",
       "solver": "z3 4.13.3",
       "leg": "proofs/check.ps1",
       "reproducibility": "proof hints no longer exist in this prover, so the pin, a margin on --z3rlimit, and --quake 3 over three cold runs are what stand in for them"
