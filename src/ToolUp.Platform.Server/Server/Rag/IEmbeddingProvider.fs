@@ -333,8 +333,9 @@ module EmbedderFailureClass =
 /// SDK-level audit event type emitted when an API-backed embedding
 /// provider is definitively unavailable for auth reasons (a permanent
 /// 401 / 403). Emitted under the reserved `_platform` scope by the
-/// provider itself when an event sink is wired, and re-emitted with
-/// tenant scope by the Phase 14t ingestion retry/dead-letter path.
+/// provider itself when an event sink is wired, and re-emitted under the
+/// uploading tenant's scope by the ingestion path for every chunk it
+/// dead-letters as permanent (`IngestionService.Outcome.deadLetterPermanent`).
 /// Exposed as a `[<Literal>]` so both layers — and consumers building
 /// alerting hooks — key off the same string.
 [<Literal>]
@@ -342,10 +343,16 @@ let KnowledgeEmbeddingProviderUnavailableEvent =
     "KnowledgeEmbeddingProviderUnavailable"
 
 /// Raised by an API-backed provider when a call fails permanently for
-/// auth reasons (401 / 403) after classification — never retried. The
-/// Phase 14t ingestion path catches this to dead-letter the chunk and
-/// raise the tenant-scoped operator notification; a direct caller sees
-/// an actionable message naming the status.
+/// auth reasons (401 / 403) after classification — never retried. On
+/// the ingestion path, `IngestionService.classifyIndexFailure` finds it
+/// anywhere in the exception's cause chain and classifies the chunk
+/// `Permanent` (Phase 867 — before that it fell through to `Transient`
+/// and was retried for half an hour): the chunk is NOT retried, the
+/// tenant-scoped `KnowledgeEmbeddingProviderUnavailable` audit is
+/// written, an Owner/Admin error `SystemMessage` is published at most
+/// once per scope per dedup window, and the chunk is dead-lettered —
+/// failing the document's ingestion. A direct caller sees an actionable
+/// message naming the status.
 exception EmbeddingProviderUnavailableException of statusCode: int * body: string
 
 /// Raised when an API-backed provider's circuit breaker is OPEN — the

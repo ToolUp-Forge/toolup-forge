@@ -171,7 +171,6 @@ KnowledgeBase.ServerIndexStorage.loadChunkHashes(ToolUp.Platform.BlobStorage+IBl
 KnowledgeBase.ServerIndexStorage.loadIndex(ToolUp.Platform.BlobStorage+IBlobStorage, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument]]
 KnowledgeBase.ServerIndexStorage.loadVersions(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocumentVersion]]
 KnowledgeBase.ServerIndexStorage.noteBodyBlobName(System.String) : System.String
-KnowledgeBase.ServerIndexStorage.progressCache : System.Collections.Concurrent.ConcurrentDictionary`2[System.String, System.Int32] { get }
 KnowledgeBase.ServerIndexStorage.saveChunkHashes(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 KnowledgeBase.ServerIndexStorage.saveIndex(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 KnowledgeBase.ServerIndexStorage.setStatus(System.String, SharedTypes+IngestionStatus) : System.Void
@@ -185,6 +184,9 @@ KnowledgeBase.ServerIndexStorage.versionsBlobName(System.String) : System.String
 KnowledgeBase.ServerIndexStorage+IngestionStatusFeed (class)
 KnowledgeBase.ServerIndexStorage+IngestionStatusFeed.subscribe(System.String, Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+IngestionStatus, Microsoft.FSharp.Core.Unit]) : System.IDisposable
 KnowledgeBase.ServerIngestionObserver (class)
+KnowledgeBase.ServerIngestionObserver.beginIngestionAttempt(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger, System.String, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.RAG.IngestionTypes+IngestionAttempt]
+KnowledgeBase.ServerIngestionObserver.forgetIngestionAttempt(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+KnowledgeBase.ServerIngestionObserver.ingestionAttemptBlobName(System.String) : System.String
 KnowledgeBase.ServerIngestionObserver.makeIngestionStatusObserver(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.Platform.ILogger) : ToolUp.RAG.IngestionTypes+IIngestionStatusObserver
 KnowledgeBase.ServerIngestionStatusStream (class)
 KnowledgeBase.ServerIngestionStatusStream.ingestionStatusStream(System.String) : System.Collections.Generic.IAsyncEnumerable`1[SharedTypes+IngestionStatus]

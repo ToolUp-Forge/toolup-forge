@@ -522,6 +522,9 @@ let private makeVectorisationHook
                                 None
                             else
                                 Some createdBy
+                        // The Data Manager status store tracks a file, not
+                        // an attempt (Phase 867 attempts are the KB's).
+                        Attempt = None
                     }
 
                     // Bounded retry: a full queue is often just the drainer

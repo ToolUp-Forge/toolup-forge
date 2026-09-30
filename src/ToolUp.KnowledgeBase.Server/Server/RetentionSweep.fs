@@ -9,6 +9,7 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.VectorKnowledgeTypes
 open SharedTypes
 open KnowledgeBase.ServerIndexStorage
+open KnowledgeBase.ServerIngestionObserver
 
 // ─── Phase 512 — per-scope age-based KB retention sweep ──────────────
 //
@@ -198,7 +199,7 @@ let sweepScope
                         | None -> ()
 
                         clearStatus doc.Id
-                        progressCache.TryRemove doc.Id |> ignore
+                        do! forgetIngestionAttempt storage container doc.Id
                         return Ok doc
                     else
                         let survivors = IIndexLifecycle.IndexLifecycleReport.summarise report

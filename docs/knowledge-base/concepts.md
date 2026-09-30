@@ -171,11 +171,11 @@ type IIngestionStatusObserver =
     abstract OnChunkFailed: IngestionJob * error: string -> Async<unit>
 ```
 
-The job itself carries the identity the observer needs, so there are no separate job-id / chunk-id parameters and no accepted / completed callbacks — completion is derived from the indexed count reaching the job's total.
+The job itself carries the identity the observer needs, so there are no separate job-id / chunk-id parameters and no accepted / completed callbacks — completion is derived from the indexed count reaching the job's total. That total is the job's `IngestionAttempt.EnqueuedChunks`: what this ingestion attempt actually enqueued, which an incremental re-index makes smaller than the document's chunk count.
 
 `KnowledgeBase.Server.makeIngestionStatusObserver storage notificationChannel logger` wires an implementation that:
-1. Resolves the document from the `IngestionJob`.
-2. Advances its persisted status through `Queued → ExtractingText → Embedding (n, total) → Complete n | Failed reason`.
+1. Resolves the document from the `IngestionJob`, and drops the callback when its attempt is not the document's current one (a late retry from an ingestion a newer upload or re-save has superseded).
+2. Advances its persisted status through `Queued → ExtractingText → Embedding (n, enqueued) → Complete chunkCount | Failed reason`. The count lives in the persisted status, not in process memory, so a chunk retried on another replica advances the same count. `Complete` and `Failed` are terminal for the attempt: no later callback moves a document out of either — only a new attempt re-seeds it — and `Complete` always reports the document's full chunk count.
 3. On a terminal status, publishes a `CustomNotification` under `KnowledgeBase.IngestionStatus` to the scope — after re-checking the job's `OriginatingUserId` against the stored `UploadedBy`, so a spoofed enqueue cannot deliver another user's status into the wrong scope.
 
 The SSE wire format for the notification is `IngestionStatusUpdate`. It is deliberately DU-free, so a subscriber in another companion can parse it without mirroring `IngestionStatus` across the module boundary — and only terminal outcomes are published:

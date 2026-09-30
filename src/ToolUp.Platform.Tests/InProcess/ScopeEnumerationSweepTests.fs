@@ -390,6 +390,7 @@ let private sampleJob: DocumentIngestionJob = {
     ScopeId = "alpha"
     Container = "team-alpha"
     OriginatingUserId = Some "ann"
+    Attempt = None
 }
 
 let private enqueueTests =

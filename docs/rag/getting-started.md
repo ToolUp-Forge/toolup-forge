@@ -132,6 +132,9 @@ let job: DocumentIngestionJob = {
     Container = $"team-{teamId}"
     // `None` on a non-user path; observers treat it as "no re-auth".
     OriginatingUserId = None
+    // `None` when the producer tracks no ingestion attempt; an observer
+    // then completes against the document's own chunk count.
+    Attempt = None
 }
 
 let enqueue = async {
