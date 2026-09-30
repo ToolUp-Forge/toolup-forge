@@ -137,11 +137,72 @@ module FactTableWriteError =
                 current
         | FactTableStorageFailure detail -> sprintf "fact-table storage failed: %s" detail
 
+// ─── Run provenance (Phases 932, 938) ────────────────────────────────
+//
+// A run's facts are `Computed` by the table's producing operation — the
+// table's own lineage — unless the run was OPENED with an imported
+// provenance (`IFactTableWriter.OpenRun`'s `provenance`, Phase 938). An
+// importing producer therefore writes through the COMPOSED writer, whatever
+// store the table is bound to, and every decoration of it (the per-run
+// browse notice, audit, budgets) reaches imported runs exactly as it
+// reaches computed ones. A run opened with no provenance, or with
+// `ComputedRun`, writes byte-for-byte what it wrote before (GP 11).
+
+/// One imported cell's disclosure as its origin published it.
+type FactTableImportedCell = {
+    /// The row's subject path in the importing table.
+    Subject: string list
+    /// The column's metric id.
+    Metric: string
+    /// The row's period start.
+    From: DateTime
+    /// The row's period end.
+    To: DateTime
+    /// What the origin published the cell at.
+    Disclosure: Disclosure
+}
+
+/// One origin of an imported run: the rows under one root subject member.
+type FactTableImportOrigin = {
+    /// The root member the origin's rows sit under.
+    RootMember: string
+    /// The certificate the origin's facts name (`Imported certificateRef`).
+    CertificateRef: string
+    /// The evidence trigger the origin's facts carry.
+    TriggerRef: string
+    /// When set, the origin is withdrawn: the absences the run mints for
+    /// its rows name this reason rather than the run.
+    Withdrawal: string option
+    /// The cells the origin published, with their disclosures.
+    Cells: FactTableImportedCell list
+}
+
+/// Where a run's facts come from. Part of the `IFactTableWriter` contract
+/// since Phase 938: every writer, and every decorator of one, honours it.
+type FactTableRunProvenance =
+    /// Computed by the table's producing operation — the default.
+    | ComputedRun
+    /// Imported: a row under an origin's root member is written with
+    /// `Imported` provenance naming the origin's certificate, evidence naming
+    /// the origin, and a disclosure no wider than the origin published it —
+    /// the floor of the two (`Disclosure.floor`), and `Internal` for a cell
+    /// the origin did not place. A row under no origin stays `Computed`.
+    | ImportedRun of origins: FactTableImportOrigin list
+
 /// The seam a producer writes a declared fact table through.
 type IFactTableWriter =
     /// Open a run of a declared table in a scope. The run stages rows and
     /// makes nothing visible until it commits.
-    abstract OpenRun: scopeId: string * tableId: string -> Async<Result<FactTableRunRecord, FactTableWriteError>>
+    ///
+    /// `provenance` (Phase 938) says where the run's facts come from, and the
+    /// writer keeps it with the run until the run ends: omitted, or
+    /// `ComputedRun`, the run writes the table's own lineage exactly as
+    /// before; `ImportedRun` writes each origin's rows `Imported`, per
+    /// `FactTableRunProvenance.rewrite`. A decorator hands it to the writer
+    /// it decorates untouched — an omitted provenance stays omitted.
+    abstract OpenRun:
+        scopeId: string * tableId: string * ?provenance: FactTableRunProvenance ->
+            Async<Result<FactTableRunRecord, FactTableWriteError>>
 
     /// Stage a batch of rows on an open run. Rows are validated at commit,
     /// not here, so a producer streams without a round trip per defect.
@@ -554,118 +615,55 @@ type FactTableHead = {
     Commit: FactTableCommit
 }
 
-// ─── Run provenance (Phase 932) ──────────────────────────────────────
-//
-// A run's facts are `Computed` by the table's producing operation — the
-// table's own lineage — unless the run was staged with an IMPORTED
-// provenance before it committed. The provenance is staged beside the run,
-// like its rows, keyed by run id in the run's scope (rule 4: any instance
-// can commit a run another staged). So an importing producer writes through
-// the COMPOSED writer, and every decoration of it (the per-run browse
-// notice, audit, budgets) reaches imported runs exactly as it reaches
-// computed ones. A run staged with no provenance is `Computed`, and its
-// writes are byte-for-byte what they were before (GP 11).
-//
-// Only the default writer reads a staged provenance, so a producer that
-// stages one writes only tables bound to `DefaultFactTableWriter.Destination`.
+/// Keeping and applying a run's provenance.
+module FactTableRunProvenance =
 
-/// One imported cell's disclosure as its origin published it.
-type internal FactTableImportedCell = {
-    /// The row's subject path in the importing table.
-    Subject: string list
-    /// The column's metric id.
-    Metric: string
-    /// The row's period start.
-    From: DateTime
-    /// The row's period end.
-    To: DateTime
-    /// What the origin published the cell at.
-    Disclosure: Disclosure
-}
-
-/// One origin of an imported run: the rows under one root subject member.
-type internal FactTableImportOrigin = {
-    /// The root member the origin's rows sit under.
-    RootMember: string
-    /// The certificate the origin's facts name (`Imported certificateRef`).
-    CertificateRef: string
-    /// The evidence trigger the origin's facts carry.
-    TriggerRef: string
-    /// When set, the origin is withdrawn: the absences the run mints for
-    /// its rows name this reason rather than the run.
-    Withdrawal: string option
-    /// The cells the origin published, with their disclosures.
-    Cells: FactTableImportedCell list
-}
-
-/// Where a run's facts come from.
-type internal FactTableRunProvenance =
-    /// Computed by the table's producing operation — the default.
-    | ComputedRun
-    /// Imported: a row under an origin's root member is written with
-    /// `Imported` provenance naming the origin's certificate, evidence naming
-    /// the origin, and a disclosure no wider than the origin published it —
-    /// the floor of the two (`Disclosure.floor`), and `Internal` for a cell
-    /// the origin did not place. A row under no origin stays `Computed`.
-    | ImportedRun of origins: FactTableImportOrigin list
-
-/// Staging and reading a run's provenance.
-module internal FactTableRunProvenance =
-
-    /// The blob a run's staged provenance lives in, in the run's scope.
-    let blobName (runId: string) =
+    /// The blob the default writer keeps an imported run's provenance in,
+    /// beside the run's staged rows, in the run's scope (rule 4: any
+    /// instance can commit a run another opened). Nothing is kept for a
+    /// computed run.
+    let internal blobName (runId: string) =
         sprintf "_fact-tables/provenance/%s.json" runId
 
-    let private runRecordName (runId: string) =
-        sprintf "_fact-tables/runs/%s.json" runId
-
-    /// Stage a provenance on an OPEN run of the default writer. Staging
-    /// `ComputedRun` clears any staged provenance.
-    let stage
+    /// Keep a run's provenance at open: an imported one is written, a
+    /// computed one writes nothing (GP 11).
+    let internal keep
         (storage: IBlobStorage)
         (scopeId: string)
-        (runId: string)
+        (name: string)
         (provenance: FactTableRunProvenance)
         : Async<Result<unit, FactTableWriteError>> =
         async {
-            match! FactTableBlobIo.tryGet<FactTableRunRecord> storage scopeId (runRecordName runId) with
-            | Error e -> return Error e
-            | Ok None -> return Error(FactTableRunUnknown runId)
-            | Ok(Some run) ->
-                match run.Status, provenance with
-                | FactTableRunStatus.Open, ComputedRun ->
-                    let! _ = storage.Delete(scopeId, blobName runId)
-                    return Ok()
-                | FactTableRunStatus.Open, ImportedRun _ ->
-                    return! FactTableBlobIo.put storage scopeId (blobName runId) provenance
-                | FactTableRunStatus.Committed _, _ -> return Error(FactTableRunClosed(runId, "committed"))
-                | FactTableRunStatus.Rejected _, _ -> return Error(FactTableRunClosed(runId, "rejected"))
-                | FactTableRunStatus.Abandoned _, _ -> return Error(FactTableRunClosed(runId, "abandoned"))
+            match provenance with
+            | ComputedRun -> return Ok()
+            | ImportedRun _ -> return! FactTableBlobIo.put storage scopeId name provenance
         }
 
-    /// A run's staged provenance: `ComputedRun` when none is staged.
-    let read
+    /// A run's kept provenance: `ComputedRun` when none is kept.
+    let internal read
         (storage: IBlobStorage)
         (scopeId: string)
-        (runId: string)
+        (name: string)
         : Async<Result<FactTableRunProvenance, FactTableWriteError>> =
         async {
-            match! FactTableBlobIo.tryGet<FactTableRunProvenance> storage scopeId (blobName runId) with
+            match! FactTableBlobIo.tryGet<FactTableRunProvenance> storage scopeId name with
             | Ok(Some provenance) -> return Ok provenance
             | Ok None -> return Ok ComputedRun
             | Error e -> return Error e
         }
 
-    /// Drop a run's staged provenance, when one is staged.
-    let discard (storage: IBlobStorage) (scopeId: string) (runId: string) : Async<unit> = async {
-        let! staged = storage.Exists(scopeId, blobName runId)
+    /// Drop a run's kept provenance, when one is kept.
+    let internal discard (storage: IBlobStorage) (scopeId: string) (name: string) : Async<unit> = async {
+        let! kept = storage.Exists(scopeId, name)
 
-        if staged then
-            let! _ = storage.Delete(scopeId, blobName runId)
+        if kept then
+            let! _ = storage.Delete(scopeId, name)
             ()
     }
 
     /// The draft rewrite a provenance implies: identity for `ComputedRun`.
+    /// ONE definition of what an imported row is, shared by every writer —
+    /// apply it to each draft a run of the provenance mints.
     let rewrite (provenance: FactTableRunProvenance) : FactDraft -> FactDraft =
         match provenance with
         | ComputedRun -> id
@@ -728,9 +726,9 @@ module internal FactTableRunProvenance =
 /// `Computed(producingOperation, "v<schemaVersion>", tableId)` — so the
 /// table's facts are their own lineage and never merge with another
 /// producer's — evidence naming the run's watermark, and the column's
-/// disclosure — unless the run was staged with an imported provenance
-/// (`FactTableRunProvenance`, Phase 932), when the rows under each origin
-/// are written `Imported`. `AppendByRun` puts the watermark in each fact's content
+/// disclosure — unless the run was opened with an imported provenance
+/// (`FactTableRunProvenance`, Phases 932 and 938), when the rows under each
+/// origin are written `Imported`. `AppendByRun` puts the watermark in each fact's content
 /// address, so every run is a complete attributable snapshot; `Replace`
 /// leaves it out, so an unchanged cell is an idempotent skip. A row the new
 /// run no longer carries is superseded by an `Absent` fact per cell, so the
@@ -865,7 +863,7 @@ type DefaultFactTableWriter
             let! _ = storage.Delete(scopeId, name)
             ()
 
-        do! FactTableRunProvenance.discard storage scopeId runId
+        do! FactTableRunProvenance.discard storage scopeId (FactTableRunProvenance.blobName runId)
     }
 
     let stagedRows (scopeId: string) (runId: string) : Async<Result<FactTableRow list, FactTableWriteError>> = async {
@@ -978,7 +976,7 @@ type DefaultFactTableWriter
 
     interface IFactTableWriter with
 
-        member _.OpenRun(scopeId, tableId) = async {
+        member _.OpenRun(scopeId, tableId, ?provenance) = async {
             match declared tableId with
             | Error e -> return Error e
             | Ok table ->
@@ -995,9 +993,21 @@ type DefaultFactTableWriter
                         Status = FactTableRunStatus.Open
                     }
 
-                    match! FactTableBlobIo.put storage scopeId (recordName run.RunId) run with
+                    // The provenance first: a run whose record exists is a
+                    // run, so it is never visible without the provenance it
+                    // was opened with.
+                    match!
+                        FactTableRunProvenance.keep
+                            storage
+                            scopeId
+                            (FactTableRunProvenance.blobName run.RunId)
+                            (defaultArg provenance ComputedRun)
+                    with
                     | Error e -> return Error e
-                    | Ok() -> return Ok run
+                    | Ok() ->
+                        match! FactTableBlobIo.put storage scopeId (recordName run.RunId) run with
+                        | Error e -> return Error e
+                        | Ok() -> return Ok run
         }
 
         member _.WriteRows(scopeId, runId, rows) = async {
@@ -1038,7 +1048,12 @@ type DefaultFactTableWriter
                                 match! stagedRows scopeId runId with
                                 | Error e -> return Error e
                                 | Ok rows ->
-                                    match! FactTableRunProvenance.read storage scopeId runId with
+                                    match!
+                                        FactTableRunProvenance.read
+                                            storage
+                                            scopeId
+                                            (FactTableRunProvenance.blobName runId)
+                                    with
                                     | Error e -> return Error e
                                     | Ok provenance -> return Ok(rows, provenance)
                             }

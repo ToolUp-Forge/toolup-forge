@@ -748,12 +748,15 @@ module FactBrowseHandler =
 
     /// Decorate a table writer so each successful `Commit` publishes ONE
     /// `CustomNotification` keyed `FactBrowseLinks.RunCommittedNotificationKey`
-    /// to the run's scope. Every other member passes straight through. A
-    /// publish failure never fails the commit: the run is already durable,
-    /// and the notice is a refresh hint, not a record.
+    /// to the run's scope. Every other member passes straight through — a
+    /// run's provenance among them, untouched (Phase 938). A publish failure
+    /// never fails the commit: the run is already durable, and the notice is
+    /// a refresh hint, not a record.
     let notifyingWriter (channel: INotificationChannel) (inner: IFactTableWriter) : IFactTableWriter =
         { new IFactTableWriter with
-            member _.OpenRun(scopeId, tableId) = inner.OpenRun(scopeId, tableId)
+            member _.OpenRun(scopeId, tableId, ?provenance) =
+                inner.OpenRun(scopeId, tableId, ?provenance = provenance)
+
             member _.WriteRows(scopeId, runId, rows) = inner.WriteRows(scopeId, runId, rows)
 
             member _.Commit(scopeId, runId) = async {

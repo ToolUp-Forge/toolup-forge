@@ -135,6 +135,24 @@ let private registeredTests =
         IFactTableWriterContract.tests "DefaultFactTableWriter" IFactTableWriterContract.defaultWriterFactory
         IFactTableWriterContract.defaultWriterObligationTests
         IFactTableWriterContract.preflightTests
+        // Phase 938 — run provenance is part of the writer contract: the pack
+        // bound a second time, over the notifying decorator; the provenance
+        // pack over every implementer; the decorator pack over every decorator.
+        IFactTableWriterContract.tests
+            "notifying decorator over DefaultFactTableWriter"
+            IFactTableWriterContract.notifyingWriterFactory
+        IFactTableWriterContract.provenanceTests "DefaultFactTableWriter" IFactTableWriterContract.defaultWriterFactory
+        IFactTableWriterContract.provenanceTests "DelegateTableWriter" IFactTableWriterContract.delegateWriterFactory
+        IFactTableWriterContract.provenanceTests
+            "notifying decorator over DefaultFactTableWriter"
+            IFactTableWriterContract.notifyingWriterFactory
+        IFactTableWriterContract.provenanceTests
+            "notifying decorator over DelegateTableWriter"
+            IFactTableWriterContract.notifyingDelegateWriterFactory
+        IFactTableWriterContract.decoratorTests "notifying decorator" IFactTableWriterContract.notifying
+        IFactTableWriterContract.decoratorTests
+            "DelegateTableWriter, for a table it does not hold"
+            IFactTableWriterContract.delegatePassThrough
         // Phase 520 — grounding fact store: IFactStore contract pack (content-
         // address idempotency, AsOf reconstruction, supersession, competing
         // facts, scope isolation, disclosure/Absent round-trips) + BlobFactStore

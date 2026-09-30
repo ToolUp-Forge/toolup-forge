@@ -138,7 +138,6 @@ IEntityLockStoreContract
 IEvidencePackGeneratorContract
 IExternalComputeDispatcherContract
 IExternalHandleStoreContract
-IFactTableWriterContract
 IFeatureFlagStoreContract
 IFormStoreContract
 IGrantConsentStoreContract
