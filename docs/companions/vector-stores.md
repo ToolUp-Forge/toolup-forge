@@ -122,9 +122,9 @@ let options = {
 
 `IvfFlatAnnIndex lists` is the alternative. It must be built *after* the table holds representative data, so provision it out of band rather than at first `create` against an empty table.
 
-## Production posture — `createTuned` / `createTunedWithDataSource`
+## Production posture — `PgvectorTuning.recommended`, the default since Phase 939
 
-`create` and `createWithDataSource` keep the store's original behaviour exactly. A table that holds many scopes under an approximate index should be composed through the tuned entry points instead, which take one more argument, a `PgvectorTuning`:
+`create` and `createWithDataSource` compose `PgvectorTuning.recommended`. A table that holds many scopes needs only an approximate index configured on the options:
 
 ```fsharp skip=fragment
 open ToolUp.RAG.VectorStores.Pgvector
@@ -135,25 +135,24 @@ let options = {
 }
 
 // The store owns the data source it builds from the connection string.
-let store =
-    PgvectorVectorStore.createTuned connectionString options PgvectorTuning.recommended (Some logger)
+let store = PgvectorVectorStore.create connectionString options (Some logger)
 
 // Or share a data source the deployment already owns; the store never disposes it.
-let shared =
-    PgvectorVectorStore.createTunedWithDataSource dataSource options PgvectorTuning.recommended (Some logger)
+let shared = PgvectorVectorStore.createWithDataSource dataSource options (Some logger)
 ```
 
-Both validate the tuning against the options before any I/O, run the same fail-loud probe and migration as `create`, and read the installed extension version once, so iterative scanning is only ever sent to a server that supports it (pgvector 0.8.0 and later). The returned store also implements `IVectorStoreBatch`, so `IVectorStore.upsertBatch` writes a whole batch in one statement.
+Both run the fail-loud probe and migration, and read the installed extension version once, so iterative scanning is only ever sent to a server that supports it (pgvector 0.8.0 and later). The returned store also implements `IVectorStoreBatch`, so `IVectorStore.upsertBatch` writes a whole batch in one statement. Under `NoAnnIndex`, the `forDimensions` default, every search is exact whatever the tuning, and the one change the default makes is that a multi-scope search runs up to four scopes concurrently.
+
+`createTuned` / `createTunedWithDataSource` take the tuning as one more argument, validated against the options before any I/O. Pass `PgvectorTuning.unchanged` (pgvector's own defaults, the posture `create` used before Phase 939) to keep the old behaviour; [`docs/migrations/939-pgvector-tuned-default.md`](../migrations/939-pgvector-tuned-default.md) says what changed and why.
 
 Why it matters: one approximate index serves every scope in the table, and the scope filter is applied as the index is walked. Measured on a local container (pgvector 0.8.6, PostgreSQL 17), with pgvector's default search width, a scope holding 1–12 % of a 165,000-row table was routed to the index by the planner and came back short on **every** query: recall@10 fell to 0.05–0.52. `PgvectorTuning.recommended` held recall@10 at 0.96 or above with no short pages for every scope size measured, at under 3 ms per query server-side. It sets:
 
-- a per-query search width (`hnsw.ef_search = 100`), applied transaction-locally so a pooled connection never carries it to the next caller;
+- a per-query search width (`hnsw.ef_search = 100`, or `ivfflat.probes = 100` under IVFFlat, measured separately), applied transaction-locally so a pooled connection never carries it to the next caller;
 - `relaxed_order` iterative scanning, where the extension supports it;
-- a distance-only `ORDER BY`, with the page re-sorted into the total order;
 - an exact re-run of any scope whose page comes back short of `topK`, through a statement no approximate index can serve — which makes a full top-k a guarantee rather than a tuning outcome;
 - bounded concurrency (4) for a multi-scope search.
 
-Start from `PgvectorTuning.recommended` and override single fields with `{ PgvectorTuning.recommended with … }`. The companion [README](../../src/VectorStores/Pgvector/README.md#production-posture--createtuned-and-pgvectortuning) carries the full settings table, the index-choice measurement behind the shared-index posture, and every recorded figure.
+With an approximate index configured, the search orders by distance alone and the page is re-sorted into the total order; there is no longer a setting for it. To adjust the posture, start from `PgvectorTuning.recommended`, override single fields with `{ PgvectorTuning.recommended with … }`, and compose it through `createTuned`. The companion [README](../../src/VectorStores/Pgvector/README.md#production-posture--what-create-composes-and-pgvectortuning) carries the full settings table, the index-choice measurement behind the shared-index posture, and every recorded figure.
 
 ## Testing
 
