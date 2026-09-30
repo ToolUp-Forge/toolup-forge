@@ -312,6 +312,20 @@ module CompositionManifest =
 
     let knob (name: string) (value: string) : ConfigKnob = { Name = name; Value = value }
 
+    /// Name prefix of the Phase 936 team output-visibility knobs.
+    [<Literal>]
+    let TeamOutputVisibilityKnobPrefix = "TeamOutputVisibility."
+
+    /// Phase 936 — the team output-visibility declaration as two knobs:
+    /// `TeamOutputVisibility.Default` (the level a team that chose nothing
+    /// sits at) and `TeamOutputVisibility.Allowed` (the levels an owner may
+    /// choose, widest first). A composition that does not declare it projects
+    /// neither, so its manifest is unchanged.
+    let teamOutputVisibilityKnobs (settings: TeamOutputVisibilitySettings) : ConfigKnob list = [
+        knob (TeamOutputVisibilityKnobPrefix + "Default") (TeamVisibilityLevel.name settings.Default)
+        knob (TeamOutputVisibilityKnobPrefix + "Allowed") (TeamOutputVisibilitySettings.describeAllowed settings)
+    ]
+
     /// Assemble a manifest from the enumerated entries. Pure projection —
     /// the caller (`ServerApp.compositionManifest`) supplies lists derived
     /// from the live registry.

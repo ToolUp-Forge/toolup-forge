@@ -45,6 +45,10 @@ services.AddSingleton<IJobStore>(scheduler.JobStore) |> ignore
 
 with `ServerConfig.JobScheduler = QuartzJobScheduler QuartzConfig.defaults`. Compose finds the instances, registers the scheduler's `IHostedService` behind the usual process-profile gate, and says so loudly if either instance is missing — a deployment that asked for Quartz and silently got nothing is the failure worth naming.
 
+### Handlers receive the resolved scope
+
+A job scheduled through the typed `Schedule(scope, registration)` runs with that scope on `JobContext.Scope`, across a restart (Phase 935). The companion never mints a scope itself. The typed `Schedule` stores the token the platform's `ScopeCarrier` issued for the job as an opaque string on the definition's tags (`_platform.scope.token`). At each fire the dispatch asks the platform to redeem it (`CarriedJobScope.ofDefinition`). Compose binds the deployment's carrier into the adopted scheduler (`IScopeCarrierBinding`). That carrier sits over the DataProtection key ring, so a token issued before a restart redeems after it, on any replica sharing the ring. A job scheduled through the string overload runs under the anonymous scope, as before. So does a job whose token is missing, altered, or copied from another job. A scheduler built outside a composition, with no carrier bound, re-mints within its own lifetime only.
+
 Add the two probes the same way every companion does:
 
 ```fsharp skip=fragment

@@ -50,9 +50,11 @@ open ToolUp.Platform
 //     the request resolved (a boot seed, an ingestion or import job, a
 //     cross-scope write) reaches the reactive path as
 //     `DataChangeScope.Carried` and is scheduled through the string overload;
-//   * a scheduler outside the platform's server tier (the Quartz companion)
-//     cannot re-mint, so it hands even a typed-scheduled job back with the
-//     anonymous scope on `JobContext.Scope` and the carried `ScopeId` beside it.
+//   * a scheduler that cannot re-mint — one with no platform carrier to
+//     redeem through, or a job whose carried token did not redeem (Phase 935;
+//     both shipped schedulers now re-mint) — hands even a typed-scheduled job
+//     back with the anonymous scope on `JobContext.Scope` and the carried
+//     `ScopeId` beside it.
 //
 // For both, the handler keys the store on the carried `ScopeId`, as it did
 // before Phase 818. Reading the anonymous shard for them instead would find

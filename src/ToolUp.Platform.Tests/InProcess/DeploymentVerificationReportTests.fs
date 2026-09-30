@@ -350,6 +350,43 @@ let private evidenceWithBothRemotingFacets () =
     |> DeploymentVerificationEvidence.withRemotingDecoders (Some sampleRemotingDecoders)
     |> DeploymentVerificationEvidence.withRemotingArgumentDecoders (Some sampleRemotingArgumentDecoders)
 
+// ─── Phase 944 — the remaining evidence seams' sample postures ────────
+//
+// One distinguishable non-None value per facet, so a contract-pack probe
+// over any wither cannot pass by reading the wrong member's value.
+
+let private sampleEgress: EgressIntegrity = {
+    EgressProfile = "verified"
+    EgressPosture = EgressPosture.DenyAll
+    EgressComponents = []
+    EgressDenials = []
+    EgressDenialsSinceBoot = 3
+    EgressLabelVocabulary = "sample-vocabulary"
+}
+
+let private sampleChain: EvidenceChain = {
+    SchemaVersion = EvidenceChain.SchemaVersion
+    Actor = "assessor@example.test"
+    WalkedAt = DateTime(2026, 9, 30, 9, 0, 0, DateTimeKind.Utc)
+    Hops = []
+    Outcome = EvidenceChain.outcomeOf []
+    VerdictDigest = "sample-digest"
+    Enumeration = EnumerationCompleteness.Complete
+}
+
+/// The walker the chain packs bind: answers the same chain every time.
+let private sampleChainWalk: unit -> Async<Result<EvidenceChain, EvidenceChainError>> =
+    fun () -> async { return Ok sampleChain }
+
+/// Base evidence carrying EVERY sibling facet at a non-None posture, so a
+/// wither that silently rebuilds the value without a member it does not
+/// name turns the pack bound to that member red.
+let private evidenceWithAllFacets () =
+    evidenceWithBothRemotingFacets ()
+    |> DeploymentVerificationEvidence.withSeamAuthority (Some healthySeamAuthority)
+    |> DeploymentVerificationEvidence.withEvidenceChain (Some sampleChainWalk)
+    |> DeploymentVerificationEvidence.withEgress (Some sampleEgress)
+
 let private runReport (evidence: IDeploymentVerificationEvidence) (auditLog: IAuditLog option) =
     DeploymentVerificationReport.run (servicesWith (Some evidence) auditLog) "probe"
     |> Async.RunSynchronously
@@ -2150,5 +2187,144 @@ let tests =
                 (fun () ->
                     evidenceWithBothRemotingFacets ()
                     |> DeploymentVerificationEvidence.withRemotingDecoders None)
+        ]
+
+        // ── Phase 944 — the three remaining evidence seams carry
+        //    contract packs ────────────────────────────────────────
+        //
+        // `ISeamAuthorityEvidence`, `IEvidenceChainEvidence` and
+        // `IEgressEvidence` are bound against all eight producers each
+        // (`none`, `create`, the six withers), every wither applied to a
+        // base carrying every facet, so dropping any facet from any
+        // wither reddens the pack bound to it.
+        testList "Phase 944 — the remaining evidence seams carry contract packs" [
+
+            ISeamAuthorityEvidenceContract.tests "DeploymentVerificationEvidence.none" None (fun () ->
+                DeploymentVerificationEvidence.none)
+
+            ISeamAuthorityEvidenceContract.tests "DeploymentVerificationEvidence.create (no facets)" None (fun () ->
+                DeploymentVerificationEvidence.create None None None None None)
+
+            ISeamAuthorityEvidenceContract.tests
+                "withGroundingContinuity carries SeamAuthority through"
+                (Some healthySeamAuthority)
+                (fun () ->
+                    evidenceWithAllFacets ()
+                    |> DeploymentVerificationEvidence.withGroundingContinuity None)
+
+            ISeamAuthorityEvidenceContract.tests
+                "withEvidenceChain carries SeamAuthority through"
+                (Some healthySeamAuthority)
+                (fun () ->
+                    evidenceWithAllFacets ()
+                    |> DeploymentVerificationEvidence.withEvidenceChain None)
+
+            ISeamAuthorityEvidenceContract.tests
+                "withRemotingDecoders carries SeamAuthority through"
+                (Some healthySeamAuthority)
+                (fun () ->
+                    evidenceWithAllFacets ()
+                    |> DeploymentVerificationEvidence.withRemotingDecoders None)
+
+            ISeamAuthorityEvidenceContract.tests
+                "withRemotingArgumentDecoders carries SeamAuthority through"
+                (Some healthySeamAuthority)
+                (fun () ->
+                    evidenceWithAllFacets ()
+                    |> DeploymentVerificationEvidence.withRemotingArgumentDecoders None)
+
+            ISeamAuthorityEvidenceContract.tests
+                "withEgress carries SeamAuthority through"
+                (Some healthySeamAuthority)
+                (fun () -> evidenceWithAllFacets () |> DeploymentVerificationEvidence.withEgress None)
+
+            ISeamAuthorityEvidenceContract.tests
+                "DeploymentVerificationEvidence.withSeamAuthority"
+                (Some healthySeamAuthority)
+                (fun () ->
+                    DeploymentVerificationEvidence.none
+                    |> DeploymentVerificationEvidence.withSeamAuthority (Some healthySeamAuthority))
+
+            IEvidenceChainEvidenceContract.tests "DeploymentVerificationEvidence.none" None (fun () ->
+                DeploymentVerificationEvidence.none)
+
+            IEvidenceChainEvidenceContract.tests "DeploymentVerificationEvidence.create (no facets)" None (fun () ->
+                DeploymentVerificationEvidence.create None None None None None)
+
+            IEvidenceChainEvidenceContract.tests
+                "withGroundingContinuity carries EvidenceChain through"
+                (Some(Ok sampleChain))
+                (fun () ->
+                    evidenceWithAllFacets ()
+                    |> DeploymentVerificationEvidence.withGroundingContinuity None)
+
+            IEvidenceChainEvidenceContract.tests
+                "withSeamAuthority carries EvidenceChain through"
+                (Some(Ok sampleChain))
+                (fun () ->
+                    evidenceWithAllFacets ()
+                    |> DeploymentVerificationEvidence.withSeamAuthority None)
+
+            IEvidenceChainEvidenceContract.tests
+                "withRemotingDecoders carries EvidenceChain through"
+                (Some(Ok sampleChain))
+                (fun () ->
+                    evidenceWithAllFacets ()
+                    |> DeploymentVerificationEvidence.withRemotingDecoders None)
+
+            IEvidenceChainEvidenceContract.tests
+                "withRemotingArgumentDecoders carries EvidenceChain through"
+                (Some(Ok sampleChain))
+                (fun () ->
+                    evidenceWithAllFacets ()
+                    |> DeploymentVerificationEvidence.withRemotingArgumentDecoders None)
+
+            IEvidenceChainEvidenceContract.tests
+                "withEgress carries EvidenceChain through"
+                (Some(Ok sampleChain))
+                (fun () -> evidenceWithAllFacets () |> DeploymentVerificationEvidence.withEgress None)
+
+            IEvidenceChainEvidenceContract.tests
+                "DeploymentVerificationEvidence.withEvidenceChain"
+                (Some(Ok sampleChain))
+                (fun () ->
+                    DeploymentVerificationEvidence.none
+                    |> DeploymentVerificationEvidence.withEvidenceChain (Some sampleChainWalk))
+
+            IEgressEvidenceContract.tests "DeploymentVerificationEvidence.none" None (fun () ->
+                DeploymentVerificationEvidence.none)
+
+            IEgressEvidenceContract.tests "DeploymentVerificationEvidence.create (no facets)" None (fun () ->
+                DeploymentVerificationEvidence.create None None None None None)
+
+            IEgressEvidenceContract.tests
+                "withGroundingContinuity carries Egress through"
+                (Some sampleEgress)
+                (fun () ->
+                    evidenceWithAllFacets ()
+                    |> DeploymentVerificationEvidence.withGroundingContinuity None)
+
+            IEgressEvidenceContract.tests "withSeamAuthority carries Egress through" (Some sampleEgress) (fun () ->
+                evidenceWithAllFacets ()
+                |> DeploymentVerificationEvidence.withSeamAuthority None)
+
+            IEgressEvidenceContract.tests "withEvidenceChain carries Egress through" (Some sampleEgress) (fun () ->
+                evidenceWithAllFacets ()
+                |> DeploymentVerificationEvidence.withEvidenceChain None)
+
+            IEgressEvidenceContract.tests "withRemotingDecoders carries Egress through" (Some sampleEgress) (fun () ->
+                evidenceWithAllFacets ()
+                |> DeploymentVerificationEvidence.withRemotingDecoders None)
+
+            IEgressEvidenceContract.tests
+                "withRemotingArgumentDecoders carries Egress through"
+                (Some sampleEgress)
+                (fun () ->
+                    evidenceWithAllFacets ()
+                    |> DeploymentVerificationEvidence.withRemotingArgumentDecoders None)
+
+            IEgressEvidenceContract.tests "DeploymentVerificationEvidence.withEgress" (Some sampleEgress) (fun () ->
+                DeploymentVerificationEvidence.none
+                |> DeploymentVerificationEvidence.withEgress (Some sampleEgress))
         ]
     ]

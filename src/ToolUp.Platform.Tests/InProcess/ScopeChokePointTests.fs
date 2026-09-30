@@ -406,8 +406,11 @@ let private sourceGuardTests =
 // mints at all: it carries the write's resolved scope or its string
 // (Phase 930, section E), and builds neither.
 
-/// Where the carried mint may be called from, by path under `src/`.
-let private carriedMintHome = "ToolUp.Platform.Server/Server/IJobScheduler.fs"
+/// Where the carried mint may be called from, by path under `src/`. Since
+/// Phase 935 that is the platform's carrier, whose redeem path is the only
+/// hop a carried scope re-mints through — for both schedulers and the
+/// publication grants alike.
+let private carriedMintHome = "ToolUp.Platform.Server/Server/CarriedScopeToken.fs"
 
 /// Where the mints are DEFINED — excluded from the caller scan.
 let private mintDefinitions = [
@@ -464,7 +467,7 @@ let private carriedMintTests =
             Expect.isEmpty (mints "store.Get(ctx.Scope, payload.factId)") "reading ctx.Scope is not a mint"
         }
 
-        test "the carried mint has exactly one caller — the scheduler's provenance module" {
+        test "the carried mint has exactly one caller — the platform's carrier" {
             let src = Path.Combine(repoRoot (), "src")
 
             let excluded =
@@ -1006,6 +1009,255 @@ let private reactivePathTests =
         }
     ]
 
+
+// ── F. The platform-owned carrier (Phase 935) ─────────────────────────
+//
+// Phase 935 moved the carried mint behind a token: a scope written down as
+// a string any store can hold, and turned back into the same scope only by
+// the platform. Pinned here:
+//
+//   * the carrier cannot be built over key material a caller chooses — its
+//     constructors that take key material are internal, and the one public
+//     constructor keeps its keys to itself;
+//   * a forged, an altered and a re-purposed token each re-mint nothing,
+//     each with its own typed refusal, and a genuine token re-mints the
+//     scope it was issued with — across a restart over the same key ring;
+//   * a job-store writer who copies a genuine token onto another job, or
+//     moves a job to another scope, gets the anonymous scope;
+//   * the carrier module is the one caller of the carried mint (section D,
+//     re-pointed), and neither scheduler nor the grant store carries a
+//     string-to-scope promotion — a planted one turns the scan red.
+
+/// A key ring in memory — what a deployment's `BlobXmlRepository` is, over
+/// a blob store that outlives each process.
+let private ringStorage () =
+    InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
+
+let private carrierOver (storage: ToolUp.Platform.BlobStorage.IBlobStorage) =
+    ScopeCarrier.ofKeyRepository (BlobXmlRepository(storage))
+
+let private jobPurpose (scopeId: string) (jobId: Guid) =
+    CarriedScopePurpose.ScheduledJob(scopeId, jobId)
+
+let private issued (carrier: ScopeCarrier) (scope: ResolvedScope) (purpose: CarriedScopePurpose) : string =
+    match carrier.Issue(scope, purpose) with
+    | Ok(Some token) -> token
+    | other -> failtestf "expected a token, got %A" other
+
+/// The files a string-to-scope promotion must never appear in: both
+/// schedulers and the grant store.
+let private carriedPaths = [
+    "ToolUp.Platform.Server/Server/IJobScheduler.fs"
+    "ToolUp.Platform.Server/Server/JobScheduler.fs"
+    "JobSchedulers/Quartz/QuartzJobScheduler.fs"
+    "JobSchedulers/Quartz/QuartzJobStore.fs"
+    "ToolUp.Facts.Server/Server/FactPublication.fs"
+]
+
+/// Every spelling that would promote a value to a `ResolvedScope` on a
+/// carried path: the mints, and a carrier built over chosen key material.
+let private promotionSpellings =
+    mintSpellings
+    @ [
+        "ScopeCarrier." + "ofDataProtection", "a carrier over a chosen DataProtection provider"
+        "ScopeCarrier." + "ofKeyRepository", "a carrier over a chosen key ring"
+        "new " + "ScopeCarrier(", "a carrier constructed directly"
+    ]
+
+let private promotions (source: string) : (string * string) list =
+    promotionSpellings |> List.filter (fun (needle, _) -> source.Contains needle)
+
+let private carrierTests =
+    testList "F — the platform-owned carrier (Phase 935)" [
+
+        test "the carrier takes no key material from a caller" {
+            let carrierType = typeof<ScopeCarrier>
+
+            Expect.isEmpty
+                (carrierType.GetConstructors(BindingFlags.Public ||| BindingFlags.Instance))
+                "no public constructor — a caller choosing the protector would choose the keys"
+
+            let moduleType = carrierType.Assembly.GetType("ToolUp.Platform.ScopeCarrierModule")
+
+            Expect.isNotNull moduleType "the companion module compiles under the ModuleSuffix name"
+
+            for name in [ "ofDataProtection"; "ofKeyRepository" ] do
+                let m = moduleType.GetMethod(name, BindingFlags.NonPublic ||| BindingFlags.Static)
+                Expect.isNotNull m (sprintf "%s exists" name)
+                Expect.isTrue m.IsAssembly (sprintf "%s is internal" name)
+
+            let publicStatics =
+                moduleType.GetMethods(BindingFlags.Public ||| BindingFlags.Static)
+                |> Array.map _.Name
+                |> Array.filter (fun n -> not (n.StartsWith "get_"))
+                |> Array.sort
+
+            Expect.sequenceEqual publicStatics [| "ephemeral" |] "the one public constructor keeps its keys to itself"
+        }
+
+        test "a genuine token re-mints the scope it was issued with — across a restart over the same key ring" {
+            let ring = ringStorage ()
+            let scope = ScopeResolution.ofStorageScope (storage "team-a")
+            let purpose = jobPurpose "team-a" (Guid.NewGuid())
+            let token = issued (carrierOver ring) scope purpose
+
+            match (carrierOver ring).Redeem(token, purpose) with
+            | Ok redeemed ->
+                Expect.equal redeemed scope "the same scope"
+                Expect.equal redeemed.Storage (Some(storage "team-a")) "container and persistence included"
+            | Error refusal -> failtestf "redeem: %s" (CarriedScopeRefusal.describe refusal)
+
+            Expect.equal
+                ((carrierOver ring).Verify(token, purpose))
+                (Ok "team-a")
+                "and Verify names the scope without minting it"
+
+            Expect.equal
+                ((carrierOver ring).Issue(ResolvedScope.anonymous, purpose))
+                (Ok None)
+                "the anonymous scope is never carried"
+        }
+
+        test "a forged token re-mints nothing" {
+            let ring = ringStorage ()
+            let scope = ScopeResolution.ofStorageScope (storage "team-a")
+            let purpose = jobPurpose "team-a" (Guid.NewGuid())
+
+            // Sealed by a carrier over another key ring: every byte of it is
+            // a well-formed token, just not one this deployment issued.
+            let foreign = issued (ScopeCarrier.ephemeral ()) scope purpose
+
+            Expect.equal
+                ((carrierOver ring).Redeem(foreign, purpose))
+                (Error CarriedScopeRefusal.TokenNotIssuedHere)
+                "a token another key ring sealed"
+
+            Expect.equal
+                ((carrierOver ring).Redeem("not-a-token", purpose))
+                (Error CarriedScopeRefusal.TokenNotIssuedHere)
+                "a string that was never sealed"
+
+            match (carrierOver ring).Redeem("   ", purpose) with
+            | Error(CarriedScopeRefusal.TokenMalformed _) -> ()
+            | other -> failtestf "an empty token is malformed, got %A" other
+        }
+
+        test "an altered token re-mints nothing" {
+            let ring = ringStorage ()
+            let scope = ScopeResolution.ofStorageScope (storage "team-a")
+            let purpose = jobPurpose "team-a" (Guid.NewGuid())
+            let token = issued (carrierOver ring) scope purpose
+            let at = token.Length / 2
+            let flipped = if token[at] = 'A' then 'B' else 'A'
+            let tampered = token.Substring(0, at) + string flipped + token.Substring(at + 1)
+
+            Expect.equal
+                ((carrierOver ring).Redeem(tampered, purpose))
+                (Error CarriedScopeRefusal.TokenNotIssuedHere)
+                "one byte changed is a token the ring did not issue"
+        }
+
+        test "a re-purposed token re-mints nothing" {
+            let ring = ringStorage ()
+            let carrier = carrierOver ring
+            let scope = ScopeResolution.ofStorageScope (storage "team-a")
+            let issuedFor = jobPurpose "team-a" (Guid.NewGuid())
+            let token = issued carrier scope issuedFor
+
+            for other in
+                [
+                    jobPurpose "team-a" (Guid.NewGuid())
+                    jobPurpose
+                        "team-b"
+                        (match issuedFor with
+                         | CarriedScopePurpose.ScheduledJob(_, id) -> id
+                         | _ -> Guid.Empty)
+                    CarriedScopePurpose.Grant("fact-publication.consent.target", "g-1")
+                ] do
+                match carrier.Redeem(token, other) with
+                | Error(CarriedScopeRefusal.PurposeMismatch _) -> ()
+                | result -> failtestf "presented for %A: expected a purpose mismatch, got %A" other result
+
+                match carrier.Verify(token, other) with
+                | Error(CarriedScopeRefusal.PurposeMismatch _) -> ()
+                | result -> failtestf "verified for %A: expected a purpose mismatch, got %A" other result
+        }
+
+        test "a job-store writer who moves a token or a job gets the anonymous scope" {
+            let carrier = carrierOver (ringStorage ())
+            let scope = ScopeResolution.ofStorageScope (storage "team-a")
+
+            let definition (jobId: Guid) (scopeId: string) (tags: Map<string, string>) : JobDefinition = {
+                JobId = jobId
+                ScopeId = scopeId
+                Handler = "h"
+                Payload = ""
+                Trigger = Manual
+                Idempotency = None
+                RetryPolicy = JobRetryPolicy.defaults
+                ShardKey = None
+                Precision = Minute
+                Status = Active
+                CreatedAt = DateTime.UtcNow
+                CreatedBy = "alice"
+                NextRunAt = None
+                LastRunAt = None
+                LastRunStatus = None
+                LastRunError = None
+                ConsecutiveFailures = 0
+                Tags = tags
+            }
+
+            let jobA = Guid.NewGuid()
+
+            let tags =
+                match CarriedJobScope.stamp carrier scope jobA (Map.ofList [ "origin", "caller" ]) with
+                | Ok tags -> tags
+                | Error e -> failtestf "stamp: %s" e
+
+            Expect.equal
+                (CarriedJobScope.ofDefinition carrier (definition jobA "team-a" tags))
+                scope
+                "the job it was issued for runs under the scope"
+
+            Expect.isTrue
+                (CarriedJobScope.ofDefinition carrier (definition (Guid.NewGuid()) "team-a" tags)).IsAnonymous
+                "the token copied onto another job runs anonymous"
+
+            Expect.isTrue
+                (CarriedJobScope.ofDefinition carrier (definition jobA "team-b" tags)).IsAnonymous
+                "the job moved to another scope runs anonymous"
+
+            Expect.isTrue
+                (CarriedJobScope.ofDefinition carrier (definition jobA "team-a" (CarriedJobScope.strip tags)))
+                    .IsAnonymous
+                "a job whose token was deleted runs anonymous"
+        }
+
+        test "neither scheduler nor the grant store promotes a string to a scope; a planted promotion is caught" {
+            let src = Path.Combine(repoRoot (), "src")
+
+            for file in carriedPaths do
+                let path = Path.Combine(src, file)
+                Expect.isTrue (File.Exists path) (sprintf "%s exists" file)
+                let text = File.ReadAllText path
+
+                match promotions text with
+                | [] -> ()
+                | found ->
+                    failtestf
+                        "%s promotes a value to a ResolvedScope:\n%s"
+                        file
+                        (found |> List.map (fun (_, why) -> "  - " + why) |> String.concat "\n")
+
+                // Go-red, over the file's own text: each planted spelling fires.
+                for needle, why in promotionSpellings do
+                    Expect.isNonEmpty
+                        (promotions (text + "\n" + needle + "(x)"))
+                        (sprintf "a planted %s in %s is caught" why file)
+        }
+    ]
+
 let tests =
     testList "Phase 797 — scope as a choke point" [
         publicSurfaceTests
@@ -1013,4 +1265,5 @@ let tests =
         sourceGuardTests
         carriedMintTests
         reactivePathTests
+        carrierTests
     ]

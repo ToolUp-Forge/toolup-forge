@@ -1292,7 +1292,7 @@ let private handoffTests =
 /// `Close` disposes: `InProcessJobScheduler` is a `BackgroundService`,
 /// and this binding never starts the hosted service — `TriggerOnce`
 /// dispatches directly — so disposal is the whole of the teardown.
-let private restartBinding () =
+let private restartBindingWith (bindRing: bool) =
     let factory () =
         let root =
             Path.Combine(Path.GetTempPath(), "toolup-jobsched-restart-" + Guid.NewGuid().ToString("N"))
@@ -1306,14 +1306,23 @@ let private restartBinding () =
                     let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
                     let jobStore = JobStore.create storage eventStore
 
-                    JobScheduler.create
-                        jobStore
-                        eventStore
-                        silentChannel
-                        ServerConfig.defaults
-                        silentLogger
-                        (NoOpActivitySink() :> IActivitySink)
-                    :> IJobScheduler
+                    let scheduler =
+                        JobScheduler.create
+                            jobStore
+                            eventStore
+                            silentChannel
+                            ServerConfig.defaults
+                            silentLogger
+                            (NoOpActivitySink() :> IActivitySink)
+
+                    // Phase 935 — what compose does: bind a carrier over the
+                    // key ring the root's storage persists, so a restart
+                    // (a fresh carrier over the same ring) redeems.
+                    if bindRing then
+                        (scheduler :> IScopeCarrierBinding)
+                            .BindScopeCarrier(ScopeCarrier.ofKeyRepository (BlobXmlRepository(storage)))
+
+                    scheduler :> IJobScheduler
             Close =
                 fun scheduler ->
                     match box scheduler with
@@ -1326,13 +1335,16 @@ let private restartBinding () =
 
     factory ()
 
+let private restartBinding () = restartBindingWith true
+
 let private restartContractTests =
     IJobSchedulerContract.restartTests "InProcessJobScheduler" restartBinding
 
-/// Phase 818 — the platform's own scheduler RE-MINTS a resolver-minted
-/// scope for the job's handler, over the same restartable binding.
+/// Phase 818 / 935 — the platform's own scheduler RE-MINTS a
+/// resolver-minted scope for the job's handler, over the same restartable
+/// binding.
 let private carriedScopeContractTests =
-    IJobSchedulerContract.carriedScopeTests "InProcessJobScheduler" true restartBinding
+    IJobSchedulerContract.carriedScopeTests "InProcessJobScheduler" restartBinding
 
 let tests =
     let factory () =
@@ -1344,6 +1356,8 @@ let tests =
         IJobSchedulerContract.tests "InProcessJobScheduler" factory
         restartContractTests
         carriedScopeContractTests
+        // Phase 935 — the carrier binding, over schedulers nothing has bound.
+        IScopeCarrierBindingContract.tests "InProcessJobScheduler" (fun () -> restartBindingWith false)
         telemetryTests
         catchUpTests
         handoffTests

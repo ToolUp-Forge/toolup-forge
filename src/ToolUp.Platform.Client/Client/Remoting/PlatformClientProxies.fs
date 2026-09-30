@@ -692,6 +692,13 @@ module PlatformClientProxies =
                 "InitialOwnerUserId", JsonEncode.string value.InitialOwnerUserId
             ]
 
+    /// Generated JSON encoder for `TeamVisibilityLevel` — members by name, cases by case name, as the writer emits them.
+    let encodeTeamVisibilityLevel: JsonEncoder<TeamVisibilityLevel> =
+        function
+        | TeamVisibilityLevel.TeamVisible -> JsonEncode.case0 "TeamVisible"
+        | TeamVisibilityLevel.TeamAdmins -> JsonEncode.case0 "TeamAdmins"
+        | TeamVisibilityLevel.PlatformAdmins -> JsonEncode.case0 "PlatformAdmins"
+
     /// Generated JSON decoder for `ColumnMappingTypes.DateOrder` — members by name, cases by case name, read off the type's own shape.
     let decodeDateOrder: JsonDecoder<ColumnMappingTypes.DateOrder> =
         JsonDecode.union "ColumnMappingTypes.DateOrder" (function
@@ -3523,6 +3530,29 @@ module PlatformClientProxies =
         |> JsonDecode.apply (JsonDecode.field "Owners" (JsonDecode.list JsonDecode.asString))
         |> JsonDecode.apply (JsonDecode.field "Admins" (JsonDecode.list JsonDecode.asString))
 
+    /// Generated JSON decoder for `TeamVisibilityLevel` — members by name, cases by case name, read off the type's own shape.
+    let decodeTeamVisibilityLevel: JsonDecoder<TeamVisibilityLevel> =
+        JsonDecode.union "TeamVisibilityLevel" (function
+            | "TeamVisible" -> Some(JsonDecode.case0 TeamVisibilityLevel.TeamVisible)
+            | "TeamAdmins" -> Some(JsonDecode.case0 TeamVisibilityLevel.TeamAdmins)
+            | "PlatformAdmins" -> Some(JsonDecode.case0 TeamVisibilityLevel.PlatformAdmins)
+            | _ -> None)
+
+    /// Generated JSON decoder for `TeamOutputVisibilityView` — members by name, cases by case name, read off the type's own shape.
+    let decodeTeamOutputVisibilityView: JsonDecoder<TeamOutputVisibilityView> =
+        JsonDecode.succeed (fun inTeamScope enabled level allowed selectable -> ({
+            InTeamScope = inTeamScope
+            Enabled = enabled
+            Level = level
+            Allowed = allowed
+            Selectable = selectable
+        }: TeamOutputVisibilityView))
+        |> JsonDecode.apply (JsonDecode.field "InTeamScope" JsonDecode.asBool)
+        |> JsonDecode.apply (JsonDecode.field "Enabled" JsonDecode.asBool)
+        |> JsonDecode.apply (JsonDecode.field "Level" decodeTeamVisibilityLevel)
+        |> JsonDecode.apply (JsonDecode.field "Allowed" (JsonDecode.list decodeTeamVisibilityLevel))
+        |> JsonDecode.apply (JsonDecode.field "Selectable" (JsonDecode.list decodeTeamVisibilityLevel))
+
     /// Generated client proxy for `ColumnMappingApi.IConversionApi` — 7 method(s), each a closure over its
     /// generated encoders, the transport and its generated response decoder.
     let iConversionApiProxy (options: RemoteBuilderOptions) : ColumnMappingApi.IConversionApi =
@@ -4239,6 +4269,18 @@ module PlatformClientProxies =
             DeleteTeamHard = fun a0 -> callDeleteTeamHard (JsonEncode.arguments [ JsonEncode.string a0 ])
         }
 
+    /// Generated client proxy for `TeamOutputVisibilityApi` — 2 method(s), each a closure over its
+    /// generated encoders, the transport and its generated response decoder.
+    let teamOutputVisibilityApiProxy (options: RemoteBuilderOptions) : TeamOutputVisibilityApi =
+        let api = Proxy.generatedApi "ToolUp.Platform.TeamOutputVisibilityApi" "TeamOutputVisibilityApi" options
+        let callGetOutputVisibility = Proxy.generatedMethod<TeamOutputVisibilityView> api "GetOutputVisibility" false decodeTeamOutputVisibilityView
+        let callSetOutputVisibility = Proxy.generatedMethod<Result<TeamOutputVisibilityView, string>> api "SetOutputVisibility" true (JsonDecode.result decodeTeamOutputVisibilityView JsonDecode.asString)
+
+        {
+            GetOutputVisibility = fun () -> callGetOutputVisibility "{}"
+            SetOutputVisibility = fun a0 -> callSetOutputVisibility (JsonEncode.arguments [ encodeTeamVisibilityLevel a0 ])
+        }
+
     /// The API records this module builds a generated proxy for, by the key
     /// `Api.makeProxy` looks a record up under.
     let coveredApiRecords: string list = [
@@ -4280,6 +4322,7 @@ module PlatformClientProxies =
         "ToolUp.Platform.PlatformAdminApi"
         "ToolUp.Platform.PlatformInfoApi"
         "ToolUp.Platform.TeamApi"
+        "ToolUp.Platform.TeamOutputVisibilityApi"
     ]
 
     /// The generated proxy for the record `apiKey` names, built over
@@ -4324,6 +4367,7 @@ module PlatformClientProxies =
         | "ToolUp.Platform.PlatformAdminApi" -> Some(box (platformAdminApiProxy options))
         | "ToolUp.Platform.PlatformInfoApi" -> Some(box (platformInfoApiProxy options))
         | "ToolUp.Platform.TeamApi" -> Some(box (teamApiProxy options))
+        | "ToolUp.Platform.TeamOutputVisibilityApi" -> Some(box (teamOutputVisibilityApiProxy options))
         | _ -> None
 
     /// Register every proxy builder above with `GeneratedProxies`, where
@@ -4368,4 +4412,5 @@ module PlatformClientProxies =
         GeneratedProxies.register "ToolUp.Platform.PlatformAdminApi" (fun options -> box (platformAdminApiProxy options))
         GeneratedProxies.register "ToolUp.Platform.PlatformInfoApi" (fun options -> box (platformInfoApiProxy options))
         GeneratedProxies.register "ToolUp.Platform.TeamApi" (fun options -> box (teamApiProxy options))
+        GeneratedProxies.register "ToolUp.Platform.TeamOutputVisibilityApi" (fun options -> box (teamOutputVisibilityApiProxy options))
 

@@ -430,6 +430,9 @@
         <Compile Include="Server\InProcessDistributedLock.fs" />
         <Compile Include="Server\IJobStore.fs" />
         <Compile Include="Server\IJobHandler.fs" />
+        <!-- Phase 935 — the platform-owned scope carrier. Before
+             IJobScheduler.fs, whose carried job scope redeems through it. -->
+        <Compile Include="Server\CarriedScopeToken.fs" />
         <Compile Include="Server\IJobScheduler.fs" />
         <!-- Phase 321 — the job-progress-checkpoint seam + its fan-out
              default, plus the ctx.Progress JobContext extension. Before
@@ -980,6 +983,11 @@
         <Compile Include="Server\Teams\BlobPendingInviteStore.fs" />
         <Compile Include="Server\Teams\PendingInviteStoreInstanceValidator.fs" />
         <Compile Include="Server\Teams\TeamInvitationHandler.fs" />
+        <!-- Phase 936 — the per-team visibility policy record (both axes), its
+             guarded store, the output-visibility source, startup check and API.
+             After TeamManagement (ITeamStore); before BuildRouteHandlers, which
+             mounts TeamOutputVisibilityApi. -->
+        <Compile Include="Server\Teams\TeamPolicyStore.fs" />
         <Compile Include="Server\Infra\BootstrapTeam.fs" />
         <Compile Include="Server\TeamCreationPolicyValidator.fs" />
         <Compile Include="Server\BootstrapTeamValidator.fs" />

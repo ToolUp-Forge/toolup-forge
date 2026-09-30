@@ -61,7 +61,7 @@ hop. The documented local invocation above is how they are held to their budgets
 | blob `azurite` | the Azure Blob companion against the local Azurite emulator | `TOOLUP_PARITY_AZURITE` |
 | store `flat` | `InMemoryVectorStore` (exact scan) | always available |
 | store `hnsw` | the HNSW companion | always available |
-| store `pgvector` | the pgvector companion, HNSW index (m=16, ef_construction=64), a table of its own per run, dropped afterwards | `TOOLUP_PGVECTOR_CONNECTION_STRING` |
+| store `pgvector` | the pgvector companion, HNSW index (m=16, ef_construction=64), built with plain `create`, a table of its own per run, dropped afterwards. Since Phase 939 `create` composes `PgvectorTuning.recommended`, so this arm now measures the tuned posture; the Phase 929 rows below predate that | `TOOLUP_PGVECTOR_CONNECTION_STRING` |
 | fact store `blob` | `BlobFactStore`, the default `IFactStore`, over whichever blob arm is named | always available |
 | fact store `postgres` | the database-backed fact store (`ToolUp.FactStores.Postgres`, Phase 888), a table of its own per run, dropped afterwards; its rows print `blob=none` | `TOOLUP_PGVECTOR_CONNECTION_STRING` |
 
@@ -136,17 +136,30 @@ azurite runs' round-minimum p95 was 40.03 / 28.35 / 37.81 ms against the memory 
 37.42 / 40.49 ms. The 250,000-chunk run used 40 queries x 3 rounds; the pgvector 100,000 run 100 x 3.
 The pgvector seed is one upsert per chunk: 64 s at 10,000 chunks, 1,002 s at 100,000.)
 
+The two pgvector rows were measured before Phase 939, when `create` composed `PgvectorTuning.unchanged`:
+pgvector's own untuned defaults (the server's default `ef_search`, no iterative scan, no exact fallback
+on a short page). They are not the behaviour of today's `create`. Phase 939 made
+`PgvectorTuning.recommended` the default (`ef_search` 100 per query, `relaxed_order` iterative scanning,
+an exact re-run of a scope whose page comes back short, up to four scopes searched concurrently). The
+companion README records what that posture measured: recall@10 of 0.964 to 1.000 across scopes of a
+165,000-row table where the untuned default gave 0.05 to 0.52, and 1.000 over 50 queries on 5,000 rows
+in Phase 939's own re-run. See [the migration note](../migrations/939-pgvector-tuned-default.md). The
+harness's own 10,000 and 100,000-chunk cells have not been re-run under the tuned default, so this page
+carries no latency or recall figure for them.
+
 Four findings from Phase 929, each out of its scope to fix:
 
 - **The azurite arm moves nothing on the retrieval path.** Its gate figure sits inside the memory
   arm's noise, because once the warm-up has loaded the scope's index the flat store and the BM25
   index answer from memory; the emulator is paid in the seed and the warm-up.
-- **pgvector is the fastest store measured under concurrency, and its recall falls with size.** At
+- **pgvector, at its untuned defaults, is the fastest store measured under concurrency, and its
+  recall falls with size.** At
   10,000 chunks it answered at 3.67 ms p50 against the flat store's 30.71; at 100,000 at 24.77 ms p95
   against the flat store's 537.57 (886). But recall of its own search against the exact scan was
   0.810 at 10,000 chunks and 0.670 at 100,000 — the store's HNSW index at the companion's defaults
   (m=16, ef_construction=64, the server's default `ef_search`) trades a third of the true top 10 at
-  100,000 chunks for that speed.
+  100,000 chunks for that speed. Phase 939 has since made the tuned posture the default (above); this
+  finding describes `PgvectorTuning.unchanged`, which a deployment now opts into.
 - **pgvector's first rounds after a seed are an order of magnitude slower than its last.** In the
   three gate runs over 10,000 chunks, the p50 over all 1,000 queries was 51.24 / 49.84 / 3.59 ms
   while every run's fastest round had a p95 under 4.1 ms. A standalone run seconds apart measured
@@ -182,7 +195,7 @@ truth is computed correctly, and it reads 1.000 too.
 |---|---|
 | flat, 500,000 chunks (Phase 14k's deferred p95) | **Attempted and stopped; extrapolated.** Phase 929 ran `load retrieval --stores flat --sizes 500000` (CPU 97%, 12.1 GB free at start). 172 s in, still seeding, the process's working set was 7.56 GB and the machine had 2.3 GB free; it was stopped before it could take the memory of the five sessions beside it. The 250,000-chunk run peaked at about 6.5 GB, so 500,000 needs about 13 GB — more than this machine had free on either day. On the slope measured at three sizes (about 5.5 µs per chunk), the p95 at eight callers is **~2.75 s**, the figure 886 extrapolated from two. The largest size measured is 250,000 chunks: **p95 1,371 ms**. |
 | flat, 1,000,000 chunks | **Extrapolated** on the same slope: p95 near 5.5 s at eight callers, over ~26 GB of process memory at the 250,000-chunk run's density. Not run, for the reason above. |
-| pgvector, 500,000 chunks | **Not run.** The harness seeds the pgvector store one upsert at a time, which took 1,002 s for 100,000 chunks, so 500,000 is over an hour of seeding before the first query. Its p95 rose from 6.50 to 24.77 ms between 10,000 and 100,000 chunks; its recall fell from 0.810 to 0.670. |
+| pgvector, 500,000 chunks | **Not run.** The harness seeds the pgvector store one upsert at a time, which took 1,002 s for 100,000 chunks, so 500,000 is over an hour of seeding before the first query. At pgvector's untuned defaults (before Phase 939) its p95 rose from 6.50 to 24.77 ms between 10,000 and 100,000 chunks, and its recall fell from 0.810 to 0.670. |
 | hnsw, 10,000 and above | **Not measurable** on this machine within a working session: the graph build did not finish (see above). Phase 929 did not retry it: nothing in the store has changed since. |
 
 ## Facts — measured
@@ -250,7 +263,101 @@ The database-backed store was also measured past the gate's size, seeded through
 300,000 facts and 2.00 at 1,200,000, against 3.70 at 12,000. **The population read does**: at
 300,000 subjects it ranks one metric's latest week in 2.8 s at the median, about nine times the
 25,000-subject figure for twelve times the subjects. That is the one operation on this store whose
-cost is the population rather than the answer, and it is out of this phase's scope to change.
+cost is the population rather than the answer. Phase 940 made it cheaper, and it is still not
+flat. See the next section.
+
+### The population read on the database arm (Phase 940)
+
+**Verdict: about three times faster at every size, and still linear in the population.** The
+statistics are functions of the whole filtered population, so no per-query read can touch fewer
+rows than the population. A flat read needs an aggregate maintained on every write, and that is
+not built. The reasons are below.
+
+Measured on 2026-09-30 by `load facts --store postgres --metrics 1 --weeks 4 --concurrency 4`
+(20 operations x 5 rounds). The database was one local PostgreSQL 17 (`pgvector/pgvector:pg17`,
+default configuration), on the same machine as the harness, with other work running. Each
+population read ranks one metric's latest week, top 10, so the population is exactly the subject
+count.
+
+| Subjects (facts) | Phase 929 p50 / p95 ms | Before p50 / p95 ms | After p50 / p95 ms | Load at start (before / after) |
+|---:|---|---|---|---|
+| 25,000 (100,000) | 317.47 / 395.24 (25,000 x 3 x 4) | 250.52 / 391.20 | 81.59 / 245.75 | CPU 88% / 100%, 13.9 / 16.2 GB free |
+| 100,000 (400,000) | — | 737.01 / 1,351.16 | 229.43 / 303.83 | CPU 96% / 22%, 11.4 / 16.9 GB free |
+| 300,000 (1,200,000) | 2,801.01 / 3,460.91 | 1,875.44 / 2,232.92 | 659.28 / 858.41 | CPU 96% / 10%, 12.2 / 15.9 GB free |
+
+"Before" is the tree at the start of Phase 940, re-measured beside "after" so the two share a
+machine and a day. Phase 929's 25,000-subject cell had three metrics, so its table was three times
+larger. From 25,000 to 300,000 subjects the p50 grew 7.5 times before and 8.1 times after.
+
+**Where the time went, before.** Measured once at 300,000 subjects against a table of the same
+shape, seeded in SQL, with one caller and a warm cache:
+
+| Stage | ms |
+|---|---:|
+| The member read in the database (`EXPLAIN ANALYZE`: a sequential scan of 1,200,000 rows, 300,000 kept, 133,337 buffers) | 343 |
+| That read plus the transfer and the materialisation into 300,000 members | 433-468 |
+| The in-memory pipeline: statistics (172-217) plus a full sort for the ranking (441-477) | 684-696 |
+
+So about two thirds of the time was spent in memory, most of it sorting 300,000 members to keep
+10. The rest was the scan, and the scan is the part that cannot shrink. With four callers, one
+read and pipeline took 3.8 s of wall time and the read alone took 1.2 s.
+
+**The choice: statistics and top-k in SQL, not a subject-paged read.** A subject-paged read moves
+the same rows in smaller pieces and still runs the same pipeline, so it bounds memory and not time.
+The read now issues four statements in one repeatable-read snapshot:
+
+1. a summary row;
+2. the method mix;
+3. the top k, `ORDER BY magnitude, fact_id COLLATE "C" LIMIT k`;
+4. the payloads of those k facts.
+
+A fifth statement runs only when needed: an exact `count(DISTINCT path)`, when the summary's
+count of distinct path hashes is below the fact count.
+
+Each statistic keeps the shared pipeline's arithmetic:
+
+- `numeric` comparison is exact decimal comparison.
+- The sum is exact in `numeric`. The mean is `PopulationStats`' own `total / decimal count`,
+  computed in .NET.
+- Freshness is the `Freshness.deriveAt` comparison, restated as `as_of >= t - window`.
+- The top k use the ranking's tiebreak, and `PopulationRanking.rankMembers` re-ranks them in .NET.
+
+Warm, at 300,000 subjects, the summary took 159-171 ms, and the method mix and the top k took about
+90 ms each.
+
+**Three cases stay in memory**, because SQL cannot compute them with identical decimal arithmetic.
+In these cases the old member read runs unchanged:
+
+- **A canonical-method selection when two methods are present.** The selection runs before the
+  threshold and needs every member of a contested group. A probe inside the same snapshot finds
+  them. A single-method population skips the selection, which is the shared function's own first
+  branch.
+- **A sum whose left-to-right `decimal` fold would round.** This applies when the sum of absolute
+  values at the largest scale exceeds `decimal`'s mantissa. Example: twenty copies of
+  `1.0000000000000000000000000001` fold to `20.000000000000000000000000001`, but the exact sum is
+  `...002`, so the two means differ. The live test pack holds this case.
+- **A freshness window where `asOf + window` could leave `DateTime`'s range.** In this case the
+  shared derivation throws.
+
+One detail is identical only up to decimal equality. Equal extremes at two scales, such as `12.0`
+and `12.00`, are equal decimals. Which one the in-memory fold keeps depends on its enumeration
+order, and neither store pins that order.
+
+**Why it is not flat.** Every statistic (the subject count, the extremes, the mean, the histogram
+and the method mix) is defined over the population the query selects. The query chooses the
+`AsOf` instant, the period, the subject depth or prefix, and the threshold, so the population can
+only be counted by reading it. The only flat design is an aggregate maintained on every write,
+per (scope, metric, period), and it was not built, for three reasons:
+
+- It cannot answer an `AsOf` replay, a threshold or a subject prefix. Those still need this read.
+- A minimum or maximum cannot be maintained under supersession without a re-read.
+- Every assert to one metric would update one hot row, which serialises writers the store
+  deliberately keeps parallel.
+
+That is a durable schema decision, and it is recorded as an open question rather than taken here.
+
+No budget was added to `perf-budgets.json`. The phase's condition for one was a flat result, and
+the gate's 12,000-fact database cell already carries a population-read ceiling (`loadPostgres`).
 
 ## Facts — extrapolated to the stated scale
 

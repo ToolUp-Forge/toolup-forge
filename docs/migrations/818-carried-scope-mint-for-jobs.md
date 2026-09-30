@@ -4,6 +4,34 @@
 ToolUp.Platform.Server (`IJobScheduler.Schedule(scope, registration)`, `InProcessJobScheduler`,
 `QuotaGatedJobScheduler`), ToolUp.JobSchedulers.Quartz, ToolUp.Facts.Server (`RecomputeJobHandler`).
 
+## Superseded by Phase 935 (2026-09-30)
+
+The rest of this note records what Phase 818 shipped. Phase 935 replaced two parts of it, so read
+these statements below as history, not as current behaviour:
+
+- **The provenance is no longer three plain `_platform.scope.*` tags.** The typed `Schedule` now
+  persists one opaque token under `_platform.scope.token`, issued by the platform's `ScopeCarrier`
+  (`CarriedScopeToken.fs`). The token seals the resolver's whole `StorageScope` and a purpose (the
+  job's scope id and job id) under the deployment's DataProtection key ring, and only the platform
+  redeems it, through the internal carried mint. A forged, altered or copied token redeems nothing
+  and the job runs under the anonymous scope. The plain tags Phase 818 wrote are no longer read: a
+  definition that carries them and no token runs anonymous. The string `Schedule` still strips the
+  whole reserved prefix.
+- **Schedulers outside the platform's server tier can now carry a resolved scope.** Both the
+  in-process scheduler and the Quartz companion stamp and redeem through the one public module
+  `CarriedJobScope` (`stamp`, `ofDefinition`). Composition binds the deployment's carrier into the
+  scheduler it builds or adopts through `IScopeCarrierBinding`, so the Quartz companion's handlers
+  now receive the resolved scope on `JobContext.Scope` across a restart. A scheduler nothing has bound
+  uses `ScopeCarrier.ephemeral` and re-mints within its own lifetime only. The contract pack's
+  `remints` parameter is retired, and a separate `IScopeCarrierBinding` pack runs against both
+  schedulers.
+- **"The provenance is as trustworthy as the job store" no longer holds.** A party that can write
+  only the job store can delete or corrupt a token, which fails closed to the anonymous scope, but
+  cannot write one for a scope the resolver did not produce.
+
+Phase 935 has no migration note of its own under `docs/migrations/`; the threat model is in the
+header of `CarriedScopeToken.fs`, and the Quartz companion's README and CHANGELOG describe its side.
+
 ## What changes
 
 Phase 797 made a request's scope a value only the platform's scope resolution can mint

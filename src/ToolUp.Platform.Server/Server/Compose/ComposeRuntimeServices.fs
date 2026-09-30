@@ -55,6 +55,15 @@ let registerCachingAndDataProtection
                 :> Microsoft.AspNetCore.DataProtection.Repositories.IXmlRepository))
     |> ignore
 
+    // Phase 935 — the platform's scope carrier, over the same key ring. An
+    // instance, so compose can bind it into the job scheduler it builds or
+    // adopts before the service provider exists; the key manager opens at
+    // first use.
+    services.AddSingleton<ScopeCarrier>(
+        ScopeCarrier.ofKeyRepository (BlobXmlRepository(resolvedBlobStorage, resolvedLogger))
+    )
+    |> ignore
+
 /// Phase 6h follow-up — Workstream B. `IDevDiagnosticsContributor`
 /// for SSE broadcast / registered-scope visibility. Gated on
 /// `EnableDevEndpoints` so production deployments don't pay the
