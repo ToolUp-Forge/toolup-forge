@@ -128,6 +128,10 @@ operate on Community-tier components only.
   Copyright (c) Compositional IT and contributors. https://github.com/CompositionalIT/farmer
 - **Fantomas** — F# code formatter. MIT License.
   Copyright (c) The Fantomas Project. https://github.com/fsprojects/fantomas
+- **F\*** — Proof-oriented language and prover, used only by the opt-in proof leg under `proofs/`.
+  `proofs/oracle/custard/FStarCustard.fs` is the support library its extractor emits, committed as
+  generated. Apache License 2.0.
+  Copyright (c) Microsoft Research. https://github.com/FStarLang/FStar
 
 ---
 

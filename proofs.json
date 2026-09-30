@@ -158,12 +158,22 @@
     "host draws what the .NET host drew - is asserted rather than inherited from the loop's pin; the diff pin caught",
     "a divergence on its first Fable run (a shuffle whose sort projection drew from the LCG, applied per element on",
     ".NET and per comparison under Fable), fixed without moving the corpus. Three production cases pin 900's three",
-    "faults, each shown red on its own on the tree before it."
+    "faults, each shown red on its own on the tree before it.",
+    "Phase 955 - the verified-implementation question, asked again - moved the pinned prover to v2026.09.27,",
+    "APPENDED thirteen entries and REWROTE one. The rewritten one is the `policy` entry",
+    "`verified-implementation-road`, which now carries two dated answers: Phase 850's NO, kept as written, and",
+    "Phase 955's YES for the ring - an array-backed ring in Pulse (proofs/ElmishRingArray.fst) proved to refine",
+    "the list model, extracted through Custard's F# backend and run on both hosts beside the shipped ring, which",
+    "it does not replace. The appended entries are four `proved` (`elmish-array-ring-is-queue`, `-push-refines`,",
+    "`-pop-refines`, `-create-refines`), three `tested` (the differential on each host, and the measurement with",
+    "its falsifier), four `assumed` (the capacity ceiling, the extractor, the Fable host's empty stand-in for the",
+    "support library, the hand-written wrapper) and two `policy` (`elmish-array-ring-not-shipped`, and",
+    "`extraction-route-stays-legacy`: the eight first-order models stay on the legacy printer, measured)."
   ],
   "kind": "proofs",
   "version": 1,
   "subject": "toolup-forge",
-  "$scope": "the proved models under proofs/: ToolUp.Remoting.Decode - the combinator algebra over the closed MessagePack value model (Phase 787); the disclosure algebra - DisclosureEgress.evaluate plus the population fold PopulationDisclosure.fold / valuesWithheld / disclosedStats (Phase 790); and the AI tool gate - ToolGate.decideDeclared, AIToolRegistry.ListAccessible and the dispatch-site re-check over the declared ToolEffect class (Phase 793); and the model-input value - the closed value every provider call is given, its smart constructor, the assembly a caller folds over it and the pure render (Phase 792); and the taint flow - the TaintLabel lattice, the labelled transform algebra fold and DisclosureTaint.analyze's conjunction (Phase 795); and the Elmish runtime's ring buffer and subscription diff - RingBuffer<'item> proved a FIFO queue through every grow, and Sub.Internal.diff / NewSubs.calculate / Fx.change proved to start, stop and keep exactly what their comment says, on the shortcut path too (Phase 788)",
+  "$scope": "the proved models under proofs/: ToolUp.Remoting.Decode - the combinator algebra over the closed MessagePack value model (Phase 787); the disclosure algebra - DisclosureEgress.evaluate plus the population fold PopulationDisclosure.fold / valuesWithheld / disclosedStats (Phase 790); and the AI tool gate - ToolGate.decideDeclared, AIToolRegistry.ListAccessible and the dispatch-site re-check over the declared ToolEffect class (Phase 793); and the model-input value - the closed value every provider call is given, its smart constructor, the assembly a caller folds over it and the pure render (Phase 792); and the taint flow - the TaintLabel lattice, the labelled transform algebra fold and DisclosureTaint.analyze's conjunction (Phase 795); and the Elmish runtime's ring buffer and subscription diff - RingBuffer<'item> proved a FIFO queue through every grow, and Sub.Internal.diff / NewSubs.calculate / Fx.change proved to start, stop and keep exactly what their comment says, on the shortcut path too (Phase 788); and the Elmish ring as a stateful array - the same ring over Pulse.Lib.Vec, refining the ring model, extracted through Custard's F# backend and run beside the shipped ring on both hosts without replacing it (Phase 955)",
   "$provers": {
     "fstar-pinned": {
       "tool": "fstar",
