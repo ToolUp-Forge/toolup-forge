@@ -33,6 +33,10 @@ proofs/oracle/TaintFlow.fs
 proofs/oracle/ElmishRing.fs
 proofs/oracle/ElmishSub.fs
 proofs/oracle/ElmishLoop.fs
+# Phase 955 - the Custard F# backend's output for proofs/ElmishRingArray.fst:
+# the module and the support library it writes beside every module, held
+# byte for byte to the extraction by proofs/check.ps1.
+proofs/oracle/custard/
 # The proof leg's working directories: the downloaded toolchain, F*'s
 # .checked cache, and the fresh extraction the byte-diff compares. All
 # gitignored, but Fantomas reads THIS file rather than .gitignore, so a

@@ -22,23 +22,34 @@
     "the release ships ulib's checked files, so the cold check still needs nothing beyond the pin.",
     "Phase 789 appended ElmishLoop.fst — the dispatch loop as a step machine — with no flag change. It is",
     "the first module to open another (ElmishRing); the check's per-run cache is what resolves that, so",
-    "check.ps1's list order (ElmishRing before ElmishLoop) is load-bearing rather than the pin."
+    "check.ps1's list order (ElmishRing before ElmishLoop) is load-bearing rather than the pin.",
+    "Phase 955 moved the pin from v2026.09.06 to v2026.09.27 with no flag change: all eight models check",
+    "on it over three cold runs with --quake 3, and every extraction through `--codegen FSharp` is",
+    "byte-identical to the one the old pin produced. The release still bundles Z3 4.13.3. What the move",
+    "is FOR is the second extraction pipeline this release carries (`--codegen Custard`, with an F#",
+    "backend) and the Pulse library it ships under lib/fstar/pulse; proofs/README.md records what was",
+    "measured on both. Upstream describes `--codegen FSharp` as unmaintained, so the `extract` set below",
+    "names a route that is kept working by this repository's normaliser rather than by the prover.",
+    "Phase 955 also appended ElmishRingArray.fst, the first Pulse module and the first extracted through",
+    "that second pipeline: the `custard` set below is its route, and check.ps1 appends one",
+    "`--custard_entry <definition>` per root the module's entry names and the `-o` path. The Pulse",
+    "library is on the prover's own include path (lib/fstar/fstar.include), so the check set is unchanged."
   ],
   "tool": "fstar",
-  "version": "v2026.09.06",
-  "released": "2026-09-06",
-  "commit": "670fc36f946559624fff48a0d0e8b3722933fbad",
+  "version": "v2026.09.27",
+  "released": "2026-09-27",
+  "commit": "7deb38a27c86990664c6b41e4b6093597acdebd4",
   "z3version": "4.13.3",
   "platforms": {
     "windows-x64": {
-      "asset": "fstar-v2026.09.06-Windows_NT-x86_64.zip",
-      "url": "https://github.com/FStarLang/FStar/releases/download/v2026.09.06/fstar-v2026.09.06-Windows_NT-x86_64.zip",
-      "sha256": "dbd13ddb75a08b98c1ed3def78728727aa9998d5a1d36ce9b6fc5cff5d9d58be",
+      "asset": "fstar-v2026.09.27-Windows_NT-x86_64.zip",
+      "url": "https://github.com/FStarLang/FStar/releases/download/v2026.09.27/fstar-v2026.09.27-Windows_NT-x86_64.zip",
+      "sha256": "afb1ad9017d9ac1b35e618c6900c7feb5e96492846c13403e77524f51c207eb4",
       "bin": "fstar/bin/fstar.exe"
     },
     "linux-x64": {
-      "asset": "fstar-v2026.09.06-Linux_x86_64.tar.gz",
-      "url": "https://github.com/FStarLang/FStar/releases/download/v2026.09.06/fstar-v2026.09.06-Linux-x86_64.tar.gz",
+      "asset": "fstar-v2026.09.27-Linux-x86_64.tar.gz",
+      "url": "https://github.com/FStarLang/FStar/releases/download/v2026.09.27/fstar-v2026.09.27-Linux-x86_64.tar.gz",
       "sha256": "",
       "bin": "fstar/bin/fstar",
       "$comment": "Declared but NOT hash-pinned: nothing in this repo has run the proof leg on Linux, and an unverified hash recorded as if it were verified is worse than an absent one. check.ps1 refuses a platform whose sha256 is empty and says why. The CI job runs windows-latest for this reason."
@@ -47,7 +58,8 @@
   "flags": {
     "check": ["--cache_checked_modules", "--report_assumes", "error", "--z3rlimit", "60"],
     "extract": ["--codegen", "FSharp"],
+    "custard": ["--codegen", "Custard", "--custard_backend", "FSharp"],
     "quake": ["--quake", "3"],
-    "$comment": "--z3rlimit 60 against modules whose slowest query finishes well inside the default is a deliberate MARGIN, not a requirement: with hints gone, the thing that makes a check flaky is a query landing near the limit on a slower machine, and headroom is the cheapest defence available. `extract` carries no `--extract <module>`: check.ps1 appends one per module from its list, so a second model did not need a second flag set (Phase 790)."
+    "$comment": "--z3rlimit 60 against modules whose slowest query finishes well inside the default is a deliberate MARGIN, not a requirement: with hints gone, the thing that makes a check flaky is a query landing near the limit on a slower machine, and headroom is the cheapest defence available. `extract` carries no `--extract <module>`: check.ps1 appends one per module from its list, so a second model did not need a second flag set (Phase 790). `custard` is the second ROUTE, not a second model's flags: a module whose entry in check.ps1 says `Route = \"Custard\"` is extracted with it and is not normalised (Phase 955)."
   }
 }
