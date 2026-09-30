@@ -593,14 +593,19 @@ Not proved. *Measured*, on every run of the gate.
   `ModelInput` *outside* the doors writes the `DisclosedFact.Scope` string itself, and nothing
   here checks that it wrote the resolver's. The doors are where the theorem's fold runs in the
   shipped code, so this is the residual, not the rule. Behind the doors, the scopes the platform
-  *carries* rather than resolves are still strings, and Phase 818 names them: a job scheduled with a
-  resolver-minted scope now runs under it (the in-process scheduler re-mints it through a second
-  internal mint whose one caller is pinned). Since Phase 930 the job-admin API schedules under the
-  request's resolved scope, and the reactive recompute path runs under the scope a data write was
-  made under whenever that write was made on a request that resolved its shard (the resolver's own
-  value rides the change; nothing is built from the write's string). Still carried as a string: the
+  *carries* rather than resolves are still strings unless they ride the platform's carrier, and
+  Phase 818 names them: a job scheduled with a resolver-minted scope now runs under it. Since Phase
+  935 the scope is written down as a token the platform's `ScopeCarrier` issued from a
+  `ResolvedScope` and bound to the work it was issued for, and re-minted through the internal
+  carried mint, whose one caller (the carrier) is pinned. So both shipped schedulers, the in-process
+  default and a companion outside the server tier, run such a job under its scope across a restart,
+  and a publication grant's target consent is restored into the scope it was given in. Since Phase
+  930 the job-admin API schedules under the request's resolved scope, and the reactive recompute
+  path runs under the scope a data write was made under whenever that write was made on a request
+  that resolved its shard (the resolver's own value rides the change; nothing is built from the
+  write's string). Still carried as a string: the
   reactive recompute of a write made off the request path or into another shard, imports, coherence
-  sweeps, knowledge-base dependency records and any scheduler outside the platform's server tier.
+  sweeps and knowledge-base dependency records.
 * **The tool-effect side is assumed, not checked here.** This theorem is about what goes *in*. The
   sentence a reader wants — that a model is isolated from knowledge except what is explicitly
   permitted — additionally needs that the tools a model may call cannot fetch what the input side

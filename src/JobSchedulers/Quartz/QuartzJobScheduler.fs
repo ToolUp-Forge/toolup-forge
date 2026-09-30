@@ -64,7 +64,8 @@ type QuartzJobScheduler
         handlers: QuartzHandlerRegistry,
         quartzConfig: QuartzConfig,
         config: ServerConfig,
-        logger: ILogger
+        logger: ILogger,
+        scopeCarrier: ScopeCarrier ref
     ) =
 
     let jobStore = store :> IJobStore
@@ -119,11 +120,11 @@ type QuartzJobScheduler
             else
                 Ok()
 
-    let createNewJob (registration: JobRegistration) : Async<Result<JobId, ScheduleError>> = async {
+    let persistNewJob (jobId: JobId) (registration: JobRegistration) : Async<Result<JobId, ScheduleError>> = async {
         let now = DateTime.UtcNow
 
         let definition: JobDefinition = {
-            JobId = Guid.NewGuid()
+            JobId = jobId
             ScopeId = registration.ScopeId
             Handler = registration.Handler
             Payload = registration.Payload
@@ -149,6 +150,42 @@ type QuartzJobScheduler
         with ex ->
             return Error(ScheduleError.StorageFailure ex.Message)
     }
+
+    /// `tagsFor` settles the persisted tags once the job id exists — the
+    /// typed `Schedule` seals its scope token for that id (Phase 935).
+    let createNewJob
+        (tagsFor: JobId -> Result<Map<string, string>, string>)
+        (registration: JobRegistration)
+        : Async<Result<JobId, ScheduleError>> =
+        async {
+            let jobId = Guid.NewGuid()
+
+            match tagsFor jobId with
+            | Error reason -> return Error(ScheduleError.StorageFailure reason)
+            | Ok tags -> return! persistNewJob jobId { registration with Tags = tags }
+        }
+
+    /// Both `Schedule` overloads, once each has settled the registration's
+    /// scope and how its tags are persisted: validate, honour idempotency
+    /// (a job recovered by its key keeps the token it was issued), persist.
+    let scheduleValidated
+        (tagsFor: JobId -> Result<Map<string, string>, string>)
+        (registration: JobRegistration)
+        : Async<Result<JobId, ScheduleError>> =
+        async {
+            match validateRegistration registration with
+            | Error e -> return Error e
+            | Ok() ->
+                match registration.Idempotency with
+                | Some key ->
+                    let! existing =
+                        jobStore.FindByIdempotencyKey(registration.ScopeId, key.Key, key.TtlSeconds, DateTime.UtcNow)
+
+                    match existing with
+                    | Some jobId -> return Ok jobId
+                    | None -> return! createNewJob tagsFor registration
+                | None -> return! createNewJob tagsFor registration
+        }
 
     /// Status transition. Writing through the projecting store is what
     /// removes the Quartz trigger on `Disable` / `Cancel` and restores
@@ -215,32 +252,27 @@ type QuartzJobScheduler
             return Ok()
         }
 
-        // Phase 818 — the typed overload registers under `scope.ScopeId`.
-        // `ResolvedScope`'s constructor is internal to the platform's
-        // server tier, so this companion cannot re-mint the scope at run
-        // time: its handlers see `ResolvedScope.anonymous` on
-        // `JobContext.Scope` whichever overload scheduled the job — never
-        // a widening — and key their stores on `ScopeId`, as before.
-        member this.Schedule(scope: ResolvedScope, registration: JobRegistration) =
-            (this :> IJobScheduler).Schedule {
+        // Phase 818 / 935 — the typed overload registers under
+        // `scope.ScopeId` and persists, as an opaque string on the
+        // definition's tags, the token the platform's carrier issued for
+        // the job. At a fire the dispatch asks the platform to redeem it
+        // (`CarriedJobScope.ofDefinition`), so the handler runs under the
+        // scope the scheduling request resolved to, across a restart when
+        // composition has bound the deployment's carrier. This companion
+        // never mints: it holds a string and the platform re-mints.
+        member _.Schedule(scope: ResolvedScope, registration: JobRegistration) =
+            let carrier = scopeCarrier.Value
+
+            scheduleValidated (fun jobId -> CarriedJobScope.stamp carrier scope jobId registration.Tags) {
                 registration with
                     ScopeId = scope.ScopeId
             }
 
-        member _.Schedule(registration: JobRegistration) = async {
-            match validateRegistration registration with
-            | Error e -> return Error e
-            | Ok() ->
-                match registration.Idempotency with
-                | Some key ->
-                    let! existing =
-                        jobStore.FindByIdempotencyKey(registration.ScopeId, key.Key, key.TtlSeconds, DateTime.UtcNow)
-
-                    match existing with
-                    | Some jobId -> return Ok jobId
-                    | None -> return! createNewJob registration
-                | None -> return! createNewJob registration
-        }
+        // The string overload strips the reserved prefix, so a registration
+        // (which may have arrived over the wire) cannot present a token.
+        member _.Schedule(registration: JobRegistration) =
+            let stripped = CarriedJobScope.strip registration.Tags
+            scheduleValidated (fun _ -> Ok stripped) registration
 
         member _.Cancel(scopeId, jobId) = setStatus scopeId jobId Cancelled
 
@@ -300,6 +332,11 @@ type QuartzJobScheduler
                     logger.Warn
                         $"[QuartzJobScheduler] event=event_fire_failed jobId={job.JobId} eventType=%s{eventType}: {ex.Message}"
         }
+
+    // Phase 935 — composition binds the deployment's carrier; the dispatch
+    // context holds the same cell, so a fire redeems through it.
+    interface IScopeCarrierBinding with
+        member _.BindScopeCarrier(carrier) = scopeCarrier.Value <- carrier
 
     interface IHostedService with
         member _.StartAsync(cancellationToken) =
@@ -385,17 +422,22 @@ module QuartzJobScheduler =
         async {
             let handlers = QuartzHandlerRegistry()
 
+            // Phase 935 — this companion's own carrier until composition
+            // binds the deployment's (`IScopeCarrierBinding`).
+            let scopeCarrier = ref (ScopeCarrier.ephemeral ())
+
             let context: QuartzDispatchContext = {
                 Store = inner
                 Handlers = handlers
                 NotificationChannel = notificationChannel
                 Config = config
                 Logger = logger
+                ScopeCarrier = scopeCarrier
             }
 
             let! quartz = buildSchedulerWith context quartzConfig configure
             let store = QuartzJobStore.create inner quartz logger
-            return QuartzJobScheduler(quartz, store, handlers, quartzConfig, config, logger)
+            return QuartzJobScheduler(quartz, store, handlers, quartzConfig, config, logger, scopeCarrier)
         }
 
     /// Compose the companion with Quartz's defaults — the in-memory job
