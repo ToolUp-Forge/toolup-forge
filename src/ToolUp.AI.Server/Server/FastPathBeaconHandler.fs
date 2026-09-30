@@ -167,16 +167,6 @@ let private jsonOptions = FableConverters.create ()
 let private toJson obj =
     JsonSerializer.Serialize(obj, jsonOptions)
 
-let private fromJson<'T> (bytes: byte[]) =
-    let json = Encoding.UTF8.GetString(bytes)
-    JsonSerializer.Deserialize<'T>(json, jsonOptions)
-
-let private conversationBlobName (conversationId: Guid) =
-    $"ai-conversations/{conversationId}.json"
-
-let private providerHistoryBlobName (conversationId: Guid) =
-    $"ai-conversations/{conversationId}.history.json"
-
 // ─── Wire shape (must match Client/FastPathHook.fs) ─────────────
 
 type FastPathBeacon = {
@@ -263,27 +253,6 @@ type SequenceBeacon = {
     LatencyMs: float
 }
 
-// ─── Provider-history mirror (mirrors AIAssistantHandler types) ─
-//
-// `AIProviderMessage` is the wire shape the provider history blob
-// carries. Defined locally so we don't pull in the full
-// AIAgentEngine dependency tree. Field names match
-// `AIProviderMessage` in `AIAgentEngine.fs` exactly so the blob
-// round-trips correctly.
-
-type private AIProviderToolCall = {
-    Id: string
-    Name: string
-    Arguments: string
-}
-
-type private AIProviderMessage = {
-    Role: string
-    Content: string
-    ToolCalls: AIProviderToolCall list
-    ToolResults: (string * string) list
-}
-
 // ─── Storage scope resolution ───────────────────────────────────
 
 // Authoritative scope ONLY. No `ToolUp.UserId` / `"anonymous"`
@@ -346,31 +315,14 @@ let private validateBeacon (b: FastPathBeacon) : Result<unit, string> =
 // `CreatedBy` (the first persisted message's owner field), refusing
 // cross-user appends.
 //
-// Semantics — three accept cases, one refuse:
-//   1. `existing = []` — new conversation. The caller establishes
-//      themselves as creator on the first persisted message. Accept.
-//   2. `existing[0].CreatedBy = ""` — legacy blob (pre-6j.D) with no
-//      recorded owner. Accept; the field was added without a
-//      backfill migration, so locking these out would break existing
-//      conversations on the upgrade.
-//   3. `existing[0].CreatedBy = caller` — same user. Accept.
-//   4. otherwise — cross-user. Refuse with the owner's id surfaced
-//      back to the handler so the `BeaconRejected` audit payload can
-//      record it for forensics.
-//
-// Pure function: takes no IO. The handler resolves the inputs and
-// applies the result. Same shape is reused by the symmetric guard in
-// `AIAssistantApi.SubmitMessage`.
+// The gate itself — its four cases and why — is defined once, in
+// `ConversationBlobs.checkOwnership` (Phase 862), and `SubmitMessage`
+// applies the same definition. This binding keeps the published name.
 
+// `Ok` when `callerUserId` may append to a conversation whose persisted
+// messages are `existing`; `Error owner` when it belongs to someone else.
 let checkOwnership (existing: ConversationMessage list) (callerUserId: string) : Result<unit, string> =
-    match existing with
-    | [] -> Ok()
-    | first :: _ ->
-        let owner = first.CreatedBy
-
-        if System.String.IsNullOrEmpty owner then Ok()
-        elif owner = callerUserId then Ok()
-        else Error owner
+    ConversationBlobs.checkOwnership existing callerUserId
 
 // ─── Phase 6j.E — beacon idempotency ────────────────────────────
 //
@@ -404,56 +356,6 @@ let isDuplicateBeacon (existing: ConversationMessage list) (beaconId: string) : 
         let skip = max 0 (List.length existing - BeaconDedupWindow)
 
         existing |> List.skip skip |> List.exists (fun m -> beaconKey m.BeaconId = key)
-
-// ─── Conversation persistence ───────────────────────────────────
-
-let private loadMessages (storage: IBlobStorage) (container: string) (conversationId: Guid) = async {
-    let! result = storage.Download(container, conversationBlobName conversationId)
-
-    match result with
-    | Ok bytes ->
-        try
-            return fromJson<ConversationMessage list> bytes
-        with _ ->
-            return []
-    | Error _ -> return []
-}
-
-let private saveMessages
-    (storage: IBlobStorage)
-    (container: string)
-    (conversationId: Guid)
-    (messages: ConversationMessage list)
-    =
-    async {
-        let bytes = toJson messages |> Encoding.UTF8.GetBytes
-        let! _ = storage.Upload(container, conversationBlobName conversationId, bytes)
-        return ()
-    }
-
-let private loadProviderHistory (storage: IBlobStorage) (container: string) (conversationId: Guid) = async {
-    let! result = storage.Download(container, providerHistoryBlobName conversationId)
-
-    match result with
-    | Ok bytes ->
-        try
-            return fromJson<AIProviderMessage list> bytes
-        with _ ->
-            return []
-    | Error _ -> return []
-}
-
-let private saveProviderHistory
-    (storage: IBlobStorage)
-    (container: string)
-    (conversationId: Guid)
-    (messages: AIProviderMessage list)
-    =
-    async {
-        let bytes = toJson messages |> Encoding.UTF8.GetBytes
-        let! _ = storage.Upload(container, providerHistoryBlobName conversationId, bytes)
-        return ()
-    }
 
 // ─── Synthetic turn construction ────────────────────────────────
 
@@ -561,23 +463,17 @@ let planBeaconAppend
     else
         Some [ buildUserMessage callerUserId beacon; buildAssistantMessage beacon ]
 
-let private buildProviderUser (beacon: FastPathBeacon) : AIProviderMessage = {
-    Role = "user"
-    Content = beacon.Instruction
-    ToolCalls = []
-    ToolResults = []
-}
+// Phase 862 — the canonical `AIProviderMessage`, so the entries the
+// beacon appends carry `Parts = []` like every other text turn.
+let private buildProviderUser (beacon: FastPathBeacon) : ToolUp.Platform.AI.AIProviderMessage =
+    ToolUp.Platform.AI.AIProviderMessage.text "user" beacon.Instruction
 
-let private buildProviderAssistant (beacon: FastPathBeacon) : AIProviderMessage = {
+let private buildProviderAssistant (beacon: FastPathBeacon) : ToolUp.Platform.AI.AIProviderMessage =
     // Synthetic turn surfaces as plain assistant text in the provider
     // history. The LLM sees "Set country to UK" — sufficient to know
     // the action happened — without the synthetic ToolCall envelope
     // (which would confuse providers' tool-use protocols).
-    Role = "assistant"
-    Content = beacon.SyntheticReply
-    ToolCalls = []
-    ToolResults = []
-}
+    ToolUp.Platform.AI.AIProviderMessage.text "assistant" beacon.SyntheticReply
 
 // ─── Event-store payload ────────────────────────────────────────
 
@@ -801,67 +697,136 @@ let beaconHandler: HttpHandler =
                         // Load BEFORE the gate so the same blob read
                         // services both the ownership check and the
                         // append. One round-trip, not two.
-                        let! existing = loadMessages storage scope.Container beacon.ConversationId
+                        let! existingLoad =
+                            ConversationBlobs.loadConversation storage scope.Container beacon.ConversationId
 
-                        match checkOwnership existing callerUserId with
-                        | Error ownerOfRecord ->
-                            // Phase 6j.D — cross-user write attempt.
-                            // The conversation belongs to someone else
-                            // in this shared container. Refuse without
-                            // touching either persisted blob.
+                        match existingLoad with
+                        | Error err ->
+                            // Phase 862 — a conversation blob that is present
+                            // but cannot be read is refused, never replaced:
+                            // read as empty, the append below would write a
+                            // two-message conversation over it.
                             warn
-                                $"FastPath beacon rejected: caller '{callerUserId}' is not the owner of conversation {beacon.ConversationId} (owner '{ownerOfRecord}', scope '{scope.ScopeId}')."
+                                $"FastPath beacon refused: {ConversationBlobs.ConversationBlobError.describe err}; conversation {beacon.ConversationId} left untouched (scope '{scope.ScopeId}')."
 
                             do!
-                                emitBeaconRejected
-                                    auditLogOpt
+                                emitRejection
+                                    eventStoreOpt
                                     logger
                                     scope.ScopeId
                                     beacon.ConversationId
-                                    callerUserId
-                                    ownerOfRecord
-                                    BeaconSurfaceLabel
+                                    "conversation blob unreadable"
 
-                            ctx.Response.StatusCode <- 403
+                            ctx.Response.StatusCode <- 409
                             return! next ctx
-                        | Ok() ->
-                            match planBeaconAppend existing callerUserId beacon with
-                            | None ->
-                                // Phase 6j.E — this beacon is already in the
-                                // conversation's tail. Explicit no-op: neither
-                                // blob is read further or written, and no
-                                // `FastPathResolved` event is emitted (one
-                                // resolution happened, so one event exists —
-                                // counting the retry would inflate the
-                                // rolling-window hit stats the beacon audit
-                                // trail exists to measure). 202, same as the
-                                // append path: the client is fire-and-forget
-                                // and a retry succeeding is the truth.
-                                info
-                                    $"FastPath beacon {beacon.BeaconId} for conversation {beacon.ConversationId} is a duplicate within the last {BeaconDedupWindow} messages; no-op."
-
-                                ctx.Response.StatusCode <- 202
-                                return! next ctx
-                            | Some turns ->
-                                do! saveMessages storage scope.Container beacon.ConversationId (existing @ turns)
-
-                                let providerUser = buildProviderUser beacon
-                                let providerAsst = buildProviderAssistant beacon
-
-                                let! providerExisting =
-                                    loadProviderHistory storage scope.Container beacon.ConversationId
+                        | Ok existing ->
+                            match checkOwnership existing callerUserId with
+                            | Error ownerOfRecord ->
+                                // Phase 6j.D — cross-user write attempt.
+                                // The conversation belongs to someone else
+                                // in this shared container. Refuse without
+                                // touching either persisted blob.
+                                warn
+                                    $"FastPath beacon rejected: caller '{callerUserId}' is not the owner of conversation {beacon.ConversationId} (owner '{ownerOfRecord}', scope '{scope.ScopeId}')."
 
                                 do!
-                                    saveProviderHistory
-                                        storage
-                                        scope.Container
+                                    emitBeaconRejected
+                                        auditLogOpt
+                                        logger
+                                        scope.ScopeId
                                         beacon.ConversationId
-                                        (providerExisting @ [ providerUser; providerAsst ])
+                                        callerUserId
+                                        ownerOfRecord
+                                        BeaconSurfaceLabel
 
-                                do! emitEvent eventStoreOpt logger scope beacon
-
-                                ctx.Response.StatusCode <- 202
+                                ctx.Response.StatusCode <- 403
                                 return! next ctx
+                            | Ok() ->
+                                match planBeaconAppend existing callerUserId beacon with
+                                | None ->
+                                    // Phase 6j.E — this beacon is already in the
+                                    // conversation's tail. Explicit no-op: neither
+                                    // blob is read further or written, and no
+                                    // `FastPathResolved` event is emitted (one
+                                    // resolution happened, so one event exists —
+                                    // counting the retry would inflate the
+                                    // rolling-window hit stats the beacon audit
+                                    // trail exists to measure). 202, same as the
+                                    // append path: the client is fire-and-forget
+                                    // and a retry succeeding is the truth.
+                                    info
+                                        $"FastPath beacon {beacon.BeaconId} for conversation {beacon.ConversationId} is a duplicate within the last {BeaconDedupWindow} messages; no-op."
+
+                                    ctx.Response.StatusCode <- 202
+                                    return! next ctx
+                                | Some turns ->
+                                    // Phase 862 — read the provider history BEFORE
+                                    // either write, so a history that cannot be
+                                    // read refuses the append with both blobs
+                                    // byte-identical.
+                                    let! historyLoad =
+                                        ConversationBlobs.loadProviderHistory
+                                            storage
+                                            scope.Container
+                                            beacon.ConversationId
+
+                                    match historyLoad with
+                                    | Error err ->
+                                        warn
+                                            $"FastPath beacon refused: {ConversationBlobs.ConversationBlobError.describe err}; conversation {beacon.ConversationId} left untouched (scope '{scope.ScopeId}')."
+
+                                        do!
+                                            emitRejection
+                                                eventStoreOpt
+                                                logger
+                                                scope.ScopeId
+                                                beacon.ConversationId
+                                                "provider history unreadable"
+
+                                        ctx.Response.StatusCode <- 409
+                                        return! next ctx
+                                    | Ok providerExisting ->
+                                        let providerTurns = [ buildProviderUser beacon; buildProviderAssistant beacon ]
+
+                                        let! saved = async {
+                                            match!
+                                                ConversationBlobs.saveConversation
+                                                    storage
+                                                    scope.Container
+                                                    beacon.ConversationId
+                                                    (existing @ turns)
+                                            with
+                                            | Error err -> return Error err
+                                            | Ok() ->
+                                                return!
+                                                    ConversationBlobs.saveProviderHistory
+                                                        storage
+                                                        scope.Container
+                                                        beacon.ConversationId
+                                                        (providerExisting @ providerTurns)
+                                        }
+
+                                        match saved with
+                                        | Error err ->
+                                            // A write the store refused is not a
+                                            // resolution the conversation holds:
+                                            // 500 rather than 202, and no
+                                            // `FastPathResolved` event.
+                                            match logger with
+                                            | Some l ->
+                                                l.Error(
+                                                    $"FastPath beacon for conversation {beacon.ConversationId} was not persisted: {ConversationBlobs.ConversationBlobError.describe err}.",
+                                                    None
+                                                )
+                                            | None -> ()
+
+                                            ctx.Response.StatusCode <- 500
+                                            return! next ctx
+                                        | Ok() ->
+                                            do! emitEvent eventStoreOpt logger scope beacon
+
+                                            ctx.Response.StatusCode <- 202
+                                            return! next ctx
                     | None ->
                         // No storage configured — emit the fast-path
                         // event for telemetry and bail. No append

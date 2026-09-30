@@ -5,8 +5,10 @@ module ToolUp.Platform.Tests.InProcess.FastPathBeaconIdempotencyTests
 
 open System
 open Expecto
+open ToolUp.Platform
 open ToolUp.AI
 open ToolUp.AI.FastPathBeaconHandler
+open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 
 // ─── Phase 6j.E — beacon endpoint idempotency ────────────────────
 //
@@ -206,4 +208,256 @@ let private scanTests =
             Expect.isTrue (isDuplicateBeacon convo "b-edge") "the oldest in-window key still matches"
     ]
 
-let tests = testList "FastPathBeaconIdempotency" [ planTests; scanTests ]
+// ─── Phase 862 — the beacon cannot truncate a conversation ───────
+//
+// The assistant handler and the beacon handler share two blobs per
+// conversation. Before Phase 862 the beacon read the provider history
+// through a private shadow of `AIProviderMessage` whose `ToolResults` was
+// a tuple list and which had no `Parts`: any history holding a tool turn
+// failed to decode, the failure read as an EMPTY history, and the beacon
+// wrote `[] @ [user; assistant]` over it. These cases drive the REAL
+// `beaconHandler` over an in-memory store, seeding the blobs with exactly
+// the bytes the assistant handler writes (the canonical wire types through
+// `FableConverters`) and reading them back the way it reads them.
+
+let private wireOptions =
+    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+
+let private historyScope: StorageScope = {
+    ScopeId = "t862"
+    Container = "team-t862"
+    Persist = true
+}
+
+let private conversationBlob (id: Guid) = $"ai-conversations/{id}.json"
+let private historyBlob (id: Guid) = $"ai-conversations/{id}.history.json"
+
+let private encode (value: 'T) =
+    System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(value, wireOptions))
+
+let private decode<'T> (bytes: byte[]) =
+    System.Text.Json.JsonSerializer.Deserialize<'T>(System.Text.Encoding.UTF8.GetString bytes, wireOptions)
+
+/// A store whose writes to one named blob fail — the failed-save case.
+type private FailingWrites(inner: ToolUp.Platform.BlobStorage.IBlobStorage, failing: string) =
+    interface ToolUp.Platform.BlobStorage.IBlobStorage with
+        member _.CanComposeFrom = inner.CanComposeFrom
+
+        member _.Upload(container, blobName, content) =
+            if blobName = failing then
+                async.Return(Error "injected write failure")
+            else
+                inner.Upload(container, blobName, content)
+
+        member _.Download(container, blobName) = inner.Download(container, blobName)
+        member _.Delete(container, blobName) = inner.Delete(container, blobName)
+        member _.List(container, prefix) = inner.List(container, prefix)
+        member _.Exists(container, blobName) = inner.Exists(container, blobName)
+        member _.GetMetadata(container, blobName) = inner.GetMetadata(container, blobName)
+
+        member _.DownloadRange(container, blobName, offset, length) =
+            inner.DownloadRange(container, blobName, offset, length)
+
+        member _.ComposeFrom(container, blobName, parts) =
+            inner.ComposeFrom(container, blobName, parts)
+
+        member _.Erase(container, prefix, policy, dryRun) =
+            inner.Erase(container, prefix, policy, dryRun)
+
+/// POST one beacon through the real handler; returns the status code.
+let private postBeacon (storage: ToolUp.Platform.BlobStorage.IBlobStorage) (b: FastPathBeacon) : int =
+    let services = Microsoft.Extensions.DependencyInjection.ServiceCollection()
+
+    Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<
+        ToolUp.Platform.BlobStorage.IBlobStorage
+     >(
+        services,
+        storage
+    )
+    |> ignore
+
+    let ctx = Microsoft.AspNetCore.Http.DefaultHttpContext()
+
+    ctx.RequestServices <-
+        Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider
+            services
+
+    ctx.Items["ToolUp.UserId"] <- box "alice"
+    ctx.Items["ToolUp.StorageScope"] <- box historyScope
+    ctx.Request.Body <- new System.IO.MemoryStream(encode b)
+    ctx.Response.Body <- new System.IO.MemoryStream()
+
+    beaconHandler (fun c -> System.Threading.Tasks.Task.FromResult(Some c)) ctx
+    |> Async.AwaitTask
+    |> Async.RunSynchronously
+    |> ignore
+
+    ctx.Response.StatusCode
+
+let private seed (storage: ToolUp.Platform.BlobStorage.IBlobStorage) (blobName: string) (bytes: byte[]) =
+    match
+        storage.Upload(historyScope.Container, blobName, bytes)
+        |> Async.RunSynchronously
+    with
+    | Ok _ -> ()
+    | Error e -> failtestf "seeding %s failed: %s" blobName e
+
+let private read (storage: ToolUp.Platform.BlobStorage.IBlobStorage) (blobName: string) : byte[] =
+    match storage.Download(historyScope.Container, blobName) |> Async.RunSynchronously with
+    | Ok bytes -> bytes
+    | Error e -> failtestf "reading %s failed: %s" blobName e
+
+/// A provider history the assistant handler writes after a turn that
+/// called a tool: the tool_use on the assistant turn, the tool_result on
+/// the user turn that answers it.
+let private toolTurnHistory: ToolUp.Platform.AI.AIProviderMessage list = [
+    ToolUp.Platform.AI.AIProviderMessage.text "user" "what is the quarter's total?"
+    {
+        ToolUp.Platform.AI.AIProviderMessage.text "assistant" "" with
+            ToolCalls = [
+                {
+                    Id = "toolu_1"
+                    Name = "sales.sum"
+                    Arguments = """{"quarter":"Q3"}"""
+                }
+            ]
+    }
+    {
+        ToolUp.Platform.AI.AIProviderMessage.text "user" "" with
+            ToolResults = [
+                {
+                    ToolCallId = "toolu_1"
+                    Content = "42"
+                }
+            ]
+    }
+    ToolUp.Platform.AI.AIProviderMessage.text "assistant" "The quarter's total is 42."
+]
+
+let private priorConversation (conversationId: Guid) : ConversationMessage list = [
+    {
+        Id = Guid.NewGuid()
+        ConversationId = conversationId
+        Participant = User
+        Content = "what is the quarter's total?"
+        Timestamp = DateTime.UtcNow
+        ToolCalls = []
+        RetrievedSources = []
+        Parts = []
+        CreatedBy = "alice"
+        BeaconId = ""
+        Verification = None
+    }
+]
+
+let private historyTests =
+    testList "beaconHandler — Phase 862 conversation history has one type and one writer" [
+        testCase "a history holding a tool turn survives a beacon append, every message intact"
+        <| fun _ ->
+            let storage = InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
+            let b = beacon "b-862" "set country to UK"
+            seed storage (conversationBlob b.ConversationId) (encode (priorConversation b.ConversationId))
+            seed storage (historyBlob b.ConversationId) (encode toolTurnHistory)
+
+            let status = postBeacon storage b
+            Expect.equal status 202 "the beacon is accepted"
+
+            let after =
+                decode<ToolUp.Platform.AI.AIProviderMessage list> (read storage (historyBlob b.ConversationId))
+
+            Expect.equal (List.length after) (List.length toolTurnHistory + 2) "prior history plus one exchange"
+            Expect.equal (List.truncate 4 after) toolTurnHistory "every prior message, tool turn included, is intact"
+
+            for m in after do
+                Expect.isFalse (isNull (box m.Parts)) $"Parts is present on the '{m.Role}' turn '{m.Content}'"
+
+            Expect.equal (after[4].Content) "set country to UK" "the beacon's instruction is appended"
+            Expect.equal (after[5].Role) "assistant" "followed by its synthetic reply"
+
+        testCase "a history entry written without Parts reads back with Parts empty"
+        <| fun _ ->
+            // The shape the pre-862 beacon wrote: no `Parts` member at all.
+            let storage = InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
+            let b = beacon "b-862-parts" "set country to UK"
+
+            let legacy =
+                """[{"Role":"user","Content":"hello","ToolCalls":[],"ToolResults":[]},{"Role":"assistant","Content":"hi","ToolCalls":[],"ToolResults":[]}]"""
+
+            seed storage (historyBlob b.ConversationId) (System.Text.Encoding.UTF8.GetBytes legacy)
+
+            Expect.equal (postBeacon storage b) 202 "the beacon is accepted"
+
+            let after =
+                decode<ToolUp.Platform.AI.AIProviderMessage list> (read storage (historyBlob b.ConversationId))
+
+            Expect.equal (List.length after) 4 "both legacy messages survive"
+
+            for m in after do
+                Expect.equal m.Parts [] $"Parts is coerced to empty on the '{m.Role}' turn"
+
+            Expect.isFalse
+                (after |> List.exists ToolUp.Platform.AI.AIProviderMessage.isMultimodal)
+                "and reads as text-only"
+
+        testCase "an undecodable provider history is refused and left byte-identical"
+        <| fun _ ->
+            let storage = InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
+            let b = beacon "b-862-corrupt" "set country to UK"
+            let conversationBytes = encode (priorConversation b.ConversationId)
+
+            let corrupt =
+                System.Text.Encoding.UTF8.GetBytes """[{"Role":"user","Content":"trunc"""
+
+            seed storage (conversationBlob b.ConversationId) conversationBytes
+            seed storage (historyBlob b.ConversationId) corrupt
+
+            let status = postBeacon storage b
+            Expect.equal status 409 "a history that cannot be decoded refuses the append"
+            Expect.equal (read storage (historyBlob b.ConversationId)) corrupt "the history blob is byte-identical"
+
+            Expect.equal
+                (read storage (conversationBlob b.ConversationId))
+                conversationBytes
+                "and the conversation blob is untouched: the refusal precedes both writes"
+
+        testCase "an undecodable conversation blob is refused and left byte-identical"
+        <| fun _ ->
+            let storage = InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
+            let b = beacon "b-862-corrupt-ui" "set country to UK"
+            let corrupt = System.Text.Encoding.UTF8.GetBytes "{not a conversation"
+            seed storage (conversationBlob b.ConversationId) corrupt
+
+            let status = postBeacon storage b
+            Expect.equal status 409 "a conversation that cannot be decoded refuses the append"
+            Expect.equal (read storage (conversationBlob b.ConversationId)) corrupt "the blob is byte-identical"
+
+            Expect.isFalse
+                (storage.Exists(historyScope.Container, historyBlob b.ConversationId)
+                 |> Async.RunSynchronously)
+                "and no provider history was written beside it"
+
+        testCase "an absent history is an empty history"
+        <| fun _ ->
+            let storage = InMemoryBlobStorage() :> ToolUp.Platform.BlobStorage.IBlobStorage
+            let b = beacon "b-862-new" "set country to UK"
+
+            Expect.equal (postBeacon storage b) 202 "a first beacon on a new conversation is accepted"
+
+            let after =
+                decode<ToolUp.Platform.AI.AIProviderMessage list> (read storage (historyBlob b.ConversationId))
+
+            Expect.equal (after |> List.map _.Role) [ "user"; "assistant" ] "exactly the one exchange"
+
+        testCase "a failed history write is reported, not acknowledged"
+        <| fun _ ->
+            let b = beacon "b-862-write" "set country to UK"
+
+            let storage =
+                FailingWrites(InMemoryBlobStorage(), historyBlob b.ConversationId)
+                :> ToolUp.Platform.BlobStorage.IBlobStorage
+
+            Expect.equal (postBeacon storage b) 500 "the beacon does not answer 202 over a write that failed"
+    ]
+
+let tests =
+    testList "FastPathBeaconIdempotency" [ planTests; scanTests; historyTests ]
