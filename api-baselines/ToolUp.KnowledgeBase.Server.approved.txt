@@ -184,6 +184,10 @@ KnowledgeBase.ServerIndexStorage.versionedOriginalBlobName(System.String, System
 KnowledgeBase.ServerIndexStorage.versionsBlobName(System.String) : System.String
 KnowledgeBase.ServerIndexStorage+IngestionStatusFeed (class)
 KnowledgeBase.ServerIndexStorage+IngestionStatusFeed.subscribe(System.String, Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+IngestionStatus, Microsoft.FSharp.Core.Unit]) : System.IDisposable
+KnowledgeBase.ServerIndexStorage+KnowledgeIndexWriteFailed (class)
+KnowledgeBase.ServerIndexStorage+KnowledgeIndexWriteFailed..ctor()
+KnowledgeBase.ServerIndexStorage+KnowledgeIndexWriteFailed..ctor(System.String)
+KnowledgeBase.ServerIndexStorage+KnowledgeIndexWriteFailed.message : System.String { get }
 KnowledgeBase.ServerIngestionObserver (class)
 KnowledgeBase.ServerIngestionObserver.makeIngestionStatusObserver(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.INotificationChannel], ToolUp.Platform.ILogger) : ToolUp.RAG.IngestionTypes+IIngestionStatusObserver
 KnowledgeBase.ServerIngestionStatusStream (class)

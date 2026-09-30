@@ -113,7 +113,7 @@ ToolUp.IngestionQueues.Redis 27/39
 ToolUp.JobSchedulers.Quartz 26/35
 ToolUp.KnowledgeBase.Client 52/395
 ToolUp.KnowledgeBase.Core 192/454
-ToolUp.KnowledgeBase.Server 192/327
+ToolUp.KnowledgeBase.Server 193/331
 ToolUp.Media.CloudTranscode 2/3
 ToolUp.Media.FFmpeg 4/5
 ToolUp.MediaLibrary 276/665
@@ -137,7 +137,7 @@ ToolUp.OpenXml.SvgRasterizer.Skia 3/3
 ToolUp.Platform.Build 308/560
 ToolUp.Platform.Client 2825/6986
 ToolUp.Platform.Core 7009/14880
-ToolUp.Platform.Server 6514/11881
+ToolUp.Platform.Server 6535/11935
 ToolUp.Platform.Testing 118/264
 ToolUp.Platform.UI 71/183
 ToolUp.PublicRendering 610/1062

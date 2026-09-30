@@ -72,6 +72,85 @@ let saveIndex (storage: IBlobStorage) (container: string) (docs: KnowledgeDocume
     ()
 }
 
+// ─── Phase 864 — guarded index writes ─────────────────────────────
+//
+// The index writers below (`upsertIndexEntry`, `updateIndexStatus`,
+// `updateIndexChunkCount`, and `appendVersion` for the per-document version
+// history) are read-modify-writes of one shared blob. They run through
+// `BlobMapStore`, so:
+//
+//   * an index that exists and cannot be read, or does not decode, is never
+//     read as empty and overwritten with empty-plus-one — the write is
+//     refused and `KnowledgeIndexWriteFailed` is raised (the undecodable
+//     bytes are copied aside for recovery);
+//   * on a backend implementing `IConditionalBlobStorage`, writers on
+//     different replicas lose no update — a lost precondition re-reads and
+//     replays the change.
+//
+// `loadIndex` / `saveIndex` above are unchanged: `loadIndex` is the read
+// path the listing surfaces use, and it still reads an unreadable index as
+// empty for display.
+
+/// Raised by the guarded index writers when the read-modify-write could
+/// not complete — the index was unreadable or undecodable, the write
+/// failed, or the retry budget was exhausted. Nothing was written. Every
+/// caller runs inside a `try … with` that logs or routes the failure (the
+/// upload handler surfaces it to the client, the ingestion observer logs
+/// it), which is the point: before Phase 864 each of these cases was a
+/// silent success.
+exception KnowledgeIndexWriteFailed of message: string
+
+let private indexLogger = ConsoleLogger.ConsoleLogger() :> ILogger
+
+let private indexCodec: BlobCodec<KnowledgeDocument list> = {
+    Encode = fun docs -> (toJson docs: string) |> Encoding.UTF8.GetBytes
+    Decode =
+        fun content ->
+            try
+                Ok(
+                    fromJson<KnowledgeDocument list> (Encoding.UTF8.GetString content)
+                    |> List.map (normaliseVersion >> normaliseTags)
+                )
+            with ex ->
+                Error ex.Message
+}
+
+// One `BlobMapStore` per storage instance, so its capability probe and its
+// one-time fallback warning are paid once per backend, not once per write.
+let private indexStores =
+    System.Runtime.CompilerServices.ConditionalWeakTable<IBlobStorage, BlobMapStore<KnowledgeDocument list>>()
+
+let private indexStoreFor (storage: IBlobStorage) =
+    indexStores.GetValue(storage, fun s -> BlobMapStore<KnowledgeDocument list>(s, indexCodec, indexLogger))
+
+let private raiseOnFailure (result: Result<unit, BlobMapStoreError>) =
+    match result with
+    | Ok() -> ()
+    | Error e -> raise (KnowledgeIndexWriteFailed(BlobMapStoreError.describe e))
+
+/// Guarded read-modify-write of `index.json`. `change` is pure over the
+/// current documents (absent = none) and returns `None` for "nothing to
+/// write"; it may run more than once.
+let private updateIndex
+    (storage: IBlobStorage)
+    (container: string)
+    (change: KnowledgeDocument list -> KnowledgeDocument list option)
+    =
+    async {
+        let! result =
+            (indexStoreFor storage)
+                .Update(
+                    container,
+                    indexBlobName,
+                    fun current ->
+                        match change (Option.defaultValue [] current) with
+                        | Some updated -> BlobUpdate.Write(updated, ())
+                        | None -> BlobUpdate.Keep()
+                )
+
+        raiseOnFailure result
+    }
+
 // ─── Phase 510 — version + chunk-hash sidecars ────────────────────
 //
 // Both sidecars live UNDER the document's own `knowledge/{docId}/`
@@ -256,6 +335,24 @@ let private containerLocks = ConcurrentDictionary<string, SemaphoreSlim>()
 let acquireContainerLock (container: string) =
     containerLocks.GetOrAdd(container, fun _ -> new SemaphoreSlim(1, 1))
 
+let private versionCodec: BlobCodec<KnowledgeDocumentVersion list> = {
+    Encode = fun versions -> (toJson versions: string) |> Encoding.UTF8.GetBytes
+    Decode =
+        fun content ->
+            try
+                match fromJson<KnowledgeDocumentVersion list> (Encoding.UTF8.GetString content) with
+                | versions when isNull (box versions) -> Error "version history decoded to null"
+                | versions -> Ok versions
+            with ex ->
+                Error ex.Message
+}
+
+let private versionStores =
+    System.Runtime.CompilerServices.ConditionalWeakTable<IBlobStorage, BlobMapStore<KnowledgeDocumentVersion list>>()
+
+let private versionStoreFor (storage: IBlobStorage) =
+    versionStores.GetValue(storage, fun s -> BlobMapStore<KnowledgeDocumentVersion list>(s, versionCodec, indexLogger))
+
 /// Phase 510 — append one superseded-version record under the container
 /// lock.
 ///
@@ -268,30 +365,34 @@ let acquireContainerLock (container: string) =
 ///
 /// **Do not call from inside another `acquireContainerLock` critical
 /// section** — the semaphore is non-reentrant.
+///
+/// Phase 864 — a guarded read-modify-write: an unreadable or undecodable
+/// history raises `KnowledgeIndexWriteFailed` instead of being replaced by
+/// a one-record list, and on a conditional backend a concurrent writer on
+/// another replica cannot drop this record.
 let appendVersion (storage: IBlobStorage) (container: string) (record: KnowledgeDocumentVersion) = async {
     let lock = acquireContainerLock container
     do! lock.WaitAsync() |> Async.AwaitTask
 
     try
-        let! existing = async {
-            match! storage.Download(container, versionsBlobName record.DocumentId) with
-            | Ok bytes ->
-                try
-                    return fromJson<KnowledgeDocumentVersion list> (Encoding.UTF8.GetString bytes)
-                with _ ->
-                    return []
-            | Error _ -> return []
-        }
+        let! result =
+            (versionStoreFor storage)
+                .Update(
+                    container,
+                    versionsBlobName record.DocumentId,
+                    fun current ->
+                        // Idempotent on version number: a retried supersede
+                        // must not double-record the same version.
+                        let updated =
+                            (Option.defaultValue [] current
+                             |> List.filter (fun v -> v.Version <> record.Version))
+                            @ [ record ]
+                            |> List.sortBy _.Version
 
-        // Idempotent on version number: a retried supersede must not
-        // double-record the same version.
-        let updated =
-            (existing |> List.filter (fun v -> v.Version <> record.Version)) @ [ record ]
-            |> List.sortBy _.Version
+                        BlobUpdate.Write(updated, ())
+                )
 
-        let json = (toJson updated: string) |> Encoding.UTF8.GetBytes
-        let! _ = storage.Upload(container, versionsBlobName record.DocumentId, json)
-        ()
+        raiseOnFailure result
     finally
         lock.Release() |> ignore
 }
@@ -304,11 +405,11 @@ let appendVersion (storage: IBlobStorage) (container: string) (record: Knowledge
 /// and have the second save clobber the first (one document silently
 /// lost from the index while its blob + chunks persist orphaned).
 ///
-/// This is the *interim single-instance* guard, matching
-/// `updateIndexStatus` / `updateIndexChunkCount` above: it serialises
-/// within one process but not across replicas. The cross-replica fix is
-/// ETag-conditional-write CAS on the index blob (Phase 9c half-2 /
-/// Phase 116 ETag-gated tasks), deferred.
+/// The lock is the in-process serialisation. Since Phase 864 the write is
+/// also a guarded read-modify-write (see "guarded index writes" above): on a
+/// backend implementing `IConditionalBlobStorage` it holds across replicas,
+/// and an unreadable or undecodable index raises `KnowledgeIndexWriteFailed`
+/// rather than being overwritten with this one document.
 ///
 /// **Do not call from inside another `acquireContainerLock` critical
 /// section** — the semaphore is non-reentrant. Callers acquire it only
@@ -319,34 +420,30 @@ let upsertIndexEntry (storage: IBlobStorage) (container: string) (doc: Knowledge
     do! lock.WaitAsync() |> Async.AwaitTask
 
     try
-        let! existing = loadIndex storage container
-
-        let updated =
-            existing |> List.filter (fun d -> d.Id <> doc.Id) |> List.append [ doc ]
-
-        do! saveIndex storage container updated
+        do!
+            updateIndex storage container (fun existing ->
+                Some(existing |> List.filter (fun d -> d.Id <> doc.Id) |> List.append [ doc ]))
     finally
         lock.Release() |> ignore
 }
 
 /// Update the persisted status of a single document in the index. Acquires
-/// the container lock, loads, mutates the matching doc, and saves. No-op
-/// if the document is not present (deleted between writes).
+/// the container lock and runs a guarded read-modify-write (Phase 864).
+/// No-op if the document is not present (deleted between writes).
 let updateIndexStatus (storage: IBlobStorage) (container: string) (docId: string) (newStatus: IngestionStatus) = async {
     let lock = acquireContainerLock container
     do! lock.WaitAsync() |> Async.AwaitTask
 
     try
-        let! existing = loadIndex storage container
-
-        match existing |> List.tryFind (fun d -> d.Id = docId) with
-        | None -> ()
-        | Some _ ->
-            let updated =
-                existing
-                |> List.map (fun d -> if d.Id = docId then { d with Status = newStatus } else d)
-
-            do! saveIndex storage container updated
+        do!
+            updateIndex storage container (fun existing ->
+                match existing |> List.tryFind (fun d -> d.Id = docId) with
+                | None -> None
+                | Some _ ->
+                    Some(
+                        existing
+                        |> List.map (fun d -> if d.Id = docId then { d with Status = newStatus } else d)
+                    ))
     finally
         lock.Release() |> ignore
 }
@@ -361,20 +458,19 @@ let updateIndexChunkCount (storage: IBlobStorage) (container: string) (docId: st
     do! lock.WaitAsync() |> Async.AwaitTask
 
     try
-        let! existing = loadIndex storage container
-
-        match existing |> List.tryFind (fun d -> d.Id = docId) with
-        | None -> ()
-        | Some _ ->
-            let updated =
-                existing
-                |> List.map (fun d ->
-                    if d.Id = docId then
-                        { d with ChunkCount = chunkCount }
-                    else
-                        d)
-
-            do! saveIndex storage container updated
+        do!
+            updateIndex storage container (fun existing ->
+                match existing |> List.tryFind (fun d -> d.Id = docId) with
+                | None -> None
+                | Some _ ->
+                    Some(
+                        existing
+                        |> List.map (fun d ->
+                            if d.Id = docId then
+                                { d with ChunkCount = chunkCount }
+                            else
+                                d)
+                    ))
     finally
         lock.Release() |> ignore
 }

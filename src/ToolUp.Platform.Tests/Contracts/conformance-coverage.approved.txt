@@ -35,7 +35,6 @@ ICitationCounters
 ICommutativeCipher
 ICompositionCapabilityGate
 IComputeBudgetStore
-IConditionalBlobStorage
 IConfigStore
 IContentScanner
 ICspContributor
