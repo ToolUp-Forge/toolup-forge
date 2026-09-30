@@ -351,6 +351,207 @@ let private touchedRows (planJson: string) : int64 * bool =
 [<Literal>]
 let private ScaleSubjects = 300_000
 
+// ─── Phase 940 — the aggregated population read ──────────────────────
+//
+// The population read now answers its statistics and its top k in the
+// database, and falls back to the member read when that answer would not
+// be the shared pipeline's. The differential pack holds both paths to the
+// blob store over its seed; these cases add the shapes that seed does not
+// reach — a `FreshFor` staleness policy (the histogram restated as SQL),
+// subjects with several members (the exact distinct-subject count behind
+// the hash count), a canonical selector over a single-method population
+// (the threshold pushed down after the in-snapshot method probe) and over
+// a contested one (the member read), and a sum whose left-to-right
+// `decimal` fold rounds (the member read, where the fold rounds).
+
+let private steppedClock () : unit -> DateTime =
+    let current = ref (DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc))
+
+    fun () ->
+        let value = current.Value
+        current.Value <- value.AddMinutes 1.0
+        value
+
+let private aggregateMetric (id: string) (staleness: StalenessPolicy) (canonical: string option) : MetricDefinition = {
+    Id = id
+    Name = id
+    Unit = "count"
+    Dimensionality = "count"
+    Direction = HigherIsBetter
+    DisplayFormat = "N2"
+    Staleness = staleness
+    ProducingOperation = None
+    CanonicalMethod = canonical
+    RecomputePolicy = None
+    RollUp = None
+    Context = None
+}
+
+let private aggregateRegistry: IMetricRegistry =
+    MetricRegistry.build [
+        for definition in
+            [
+                aggregateMetric "footfall" (FreshFor(TimeSpan.FromMinutes 30.0)) None
+                aggregateMetric "yield" UntilSuperseded (Some "computed:rollup")
+                aggregateMetric "share" (FreshFor(TimeSpan.FromMinutes 45.0)) (Some "computed:rollup")
+                aggregateMetric "precise" UntilSuperseded None
+            ] do
+            ({
+                Module = "test"
+                Definition = definition
+            }
+            : MetricRegistration)
+    ] []
+
+let private q3: TemporalExtent = {
+    From = q2.To
+    To = q2.To.AddMonths 3
+    Label = Some "Q3-2026"
+}
+
+let private aggregateDraft
+    (path: string list)
+    (metric: string)
+    (period: TemporalExtent)
+    (method': MethodRef)
+    (value: FactValue)
+    (inputHash: string)
+    : FactDraft =
+    {
+        (draftFor "unused" metric inputHash 0m) with
+            Subject = { Hierarchy = "geography"; Path = path }
+            Value = value
+            Period = period
+            Method = method'
+    }
+
+let private rollup = Computed("rollup", "1", "p0")
+let private estimator = Computed("estimator", "1", "p0")
+
+/// Asserted one at a time, so both stores read the same clock sequence.
+let private aggregateSeed: FactDraft list = [
+    for i in 0..23 do
+        let path = [ "north"; sprintf "s%02d" i ]
+        let value = decimal i * 1.5m
+        aggregateDraft path "footfall" q2 rollup (Scalar value) (sprintf "f%d" i)
+
+        if i % 3 = 0 then
+            aggregateDraft path "footfall" q3 rollup (Scalar(value + 0.25m)) (sprintf "f%d-q3" i)
+
+        if i % 5 = 0 then
+            aggregateDraft path "footfall" q2 estimator (Scalar(value * 2m)) (sprintf "f%d-est" i)
+
+        aggregateDraft path "yield" q2 rollup (Scalar(decimal (i % 7))) (sprintf "y%d" i)
+        aggregateDraft path "share" q2 rollup (Scalar(decimal i / 4m)) (sprintf "s%d" i)
+
+    // Equal values at two scales, a non-comparable member, supersessions.
+    aggregateDraft [ "north"; "tie-a" ] "footfall" q2 rollup (Scalar 12.0m) "tie-a"
+    aggregateDraft [ "north"; "tie-b" ] "footfall" q2 rollup (Scalar 12.00m) "tie-b"
+    aggregateDraft [ "north"; "gap" ] "footfall" q2 rollup (Absent "not measured") "gap"
+    aggregateDraft [ "north"; "s04" ] "footfall" q2 rollup (Scalar 40m) "f4-v2"
+    aggregateDraft [ "north"; "s07" ] "yield" q2 rollup (Scalar 9m) "y7-v2"
+    // The one competitor that makes `share` a contested population.
+    aggregateDraft [ "north"; "s02" ] "share" q2 estimator (Scalar 99m) "s2-est"
+    // Twenty copies of a value whose left-to-right decimal sum rounds
+    // differently from the exact sum (20.000...001 against 20.000...002),
+    // far enough that the two means differ too (1 against 1.000...001).
+    for i in 0..19 do
+        aggregateDraft
+            [ "north"; sprintf "p%02d" i ]
+            "precise"
+            q2
+            rollup
+            (Scalar 1.0000000000000000000000000001m)
+            (sprintf "p%d" i)
+    aggregateDraft [ "north"; "s09" ] "footfall" q2 rollup (Scalar 3m) "f9-v2"
+]
+
+let private aggregateQueries (instants: DateTime list) : (string * PopulationQuery) list = [
+    for metric in [ "footfall"; "yield"; "share"; "precise" ] do
+        for ordering in [ Descending; Ascending ] do
+            for threshold in [ None; Some(AtLeast 5m); Some(Between(3m, 12m)) ] do
+                for methods in [ CanonicalMethodOnly; AllCompetingMethods ] do
+                    for period in [ None; Some q2 ] do
+                        for topK in [ 3; 50 ] do
+                            for asOf in None :: (instants |> List.map Some) do
+                                let query = {
+                                    PopulationQuery.create (MetricRef metric) "geography" with
+                                        Ordering = ordering
+                                        Threshold = threshold
+                                        Methods = methods
+                                        PeriodOverlaps = period
+                                        TopK = topK
+                                        Level = Some 2
+                                        AsOf = asOf
+                                }
+
+                                sprintf
+                                    "%s %A %A %A %A top-%d as of %A"
+                                    metric
+                                    ordering
+                                    threshold
+                                    methods
+                                    period
+                                    topK
+                                    asOf,
+                                query
+]
+
+let private aggregateTests
+    (reference: IMetricRegistry option -> (unit -> DateTime) -> IFactStore * string)
+    (candidate: IMetricRegistry option -> (unit -> DateTime) -> IFactStore * string)
+    =
+    testCaseAsync "Phase 940 — every aggregated population shape answers as the blob store does"
+    <| async {
+        let expectedStore, expectedScope =
+            reference (Some aggregateRegistry) (steppedClock ())
+
+        let actualStore, actualScope = candidate (Some aggregateRegistry) (steppedClock ())
+        let written = ResizeArray<Fact>()
+
+        for draft in aggregateSeed do
+            let! expected = expectedStore.Assert(expectedScope, draft)
+            let! actual = actualStore.Assert(actualScope, draft)
+            Expect.equal actual expected "both stores wrote the same fact"
+
+            match actual with
+            | Ok f -> written.Add f
+            | Error e -> failtestf "seed refused: %s" e
+
+        // Instants inside the seed, so a replay sees earlier heads, a
+        // superseded predecessor and a freshness window part-elapsed.
+        let instants = [ written[20].AsOf; written[70].AsOf ]
+        let mutable freshAndStale = false
+
+        for label, query in aggregateQueries instants do
+            let! expected = expectedStore.QueryPopulation(expectedScope, query)
+            let! actual = actualStore.QueryPopulation(actualScope, query)
+            Expect.equal actual expected (sprintf "population '%s' answers identically" label)
+
+            match actual with
+            | Ok r when r.Stats.Freshness.FreshCount > 0 && r.Stats.Freshness.StaleCount > 0 -> freshAndStale <- true
+            | _ -> ()
+
+        // Verify the probe: the freshness cases must have split the
+        // population, or the histogram was never really tested.
+        Expect.isTrue freshAndStale "some population was part fresh and part stale"
+
+        let precise = {
+            PopulationQuery.create (MetricRef "precise") "geography" with
+                Ordering = Descending
+        }
+
+        match! actualStore.QueryPopulation(actualScope, precise) with
+        | Ok r ->
+            Expect.equal r.Stats.ComparableCount 20 "the twenty precise members"
+            // The fold's rounded sum over twenty, not the exact one's.
+            Expect.equal
+                r.Stats.Mean
+                (Some(20.000000000000000000000000001m / 20m))
+                "the mean is the left-to-right decimal fold's"
+        | Error e -> failtestf "precise refused: %s" e
+    }
+
 let private liveTests (conn: string) =
     let dataSource = NpgsqlDataSource.Create conn
 
@@ -382,6 +583,9 @@ let private liveTests (conn: string) =
 
         // One seeded fact base, every query shape, value for value.
         IFactStoreContract.differentialTests "PostgresFactStore" blobReference candidate
+
+        // The shapes the differential seed does not reach (Phase 940).
+        aggregateTests blobReference candidate
 
         testList "PostgresFactStore specifics" [
 
