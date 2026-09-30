@@ -149,6 +149,201 @@ let private warningText (result: ConfigValidation.ValidationResult) =
     | ConfigValidation.ValidationResult.Warning message -> message
     | other -> failtestf "expected a Warning, got %A" other
 
+// ─── Phase 866 — retrieval scores carry their scale ──────────────────
+//
+// The default composition always builds a keyword index, so every default
+// retrieval is fused by reciprocal rank fusion (k = 60), whose raw scores
+// top out at 2/61 ≈ 0.033. A `MinScore` threshold documented as a cosine
+// gate therefore dropped EVERY chunk above ~0.033, and the additive boosts
+// (0.05 / 0.10 / 0.15) each exceeded the whole fused range. Pinned here, in
+// the composition a deployment actually gets:
+//
+//  • MinScore 0.5 keeps a strong match and drops a weak one;
+//  • a boost is a nudge within the space, never a tier above it;
+//  • with no threshold and no boosts, result ORDER is unchanged;
+//  • the validator reports a threshold whose space cannot be confirmed.
+
+/// A lexical embedder: each word hashes to one of 64 dimensions and the
+/// vector is L2-normalised, so cosine similarity tracks word overlap —
+/// enough to rank a small corpus without a model.
+let private lexicalEmbedder =
+    let dims = 64
+
+    let embed (text: string) =
+        let v = Array.zeroCreate<float32> dims
+
+        for word in text.ToLowerInvariant().Split([| ' '; ','; '.'; '?' |], StringSplitOptions.RemoveEmptyEntries) do
+            let h = word |> Seq.fold (fun acc c -> (acc * 31 + int c) % 1_000_003) 7
+            v[h % dims] <- v[h % dims] + 1.0f
+
+        let norm = v |> Array.sumBy (fun x -> x * x) |> sqrt
+
+        if norm = 0.0f then
+            v
+        else
+            v |> Array.map (fun x -> x / norm)
+
+    { new IEmbeddingProvider with
+        member _.GenerateEmbedding text = async { return embed text }
+
+        member _.GenerateEmbeddings texts = async { return texts |> Seq.map embed |> Seq.toArray }
+
+        member _.ProviderId = "stub"
+        member _.ModelId = "lexical"
+        member _.Dimensions = dims
+    }
+
+let private lexicalApp () =
+    RAGServerApp.create stubFactory stubProfile lexicalEmbedder
+    |> RAGServerApp.withStorage (InMemoryBlobStorage() :> BlobStorage.IBlobStorage)
+
+let private teamScope = Team "t1"
+
+let private teamAccess = AccessContext.unrestricted (TeamMember("u1", "t1"))
+
+let private indexAll (pipeline: IRetrievalPipeline) (chunks: (string * string * (string * string) list) list) = async {
+    for chunkId, content, meta in chunks do
+        do!
+            pipeline.Index
+                chunkId
+                {
+                    Content = content
+                    Metadata = Map.ofList meta
+                }
+                teamScope
+}
+
+/// Run the retrieval prompt builder over `pipeline` and return the prompt
+/// and the chunk ids surfaced as sources — what the model and the user see.
+let private promptFor (defaults: RetrievalDefaults) (pipeline: IRetrievalPipeline) (question: string) = async {
+    let sources = ref []
+
+    let ctx: ToolUp.AI.SystemPromptBuilder.PromptContext = {
+        Access = teamAccess
+        ActiveModule = None
+        ActivePage = None
+        ActivePageNarrative = None
+        ModuleContexts = Map.empty
+        CurrentMessage = Some question
+        ConversationHistory = []
+        RetrievalFilters = None
+        RetrievedSources = sources
+        ShortCircuit = ref None
+        PlannedAnswerId = ref None
+    }
+
+    let! prompt = ToolUp.RAG.RAGPromptBuilder.withRetrieval defaults None None pipeline ctx
+    return prompt, sources.Value |> List.map _.Snippet
+}
+
+let private strongText = "acme quarterly revenue rose sharply in the third quarter"
+let private weakText = "the office kitchen rota for next week"
+let private otherText = "parking permits renew every january"
+
+type private CapturingTracer() =
+    let traces = ResizeArray<ToolUp.Platform.IRetrievalTracer.RetrievalTrace>()
+    member _.Last = traces |> Seq.tryLast
+
+    interface ToolUp.Platform.IRetrievalTracer.IRetrievalTracer with
+        member _.Trace trace _ = async { traces.Add trace }
+        member _.Miss _ _ = async { return () }
+
+let private rankedMatch (chunkId: string) (meta: (string * string) list) : VectorMatch = {
+    ChunkId = chunkId
+    Content = "content " + chunkId
+    Score = 0.5
+    Scope = teamScope
+    Metadata = Map.ofList meta
+}
+
+/// A pipeline whose two retrievers return FIXED rankings, so the fused
+/// score of every candidate is known in advance: `1/(60+rank)` summed
+/// over the lists it appears in.
+let private fixedRankPipeline
+    (dense: VectorMatch list)
+    (sparse: VectorMatch list option)
+    (options: ToolUp.RAG.RetrievalPipeline.RetrievalPipelineOptions)
+    (tracer: CapturingTracer)
+    : IRetrievalPipeline =
+    let inner = externalVectorStore ()
+
+    let store =
+        { new IVectorStore with
+            member _.Upsert s c v t = inner.Upsert s c v t
+            member _.Search _ _ k = async { return dense |> List.truncate k }
+            member _.ListChunks s d = inner.ListChunks s d
+            member _.DeleteChunk s c = inner.DeleteChunk s c
+            member _.RestoreChunk s c = inner.RestoreChunk s c
+            member _.Vacuum s r = inner.Vacuum s r
+            member _.DeleteByScope s = inner.DeleteByScope s
+            member _.ListScopes() = inner.ListScopes()
+            member _.Erase(s, u, p, d) = inner.Erase(s, u, p, d)
+        }
+
+    let keyword =
+        sparse
+        |> Option.map (fun ranked ->
+            let stub = externalIndex ()
+
+            { new ISparseIndex with
+                member _.Upsert s c t = stub.Upsert s c t
+                member _.Search _ _ k = async { return ranked |> List.truncate k }
+                member _.DeleteByScope s = stub.DeleteByScope s
+                member _.DeleteChunk s c = stub.DeleteChunk s c
+                member _.Erase(s, u, p, d) = stub.Erase(s, u, p, d)
+            })
+
+    match keyword with
+    | Some index ->
+        new ToolUp.RAG.RetrievalPipeline.RetrievalPipeline(
+            store,
+            lexicalEmbedder,
+            sparseIndex = index,
+            options = options,
+            tracer = tracer
+        )
+        :> IRetrievalPipeline
+    | None ->
+        new ToolUp.RAG.RetrievalPipeline.RetrievalPipeline(store, lexicalEmbedder, options = options, tracer = tracer)
+        :> IRetrievalPipeline
+
+let private noBoosts: ToolUp.RAG.RetrievalPipeline.RetrievalPipelineOptions = {
+    ToolUp.RAG.RetrievalPipeline.RetrievalPipelineOptions.defaults with
+        ActiveModuleBoost = 0.0
+        SummaryBoost = 0.0
+        FactNarrativeJoinBoost = 0.0
+}
+
+let private summaryMeta = [ ChunkMetadata.IsSummaryKey, "true" ]
+
+let private retrieveIds (pipeline: IRetrievalPipeline) = async {
+    let! matches = pipeline.Retrieve (RetrievalRequest.create "query" [ teamScope ] 20 Interleaved) teamAccess
+    return matches
+}
+
+/// Run the MinScore-space validator exactly as `composeRAG` registered it.
+let private scoreSpaceVerdict (app: RAGServerApp) : ConfigValidation.ValidationResult =
+    let composed = composeRAG app
+
+    let v =
+        composed.ConfigValidators |> List.find (fun v -> v.Name = "rag-min-score-space")
+
+    v.Validate() |> Async.RunSynchronously
+
+let private stubReranker =
+    { new ToolUp.Platform.IReranker.IReranker with
+        member _.Name = "stub-reranker"
+        member _.MaxBatchSize = 32
+        member _.Rerank _ candidates = async { return candidates }
+    }
+
+let private externalPipeline () =
+    { new IRetrievalPipeline with
+        member _.Retrieve _ _ = async { return [] }
+        member _.Index _ _ _ = async { return () }
+        member _.DeleteByScope _ = async { return () }
+    }
+
 let tests =
     testList "Phase 893 — the keyword index is a composition choice" [
 
@@ -335,6 +530,204 @@ let tests =
 
                 Expect.stringContains message "InMemoryVectorStore" "the in-process vector store"
                 Expect.isFalse (message.Contains "InMemoryBM25Index") "no keyword index is composed"
+            }
+        ]
+
+        testList "Phase 866 — retrieval scores carry their scale" [
+            testAsync "default composition: MinScore 0.5 keeps the strong match and drops the weak one" {
+                use sp = provider (lexicalApp ())
+                let pipeline = sp.GetRequiredService<IRetrievalPipeline>()
+
+                do! indexAll pipeline [ "strong", strongText, []; "weak", weakText, []; "other", otherText, [] ]
+
+                let defaults = {
+                    RetrievalDefaults.defaults with
+                        MinScore = Some 0.5
+                }
+
+                let! prompt, snippets = promptFor defaults pipeline "what was acme quarterly revenue"
+
+                Expect.contains snippets strongText "the strong match survives a 0.5 threshold"
+                Expect.isFalse (List.contains weakText snippets) "the weak match is dropped"
+                Expect.stringContains prompt "acme quarterly revenue" "and reaches the prompt"
+            }
+
+            testAsync "default composition: fused scores reach the caller normalised onto [0, 1]" {
+                use sp = provider (lexicalApp ())
+                let pipeline = sp.GetRequiredService<IRetrievalPipeline>()
+
+                do! indexAll pipeline [ "strong", strongText, []; "weak", weakText, []; "other", otherText, [] ]
+
+                let! matches =
+                    pipeline.Retrieve
+                        (RetrievalRequest.create "what was acme quarterly revenue" [ teamScope ] 5 Interleaved)
+                        teamAccess
+
+                let scores = matches |> List.map _.Score
+                Expect.equal (List.head matches).ChunkId "strong" "the strong match leads"
+                Expect.floatClose Accuracy.veryHigh (List.head scores) 1.0 "the pool's best scores 1.0"
+                Expect.floatClose Accuracy.veryHigh (List.last scores) 0.0 "and its weakest 0.0"
+                Expect.all scores (fun s -> s >= 0.0 && s <= 1.0) "every score is in the unit interval"
+            }
+
+            testAsync "the trace states the normalisation and the space it returned" {
+                let tracer = CapturingTracer()
+                let dense = [ rankedMatch "a" []; rankedMatch "b" [] ]
+                let pipeline = fixedRankPipeline dense (Some(List.rev dense)) noBoosts tracer
+                let! _ = retrieveIds pipeline
+
+                match tracer.Last with
+                | None -> failtest "a trace is emitted"
+                | Some trace ->
+                    Expect.contains trace.Stages "Normalise:MinMax" "the normalisation is stated"
+                    Expect.equal (List.last trace.Stages) "ScoreSpace:Fused" "and the returned space"
+            }
+
+            testAsync "dense-only: cosine scores are left as scored, and the trace says Cosine" {
+                let tracer = CapturingTracer()
+
+                let dense = [
+                    { rankedMatch "a" [] with Score = 0.9 }
+                    { rankedMatch "b" [] with Score = 0.4 }
+                ]
+
+                let pipeline = fixedRankPipeline dense None noBoosts tracer
+                let! matches = retrieveIds pipeline
+
+                Expect.equal (matches |> List.map _.Score) [ 0.9; 0.4 ] "no normalisation on the cosine path"
+
+                match tracer.Last with
+                | None -> failtest "a trace is emitted"
+                | Some trace ->
+                    Expect.isFalse (List.contains "Normalise:MinMax" trace.Stages) "nothing to normalise"
+                    Expect.equal (List.last trace.Stages) "ScoreSpace:Cosine" "the returned space"
+            }
+
+            testAsync "no threshold, no boosts: the fused ORDER is unchanged, and the scores are min-max RRF" {
+                // Ten candidates in two partially overlapping rankings.
+                let ids = [ for i in 1..10 -> sprintf "c%02d" i ]
+                let dense = ids |> List.map (fun id -> rankedMatch id [])
+
+                let sparse =
+                    [ "c07"; "c02"; "c10"; "c01"; "c05"; "c09" ]
+                    |> List.map (fun id -> rankedMatch id [])
+
+                let rrf =
+                    let contribution (ranked: VectorMatch list) (id: string) =
+                        match ranked |> List.tryFindIndex (fun m -> m.ChunkId = id) with
+                        | Some i -> 1.0 / (60.0 + float (i + 1))
+                        | None -> 0.0
+
+                    ids |> List.map (fun id -> id, contribution dense id + contribution sparse id)
+
+                let expectedOrder = rrf |> List.sortBy (fun (id, s) -> -s, id) |> List.map fst
+                let lo = rrf |> List.map snd |> List.min
+                let hi = rrf |> List.map snd |> List.max
+
+                let! matches = retrieveIds (fixedRankPipeline dense (Some sparse) noBoosts (CapturingTracer()))
+
+                Expect.equal (matches |> List.map _.ChunkId) expectedOrder "rank fusion order, unchanged"
+
+                for m in matches do
+                    let raw = rrf |> List.find (fun (id, _) -> id = m.ChunkId) |> snd
+                    Expect.floatClose Accuracy.veryHigh m.Score ((raw - lo) / (hi - lo)) m.ChunkId
+            }
+
+            testAsync "a summary outranks an equal-relevance chunk" {
+                // `a` and `s` swap ranks across the two lists: equal fused relevance.
+                let a = rankedMatch "a" []
+                let s = rankedMatch "s" summaryMeta
+                let x = rankedMatch "x" []
+                let options = ToolUp.RAG.RetrievalPipeline.RetrievalPipelineOptions.defaults
+
+                let! unboosted =
+                    retrieveIds (fixedRankPipeline [ a; s; x ] (Some [ s; a; x ]) noBoosts (CapturingTracer()))
+
+                let! boosted =
+                    retrieveIds (fixedRankPipeline [ a; s; x ] (Some [ s; a; x ]) options (CapturingTracer()))
+
+                Expect.equal (unboosted |> List.map _.ChunkId) [ "a"; "s"; "x" ] "a tie, broken by id"
+                Expect.equal (boosted |> List.map _.ChunkId) [ "s"; "a"; "x" ] "the summary boost breaks the tie"
+            }
+
+            testAsync "a summary does not outrank a far better chunk" {
+                // `a` leads both lists; the summary trails both. Raw fused
+                // scores top out at 2/61, so before Phase 866 the +0.10
+                // summary boost alone lifted `s` over everything.
+                let a = rankedMatch "a" []
+                let fillers = [ for i in 1..8 -> rankedMatch (sprintf "f%d" i) [] ]
+                let s = rankedMatch "s" summaryMeta
+                let ranked = a :: fillers @ [ s ]
+                let options = ToolUp.RAG.RetrievalPipeline.RetrievalPipelineOptions.defaults
+                let! matches = retrieveIds (fixedRankPipeline ranked (Some ranked) options (CapturingTracer()))
+                let ids = matches |> List.map _.ChunkId
+
+                Expect.equal (List.head ids) "a" "the far better chunk keeps the lead"
+
+                let summaryRank = ids |> List.findIndex ((=) "s")
+                let summaryScore = (matches |> List.find (fun m -> m.ChunkId = "s")).Score
+
+                Expect.isGreaterThan summaryRank 1 "the summary is nudged, not promoted to a tier"
+
+                Expect.floatClose
+                    Accuracy.veryHigh
+                    summaryScore
+                    ToolUp.RAG.RetrievalPipeline.RetrievalPipelineOptions.defaults.SummaryBoost
+                    "the weakest candidate (0.0) plus exactly the boost"
+            }
+
+            test "the validator is silent for the default composition with a reachable threshold" {
+                Expect.equal
+                    (lexicalApp () |> RAGServerApp.withMinScore (Some 0.5) |> scoreSpaceVerdict)
+                    ConfigValidation.ValidationResult.Ok
+                    "fused scores reach 1.0; 0.5 can be met"
+            }
+
+            test "the validator is silent with no threshold, whatever is composed" {
+                Expect.equal
+                    (lexicalApp () |> RAGServerApp.withReranker stubReranker |> scoreSpaceVerdict)
+                    ConfigValidation.ValidationResult.Ok
+                    "no gate, nothing to reach"
+            }
+
+            test "the validator warns when a reranker owns the scale the threshold reads" {
+                let message =
+                    lexicalApp ()
+                    |> RAGServerApp.withReranker stubReranker
+                    |> RAGServerApp.withMinScore (Some 0.5)
+                    |> scoreSpaceVerdict
+                    |> warningText
+
+                Expect.stringContains message "Reranked" "names the space"
+                Expect.stringContains message "withReranker" "and the setter that put it there"
+            }
+
+            test "the validator warns when a supplied pipeline owns retrieval" {
+                let message =
+                    lexicalApp ()
+                    |> RAGServerApp.withRetrievalPipeline (externalPipeline ())
+                    |> RAGServerApp.withMinScore (Some 0.5)
+                    |> scoreSpaceVerdict
+                    |> warningText
+
+                Expect.stringContains message "withRetrievalPipeline" "names the supplied pipeline"
+            }
+
+            test "a threshold at the top of a bounded space cannot be met" {
+                let finding =
+                    ToolUp.RAG.RetrievalPipeline.RetrievalScoreSpace.thresholdFinding
+                        (Some ToolUp.RAG.RetrievalPipeline.RetrievalScoreSpace.Fused)
+                        (Some 1.0)
+
+                match finding with
+                | Some message -> Expect.stringContains message "cannot be met" "the gate keeps only scores above it"
+                | None -> failtest "a 1.0 threshold drops every unboosted fused match"
+
+                Expect.isNone
+                    (ToolUp.RAG.RetrievalPipeline.RetrievalScoreSpace.thresholdFinding
+                        (Some ToolUp.RAG.RetrievalPipeline.RetrievalScoreSpace.Cosine)
+                        (Some 0.99))
+                    "0.99 is reachable in cosine"
             }
         ]
     ]

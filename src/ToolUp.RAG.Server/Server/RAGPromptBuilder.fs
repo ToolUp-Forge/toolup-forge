@@ -320,8 +320,11 @@ let private emptyRetrievalMessage (toolFraming: ToolFraming) : string =
 ///   for the client's Sources panel — without coupling the prompt-builder
 ///   return type to the wire-format shape.
 /// - Applies `RetrievalDefaults` knobs: `TopK`, `Merge`, `MinScore` (drops
-///   matches scoring at or below the threshold), and `SnippetCharLimit`
-///   (controls Sources panel preview length).
+///   matches scoring at or below the threshold, in the score space the
+///   pipeline returned — `RetrievalScoreSpace`: cosine similarity for a
+///   dense-only composition, the pool-normalised `[0, 1]` fused score for
+///   the default hybrid one), and `SnippetCharLimit` (controls Sources
+///   panel preview length).
 /// - Records the post-filter outcome via `IRagTelemetry.RecordRetrieval`
 ///   when one is supplied so `/health/rag` reflects what the user actually
 ///   saw (raw pipeline results pre-filter would over-count hits when
@@ -543,7 +546,12 @@ and withRetrievalPlanned
             // Apply MinScore filter to chunks: a deployment that wants to
             // refuse weak matches drops them here so neither the prompt nor
             // the Sources panel surfaces them — keeps the model and the user
-            // aligned.
+            // aligned. Phase 866 — the threshold is read in the space the
+            // default pipeline declares on its trace (`ScoreSpace:<space>`):
+            // cosine when dense-only, and the fused score normalised onto
+            // [0, 1] within the pool when a keyword index is composed (the
+            // default). Before 866 the fused score was raw RRF, topping out
+            // at 2/61, so any threshold above ~0.033 dropped every chunk.
             let chunks =
                 match defaults.MinScore with
                 | None -> rawChunks
