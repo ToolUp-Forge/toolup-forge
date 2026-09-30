@@ -480,6 +480,14 @@ let buildRouteHandlers
     // a single per-request DI miss and return an empty suggestion list.
     let userDirectoryApiHandler: HttpHandler list = [ makeApi UserDirectoryApiHandler.userDirectoryApi ]
 
+    // Phase 936 — TeamOutputVisibilityApi mount. Always-on, like the user
+    // directory above: a team-settings client resolves it in every
+    // deployment, and until team output visibility is composed
+    // (`FactsCompose.withTeamOutputVisibility`) it answers "not enabled"
+    // and refuses a change. Moved here from the AI companion, which
+    // mounted it only in deployments that composed the assistant.
+    let teamOutputVisibilityApiHandler: HttpHandler list = [ makeApi TeamPolicyStore.teamOutputVisibilityApi ]
+
     // Phase 3d — ITeamInviteApi mount. Auto-injected unconditionally
     // so the client `Api.makeProxy<ITeamInviteApi>` (used by the
     // `/invite/{token}` accept page and `TeamManagerUI`'s invite UI)
@@ -808,6 +816,7 @@ let buildRouteHandlers
             ]
             @ platformAdminApiHandler
             @ userDirectoryApiHandler
+            @ teamOutputVisibilityApiHandler
             @ teamInvitationApiHandler
             @ configHandler
             @ featureFlagHandler

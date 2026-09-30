@@ -6376,9 +6376,11 @@ ToolUp.Remoting.Client.PlatformClientProxies.decodeTeamInviteExpiredPayload : Mi
 ToolUp.Remoting.Client.PlatformClientProxies.decodeTeamInviteIssueResult : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamInviteIssueResult, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeTeamInviteSummary : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamInviteSummary, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeTeamMembership : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamMembership, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Client.PlatformClientProxies.decodeTeamOutputVisibilityView : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamOutputVisibilityView, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeTeamPermissions : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamPermissions, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeTeamRole : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamRole, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeTeamSummary : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamSummary, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Client.PlatformClientProxies.decodeTeamVisibilityLevel : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamVisibilityLevel, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeTenantLifecyclePhase : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TenantLifecyclePhase, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeTokenStatus : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TokenStatus, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeToolDataCount : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ToolDataCount, ToolUp.Remoting.DecodeError]] { get }
@@ -6466,6 +6468,7 @@ ToolUp.Remoting.Client.PlatformClientProxies.encodeServiceAccountStatus(ToolUp.P
 ToolUp.Remoting.Client.PlatformClientProxies.encodeSubmitterClass(ToolUp.Platform.SubmitterClass) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeTeamInviteIssueRequest(ToolUp.Platform.TeamInviteIssueRequest) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeTeamRole(ToolUp.Platform.TeamRole) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Client.PlatformClientProxies.encodeTeamVisibilityLevel(ToolUp.Platform.TeamVisibilityLevel) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeTrigger(ToolUp.Platform.Trigger) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeUpdateExternalContactRequest(ToolUp.Platform.UpdateExternalContactRequest) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeUserAuthoredSchema(ToolUp.Platform.UserAuthoredSchema) : ToolUp.Remoting.Json.JsonValue
@@ -6512,6 +6515,7 @@ ToolUp.Remoting.Client.PlatformClientProxies.platformAdminApiProxy(ToolUp.Remoti
 ToolUp.Remoting.Client.PlatformClientProxies.platformInfoApiProxy(ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Platform.PlatformInfoApi
 ToolUp.Remoting.Client.PlatformClientProxies.registerAll() : System.Void
 ToolUp.Remoting.Client.PlatformClientProxies.teamApiProxy(ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Platform.TeamApi
+ToolUp.Remoting.Client.PlatformClientProxies.teamOutputVisibilityApiProxy(ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Platform.TeamOutputVisibilityApi
 ToolUp.Remoting.Client.PlatformClientProxies.tryBuild(System.String, ToolUp.Remoting.Client.RemoteBuilderOptions) : Microsoft.FSharp.Core.FSharpOption`1[System.Object]
 ToolUp.Remoting.Client.Proxy (class)
 ToolUp.Remoting.Client.Proxy.combineRouteWithBaseUrl(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.String

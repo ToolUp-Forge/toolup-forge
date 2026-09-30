@@ -1,428 +1,31 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-/// Phase 859 — the per-team conversation visibility policy: its deployment
-/// settings, its stored record (with the change history the "widening never
-/// exposes the past" rule reads), the per-request gate the assistant handler
-/// filters every conversation read and write through, the audit rows, and
-/// the `TeamConversationVisibilityApi` a team owner sets the level with.
+/// Phase 859 — the per-team conversation visibility policy as the assistant
+/// applies it: the per-request gate the assistant handler filters every
+/// conversation read and write through, the audit rows, and the
+/// `TeamConversationVisibilityApi` a team owner sets the level with.
 ///
-/// Phase 896 — the same record also holds the team's OUTPUT-visibility
-/// level (who sees the restricted output its modules publish), under the
-/// same guarded write and the same change rules, with the policy-change
-/// check that keeps conversation visibility no wider than output
-/// visibility; `TeamOutputVisibilityApi` sets it, and
-/// `TeamPolicyOutputVisibilitySource` is how the disclosure gate reads it.
+/// Phase 936 — the record the level is stored in, its guarded store, the
+/// deployment declaration, and everything about the team's OUTPUT level
+/// (Phase 896) moved to the platform tier (`ToolUp.Platform.TeamPolicyStore`,
+/// with the types in Platform.Core `TeamOutputVisibility.fs`), so a
+/// deployment that composes facts without the assistant has them. This
+/// module is now a consumer of that record for the conversation level.
 module ToolUp.AI.TeamConversationPolicyStore
 
 open System
-open System.Collections.Concurrent
-open System.Text
-open System.Text.Json
-open System.Text.Json.Nodes
-open System.Threading
 open Microsoft.AspNetCore.Http
-open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.TeamPolicyStore
 open ToolUp.AI
-
-// ─── Deployment settings ─────────────────────────────────────────
-
-/// What the deployment declares (Phase 859.D): the level a team starts
-/// with, and the levels a team may choose from. Composed with
-/// `AICompose.withTeamConversationVisibility`; a deployment that composes
-/// nothing gets `TeamConversationVisibilitySettings.unrestricted`.
-type TeamConversationVisibilitySettings = {
-    /// The level in force for a team that has chosen nothing.
-    Default: TeamConversationVisibility
-    /// The levels a team owner may select. Always contains `Default`.
-    Allowed: TeamConversationVisibility list
-}
-
-module TeamConversationVisibilitySettings =
-    /// No composition: `TeamVisible` by default, every level allowed — a
-    /// team that has set nothing behaves exactly as before Phase 859.
-    let unrestricted: TeamConversationVisibilitySettings = {
-        Default = TeamVisible
-        Allowed = TeamConversationVisibility.all
-    }
-
-    /// Validate a declaration. The allowed set must be non-empty and must
-    /// contain the default, or a team that never chose would sit at a
-    /// level no one could select back to.
-    let create
-        (defaultLevel: TeamConversationVisibility)
-        (allowed: TeamConversationVisibility list)
-        : Result<TeamConversationVisibilitySettings, string> =
-        let allowed = allowed |> List.distinct
-
-        if List.isEmpty allowed then
-            Error "withTeamConversationVisibility: the allowed set is empty; a team could select no level at all."
-        elif not (List.contains defaultLevel allowed) then
-            Error(
-                sprintf
-                    "withTeamConversationVisibility: the default %s is not in the allowed set [%s]."
-                    (TeamConversationVisibility.name defaultLevel)
-                    (allowed |> List.map TeamConversationVisibility.name |> String.concat ", ")
-            )
-        else
-            Ok {
-                Default = defaultLevel
-                Allowed = TeamConversationVisibility.all |> List.filter (fun l -> List.contains l allowed)
-            }
-
-    /// The allowed set, named, for a refusal.
-    let describeAllowed (settings: TeamConversationVisibilitySettings) : string =
-        settings.Allowed
-        |> List.map TeamConversationVisibility.name
-        |> String.concat ", "
-
-    /// Resolve the composed settings from DI, else `unrestricted`.
-    let resolve (services: IServiceProvider) : TeamConversationVisibilitySettings =
-        match services.GetService(typeof<TeamConversationVisibilitySettings>) with
-        | :? TeamConversationVisibilitySettings as s -> s
-        | _ -> unrestricted
-
-// ─── The stored record ───────────────────────────────────────────
-
-/// One change of a team's level (Phase 859.G).
-type TeamConversationVisibilityChange = {
-    /// The level from `ChangedAt` on.
-    Level: TeamConversationVisibility
-    /// The user who changed it.
-    ChangedBy: string
-    /// When, UTC.
-    ChangedAt: DateTime
-}
-
-/// A team's own conversation-visibility record, stored in the team's
-/// container — deliberately not a field on `TeamPermissions` and not a case
-/// on the admin-mutation union (859.D). It keeps every change, oldest first,
-/// so the level in force when a conversation was created is always
-/// decidable without adding a field to the conversation.
-type TeamConversationPolicyRecord = {
-    /// Every change, oldest first. Empty for a team that never chose.
-    Changes: TeamConversationVisibilityChange list
-}
-
-module TeamConversationPolicyRecord =
-    /// A team that has chosen nothing.
-    let empty: TeamConversationPolicyRecord = { Changes = [] }
-
-    /// Blob name inside the team's container.
-    [<Literal>]
-    let BlobName = "team-policies/ai-conversation-visibility.json"
-
-    /// The container a team's record lives in — the team's own container,
-    /// read in the team's scope.
-    let containerOf (teamId: string) = $"team-{teamId}"
-
-    /// Whether the team has ever chosen a level.
-    let isUnset (record: TeamConversationPolicyRecord) = List.isEmpty record.Changes
-
-    /// The level in force now: the last change, else the deployment default.
-    let current (defaultLevel: TeamConversationVisibility) (record: TeamConversationPolicyRecord) =
-        record.Changes
-        |> List.tryLast
-        |> Option.map _.Level
-        |> Option.defaultValue defaultLevel
-
-    /// The level in force at `at`: the last change made at or before it,
-    /// else the deployment default.
-    let levelAt (defaultLevel: TeamConversationVisibility) (record: TeamConversationPolicyRecord) (at: DateTime) =
-        record.Changes
-        |> List.filter (fun c -> c.ChangedAt <= at)
-        |> List.tryLast
-        |> Option.map _.Level
-        |> Option.defaultValue defaultLevel
-
-    let private jsonOptions = FableConverters.create ()
-
-    /// The record's stored bytes (the Fable-compatible JSON shape).
-    let serialise (record: TeamConversationPolicyRecord) : byte[] =
-        Encoding.UTF8.GetBytes(JsonSerializer.Serialize(record, jsonOptions))
-
-    /// Parse a stored record. A record persisted without `Changes` reads
-    /// as empty (the STJ path yields `null` for an absent list).
-    let deserialise (bytes: byte[]) : TeamConversationPolicyRecord option =
-        try
-            let parsed =
-                JsonSerializer.Deserialize<TeamConversationPolicyRecord>(Encoding.UTF8.GetString bytes, jsonOptions)
-
-            if isNull (box parsed) then
-                None
-            elif isNull (box parsed.Changes) then
-                Some empty
-            else
-                Some {
-                    Changes = parsed.Changes |> List.sortBy _.ChangedAt
-                }
-        with _ ->
-            None
-
-// ─── Phase 896 — output visibility, in the same record ───────────
-
-/// A team's output-visibility history (Phase 896). Held in the SAME per-team
-/// policy record as the conversation level — the same blob, under the same
-/// guarded write — as an `OutputChanges` member beside `Changes`. A team
-/// that never set an output level stores nothing new, so its record is
-/// byte-identical to one written before this phase. Each entry reuses the
-/// change shape (`Level`, `ChangedBy`, `ChangedAt`).
-type TeamOutputPolicyRecord = {
-    /// Every change of the team's output level, oldest first. Empty for a
-    /// team that never chose.
-    OutputChanges: TeamConversationVisibilityChange list
-}
-
-module TeamOutputPolicyRecord =
-    /// A team that has chosen nothing.
-    let empty: TeamOutputPolicyRecord = { OutputChanges = [] }
-
-    /// The member of the stored record that holds the output history.
-    [<Literal>]
-    let MemberName = "OutputChanges"
-
-    /// Whether the team has ever chosen an output level.
-    let isUnset (record: TeamOutputPolicyRecord) = List.isEmpty record.OutputChanges
-
-    /// The output level in force now: the last change, else the deployment
-    /// default.
-    let current (defaultLevel: TeamVisibilityLevel) (record: TeamOutputPolicyRecord) =
-        record.OutputChanges
-        |> List.tryLast
-        |> Option.map _.Level
-        |> Option.defaultValue defaultLevel
-
-    let private jsonOptions = FableConverters.create ()
-
-    /// The output part of a stored record's bytes: empty when the member is
-    /// absent, `None` when the bytes or the member cannot be read.
-    let ofRecordBytes (bytes: byte[]) : TeamOutputPolicyRecord option =
-        try
-            use document = JsonDocument.Parse(ReadOnlyMemory<byte>(bytes))
-
-            if document.RootElement.ValueKind <> JsonValueKind.Object then
-                None
-            else
-                match document.RootElement.TryGetProperty MemberName with
-                | true, entries when entries.ValueKind = JsonValueKind.Array ->
-                    let changes =
-                        JsonSerializer.Deserialize<TeamConversationVisibilityChange list>(
-                            entries.GetRawText(),
-                            jsonOptions
-                        )
-
-                    Some {
-                        OutputChanges =
-                            if isNull (box changes) then
-                                []
-                            else
-                                changes |> List.sortBy _.ChangedAt
-                    }
-                | true, entries when entries.ValueKind = JsonValueKind.Null -> Some empty
-                | true, _ -> None
-                | false, _ -> Some empty
-        with _ ->
-            None
-
-    /// The stored bytes of a record holding both parts. With no output
-    /// change the output member is omitted, so the bytes are exactly the
-    /// conversation record's.
-    let serialiseWith (conversation: TeamConversationPolicyRecord) (output: TeamOutputPolicyRecord) : byte[] =
-        if isUnset output then
-            TeamConversationPolicyRecord.serialise conversation
-        else
-            let node = JsonSerializer.SerializeToNode(conversation, jsonOptions).AsObject()
-            node[MemberName] <- JsonSerializer.SerializeToNode(output.OutputChanges, jsonOptions)
-            Encoding.UTF8.GetBytes(node.ToJsonString(jsonOptions))
-
-// ─── The store ───────────────────────────────────────────────────
-
-/// Reads and guarded writes of a team's record. The write is a
-/// read-modify-write guarded twice: an ETag compare-and-swap when the
-/// backend implements `IConditionalBlobStorage` (retried a bounded number of
-/// times on a lost race), and a per-container gate in this process so two
-/// requests here never interleave even on a backend without conditional
-/// writes — the same interim guard the other blob-backed ledgers use.
-type TeamConversationPolicyStore(storage: IBlobStorage) =
-    static let gates = ConcurrentDictionary<string, SemaphoreSlim>()
-
-    let conditional =
-        match box storage with
-        | :? IConditionalBlobStorage as c -> Some c
-        | _ -> None
-
-    let maxAttempts = 5
-
-    /// Absent vs unreadable: an absent record is a team that never chose;
-    /// a record that exists but cannot be read is an `Error`, so a caller
-    /// fails closed rather than silently falling back to the default.
-    let absentOrError
-        (container: string)
-        (message: string)
-        : Async<Result<TeamConversationPolicyRecord * TeamOutputPolicyRecord, string>> =
-        async {
-            let! exists = async {
-                try
-                    return! storage.Exists(container, TeamConversationPolicyRecord.BlobName)
-                with _ ->
-                    return true
-            }
-
-            if exists then
-                return Error $"the team's conversation-visibility record could not be read: {message}"
-            else
-                return Ok(TeamConversationPolicyRecord.empty, TeamOutputPolicyRecord.empty)
-        }
-
-    let parse (bytes: byte[]) =
-        match TeamConversationPolicyRecord.deserialise bytes, TeamOutputPolicyRecord.ofRecordBytes bytes with
-        | Some record, Some output -> Ok(record, output)
-        | None, _ -> Error "the team's conversation-visibility record is unparseable"
-        | Some _, None -> Error "the team's output-visibility entries are unparseable"
-
-    let readWithETag
-        (container: string)
-        : Async<Result<(TeamConversationPolicyRecord * TeamOutputPolicyRecord) * string option, string>> =
-        async {
-            match conditional with
-            | Some cas ->
-                match! cas.DownloadWithETag(container, TeamConversationPolicyRecord.BlobName) with
-                | Ok(bytes, etag) -> return parse bytes |> Result.map (fun r -> r, Some etag)
-                | Error message ->
-                    let! fallback = absentOrError container message
-                    return fallback |> Result.map (fun r -> r, None)
-            | None ->
-                match! storage.Download(container, TeamConversationPolicyRecord.BlobName) with
-                | Ok bytes -> return parse bytes |> Result.map (fun r -> r, None)
-                | Error message ->
-                    let! fallback = absentOrError container message
-                    return fallback |> Result.map (fun r -> r, None)
-        }
-
-    // The guarded read-modify-write over both parts of the record. `what`
-    // names the setting in a refusal ("conversation visibility").
-    let changeBoth
-        (container: string)
-        (what: string)
-        (decide:
-            TeamConversationPolicyRecord * TeamOutputPolicyRecord
-                -> Result<TeamConversationPolicyRecord * TeamOutputPolicyRecord, string>)
-        =
-        async {
-            let gate = gates.GetOrAdd(container, fun _ -> new SemaphoreSlim(1, 1))
-            do! gate.WaitAsync() |> Async.AwaitTask
-
-            try
-                let rec attempt n = async {
-                    match! readWithETag container with
-                    | Error e -> return Error e
-                    | Ok(before, etag) ->
-                        match decide before with
-                        | Error refusal -> return Error refusal
-                        | Ok after when after = before -> return Ok(before, after)
-                        | Ok after ->
-                            let bytes = TeamOutputPolicyRecord.serialiseWith (fst after) (snd after)
-
-                            match conditional with
-                            | Some cas ->
-                                let condition =
-                                    match etag with
-                                    | Some e -> IfMatch e
-                                    | None -> IfAbsent
-
-                                match!
-                                    cas.UploadWithETag(
-                                        container,
-                                        TeamConversationPolicyRecord.BlobName,
-                                        bytes,
-                                        condition
-                                    )
-                                with
-                                | Ok _ -> return Ok(before, after)
-                                | Error(ETagMismatch _) when n < maxAttempts -> return! attempt (n + 1)
-                                | Error(ETagMismatch _) ->
-                                    return Error $"the team's {what} was changed concurrently; try again."
-                                | Error(ConditionalWriteFailure message) ->
-                                    return Error $"the team's {what} could not be saved: {message}"
-                            | None ->
-                                match! storage.Upload(container, TeamConversationPolicyRecord.BlobName, bytes) with
-                                | Ok _ -> return Ok(before, after)
-                                | Error message -> return Error $"the team's {what} could not be saved: {message}"
-                }
-
-                return! attempt 1
-            finally
-                gate.Release() |> ignore
-        }
-
-    /// The team's record. `Ok empty` when the team never chose; `Error`
-    /// when a record exists but cannot be read.
-    member _.Read(container: string) : Async<Result<TeamConversationPolicyRecord, string>> = async {
-        let! read = readWithETag container
-        return read |> Result.map (fst >> fst)
-    }
-
-    /// The team's output-visibility history (Phase 896). `Ok empty` when
-    /// the team never chose; `Error` when the record exists but cannot be
-    /// read.
-    member _.ReadOutput(container: string) : Async<Result<TeamOutputPolicyRecord, string>> = async {
-        let! read = readWithETag container
-        return read |> Result.map (fst >> snd)
-    }
-
-    /// Guarded read-modify-write. `decide` sees the stored record and
-    /// returns the record to write, or `Error` to refuse (nothing is
-    /// written). Returns `(before, after)`; when `decide` returns the
-    /// record unchanged nothing is written.
-    member _.Change
-        (container: string, decide: TeamConversationPolicyRecord -> Result<TeamConversationPolicyRecord, string>)
-        : Async<Result<TeamConversationPolicyRecord * TeamConversationPolicyRecord, string>> =
-        async {
-            // The output part rides through untouched (Phase 896).
-            let! changed =
-                changeBoth container "conversation visibility" (fun (record, output) ->
-                    decide record |> Result.map (fun after -> after, output))
-
-            return changed |> Result.map (fun (before, after) -> fst before, fst after)
-        }
-
-    /// Guarded read-modify-write over BOTH parts of the record (Phase 896),
-    /// so a change of either level is judged against the other as actually
-    /// stored. `what` names the setting in a refusal. Returns
-    /// `(before, after)`; when `decide` returns the pair unchanged nothing
-    /// is written.
-    member _.ChangeBoth
-        (
-            container: string,
-            what: string,
-            decide:
-                TeamConversationPolicyRecord * TeamOutputPolicyRecord
-                    -> Result<TeamConversationPolicyRecord * TeamOutputPolicyRecord, string>
-        ) : Async<
-                Result<
-                    (TeamConversationPolicyRecord * TeamOutputPolicyRecord) *
-                    (TeamConversationPolicyRecord * TeamOutputPolicyRecord),
-                    string
-                 >
-             >
-        =
-        changeBoth container what decide
 
 // ─── The per-request gate ────────────────────────────────────────
 
-/// Who is asking, as the rule needs them.
-type ConversationViewer = {
-    /// The viewer's user id.
-    UserId: string
-    /// The viewer's role in the team, `None` when not a member (or when no
-    /// team store is composed to say).
-    TeamRole: TeamRole option
-    /// Whether the viewer holds `PlatformRole.PlatformAdmin`.
-    IsPlatformAdmin: bool
-}
+/// Who is asking, as the rule needs them — the platform's viewer (Phase 936).
+type ConversationViewer = TeamPolicyViewer
 
 /// What one request knows about its team's policy.
 type TeamVisibilityState = {
@@ -527,14 +130,14 @@ module ConversationVisibility =
             match teamOf (accessOf ctx) container with
             | None -> return None
             | Some teamId ->
-                let store = TeamConversationPolicyStore storage
+                let store = TeamPolicyStore storage
                 let! record = store.Read(TeamConversationPolicyRecord.containerOf teamId)
 
                 return
                     Some {
                         TeamId = teamId
                         Container = container
-                        Settings = TeamConversationVisibilitySettings.resolve ctx.RequestServices
+                        Settings = TeamPolicySettings.conversationOrUnrestricted ctx.RequestServices
                         Record =
                             match record with
                             | Ok r -> Some r
@@ -545,23 +148,8 @@ module ConversationVisibility =
     /// The viewer, with their role in `teamId` read from `ITeamStore`
     /// (`None` when no team store is composed — fail closed) and their
     /// platform role from the request's `AccessContext`.
-    let resolveViewer (ctx: HttpContext) (userId: string) (teamId: string) : Async<ConversationViewer> = async {
-        let! role =
-            match ctx.RequestServices.GetService(typeof<ITeamStore>) with
-            | :? ITeamStore as teams -> teams.GetMemberRole(teamId, userId)
-            | _ -> async.Return None
-
-        let isPlatformAdmin =
-            accessOf ctx
-            |> Option.map AccessContext.canModifyPlatformConfig
-            |> Option.defaultValue false
-
-        return {
-            UserId = userId
-            TeamRole = role
-            IsPlatformAdmin = isPlatformAdmin
-        }
-    }
+    let resolveViewer (ctx: HttpContext) (userId: string) (teamId: string) : Async<ConversationViewer> =
+        TeamPolicyViewer.resolve ctx.RequestServices (accessOf ctx) userId teamId
 
 // ─── Audit rows ──────────────────────────────────────────────────
 //
@@ -698,7 +286,7 @@ module ConversationVisibilityChange =
 /// caller's active team.
 let teamConversationVisibilityApi (ctx: HttpContext) : TeamConversationVisibilityApi =
     let services = ctx.RequestServices
-    let settings = TeamConversationVisibilitySettings.resolve services
+    let settings = TeamPolicySettings.conversationOrUnrestricted services
 
     let storage =
         match services.GetService(typeof<IBlobStorage>) with
@@ -725,10 +313,7 @@ let teamConversationVisibilityApi (ctx: HttpContext) : TeamConversationVisibilit
 
     // Phase 896 — composed only with team output visibility; `None` keeps
     // the policy-change check out of the conversation path entirely.
-    let outputSettings =
-        match services.GetService(typeof<TeamOutputVisibilitySettings>) with
-        | :? TeamOutputVisibilitySettings as s -> Some s
-        | _ -> None
+    let outputSettings = TeamPolicySettings.output services
 
     let team =
         match access |> Option.map _.Subject with
@@ -759,7 +344,7 @@ let teamConversationVisibilityApi (ctx: HttpContext) : TeamConversationVisibilit
                 | Some(userId, teamId, container), Some storage ->
                     let! viewer = ConversationVisibility.resolveViewer ctx userId teamId
 
-                    match! TeamConversationPolicyStore(storage).Read container with
+                    match! TeamPolicyStore(storage).Read container with
                     | Ok record -> return viewOf record viewer
                     | Error message ->
                         logger.Warn $"Conversation visibility for team {teamId}: {message}"
@@ -820,10 +405,7 @@ let teamConversationVisibilityApi (ctx: HttpContext) : TeamConversationVisibilit
                                 |> Result.map (fun () -> after, output)
                             | _ -> Ok(after, output))
 
-                    match!
-                        TeamConversationPolicyStore(storage)
-                            .ChangeBoth(container, "conversation visibility", decideBoth)
-                    with
+                    match! TeamPolicyStore(storage).ChangeBoth(container, "conversation visibility", decideBoth) with
                     | Error refusal -> return Error refusal
                     | Ok((before, _), (after, _)) ->
                         if after <> before then
@@ -839,231 +421,5 @@ let teamConversationVisibilityApi (ctx: HttpContext) : TeamConversationVisibilit
                         return Ok(viewOf after viewer)
                 | Some _, None -> return Error "Conversation visibility cannot be stored: no blob storage is composed."
                 | None, _ -> return Error "Conversation visibility is a team setting; there is no active team."
-            }
-    }
-// ─── Phase 896 — team output visibility over the same record ─────
-
-/// The deployment's output-visibility declaration from DI, when team output
-/// visibility is composed (`FactsCompose.withTeamOutputVisibility`).
-let private outputSettingsOf (services: IServiceProvider) : TeamOutputVisibilitySettings option =
-    match services.GetService(typeof<TeamOutputVisibilitySettings>) with
-    | :? TeamOutputVisibilitySettings as s -> Some s
-    | _ -> None
-
-/// `ITeamOutputVisibilitySource` over the per-team policy record (Phase
-/// 896): the level a team chose, else the deployment default. An unreadable
-/// record is an `Error`, and the disclosure gate fails closed on it. With no
-/// blob storage composed every team sits at the default.
-type TeamPolicyOutputVisibilitySource(services: IServiceProvider) =
-    interface ITeamOutputVisibilitySource with
-        member _.Current(teamId: string) = async {
-            let settings =
-                outputSettingsOf services
-                |> Option.defaultValue TeamOutputVisibilitySettings.unrestricted
-
-            match services.GetService(typeof<IBlobStorage>) with
-            | :? IBlobStorage as storage ->
-                match!
-                    TeamConversationPolicyStore(storage).ReadOutput(TeamConversationPolicyRecord.containerOf teamId)
-                with
-                | Ok record -> return Ok(TeamOutputPolicyRecord.current settings.Default record)
-                | Error message -> return Error message
-            | _ -> return Ok settings.Default
-        }
-
-/// Refuses, at startup, deployment DEFAULTS that already break the
-/// policy-change check (Phase 896): a team that chose nothing would sit at
-/// a conversation level wider than its output level. Inert unless team
-/// output visibility is composed.
-type TeamVisibilityDefaultsValidator(services: IServiceProvider) =
-    interface ConfigValidation.IConfigValidator with
-        member _.Name = "team-visibility-defaults"
-        member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
-
-        member _.Validate() = async {
-            match outputSettingsOf services with
-            | None -> return ConfigValidation.ValidationResult.Ok
-            | Some output ->
-                let conversation = TeamConversationVisibilitySettings.resolve services
-
-                match TeamOutputVisibility.checkCombination conversation.Default [ output.Default ] with
-                | Ok() -> return ConfigValidation.ValidationResult.Ok
-                | Error message ->
-                    return
-                        ConfigValidation.ValidationResult.Error(
-                            $"The deployment defaults for team visibility conflict. {message}"
-                        )
-        }
-
-/// The audit row a change of a team's output level writes (Phase 896): who,
-/// the old level and the new. Rides `RemotingMethodAudited` with a `Custom:`
-/// kind, like the conversation rows, so no exhaustive match changes.
-module OutputVisibilityAudit =
-    /// Kind of the row a change of a team's output level writes.
-    [<Literal>]
-    let LevelChangedKind = "Custom:TeamOutputVisibilityChanged"
-
-    /// A change of a team's output level.
-    let levelChanged
-        (audit: IAuditLog option)
-        (scopeId: string)
-        (teamId: string)
-        (changedBy: string)
-        (oldLevel: TeamVisibilityLevel)
-        (newLevel: TeamVisibilityLevel)
-        =
-        async {
-            match audit with
-            | Some log ->
-                do!
-                    log.Record(
-                        scopeId,
-                        RemotingMethodAudited {
-                            Kind = LevelChangedKind
-                            MethodName = "SetOutputVisibility"
-                            SubjectId = changedBy
-                            CorrelationId = None
-                            Payload =
-                                Map.ofList [
-                                    "teamId", teamId
-                                    "changedBy", changedBy
-                                    "oldLevel", TeamVisibilityLevel.name oldLevel
-                                    "newLevel", TeamVisibilityLevel.name newLevel
-                                ]
-                        }
-                    )
-            | None -> ()
-        }
-
-/// `TeamOutputVisibilityApi` over the request (Phase 896). The team is
-/// always the caller's active team. The change rules are conversation
-/// visibility's (the team `Owner` sets it, `PlatformAdmins` only by a
-/// platform admin, within the deployment's allowed set), and a change is
-/// refused when it would leave conversation visibility wider than output
-/// visibility.
-let teamOutputVisibilityApi (ctx: HttpContext) : TeamOutputVisibilityApi =
-    let services = ctx.RequestServices
-    let conversationSettings = TeamConversationVisibilitySettings.resolve services
-    let outputSettings = outputSettingsOf services
-
-    let storage =
-        match services.GetService(typeof<IBlobStorage>) with
-        | :? IBlobStorage as s -> Some s
-        | _ -> None
-
-    let audit =
-        match services.GetService(typeof<IAuditLog>) with
-        | :? IAuditLog as a -> Some a
-        | _ -> None
-
-    let team =
-        match ConversationVisibility.accessOf ctx |> Option.map _.Subject with
-        | Some(TeamMember(userId, teamId)) -> Some(userId, teamId, TeamConversationPolicyRecord.containerOf teamId)
-        | _ -> None
-
-    let notEnabledView (inTeamScope: bool) = {
-        InTeamScope = inTeamScope
-        Enabled = false
-        Level = TeamVisible
-        Allowed = [ TeamVisible ]
-        Selectable = []
-    }
-
-    let viewOf (settings: TeamOutputVisibilitySettings) (record: TeamOutputPolicyRecord) (viewer: ConversationViewer) =
-        let current = TeamOutputPolicyRecord.current settings.Default record
-
-        {
-            InTeamScope = true
-            Enabled = true
-            Level = current
-            Allowed = settings.Allowed
-            Selectable = TeamOutputVisibility.selectable settings current viewer.TeamRole viewer.IsPlatformAdmin
-        }
-
-    {
-        GetOutputVisibility =
-            fun () -> async {
-                match team, storage, outputSettings with
-                | Some(userId, teamId, container), Some storage, Some settings ->
-                    let! viewer = ConversationVisibility.resolveViewer ctx userId teamId
-
-                    match! TeamConversationPolicyStore(storage).ReadOutput container with
-                    | Ok record -> return viewOf settings record viewer
-                    | Error _ ->
-                        // Unreadable: the gate denies every restricted fact.
-                        // Show the narrowest level and offer no change.
-                        return {
-                            InTeamScope = true
-                            Enabled = true
-                            Level = PlatformAdmins
-                            Allowed = settings.Allowed
-                            Selectable = []
-                        }
-                | Some _, _, None -> return notEnabledView true
-                | Some _, None, Some settings ->
-                    return {
-                        InTeamScope = true
-                        Enabled = true
-                        Level = settings.Default
-                        Allowed = settings.Allowed
-                        Selectable = []
-                    }
-                | None, _, _ -> return notEnabledView false
-            }
-
-        SetOutputVisibility =
-            fun requested -> async {
-                match team, storage, outputSettings with
-                | Some(userId, teamId, container), Some storage, Some settings ->
-                    let! viewer = ConversationVisibility.resolveViewer ctx userId teamId
-
-                    let decide (record: TeamConversationPolicyRecord, output: TeamOutputPolicyRecord) =
-                        let current = TeamOutputPolicyRecord.current settings.Default output
-
-                        TeamOutputVisibility.checkChange
-                            settings
-                            current
-                            viewer.TeamRole
-                            viewer.IsPlatformAdmin
-                            requested
-                        |> Result.bind (fun () ->
-                            if requested = current then
-                                Ok(record, output)
-                            else
-                                TeamOutputVisibility.checkCombination
-                                    (TeamConversationPolicyRecord.current conversationSettings.Default record)
-                                    [ requested ]
-                                |> Result.map (fun () ->
-                                    record,
-                                    {
-                                        OutputChanges =
-                                            output.OutputChanges
-                                            @ [
-                                                {
-                                                    Level = requested
-                                                    ChangedBy = userId
-                                                    ChangedAt = DateTime.UtcNow
-                                                }
-                                            ]
-                                    }))
-
-                    match! TeamConversationPolicyStore(storage).ChangeBoth(container, "output visibility", decide) with
-                    | Error refusal -> return Error refusal
-                    | Ok((_, before), (_, after)) ->
-                        if after <> before then
-                            do!
-                                OutputVisibilityAudit.levelChanged
-                                    audit
-                                    teamId
-                                    teamId
-                                    userId
-                                    (TeamOutputPolicyRecord.current settings.Default before)
-                                    (TeamOutputPolicyRecord.current settings.Default after)
-
-                        return Ok(viewOf settings after viewer)
-                | _, _, None -> return Error "Team output visibility is not enabled in this deployment."
-                | Some _, None, Some _ ->
-                    return Error "Output visibility cannot be stored: no blob storage is composed."
-                | None, _, Some _ -> return Error "Output visibility is a team setting; there is no active team."
             }
     }

@@ -2856,6 +2856,29 @@ module PlatformDecoders =
         |> Decode.apply (Decode.field "Owners" 5 (Decode.list Decode.asString))
         |> Decode.apply (Decode.field "Admins" 6 (Decode.list Decode.asString))
 
+    /// Generated decoder for `TeamVisibilityLevel` — one combinator per field or case, read off the type's own shape.
+    let teamVisibilityLevel: Decoder<TeamVisibilityLevel> =
+        Decode.union "TeamVisibilityLevel" (function
+            | 0 -> Some(Decode.case0 TeamVisibilityLevel.TeamVisible)
+            | 1 -> Some(Decode.case0 TeamVisibilityLevel.TeamAdmins)
+            | 2 -> Some(Decode.case0 TeamVisibilityLevel.PlatformAdmins)
+            | _ -> None)
+
+    /// Generated decoder for `TeamOutputVisibilityView` — one combinator per field or case, read off the type's own shape.
+    let teamOutputVisibilityView: Decoder<TeamOutputVisibilityView> =
+        Decode.succeed (fun inTeamScope enabled level allowed selectable -> ({
+            InTeamScope = inTeamScope
+            Enabled = enabled
+            Level = level
+            Allowed = allowed
+            Selectable = selectable
+        }: TeamOutputVisibilityView))
+        |> Decode.apply (Decode.field "InTeamScope" 0 Decode.asBool)
+        |> Decode.apply (Decode.field "Enabled" 1 Decode.asBool)
+        |> Decode.apply (Decode.field "Level" 2 teamVisibilityLevel)
+        |> Decode.apply (Decode.field "Allowed" 3 (Decode.list teamVisibilityLevel))
+        |> Decode.apply (Decode.field "Selectable" 4 (Decode.list teamVisibilityLevel))
+
     /// Generated decoder for `ProviderOrigin` — one combinator per field or case, read off the type's own shape.
     let providerOrigin: Decoder<ProviderOrigin> =
         Decode.union "ProviderOrigin" (function
@@ -3109,6 +3132,8 @@ module PlatformDecoders =
         typeof<TeamMembership>.FullName
         typeof<TeamCreationPolicy>.FullName
         typeof<TeamSummary>.FullName
+        typeof<TeamVisibilityLevel>.FullName
+        typeof<TeamOutputVisibilityView>.FullName
         typeof<ProviderOrigin>.FullName
         typeof<UsageRecord>.FullName
         typeof<UsageAggregateRow>.FullName
@@ -3213,6 +3238,7 @@ module PlatformDecoders =
         typeof<TeamMembership list>.FullName
         typeof<string option>.FullName
         typeof<Result<TeamSummary list, string>>.FullName
+        typeof<Result<TeamOutputVisibilityView, string>>.FullName
         typeof<UsageRecord list>.FullName
         typeof<UsageAggregateRow list>.FullName
         typeof<byte[]>.FullName
@@ -3436,6 +3462,8 @@ module PlatformDecoders =
         RemotingDecoders.register<TeamMembership> teamMembership
         RemotingDecoders.register<TeamCreationPolicy> teamCreationPolicy
         RemotingDecoders.register<TeamSummary> teamSummary
+        RemotingDecoders.register<TeamVisibilityLevel> teamVisibilityLevel
+        RemotingDecoders.register<TeamOutputVisibilityView> teamOutputVisibilityView
         RemotingDecoders.register<ProviderOrigin> providerOrigin
         RemotingDecoders.register<UsageRecord> usageRecord
         RemotingDecoders.register<UsageAggregateRow> usageAggregateRow
@@ -3540,6 +3568,7 @@ module PlatformDecoders =
         RemotingDecoders.register<TeamMembership list> (Decode.list teamMembership)
         RemotingDecoders.register<string option> (Decode.option Decode.asString)
         RemotingDecoders.register<Result<TeamSummary list, string>> (Decode.result (Decode.list teamSummary) Decode.asString)
+        RemotingDecoders.register<Result<TeamOutputVisibilityView, string>> (Decode.result teamOutputVisibilityView Decode.asString)
         RemotingDecoders.register<UsageRecord list> (Decode.list usageRecord)
         RemotingDecoders.register<UsageAggregateRow list> (Decode.list usageAggregateRow)
         RemotingDecoders.register<byte[]> Decode.asBytes
@@ -3764,6 +3793,8 @@ module PlatformDecoders =
         RemotingDecoders.verifyThrough<TeamMembership> gate draws seed teamMembership
         RemotingDecoders.verifyThrough<TeamCreationPolicy> gate draws seed teamCreationPolicy
         RemotingDecoders.verifyThrough<TeamSummary> gate draws seed teamSummary
+        RemotingDecoders.verifyThrough<TeamVisibilityLevel> gate draws seed teamVisibilityLevel
+        RemotingDecoders.verifyThrough<TeamOutputVisibilityView> gate draws seed teamOutputVisibilityView
         RemotingDecoders.verifyThrough<ProviderOrigin> gate draws seed providerOrigin
         RemotingDecoders.verifyThrough<UsageRecord> gate draws seed usageRecord
         RemotingDecoders.verifyThrough<UsageAggregateRow> gate draws seed usageAggregateRow
@@ -3868,6 +3899,7 @@ module PlatformDecoders =
         RemotingDecoders.verifyThrough<TeamMembership list> gate draws seed (Decode.list teamMembership)
         RemotingDecoders.verifyThrough<string option> gate draws seed (Decode.option Decode.asString)
         RemotingDecoders.verifyThrough<Result<TeamSummary list, string>> gate draws seed (Decode.result (Decode.list teamSummary) Decode.asString)
+        RemotingDecoders.verifyThrough<Result<TeamOutputVisibilityView, string>> gate draws seed (Decode.result teamOutputVisibilityView Decode.asString)
         RemotingDecoders.verifyThrough<UsageRecord list> gate draws seed (Decode.list usageRecord)
         RemotingDecoders.verifyThrough<UsageAggregateRow list> gate draws seed (Decode.list usageAggregateRow)
         RemotingDecoders.verifyThrough<byte[]> gate draws seed Decode.asBytes
@@ -3943,6 +3975,7 @@ module PlatformDecoders =
         "PlatformAdminApi", [ typeof<bool>.FullName; typeof<string list>.FullName; typeof<Result<unit, string>>.FullName; typeof<PlatformKnowledgeBaseMode>.FullName ], true
         "PlatformInfoApi", [ typeof<PlatformInfo>.FullName ], true
         "TeamApi", [ typeof<Result<TeamInfo, string>>.FullName; typeof<TeamInfo list>.FullName; typeof<Result<unit, string>>.FullName; typeof<TeamMembership list>.FullName; typeof<string option>.FullName; typeof<TeamCreationPolicy>.FullName; typeof<Result<TeamSummary list, string>>.FullName ], true
+        "TeamOutputVisibilityApi", [ typeof<TeamOutputVisibilityView>.FullName; typeof<Result<TeamOutputVisibilityView, string>>.FullName ], true
         "IUsageQueryApi", [ typeof<UsageRecord list>.FullName; typeof<UsageAggregateRow list>.FullName; typeof<byte[]>.FullName ], true
     ]
 

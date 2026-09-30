@@ -12331,6 +12331,24 @@ ToolUp.Platform.TeamConfig (class)
 ToolUp.Platform.TeamConfig..ctor(ToolUp.Platform.Persistence, ToolUp.Platform.TeamSwitchingUX)
 ToolUp.Platform.TeamConfig.Persistence : ToolUp.Platform.Persistence { get }
 ToolUp.Platform.TeamConfig.Switching : ToolUp.Platform.TeamSwitchingUX { get }
+ToolUp.Platform.TeamConversationPolicyRecord (class)
+ToolUp.Platform.TeamConversationPolicyRecord..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityChange])
+ToolUp.Platform.TeamConversationPolicyRecord.Changes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityChange] { get }
+ToolUp.Platform.TeamConversationPolicyRecordModule (class)
+ToolUp.Platform.TeamConversationPolicyRecordModule.BlobName : System.String (literal)
+ToolUp.Platform.TeamConversationPolicyRecordModule.containerOf(System.String) : System.String
+ToolUp.Platform.TeamConversationPolicyRecordModule.current(ToolUp.Platform.TeamVisibilityLevel, ToolUp.Platform.TeamConversationPolicyRecord) : ToolUp.Platform.TeamVisibilityLevel
+ToolUp.Platform.TeamConversationPolicyRecordModule.empty : ToolUp.Platform.TeamConversationPolicyRecord { get }
+ToolUp.Platform.TeamConversationPolicyRecordModule.isUnset(ToolUp.Platform.TeamConversationPolicyRecord) : System.Boolean
+ToolUp.Platform.TeamConversationPolicyRecordModule.levelAt(ToolUp.Platform.TeamVisibilityLevel, ToolUp.Platform.TeamConversationPolicyRecord, System.DateTime) : ToolUp.Platform.TeamVisibilityLevel
+ToolUp.Platform.TeamConversationVisibilitySettings (class)
+ToolUp.Platform.TeamConversationVisibilitySettings..ctor(ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel])
+ToolUp.Platform.TeamConversationVisibilitySettings.Allowed : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel] { get }
+ToolUp.Platform.TeamConversationVisibilitySettings.Default : ToolUp.Platform.TeamVisibilityLevel { get }
+ToolUp.Platform.TeamConversationVisibilitySettingsModule (class)
+ToolUp.Platform.TeamConversationVisibilitySettingsModule.create(ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamConversationVisibilitySettings, System.String]
+ToolUp.Platform.TeamConversationVisibilitySettingsModule.describeAllowed(ToolUp.Platform.TeamConversationVisibilitySettings) : System.String
+ToolUp.Platform.TeamConversationVisibilitySettingsModule.unrestricted : ToolUp.Platform.TeamConversationVisibilitySettings { get }
 ToolUp.Platform.TeamCreatedPayload (class)
 ToolUp.Platform.TeamCreatedPayload..ctor(System.String, System.String, System.String)
 ToolUp.Platform.TeamCreatedPayload.TeamId : System.String { get }
@@ -12458,12 +12476,24 @@ ToolUp.Platform.TeamMembership.JoinedAt : System.DateTime { get }
 ToolUp.Platform.TeamMembership.Role : ToolUp.Platform.TeamRole { get }
 ToolUp.Platform.TeamMembership.TeamId : System.String { get }
 ToolUp.Platform.TeamMembership.UserId : System.String { get }
+ToolUp.Platform.TeamOutputPolicyRecord (class)
+ToolUp.Platform.TeamOutputPolicyRecord..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityChange])
+ToolUp.Platform.TeamOutputPolicyRecord.OutputChanges : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityChange] { get }
+ToolUp.Platform.TeamOutputPolicyRecordModule (class)
+ToolUp.Platform.TeamOutputPolicyRecordModule.MemberName : System.String (literal)
+ToolUp.Platform.TeamOutputPolicyRecordModule.current(ToolUp.Platform.TeamVisibilityLevel, ToolUp.Platform.TeamOutputPolicyRecord) : ToolUp.Platform.TeamVisibilityLevel
+ToolUp.Platform.TeamOutputPolicyRecordModule.empty : ToolUp.Platform.TeamOutputPolicyRecord { get }
+ToolUp.Platform.TeamOutputPolicyRecordModule.isUnset(ToolUp.Platform.TeamOutputPolicyRecord) : System.Boolean
 ToolUp.Platform.TeamOutputVisibility (class)
 ToolUp.Platform.TeamOutputVisibility.canSee(ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], System.Boolean) : System.Boolean
 ToolUp.Platform.TeamOutputVisibility.checkChange(ToolUp.Platform.TeamOutputVisibilitySettings, ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], System.Boolean, ToolUp.Platform.TeamVisibilityLevel) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
 ToolUp.Platform.TeamOutputVisibility.checkCombination(ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
 ToolUp.Platform.TeamOutputVisibility.describe(ToolUp.Platform.TeamVisibilityLevel) : System.String
 ToolUp.Platform.TeamOutputVisibility.selectable(ToolUp.Platform.TeamOutputVisibilitySettings, ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamRole], System.Boolean) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel]
+ToolUp.Platform.TeamOutputVisibilityApi (class)
+ToolUp.Platform.TeamOutputVisibilityApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.TeamOutputVisibilityView]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamOutputVisibilityView, System.String]]])
+ToolUp.Platform.TeamOutputVisibilityApi.GetOutputVisibility : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.TeamOutputVisibilityView]] { get }
+ToolUp.Platform.TeamOutputVisibilityApi.SetOutputVisibility : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamOutputVisibilityView, System.String]]] { get }
 ToolUp.Platform.TeamOutputVisibilitySettings (class)
 ToolUp.Platform.TeamOutputVisibilitySettings..ctor(ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel])
 ToolUp.Platform.TeamOutputVisibilitySettings.Allowed : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel] { get }
@@ -12472,6 +12502,13 @@ ToolUp.Platform.TeamOutputVisibilitySettingsModule (class)
 ToolUp.Platform.TeamOutputVisibilitySettingsModule.create(ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamOutputVisibilitySettings, System.String]
 ToolUp.Platform.TeamOutputVisibilitySettingsModule.describeAllowed(ToolUp.Platform.TeamOutputVisibilitySettings) : System.String
 ToolUp.Platform.TeamOutputVisibilitySettingsModule.unrestricted : ToolUp.Platform.TeamOutputVisibilitySettings { get }
+ToolUp.Platform.TeamOutputVisibilityView (class)
+ToolUp.Platform.TeamOutputVisibilityView..ctor(System.Boolean, System.Boolean, ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel])
+ToolUp.Platform.TeamOutputVisibilityView.Allowed : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel] { get }
+ToolUp.Platform.TeamOutputVisibilityView.Enabled : System.Boolean { get }
+ToolUp.Platform.TeamOutputVisibilityView.InTeamScope : System.Boolean { get }
+ToolUp.Platform.TeamOutputVisibilityView.Level : ToolUp.Platform.TeamVisibilityLevel { get }
+ToolUp.Platform.TeamOutputVisibilityView.Selectable : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel] { get }
 ToolUp.Platform.TeamOwnershipTransferredPayload (class)
 ToolUp.Platform.TeamOwnershipTransferredPayload..ctor(System.String, System.String, System.String, System.String)
 ToolUp.Platform.TeamOwnershipTransferredPayload.ActorUserId : System.String { get }
@@ -12528,6 +12565,11 @@ ToolUp.Platform.TeamSwitchingUX.Tag : System.Int32 { get }
 ToolUp.Platform.TeamSwitchingUX+Tags (class)
 ToolUp.Platform.TeamSwitchingUX+Tags.HeaderSwitcher : System.Int32 (literal)
 ToolUp.Platform.TeamSwitchingUX+Tags.NoSwitcher : System.Int32 (literal)
+ToolUp.Platform.TeamVisibilityChange (class)
+ToolUp.Platform.TeamVisibilityChange..ctor(ToolUp.Platform.TeamVisibilityLevel, System.String, System.DateTime)
+ToolUp.Platform.TeamVisibilityChange.ChangedAt : System.DateTime { get }
+ToolUp.Platform.TeamVisibilityChange.ChangedBy : System.String { get }
+ToolUp.Platform.TeamVisibilityChange.Level : ToolUp.Platform.TeamVisibilityLevel { get }
 ToolUp.Platform.TeamVisibilityLevel (class)
 ToolUp.Platform.TeamVisibilityLevel.IsPlatformAdmins : System.Boolean { get }
 ToolUp.Platform.TeamVisibilityLevel.IsTeamAdmins : System.Boolean { get }
@@ -14394,6 +14436,7 @@ ToolUp.Remoting.Json.PlatformJsonDecoders.serviceAccountStatus : Microsoft.FShar
 ToolUp.Remoting.Json.PlatformJsonDecoders.submitterClass : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.SubmitterClass, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Json.PlatformJsonDecoders.teamInviteIssueRequest : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamInviteIssueRequest, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Json.PlatformJsonDecoders.teamRole : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamRole, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Json.PlatformJsonDecoders.teamVisibilityLevel : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamVisibilityLevel, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Json.PlatformJsonDecoders.trigger : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Trigger, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Json.PlatformJsonDecoders.updateExternalContactRequest : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.UpdateExternalContactRequest, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Json.PlatformJsonDecoders.usageDateRange : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Usage.UsageDateRange, ToolUp.Remoting.DecodeError]] { get }
@@ -14755,9 +14798,11 @@ ToolUp.Remoting.PlatformDecoders.teamInviteExpiredPayload : Microsoft.FSharp.Cor
 ToolUp.Remoting.PlatformDecoders.teamInviteIssueResult : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamInviteIssueResult, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.teamInviteSummary : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamInviteSummary, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.teamMembership : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamMembership, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.teamOutputVisibilityView : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamOutputVisibilityView, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.teamPermissions : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamPermissions, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.teamRole : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamRole, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.teamSummary : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamSummary, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.teamVisibilityLevel : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamVisibilityLevel, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.tenantLifecyclePhase : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TenantLifecyclePhase, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.tokenStatus : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TokenStatus, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.toolDataCount : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ToolDataCount, ToolUp.Remoting.DecodeError]] { get }

@@ -980,6 +980,11 @@
         <Compile Include="Server\Teams\BlobPendingInviteStore.fs" />
         <Compile Include="Server\Teams\PendingInviteStoreInstanceValidator.fs" />
         <Compile Include="Server\Teams\TeamInvitationHandler.fs" />
+        <!-- Phase 936 — the per-team visibility policy record (both axes), its
+             guarded store, the output-visibility source, startup check and API.
+             After TeamManagement (ITeamStore); before BuildRouteHandlers, which
+             mounts TeamOutputVisibilityApi. -->
+        <Compile Include="Server\Teams\TeamPolicyStore.fs" />
         <Compile Include="Server\Infra\BootstrapTeam.fs" />
         <Compile Include="Server\TeamCreationPolicyValidator.fs" />
         <Compile Include="Server\BootstrapTeamValidator.fs" />
