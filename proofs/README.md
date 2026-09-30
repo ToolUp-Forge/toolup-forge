@@ -1582,12 +1582,18 @@ What the columns found:
   `as_date_time_offset_with`, `as_decimal_with` and the four `decode_*` fixtures — reach a decoder
   that is a parameterless polymorphic value (`as_int32`, `as_int64`), which F#'s value restriction
   cannot express; Custard refuses it by name (error 370) rather than emit it. The remedy is in the
-  model — give those values a parameter — and so moves a byte-held extraction.
+  model — give those values a parameter — and so moves a byte-held extraction. Reported upstream
+  (2026-09-30) as [FStarLang/FStar#4623](https://github.com/FStarLang/FStar/issues/4623): these
+  values have a function type, and the backend already emits one eta-expanded when it is *applied*;
+  it refuses only when the value is *passed* as an argument, which is how the decoders use them. If
+  upstream takes that, the remedy moves out of the model.
 * **What does not build.** `ModelInput`'s generated module is refused by the F# compiler: in
   `render`, a `match` that is the value of a record field is printed with its arms to the left of
   the expression it belongs to (`ModelInput.fs(126,6)`: FS0058, then FS0010). That is a defect in
   the new backend's layout, the thing it was written to get right, and it is in the release this
-  directory pins.
+  directory pins. Reported upstream (2026-09-30) as
+  [FStarLang/FStar#4622](https://github.com/FStarLang/FStar/issues/4622), with a nine-line
+  reproduction; the nightly of that date prints the same layout.
 * **The names.** `ElmishRing.succ` becomes `elmishRing_succ`: every value and type carries its
   module as a lower-cased prefix, constructors as an upper-cased one (`ModelInput_ONone`), and an
   inductive with one constructor and named fields becomes an F# record. Every differential host's
@@ -1607,7 +1613,10 @@ byte-stable across the pin move, and the normaliser that keeps it compiling refu
 recognise. What upstream says about that route is now on this ladder: it is unmaintained, so a
 future release may drop it, and the normaliser is this repository's to carry until then. What would
 reopen the decision is a release in which `ModelInput`'s project builds as generated; the table is
-the measurement to repeat.
+the measurement to repeat, and the two upstream issues above are what to watch. The clock on it is
+upstream's: in closing [FStarLang/FStar#4523](https://github.com/FStarLang/FStar/issues/4523)
+(2026-09-18) a maintainer wrote that the legacy `--codegen FSharp` will be deprecated soon in favour
+of the new backend.
 
 ### How a generic ring leaves the extractor
 
