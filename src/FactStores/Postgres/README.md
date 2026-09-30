@@ -116,10 +116,26 @@ and the test pack asserts each one binds it.
   of the reading clock is simply not yet visible.
 - **Population reads** push down the subject set, the metric, the period,
   visibility, a single named method and — when no canonical selection can
-  apply — the value threshold. Canonical selection, the ranking and every
-  statistic run in memory through the shared `PopulationQueryTypes`
-  functions, so the answer equals the blob store's by construction. Only the
-  ranked top-k are read in full.
+  apply — the value threshold. Since Phase 940 the statistics and the top k
+  are computed in the database too, in one repeatable-read snapshot, so a
+  summary row, the method mix and k members cross the wire instead of every
+  member. Each statistic is computed with the shared pipeline's arithmetic:
+  counts, the period bounds, the minimum and maximum (`numeric` comparison is
+  exact decimal comparison), the freshness histogram (`as_of >= t - window`),
+  the method mix (ordered ordinally in .NET) and the top k (by value, ties by
+  content address, re-ranked in .NET by `PopulationRanking.rankMembers`). The
+  sum is exact in `numeric`, and the mean is the same `total / count` division,
+  taken in .NET. Three cases still read every member and run the shared
+  `PopulationQueryTypes` functions in memory, because the database cannot
+  compute them with identical decimal arithmetic:
+  - a canonical-method selection with two methods present to choose between
+    (the in-snapshot probe finds them);
+  - a sum whose left-to-right `decimal` fold would round, where the sum of
+    absolute values at the largest scale overflows `decimal`'s mantissa;
+  - a freshness window reaching past `DateTime`'s range, where the shared
+    derivation throws.
+
+  Only the ranked top-k are read in full.
 - **Audit (GP 6)** is the blob store's: `FactAsserted` (+ `FactSuperseded`)
   per fact on the scalar path, one `FactBatchAsserted` row per batch, under
   the reserved `_facts` source module, written after the commit.
@@ -133,6 +149,26 @@ and the test pack asserts each one binds it.
 statement — which index answered, and how many rows it touched. At 300,000
 subjects in one scope a subject-and-metric point read touched 5 rows, with
 no sequential scan.
+
+**The population read is linear in the population, not flat (Phase 940,
+measured).** Measured on one local PostgreSQL 17 with four concurrent callers,
+the same table and statement shapes the load harness runs. Each population is
+`N x 1 metric x 4 weeks`, and the read ranks the latest week (top 10). Each
+cell is the p50 / p95 in ms:
+
+| Subjects | Before (member read) | After (aggregates in the database) |
+|---:|---|---|
+| 25,000 | 250.52 / 391.20 | 81.59 / 245.75 |
+| 100,000 | 737.01 / 1,351.16 | 229.43 / 303.83 |
+| 300,000 | 1,875.44 / 2,232.92 | 659.28 / 858.41 |
+
+The read is about three times faster at every size, and it still grows with
+the population. What remains is the database's own scan of the matching rows.
+Every statistic is defined over the whole filtered population, at an `AsOf`
+instant, a period, a subject prefix and a threshold the caller chooses. No
+per-query read can therefore touch fewer rows than the population. A flat read
+needs an aggregate maintained on every write, and this companion does not build
+one. `docs/rag/performance.md` has the breakdown and the reasoning.
 
 Migrating an existing blob store's facts into the table is not provided yet.
 
