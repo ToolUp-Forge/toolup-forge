@@ -111,6 +111,11 @@ ToolUp.RAG.InMemoryVectorStore+IndexEntry.Content : System.String { get; set }
 ToolUp.RAG.InMemoryVectorStore+IndexEntry.Metadata : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get; set }
 ToolUp.RAG.InMemoryVectorStore+IndexEntry.ScopeTag : System.String { get; set }
 ToolUp.RAG.InMemoryVectorStore+IndexEntry.Vector : System.Single[] { get; set }
+ToolUp.RAG.InMemoryVectorStore+RagScopeSnapshotUnreadableException (class)
+ToolUp.RAG.InMemoryVectorStore+RagScopeSnapshotUnreadableException..ctor(System.String, System.String, System.String)
+ToolUp.RAG.InMemoryVectorStore+RagScopeSnapshotUnreadableException.BlobLocation : System.String { get }
+ToolUp.RAG.InMemoryVectorStore+RagScopeSnapshotUnreadableException.Reason : System.String { get }
+ToolUp.RAG.InMemoryVectorStore+RagScopeSnapshotUnreadableException.ScopeKey : System.String { get }
 ToolUp.RAG.IngestionRetryJobHandler (class)
 ToolUp.RAG.IngestionRetryJobHandler.create(ToolUp.RAG.IngestionService+IngestionRetryDeps) : ToolUp.Platform.IJobHandler
 ToolUp.RAG.IngestionRetryJobHandler+IngestionRetryJobHandler (class)

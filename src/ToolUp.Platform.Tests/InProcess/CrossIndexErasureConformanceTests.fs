@@ -813,4 +813,19 @@ let tests =
             finally
                 third.Shutdown()
         }
+
+        // Phase 861 — the vector-store restart laws, bound to the in-process
+        // dense store: every mutation hydrates a lazily loaded scope first
+        // (Phase 726 covered the two deletes; this holds all of them), and
+        // an unreadable snapshot refuses it.
+        ToolUp.Platform.Tests.Contracts.IVectorStoreContract.tests "InMemoryVectorStore" (fun storage ->
+            new InMemoryVectorStore(storage, logger = SilentLogger(), flushIntervalMs = 60000) :> IVectorStore)
+
+        ToolUp.Platform.Tests.Contracts.IVectorStoreContract.unreadableSnapshotTests
+            "InMemoryVectorStore"
+            (function
+            | :? RagScopeSnapshotUnreadableException -> true
+            | _ -> false)
+            (fun storage ->
+                new InMemoryVectorStore(storage, logger = SilentLogger(), flushIntervalMs = 60000) :> IVectorStore)
     ]

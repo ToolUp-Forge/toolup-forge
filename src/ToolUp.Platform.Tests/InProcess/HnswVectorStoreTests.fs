@@ -234,4 +234,22 @@ let tests =
             finally
                 dispose.Dispose()
         }
+
+        // Phase 861 — the restart laws: every mutation hydrates a lazily
+        // loaded scope first, and an unreadable snapshot refuses it. Over
+        // the in-memory blob double, because these laws are ABOUT reloading
+        // from storage (the `team:<id>` segment cannot materialise on a
+        // Windows `LocalFileStorage`, see `SilentLogger` above).
+        ToolUp.Platform.Tests.Contracts.IVectorStoreContract.tests "HnswVectorStore" (fun storage ->
+            new HnswVectorStore.HnswVectorStore(storage, logger = SilentLogger(), flushIntervalMs = 60000)
+            :> IVectorStore)
+
+        ToolUp.Platform.Tests.Contracts.IVectorStoreContract.unreadableSnapshotTests
+            "HnswVectorStore"
+            (function
+            | :? HnswVectorStore.HnswScopeSnapshotUnreadableException -> true
+            | _ -> false)
+            (fun storage ->
+                new HnswVectorStore.HnswVectorStore(storage, logger = SilentLogger(), flushIntervalMs = 60000)
+                :> IVectorStore)
     ]

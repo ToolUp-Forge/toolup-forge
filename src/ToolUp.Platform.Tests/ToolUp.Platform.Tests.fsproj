@@ -131,6 +131,7 @@
         <Compile Include="Contracts\IReportRendererContract.fs" />
         <Compile Include="Contracts\IDerivativeRendererContract.fs" />
         <Compile Include="Contracts\InMemoryBlobStorage.fs" />
+        <Compile Include="Contracts\IVectorStoreContract.fs" />
         <Compile Include="Contracts\IConditionalDataObjectStoreContract.fs" />
         <!-- Phase 864 — IConditionalBlobStorage conformance: the Phase 600 ETag
              seam plus the guarded read-modify-write over it (team membership,
