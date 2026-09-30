@@ -260,6 +260,9 @@ type internal FactPublicationDeps = {
     Verifier: IArtefactVerifier option
     Clock: unit -> DateTime
     Config: FactPublicationConfig
+    /// Phase 935 — the platform's scope carrier, when grants persist.
+    /// `None` holds grants in process, as Phase 897 did.
+    Carrier: ScopeCarrier option
 }
 
 /// Blob names and the canonical manifest under the target's scope.
@@ -647,6 +650,245 @@ module internal FactPublicationSeam =
 
 // SEAM-END
 
+// ─── Phase 935 — publication grants survive a restart ────────────────
+//
+// A grant is written to durable storage on every owner act, with each
+// consent's carried scope beside it: the platform's `ScopeCarrier` issues a
+// token from the scope the consenting owner's request resolved to, sealed
+// for this grant, this side and this consent. On restore the platform
+// redeems the target's token into the scope the seam writes under — so a
+// consolidation keeps receiving after a restart without either owner
+// consenting again — and verifies the source's without holding it (the
+// service holds one scope per grant; the seam is still the only place that
+// holds two).
+//
+// A consent whose token does not redeem — absent, altered, issued by another
+// key ring, or copied from another grant or another consent — is dropped on
+// restore, with an audit record in both teams' scopes naming why. The grant
+// is then not in force, so the target's next refresh withdraws the origin
+// with a named reason, exactly as a restart did before this phase. The
+// token binds the grant's own fields (teams, tables, visibility) and the
+// consent's, so an edit of those in the store drops the consent rather than
+// re-pointing it. What the store keeps outright is the rest of the record: a
+// party that can write it can delete a grant, or replay an earlier state of
+// one — including one from before a withdrawal, which the audit trail still
+// records. None of that writes under a scope the platform did not resolve.
+//
+// Nothing here runs unless the service was composed with a carrier
+// (`FactPublication.createDurable`); `createWith` holds grants in process
+// exactly as Phase 897 did (GP 11).
+
+/// Durable publication grants (Phase 935).
+module internal GrantPersistence =
+
+    /// The platform-reserved container grants are written under — they
+    /// belong to two teams, so to neither team's scope.
+    [<Literal>]
+    let Container = "_platform"
+
+    /// The blob prefix every grant is written under.
+    [<Literal>]
+    let Prefix = "_fact-publication/grants/"
+
+    /// A grant's blob name.
+    let name (grantId: string) = Prefix + grantId + ".json"
+
+    /// The tokens a grant's consents were given with.
+    type ConsentTokens = {
+        Source: string option
+        Target: string option
+    }
+
+    /// No consent carried yet.
+    let noTokens = { Source = None; Target = None }
+
+    /// What is written: the grant and its consents' tokens.
+    type PersistedGrant = {
+        Grant: PublicationGrant
+        SourceConsentToken: string option
+        TargetConsentToken: string option
+    }
+
+    /// The purpose a consent's token is issued and redeemed for: the grant
+    /// and the consenting side, bound to a digest of every field the
+    /// consent agreed to and of the consent itself.
+    let purpose (grant: PublicationGrant) (side: PublicationSide) (consent: PublicationConsent) : CarriedScopePurpose =
+        let digest =
+            [
+                grant.GrantId
+                grant.SourceTeam
+                grant.SourceTable
+                grant.TargetTeam
+                grant.TargetTable
+                PublicationVisibility.label grant.Visibility
+                PublicationSide.name side
+                consent.TeamId
+                consent.ByUserId
+                consent.At.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            ]
+            |> FactTableBlobIo.serialize
+            |> PublicationLedger.sha256Hex
+
+        CarriedScopePurpose.Grant(
+            "fact-publication.consent." + (PublicationSide.name side).ToLowerInvariant(),
+            grant.GrantId + ":" + digest
+        )
+
+    /// The side's consent, when given.
+    let consentOf (grant: PublicationGrant) (side: PublicationSide) : PublicationConsent option =
+        match side with
+        | PublicationSide.Source -> grant.SourceConsent
+        | PublicationSide.Target -> grant.TargetConsent
+
+    /// The tokens after an owner act by `side` in `scope`: a consent issues
+    /// the side's token from the consenting scope; a withdrawal drops both,
+    /// so the record of a withdrawn grant carries no scope at all.
+    let afterAct
+        (carrier: ScopeCarrier)
+        (scope: ResolvedScope)
+        (side: PublicationSide)
+        (grant: PublicationGrant)
+        (tokens: ConsentTokens)
+        : Result<ConsentTokens, PublicationRefusal> =
+        if grant.Revocation.IsSome then
+            Ok noTokens
+        else
+            match consentOf grant side with
+            | None -> Ok tokens
+            | Some consent ->
+                match carrier.Issue(scope, purpose grant side consent) with
+                | Error reason -> Error(PublicationStorageFailure reason)
+                | Ok token ->
+                    match side with
+                    | PublicationSide.Source -> Ok { tokens with Source = token }
+                    | PublicationSide.Target -> Ok { tokens with Target = token }
+
+    /// Write a grant and its tokens.
+    let write
+        (deps: FactPublicationDeps)
+        (grant: PublicationGrant)
+        (tokens: ConsentTokens)
+        : Async<Result<unit, PublicationRefusal>> =
+        async {
+            let record = {
+                Grant = grant
+                SourceConsentToken = tokens.Source
+                TargetConsentToken = tokens.Target
+            }
+
+            match! FactTableBlobIo.put deps.Storage Container (name grant.GrantId) record with
+            | Ok() -> return Ok()
+            | Error e -> return Error(PublicationStorageFailure(FactTableWriteError.describe e))
+        }
+
+    /// One grant restored: its entry, the tokens that redeemed, and why any
+    /// consent was dropped.
+    type Restored = {
+        Entry: GrantEntry
+        Tokens: ConsentTokens
+        Dropped: (PublicationSide * string) list
+    }
+
+    /// Restore one persisted grant. A consent stands only when its token
+    /// redeems for this grant, this side and this consent, into the scope of
+    /// the team that side names; the target's redeemed scope is the one the
+    /// seam writes under, and the source's is verified and not held.
+    let restoreOne (carrier: ScopeCarrier) (record: PersistedGrant) : Restored =
+        let grant = record.Grant
+
+        let check (side: PublicationSide) (token: string option) (team: string) =
+            match consentOf grant side, token with
+            | None, _ -> Ok None
+            | Some _, None -> Error "no carried scope was persisted with the consent"
+            | Some consent, Some token ->
+                match side with
+                | PublicationSide.Source ->
+                    match carrier.Verify(token, purpose grant side consent) with
+                    | Ok scopeId when scopeId = team -> Ok None
+                    | Ok scopeId -> Error(sprintf "the consent's carried scope is team '%s', not '%s'" scopeId team)
+                    | Error refusal -> Error(CarriedScopeRefusal.describe refusal)
+                | PublicationSide.Target ->
+                    match carrier.Redeem(token, purpose grant side consent) with
+                    | Ok scope when scope.ScopeId = team -> Ok(Some scope)
+                    | Ok scope -> Error(sprintf "the consent's carried scope is team '%s', not '%s'" scope.ScopeId team)
+                    | Error refusal -> Error(CarriedScopeRefusal.describe refusal)
+
+        let source = check PublicationSide.Source record.SourceConsentToken grant.SourceTeam
+        let target = check PublicationSide.Target record.TargetConsentToken grant.TargetTeam
+
+        let dropped = [
+            match source with
+            | Error why -> PublicationSide.Source, why
+            | Ok _ -> ()
+            match target with
+            | Error why -> PublicationSide.Target, why
+            | Ok _ -> ()
+        ]
+
+        {
+            Entry = {
+                Grant = {
+                    grant with
+                        SourceConsent = (if Result.isOk source then grant.SourceConsent else None)
+                        TargetConsent = (if Result.isOk target then grant.TargetConsent else None)
+                }
+                ConsentedTarget =
+                    match target with
+                    | Ok scope -> scope
+                    | Error _ -> None
+            }
+            Tokens = {
+                Source =
+                    (if Result.isOk source then
+                         record.SourceConsentToken
+                     else
+                         None)
+                Target =
+                    (if Result.isOk target then
+                         record.TargetConsentToken
+                     else
+                         None)
+            }
+            Dropped = dropped
+        }
+
+    /// Every persisted grant, restored, with one audit record per dropped
+    /// consent in each team's scope. An unreadable record restores nothing.
+    let restore (deps: FactPublicationDeps) (carrier: ScopeCarrier) : Async<Restored list> = async {
+        let! names = deps.Storage.List(Container, Prefix)
+
+        let! loaded =
+            names
+            |> List.filter (fun n -> n.EndsWith ".json")
+            |> List.sort
+            |> List.map (fun blob -> async {
+                match! FactTableBlobIo.tryGet<PersistedGrant> deps.Storage Container blob with
+                | Ok(Some record) when not (isNull (box record.Grant)) -> return Some(restoreOne carrier record)
+                | _ -> return None
+            })
+            |> Async.Sequential
+
+        let restored = loaded |> Array.choose id |> List.ofArray
+
+        for r in restored do
+            for side, why in r.Dropped do
+                let reason =
+                    sprintf "the %s team's consent was not restored: %s" (PublicationSide.name side) why
+
+                for team, auditSide in
+                    [
+                        r.Entry.Grant.SourceTeam, PublicationSide.Source
+                        r.Entry.Grant.TargetTeam, PublicationSide.Target
+                    ] do
+                    do!
+                        Consolidation.audit deps (Guid.NewGuid()) team FactPublicationEvents.RefusedType {
+                            Consolidation.eventFor deps r.Entry.Grant auditSide with
+                                Reason = Some reason
+                        }
+
+        return restored
+    }
+
 /// The default `IFactPublication`: grants held in process, the source read
 /// through the gate at `FactTeamPublication`, the target written through
 /// `FactPublicationSeam` alone.
@@ -654,6 +896,55 @@ type internal FactPublicationService(deps: FactPublicationDeps) =
 
     let grants = ConcurrentDictionary<string, GrantEntry>()
     let gate = obj ()
+
+    // Phase 935 — each grant's consent tokens, and the grants an earlier
+    // process persisted, restored before this service answers anything.
+    let consentTokens = ConcurrentDictionary<string, GrantPersistence.ConsentTokens>()
+
+    do
+        match deps.Carrier with
+        | None -> ()
+        | Some carrier ->
+            for restored in GrantPersistence.restore deps carrier |> Async.RunSynchronously do
+                grants[restored.Entry.Grant.GrantId] <- restored.Entry
+                consentTokens[restored.Entry.Grant.GrantId] <- restored.Tokens
+
+    /// Phase 935 — one write at a time, so two owners acting on one grant at
+    /// once cannot persist a record that has lost the other's token.
+    let persistLock = new System.Threading.SemaphoreSlim(1, 1)
+
+    /// Phase 935 — persist a grant after an owner act by `side` in `scope`:
+    /// the grant as this service now holds it (a concurrent act included),
+    /// with the acting side's token issued from `scope`. A no-op without a
+    /// carrier.
+    let persistAct (scope: ResolvedScope) (side: PublicationSide) (acted: PublicationGrant) = async {
+        match deps.Carrier with
+        | None -> return Ok()
+        | Some carrier ->
+            do! persistLock.WaitAsync() |> Async.AwaitTask
+
+            try
+                let grant =
+                    match grants.TryGetValue acted.GrantId with
+                    | true, entry -> entry.Grant
+                    | _ -> acted
+
+                let tokens =
+                    match consentTokens.TryGetValue grant.GrantId with
+                    | true, t -> t
+                    | _ -> GrantPersistence.noTokens
+
+                match GrantPersistence.afterAct carrier scope side grant tokens with
+                | Error e -> return Error e
+                | Ok next ->
+                    match! GrantPersistence.write deps grant next with
+                    | Error e -> return Error e
+                    | Ok() ->
+                        consentTokens[grant.GrantId] <- next
+                        return Ok()
+            finally
+                persistLock.Release() |> ignore
+    }
 
     let now () =
         let t = deps.Clock().ToUniversalTime()
@@ -709,22 +1000,32 @@ type internal FactPublicationService(deps: FactPublicationDeps) =
                                 match act current side userId with
                                 | Ok next ->
                                     grants[grantId] <- next
-                                    Ok next
+                                    Ok(current, next)
                                 | Error e -> Error e)
 
                         match result with
                         | Error e -> return Error e
-                        | Ok next ->
-                            do!
-                                Consolidation.audit deps (Guid.NewGuid()) scope.ScopeId eventType {
-                                    Consolidation.eventFor deps next.Grant side with
-                                        ByUserId = Some userId
-                                        Reason =
-                                            next.Grant.Revocation
-                                            |> Option.map (fun _ -> "withdrawn by the team's owner")
-                                }
+                        | Ok(previous, next) ->
+                            // Phase 935 — a grant the store did not take is
+                            // not changed here either.
+                            match! persistAct scope side next.Grant with
+                            | Error e ->
+                                lock gate (fun () ->
+                                    if obj.ReferenceEquals(grants[grantId], next) then
+                                        grants[grantId] <- previous)
 
-                            return Ok next.Grant
+                                return Error e
+                            | Ok() ->
+                                do!
+                                    Consolidation.audit deps (Guid.NewGuid()) scope.ScopeId eventType {
+                                        Consolidation.eventFor deps next.Grant side with
+                                            ByUserId = Some userId
+                                            Reason =
+                                                next.Grant.Revocation
+                                                |> Option.map (fun _ -> "withdrawn by the team's owner")
+                                    }
+
+                                return Ok next.Grant
         }
 
     /// The source table's current rows, as the writer's lineage holds them
@@ -1060,18 +1361,26 @@ type internal FactPublicationService(deps: FactPublicationDeps) =
                                     ConsentedTarget = None
                                 }
 
-                                do!
-                                    Consolidation.audit
-                                        deps
-                                        (Guid.NewGuid())
-                                        scope.ScopeId
-                                        FactPublicationEvents.ProposedType
-                                        {
-                                            Consolidation.eventFor deps grant side with
-                                                ByUserId = Some userId
-                                        }
+                                // Phase 935 — persisted before it is
+                                // reported; a grant the store did not take
+                                // is not proposed.
+                                match! persistAct scope side grant with
+                                | Error e ->
+                                    grants.TryRemove grant.GrantId |> ignore
+                                    return Error e
+                                | Ok() ->
+                                    do!
+                                        Consolidation.audit
+                                            deps
+                                            (Guid.NewGuid())
+                                            scope.ScopeId
+                                            FactPublicationEvents.ProposedType
+                                            {
+                                                Consolidation.eventFor deps grant side with
+                                                    ByUserId = Some userId
+                                            }
 
-                                return Ok grant
+                                    return Ok grant
         }
 
         member _.Consent(scope, grantId) =
@@ -1203,11 +1512,9 @@ module FactPublication =
 
             FactPublicationTarget.defects target table hierarchy)
 
-    /// The default publication service. `teamRole` answers a user's role in
-    /// a team (`teamId`, then `userId`) — the owner check every owner act
-    /// makes. The signer and verifier are required by the regulated profile
-    /// and unused otherwise. Fails when the declaration has defects.
-    let createWith
+    /// The one construction both public factories share (Phase 935).
+    let private build
+        (carrier: ScopeCarrier option)
         (config: FactPublicationConfig)
         (store: IFactStore)
         (storage: IBlobStorage)
@@ -1244,9 +1551,55 @@ module FactPublication =
                         Verifier = verifier
                         Clock = clock
                         Config = config
+                        Carrier = carrier
                     }
                 )
                 :> IFactPublication
+
+    /// The default publication service. `teamRole` answers a user's role in
+    /// a team (`teamId`, then `userId`) — the owner check every owner act
+    /// makes. The signer and verifier are required by the regulated profile
+    /// and unused otherwise. Fails when the declaration has defects.
+    /// Grants are held in process: a restart forgets them (Phase 897).
+    let createWith
+        (config: FactPublicationConfig)
+        (store: IFactStore)
+        (storage: IBlobStorage)
+        (events: IEventStore)
+        (gate: IFactDisclosureGate)
+        (tables: IFactTableRegistry)
+        (registry: IMetricRegistry option)
+        (writer: IFactTableWriter option)
+        (teamRole: string -> string -> Async<TeamRole option>)
+        (signer: IArtefactSigner option)
+        (verifier: IArtefactVerifier option)
+        (clock: unit -> DateTime)
+        : IFactPublication =
+        build None config store storage events gate tables registry writer teamRole signer verifier clock
+
+    /// `createWith`, with grants that survive a restart (Phase 935): every
+    /// owner act is persisted with each consent's scope carried by the
+    /// platform's `ScopeCarrier`, and the grants an earlier process
+    /// persisted are restored when the service is built — a consent whose
+    /// carried scope does not redeem is dropped, with an audit record naming
+    /// why. `FactsCompose.withFactPublication` builds this form when the
+    /// deployment composed a carrier.
+    let createDurable
+        (carrier: ScopeCarrier)
+        (config: FactPublicationConfig)
+        (store: IFactStore)
+        (storage: IBlobStorage)
+        (events: IEventStore)
+        (gate: IFactDisclosureGate)
+        (tables: IFactTableRegistry)
+        (registry: IMetricRegistry option)
+        (writer: IFactTableWriter option)
+        (teamRole: string -> string -> Async<TeamRole option>)
+        (signer: IArtefactSigner option)
+        (verifier: IArtefactVerifier option)
+        (clock: unit -> DateTime)
+        : IFactPublication =
+        build (Some carrier) config store storage events gate tables registry writer teamRole signer verifier clock
 
 /// The publication and refresh jobs (Phase 897). Publication is a job in
 /// the SOURCE team's scope and a refresh a job in the TARGET's: each is

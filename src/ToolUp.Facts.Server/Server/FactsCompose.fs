@@ -1702,7 +1702,15 @@ module FactsCompose =
                     Func<IServiceProvider, IFactPublication>(fun sp ->
                         let teams = tryService<ToolUp.Platform.TeamManagement.ITeamStore> sp
 
-                        FactPublication.createWith
+                        // Phase 935 — grants persist when the platform's
+                        // scope carrier is composed (it is, beside the
+                        // DataProtection key ring, in every composition).
+                        let create =
+                            match tryService<ScopeCarrier> sp with
+                            | Some carrier -> FactPublication.createDurable carrier
+                            | None -> FactPublication.createWith
+
+                        create
                             config
                             (sp.GetRequiredService<IFactStore>())
                             (sp.GetRequiredService<IBlobStorage>())
