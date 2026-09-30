@@ -190,6 +190,10 @@ type internal QuartzDispatchContext = {
     NotificationChannel: INotificationChannel
     Config: ServerConfig
     Logger: ILogger
+    /// Phase 935 — the carrier a fire redeems the job's scope token
+    /// through. A cell, so composition's binding reaches the dispatch the
+    /// scheduler's own container resolves.
+    ScopeCarrier: ScopeCarrier ref
 }
 
 /// The system user id a scheduler-driven run is attributed to. Mirrors
@@ -387,7 +391,10 @@ type internal QuartzDispatchJob(context: QuartzDispatchContext) =
                         AccessContext = systemContext context.Config job.ScopeId
                         Attempt = attempt
                         Trigger = job.Trigger
-                        Scope = ToolUp.Platform.ResolvedScope.anonymous
+                        // Phase 935 — the scope the typed `Schedule`'s
+                        // token carries, redeemed by the platform for this
+                        // job; the anonymous scope for any other job.
+                        Scope = CarriedJobScope.ofDefinition context.ScopeCarrier.Value job
                         TriggerSource = source
                         ScheduledAt =
                             if ctx.ScheduledFireTimeUtc.HasValue then

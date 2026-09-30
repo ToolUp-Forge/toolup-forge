@@ -344,8 +344,8 @@ type JobContext = {
     ///
     /// A job scheduled through `IJobScheduler.Schedule(scope, …)` with a
     /// scope the platform's resolution minted runs under THAT scope: the
-    /// in-tree scheduler persists it with the definition and re-mints it
-    /// here on every dispatch. A job scheduled through the string
+    /// scheduler persists a token the platform's carrier issued for the job
+    /// (Phase 935) and the platform re-mints it here on every dispatch. A job scheduled through the string
     /// `Schedule(registration)` — or by a scheduler that cannot re-mint —
     /// runs under `ResolvedScope.anonymous`, never a widening. `ScopeId`
     /// is unchanged either way, so a handler that reads only the string

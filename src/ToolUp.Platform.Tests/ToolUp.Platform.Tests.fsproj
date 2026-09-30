@@ -50,6 +50,8 @@
         <Compile Include="Contracts\ILineageStoreContract.fs" />
         <Compile Include="Contracts\IJobStoreContract.fs" />
         <Compile Include="Contracts\IJobSchedulerContract.fs" />
+        <!-- Phase 935 — the scope carrier binding both schedulers implement. -->
+        <Compile Include="Contracts\IScopeCarrierBindingContract.fs" />
         <Compile Include="Contracts\IModuleQueryBusContract.fs" />
         <Compile Include="Contracts\IDataSourceContract.fs" />
         <Compile Include="Contracts\IDeclaresPayloadFormatContract.fs" />

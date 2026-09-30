@@ -1225,6 +1225,46 @@ ToolUp.Platform.CapacityGrant (class)
 ToolUp.Platform.CapacityGrant..ctor(System.String, System.Int64)
 ToolUp.Platform.CapacityGrant.Dimension : System.String { get }
 ToolUp.Platform.CapacityGrant.Limit : System.Int64 { get }
+ToolUp.Platform.CarriedJobScope (class)
+ToolUp.Platform.CarriedJobScope.Prefix : System.String (literal)
+ToolUp.Platform.CarriedJobScope.TokenTag : System.String (literal)
+ToolUp.Platform.CarriedJobScope.ofDefinition(ToolUp.Platform.ScopeCarrier, ToolUp.Platform.JobDefinition) : ToolUp.Platform.ResolvedScope
+ToolUp.Platform.CarriedJobScope.purpose(System.String, System.Guid) : ToolUp.Platform.CarriedScopePurpose
+ToolUp.Platform.CarriedJobScope.stamp(ToolUp.Platform.ScopeCarrier, ToolUp.Platform.ResolvedScope, System.Guid, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String]
+ToolUp.Platform.CarriedJobScope.strip(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]
+ToolUp.Platform.CarriedScopePurpose (class)
+ToolUp.Platform.CarriedScopePurpose.IsGrant : System.Boolean { get }
+ToolUp.Platform.CarriedScopePurpose.IsScheduledJob : System.Boolean { get }
+ToolUp.Platform.CarriedScopePurpose.Tag : System.Int32 { get }
+ToolUp.Platform.CarriedScopePurpose+Grant (class)
+ToolUp.Platform.CarriedScopePurpose+Grant.grantId : System.String { get }
+ToolUp.Platform.CarriedScopePurpose+Grant.kind : System.String { get }
+ToolUp.Platform.CarriedScopePurpose+ScheduledJob (class)
+ToolUp.Platform.CarriedScopePurpose+ScheduledJob.jobId : System.Guid { get }
+ToolUp.Platform.CarriedScopePurpose+ScheduledJob.scopeId : System.String { get }
+ToolUp.Platform.CarriedScopePurpose+Tags (class)
+ToolUp.Platform.CarriedScopePurpose+Tags.Grant : System.Int32 (literal)
+ToolUp.Platform.CarriedScopePurpose+Tags.ScheduledJob : System.Int32 (literal)
+ToolUp.Platform.CarriedScopePurposeModule (class)
+ToolUp.Platform.CarriedScopePurposeModule.describe(ToolUp.Platform.CarriedScopePurpose) : System.String
+ToolUp.Platform.CarriedScopePurposeModule.fields(ToolUp.Platform.CarriedScopePurpose) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.CarriedScopeRefusal (class)
+ToolUp.Platform.CarriedScopeRefusal.IsPurposeMismatch : System.Boolean { get }
+ToolUp.Platform.CarriedScopeRefusal.IsTokenMalformed : System.Boolean { get }
+ToolUp.Platform.CarriedScopeRefusal.IsTokenNotIssuedHere : System.Boolean { get }
+ToolUp.Platform.CarriedScopeRefusal.Tag : System.Int32 { get }
+ToolUp.Platform.CarriedScopeRefusal.TokenNotIssuedHere : ToolUp.Platform.CarriedScopeRefusal { get }
+ToolUp.Platform.CarriedScopeRefusal+PurposeMismatch (class)
+ToolUp.Platform.CarriedScopeRefusal+PurposeMismatch.issuedFor : System.String { get }
+ToolUp.Platform.CarriedScopeRefusal+PurposeMismatch.presentedFor : System.String { get }
+ToolUp.Platform.CarriedScopeRefusal+Tags (class)
+ToolUp.Platform.CarriedScopeRefusal+Tags.PurposeMismatch : System.Int32 (literal)
+ToolUp.Platform.CarriedScopeRefusal+Tags.TokenMalformed : System.Int32 (literal)
+ToolUp.Platform.CarriedScopeRefusal+Tags.TokenNotIssuedHere : System.Int32 (literal)
+ToolUp.Platform.CarriedScopeRefusal+TokenMalformed (class)
+ToolUp.Platform.CarriedScopeRefusal+TokenMalformed.reason : System.String { get }
+ToolUp.Platform.CarriedScopeRefusalModule (class)
+ToolUp.Platform.CarriedScopeRefusalModule.describe(ToolUp.Platform.CarriedScopeRefusal) : System.String
 ToolUp.Platform.CertificateIssuanceIntegrity (class)
 ToolUp.Platform.CertificateIssuanceIntegrity..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Boolean)
 ToolUp.Platform.CertificateIssuanceIntegrity.Issued : System.Int32 { get }
@@ -6077,6 +6117,8 @@ ToolUp.Platform.ISbomSource (interface)
 ToolUp.Platform.ISbomSource.Closure() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DependencyClosure, System.String]]
 ToolUp.Platform.ISbomSource.Describe() : System.String
 ToolUp.Platform.ISbomSource.Options() : ToolUp.Platform.SbomOptions
+ToolUp.Platform.IScopeCarrierBinding (interface)
+ToolUp.Platform.IScopeCarrierBinding.BindScopeCarrier(ToolUp.Platform.ScopeCarrier) : System.Void
 ToolUp.Platform.IScopeEnumerator (interface)
 ToolUp.Platform.IScopeEnumerator.ListScopes() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.IScopeEnumerator.Name : System.String { get }
@@ -9283,6 +9325,15 @@ ToolUp.Platform.ScopeAtCapacity..ctor(System.String, System.Int32, System.Int32)
 ToolUp.Platform.ScopeAtCapacity.Cap : System.Int32 { get }
 ToolUp.Platform.ScopeAtCapacity.CurrentCount : System.Int32 { get }
 ToolUp.Platform.ScopeAtCapacity.ScopeId : System.String { get }
+ToolUp.Platform.ScopeCarrier (class)
+ToolUp.Platform.ScopeCarrier.Issue(ToolUp.Platform.ResolvedScope, ToolUp.Platform.CarriedScopePurpose) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String]
+ToolUp.Platform.ScopeCarrier.Redeem(System.String, ToolUp.Platform.CarriedScopePurpose) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ResolvedScope, ToolUp.Platform.CarriedScopeRefusal]
+ToolUp.Platform.ScopeCarrier.RedeemOrAnonymous(Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.CarriedScopePurpose) : ToolUp.Platform.ResolvedScope
+ToolUp.Platform.ScopeCarrier.Verify(System.String, ToolUp.Platform.CarriedScopePurpose) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.CarriedScopeRefusal]
+ToolUp.Platform.ScopeCarrierModule (class)
+ToolUp.Platform.ScopeCarrierModule.ApplicationName : System.String (literal)
+ToolUp.Platform.ScopeCarrierModule.ProtectorPurpose : System.String (literal)
+ToolUp.Platform.ScopeCarrierModule.ephemeral() : ToolUp.Platform.ScopeCarrier
 ToolUp.Platform.ScopeEnumeration (class)
 ToolUp.Platform.ScopeEnumeration.DeploymentContainer : System.String (literal)
 ToolUp.Platform.ScopeEnumeration.PlatformContainer : System.String (literal)

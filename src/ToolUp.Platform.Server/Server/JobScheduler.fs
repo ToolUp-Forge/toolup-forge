@@ -337,6 +337,13 @@ type InProcessJobScheduler
 
     let handlers = ConcurrentDictionary<string, IJobHandler>()
 
+    /// Phase 935 — the carrier a typed `Schedule` stamps a job's scope with
+    /// and a dispatch redeems it through. Composition binds the
+    /// deployment's (over its key ring, so a restart re-mints); until then
+    /// this scheduler's own, so a hand-constructed one re-mints within its
+    /// lifetime and runs a restarted job anonymous.
+    let mutable scopeCarrier = ScopeCarrier.ephemeral ()
+
     /// Phase 321 — the progress sink, when the deployment wants progress.
     ///
     /// **Derived from config rather than threaded through a new factory
@@ -678,10 +685,10 @@ type InProcessJobScheduler
                         let ctx: JobContext = {
                             JobId = current.JobId
                             ScopeId = current.ScopeId
-                            // Phase 818 — the carried mint: the resolver's
-                            // scope when the typed `Schedule` recorded one,
-                            // otherwise the anonymous scope.
-                            Scope = CarriedJobScope.ofDefinition current
+                            // Phase 818 / 935 — the carried mint: the scope
+                            // the typed `Schedule`'s token carries, redeemed
+                            // for this job, otherwise the anonymous scope.
+                            Scope = CarriedJobScope.ofDefinition scopeCarrier current
                             AccessContext = buildSystemContext current.ScopeId
                             Attempt = attempt
                             Trigger = current.Trigger
@@ -1096,8 +1103,7 @@ type InProcessJobScheduler
 
     // ─── Build + persist a fresh job ─────────────────────────────
 
-    let createNewJob (registration: JobRegistration) : Async<Result<JobId, ScheduleError>> = async {
-        let jobId = Guid.NewGuid()
+    let persistNewJob (jobId: JobId) (registration: JobRegistration) : Async<Result<JobId, ScheduleError>> = async {
         let now = DateTime.UtcNow
         let nextRunAt = computeNextRunAt registration.Trigger now
 
@@ -1140,6 +1146,20 @@ type InProcessJobScheduler
             return Error(ScheduleError.StorageFailure ex.Message)
     }
 
+    /// `tagsFor` settles the persisted tags once the job id exists — the
+    /// typed `Schedule` seals its scope token for that id (Phase 935).
+    let createNewJob
+        (tagsFor: JobId -> Result<Map<string, string>, string>)
+        (registration: JobRegistration)
+        : Async<Result<JobId, ScheduleError>> =
+        async {
+            let jobId = Guid.NewGuid()
+
+            match tagsFor jobId with
+            | Error reason -> return Error(ScheduleError.StorageFailure reason)
+            | Ok tags -> return! persistNewJob jobId { registration with Tags = tags }
+        }
+
     // ─── Schedule validation chain ───────────────────────────────
 
     let validateRegistration (registration: JobRegistration) : Result<unit, ScheduleError> =
@@ -1167,21 +1187,27 @@ type InProcessJobScheduler
 
     /// Both `Schedule` overloads, after each has settled the registration's
     /// scope and tags: validate, honour idempotency, persist.
-    let scheduleValidated (registration: JobRegistration) : Async<Result<JobId, ScheduleError>> = async {
-        match validateRegistration registration with
-        | Error e -> return Error e
-        | Ok() ->
+    let scheduleValidated
+        (tagsFor: JobId -> Result<Map<string, string>, string>)
+        (registration: JobRegistration)
+        : Async<Result<JobId, ScheduleError>> =
+        async {
+            match validateRegistration registration with
+            | Error e -> return Error e
+            | Ok() ->
 
-            // Idempotency check before any persistence work.
-            match registration.Idempotency with
-            | Some k ->
-                let! existing = store.FindByIdempotencyKey(registration.ScopeId, k.Key, k.TtlSeconds, DateTime.UtcNow)
+                // Idempotency check before any persistence work. A job
+                // recovered by its key keeps the token it was issued.
+                match registration.Idempotency with
+                | Some k ->
+                    let! existing =
+                        store.FindByIdempotencyKey(registration.ScopeId, k.Key, k.TtlSeconds, DateTime.UtcNow)
 
-                match existing with
-                | Some jobId -> return Ok jobId
-                | None -> return! createNewJob registration
-            | None -> return! createNewJob registration
-    }
+                    match existing with
+                    | Some jobId -> return Ok jobId
+                    | None -> return! createNewJob tagsFor registration
+                | None -> return! createNewJob tagsFor registration
+        }
 
     // ─── Phase 320 — the exactly-once terminal claim ─────────────
     //
@@ -2154,6 +2180,11 @@ type InProcessJobScheduler
     /// coalescer exists to prevent, reintroduced by duplication.
     member _.ProgressSink: IJobProgressSink option = progressSink
 
+    // ─── Phase 935 — the carrier binding ─────────────────────────
+
+    interface IScopeCarrierBinding with
+        member _.BindScopeCarrier(carrier) = scopeCarrier <- carrier
+
     // ─── IJobScheduler ───────────────────────────────────────────
 
     interface IJobScheduler with
@@ -2171,16 +2202,17 @@ type InProcessJobScheduler
         // can never claim a resolver-minted scope; the typed overload is
         // the one place they are stamped.
         member _.Schedule(registration: JobRegistration) =
-            scheduleValidated {
-                registration with
-                    Tags = CarriedJobScope.strip registration.Tags
-            }
+            let stripped = CarriedJobScope.strip registration.Tags
+            scheduleValidated (fun _ -> Ok stripped) registration
 
+        // Phase 935 — the typed overload seals the scope into a token for
+        // the job id the scheduler assigns, through the bound carrier.
         member _.Schedule(scope: ResolvedScope, registration: JobRegistration) =
-            scheduleValidated {
+            let carrier = scopeCarrier
+
+            scheduleValidated (fun jobId -> CarriedJobScope.stamp carrier scope jobId registration.Tags) {
                 registration with
                     ScopeId = scope.ScopeId
-                    Tags = CarriedJobScope.stamp scope registration.Tags
             }
 
         member _.Cancel(scopeId, jobId) = setStatus scopeId jobId Cancelled

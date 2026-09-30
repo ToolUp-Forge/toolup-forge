@@ -186,13 +186,24 @@ let storeRestartTests =
     IJobStoreContract.restartTests "QuartzJobStore" factory
 
 let schedulerRestartTests =
-    let factory () =
+    let factoryWith (bindRing: bool) =
         let root = tempRoot ()
 
         let binding: IJobSchedulerContract.RestartableScheduler = {
             Open =
                 fun () ->
                     let companion = composeOver (jobStoreAt root) true
+
+                    // Phase 935 — what compose does: bind the deployment's
+                    // carrier, here over the key ring the root's storage
+                    // persists, so a restart redeems the job's token.
+                    if bindRing then
+                        (companion :> IScopeCarrierBinding)
+                            .BindScopeCarrier(
+                                ScopeCarrier.ofKeyRepository (
+                                    BlobXmlRepository(LocalFileStorage.LocalFileStorage(root) :> IBlobStorage)
+                                )
+                            )
 
                     (companion :> Microsoft.Extensions.Hosting.IHostedService).StartAsync CancellationToken.None
                     |> Async.AwaitTask
@@ -212,12 +223,16 @@ let schedulerRestartTests =
 
         binding
 
+    let factory () = factoryWith true
+
     testList "QuartzJobScheduler — restartable contract arms" [
         IJobSchedulerContract.restartTests "QuartzJobScheduler" factory
-        // Phase 818 — a companion outside the platform's server tier
-        // cannot re-mint a `ResolvedScope`; it must hand out the anonymous
-        // scope, never a widening.
-        IJobSchedulerContract.carriedScopeTests "QuartzJobScheduler" false factory
+        // Phase 935 — a companion outside the platform's server tier
+        // re-mints through the platform's carrier: it stores the token as
+        // an opaque string and asks the platform to redeem it at a fire.
+        IJobSchedulerContract.carriedScopeTests "QuartzJobScheduler" factory
+        // Phase 935 — the carrier binding, over schedulers nothing has bound.
+        IScopeCarrierBindingContract.tests "QuartzJobScheduler" (fun () -> factoryWith false)
     ]
 
 // ─── The Quartz side of the seam ─────────────────────────────────────
