@@ -64,27 +64,40 @@
 /// The six theorems of `ElmishRing.fst` are statements about the model
 /// state, so they hold of the array ring through `is_ring` and are not
 /// proved again. `run` makes that a checked statement rather than a
-/// remark: over ANY operation sequence in which no push is refused, the
-/// array ring returns exactly the outputs the reference FIFO queue
-/// returns from its unread contents, and ends holding exactly what that
-/// queue holds — every pushed item popped once, in push order, nothing
-/// lost and nothing invented, through every grow. Its proof is three
-/// calls to `ElmishRing.ring_is_queue`.
+/// remark, over ANY operation sequence, and says how far it got (Phase
+/// 956): it returns the operations it did not consume, and for the
+/// prefix it did consume the array ring returned exactly the outputs the
+/// reference FIFO queue returns from its unread contents, and holds
+/// exactly what that queue holds — every pushed item popped once, in
+/// push order, nothing lost and nothing invented, through every grow.
+/// What is left is nothing, or a push the ring refused at its ceiling,
+/// with the ring unchanged by it. Its proof is one call to
+/// `ElmishRing.ring_is_queue` per operation, over the consumed prefix.
 ///
 /// # What is assumed, and the one place the array ring differs
 ///
-/// Nothing is admitted or assumed. Three things are parameters of the
+/// Nothing is admitted or assumed. Four things are parameters of the
 /// statement and worth reading as such:
 ///
-///   * **The capacity ceiling.** The list model grows without bound. An
-///     array of `2n + 1` slots needs `2n + 1` to be a size the platform
-///     can index, and the only size bound F* states unconditionally is
-///     that `SizeT` holds 16 bits. So the grow step is taken only while
-///     the capacity is at most `max_growable` (32,767 slots, growing to
-///     65,535); past it `push` changes nothing and returns `false`
-///     (`at_ceiling`). Every theorem here is about pushes that returned
-///     `true`. Lifting the ceiling is a stated platform assumption
-///     (`SizeT.fits_u32`), not a proof.
+///   * **`SizeT.fits_u32` — the platform's size type holds 32 bits.**
+///     F* states only 16 bits unconditionally. Phase 956 takes the wider
+///     fact as a PREMISE, by operator decision (2026-09-30): `push`,
+///     `grow` and `run` require it, and `fits_doubled` is the one place
+///     it is used. It is false exactly on a host whose size type is
+///     narrower than 32 bits; neither host the extraction runs on (.NET,
+///     whose arrays index by `int`, and JavaScript, whose array lengths
+///     are 32-bit) is one.
+///   * **The capacity ceiling.** The list model grows without bound. The
+///     extraction indexes and allocates through `int`, so a capacity
+///     above `Int32.MaxValue` would convert to a negative length outside
+///     anything proved here. So every array ring holds at most
+///     `max_capacity` (2^31 - 1) slots — `create` requires the requested
+///     size to be within it, and `is_ring` carries it — and the grow step
+///     is taken only while the capacity is at most `max_growable`
+///     (2^30 - 1, growing to exactly `max_capacity`). Past it `push`
+///     changes nothing and returns `false` (`at_ceiling`). Every
+///     refinement theorem here is about pushes that returned `true`;
+///     `run` says what the refused one leaves.
 ///   * **The placeholder value.** `create` takes the value unfilled
 ///     slots hold, because Pulse allocates an array from an initial
 ///     element and has no uninitialised one. No theorem depends on what
@@ -145,9 +158,14 @@ let out_of (#t: Type0) (o: option t) : ER.opt (ER.slot t) =
   | None -> ER.ONone
   | Some v -> ER.OSome (ER.Written v)
 
-/// The largest capacity the grow step is taken from: `2n + 1` must be a
-/// size F* can show `SizeT` holds, and 16 bits is all it guarantees.
-let max_growable : nat = 32767
+/// The most slots an array ring ever holds: `Int32.MaxValue`, because
+/// the extraction indexes and allocates through `int` (Phase 956).
+let max_capacity : nat = 2147483647
+
+/// The largest capacity the grow step is taken from: the grown ring's
+/// `2n + 1` slots are then exactly `max_capacity` (Phase 956; 32,767
+/// under Phase 955's 16-bit bound).
+let max_growable : nat = 1073741823
 
 /// The push the array ring refuses: one that must grow, from a capacity
 /// past the ceiling.
@@ -363,7 +381,7 @@ type ring (t: Type0) = {
 }
 
 /// **The abstraction.** The array ring `rb` represents the well-formed
-/// model ring `m`.
+/// model ring `m`, in at most `max_capacity` slots.
 let is_ring (#t: Type0) ([@@@mkey] rb: ring t) (m: ER.ring t) : slprop =
   exists* (v: V.vec t) (buf: Seq.seq t) (c w r: SZ.t) (rd: bool).
     B.pts_to rb.items v **
@@ -372,7 +390,7 @@ let is_ring (#t: Type0) ([@@@mkey] rb: ring t) (m: ER.ring t) : slprop =
     B.pts_to rb.wix w **
     B.pts_to rb.rix r **
     B.pts_to rb.readable rd **
-    pure (V.is_full_vec v /\ ER.wf m /\ repr buf (SZ.v c) (SZ.v w) (SZ.v r) rd m)
+    pure (V.is_full_vec v /\ ER.wf m /\ repr buf (SZ.v c) (SZ.v w) (SZ.v r) rd m /\ SZ.v c <= max_capacity)
 
 /// F#: `(i + 1) % items.Length`, as the comparison `ElmishRing.succ` is.
 let succ_sz (c: SZ.t) (i: SZ.t{SZ.v i < SZ.v c}) : (j: SZ.t{SZ.v j == ER.succ (SZ.v c) (SZ.v i)}) =
@@ -380,8 +398,10 @@ let succ_sz (c: SZ.t) (i: SZ.t{SZ.v i < SZ.v c}) : (j: SZ.t{SZ.v j == ER.succ (S
   let i1 = SZ.add i 1sz in
   if SZ.gte i1 c then 0sz else i1
 
-/// F#: `RingBuffer(size)`. `dflt` is the value unfilled slots hold.
+/// F#: `RingBuffer(size)`. `dflt` is the value unfilled slots hold. The
+/// size is an `int` on both hosts, so the bound costs a caller nothing.
 fn create (#t: Type0) (size: SZ.t) (dflt: t)
+  requires pure (SZ.v size <= max_capacity)
   returns rb: ring t
   ensures is_ring rb (ER.create #t (SZ.v size))
 {
@@ -440,10 +460,14 @@ fn pop (#t: Type0) (rb: ring t) (#m: erased (ER.ring t))
   }
 }
 
+/// The one use of the platform premise: a ring grown from at most
+/// `max_growable` slots has a size `SizeT` holds, and at most
+/// `max_capacity` slots.
 let fits_doubled (c: nat)
-  : Lemma (requires c <= max_growable) (ensures SZ.fits (c + c) /\ SZ.fits (c + c + 1)) =
-  assert_norm (pow2 16 == 65536);
-  SZ.fits_at_least_16 (c + c + 1);
+  : Lemma (requires c <= max_growable /\ SZ.fits_u32)
+          (ensures SZ.fits (c + c) /\ SZ.fits (c + c + 1) /\ c + c + 1 <= max_capacity) =
+  assert_norm (pow2 32 == 4294967296);
+  SZ.fits_u32_implies_fits (c + c + 1);
   SZ.fits_lte (c + c) (c + c + 1)
 
 /// F#: `doubleSize rix items` — a new array of `2n + 1` slots whose first
@@ -451,7 +475,7 @@ let fits_doubled (c: nat)
 /// hold `fill`, the placeholder.
 fn grow (#t: Type0) (src: V.vec t) (cv rv: SZ.t) (fill: t) (#buf: erased (Seq.seq t))
   requires V.pts_to src buf **
-           pure (Seq.length buf == SZ.v cv /\ SZ.v rv < SZ.v cv /\ SZ.v cv <= max_growable)
+           pure (Seq.length buf == SZ.v cv /\ SZ.v rv < SZ.v cv /\ SZ.v cv <= max_growable /\ SZ.fits_u32)
   returns dst: V.vec t
   ensures exists* (nbuf: Seq.seq t).
             V.pts_to src buf ** V.pts_to dst nbuf **
@@ -485,8 +509,9 @@ fn grow (#t: Type0) (src: V.vec t) (cv rv: SZ.t) (fill: t) (#buf: erased (Seq.se
 
 /// F#: `RingBuffer.Push`. `true` and the model's push — or, at the
 /// capacity ceiling only, `false` and nothing changed (`push_post`).
+/// Under the platform premise `SZ.fits_u32` (Phase 956).
 fn push (#t: Type0) (rb: ring t) (x: t) (#m: erased (ER.ring t))
-  requires is_ring rb m
+  requires is_ring rb m ** pure SZ.fits_u32
   returns ok: bool
   ensures exists* (m': ER.ring t). is_ring rb m' ** pure (push_post m m' x ok)
 {
@@ -502,7 +527,7 @@ fn push (#t: Type0) (rb: ring t) (x: t) (#m: erased (ER.ring t))
     readable_facts buf (SZ.v c) (SZ.v w) (SZ.v r) m;
     let w1 = succ_sz cv wv;
     if (w1 = rv) {
-      if (SZ.gt cv 32767sz) {
+      if (SZ.gt cv (SZ.of_u32 1073741823ul)) {
         rewrite (V.pts_to vv buf) as (V.pts_to v buf);
         fold (is_ring rb m);
         false
@@ -553,27 +578,69 @@ let rec outs_of (#t: Type0) (os: list (option t)) : Tot (list (ER.opt (ER.slot t
   | [] -> []
   | o :: rest -> out_of o :: outs_of rest
 
-/// What `run` promises when no push was refused: the array ring did what
-/// the model's `run` does, and therefore — `ring_is_queue` — what the
-/// reference FIFO queue does from the ring's unread contents.
-let run_post (#t: Type0) (m: ER.ring t) (ops: list (ER.op t)) (m': ER.ring t) (ok: bool) (outs: list (option t)) : prop =
-  ok ==> (ER.run m ops == ER.Pair m' (outs_of outs) /\
-          (let ER.Pair q' qouts = ER.queue_run (ER.unread m) ops in
-           ER.unread m' == q' /\ outs_of outs == qouts))
+/// Where a run stopped: at the end of its operations, or at a push the
+/// ring refused at its ceiling — never at a pop, which cannot be refused.
+let stopped_at (#t: Type0) (m': ER.ring t) (rem: list (ER.op t)) : prop =
+  match rem with
+  | [] -> True
+  | ER.Push _ :: _ -> at_ceiling m'
+  | ER.Pop :: _ -> False
+
+/// What a run did over the prefix `pre` of `ops` it consumed, leaving
+/// `rem`: the array ring did what the model's `run` does over `pre`, and
+/// therefore — `ring_is_queue` — what the reference FIFO queue does over
+/// `pre` from the ring's unread contents, and it stopped where
+/// `stopped_at` says.
+let run_prefix (#t: Type0) (m: ER.ring t) (ops pre: list (ER.op t)) (m': ER.ring t)
+               (outs: list (option t)) (rem: list (ER.op t)) : prop =
+  ops == ER.append pre rem /\
+  ER.run m pre == ER.Pair m' (outs_of outs) /\
+  (let ER.Pair q' qouts = ER.queue_run (ER.unread m) pre in
+   ER.unread m' == q' /\ outs_of outs == qouts) /\
+  stopped_at m' rem
+
+/// What `run` promises (Phase 956): SOME prefix of the operations was
+/// consumed with the guarantee `run_prefix` states, and the rest are
+/// returned unconsumed. Phase 955's form said nothing at all about a
+/// sequence in which a push was refused.
+let run_post (#t: Type0) (m: ER.ring t) (ops: list (ER.op t)) (m': ER.ring t)
+             (outs: list (option t)) (rem: list (ER.op t)) : prop =
+  exists (pre: list (ER.op t)). run_prefix m ops pre m' outs rem
 
 let run_nil (#t: Type0) (m: ER.ring t)
-  : Lemma (requires ER.wf m) (ensures run_post m [] m true []) =
-  ER.ring_is_queue m []
+  : Lemma (requires ER.wf m) (ensures run_post m [] m [] []) =
+  introduce exists (pre: list (ER.op t)). run_prefix m [] pre m [] []
+  with [] and ()
 
-let run_push (#t: Type0) (m m1 m2: ER.ring t) (x: t) (rest: list (ER.op t)) (ok1 ok2: bool) (outs: list (option t))
-  : Lemma (requires ER.wf m /\ push_post m m1 x ok1 /\ (ok1 ==> run_post m1 rest m2 ok2 outs))
-          (ensures run_post m (ER.Push x :: rest) m2 (ok1 && ok2) outs) =
-  if ok1 && ok2 then ER.ring_is_queue m (ER.Push x :: rest)
+/// The refused push: nothing consumed, the ring unchanged, and the push
+/// is the first operation left.
+let run_refused (#t: Type0) (m: ER.ring t) (x: t) (rest: list (ER.op t))
+  : Lemma (requires ER.wf m /\ at_ceiling m)
+          (ensures run_post m (ER.Push x :: rest) m [] (ER.Push x :: rest)) =
+  introduce exists (pre: list (ER.op t)). run_prefix m (ER.Push x :: rest) pre m [] (ER.Push x :: rest)
+  with [] and ()
 
-let run_pop (#t: Type0) (m m2: ER.ring t) (o: option t) (rest: list (ER.op t)) (ok: bool) (outs: list (option t))
-  : Lemma (requires ER.wf m /\ pop_out m == out_of o /\ run_post (pop_state m) rest m2 ok outs)
-          (ensures run_post m (ER.Pop :: rest) m2 ok (o :: outs)) =
-  if ok then ER.ring_is_queue m (ER.Pop :: rest)
+let run_push (#t: Type0) (m m2: ER.ring t) (x: t) (rest: list (ER.op t))
+             (outs: list (option t)) (rem: list (ER.op t))
+  : Lemma (requires ER.wf m /\ run_post (ER.push x m) rest m2 outs rem)
+          (ensures run_post m (ER.Push x :: rest) m2 outs rem) =
+  eliminate exists (pre: list (ER.op t)). run_prefix (ER.push x m) rest pre m2 outs rem
+  with begin
+    ER.ring_is_queue m (ER.Push x :: pre);
+    introduce exists (p: list (ER.op t)). run_prefix m (ER.Push x :: rest) p m2 outs rem
+    with (ER.Push x :: pre) and ()
+  end
+
+let run_pop (#t: Type0) (m m2: ER.ring t) (o: option t) (rest: list (ER.op t))
+            (outs: list (option t)) (rem: list (ER.op t))
+  : Lemma (requires ER.wf m /\ pop_out m == out_of o /\ run_post (pop_state m) rest m2 outs rem)
+          (ensures run_post m (ER.Pop :: rest) m2 (o :: outs) rem) =
+  eliminate exists (pre: list (ER.op t)). run_prefix (pop_state m) rest pre m2 outs rem
+  with begin
+    ER.ring_is_queue m (ER.Pop :: pre);
+    introduce exists (p: list (ER.op t)). run_prefix m (ER.Pop :: rest) p m2 (o :: outs) rem
+    with (ER.Pop :: pre) and ()
+  end
 
 ghost
 fn ring_wf (#t: Type0) (rb: ring t) (#m: erased (ER.ring t))
@@ -584,16 +651,19 @@ fn ring_wf (#t: Type0) (rb: ring t) (#m: erased (ER.ring t))
   fold (is_ring rb m);
 }
 
-/// **`run` — the array ring is a FIFO queue.** Drive the array ring's own
-/// `push` and `pop` over any operation sequence. If no push was refused
-/// at the capacity ceiling, the outputs are exactly the model's
-/// (`ElmishRing.run`) and therefore exactly the reference queue's
-/// (`ElmishRing.queue_run` from the unread contents), and the ring ends
-/// holding exactly what that queue holds. Not extracted: the hosts drive
-/// `push` and `pop` themselves.
+/// **`run` — the array ring is a FIFO queue, as far as it got.** Drive
+/// the array ring's own `push` and `pop` over any operation sequence,
+/// stopping at the first push refused at the capacity ceiling. The
+/// result is the outputs and the operations NOT consumed. Over the
+/// consumed prefix the outputs are exactly the model's (`ElmishRing.run`)
+/// and therefore exactly the reference queue's (`ElmishRing.queue_run`
+/// from the unread contents), and the ring holds exactly what that queue
+/// holds; what is left is empty, or starts with the refused push
+/// (`run_post`). Not extracted: the hosts drive `push` and `pop`
+/// themselves.
 fn rec run (#t: Type0) (rb: ring t) (ops: list (ER.op t)) (#m: erased (ER.ring t))
-  requires is_ring rb m
-  returns res: (bool & list (option t))
+  requires is_ring rb m ** pure SZ.fits_u32
+  returns res: (list (option t) & list (ER.op t))
   ensures exists* (m': ER.ring t). is_ring rb m' ** pure (run_post m ops m' (fst res) (snd res))
   decreases ops
 {
@@ -601,7 +671,7 @@ fn rec run (#t: Type0) (rb: ring t) (ops: list (ER.op t)) (#m: erased (ER.ring t
   match ops {
     [] -> {
       run_nil #t m;
-      (true, [])
+      ([], [])
     }
     op :: rest -> {
       match op {
@@ -611,11 +681,11 @@ fn rec run (#t: Type0) (rb: ring t) (ops: list (ER.op t)) (#m: erased (ER.ring t
           if ok1 {
             let res = run rb rest;
             with m2. assert (is_ring rb m2);
-            run_push #t m m1 m2 x rest ok1 (fst res) (snd res);
+            run_push #t m m2 x rest (fst res) (snd res);
             res
           } else {
-            run_push #t m m1 m1 x rest ok1 true [];
-            (false, [])
+            run_refused #t m x rest;
+            ([], ER.Push x :: rest)
           }
         }
         ER.Pop -> {
@@ -623,7 +693,7 @@ fn rec run (#t: Type0) (rb: ring t) (ops: list (ER.op t)) (#m: erased (ER.ring t
           let res = run rb rest;
           with m2. assert (is_ring rb m2);
           run_pop #t m m2 o rest (fst res) (snd res);
-          (fst res, o :: snd res)
+          (o :: fst res, snd res)
         }
       }
     }

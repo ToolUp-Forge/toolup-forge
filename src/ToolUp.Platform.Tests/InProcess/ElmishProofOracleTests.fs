@@ -195,22 +195,26 @@ let private goldenFile (file: string) (render: unit -> string) (what: string) =
 // model's verdicts, and the extracted array ring behind the wrapper
 // below, over the same sequences.
 
-/// What the wrapper says when the extracted ring refuses a push. The
-/// array ring grows only while `2n + 1` is a size the prover can show the
-/// platform holds (`max_growable` in the model); the shipped ring has no
-/// such ceiling.
+/// What the wrapper says when the extracted ring refuses a push. Since
+/// Phase 956 the array ring holds at most `Int32.MaxValue` slots
+/// (`max_capacity` in the model) and grows only from `max_growable`
+/// (2^30 - 1) or fewer, under the platform premise `SizeT.fits_u32`; the
+/// shipped ring has no ceiling of its own.
 [<Literal>]
 let private ArrayRingCeilingMessage =
-    "the extracted ring refused a push at its capacity ceiling"
+    "the extracted ring refused a push: it grows only from 1073741823 slots or fewer, to at most 2147483647"
+
+/// The model's `max_growable`, as the extraction compares it.
+[<Literal>]
+let private MaxGrowable = 1073741823UL
 
 /// `RingBuffer<'item>`'s surface over the extracted functions — all a
 /// replacement of `Ring.fs` would hand-write, and therefore all of it
 /// that would be trusted rather than proved: the `int` capacity widened
 /// to the extraction's `uint64`, the placeholder the constructor fills
 /// unwritten slots with, and a refused push surfaced as an exception.
-type private ArrayRing<'item>(size: int) =
-    let ring =
-        ElmishRingArray.elmishRingArray_create (uint64 (max size 0)) Unchecked.defaultof<'item>
+type private ArrayRing<'item>(ring: ElmishRingArray.elmishRingArray_ring<'item>) =
+    new(size: int) = ArrayRing(ElmishRingArray.elmishRingArray_create (uint64 (max size 0)) Unchecked.defaultof<'item>)
 
     member _.Pop() : 'item option =
         ElmishRingArray.elmishRingArray_pop ring
@@ -258,7 +262,20 @@ let private MeasuredSequenceFingerprint = "1:14575:1899911031"
 /// Wall-clock nanoseconds per operation: the MINIMUM over `rounds`
 /// rounds of `reps` runs each — Phase 849's statistic, because noise on
 /// a shared machine is one-sided.
+///
+/// Each body first runs for a quarter of a second untimed (Phase 956). A
+/// Release build's tiered JIT promotes a method some time AFTER its
+/// thirtieth call, so a body first called just before it is timed is
+/// measured at its first tier: Phase 956 saw the array arm at 0.97-1.43x
+/// the shipped ring here and 0.21-0.26x in steady state, the same
+/// sequence and the same drivers, the difference being only how long the
+/// arm had been running.
 let private minPerOpNs (rounds: int) (reps: int) (ops: int) (body: unit -> unit) : float =
+    let settle = Diagnostics.Stopwatch.StartNew()
+
+    while settle.ElapsedMilliseconds < 250L do
+        body ()
+
     List.min [
         for _ in 1..rounds do
             let watch = Diagnostics.Stopwatch.StartNew()
@@ -362,31 +379,57 @@ let private arrayRingTests =
             Expect.isFalse (popped |> List.exists isNull) "a pop returned the placeholder"
         }
 
-        test "at the capacity ceiling a push is refused, nothing is lost, and the ring goes on working" {
-            // The one place the array ring differs from the shipped one:
-            // past `max_growable` slots it refuses the push that would grow.
-            let rb = ArrayRing<int> MeasuredCapacity
-            let mutable pushed = 0
-            let mutable refused = false
+        test "at the capacity ceiling a push is refused, changes nothing, and the wrapper reports it" {
+            // Phase 956 lifted the ceiling to `max_growable` = 2^30 - 1
+            // slots (growing to Int32.MaxValue), so no test can push its way
+            // there. This builds the extraction's own record in the state
+            // `at_ceiling` names - readable, full, capacity past
+            // `max_growable` - over a small array: `push` reads the flag, the
+            // indices and the capacity and nothing else before it refuses,
+            // which is exactly what the model's refusal branch says it does.
+            // A ring that really holds a billion slots is the theorem's to
+            // cover, not a test's to allocate.
+            let atCeiling () : ElmishRingArray.elmishRingArray_ring<int> = {
+                items = ref [| 10; 11; 12; 13; 14; 15; 16; 17 |]
+                cap = ref (MaxGrowable + 1UL)
+                wix = ref 2UL
+                rix = ref 3UL
+                readable = ref true
+                dflt = 0
+            }
 
-            while not refused && pushed < 70_000 do
+            let raw = atCeiling ()
+            let before = raw.items.Value
+
+            Expect.isFalse
+                (ElmishRingArray.elmishRingArray_push raw 99)
+                "the extraction refuses the push that would grow past max_growable"
+
+            Expect.isTrue (obj.ReferenceEquals(raw.items.Value, before)) "the refused push kept the array"
+            Expect.equal raw.items.Value [| 10; 11; 12; 13; 14; 15; 16; 17 |] "the refused push wrote nothing"
+
+            Expect.equal
+                (raw.cap.Value, raw.wix.Value, raw.rix.Value, raw.readable.Value)
+                (MaxGrowable + 1UL, 2UL, 3UL, true)
+                "the refused push moved no index"
+
+            Expect.equal (ElmishRingArray.elmishRingArray_pop raw) (Some 13) "the oldest unread item is still first"
+
+            let rb = ArrayRing<int>(atCeiling ())
+
+            let raised =
                 try
-                    rb.Push(pushed + 1)
-                    pushed <- pushed + 1
-                with :? InvalidOperationException as e when e.Message = ArrayRingCeilingMessage ->
-                    refused <- true
+                    rb.Push 99
+                    None
+                with :? InvalidOperationException as e ->
+                    Some e.Message
 
-            Expect.isTrue refused "the array ring never refused a push"
-            Expect.isGreaterThan rb.Slots 32_767 "the refusal came before the ceiling"
-            Expect.isLessThanOrEqual rb.Slots 65_535 "the ring grew past the size the proof covers"
-            Expect.equal pushed (rb.Slots - 1) "a ring of n slots holds n - 1 unread items when it refuses"
+            Expect.equal
+                raised
+                (Some ArrayRingCeilingMessage)
+                "the wrapper surfaces a refused push as an exception naming the bound, never swallows it"
 
-            Expect.equal (rb.Pop()) (Some 1) "the oldest item is still first"
-            rb.Push(pushed + 1)
-
-            let rest = [ for _ in 1..pushed -> rb.Pop() ]
-            Expect.equal rest [ for v in 2 .. pushed + 1 -> Some v ] "every accepted item comes out once, in order"
-            Expect.isNone (rb.Pop()) "and then the ring is empty"
+            Expect.equal (rb.Pop()) (Some 13) "and the ring it wraps is unchanged by the refusal"
         }
 
         test "the measured sequence is the draw both hosts make - its fingerprint is pinned" {
@@ -473,6 +516,60 @@ let private arrayRingTests =
 
             let arrayAloneNs = minPerOpNs 9 100 MeasuredOps (fun () -> arrayAlone () |> ignore)
 
+            // The dispatch loop's own shape (Phase 956): the ring almost
+            // never holds more than one message - `dispatch` pushes one,
+            // the drain pops it, and the next pop finds the ring empty. The
+            // measured sequence above grows the ring to thousands of slots,
+            // which a dispatch loop rarely does; this one never grows it.
+            let dispatchSteps =
+                Array.init (MeasuredOps + 2) (fun i -> if i % 3 = 0 then i + 1 else -1)
+
+            let walk (push: int -> unit) (pop: unit -> int option) =
+                let mutable sum = 0
+
+                for step in dispatchSteps do
+                    if step >= 0 then
+                        push step
+                    else
+                        match pop () with
+                        | Some v -> sum <- sum + v
+                        | None -> sum <- sum + 1
+
+                sum
+
+            let shippedSteady () =
+                let rb = RingBuffer<int> MeasuredCapacity
+                walk rb.Push rb.Pop
+
+            let arraySteady () =
+                let rb = ArrayRing<int> MeasuredCapacity
+                walk rb.Push rb.Pop
+
+            Expect.equal
+                (arraySteady ())
+                (shippedSteady ())
+                "the two rings walked over the dispatch shape must pop the same items"
+
+            let shippedSteadyNs =
+                minPerOpNs 9 100 dispatchSteps.Length (fun () -> shippedSteady () |> ignore)
+
+            let arraySteadyNs =
+                minPerOpNs 9 100 dispatchSteps.Length (fun () -> arraySteady () |> ignore)
+
+            printfn
+                "Phase 956 measurement (.NET %s, %s build, capacity %d, the dispatch shape push/pop/pop over %d ops, min over rounds): shipped Ring.fs %.1f ns/op; array extraction %.1f ns/op (%.2fx)."
+                (string Environment.Version)
+#if DEBUG
+                "Debug"
+#else
+                "Release"
+#endif
+                MeasuredCapacity
+                dispatchSteps.Length
+                shippedSteadyNs
+                arraySteadyNs
+                (arraySteadyNs / shippedSteadyNs)
+
             printfn
                 "Phase 955 measurement (.NET %s, capacity %d, %d ops, 65%% pushes, min over rounds): shipped Ring.fs %.1f ns/op; list extraction %.0f ns/op; array extraction %.1f ns/op (%.2fx the shipped ring). Ring alone, no output list: shipped %.1f ns/op; array extraction %.1f ns/op (%.2fx)."
                 (string Environment.Version)
@@ -491,7 +588,9 @@ let private arrayRingTests =
                  && listNs > 0.0
                  && arrayNs > 0.0
                  && shippedAloneNs > 0.0
-                 && arrayAloneNs > 0.0)
+                 && arrayAloneNs > 0.0
+                 && shippedSteadyNs > 0.0
+                 && arraySteadyNs > 0.0)
                 "every measurement ran"
         }
     ]

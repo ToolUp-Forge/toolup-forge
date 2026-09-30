@@ -168,12 +168,23 @@
     "`-pop-refines`, `-create-refines`), three `tested` (the differential on each host, and the measurement with",
     "its falsifier), four `assumed` (the capacity ceiling, the extractor, the Fable host's empty stand-in for the",
     "support library, the hand-written wrapper) and two `policy` (`elmish-array-ring-not-shipped`, and",
-    "`extraction-route-stays-legacy`: the eight first-order models stay on the legacy printer, measured)."
+    "`extraction-route-stays-legacy`: the eight first-order models stay on the legacy printer, measured).",
+    "Phase 956 - the shipped ring and the proved ring - REWROTE eleven entries and APPENDED two. It was filed to replace",
+    "Ring.fs with the extracted array ring and stopped at its own first gate: under Fable on node, on the dispatch loop's",
+    "steady shape, the array ring costs 1.62-1.81x the shipped ring per operation (its SizeT indices are uint64, a",
+    "JavaScript BigInt), so Ring.fs is unchanged and `verified-implementation-road` gains a third dated answer, NOTHING",
+    "SHIPS, with `elmish-array-ring-not-shipped` keeping its level on that measurement. The model moved regardless: the",
+    "capacity ceiling is lifted under the premise SizeT.fits_u32 (an operator decision; appended as the `assumed` entry",
+    "`elmish-array-ring-sizet-fits-u32`), and `run` now states the whole sequence up to the first refused push. The",
+    "rewritten entries are the policy row, the three proved rows that moved (`-is-queue`, `-push-refines`,",
+    "`-create-refines`), the two differential rows and the measurement, three `assumed` rows (the ceiling, the extractor,",
+    "the wrapper) and `-not-shipped`; the second appended entry is the `tested` finding",
+    "`elmish-array-ring-slower-under-fable-steady-state`."
   ],
   "kind": "proofs",
   "version": 1,
   "subject": "toolup-forge",
-  "$scope": "the proved models under proofs/: ToolUp.Remoting.Decode - the combinator algebra over the closed MessagePack value model (Phase 787); the disclosure algebra - DisclosureEgress.evaluate plus the population fold PopulationDisclosure.fold / valuesWithheld / disclosedStats (Phase 790); and the AI tool gate - ToolGate.decideDeclared, AIToolRegistry.ListAccessible and the dispatch-site re-check over the declared ToolEffect class (Phase 793); and the model-input value - the closed value every provider call is given, its smart constructor, the assembly a caller folds over it and the pure render (Phase 792); and the taint flow - the TaintLabel lattice, the labelled transform algebra fold and DisclosureTaint.analyze's conjunction (Phase 795); and the Elmish runtime's ring buffer and subscription diff - RingBuffer<'item> proved a FIFO queue through every grow, and Sub.Internal.diff / NewSubs.calculate / Fx.change proved to start, stop and keep exactly what their comment says, on the shortcut path too (Phase 788); and the Elmish ring as a stateful array - the same ring over Pulse.Lib.Vec, refining the ring model, extracted through Custard's F# backend and run beside the shipped ring on both hosts without replacing it (Phase 955)",
+  "$scope": "the proved models under proofs/: ToolUp.Remoting.Decode - the combinator algebra over the closed MessagePack value model (Phase 787); the disclosure algebra - DisclosureEgress.evaluate plus the population fold PopulationDisclosure.fold / valuesWithheld / disclosedStats (Phase 790); and the AI tool gate - ToolGate.decideDeclared, AIToolRegistry.ListAccessible and the dispatch-site re-check over the declared ToolEffect class (Phase 793); and the model-input value - the closed value every provider call is given, its smart constructor, the assembly a caller folds over it and the pure render (Phase 792); and the taint flow - the TaintLabel lattice, the labelled transform algebra fold and DisclosureTaint.analyze's conjunction (Phase 795); and the Elmish runtime's ring buffer and subscription diff - RingBuffer<'item> proved a FIFO queue through every grow, and Sub.Internal.diff / NewSubs.calculate / Fx.change proved to start, stop and keep exactly what their comment says, on the shortcut path too (Phase 788); and the Elmish ring as a stateful array - the same ring over Pulse.Lib.Vec, refining the ring model, extracted through Custard's F# backend and run beside the shipped ring on both hosts without replacing it (Phase 955); and the array ring's whole-sequence theorem up to the first refused push, with its ceiling lifted under the stated premise SizeT.fits_u32, and the measurement that stopped its replacement of the shipped ring (Phase 956)",
   "$provers": {
     "fstar-pinned": {
       "tool": "fstar",
@@ -1825,11 +1836,11 @@
     {
       "id": "verified-implementation-road",
       "level": "policy",
-      "claim": "SECOND ANSWER (Phase 955, 2026-09-30, on the pin v2026.09.27): for the RING, a verified implementation is reachable - an array-backed ring written in Pulse, proved to refine the list model, extracted to F# by the prover and run on both hosts, can replace the shipped Ring.fs within the client budgets. It has NOT replaced it: Ring.fs is unchanged, the replacement is a successor's, and until it lands the ring stays on the refinement tie with everything else. For every other model the first answer stands. FIRST ANSWER (Phase 850, on the pin v2026.09.06), kept as written: The road to a verified runtime runs on the REFINEMENT TIE - the F* model is the specification, the shipped code is the implementation, and a rewrite is held to the model by the differential on both hosts - NOT on verified implementations, where the extraction would be the shipped code.",
+      "claim": "THIRD ANSWER (Phase 956, 2026-09-30, on the same pin): NOTHING SHIPS - the replacement of Ring.fs by the extracted array ring was measured first, as the phase required, and stopped. On .NET the array ring is the faster in every arm, Release and Debug; under Fable on node, on the shape the dispatch loop runs on almost every message (push, pop, pop the empty ring), it is 1.62-1.81x the shipped ring's cost per operation, because the extraction's SizeT indices are uint64 and Fable carries a uint64 as a JavaScript BigInt. Ring.fs is unchanged, and the ring stays on the refinement tie. The model moved on regardless: the capacity ceiling is lifted under the stated premise SizeT.fits_u32 (an operator decision) and `run` now says what a sequence with a refused push did up to it. SECOND ANSWER (Phase 955, 2026-09-30, on the pin v2026.09.27): for the RING, a verified implementation is reachable - an array-backed ring written in Pulse, proved to refine the list model, extracted to F# by the prover and run on both hosts, can replace the shipped Ring.fs within the client budgets. It has NOT replaced it: Ring.fs is unchanged, the replacement is a successor's, and until it lands the ring stays on the refinement tie with everything else. For every other model the first answer stands. FIRST ANSWER (Phase 850, on the pin v2026.09.06), kept as written: The road to a verified runtime runs on the REFINEMENT TIE - the F* model is the specification, the shipped code is the implementation, and a rewrite is held to the model by the differential on both hosts - NOT on verified implementations, where the extraction would be the shipped code.",
       "evidence": {
         "document": "proofs/README.md"
       },
-      "reason": "SECOND ANSWER (Phase 955). What reopened the question is the event the first answer named: the release of 2026-09-27 carries a second extraction pipeline, Custard, whose F# backend realises a Pulse vec as a .NET array and a box as a ref cell. proofs/ElmishRingArray.fst is the ring over Pulse.Lib.Vec; its create, pop and push are each proved to do to the abstract ring what ElmishRing.create, pop and push do, so the ring theorems hold of it through the refinement, and `run` proves it a FIFO queue over any operation sequence in which no push is refused. The extraction is generic F# (a polymorphic definition is emitted generic when it is named as a root; a module root emits nothing polymorphic), it builds on .NET 10 as generated, and Fable transpiles it with the client tier. Both hosts run it beside the shipped ring: it agrees on every sequence of two campaigns and costs less per operation - on .NET 19.0-23.9 ns/op against 35.6-40.2 (0.53-0.61x, seven runs), under Fable on node 136.7-140.5 against 184.6-191.9 (0.71-0.76x, two runs); the two rings walked alone, 14.2-18.6 against 31.6-34.3 ns/op on .NET and 44.0-46.4 against 98.9-102.5 under Fable (2026-09-30, Debug builds, minimum over rounds, both hosts held to one sequence by a pinned fingerprint). THREE CONDITIONS travel with the yes. (1) A capacity ceiling the shipped ring does not have: the grow step needs 2n+1 shown to fit a size, F* guarantees SizeT 16 bits and no more, so the array ring grows only from 32,767 slots or fewer and refuses the push that would grow past that. (2) The support library Custard writes beside every module does not transpile under Fable; the ring uses nothing from it, so the Fable host compiles an empty module of that name in its place. (3) The extractor joins the trusted base and is new: its F# backend was first committed upstream on 2026-09-18, and measuring the eight existing models on it found one whose generated project does not compile (ModelInput: a match in a record field laid out offside, FS0058) and one that cannot be extracted whole (RemotingDecode: seven definitions refused, error 370). For that reason the eight stay on the legacy printer, which upstream now describes as unmaintained, and the layout normaliser stays with them. What would FALSIFY the yes: the perf-budget gate going red over the replacement, or a quiet-machine run putting the array ring's per-op minimum above the shipped ring's on either host. What would reopen the rest: a release in which every existing model's Custard project builds as generated. FIRST ANSWER (Phase 850), kept as written: Phase 850 took the ring through the three things between an extraction and production on the pinned release (v2026.09.06). Layout stood: proofs/normalise-extraction.fsx re-lays the F# backend's output into F# both hosts compile with no flag (F# 10 refuses the verbose-syntax escape, FS1205). Representation stood: the machine-integer Prims in proofs/oracle/fable/ compiles the ring extraction under Fable, which runs it live. The array-backed ring did NOT stand, and the blocker is a toolchain fact, not a proof one: FStar.Seq.Base is `MkSeq of list` and the F# backend extracts it as exactly that (a Seq-backed ring is the list ring respelled - correct and slow), the pinned ulib ships no FStar.ST / FStar.Ref / FStar.Array / HyperStack / LowStar.Buffer at all, FStar.ImmutableArray is an OCaml-realised interface with no upd, and the F# backend has no runtime for any of them. Measured on both hosts, the extraction that can be built is 1,000-1,300x (.NET) and ~785x (Fable/node; the ~2,600x first recorded was over a different, all-push sequence, corrected by Phase 884) slower per op than the shipped Ring.fs. What would reopen this is an F* release with a stateful array the F# backend can realise, or an axiomatised array realised by hand per host - which is the refinement tie in a different coat."
+      "reason": "THIRD ANSWER (Phase 956). The phase's rule was that the array ring must be at least as fast as the shipped ring in the configuration clients ship before anything is replaced. Both packs now time the dispatch shape beside Phase 955's sequence, after a quarter-second untimed warm-up per arm (a Release build's tiered JIT had been timing the array arm at its first tier, which read 0.97-1.43x in the pack and is 0.23-0.30x warm). Under Fable the dispatch shape reads 1.62-1.81x over four runs, and a two-order scratch benchmark agrees (1.74x for the ring alone, 1.02x with an output list built); Phase 955's sequence stays 0.71-0.74x, because what the shipped ring pays for growing hides the BigInt arithmetic there. The difference is about twelve nanoseconds a ring operation against a view-per-dispatch baseline of about 360 microseconds, so the perf-budget gate cannot see it and is not this claim's falsifier. A probe of uint32 indices recovered the shipped ring's speed only when the array was indexed by int directly (1.01x), not through uint64 as a SizeT cast extracts (2.48x). What would reopen it: an operator decision to accept the Fable steady-state cost, or an F# extraction whose index type Fable carries as a number - Custard narrows SizeT to 32 bits for its C backend only (--custard_sizet_width 32), under exactly the premise this phase took. SECOND ANSWER (Phase 955). What reopened the question is the event the first answer named: the release of 2026-09-27 carries a second extraction pipeline, Custard, whose F# backend realises a Pulse vec as a .NET array and a box as a ref cell. proofs/ElmishRingArray.fst is the ring over Pulse.Lib.Vec; its create, pop and push are each proved to do to the abstract ring what ElmishRing.create, pop and push do, so the ring theorems hold of it through the refinement, and `run` proves it a FIFO queue over any operation sequence in which no push is refused. The extraction is generic F# (a polymorphic definition is emitted generic when it is named as a root; a module root emits nothing polymorphic), it builds on .NET 10 as generated, and Fable transpiles it with the client tier. Both hosts run it beside the shipped ring: it agrees on every sequence of two campaigns and costs less per operation - on .NET 19.0-23.9 ns/op against 35.6-40.2 (0.53-0.61x, seven runs), under Fable on node 136.7-140.5 against 184.6-191.9 (0.71-0.76x, two runs); the two rings walked alone, 14.2-18.6 against 31.6-34.3 ns/op on .NET and 44.0-46.4 against 98.9-102.5 under Fable (2026-09-30, Debug builds, minimum over rounds, both hosts held to one sequence by a pinned fingerprint). THREE CONDITIONS travel with the yes. (1) A capacity ceiling the shipped ring does not have: the grow step needs 2n+1 shown to fit a size, F* guarantees SizeT 16 bits and no more, so the array ring grows only from 32,767 slots or fewer and refuses the push that would grow past that. (2) The support library Custard writes beside every module does not transpile under Fable; the ring uses nothing from it, so the Fable host compiles an empty module of that name in its place. (3) The extractor joins the trusted base and is new: its F# backend was first committed upstream on 2026-09-18, and measuring the eight existing models on it found one whose generated project does not compile (ModelInput: a match in a record field laid out offside, FS0058) and one that cannot be extracted whole (RemotingDecode: seven definitions refused, error 370). For that reason the eight stay on the legacy printer, which upstream now describes as unmaintained, and the layout normaliser stays with them. What would FALSIFY the yes: the perf-budget gate going red over the replacement, or a quiet-machine run putting the array ring's per-op minimum above the shipped ring's on either host. What would reopen the rest: a release in which every existing model's Custard project builds as generated. FIRST ANSWER (Phase 850), kept as written: Phase 850 took the ring through the three things between an extraction and production on the pinned release (v2026.09.06). Layout stood: proofs/normalise-extraction.fsx re-lays the F# backend's output into F# both hosts compile with no flag (F# 10 refuses the verbose-syntax escape, FS1205). Representation stood: the machine-integer Prims in proofs/oracle/fable/ compiles the ring extraction under Fable, which runs it live. The array-backed ring did NOT stand, and the blocker is a toolchain fact, not a proof one: FStar.Seq.Base is `MkSeq of list` and the F# backend extracts it as exactly that (a Seq-backed ring is the list ring respelled - correct and slow), the pinned ulib ships no FStar.ST / FStar.Ref / FStar.Array / HyperStack / LowStar.Buffer at all, FStar.ImmutableArray is an OCaml-realised interface with no upd, and the F# backend has no runtime for any of them. Measured on both hosts, the extraction that can be built is 1,000-1,300x (.NET) and ~785x (Fable/node; the ~2,600x first recorded was over a different, all-push sequence, corrected by Phase 884) slower per op than the shipped Ring.fs. What would reopen this is an F* release with a stateful array the F# backend can realise, or an axiomatised array realised by hand per host - which is the refinement tie in a different coat."
     },
     {
       "id": "elmish-fable-shim-machine-integers",
@@ -1856,13 +1867,17 @@
     {
       "id": "elmish-array-ring-is-queue",
       "level": "proved",
-      "claim": "Driving the array ring's own push and pop over ANY operation sequence in which no push is refused at the capacity ceiling, the outputs are exactly the list model's and therefore exactly a reference FIFO queue's from the ring's unread contents, and the ring ends holding exactly what that queue holds: every pushed item is popped once, in push order, nothing lost and nothing invented, through every grow.",
+      "claim": "Driving the array ring's own push and pop over ANY operation sequence, `run` returns the outputs and the operations it did NOT consume, and for the prefix it consumed (ops = prefix @ rest) the outputs are exactly the list model's and therefore exactly a reference FIFO queue's from the ring's unread contents, and the ring holds exactly what that queue holds - every pushed item popped once, in push order, nothing lost and nothing invented, through every grow; what is left is nothing, or begins with a push the ring refused at its capacity ceiling, never with a pop. Under the platform premise SizeT.fits_u32. (Phase 955 stated this only for sequences in which no push was refused; Phase 956 states it for every sequence.)",
       "evidence": {
         "theorem": "run",
         "model": "proofs/ElmishRingArray.fst",
         "prover": "proofs/fstar-pin.json",
         "supporting": [
+          "run_post",
+          "run_prefix",
+          "stopped_at",
           "run_nil",
+          "run_refused",
           "run_push",
           "run_pop",
           "push",
@@ -1874,7 +1889,7 @@
     {
       "id": "elmish-array-ring-push-refines",
       "level": "proved",
-      "claim": "A push on the array ring that returns true leaves it representing exactly `ElmishRing.push` of the model ring it represented - in the writable state, in the readable state, and through the grow step, where the new array is the old one read cyclically from the read index in 2n+1 slots; a push that returns false changed nothing and was at the capacity ceiling.",
+      "claim": "A push on the array ring that returns true leaves it representing exactly `ElmishRing.push` of the model ring it represented - in the writable state, in the readable state, and through the grow step, where the new array is the old one read cyclically from the read index in 2n+1 slots; a push that returns false changed nothing and was at the capacity ceiling (a full ring past 2^30 - 1 slots). Under the platform premise SizeT.fits_u32, which is what lets the grow step reach 2^31 - 1 slots (Phase 956; 65,535 under Phase 955's 16-bit bound).",
       "evidence": {
         "theorem": "push",
         "model": "proofs/ElmishRingArray.fst",
@@ -1886,7 +1901,8 @@
           "grow",
           "nth_double_size",
           "length_double_size",
-          "models_upd"
+          "models_upd",
+          "fits_doubled"
         ]
       }
     },
@@ -1908,7 +1924,7 @@
     {
       "id": "elmish-array-ring-create-refines",
       "level": "proved",
-      "claim": "The array ring the constructor builds represents `ElmishRing.create` at the same requested size: at least two slots, empty, well-formed - so the ring theorems' one precondition holds of every array ring by construction.",
+      "claim": "The array ring the constructor builds represents `ElmishRing.create` at the same requested size: at least two slots, empty, well-formed - so the ring theorems' one precondition holds of every array ring by construction. The requested size must be at most 2^31 - 1 (an `int` on both hosts), and every array ring holds at most that many slots, so every index the extraction narrows to `int` is exact (Phase 956).",
       "evidence": {
         "theorem": "create",
         "model": "proofs/ElmishRingArray.fst",
@@ -1922,7 +1938,7 @@
     {
       "id": "elmish-array-ring-agrees-with-shipped-code-dotnet",
       "level": "tested",
-      "claim": "The EXTRACTED array ring (proofs/oracle/custard/ElmishRingArray.fs, behind a three-line wrapper) agrees on .NET with the shipped `RingBuffer` and with the list model's verdicts over the 200-sequence campaign, with the shipped ring over a second campaign of 120 sequences, holds exactly the model's number of slots after every sequence, never pops the placeholder over a reference type, and refuses a push at its ceiling without losing an item.",
+      "claim": "The EXTRACTED array ring (proofs/oracle/custard/ElmishRingArray.fs, behind a three-line wrapper) agrees on .NET with the shipped `RingBuffer` and with the list model's verdicts over the 200-sequence campaign, with the shipped ring over a second campaign of 120 sequences, holds exactly the model's number of slots after every sequence, never pops the placeholder over a reference type, and, built in the state the model calls `at_ceiling`, refuses the push, changes nothing, and has the host wrapper raise the exception naming the bound (Phase 956: the ceiling is past anything a test can push its way to).",
       "evidence": {
         "family": "Phase 788 - the proved Elmish runtime as oracle / Phase 955 - the extracted array ring as implementation",
         "host": "src/ToolUp.Platform.Tests/InProcess/ElmishProofOracleTests.fs",
@@ -1932,7 +1948,7 @@
           "the extracted array ring agrees with the shipped ring on sequences the corpus never had",
           "a ring that skips the wrap check is caught against the array ring - go-red",
           "a placeholder is never popped - the array ring over a reference type",
-          "at the capacity ceiling a push is refused, nothing is lost, and the ring goes on working",
+          "at the capacity ceiling a push is refused, changes nothing, and the wrapper reports it",
           "the measured sequence is the draw both hosts make - its fingerprint is pinned"
         ],
         "runner": "proofs/check.ps1 step 7, which asserts a CASE COUNT; step 5 byte-holds the three generated files and step 6 builds the generated project as generated"
@@ -1941,7 +1957,7 @@
     {
       "id": "elmish-array-ring-agrees-with-shipped-code-fable",
       "level": "tested",
-      "claim": "The same extraction, transpiled by Fable with the client tier, agrees under node with the transpiled `Ring.fs` and with the corpus the .NET host wrote, over the same two campaigns; reaches only slot counts the model's grow step can produce; never pops the placeholder; and refuses at the same ceiling.",
+      "claim": "The same extraction, transpiled by Fable with the client tier, agrees under node with the transpiled `Ring.fs` and with the corpus the .NET host wrote, over the same two campaigns; reaches only slot counts the model's grow step can produce; never pops the placeholder; and, built in the `at_ceiling` state, refuses the push, changes nothing, and has the host wrapper raise the exception naming the bound (Phase 956).",
       "evidence": {
         "family": "Phase 788 - the proved Elmish runtime as oracle (Fable) / Phase 955 - the extracted array ring as implementation (Fable)",
         "host": "src/ToolUp.AI.Client.Tests/ElmishProofOracleTests.fs",
@@ -1951,7 +1967,7 @@
           "the extracted array ring agrees with the transpiled ring on sequences the corpus never had",
           "a ring that skips the wrap check is caught against the array ring - go-red",
           "a placeholder is never popped - the array ring over a reference type",
-          "at the capacity ceiling a push is refused, nothing is lost, and the ring goes on working",
+          "at the capacity ceiling a push is refused, changes nothing, and the wrapper reports it",
           "the measured sequence is the draw both hosts make - its fingerprint is pinned"
         ],
         "runner": "dotnet run --project Build.fsproj -- VerifyFable"
@@ -1960,31 +1976,31 @@
     {
       "id": "elmish-array-ring-measured",
       "level": "tested",
-      "claim": "Over one 4,000-operation sequence (capacity 10, 65% pushes, seven grows to 1,407 slots), every arm asserted to pop the same values before timing and both hosts held to the same sequence by a pinned fingerprint, the per-op cost of the shipped ring, the list extraction and the array extraction is printed: on .NET 35.6-40.2 ns, 67-88 us and 19.0-23.9 ns (array 0.53-0.61x the shipped ring; seven runs); under Fable on node 184.6-191.9 ns, 134-175 us and 136.7-140.5 ns (0.71-0.76x; two runs). The two rings walked alone, no output list built: 31.6-34.3 against 14.2-18.6 ns on .NET, 98.9-102.5 against 44.0-46.4 ns under Fable. Measured 2026-09-30, Debug builds, minimum over rounds. No arm asserts a threshold; the claim these figures support is falsified by a quiet-machine run in which the array arm's minimum exceeds the shipped arm's.",
+      "claim": "Phase 956, both configurations: every arm asserted to pop the same values before timing, both hosts held to one sequence by a pinned fingerprint, each arm run for a quarter of a second untimed first, minimum over rounds, 2026-09-30. On Phase 955's sequence (capacity 10, 4,000 operations, 65% pushes, seven grows to 1,407 slots) the array extraction costs, against the shipped ring: .NET Release 0.23-0.30x (output list) and 0.14-0.16x (ring alone), five runs; .NET Debug 0.52-0.69x and 0.38-0.44x, five runs; Fable on node 0.71-0.74x and 0.40-0.53x, four runs. On the dispatch shape (push, pop, pop the empty ring; 4,002 operations; the ring never grows), ring alone: .NET Release 0.25-0.40x, .NET Debug 0.42-0.52x, and Fable on node 1.62-1.81x - SLOWER. No arm asserts a threshold. The claim is falsified by a quiet-machine run that moves either host across 1.0 on either sequence. PHASE 955'S FIGURES, kept: Over one 4,000-operation sequence (capacity 10, 65% pushes, seven grows to 1,407 slots), every arm asserted to pop the same values before timing and both hosts held to the same sequence by a pinned fingerprint, the per-op cost of the shipped ring, the list extraction and the array extraction is printed: on .NET 35.6-40.2 ns, 67-88 us and 19.0-23.9 ns (array 0.53-0.61x the shipped ring; seven runs); under Fable on node 184.6-191.9 ns, 134-175 us and 136.7-140.5 ns (0.71-0.76x; two runs). The two rings walked alone, no output list built: 31.6-34.3 against 14.2-18.6 ns on .NET, 98.9-102.5 against 44.0-46.4 ns under Fable. Measured 2026-09-30, Debug builds, minimum over rounds. No arm asserts a threshold; the claim these figures support is falsified by a quiet-machine run in which the array arm's minimum exceeds the shipped arm's.",
       "evidence": {
         "family": "Phase 955 - the extracted array ring as implementation",
         "host": "src/ToolUp.Platform.Tests/InProcess/ElmishProofOracleTests.fs and src/ToolUp.AI.Client.Tests/ElmishProofOracleTests.fs",
         "cases": [
           "Phase 955 - shipped ring, list extraction and array extraction, measured (informational)"
         ],
-        "runner": "proofs/check.ps1 step 7 on .NET; dotnet run --project Build.fsproj -- VerifyFable under Fable"
+        "runner": "proofs/check.ps1 step 7 on .NET; dotnet run --project Build.fsproj -- VerifyFable under Fable; the Release figures from the Platform pack built with -c Release"
       }
     },
     {
       "id": "elmish-array-ring-capacity-ceiling",
       "level": "assumed",
-      "claim": "The array ring has a capacity ceiling the list model and the shipped ring do not: it takes the grow step only from 32,767 slots or fewer, reaching at most 65,535, and past that refuses the push that would grow. Every array-ring theorem is about pushes that were accepted.",
+      "claim": "The array ring has a capacity ceiling the list model and the shipped ring do not, lifted by Phase 956 from 65,535 slots to the one the extraction needs: every array ring holds at most 2^31 - 1 slots (the extraction indexes and allocates through `int`), the grow step is taken only from 2^30 - 1 slots or fewer, and past that the push that would grow is refused. Every array-ring refinement theorem is about pushes that were accepted; `run` says what the refused one leaves.",
       "evidence": {
-        "assumption": "no dispatch ring holds tens of thousands of unread messages - a ring built at capacity 10 refuses its 45,055th - so the refusal is unreachable in practice, as the 2^31 bound on the machine-integer shim is"
+        "assumption": "no dispatch ring holds a billion unread messages, so the refusal is unreachable in practice. What each host does at the bound: a refused push returns false with the ring unchanged and the hosts' wrapper raises an exception naming the bound (tested). NOT measured: .NET documents Array.MaxLength as 2,147,483,591, 56 below the bound, so on .NET the last grow the model allows would be refused by the runtime's allocator rather than by push; under JavaScript an array of that length exceeds any heap node runs with. Nothing is claimed about the shipped ring at its own limit."
       },
-      "mitigation": "the ceiling is in the code, not only in the statement: push returns false and changes nothing (at_ceiling), both hosts assert the refusal comes between 32,768 and 65,535 slots, loses nothing already accepted and leaves the ring working; lifting it needs SizeT.fits_u32 as a stated platform assumption, which is not taken here"
+      "mitigation": "the ceiling is in the code and in the proof, not only in the statement: push returns false and changes nothing (at_ceiling), `is_ring` carries the capacity bound, and nine one-line mutants of the model - the check one slot higher, max_growable one higher, create without the size bound among them - are refused by the prover; both hosts build the extraction's record in the at_ceiling state and assert the refusal and the exception"
     },
     {
       "id": "elmish-array-ring-extractor-trusted",
       "level": "assumed",
       "claim": "That the code the hosts run is the program the prover checked rests on Custard's F# backend and on its realisation of the Pulse heap types: a vec as a .NET array indexed by `int` of a `uint64`, a box as a `ref` cell, SizeT as `uint64` (a JavaScript BigInt under Fable), `free` as nothing. The Pulse checker is a plugin in the same release and part of the same trust.",
       "evidence": {
-        "assumption": "Custard prints the checked program faithfully and .NET arrays, ref cells and uint64 mean what Pulse.Lib.Vec, Pulse.Lib.Box and FStar.SizeT say; the narrowing of an index to int is exact below 2^31, which the capacity ceiling keeps four orders of magnitude inside"
+        "assumption": "Custard prints the checked program faithfully and .NET arrays, ref cells and uint64 mean what Pulse.Lib.Vec, Pulse.Lib.Box and FStar.SizeT say; the narrowing of an index to int is exact below 2^31, and since Phase 956 every index is below 2^31 - 1 by proof (`is_ring` carries the capacity bound)"
       },
       "mitigation": "the backend is new (first committed upstream 2026-09-18) and one defect in its output was found here, so it is not taken on trust alone: all three generated files are byte-held to the pinned prover's output, the generated project is built as generated on every run of the leg, and the differential on both hosts holds the extraction to the shipped ring and to the list model's verdicts, slot count included"
     },
@@ -2000,7 +2016,7 @@
     {
       "id": "elmish-array-ring-wrapper-hand-written",
       "level": "assumed",
-      "claim": "The typed wrapper a host puts over the extracted functions is hand-written: the `int` capacity widened to `uint64` (negative clamped to zero), the placeholder value `Unchecked.defaultof`, and a refused push raised as an exception. It is duplicated in the two host files for this phase.",
+      "claim": "The typed wrapper a host puts over the extracted functions is hand-written: the `int` capacity widened to `uint64` (negative clamped to zero), the placeholder value `Unchecked.defaultof`, and a refused push raised as an exception. It is duplicated in the two host files, which Phase 956 left as they are because the replacement that would put one copy in the client tier did not land; since 956 each copy can also be built over an existing extracted record, which is how the ceiling case reaches the exception.",
       "evidence": {
         "assumption": "the three lines do what they say; no theorem depends on the placeholder's value, and the constructor's floor is the extraction's own"
       },
@@ -2009,11 +2025,11 @@
     {
       "id": "elmish-array-ring-not-shipped",
       "level": "policy",
-      "claim": "The array ring is not the shipped ring. `Ring.fs` is unchanged by Phase 955 and nothing in the client tier calls the extraction; the rows above are about code that runs in the two test packs.",
+      "claim": "The array ring is not the shipped ring. `Ring.fs` is unchanged by Phases 955 and 956 and nothing in the client tier calls the extraction; the rows above are about code that runs in the two test packs.",
       "evidence": {
         "document": "proofs/README.md"
       },
-      "reason": "Phase 955 answered whether the replacement is possible and measured what it would cost; making it changes what every client on the platform executes and belongs to a phase of its own, which runs the perf-budget gate over the replacement first and lands it behind the differential."
+      "reason": "Phase 956 was filed to make the replacement and stopped at its own first gate: the array ring must be at least as fast as the shipped ring in the configuration clients ship, and under Fable on node, on the dispatch loop's steady shape, it is 1.62-1.81x the shipped ring's cost (elmish-array-ring-slower-under-fable-steady-state). Phase 955's reason stands beside it: making the replacement changes what every client on the platform executes, runs the perf-budget gate over it first, and lands it behind the differential. What reopens it is named on verified-implementation-road."
     },
     {
       "id": "extraction-route-stays-legacy",
@@ -2023,6 +2039,28 @@
         "document": "proofs/README.md"
       },
       "reason": "Measured on the pin (Phase 955): through Custard, ModelInput's generated project does not compile (a match in a record field laid out offside - FS0058, FS0010); seven RemotingDecode definitions are refused (error 370, a parameterless polymorphic value) and need the model reshaped; a module root emits only monomorphic definitions, so every entry point must be named; every emitted name changes (module-prefixed, single-constructor types as records), so every host bridge would be rewritten; Prims.int becomes bigint on both hosts; and the generated support library does not transpile under Fable. The legacy route is green and byte-identical across the pin move. What would reopen it: a release in which every model's Custard project builds as generated - the README table is the measurement to repeat. Both defects were reported upstream on 2026-09-30, as FStarLang/FStar#4622 (the layout) and FStarLang/FStar#4623 (the refusal, which the backend applies only when such a value is passed as an argument and not when it is applied); both reproduce on the nightly of that date, and those two issues are what to watch."
+    },
+    {
+      "id": "elmish-array-ring-sizet-fits-u32",
+      "level": "assumed",
+      "claim": "The array ring's push, grow and whole-sequence theorems hold under the premise SizeT.fits_u32 - that the platform's size type holds 32 bits - which F* declares as a proposition and does not prove. Phase 956 took it by operator decision (2026-09-30) to lift the ceiling Phase 955's 16-bit bound imposed.",
+      "evidence": {
+        "assumption": "both hosts the extraction runs on index arrays by 32-bit integers (.NET by int, JavaScript by array lengths below 2^32); the premise is falsified by a host whose size type is narrower than 32 bits"
+      },
+      "mitigation": "it is a requires on push, grow and run, never an assume - `--report_assumes error` still holds the leg, and a push mutant without the premise is refused - and it is used in exactly one lemma, fits_doubled, and in the one conversion that states the grow bound (SZ.of_u32 1073741823ul); the ceiling it licenses is the extraction's own int bound, which the proof carries separately"
+    },
+    {
+      "id": "elmish-array-ring-slower-under-fable-steady-state",
+      "level": "tested",
+      "claim": "Under Fable on node, on the dispatch loop's steady shape - push one message, pop it, pop the empty ring; capacity 10; 4,002 operations; the ring never grows - the extracted array ring costs 1.62-1.81x what the shipped Ring.fs costs per operation (ring alone, four runs, 2026-09-30), where on .NET it costs 0.25-0.40x (Release) and 0.42-0.52x (Debug). The cause is the realisation: the extraction's SizeT indices are uint64, which Fable carries as a JavaScript BigInt.",
+      "evidence": {
+        "family": "Phase 955 - the extracted array ring as implementation",
+        "host": "src/ToolUp.Platform.Tests/InProcess/ElmishProofOracleTests.fs and src/ToolUp.AI.Client.Tests/ElmishProofOracleTests.fs",
+        "cases": [
+          "Phase 955 - shipped ring, list extraction and array extraction, measured (informational)"
+        ],
+        "runner": "dotnet run --project Build.fsproj -- VerifyFable under Fable; proofs/check.ps1 step 7 on .NET (Release by building the Platform pack with -c Release)"
+      }
     }
   ]
 }
