@@ -1023,8 +1023,114 @@ let private composeTests =
         }
     ]
 
+// ─── Phase 936 — the per-team record at the platform tier ────────────
+
+/// A record exactly as the store wrote it before Phase 936: the owner chose
+/// `TeamAdmins` for conversations, then for output.
+let private legacyRecord =
+    """{"Changes":[{"Level":"TeamAdmins","ChangedBy":"olga","ChangedAt":"2026-09-01T10:00:00.0000000Z"}],"OutputChanges":[{"Level":"TeamAdmins","ChangedBy":"olga","ChangedAt":"2026-09-01T10:05:00.0000000Z"}]}"""
+
+let private legacyBlobName = "team-policies/ai-conversation-visibility.json"
+
+/// A facts-only composition: the fact store's gate, team output visibility
+/// declared, and NO AI assistant.
+let private factsOnly (world: World) (store: IFactStore) (events: IEventStore) =
+    let taint = DisclosureTaintConfig.ofLists [ salesPolicy ] []
+
+    let withGate = {
+        ServerApp.empty with
+            Config = {
+                ServerConfig.defaults with
+                    FactStore = EnabledFactStore
+            }
+            Extensions = {
+                ServerApp.empty.Extensions with
+                    ServiceConfig =
+                        Some(fun s ->
+                            s.AddSingleton<IFactDisclosureGate>(
+                                Func<IServiceProvider, IFactDisclosureGate>(fun _ ->
+                                    FactDisclosureGate(store, events, taint = taint) :> IFactDisclosureGate)
+                            ))
+            }
+    }
+
+    let composed =
+        FactsCompose.withTeamOutputVisibility TeamVisible [ TeamVisible; TeamAdmins ] withGate
+
+    let services = ServiceCollection()
+    services.AddSingleton<IBlobStorage>(world.Storage) |> ignore
+    services.AddSingleton<ITeamStore>(world.Teams) |> ignore
+
+    let configure =
+        composed.Extensions.ServiceConfig
+        |> Option.defaultWith (fun () -> failtest "no config")
+
+    configure services |> ignore
+    composed, services
+
+let private platformTierTests =
+    testList "Phase 936 — the per-team record at the platform tier" [
+
+        testCaseAsync "a facts-only composition honours a team owner's output level"
+        <| async {
+            let! world = newWorld ()
+
+            let! _ = world.Storage.Upload($"team-{team}", legacyBlobName, Encoding.UTF8.GetBytes legacyRecord)
+
+            let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let store = BlobFactStore.create (InMemoryBlobStorage()) events
+
+            let restricted =
+                assertFact store team (draftWith "margin" (Restricted "sales") 4242m)
+
+            let _, services = factsOnly world store events
+            let gate = services.BuildServiceProvider().GetRequiredService<IFactDisclosureGate>()
+
+            Expect.equal
+                (verdictOf gate (Some member') FactRetrieval restricted.FactId)
+                (Some(FactNotDisclosable "sales"))
+                "the owner chose TeamAdmins: a member is refused, not given the deployment default"
+
+            Expect.equal
+                (verdictOf gate (Some owner) FactRetrieval restricted.FactId)
+                (Some FactDisclosable)
+                "the owner sees it"
+        }
+
+        test "the stored shape is the legacy one, byte for byte" {
+            let at minute =
+                DateTime(2026, 9, 1, 10, minute, 0, DateTimeKind.Utc)
+
+            let conversation: TeamConversationPolicyRecord = {
+                Changes = [
+                    {
+                        Level = TeamAdmins
+                        ChangedBy = "olga"
+                        ChangedAt = at 0
+                    }
+                ]
+            }
+
+            let output: TeamOutputPolicyRecord = {
+                OutputChanges = [
+                    {
+                        Level = TeamAdmins
+                        ChangedBy = "olga"
+                        ChangedAt = at 5
+                    }
+                ]
+            }
+
+            Expect.equal
+                (Encoding.UTF8.GetString(TeamOutputPolicyRecord.serialiseWith conversation output))
+                legacyRecord
+                "the literal is what the store writes"
+        }
+    ]
+
 let tests =
     testList "Phase 896 team output visibility" [
+        platformTierTests
         ruleTests
         resolverTests
         surfaceTests
