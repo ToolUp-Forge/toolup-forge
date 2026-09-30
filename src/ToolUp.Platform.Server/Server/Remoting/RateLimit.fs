@@ -56,6 +56,9 @@ module RateLimitWindow =
 /// single-instance deployments; distributed deployments wire Redis or
 /// equivalent against the `IRateLimitStore` contract.
 ///
+/// Admission is atomic per key (Phase 870): N callers released together
+/// against one remaining slot admit exactly one.
+///
 /// Bounded by `maxBuckets` (default 100_000). Once the cap is reached,
 /// the oldest bucket (by first-insertion time) is evicted on next
 /// `TryAcquire`. Cardinality-bounded so a deployment hit by many
@@ -110,42 +113,59 @@ type InMemoryRateLimitStore(?maxBuckets: int) =
                 evictOldestIfFull ()
                 order.Enqueue key
 
-            // Evict expired timestamps from the front. The queue is
-            // approximately ordered by enqueue time so we can stop at
-            // the first non-expired entry.
-            let mutable peeked = DateTimeOffset.MinValue
-            let mutable evicting = true
+            // Phase 870 — evict, check and admit under ONE per-key lock.
+            // `ConcurrentQueue` makes each operation safe, not their
+            // composition: `Count < count` then `Enqueue` is
+            // check-then-act, so N callers arriving together at
+            // `count - 1` all read "one slot left" before any of them
+            // records its admission, and all pass. The lock is the queue
+            // itself — one per key, so distinct subjects never contend —
+            // and nothing inside it awaits.
+            let decision =
+                lock queue (fun () ->
+                    // Evict expired timestamps from the front. The queue is
+                    // ordered by enqueue time (admissions are serialised
+                    // above), so we can stop at the first non-expired entry.
+                    let mutable peeked = DateTimeOffset.MinValue
+                    let mutable evicting = true
 
-            while evicting && queue.TryPeek(&peeked) do
-                if peeked < cutoff then
-                    let mutable dequeued = DateTimeOffset.MinValue
-                    queue.TryDequeue(&dequeued) |> ignore
-                else
-                    evicting <- false
-
-            if queue.Count < count then
-                queue.Enqueue now
-                return RateLimitAllowed
-            else
-                // Budget exhausted. RetryAfter is the time until the
-                // oldest in-window entry expires (the earliest moment
-                // a new acquisition becomes possible).
-                let mutable oldest = DateTimeOffset.MinValue
-
-                if queue.TryPeek(&oldest) then
-                    let retryAfter = (oldest + window) - now
-
-                    let safe =
-                        if retryAfter < TimeSpan.Zero then
-                            TimeSpan.FromMilliseconds 1.0
+                    while evicting && queue.TryPeek(&peeked) do
+                        if peeked < cutoff then
+                            let mutable dequeued = DateTimeOffset.MinValue
+                            queue.TryDequeue(&dequeued) |> ignore
                         else
-                            retryAfter
+                            evicting <- false
 
-                    return RateLimitDenied safe
-                else
-                    // Lost a race; treat as allowed and re-enqueue.
-                    queue.Enqueue now
-                    return RateLimitAllowed
+                    if queue.Count < count then
+                        queue.Enqueue now
+                        RateLimitAllowed
+                    else
+                        // Budget exhausted. RetryAfter is the time until the
+                        // oldest in-window entry expires (the earliest moment
+                        // a new acquisition becomes possible).
+                        let mutable oldest = DateTimeOffset.MinValue
+
+                        if queue.TryPeek(&oldest) then
+                            let retryAfter = (oldest + window) - now
+
+                            let safe =
+                                if retryAfter < TimeSpan.Zero then
+                                    TimeSpan.FromMilliseconds 1.0
+                                else
+                                    retryAfter
+
+                            RateLimitDenied safe
+                        else
+                            // An empty queue that is still "full" means a
+                            // non-positive budget. Under the lock no other
+                            // caller can have drained it, so this is no
+                            // longer a race — kept as it was (admit and
+                            // record) so a non-positive budget behaves
+                            // exactly as before.
+                            queue.Enqueue now
+                            RateLimitAllowed)
+
+            return decision
         }
 
     /// Diagnostics: bucket count for telemetry / health checks.
