@@ -168,12 +168,23 @@
     "`-pop-refines`, `-create-refines`), three `tested` (the differential on each host, and the measurement with",
     "its falsifier), four `assumed` (the capacity ceiling, the extractor, the Fable host's empty stand-in for the",
     "support library, the hand-written wrapper) and two `policy` (`elmish-array-ring-not-shipped`, and",
-    "`extraction-route-stays-legacy`: the eight first-order models stay on the legacy printer, measured)."
+    "`extraction-route-stays-legacy`: the eight first-order models stay on the legacy printer, measured).",
+    "Phase 956 - the shipped ring and the proved ring - REWROTE eleven entries and APPENDED two. It was filed to replace",
+    "Ring.fs with the extracted array ring and stopped at its own first gate: under Fable on node, on the dispatch loop's",
+    "steady shape, the array ring costs 1.62-1.81x the shipped ring per operation (its SizeT indices are uint64, a",
+    "JavaScript BigInt), so Ring.fs is unchanged and `verified-implementation-road` gains a third dated answer, NOTHING",
+    "SHIPS, with `elmish-array-ring-not-shipped` keeping its level on that measurement. The model moved regardless: the",
+    "capacity ceiling is lifted under the premise SizeT.fits_u32 (an operator decision; appended as the `assumed` entry",
+    "`elmish-array-ring-sizet-fits-u32`), and `run` now states the whole sequence up to the first refused push. The",
+    "rewritten entries are the policy row, the three proved rows that moved (`-is-queue`, `-push-refines`,",
+    "`-create-refines`), the two differential rows and the measurement, three `assumed` rows (the ceiling, the extractor,",
+    "the wrapper) and `-not-shipped`; the second appended entry is the `tested` finding",
+    "`elmish-array-ring-slower-under-fable-steady-state`."
   ],
   "kind": "proofs",
   "version": 1,
   "subject": "toolup-forge",
-  "$scope": "the proved models under proofs/: ToolUp.Remoting.Decode - the combinator algebra over the closed MessagePack value model (Phase 787); the disclosure algebra - DisclosureEgress.evaluate plus the population fold PopulationDisclosure.fold / valuesWithheld / disclosedStats (Phase 790); and the AI tool gate - ToolGate.decideDeclared, AIToolRegistry.ListAccessible and the dispatch-site re-check over the declared ToolEffect class (Phase 793); and the model-input value - the closed value every provider call is given, its smart constructor, the assembly a caller folds over it and the pure render (Phase 792); and the taint flow - the TaintLabel lattice, the labelled transform algebra fold and DisclosureTaint.analyze's conjunction (Phase 795); and the Elmish runtime's ring buffer and subscription diff - RingBuffer<'item> proved a FIFO queue through every grow, and Sub.Internal.diff / NewSubs.calculate / Fx.change proved to start, stop and keep exactly what their comment says, on the shortcut path too (Phase 788); and the Elmish ring as a stateful array - the same ring over Pulse.Lib.Vec, refining the ring model, extracted through Custard's F# backend and run beside the shipped ring on both hosts without replacing it (Phase 955)",
+  "$scope": "the proved models under proofs/: ToolUp.Remoting.Decode - the combinator algebra over the closed MessagePack value model (Phase 787); the disclosure algebra - DisclosureEgress.evaluate plus the population fold PopulationDisclosure.fold / valuesWithheld / disclosedStats (Phase 790); and the AI tool gate - ToolGate.decideDeclared, AIToolRegistry.ListAccessible and the dispatch-site re-check over the declared ToolEffect class (Phase 793); and the model-input value - the closed value every provider call is given, its smart constructor, the assembly a caller folds over it and the pure render (Phase 792); and the taint flow - the TaintLabel lattice, the labelled transform algebra fold and DisclosureTaint.analyze's conjunction (Phase 795); and the Elmish runtime's ring buffer and subscription diff - RingBuffer<'item> proved a FIFO queue through every grow, and Sub.Internal.diff / NewSubs.calculate / Fx.change proved to start, stop and keep exactly what their comment says, on the shortcut path too (Phase 788); and the Elmish ring as a stateful array - the same ring over Pulse.Lib.Vec, refining the ring model, extracted through Custard's F# backend and run beside the shipped ring on both hosts without replacing it (Phase 955); and the array ring's whole-sequence theorem up to the first refused push, with its ceiling lifted under the stated premise SizeT.fits_u32, and the measurement that stopped its replacement of the shipped ring (Phase 956)",
   "$provers": {
     "fstar-pinned": {
       "tool": "fstar",
