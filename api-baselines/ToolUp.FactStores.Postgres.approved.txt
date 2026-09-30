@@ -3,6 +3,97 @@
 # Do not edit by hand. Drift in EITHER direction fails the gate (Phase 618): a
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
+ToolUp.FactStores.Postgres.FactStoreMigratedEvent (class)
+ToolUp.FactStores.Postgres.FactStoreMigratedEvent..ctor(System.String, System.String, System.String, System.Int32, System.Int32, System.Int32, System.Int32, System.Int32, System.Int32, System.Int32, System.String)
+ToolUp.FactStores.Postgres.FactStoreMigratedEvent.Detail : System.String { get }
+ToolUp.FactStores.Postgres.FactStoreMigratedEvent.Differences : System.Int32 { get }
+ToolUp.FactStores.Postgres.FactStoreMigratedEvent.Heads : System.Int32 { get }
+ToolUp.FactStores.Postgres.FactStoreMigratedEvent.Inserted : System.Int32 { get }
+ToolUp.FactStores.Postgres.FactStoreMigratedEvent.Lineages : System.Int32 { get }
+ToolUp.FactStores.Postgres.FactStoreMigratedEvent.ResumedFrom : System.Int32 { get }
+ToolUp.FactStores.Postgres.FactStoreMigratedEvent.Source : System.String { get }
+ToolUp.FactStores.Postgres.FactStoreMigratedEvent.SourceFacts : System.Int32 { get }
+ToolUp.FactStores.Postgres.FactStoreMigratedEvent.Target : System.String { get }
+ToolUp.FactStores.Postgres.FactStoreMigratedEvent.TargetFacts : System.Int32 { get }
+ToolUp.FactStores.Postgres.FactStoreMigratedEvent.Verification : System.String { get }
+ToolUp.FactStores.Postgres.FactStoreMigration (class)
+ToolUp.FactStores.Postgres.FactStoreMigration.MigratedType : System.String (literal)
+ToolUp.FactStores.Postgres.FactStoreMigration.exitCode(ToolUp.FactStores.Postgres.FactStoreMigrationReport) : System.Int32
+ToolUp.FactStores.Postgres.FactStoreMigration.migrate(ToolUp.Facts.BlobFactStore, ToolUp.FactStores.Postgres.PostgresFactStore, ToolUp.Platform.IEventStore, ToolUp.FactStores.Postgres.FactStoreMigrationOptions, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.FactStores.Postgres.FactStoreMigrationReport]
+ToolUp.FactStores.Postgres.FactStoreMigration.render(ToolUp.FactStores.Postgres.FactStoreMigrationReport) : System.String
+ToolUp.FactStores.Postgres.FactStoreMigration.validateSource(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.FactStores.Postgres.MigrationDifference]
+ToolUp.FactStores.Postgres.FactStoreMigration.verify(ToolUp.Facts.BlobFactStore, ToolUp.FactStores.Postgres.PostgresFactStore, ToolUp.FactStores.Postgres.FactStoreMigrationOptions, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.FactStores.Postgres.FactStoreMigrationReport]
+ToolUp.FactStores.Postgres.FactStoreMigrationOptions (class)
+ToolUp.FactStores.Postgres.FactStoreMigrationOptions..ctor(System.Int32, System.Int32, System.Boolean, System.String)
+ToolUp.FactStores.Postgres.FactStoreMigrationOptions.AllowUnreadableSource : System.Boolean { get }
+ToolUp.FactStores.Postgres.FactStoreMigrationOptions.AsOfSamples : System.Int32 { get }
+ToolUp.FactStores.Postgres.FactStoreMigrationOptions.PageSize : System.Int32 { get }
+ToolUp.FactStores.Postgres.FactStoreMigrationOptions.SourceName : System.String { get }
+ToolUp.FactStores.Postgres.FactStoreMigrationOptionsModule (class)
+ToolUp.FactStores.Postgres.FactStoreMigrationOptionsModule.defaults : ToolUp.FactStores.Postgres.FactStoreMigrationOptions { get }
+ToolUp.FactStores.Postgres.FactStoreMigrationOptionsModule.validate(ToolUp.FactStores.Postgres.FactStoreMigrationOptions) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.FactStores.Postgres.FactStoreMigrationReport (class)
+ToolUp.FactStores.Postgres.FactStoreMigrationReport..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.FactStores.Postgres.ScopeMigrationReport])
+ToolUp.FactStores.Postgres.FactStoreMigrationReport.Passed : System.Boolean { get }
+ToolUp.FactStores.Postgres.FactStoreMigrationReport.Scopes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.FactStores.Postgres.ScopeMigrationReport] { get }
+ToolUp.FactStores.Postgres.MigrationDifference (class)
+ToolUp.FactStores.Postgres.MigrationDifference.IsAsOfReadDiffers : System.Boolean { get }
+ToolUp.FactStores.Postgres.MigrationDifference.IsChainDiffers : System.Boolean { get }
+ToolUp.FactStores.Postgres.MigrationDifference.IsColumnDiffers : System.Boolean { get }
+ToolUp.FactStores.Postgres.MigrationDifference.IsExtraOnTarget : System.Boolean { get }
+ToolUp.FactStores.Postgres.MigrationDifference.IsHeadDiffers : System.Boolean { get }
+ToolUp.FactStores.Postgres.MigrationDifference.IsInvalidSource : System.Boolean { get }
+ToolUp.FactStores.Postgres.MigrationDifference.IsMissingOnTarget : System.Boolean { get }
+ToolUp.FactStores.Postgres.MigrationDifference.IsUnreadableSource : System.Boolean { get }
+ToolUp.FactStores.Postgres.MigrationDifference.Tag : System.Int32 { get }
+ToolUp.FactStores.Postgres.MigrationDifference+AsOfReadDiffers (class)
+ToolUp.FactStores.Postgres.MigrationDifference+AsOfReadDiffers.asOf : System.DateTime { get }
+ToolUp.FactStores.Postgres.MigrationDifference+AsOfReadDiffers.factId : System.String { get }
+ToolUp.FactStores.Postgres.MigrationDifference+AsOfReadDiffers.visibleOnSource : System.Boolean { get }
+ToolUp.FactStores.Postgres.MigrationDifference+ChainDiffers (class)
+ToolUp.FactStores.Postgres.MigrationDifference+ChainDiffers.lineageHash : System.String { get }
+ToolUp.FactStores.Postgres.MigrationDifference+ChainDiffers.source : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.FactStores.Postgres.MigrationDifference+ChainDiffers.target : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.FactStores.Postgres.MigrationDifference+ColumnDiffers (class)
+ToolUp.FactStores.Postgres.MigrationDifference+ColumnDiffers.column : System.String { get }
+ToolUp.FactStores.Postgres.MigrationDifference+ColumnDiffers.factId : System.String { get }
+ToolUp.FactStores.Postgres.MigrationDifference+ColumnDiffers.source : System.String { get }
+ToolUp.FactStores.Postgres.MigrationDifference+ColumnDiffers.target : System.String { get }
+ToolUp.FactStores.Postgres.MigrationDifference+ExtraOnTarget (class)
+ToolUp.FactStores.Postgres.MigrationDifference+ExtraOnTarget.factId : System.String { get }
+ToolUp.FactStores.Postgres.MigrationDifference+HeadDiffers (class)
+ToolUp.FactStores.Postgres.MigrationDifference+HeadDiffers.factId : System.String { get }
+ToolUp.FactStores.Postgres.MigrationDifference+HeadDiffers.sourceHead : System.Boolean { get }
+ToolUp.FactStores.Postgres.MigrationDifference+HeadDiffers.targetHead : System.Boolean { get }
+ToolUp.FactStores.Postgres.MigrationDifference+InvalidSource (class)
+ToolUp.FactStores.Postgres.MigrationDifference+InvalidSource.factId : System.String { get }
+ToolUp.FactStores.Postgres.MigrationDifference+InvalidSource.reason : System.String { get }
+ToolUp.FactStores.Postgres.MigrationDifference+MissingOnTarget (class)
+ToolUp.FactStores.Postgres.MigrationDifference+MissingOnTarget.factId : System.String { get }
+ToolUp.FactStores.Postgres.MigrationDifference+Tags (class)
+ToolUp.FactStores.Postgres.MigrationDifference+Tags.AsOfReadDiffers : System.Int32 (literal)
+ToolUp.FactStores.Postgres.MigrationDifference+Tags.ChainDiffers : System.Int32 (literal)
+ToolUp.FactStores.Postgres.MigrationDifference+Tags.ColumnDiffers : System.Int32 (literal)
+ToolUp.FactStores.Postgres.MigrationDifference+Tags.ExtraOnTarget : System.Int32 (literal)
+ToolUp.FactStores.Postgres.MigrationDifference+Tags.HeadDiffers : System.Int32 (literal)
+ToolUp.FactStores.Postgres.MigrationDifference+Tags.InvalidSource : System.Int32 (literal)
+ToolUp.FactStores.Postgres.MigrationDifference+Tags.MissingOnTarget : System.Int32 (literal)
+ToolUp.FactStores.Postgres.MigrationDifference+Tags.UnreadableSource : System.Int32 (literal)
+ToolUp.FactStores.Postgres.MigrationDifference+UnreadableSource (class)
+ToolUp.FactStores.Postgres.MigrationDifference+UnreadableSource.blobName : System.String { get }
+ToolUp.FactStores.Postgres.MigrationDifference+UnreadableSource.reason : System.String { get }
+ToolUp.FactStores.Postgres.MigrationDifferenceModule (class)
+ToolUp.FactStores.Postgres.MigrationDifferenceModule.describe(ToolUp.FactStores.Postgres.MigrationDifference) : System.String
+ToolUp.FactStores.Postgres.MigrationSql (class)
+ToolUp.FactStores.Postgres.MigrationSql.StageTable : System.String (literal)
+ToolUp.FactStores.Postgres.MigrationSql.insertStaged(System.String) : System.String
+ToolUp.FactStores.Postgres.MigrationSql.progressDdl(System.String) : System.String
+ToolUp.FactStores.Postgres.MigrationSql.progressTable(System.String) : System.String
+ToolUp.FactStores.Postgres.MigrationSql.readProgress(System.String) : System.String
+ToolUp.FactStores.Postgres.MigrationSql.saveProgress(System.String) : System.String
+ToolUp.FactStores.Postgres.MigrationSql.scopeBoundStatements(System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.FactStores.Postgres.MigrationSql.stage(System.String) : System.String
+ToolUp.FactStores.Postgres.MigrationSql.targetRows(System.String) : System.String
 ToolUp.FactStores.Postgres.PostgresFactSchemaMode (class)
 ToolUp.FactStores.Postgres.PostgresFactSchemaMode.AutoMigrate : ToolUp.FactStores.Postgres.PostgresFactSchemaMode { get }
 ToolUp.FactStores.Postgres.PostgresFactSchemaMode.IsAutoMigrate : System.Boolean { get }
@@ -34,6 +125,36 @@ ToolUp.FactStores.Postgres.PostgresFactStoreOptionsModule.MaxTableNameLength : S
 ToolUp.FactStores.Postgres.PostgresFactStoreOptionsModule.defaults : ToolUp.FactStores.Postgres.PostgresFactStoreOptions { get }
 ToolUp.FactStores.Postgres.PostgresFactStoreOptionsModule.isSafeIdentifier(System.String) : System.Boolean
 ToolUp.FactStores.Postgres.PostgresFactStoreOptionsModule.validate(ToolUp.FactStores.Postgres.PostgresFactStoreOptions) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.FactStores.Postgres.ScopeMigrationOutcome (class)
+ToolUp.FactStores.Postgres.ScopeMigrationOutcome.AlreadyVerified : ToolUp.FactStores.Postgres.ScopeMigrationOutcome { get }
+ToolUp.FactStores.Postgres.ScopeMigrationOutcome.IsAlreadyVerified : System.Boolean { get }
+ToolUp.FactStores.Postgres.ScopeMigrationOutcome.IsCopyFailed : System.Boolean { get }
+ToolUp.FactStores.Postgres.ScopeMigrationOutcome.IsSourceRefused : System.Boolean { get }
+ToolUp.FactStores.Postgres.ScopeMigrationOutcome.IsVerificationFailed : System.Boolean { get }
+ToolUp.FactStores.Postgres.ScopeMigrationOutcome.IsVerified : System.Boolean { get }
+ToolUp.FactStores.Postgres.ScopeMigrationOutcome.SourceRefused : ToolUp.FactStores.Postgres.ScopeMigrationOutcome { get }
+ToolUp.FactStores.Postgres.ScopeMigrationOutcome.Tag : System.Int32 { get }
+ToolUp.FactStores.Postgres.ScopeMigrationOutcome.VerificationFailed : ToolUp.FactStores.Postgres.ScopeMigrationOutcome { get }
+ToolUp.FactStores.Postgres.ScopeMigrationOutcome.Verified : ToolUp.FactStores.Postgres.ScopeMigrationOutcome { get }
+ToolUp.FactStores.Postgres.ScopeMigrationOutcome+CopyFailed (class)
+ToolUp.FactStores.Postgres.ScopeMigrationOutcome+CopyFailed.error : System.String { get }
+ToolUp.FactStores.Postgres.ScopeMigrationOutcome+Tags (class)
+ToolUp.FactStores.Postgres.ScopeMigrationOutcome+Tags.AlreadyVerified : System.Int32 (literal)
+ToolUp.FactStores.Postgres.ScopeMigrationOutcome+Tags.CopyFailed : System.Int32 (literal)
+ToolUp.FactStores.Postgres.ScopeMigrationOutcome+Tags.SourceRefused : System.Int32 (literal)
+ToolUp.FactStores.Postgres.ScopeMigrationOutcome+Tags.VerificationFailed : System.Int32 (literal)
+ToolUp.FactStores.Postgres.ScopeMigrationOutcome+Tags.Verified : System.Int32 (literal)
+ToolUp.FactStores.Postgres.ScopeMigrationReport (class)
+ToolUp.FactStores.Postgres.ScopeMigrationReport..ctor(System.String, ToolUp.FactStores.Postgres.ScopeMigrationOutcome, System.Int32, System.Int32, System.Int32, System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.FactStores.Postgres.MigrationDifference])
+ToolUp.FactStores.Postgres.ScopeMigrationReport.Differences : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.FactStores.Postgres.MigrationDifference] { get }
+ToolUp.FactStores.Postgres.ScopeMigrationReport.Heads : System.Int32 { get }
+ToolUp.FactStores.Postgres.ScopeMigrationReport.Inserted : System.Int32 { get }
+ToolUp.FactStores.Postgres.ScopeMigrationReport.Lineages : System.Int32 { get }
+ToolUp.FactStores.Postgres.ScopeMigrationReport.Outcome : ToolUp.FactStores.Postgres.ScopeMigrationOutcome { get }
+ToolUp.FactStores.Postgres.ScopeMigrationReport.ResumedFrom : System.Int32 { get }
+ToolUp.FactStores.Postgres.ScopeMigrationReport.Scope : System.String { get }
+ToolUp.FactStores.Postgres.ScopeMigrationReport.SourceFacts : System.Int32 { get }
+ToolUp.FactStores.Postgres.ScopeMigrationReport.TargetFacts : System.Int32 { get }
 ToolUp.FactStores.Postgres.Sql (class)
 ToolUp.FactStores.Postgres.Sql.clearHeads(System.String) : System.String
 ToolUp.FactStores.Postgres.Sql.copyIn(System.String) : System.String
