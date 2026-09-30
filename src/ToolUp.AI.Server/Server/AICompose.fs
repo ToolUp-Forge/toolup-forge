@@ -343,10 +343,8 @@ let composeAI (app: AIServerApp) : ServerApp =
             makeApi (aiSettingsApi aiProviderFactory providerProfile)
             // Phase 859 — the active team's conversation visibility level.
             makeApi TeamConversationPolicyStore.teamConversationVisibilityApi
-            // Phase 896 — the active team's output visibility level (held in
-            // the same per-team record; answers "not enabled" unless team
-            // output visibility is composed).
-            makeApi TeamConversationPolicyStore.teamOutputVisibilityApi
+            // Phase 896's output-visibility API is mounted by the platform
+            // itself since Phase 936, in every deployment.
             // Phase 70 — Platform Admin AI keys API. Every method
             // is gated server-side on canModifyPlatformConfig; the
             // client-side module is hidden from non-admin sidebars by
@@ -586,20 +584,19 @@ let composeAI (app: AIServerApp) : ServerApp =
                 // the env vars).
                 .AddSingleton<ConfigValidation.IConfigValidator>(AIProviderEnvValidator.create aiProviderFactory)
                 .AddSingleton<ConfigValidation.IConfigValidator>(AIModelEnvValidator.create aiProviderFactory)
-                // Phase 896 — how the disclosure gate reads a team's output
-                // level (the per-team policy record), and the startup check
-                // that the deployment's two visibility defaults do not
-                // already conflict. Both are inert until team output
-                // visibility is composed.
-                .AddSingleton<ITeamOutputVisibilitySource>(
-                    Func<IServiceProvider, ITeamOutputVisibilitySource>(fun sp ->
-                        TeamConversationPolicyStore.TeamPolicyOutputVisibilitySource(sp) :> ITeamOutputVisibilitySource)
-                )
-                .AddSingleton<ConfigValidation.IConfigValidator>(
-                    Func<IServiceProvider, ConfigValidation.IConfigValidator>(fun sp ->
-                        TeamConversationPolicyStore.TeamVisibilityDefaultsValidator(sp)
-                        :> ConfigValidation.IConfigValidator)
-                )
+
+        // Phase 936 — the conversation axis of team visibility exists
+        // whenever the assistant is composed. Register its declaration
+        // (`unrestricted` unless `withTeamConversationVisibility` declared
+        // one), so the platform's output-visibility change check and startup
+        // check know there are conversations output could be quoted in. The
+        // disclosure gate's source and the output API are the platform's.
+        Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAddSingleton<
+            TeamConversationVisibilitySettings
+         >(
+            s,
+            TeamConversationVisibilitySettings.unrestricted
+        )
 
         // Phase 47 — the sustained-denial rate monitor. Registered ONLY
         // when the deployment declared a policy via
@@ -1267,9 +1264,8 @@ let withTeamConversationVisibility
     (allowed: TeamConversationVisibility list)
     (app: ServerApp)
     : ServerApp =
-    match TeamConversationPolicyStore.TeamConversationVisibilitySettings.create defaultLevel allowed with
+    match TeamConversationVisibilitySettings.create defaultLevel allowed with
     | Ok settings ->
         app
-        |> withServiceConfig (fun s ->
-            s.AddSingleton<TeamConversationPolicyStore.TeamConversationVisibilitySettings>(settings))
+        |> withServiceConfig (fun s -> s.AddSingleton<TeamConversationVisibilitySettings>(settings))
     | Error message -> failwith message

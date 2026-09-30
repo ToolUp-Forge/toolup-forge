@@ -627,17 +627,6 @@ ToolUp.AI.TeamConversationVisibilityView.Allowed : Microsoft.FSharp.Collections.
 ToolUp.AI.TeamConversationVisibilityView.InTeamScope : System.Boolean { get }
 ToolUp.AI.TeamConversationVisibilityView.Level : ToolUp.Platform.TeamVisibilityLevel { get }
 ToolUp.AI.TeamConversationVisibilityView.Selectable : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel] { get }
-ToolUp.AI.TeamOutputVisibilityApi (class)
-ToolUp.AI.TeamOutputVisibilityApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.TeamOutputVisibilityView]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.TeamOutputVisibilityView, System.String]]])
-ToolUp.AI.TeamOutputVisibilityApi.GetOutputVisibility : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.TeamOutputVisibilityView]] { get }
-ToolUp.AI.TeamOutputVisibilityApi.SetOutputVisibility : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.TeamOutputVisibilityView, System.String]]] { get }
-ToolUp.AI.TeamOutputVisibilityView (class)
-ToolUp.AI.TeamOutputVisibilityView..ctor(System.Boolean, System.Boolean, ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel])
-ToolUp.AI.TeamOutputVisibilityView.Allowed : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel] { get }
-ToolUp.AI.TeamOutputVisibilityView.Enabled : System.Boolean { get }
-ToolUp.AI.TeamOutputVisibilityView.InTeamScope : System.Boolean { get }
-ToolUp.AI.TeamOutputVisibilityView.Level : ToolUp.Platform.TeamVisibilityLevel { get }
-ToolUp.AI.TeamOutputVisibilityView.Selectable : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamVisibilityLevel] { get }
 ToolUp.AI.ToolApprovalDecision (class)
 ToolUp.AI.ToolApprovalDecision.Approved : ToolUp.AI.ToolApprovalDecision { get }
 ToolUp.AI.ToolApprovalDecision.IsApproved : System.Boolean { get }

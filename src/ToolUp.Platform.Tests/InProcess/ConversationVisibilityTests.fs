@@ -15,6 +15,7 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.NotificationChannel
 open ToolUp.Platform.StorageScopeResolver
 open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.TeamPolicyStore
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.AI
 open ToolUp.AI.AIAssistantHandler
@@ -229,7 +230,7 @@ let private setRecord (world: World) (teamId: string) (changes: (TeamConversatio
         world.Storage.Upload(
             containerOf teamId,
             TeamConversationPolicyRecord.BlobName,
-            TeamConversationPolicyRecord.serialise record
+            TeamPolicyRecordCodec.serialise record TeamOutputPolicyRecord.empty
         )
 
     ()
@@ -788,7 +789,7 @@ let private changeTests =
         testCaseAsync "the write is guarded: concurrent changes all land, in order"
         <| async {
             let storage = InMemoryBlobStorage() :> IBlobStorage
-            let store = TeamConversationPolicyStore storage
+            let store = TeamPolicyStore storage
 
             let append (i: int) =
                 store.Change(
