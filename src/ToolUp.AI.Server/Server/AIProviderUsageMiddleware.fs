@@ -54,6 +54,112 @@ let private scopeIdFor (ctx: AccessContext) : string =
     | Some scope -> scope.ScopeId
     | None -> ctx.UserId
 
+// ─── Phase 865 — one forwarding base for every decorator ─────────
+//
+// `IAIProvider.SendMessageWith` dispatches on the runtime type of the
+// OUTERMOST provider: one that implements `IAIProviderModelOverride`
+// serves the per-call override, anything else serves the configured
+// model's plain send and reports the fallback. So a decorator that
+// implements `IAIProvider` and forgets the optional interface does not
+// merely skip its own rule on the override path — it turns every
+// override beneath it into a full-price call. Until Phase 865 the two
+// budget decorators did exactly that, and triage (which names its cheap
+// model through the override) ran on the configured model on every
+// team-scoped deployment — the per-user token decorator is composed
+// there whether or not a cap is set — and on every deployment that
+// registered a rate card.
+//
+// The cure is structural rather than a fourth copy of the forwarding
+// block: every decorator here is a `GatedProvider`, which implements
+// BOTH interfaces once and routes all four send paths through the one
+// `Gate` its subclass supplies. A decorator therefore cannot enforce on
+// one interface and forget the other — there is nothing to forget.
+//
+// The plain paths are normalised to `AIProviderCallResponse` so a gate
+// sees one shape: the inner PLAIN send is still what runs (its request
+// bytes are unchanged), and the outcome is `ConfiguredModel` read from
+// `inner.Capabilities` AFTER the call returns — the Phase 498 moment, so
+// a failover composite reports the entry that actually served.
+
+/// What a decorator's gate is told about the call it guards.
+type private GatedCall = {
+    /// The request, for gates that estimate from it.
+    Messages: AIProviderMessage list
+    /// The per-call options on the override paths; `None` on the plain
+    /// ones.
+    Options: AIProviderCallOptions option
+}
+
+/// The shared base: forwards `Capabilities`, implements `IAIProvider`
+/// AND `IAIProviderModelOverride`, and sends every call through `Gate`.
+[<AbstractClass>]
+type private GatedProvider(inner: IAIProvider) =
+
+    /// Wrap a plain send's result as a call response served on the
+    /// configured model, read post-call (Phase 498).
+    let asConfigured (send: Async<Result<AIProviderResponse, AIProviderError>>) = async {
+        let! result = send
+
+        return
+            result
+            |> Result.map (fun response ->
+                ({
+                    Response = response
+                    Model = ConfiguredModel inner.Capabilities.Model
+                }
+                : AIProviderCallResponse))
+    }
+
+    let plainResponse (call: Async<Result<AIProviderCallResponse, AIProviderError>>) = async {
+        let! result = call
+        return result |> Result.map _.Response
+    }
+
+    /// The one rule this decorator applies — before, after or around
+    /// `send`. Every send path runs through it.
+    abstract Gate:
+        call: GatedCall * send: (unit -> Async<Result<AIProviderCallResponse, AIProviderError>>) ->
+            Async<Result<AIProviderCallResponse, AIProviderError>>
+
+    interface IAIProvider with
+        member _.Capabilities = inner.Capabilities
+
+        member this.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy) =
+            this.Gate(
+                { Messages = messages; Options = None },
+                fun () -> asConfigured (inner.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy))
+            )
+            |> plainResponse
+
+        member this.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) =
+            this.Gate(
+                { Messages = messages; Options = None },
+                fun () -> asConfigured (inner.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy))
+            )
+            |> plainResponse
+
+    // Forwarded through the `IAIProvider` extension, so an inner provider
+    // that does not implement the optional interface still serves the
+    // call (on its configured model, reported as such).
+    interface IAIProviderModelOverride with
+        member this.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy) =
+            this.Gate(
+                {
+                    Messages = messages
+                    Options = Some options
+                },
+                fun () -> inner.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy)
+            )
+
+        member this.SendStructuredMessageWith(options, messages, tools, systemPrompt, schema, retryPolicy) =
+            this.Gate(
+                {
+                    Messages = messages
+                    Options = Some options
+                },
+                fun () -> inner.SendStructuredMessageWith(options, messages, tools, systemPrompt, schema, retryPolicy)
+            )
+
 /// Wraps an `IAIProvider` returned by `Resolve` so each `SendMessage`
 /// emits `ai.tokens.input` and `ai.tokens.output` `UsageRecord`s.
 /// `Capabilities` and `SendMessage` semantics pass through unchanged
@@ -68,6 +174,7 @@ type private MeteringProvider
         origin: ProviderOrigin,
         priceTable: ModelPriceTable option
     ) =
+    inherit GatedProvider(inner)
 
     // Phase 498 — read `inner.Capabilities` PER EMISSION, not once at
     // construction. `emit` runs after `inner.SendMessage` has returned,
@@ -164,64 +271,32 @@ type private MeteringProvider
     /// plus the Phase 499.C cost true-up. A turn without reported usage
     /// emits nothing — the provider couldn't extract usage (transient
     /// parse failure or streaming early-exit), and half a record is
-    /// worse than no record. An error emits nothing.
-    let meter (model: string) (result: Result<AIProviderResponse, AIProviderError>) = async {
-        match result with
-        | Ok response ->
-            match response.Usage with
-            | Some usage ->
-                let cachedExtra = [ "cached_input_tokens", string usage.CachedPromptTokens ]
-                do! emit ResourceKinds.aiTokensInput (decimal usage.PromptTokens) model cachedExtra
-                do! emit ResourceKinds.aiTokensOutput (decimal usage.OutputTokens) model []
-                do! emitCost model usage
-            | None -> ()
-        | Error _ -> ()
+    /// worse than no record. An error emits nothing (see `Gate`).
+    let meter (model: string) (response: AIProviderResponse) = async {
+        match response.Usage with
+        | Some usage ->
+            let cachedExtra = [ "cached_input_tokens", string usage.CachedPromptTokens ]
+            do! emit ResourceKinds.aiTokensInput (decimal usage.PromptTokens) model cachedExtra
+            do! emit ResourceKinds.aiTokensOutput (decimal usage.OutputTokens) model []
+            do! emitCost model usage
+        | None -> ()
     }
 
-    /// Phase 661 — the per-call-options path meters the model that
-    /// SERVED (`ModelOverrideOutcome.served`), which on an honoured
-    /// override is not `inner.Capabilities.Model`.
-    let meterCall (result: Result<AIProviderCallResponse, AIProviderError>) = async {
+    /// Every path — plain, structured (Phase 67b: the schema is metered
+    /// as input tokens at the provider's report, not reconstructed here)
+    /// and both override forms — meters the model that SERVED
+    /// (`ModelOverrideOutcome.served`). On the plain paths that is the
+    /// base's post-call read of `inner.Capabilities.Model`; on an
+    /// honoured override it is the requested model (Phase 661).
+    override _.Gate(_call, send) = async {
+        let! result = send ()
+
         match result with
-        | Ok call -> do! meter (ModelOverrideOutcome.served call.Model) (Ok call.Response)
+        | Ok call -> do! meter (ModelOverrideOutcome.served call.Model) call.Response
         | Error _ -> ()
+
+        return result
     }
-
-    interface IAIProvider with
-        member _.Capabilities = inner.Capabilities
-
-        member _.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy) = async {
-            let! result = inner.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy)
-            do! meter inner.Capabilities.Model result
-            return result
-        }
-
-        // Phase 67b — structured-output path is metered identically to
-        // SendMessage: delegate to inner.SendStructuredMessage, record
-        // usage on success. The schema is metered as input tokens at
-        // the provider's report rather than reconstructed here.
-        member _.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) = async {
-            let! result = inner.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy)
-            do! meter inner.Capabilities.Model result
-            return result
-        }
-
-    // Phase 661 — the override path is metered identically, and is
-    // forwarded through the `IAIProvider` extension so an inner
-    // provider that does not implement the optional interface still
-    // serves the call (on its configured model, reported as such).
-    interface IAIProviderModelOverride with
-        member _.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy) = async {
-            let! result = inner.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy)
-            do! meterCall result
-            return result
-        }
-
-        member _.SendStructuredMessageWith(options, messages, tools, systemPrompt, schema, retryPolicy) = async {
-            let! result = inner.SendStructuredMessageWith(options, messages, tools, systemPrompt, schema, retryPolicy)
-            do! meterCall result
-            return result
-        }
 
 /// Wraps an `IAIProviderFactory` so resolved providers fire usage
 /// records on every `SendMessage`. `Available`, `PlatformDescriptor`,
@@ -289,10 +364,12 @@ type MeteringProviderFactory
 /// scope is already at/over its configured per-day/per-month budget,
 /// the policy breaches here and the provider is never invoked.
 type private QuotaEnforcingProvider(inner: IAIProvider, quota: ITeamQuotaPolicy, scopeId: string) =
+    inherit GatedProvider(inner)
 
-    /// The point-in-time gate, generic over the send it guards so the
-    /// plain and per-call-options paths (Phase 661) share one rule.
-    let gated (proceed: unit -> Async<Result<'r, AIProviderError>>) : Async<Result<'r, AIProviderError>> = async {
+    /// The point-in-time gate. The same rule on every path — plain,
+    /// structured (Phase 67b) and both override forms (Phase 661): a
+    /// denied call is never sent, whichever model it named.
+    override _.Gate(_call, proceed) = async {
         let! gate = quota.CheckTokenBudget(scopeId, ResourceKinds.aiTokensInput, 1m)
 
         match gate with
@@ -315,27 +392,6 @@ type private QuotaEnforcingProvider(inner: IAIProvider, quota: ITeamQuotaPolicy,
                     )
                 )
     }
-
-    interface IAIProvider with
-        member _.Capabilities = inner.Capabilities
-
-        member _.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy) =
-            gated (fun () -> inner.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy))
-
-        // Phase 67b — structured-output path is quota-gated identically
-        // to SendMessage. Same point-in-time gate semantics.
-        member _.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) =
-            gated (fun () -> inner.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy))
-
-    // Phase 661 — the override path is gated identically; a denied call
-    // is never sent whichever model it named.
-    interface IAIProviderModelOverride with
-        member _.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy) =
-            gated (fun () -> inner.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy))
-
-        member _.SendStructuredMessageWith(options, messages, tools, systemPrompt, schema, retryPolicy) =
-            gated (fun () ->
-                inner.SendStructuredMessageWith(options, messages, tools, systemPrompt, schema, retryPolicy))
 
 /// Wraps an `IAIProviderFactory` so every `Resolve`-d provider's
 /// `SendMessage` is quota-gated. `TryResolveByLabel` (diagnostic
@@ -391,11 +447,14 @@ type QuotaEnforcingProviderFactory(inner: IAIProviderFactory, quota: ITeamQuotaP
 /// already been recorded as an `AITokenBudgetExceeded` event.
 type private BudgetEnforcingProvider
     (inner: IAIProvider, enforcer: AIBudgetEnforcer.AIBudgetEnforcer, scopeId: string, userId: string) =
+    inherit GatedProvider(inner)
 
     // Phase 9d's advisory estimator, reused rather than re-derived: the
     // pre-call figure is an estimate in both windows, and two budgets
     // disagreeing about what a request "asks for" would be a defect
-    // nobody could explain.
+    // nobody could explain. It counts characters, not model tokens, so
+    // the figure is the same whichever model the call names — the
+    // override path is gated on exactly the estimate the plain one is.
     let estimate (messages: AIProviderMessage list) : decimal =
         messages
         |> List.map (fun m -> (m.Role, m.Content))
@@ -404,32 +463,20 @@ type private BudgetEnforcingProvider
     let refusal (denial: BudgetDenial) =
         Error(PermanentClient(429, AITokenBudgetExceeded.message denial))
 
-    interface IAIProvider with
-        member _.Capabilities = inner.Capabilities
+    /// Every path — plain, structured (it spends the same provider
+    /// budget out of the same window) and both override forms (Phase
+    /// 865) — runs this one check.
+    override _.Gate(call, proceed) = async {
+        let! verdict = enforcer.Check(scopeId, userId, estimate call.Messages)
 
-        member _.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy) = async {
-            let! verdict = enforcer.Check(scopeId, userId, estimate messages)
-
-            match verdict with
-            | BudgetVerdict.Refused denial -> return refusal denial
-            | BudgetVerdict.Allowed
-            | BudgetVerdict.NearLimit _ ->
-                // `NearLimit` proceeds — it is a leading indicator, not
-                // a refusal. The account has already recorded it.
-                return! inner.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy)
-        }
-
-        // Structured output is gated identically: it spends the same
-        // provider budget out of the same window.
-        member _.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) = async {
-            let! verdict = enforcer.Check(scopeId, userId, estimate messages)
-
-            match verdict with
-            | BudgetVerdict.Refused denial -> return refusal denial
-            | BudgetVerdict.Allowed
-            | BudgetVerdict.NearLimit _ ->
-                return! inner.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy)
-        }
+        match verdict with
+        | BudgetVerdict.Refused denial -> return refusal denial
+        | BudgetVerdict.Allowed
+        | BudgetVerdict.NearLimit _ ->
+            // `NearLimit` proceeds — it is a leading indicator, not a
+            // refusal. The account has already recorded it.
+            return! proceed ()
+    }
 
 /// Wraps an `IAIProviderFactory` so every `Resolve`-d provider is
 /// gated by the caller's per-user hourly budget. `TryResolveByLabel`
@@ -501,8 +548,10 @@ type BudgetEnforcingProviderFactory(inner: IAIProviderFactory, enforcer: AIBudge
 /// visible failure.
 type private SpendEnforcingProvider
     (inner: IAIProvider, enforcer: AIBudgetEnforcer.AISpendEnforcer, scopeId: string, userId: string) =
+    inherit GatedProvider(inner)
 
-    /// The pre-call cost estimate, in the rate card's currency.
+    /// The pre-call cost estimate, in the rate card's currency, priced
+    /// on the model the call will run on.
     ///
     /// Conservative by construction, in the two places it can be:
     /// input is Phase 9d's advisory character estimator (reused rather
@@ -513,25 +562,48 @@ type private SpendEnforcingProvider
     /// writes it, so it is charged at
     /// `AIBudgetEnforcer.AssumedOutputTokens`.
     ///
-    /// An unpriced `(provider, model)` estimates `0M` — count-only,
-    /// never a guessed rate and never a block (GP 11).
-    let estimate (messages: AIProviderMessage list) : decimal =
+    /// **Which model (Phase 865).** A per-call override naming a model
+    /// the rate card prices for THIS provider is estimated on that
+    /// model — the cheap triage call is admitted at the cheap rate, not
+    /// at the frontier rate it no longer runs on. Any other call is
+    /// estimated on the configured model: the plain paths, an override
+    /// with no model, and an override naming a model the rate card
+    /// does not price for this provider. The last is deliberate — an
+    /// unpriced id is exactly the one a connector may decline and serve
+    /// on its configured model instead (`OverrideFellBack`), so pricing
+    /// it at a count-only zero would let a caller walk past the ceiling
+    /// by naming a model nobody priced. The post-call true-up is
+    /// unaffected either way: `Spent` is always the priced actual.
+    ///
+    /// An unpriced CONFIGURED `(provider, model)` estimates `0M` —
+    /// count-only, never a guessed rate and never a block (GP 11).
+    let estimate (call: GatedCall) : decimal =
         let caps = inner.Capabilities
 
         let promptTokens =
-            messages
+            call.Messages
             |> List.map (fun m -> (m.Role, m.Content))
             |> TeamQuotaPolicy.RequestTokenEstimator.estimateMessages
 
-        enforcer.PriceTable
-        |> ModelPriceTable.tryCost
-            caps.ProviderName
-            caps.Model
-            (int (ceil promptTokens))
-            0
-            AIBudgetEnforcer.AssumedOutputTokens
-            0
-        |> Option.defaultValue 0M
+        let priceOn (model: string) =
+            enforcer.PriceTable
+            |> ModelPriceTable.tryCost
+                caps.ProviderName
+                model
+                (int (ceil promptTokens))
+                0
+                AIBudgetEnforcer.AssumedOutputTokens
+                0
+
+        let requested =
+            call.Options
+            |> Option.bind _.Model
+            |> Option.filter (String.IsNullOrWhiteSpace >> not)
+            |> Option.bind priceOn
+
+        match requested with
+        | Some cost -> cost
+        | None -> priceOn caps.Model |> Option.defaultValue 0M
 
     let refusal (denial: BudgetDenial) (policy: AISpendBudgetPolicy) =
         let windowLabel =
@@ -548,11 +620,13 @@ type private SpendEnforcingProvider
 
         Error(PermanentClient(429, AISpendBudgetExceeded.message enforcer.PriceTable.Currency windowLabel denial))
 
-    /// Run the gate, then the inner call. `NearLimit` proceeds — it is
-    /// a leading indicator, not a refusal, and the account has already
-    /// recorded it.
-    let gated (messages: AIProviderMessage list) (proceed: unit -> Async<Result<AIProviderResponse, AIProviderError>>) = async {
-        let! verdict = enforcer.Check(scopeId, userId, estimate messages)
+    /// Run the gate, then the inner call — on every path: plain,
+    /// structured (it spends the same provider budget out of the same
+    /// window) and both override forms (Phase 865). `NearLimit`
+    /// proceeds — it is a leading indicator, not a refusal, and the
+    /// account has already recorded it.
+    override _.Gate(call, proceed) = async {
+        let! verdict = enforcer.Check(scopeId, userId, estimate call)
 
         match verdict with
         | BudgetVerdict.Refused denial ->
@@ -561,17 +635,6 @@ type private SpendEnforcingProvider
         | BudgetVerdict.Allowed
         | BudgetVerdict.NearLimit _ -> return! proceed ()
     }
-
-    interface IAIProvider with
-        member _.Capabilities = inner.Capabilities
-
-        member _.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy) =
-            gated messages (fun () -> inner.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy))
-
-        // Structured output is gated identically: it spends the same
-        // provider budget out of the same window.
-        member _.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) =
-            gated messages (fun () -> inner.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy))
 
 /// Wraps an `IAIProviderFactory` so every `Resolve`-d provider is gated
 /// by the caller's monetary budget. `TryResolveByLabel` is forwarded
