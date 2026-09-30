@@ -70,7 +70,10 @@ be read, every `Restricted` fact is denied under `team-output-visibility-unreada
 ## Stored with the conversation level, under the same rules
 
 A team's output level is stored in the same per-team policy record as its conversation level: the same
-blob, updated by the same guarded read-modify-write, and under the same change rules.
+blob, updated by the same guarded read-modify-write, and under the same change rules. Since Phase 936
+the record, its store (`TeamPolicyStore`) and everything below belong to the platform tier
+(`ToolUp.Platform.Core` and `ToolUp.Platform.Server`), not to the AI assistant. A deployment that
+composes facts without the assistant therefore honours each team's choice, and its owners can set it.
 
 - The deployment sets the default and the allowed levels:
   `FactsCompose.withTeamOutputVisibility defaultLevel allowed`.
@@ -79,8 +82,9 @@ blob, updated by the same guarded read-modify-write, and under the same change r
 - A narrower level applies at once, because every fact is re-checked at every door on every read.
 - Every change is audited as `Custom:TeamOutputVisibilityChanged` and names who made it, the old level
   and the new level.
-- `TeamOutputVisibilityApi` reads and sets the level for the caller's active team. It is mounted beside
-  `TeamConversationVisibilityApi`.
+- `TeamOutputVisibilityApi` (`ToolUp.Platform`) reads and sets the level for the caller's active team.
+  The platform mounts it in every deployment. Until the axis is composed it answers `Enabled = false`
+  and refuses a change.
 
 ```fsharp skip=fragment
 ServerApp.empty
@@ -91,8 +95,15 @@ ServerApp.empty
 ```
 
 A team that has never chosen a level stores nothing new, so its record is byte-identical to one written
-before Phase 896. The gate reads each team's level through `ITeamOutputVisibilitySource`. If no source is
-composed, every team is at the deployment default.
+before Phase 896. The record keeps its original blob name, `team-policies/ai-conversation-visibility.json`,
+so records written before Phase 936 read back unchanged. The gate reads each team's level through
+`ITeamOutputVisibilitySource`. `withTeamOutputVisibility` registers the platform's source over the record
+unless the deployment registered its own. With no source at all, every team is at the deployment default.
+
+The declaration is projected onto the composition manifest as the knobs `TeamOutputVisibility.Default`
+and `TeamOutputVisibility.Allowed`, which the composition inspector shows. It is not on `/dev/inspect`,
+which reports `ServerConfig` rather than the manifest. The move is described in
+[the Phase 936 migration note](../migrations/936-team-policy-record-platform-tier.md).
 
 ## The one coupling: conversations can quote output
 
@@ -106,6 +117,10 @@ and the refusal names both levels. The levels do not form a chain: `TeamAdmins` 
 each admit someone the other does not. The allowed combinations are therefore an equal pair, or any
 conversation level with `TeamVisible` output. To narrow output, first narrow conversations to the same
 level. The deployment's two defaults are checked the same way at startup.
+
+The check applies only where conversations exist, which means where the AI assistant is composed. The
+assistant registers its conversation declaration whenever it is composed. A facts-only deployment has
+no conversations to quote output in, so neither the change check nor the startup check applies there.
 
 Citations are **not** re-checked when a conversation is opened. Doing that would be the complicated
 control, and it is deliberately not offered.
