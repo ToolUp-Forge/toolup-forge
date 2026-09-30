@@ -131,6 +131,7 @@
         <Compile Include="Contracts\IReportRendererContract.fs" />
         <Compile Include="Contracts\IDerivativeRendererContract.fs" />
         <Compile Include="Contracts\InMemoryBlobStorage.fs" />
+        <Compile Include="Contracts\IVectorStoreContract.fs" />
         <Compile Include="Contracts\IConditionalDataObjectStoreContract.fs" />
         <!-- Phase 535 — CRDT co-editing store conformance: append / diff /
              snapshot / compaction, scope isolation, and the convergence

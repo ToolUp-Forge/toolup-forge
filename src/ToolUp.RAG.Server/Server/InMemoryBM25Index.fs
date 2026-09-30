@@ -438,28 +438,71 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
                     markDirty scope
             with ex ->
                 log.Warn $"[InMemoryBM25Index] Corrupt index for {scopeToKey scope}: {ex.Message} — starting empty."
-        | Error _ -> ()
+        | Error reason ->
+            // Phase 861 — a failed download is ABSENT only when the blob is
+            // not there. A snapshot that is there but could not be read must
+            // not be taken for an empty scope: the next mutation's flush
+            // would replace the whole persisted index. Refuse, and leave the
+            // scope unloaded so the next access retries.
+            let! present = storage.Exists("_rag", blobName scope)
+
+            if present then
+                raise (
+                    ToolUp.RAG.InMemoryVectorStore.RagScopeSnapshotUnreadableException(
+                        scopeToKey scope,
+                        blobName scope,
+                        reason
+                    )
+                )
 
         // Phase 726 — mark loaded after a completed attempt, on every path.
         // A corrupt or absent snapshot leaves the scope loaded-and-empty,
         // which is the honest state: there is nothing readable at rest for a
-        // later read to resurrect.
+        // later read to resurrect. (An unreadable one, above, is not marked.)
         loadedScopes[scopeToKey scope] <- 0uy
     }
+
+    // Phase 861 — cold loads are single-flight, so a mutation cannot land
+    // between a concurrent load's download and its replay into the index.
+    let loadGate = new SemaphoreSlim(1, 1)
 
     /// Guarantee this scope's persisted snapshot has been read into memory.
     /// Team and User scopes hydrate lazily (neither id is known at
     /// construction); Platform and Deployment are loaded eagerly below and
     /// mark themselves loaded like any other, so this one lookup answers for
     /// every scope and no caller re-encodes which scopes are lazy.
+    ///
+    /// Phase 861 — EVERY mutating member calls this first. It raises
+    /// `RagScopeSnapshotUnreadableException` when the snapshot exists but
+    /// cannot be read.
     let ensureScopeLoaded (scope: VectorScope) = async {
         if not (loadedScopes.ContainsKey(scopeToKey scope)) then
-            do! loadScope scope
+            do! loadGate.WaitAsync() |> Async.AwaitTask
+
+            try
+                if not (loadedScopes.ContainsKey(scopeToKey scope)) then
+                    do! loadScope scope
+            finally
+                loadGate.Release() |> ignore
     }
 
+    /// The retrieval path's load: an unreadable snapshot degrades the scope
+    /// to no results for this call (with a warning) instead of failing the
+    /// whole search; the scope stays unloaded, so mutations still refuse.
+    let ensureScopeLoadedForSearch (scope: VectorScope) = async {
+        match! ensureScopeLoaded scope |> Async.Catch with
+        | Choice1Of2() -> ()
+        | Choice2Of2(:? ToolUp.RAG.InMemoryVectorStore.RagScopeSnapshotUnreadableException as refused) ->
+            log.Warn
+                $"[InMemoryBM25Index] Snapshot '{refused.BlobLocation}' for {refused.ScopeKey} exists but could not be read ({refused.Reason}) — searching without it; mutations of the scope are refused until it reads."
+        | Choice2Of2 ex -> ToolUp.RAG.InMemoryVectorStore.rethrow ex
+    }
+
+    // Phase 861 — an unreadable eager snapshot does not fail construction:
+    // the scope stays unloaded and the first access retries.
     do
-        loadScope Platform |> Async.RunSynchronously
-        loadScope Deployment |> Async.RunSynchronously
+        ensureScopeLoadedForSearch Platform |> Async.RunSynchronously
+        ensureScopeLoadedForSearch Deployment |> Async.RunSynchronously
 
     let flushLoop = async {
         while not cts.IsCancellationRequested do
@@ -484,6 +527,11 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
     interface ISparseIndex with
 
         member _.Upsert scope chunkId chunk = async {
+            // Phase 861 — hydrate first. An upsert that is the first thing a
+            // restarted process does to a lazily-loaded scope would otherwise
+            // create a fresh, empty index for it, and the next flush would
+            // replace the persisted `bm25.json` with just the new chunks.
+            do! ensureScopeLoaded scope
             let idx = getOrCreateScopeIndex scope
             idx.Upsert(chunkId, analyse chunk.Content, chunk.Content, chunk.Metadata)
             markDirty scope
@@ -494,7 +542,7 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
             // Deployment are already loaded at construction, and say so
             // through the same `loadedScopes` map.
             for scope in scopes' do
-                do! ensureScopeLoaded scope
+                do! ensureScopeLoadedForSearch scope
 
             // The SAME `analyse` the index-time path uses — one binding, one
             // analyzer, no way to reach the postings with anything else.
@@ -573,18 +621,23 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
             else
                 // Team and User scopes are lazy-loaded on first access (same
                 // as `Search`) — erasure must see the persisted corpus even
-                // when this process has never searched the scope.
-                do! ensureScopeLoaded scope
+                // when this process has never searched the scope. Phase 861 —
+                // a snapshot that exists but cannot be read is the interface's
+                // own typed failure, which the orchestrator retries.
+                let! loaded = ensureScopeLoaded scope |> Async.Catch
 
-                match scopes.TryGetValue(scopeToKey scope) with
-                | false, _ ->
+                match loaded, scopes.TryGetValue(scopeToKey scope) with
+                | Choice2Of2(:? ToolUp.RAG.InMemoryVectorStore.RagScopeSnapshotUnreadableException as ex), _ ->
+                    return Result.Error(ErasureError.StoreUnreachable("sparse-index", ex.Message))
+                | Choice2Of2 ex, _ -> return ToolUp.RAG.InMemoryVectorStore.rethrow ex
+                | Choice1Of2(), (false, _) ->
                     return
                         Result.Ok {
                             HandlerName = "sparse-index"
                             RecordsAffected = 0
                             Note = Some "scope empty — nothing to erase"
                         }
-                | true, idx ->
+                | Choice1Of2(), (true, idx) ->
                     let matched =
                         idx.Snapshot()
                         |> Array.filter (fun entry ->
