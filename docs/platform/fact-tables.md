@@ -157,6 +157,13 @@ records live in the backing store. Ordering holds only within one (scope, table)
 second precision. The contract pack `IFactTableWriterContract.tests` holds any implementation to
 the same bar.
 
+Where a run's facts come from is part of the contract too (Phase 938). `OpenRun` takes an optional
+`FactTableRunProvenance`. With no argument, or with `ComputedRun`, the run writes the table's own
+lineage. With `ImportedRun`, each origin's rows are written `Imported`; team publication opens its
+runs this way. Every writer honours the provenance, and every decorator passes it through untouched.
+`IFactTableWriterContract.provenanceTests` and `IFactTableWriterContract.decoratorTests` check both.
+See [the migration note](../migrations/938-run-provenance-in-the-fact-table-writer.md).
+
 ## Delegate facts — a population held as a pointer to a table
 
 The default writer turns every cell into a fact. For a large population that is one stored fact,
