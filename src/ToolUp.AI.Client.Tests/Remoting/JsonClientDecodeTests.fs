@@ -634,4 +634,66 @@ let tests =
                         Expect.isTrue ex.DecodeError.IsSome "the refusal is carried as data"
                     | other -> failwithf "expected a named refusal, got %A" other)
         ]
+
+        // ─── Phase 937 — the Long object form is refused on the reflective read ─
+        //
+        // Phase 911's pass rewrote or refused a NUMBER at an int64 / uint64
+        // position and passed an OBJECT through, so `Fable.SimpleJson` still
+        // read the Fable/Long.js runtime shape `{"high","low","unsigned"}`.
+        // These pins went red against that pass (each object decoded) and
+        // stay as the refusal pins; the number and string forms beside them
+        // are the 911 cases above.
+        testList "Phase 937 — the Long object form is refused on the reflective read" [
+            let expectObjectRefusal (path: string list) (typeName: string) (outcome: Outcome<'T>) =
+                match outcome with
+                | Raised(:? ProxyRequestException as ex) ->
+                    match ex.DecodeError with
+                    | Some error ->
+                        same error.Path path "the path to the offending value"
+                        Expect.isTrue (error.Expected.Contains typeName) error.Expected
+                        Expect.isTrue (error.Expected.Contains "a digit string") error.Expected
+                        Expect.isTrue (error.Found.Contains "object") error.Found
+                    | None -> failwith "DecodeError was None: the refusal was not carried as data"
+                | Raised ex -> failwithf "raised `%s`, not ProxyRequestException" ex.Message
+                | Returned value -> failwithf "the Long object form decoded: %A" value
+                | Pending -> failwith "the call never completed"
+
+            // The library pin: what the pass stands in front of. If this goes
+            // red the library changed, not the proxy.
+            testCase "937 red — Fable.SimpleJson itself reads the Long object form"
+            <| fun () ->
+                same
+                    (viaReflection<int64> """{"high":1,"low":705032704,"unsigned":false}""")
+                    5000000000L
+                    "the object form is read, high and low"
+
+            testCaseDeferred "937 — an object at an int64 record field is a named refusal at its path" 30 (fun () ->
+                installXhrStub ()
+                JsonDecoders.resetForTests ()
+
+                scriptResponse
+                    200
+                    """{"Count":{"high":1,"low":705032704,"unsigned":false},"Size":1,"Maybe":null,"Series":[],"Pair":[1,"x"]}"""
+
+                let outcome = start (wideApi.GetReading())
+                fun () -> expectObjectRefusal [ "Count" ] "Int64" (outcome ()))
+
+            testCaseDeferred "937 — an object inside an int64 list is refused at the element's path" 30 (fun () ->
+                installXhrStub ()
+                JsonDecoders.resetForTests ()
+
+                scriptResponse
+                    200
+                    """{"Count":1,"Size":1,"Maybe":null,"Series":[2,{"high":0,"low":7,"unsigned":false}],"Pair":[1,"x"]}"""
+
+                let outcome = start (wideApi.GetReading())
+                fun () -> expectObjectRefusal [ "Series"; "[1]" ] "Int64" (outcome ()))
+
+            testCaseDeferred "937 — an object at a uint64 return is refused at the root" 30 (fun () ->
+                installXhrStub ()
+                JsonDecoders.resetForTests ()
+                scriptResponse 200 """{"high":-1,"low":-1,"unsigned":true}"""
+                let outcome = start (wideApi.GetSize())
+                fun () -> expectObjectRefusal [] "UInt64" (outcome ()))
+        ]
     ]

@@ -100,11 +100,13 @@ type IJobScheduler =
     /// A job scheduled through the string overload runs under the
     /// anonymous scope on that field — never a widening.
     ///
-    /// Re-minting is the platform's act: `ResolvedScope` has an internal
-    /// constructor, so an implementation outside the platform's server tier
-    /// cannot re-mint and must hand its handlers `ResolvedScope.anonymous`
-    /// (the contract pack's `carriedScopeTests` pins which of the two an
-    /// implementation declares). Passing `ResolvedScope.anonymous` here
+    /// Re-minting is the platform's act (Phase 935): the scope rides the
+    /// definition as a token the platform's `ScopeCarrier` issued for this
+    /// job, and a dispatch redeems it through the same carrier, so an
+    /// implementation outside the platform's server tier re-mints exactly
+    /// as the in-process default does (`CarriedJobScope`). Neither can
+    /// promote a string: a token re-mints only the scope it was issued for,
+    /// for the job it was issued for. Passing `ResolvedScope.anonymous` here
     /// registers an ordinary job under the anonymous scope.
     abstract Schedule: scope: ResolvedScope * registration: JobRegistration -> Async<Result<JobId, ScheduleError>>
 
@@ -158,7 +160,7 @@ type IJobScheduler =
     /// a single write maps to a single notify).
     abstract NotifyEventWritten: scopeId: string * eventType: string * eventId: System.Guid -> Async<unit>
 
-// ─── Phase 818 — the carried mint's persisted provenance ─────────────
+// ─── Phase 818 / 935 — the carried scope, persisted with the job ─────
 //
 // A job's scope is persisted as a string (`JobDefinition.ScopeId`, rule 1:
 // identity by value), and the dispatch that runs it happens later, in
@@ -170,39 +172,49 @@ type IJobScheduler =
 // It rides the definition's `Tags` under a reserved `_platform.scope.`
 // prefix rather than a new `JobDefinition` field: the record is persisted
 // by every job store and crosses the job-admin wire, and a field would
-// retype its constructor for every store and decoder in the ecosystem to
-// carry three strings. The price of a tag is that it can be WRITTEN by a
-// caller, which is why the string `Schedule` strips the prefix before
-// persisting: provenance is stamped only by the typed overload, and a
-// registration that arrives over the wire cannot claim it. What remains
-// trusted is the job store itself — a party that can write definitions
-// straight into it is inside the server's trust boundary already, and
-// holds the string store members besides.
-module internal CarriedJobScope =
+// retype its constructor for every store and decoder in the ecosystem.
+//
+// Since Phase 935 what rides there is ONE opaque token the platform's
+// `ScopeCarrier` issued for this job (`CarriedScopeToken.fs`), not the
+// three plain strings Phase 818 wrote. Phase 818 treated the job store as
+// trusted — a party that could write definitions could write the three
+// tags and claim any container and persistence for the job's scope id.
+// The token closes that: a store writer can delete or corrupt it (the job
+// runs anonymous) or copy a genuine one from another job (the purpose, the
+// job's scope id and job id, refuses it), and cannot write one. Both
+// schedulers — the in-process default and a companion outside the server
+// tier — stamp and redeem through this one module, so there is one
+// carrier, not two. The string `Schedule` still strips the prefix, so a
+// registration that arrives over the wire cannot even present a token.
+//
+// A definition persisted with Phase 818's three tags and no token runs
+// anonymous: those tags are no longer read, and nothing released ever
+// wrote them.
+/// The carried scope of a scheduled job (Phases 818 and 935): the token a
+/// typed `Schedule` persists on the definition's tags, and the scope a
+/// dispatch of the definition runs under. Public so a scheduler outside the
+/// platform's server tier stamps and redeems exactly as the in-process
+/// default does; every function takes the platform's `ScopeCarrier`, which
+/// no caller can construct over key material of its own.
+[<RequireQualifiedAccess>]
+module CarriedJobScope =
 
     /// The reserved tag prefix. Every key under it is the scheduler's.
     [<Literal>]
     let Prefix = "_platform.scope."
 
-    /// Present, with value `Resolver`, when the definition's scope was
-    /// minted by the platform's scope resolution.
+    /// The tag the carried-scope token rides under.
     [<Literal>]
-    let ProvenanceTag = "_platform.scope.provenance"
+    let TokenTag = "_platform.scope.token"
 
-    /// The provenance value the typed `Schedule` stamps.
-    [<Literal>]
-    let Resolver = "resolver"
-
-    /// The resolved `StorageScope.Container`.
-    [<Literal>]
-    let ContainerTag = "_platform.scope.container"
-
-    /// The resolved `StorageScope.Persist`, as `"true"` / `"false"`.
-    [<Literal>]
-    let PersistTag = "_platform.scope.persist"
+    /// The purpose a job's token is issued and redeemed for: the job's
+    /// scope id and job id, so a token copied onto another job — or onto
+    /// the same job id in another scope — redeems nothing.
+    let purpose (scopeId: string) (jobId: JobId) : CarriedScopePurpose =
+        CarriedScopePurpose.ScheduledJob(scopeId, jobId)
 
     /// Remove every reserved key — what the string `Schedule` does to a
-    /// caller's tags, so no registration can claim a provenance it lacks.
+    /// caller's tags, so no registration can claim a scope it lacks.
     let strip (tags: Map<string, string>) : Map<string, string> =
         if isNull (box tags) then
             Map.empty
@@ -210,42 +222,48 @@ module internal CarriedJobScope =
             tags
             |> Map.filter (fun key _ -> not (key.StartsWith(Prefix, StringComparison.Ordinal)))
 
-    /// The tags the typed `Schedule` persists: the caller's, stripped,
-    /// plus the resolver's scope when there is one. The anonymous scope
-    /// carries no provenance — it runs anonymous whichever way it came.
-    let stamp (scope: ResolvedScope) (tags: Map<string, string>) : Map<string, string> =
+    /// The tags the typed `Schedule` persists for job `jobId`: the
+    /// caller's, stripped, plus a token carrying `scope` when it is a
+    /// resolved one. The anonymous scope carries nothing — it runs
+    /// anonymous whichever way it came. `Error` when the carrier could not
+    /// seal; the scheduler refuses the job rather than drop its scope.
+    let stamp
+        (carrier: ScopeCarrier)
+        (scope: ResolvedScope)
+        (jobId: JobId)
+        (tags: Map<string, string>)
+        : Result<Map<string, string>, string> =
         let stripped = strip tags
 
-        match scope.Storage with
-        | None -> stripped
-        | Some storage ->
-            stripped
-            |> Map.add ProvenanceTag Resolver
-            |> Map.add ContainerTag storage.Container
-            |> Map.add PersistTag (if storage.Persist then "true" else "false")
+        carrier.Issue(scope, purpose scope.ScopeId jobId)
+        |> Result.map (fun token ->
+            match token with
+            | None -> stripped
+            | Some token -> stripped |> Map.add TokenTag token)
 
-    /// The scope a dispatch of this definition runs under: the resolver's
-    /// scope, re-minted, when the definition carries a complete provenance
-    /// record; otherwise the anonymous scope. A partial or malformed record
-    /// is anonymous, never a guess.
-    let ofDefinition (definition: JobDefinition) : ResolvedScope =
-        let tags = definition.Tags
+    /// The scope a dispatch of this definition runs under: the scope its
+    /// token carries, re-minted by the platform, when the token redeems for
+    /// this job; otherwise the anonymous scope. A missing, altered, foreign
+    /// or re-purposed token is anonymous, never a guess.
+    let ofDefinition (carrier: ScopeCarrier) (definition: JobDefinition) : ResolvedScope =
+        let token =
+            if isNull (box definition.Tags) then
+                None
+            else
+                Map.tryFind TokenTag definition.Tags
 
-        if isNull (box tags) then
-            ResolvedScope.anonymous
-        else
-            match Map.tryFind ProvenanceTag tags, Map.tryFind ContainerTag tags, Map.tryFind PersistTag tags with
-            | Some provenance, Some container, Some persist when provenance = Resolver ->
-                match persist with
-                | "true"
-                | "false" ->
-                    ResolvedScope.ofCarried {
-                        ScopeId = definition.ScopeId
-                        Container = container
-                        Persist = (persist = "true")
-                    }
-                | _ -> ResolvedScope.anonymous
-            | _ -> ResolvedScope.anonymous
+        carrier.RedeemOrAnonymous(token, purpose definition.ScopeId definition.JobId)
+
+/// Phase 935 — a scheduler that carries a resolved scope through the
+/// platform's `ScopeCarrier`. Composition binds the deployment's carrier
+/// (over its DataProtection key ring) into the scheduler it composes or
+/// adopts, so a job scheduled under a resolved scope runs under it after a
+/// restart. A scheduler nothing has bound uses a carrier of its own
+/// (`ScopeCarrier.ephemeral`): it re-mints within its own lifetime, and a
+/// job it scheduled runs anonymous after a restart.
+type IScopeCarrierBinding =
+    /// Bind the carrier this scheduler stamps and redeems job scopes with.
+    abstract BindScopeCarrier: carrier: ScopeCarrier -> unit
 
 // ─── Phase 9b.B — compose-time scheduled-job declarations ─────────────
 //

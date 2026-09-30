@@ -663,46 +663,11 @@ type TeamConversationVisibilityApi = {
     SetConversationVisibility: TeamConversationVisibility -> Async<Result<TeamConversationVisibilityView, string>>
 }
 
-// ─── Phase 896 — team output visibility ──────────────────────────
-//
-// Module permission governs USE of a module; the team's output level
-// governs who sees the restricted output its modules publish. Held in the
-// same per-team policy record as the conversation level, so it is set here,
-// beside it.
-
-/// The output-visibility level in force for the caller's active team
-/// (Phase 896).
-type TeamOutputVisibilityView = {
-    /// False outside a team scope: there is no team level to show or set.
-    InTeamScope: bool
-    /// False when the deployment has not composed team output visibility:
-    /// the level shown is `TeamVisible` and cannot be changed.
-    Enabled: bool
-    /// The level in force now.
-    Level: TeamVisibilityLevel
-    /// The levels this deployment lets a team choose from.
-    Allowed: TeamVisibilityLevel list
-    /// The levels THIS caller may select now. Empty when the caller may not
-    /// change the level at all.
-    Selectable: TeamVisibilityLevel list
-}
-
-/// Read and set the active team's output visibility (Phase 896). Mounted
-/// beside `TeamConversationVisibilityApi`; the team is always the caller's
-/// active team, never a request field.
-type TeamOutputVisibilityApi = {
-    /// The level in force for the caller's active team, and what the caller
-    /// may change it to.
-    [<AllowAnonymous>]
-    GetOutputVisibility: unit -> Async<TeamOutputVisibilityView>
-    /// Set the active team's level. Only the team `Owner` may; selecting
-    /// `PlatformAdmins`, or leaving it, also needs a platform admin. A level
-    /// outside the deployment's allowed set is refused, naming the set, and
-    /// so is a level that would leave conversation visibility wider than
-    /// output visibility, naming both.
-    [<RequiresClaim "scope">]
-    SetOutputVisibility: TeamVisibilityLevel -> Async<Result<TeamOutputVisibilityView, string>>
-}
+// Phase 896's `TeamOutputVisibilityApi` / `TeamOutputVisibilityView` moved
+// to the platform tier in Phase 936 (`ToolUp.Platform`, Platform.Core
+// `Shared/Types/TeamOutputVisibility.fs`), beside the per-team policy record
+// they read and set, so a deployment without the assistant has them. The
+// conversation API above stays here.
 
 // ─── Branding ─────────────────────────────────────────────────────
 

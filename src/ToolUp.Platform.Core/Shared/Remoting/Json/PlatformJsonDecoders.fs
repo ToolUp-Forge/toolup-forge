@@ -939,6 +939,14 @@ module PlatformJsonDecoders =
         |> JsonDecode.apply (JsonDecode.field "Name" JsonDecode.asString)
         |> JsonDecode.apply (JsonDecode.field "InitialOwnerUserId" JsonDecode.asString)
 
+    /// Generated JSON decoder for `TeamVisibilityLevel` — members by name, cases by case name, read off the type's own shape.
+    let teamVisibilityLevel: JsonDecoder<TeamVisibilityLevel> =
+        JsonDecode.union "TeamVisibilityLevel" (function
+            | "TeamVisible" -> Some(JsonDecode.case0 TeamVisibilityLevel.TeamVisible)
+            | "TeamAdmins" -> Some(JsonDecode.case0 TeamVisibilityLevel.TeamAdmins)
+            | "PlatformAdmins" -> Some(JsonDecode.case0 TeamVisibilityLevel.PlatformAdmins)
+            | _ -> None)
+
     /// Generated JSON decoder for `UsageDateRange` — members by name, cases by case name, read off the type's own shape.
     let usageDateRange: JsonDecoder<UsageDateRange> =
         JsonDecode.succeed (fun from to' -> ({
@@ -1047,6 +1055,7 @@ module PlatformJsonDecoders =
         Some "TeamApi", typeof<CreateTeamRequest>.FullName
         Some "TeamApi", typeof<string * string * TeamRole>.FullName
         Some "TeamApi", typeof<string * string>.FullName
+        Some "TeamOutputVisibilityApi", typeof<TeamVisibilityLevel>.FullName
         Some "IUsageQueryApi", typeof<(string option) * (UsageDateRange option)>.FullName
         Some "IUsageQueryApi", typeof<UsageGrouping>.FullName
         Some "IUsageQueryApi", typeof<UsageDateRange option>.FullName
@@ -1094,6 +1103,7 @@ module PlatformJsonDecoders =
         "PlatformAdminApi"
         "PlatformInfoApi"
         "TeamApi"
+        "TeamOutputVisibilityApi"
         "IUsageQueryApi"
     ]
 
@@ -1187,6 +1197,7 @@ module PlatformJsonDecoders =
         JsonDecoders.registerFor<CreateTeamRequest> "TeamApi" createTeamRequest
         JsonDecoders.registerFor<string * string * TeamRole> "TeamApi" (JsonDecode.tuple3 JsonDecode.asString JsonDecode.asString teamRole)
         JsonDecoders.registerFor<string * string> "TeamApi" (JsonDecode.tuple2 JsonDecode.asString JsonDecode.asString)
+        JsonDecoders.registerFor<TeamVisibilityLevel> "TeamOutputVisibilityApi" teamVisibilityLevel
         JsonDecoders.registerFor<(string option) * (UsageDateRange option)> "IUsageQueryApi" (JsonDecode.tuple2 (JsonDecode.option JsonDecode.asString) (JsonDecode.option usageDateRange))
         JsonDecoders.registerFor<UsageGrouping> "IUsageQueryApi" usageGrouping
         JsonDecoders.registerFor<UsageDateRange option> "IUsageQueryApi" (JsonDecode.option usageDateRange)
@@ -1288,6 +1299,7 @@ module PlatformJsonDecoders =
             (Some "TeamApi", typeof<CreateTeamRequest>.FullName), JsonDecoders.verifyThrough<CreateTeamRequest> gate draws seed createTeamRequest
             (Some "TeamApi", typeof<string * string * TeamRole>.FullName), JsonDecoders.verifyThrough<string * string * TeamRole> gate draws seed (JsonDecode.tuple3 JsonDecode.asString JsonDecode.asString teamRole)
             (Some "TeamApi", typeof<string * string>.FullName), JsonDecoders.verifyThrough<string * string> gate draws seed (JsonDecode.tuple2 JsonDecode.asString JsonDecode.asString)
+            (Some "TeamOutputVisibilityApi", typeof<TeamVisibilityLevel>.FullName), JsonDecoders.verifyThrough<TeamVisibilityLevel> gate draws seed teamVisibilityLevel
             (Some "IUsageQueryApi", typeof<(string option) * (UsageDateRange option)>.FullName), JsonDecoders.verifyThrough<(string option) * (UsageDateRange option)> gate draws seed (JsonDecode.tuple2 (JsonDecode.option JsonDecode.asString) (JsonDecode.option usageDateRange))
             (Some "IUsageQueryApi", typeof<UsageGrouping>.FullName), JsonDecoders.verifyThrough<UsageGrouping> gate draws seed usageGrouping
             (Some "IUsageQueryApi", typeof<UsageDateRange option>.FullName), JsonDecoders.verifyThrough<UsageDateRange option> gate draws seed (JsonDecode.option usageDateRange)

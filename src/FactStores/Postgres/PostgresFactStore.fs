@@ -65,14 +65,37 @@ open ToolUp.Facts
 //                value threshold (`numeric` comparison is exact decimal
 //                comparison, and a non-scalar has no magnitude, so it
 //                fails every threshold in both places).
-//   in memory    the D19 canonical-method selection (a registry fact), the
-//                ranking (the decimal tie order and the content-address
-//                tiebreak are `PopulationRanking.rankBy`'s), and every
-//                statistic: the mean's decimal division, the first-extreme
-//                minimum and maximum, the method mix and the freshness
-//                histogram (a registry staleness policy). These run over
-//                the projected rows through `PopulationQueryTypes`, so the
-//                answer is the blob store's by construction.
+//   aggregated   (Phase 940) — when no canonical selection can move the
+//                population — the statistics and the top k:
+//                  counts, and the distinct-subject count (a hash count
+//                    first; an exact `count(DISTINCT path)` only when the
+//                    hashes cannot prove every path distinct);
+//                  earliest start and latest end (integer ticks);
+//                  minimum and maximum (`numeric` comparison is exact
+//                    decimal comparison; equal values at two scales are
+//                    equal decimals, and which one the in-memory fold keeps
+//                    is its enumeration order's, which no store pins);
+//                  the sum, exact in `numeric`, used only when the sum of
+//                    absolute values at the largest scale fits `decimal`'s
+//                    mantissa — then every left-to-right partial sum is a
+//                    `decimal` without rounding, so the fold's sum is this
+//                    one, scale included — and the mean is the fold's own
+//                    `total / decimal count`, taken in .NET;
+//                  the method mix, ordered ordinally in .NET;
+//                  the freshness histogram, as `as_of >= t - window` (the
+//                    `Freshness.deriveAt` comparison restated), except where
+//                    `asOf + window` could leave `DateTime`'s range;
+//                  the top k by value, ties by content address in byte
+//                    order (ordinal for a hex address), re-ranked in .NET by
+//                    `PopulationRanking.rankMembers`.
+//                All of it in one repeatable-read snapshot.
+//   in memory    the D19 canonical-method selection (a registry fact) when
+//                two methods are present to compete, and anything the
+//                aggregated read declines (a sum `decimal` would round, a
+//                freshness window at the edge of `DateTime`). Then every
+//                visible member row is read and the whole shared pipeline
+//                runs over the projected rows through
+//                `PopulationQueryTypes`, as it did before Phase 940.
 //
 // Only the top-k facts are read in full. A point read's listing order is
 // the contract's (hierarchy, metric, period start); ties, which the
@@ -279,6 +302,73 @@ WHERE f.scope = @scope AND NOT f.is_head AND f.as_of_ticks <= @t{clauses}
   AND f.fact_id IN (SELECT s.supersedes FROM {table} s WHERE s.scope = @scope AND s.as_of_ticks > @t AND s.supersedes IS NOT NULL)
   AND NOT EXISTS (SELECT 1 FROM {table} s2 WHERE s2.scope = @scope AND s2.supersedes = f.fact_id AND s2.as_of_ticks <= @t)"""
 
+    // ─── Population aggregates (Phase 940) ───────────────────────────
+    //
+    // The population read's statistics and top-k, answered in the database
+    // over the same visible set `visibleAt` defines, so only a summary row,
+    // the method mix and k members cross the wire. Every statement binds
+    // what `visibleAt` binds; the summary also binds `@fresh_from` and the
+    // top-k `@k`. Which arithmetic may run here, and which may not, is the
+    // file header's "What the database decides" note.
+
+    /// The visible rows, projected to what the aggregates read — `numeric`
+    /// kept as `numeric` so it orders and sums as a number.
+    let internal aggregateColumns =
+        "f.fact_id, f.hierarchy, f.path, f.magnitude, f.period_from_ticks, f.period_to_ticks, f.as_of_ticks, f.method_identity"
+
+    /// `decimal`'s largest mantissa, 2^96 - 1.
+    [<Literal>]
+    let internal DecimalMantissaMax = "79228162514264337593543950335"
+
+    /// One row: fact count, comparable count, minimum, maximum, exact sum,
+    /// whether every left-to-right partial sum is a `decimal` without
+    /// rounding (the sum of absolute values at the largest scale fits the
+    /// mantissa), earliest period start, latest period end, fresh count,
+    /// and the count of distinct subject-path HASHES (a lower bound on the
+    /// distinct subjects: equal paths hash equal, so a count equal to the
+    /// fact count proves every path distinct).
+    let internal populationSummary (table: string) (filter: RowFilter) : string =
+        $"""SELECT count(*), count(m.magnitude), min(m.magnitude)::text, max(m.magnitude)::text, sum(m.magnitude)::text,
+  coalesce(sum(abs(m.magnitude)) * power(10::numeric, max(scale(m.magnitude))) <= {DecimalMantissaMax}, true),
+  min(m.period_from_ticks), max(m.period_to_ticks),
+  count(*) FILTER (WHERE m.as_of_ticks >= @fresh_from),
+  count(DISTINCT hash_array_extended(m.path, 0))
+FROM ({visibleAt table aggregateColumns filter}) m"""
+
+    /// The exact distinct-subject count — issued only when the hash count
+    /// in `populationSummary` cannot prove it. The hierarchy is a filter,
+    /// so a subject is its path.
+    let internal populationSubjects (table: string) (filter: RowFilter) : string =
+        $"SELECT count(DISTINCT m.path) FROM ({visibleAt table aggregateColumns filter}) m"
+
+    /// `(method identity, count)` over the visible rows.
+    let internal populationMethodMix (table: string) (filter: RowFilter) : string =
+        $"SELECT m.method_identity, count(*) FROM ({visibleAt table aggregateColumns filter}) m GROUP BY m.method_identity"
+
+    /// At most two of the visible rows' method identities — enough to tell
+    /// a single-method population (where no canonical selection can apply)
+    /// from a competing one.
+    let internal populationMethodProbe (table: string) (filter: RowFilter) : string =
+        let columns = "f.method_identity"
+        $"SELECT m.method_identity FROM ({visibleAt table columns filter}) m GROUP BY m.method_identity LIMIT 2"
+
+    /// The best `@k` comparable members, projected as `memberColumns`: by
+    /// value in `direction`, ties by content address in byte order, which
+    /// for a hex content address is `String.CompareOrdinal`'s — the
+    /// comparator inside `PopulationRanking.rankBy`, so the SET of the top
+    /// k is the shared ranking's; the caller re-ranks the k rows through
+    /// that function for the order.
+    let internal populationTop (table: string) (filter: RowFilter) (direction: RankDirection) : string =
+        let order =
+            match direction with
+            | HighestFirst -> "DESC"
+            | LowestFirst -> "ASC"
+
+        $"""SELECT {memberColumns "m"} FROM ({visibleAt table aggregateColumns filter}) m
+WHERE m.magnitude IS NOT NULL
+ORDER BY m.magnitude {order}, m.fact_id COLLATE "C"
+LIMIT @k"""
+
     /// Every fact written by `@t` that passes `filter` — the full-history
     /// listing (`IncludeSuperseded`).
     let internal historyAt (table: string) (filter: RowFilter) : string =
@@ -484,41 +574,51 @@ type PostgresFactStore
 
     let utc (ticks: int64) = DateTime(ticks, DateTimeKind.Utc)
 
+    // `numeric` crosses the wire as text and is parsed invariantly, so the
+    // decimal keeps the scale it was written with (1.0 stays 1.0).
+    let parseDecimal (text: string) =
+        Decimal.Parse(text, NumberStyles.Number, CultureInfo.InvariantCulture)
+
+    // Every member row a reader holds, in the `Sql.memberColumns` order.
+    let readMemberRows (cmd: NpgsqlCommand) : Async<PopulationMember list> = async {
+        use! reader = cmd.ExecuteReaderAsync() |> Async.AwaitTask
+        let members = ResizeArray<PopulationMember>()
+
+        let rec loop () = async {
+            let! more = reader.ReadAsync() |> Async.AwaitTask
+
+            if more then
+                let magnitude =
+                    if reader.IsDBNull 3 then
+                        None
+                    else
+                        Some(parseDecimal (reader.GetString 3))
+
+                members.Add {
+                    FactId = reader.GetString 0
+                    Subject = {
+                        Hierarchy = reader.GetString 1
+                        Path = reader.GetFieldValue<string[]> 2 |> List.ofArray
+                    }
+                    Magnitude = magnitude
+                    PeriodFrom = utc (reader.GetInt64 4)
+                    PeriodTo = utc (reader.GetInt64 5)
+                    AsOf = utc (reader.GetInt64 6)
+                    MethodIdentity = reader.GetString 7
+                }
+
+                return! loop ()
+        }
+
+        do! loop ()
+        return List.ofSeq members
+    }
+
     let readMembers (sql: string) (bind: NpgsqlCommand -> unit) : Async<PopulationMember list> =
         withConnection (fun conn -> async {
             use cmd = command sql conn null
             bind cmd
-            use! reader = cmd.ExecuteReaderAsync() |> Async.AwaitTask
-            let members = ResizeArray<PopulationMember>()
-
-            let rec loop () = async {
-                let! more = reader.ReadAsync() |> Async.AwaitTask
-
-                if more then
-                    let magnitude =
-                        if reader.IsDBNull 3 then
-                            None
-                        else
-                            Some(Decimal.Parse(reader.GetString 3, NumberStyles.Number, CultureInfo.InvariantCulture))
-
-                    members.Add {
-                        FactId = reader.GetString 0
-                        Subject = {
-                            Hierarchy = reader.GetString 1
-                            Path = reader.GetFieldValue<string[]> 2 |> List.ofArray
-                        }
-                        Magnitude = magnitude
-                        PeriodFrom = utc (reader.GetInt64 4)
-                        PeriodTo = utc (reader.GetInt64 5)
-                        AsOf = utc (reader.GetInt64 6)
-                        MethodIdentity = reader.GetString 7
-                    }
-
-                    return! loop ()
-            }
-
-            do! loop ()
-            return List.ofSeq members
+            return! readMemberRows cmd
         })
 
     let bindVisible (scopeId: string) (t: DateTime) (filter: RowFilter) (cmd: NpgsqlCommand) =
@@ -610,17 +710,66 @@ type PostgresFactStore
         |> Option.map _.Staleness
         |> Option.defaultValue Grounding.UntilSuperseded
 
-    let runPopulation (scopeId: string) (query: PopulationQuery) : Async<Result<PopulationResult, string>> = async {
-        let metricDef = registry |> Option.bind (fun r -> r.TryGetMetric query.Metric.Value)
+    // The population's row filter; the threshold only when the caller
+    // has shown no canonical selection can run before it.
+    let populationFilter (query: PopulationQuery) (withThreshold: bool) : RowFilter = {
+        RowFilter.none with
+            Hierarchy = Some query.Hierarchy
+            Level = query.Level
+            PathPrefix = query.PathPrefix
+            Metric = Some query.Metric.Value
+            Period = query.PeriodOverlaps
+            MethodIdentity =
+                match query.Methods with
+                | OneMethod m -> Some(Fact.methodIdentity m)
+                | _ -> None
+            Threshold = if withThreshold then query.Threshold else None
+    }
 
-        // Ordering first: a refusal costs no read (GP 9), exactly as the
-        // blob store resolves it.
-        match PopulationOrdering.resolve query.Metric.Value query.Ordering (metricDef |> Option.map _.Direction) with
-        | Error refusal -> return Error refusal
-        | Ok direction ->
-            let t = query.AsOf |> Option.defaultValue (clock().ToUniversalTime())
-            let selector = metricDef |> Option.bind _.CanonicalMethod
+    // The transaction-time floor a fact must reach to be FRESH at `t` —
+    // `Freshness.deriveAt` over a current head, restated as a comparison
+    // the database can count. Under `FreshFor window` a head is fresh while
+    // `t <= asOf + window`, i.e. `asOf.Ticks >= t.Ticks - window.Ticks`;
+    // under the other two policies every current head is fresh. `None`
+    // when `asOf + window` could leave `DateTime`'s range (a negative
+    // window, or one reaching past `DateTime.MaxValue` from `t`): the
+    // shared derivation throws there, so the member read runs it rather
+    // than the database quietly answering.
+    let freshFloor (policy: Grounding.StalenessPolicy) (t: DateTime) : int64 option =
+        match policy with
+        | Grounding.UntilSuperseded
+        | Grounding.UntilUpstreamChange -> Some Int64.MinValue
+        | Grounding.FreshFor window ->
+            if window < TimeSpan.Zero || window.Ticks > DateTime.MaxValue.Ticks - t.Ticks then
+                None
+            else
+                Some(t.Ticks - window.Ticks)
 
+    // The full facts of the ranked members, in the members' order.
+    let factsInOrder (members: PopulationMember list) (facts: Fact list) : Fact list =
+        let byId = facts |> List.map (fun f -> f.FactId, f) |> dict
+
+        members
+        |> List.choose (fun m ->
+            if byId.ContainsKey m.FactId then
+                Some byId[m.FactId]
+            else
+                None)
+
+    /// The member read (Phase 888): every visible member row crosses the
+    /// wire and the shared pipeline decides everything in memory. Runs
+    /// when the aggregate read below cannot answer identically — a
+    /// canonical-method selection over competing methods, a sum `decimal`
+    /// would round, or a freshness window at the edge of `DateTime`.
+    let populationFromMembers
+        (scopeId: string)
+        (query: PopulationQuery)
+        (direction: RankDirection)
+        (policy: Grounding.StalenessPolicy)
+        (selector: string option)
+        (t: DateTime)
+        : Async<PopulationResult> =
+        async {
             // The threshold may run in the database only when the canonical
             // selection cannot apply: selection runs BEFORE the threshold
             // and needs every member of a contested group to decide.
@@ -630,19 +779,7 @@ type PostgresFactStore
                 | AllCompetingMethods
                 | OneMethod _ -> true
 
-            let filter = {
-                RowFilter.none with
-                    Hierarchy = Some query.Hierarchy
-                    Level = query.Level
-                    PathPrefix = query.PathPrefix
-                    Metric = Some query.Metric.Value
-                    Period = query.PeriodOverlaps
-                    MethodIdentity =
-                        match query.Methods with
-                        | OneMethod m -> Some(Fact.methodIdentity m)
-                        | _ -> None
-                    Threshold = if thresholdInDatabase then query.Threshold else None
-            }
+            let filter = populationFilter query thresholdInDatabase
 
             let! heads = readMembers (Sql.visibleAt table (Sql.memberColumns "f") filter) (bindVisible scopeId t filter)
 
@@ -664,8 +801,6 @@ type PostgresFactStore
                     |> List.filter (fun m -> ValueThreshold.satisfiesMagnitude threshold m.Magnitude)
                 | _ -> selected
 
-            let policy = stalenessOf metricDef
-
             let stats =
                 PopulationStats.ofMembers (fun m -> Freshness.deriveAt policy m.AsOf true t) population
 
@@ -681,22 +816,237 @@ type PostgresFactStore
                         addText cmd "scope" scopeId
                         addTextArray cmd "ids" (top |> List.map _.FactId))
 
-            let byId = facts |> List.map (fun f -> f.FactId, f) |> dict
+            return {
+                Ranked = factsInOrder top facts
+                Direction = direction
+                EffectiveTopK = k
+                Truncated = List.length ranked > k
+                Stats = stats
+            }
+        }
 
-            return
-                Ok {
-                    Ranked =
-                        top
-                        |> List.choose (fun m ->
-                            if byId.ContainsKey m.FactId then
-                                Some byId[m.FactId]
-                            else
-                                None)
-                    Direction = direction
-                    EffectiveTopK = k
-                    Truncated = List.length ranked > k
-                    Stats = stats
+    /// The aggregate read (Phase 940): the summary, the method mix and the
+    /// top k computed in the database, in ONE repeatable-read snapshot so
+    /// the three agree with each other under concurrent writers. `None`
+    /// when the answer would not be the shared pipeline's — the caller
+    /// then runs the member read. The threshold is always in the database
+    /// here: with `requireSingleMethod` (a canonical selector is declared)
+    /// the same snapshot first proves the unthresholded population carries
+    /// one method identity, where `PopulationSelection.canonicalHeads` is
+    /// the identity (its own first branch) and so cannot move the
+    /// threshold; two identities decline.
+    let populationFromAggregates
+        (scopeId: string)
+        (query: PopulationQuery)
+        (direction: RankDirection)
+        (freshFrom: int64)
+        (requireSingleMethod: bool)
+        (t: DateTime)
+        : Async<PopulationResult option> =
+        withConnection (fun conn -> async {
+            let filter = populationFilter query true
+            let k = PopulationQuery.effectiveTopK query
+
+            use! tx =
+                conn.BeginTransactionAsync(Data.IsolationLevel.RepeatableRead).AsTask()
+                |> Async.AwaitTask
+
+            let bound (sql: string) =
+                let cmd = command sql conn tx
+                bindVisible scopeId t filter cmd
+                cmd
+
+            let! competing = async {
+                if requireSingleMethod then
+                    let unthresholded = populationFilter query false
+                    use probe = command (Sql.populationMethodProbe table unthresholded) conn tx
+                    bindVisible scopeId t unthresholded probe
+                    use! reader = probe.ExecuteReaderAsync() |> Async.AwaitTask
+                    let! first = reader.ReadAsync() |> Async.AwaitTask
+                    let! second = reader.ReadAsync() |> Async.AwaitTask
+                    return first && second
+                else
+                    return false
+            }
+
+            // Everything past the method probe, in the same snapshot.
+            let summarise () = async {
+                // The summary row.
+                use summary = bound (Sql.populationSummary table filter)
+                addBigint summary "fresh_from" freshFrom
+
+                let! row = async {
+                    use! reader = summary.ExecuteReaderAsync() |> Async.AwaitTask
+                    let! _ = reader.ReadAsync() |> Async.AwaitTask
+
+                    let text (i: int) =
+                        if reader.IsDBNull i then None else Some(reader.GetString i)
+
+                    return
+                        reader.GetInt64 0,
+                        reader.GetInt64 1,
+                        text 2,
+                        text 3,
+                        text 4,
+                        reader.GetBoolean 5,
+                        (if reader.IsDBNull 6 then 0L else reader.GetInt64 6),
+                        (if reader.IsDBNull 7 then 0L else reader.GetInt64 7),
+                        reader.GetInt64 8,
+                        reader.GetInt64 9
                 }
+
+                let (factCount,
+                     comparableCount,
+                     minimum,
+                     maximum,
+                     total,
+                     sumExact,
+                     periodFrom,
+                     periodTo,
+                     freshCount,
+                     pathHashes) =
+                    row
+
+                if not sumExact then
+                    // A partial sum would round in `decimal`, and the member
+                    // read's left-to-right fold rounds where it rounds.
+                    do! tx.CommitAsync() |> Async.AwaitTask
+                    return None
+                elif factCount = 0L then
+                    do! tx.CommitAsync() |> Async.AwaitTask
+
+                    return
+                        Some {
+                            Ranked = []
+                            Direction = direction
+                            EffectiveTopK = k
+                            Truncated = false
+                            Stats = PopulationStats.empty
+                        }
+                else
+                    let! subjectCount = async {
+                        if pathHashes = factCount then
+                            return factCount
+                        else
+                            use exact = bound (Sql.populationSubjects table filter)
+                            let! n = exact.ExecuteScalarAsync() |> Async.AwaitTask
+                            return Convert.ToInt64 n
+                    }
+
+                    use mixCommand = bound (Sql.populationMethodMix table filter)
+
+                    let! mix = async {
+                        use! reader = mixCommand.ExecuteReaderAsync() |> Async.AwaitTask
+                        let rows = ResizeArray<string * int>()
+
+                        let rec loop () = async {
+                            let! more = reader.ReadAsync() |> Async.AwaitTask
+
+                            if more then
+                                rows.Add((reader.GetString 0, int (reader.GetInt64 1)))
+                                return! loop ()
+                        }
+
+                        do! loop ()
+                        return List.ofSeq rows
+                    }
+
+                    use topCommand = bound (Sql.populationTop table filter direction)
+                    addInt topCommand "k" k
+                    let! top = readMemberRows topCommand
+
+                    // The shared comparator orders the k rows the database chose.
+                    let top = PopulationRanking.rankMembers direction top
+
+                    let! facts =
+                        match top with
+                        | [] -> async { return [] }
+                        | _ -> async {
+                            use payloads = command (Sql.getByIds table) conn tx
+                            addText payloads "scope" scopeId
+                            addTextArray payloads "ids" (top |> List.map _.FactId)
+                            return! readPayloads payloads
+                          }
+
+                    do! tx.CommitAsync() |> Async.AwaitTask
+
+                    // `PopulationStats.ofMembersWithFreshness`, field for field:
+                    // the extremes are `numeric` min / max (equal values at two
+                    // scales are equal decimals; which of them the fold keeps
+                    // is its enumeration order's, which neither store pins),
+                    // the sum is exact and — `sumExact` — the fold's own, and
+                    // the mean is the fold's decimal division of it.
+                    let comparable = int comparableCount
+
+                    let stats: PopulationStats = {
+                        SubjectCount = int subjectCount
+                        FactCount = int factCount
+                        ComparableCount = comparable
+                        NonComparableCount = int factCount - comparable
+                        PeriodFrom = Some(utc periodFrom)
+                        PeriodTo = Some(utc periodTo)
+                        Minimum = minimum |> Option.map parseDecimal
+                        Maximum = maximum |> Option.map parseDecimal
+                        Mean =
+                            if comparable = 0 then
+                                None
+                            else
+                                total |> Option.map (fun s -> parseDecimal s / decimal comparable)
+                        Freshness = {
+                            FreshCount = int freshCount
+                            StaleCount = int factCount - int freshCount
+                        }
+                        MethodMix = mix |> List.sortWith (fun (a, _) (b, _) -> String.CompareOrdinal(a, b))
+                    }
+
+                    return
+                        Some {
+                            Ranked = factsInOrder top facts
+                            Direction = direction
+                            EffectiveTopK = k
+                            Truncated = comparable > k
+                            Stats = stats
+                        }
+            }
+
+            if competing then
+                do! tx.CommitAsync() |> Async.AwaitTask
+                return None
+            else
+                return! summarise ()
+        })
+
+    let runPopulation (scopeId: string) (query: PopulationQuery) : Async<Result<PopulationResult, string>> = async {
+        let metricDef = registry |> Option.bind (fun r -> r.TryGetMetric query.Metric.Value)
+
+        // Ordering first: a refusal costs no read (GP 9), exactly as the
+        // blob store resolves it.
+        match PopulationOrdering.resolve query.Metric.Value query.Ordering (metricDef |> Option.map _.Direction) with
+        | Error refusal -> return Error refusal
+        | Ok direction ->
+            let t = query.AsOf |> Option.defaultValue (clock().ToUniversalTime())
+            let selector = metricDef |> Option.bind _.CanonicalMethod
+            let policy = stalenessOf metricDef
+
+            // A canonical selection can only change the population when
+            // two methods are present to choose between; the aggregate read
+            // checks that in its own snapshot.
+            let requireSingleMethod =
+                match query.Methods with
+                | CanonicalMethodOnly -> selector.IsSome
+                | AllCompetingMethods
+                | OneMethod _ -> false
+
+            let! aggregated =
+                match freshFloor policy t with
+                | Some freshFrom -> populationFromAggregates scopeId query direction freshFrom requireSingleMethod t
+                | None -> async { return None }
+
+            match aggregated with
+            | Some result -> return Ok result
+            | None ->
+                let! result = populationFromMembers scopeId query direction policy selector t
+                return Ok result
     }
 
     // ─── Writes ───────────────────────────────────────────────────────

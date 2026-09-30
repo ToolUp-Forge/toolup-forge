@@ -26,6 +26,12 @@ namespace ToolUp.Platform
 // visibility share (conversation visibility, Phase 859, names it
 // `ToolUp.AI.TeamConversationVisibility`), of the output rule, and of the
 // one coupling check between the two.
+//
+// Phase 936 — it is also the home of the per-team policy RECORD both axes
+// are stored in, of the two deployment declarations, and of the
+// read-and-set contract for the output level, so a deployment that
+// composes facts without the AI assistant has all of it. The store over the
+// record lives in `ToolUp.Platform.Server` (`TeamPolicyStore`).
 
 /// The three team visibility levels — one vocabulary for everything a team
 /// can limit: who, besides its author, sees a conversation (Phase 859) and
@@ -103,6 +109,144 @@ module TeamOutputVisibilitySettings =
     /// The allowed set, named, for a refusal.
     let describeAllowed (settings: TeamOutputVisibilitySettings) : string =
         settings.Allowed |> List.map TeamVisibilityLevel.name |> String.concat ", "
+
+/// What the deployment declares about conversation visibility (Phase 859):
+/// the level a team starts with, and the levels a team may choose from.
+/// Composed by the AI companion (`AICompose.withTeamConversationVisibility`),
+/// which registers `unrestricted` when nothing is declared; it lives here
+/// (Phase 936) because the output axis's change check and startup check read
+/// its default, and a deployment without the assistant has no conversation
+/// axis at all.
+type TeamConversationVisibilitySettings = {
+    /// The level in force for a team that has chosen nothing.
+    Default: TeamVisibilityLevel
+    /// The levels a team owner may select. Always contains `Default`.
+    Allowed: TeamVisibilityLevel list
+}
+
+/// Constructors for `TeamConversationVisibilitySettings`.
+module TeamConversationVisibilitySettings =
+    /// Nothing declared: `TeamVisible` by default, every level allowed — a
+    /// team that has set nothing behaves exactly as before Phase 859.
+    let unrestricted: TeamConversationVisibilitySettings = {
+        Default = TeamVisible
+        Allowed = TeamVisibilityLevel.all
+    }
+
+    /// Validate a declaration. The allowed set must be non-empty and must
+    /// contain the default, or a team that never chose would sit at a level
+    /// no one could select back to.
+    let create
+        (defaultLevel: TeamVisibilityLevel)
+        (allowed: TeamVisibilityLevel list)
+        : Result<TeamConversationVisibilitySettings, string> =
+        let allowed = allowed |> List.distinct
+
+        if List.isEmpty allowed then
+            Error "withTeamConversationVisibility: the allowed set is empty; a team could select no level at all."
+        elif not (List.contains defaultLevel allowed) then
+            Error(
+                sprintf
+                    "withTeamConversationVisibility: the default %s is not in the allowed set [%s]."
+                    (TeamVisibilityLevel.name defaultLevel)
+                    (allowed |> List.map TeamVisibilityLevel.name |> String.concat ", ")
+            )
+        else
+            Ok {
+                Default = defaultLevel
+                Allowed = TeamVisibilityLevel.all |> List.filter (fun l -> List.contains l allowed)
+            }
+
+    /// The allowed set, named, for a refusal.
+    let describeAllowed (settings: TeamConversationVisibilitySettings) : string =
+        settings.Allowed |> List.map TeamVisibilityLevel.name |> String.concat ", "
+
+// ─── The per-team policy record (Phase 859 / 896; platform tier since 936) ──
+
+/// One change of a team's level, on either axis.
+type TeamVisibilityChange = {
+    /// The level from `ChangedAt` on.
+    Level: TeamVisibilityLevel
+    /// The user who changed it.
+    ChangedBy: string
+    /// When, UTC.
+    ChangedAt: System.DateTime
+}
+
+/// The conversation part of a team's policy record (Phase 859), stored in
+/// the team's container — deliberately not a field on `TeamPermissions` and
+/// not a case on the admin-mutation union. It keeps every change, oldest
+/// first, so the level in force when a conversation was created is always
+/// decidable without adding a field to the conversation.
+type TeamConversationPolicyRecord = {
+    /// Every change, oldest first. Empty for a team that never chose.
+    Changes: TeamVisibilityChange list
+}
+
+/// Functions over the conversation part of the record.
+module TeamConversationPolicyRecord =
+    /// A team that has chosen nothing.
+    let empty: TeamConversationPolicyRecord = { Changes = [] }
+
+    /// Blob name inside the team's container. Kept, not renamed, when the
+    /// record moved to the platform tier (Phase 936): every record already
+    /// stored reads from where it was written, and no migration runs.
+    [<Literal>]
+    let BlobName = "team-policies/ai-conversation-visibility.json"
+
+    /// The container a team's record lives in — the team's own container,
+    /// read in the team's scope.
+    let containerOf (teamId: string) = "team-" + teamId
+
+    /// Whether the team has ever chosen a level.
+    let isUnset (record: TeamConversationPolicyRecord) = List.isEmpty record.Changes
+
+    /// The level in force now: the last change, else the deployment default.
+    let current (defaultLevel: TeamVisibilityLevel) (record: TeamConversationPolicyRecord) =
+        record.Changes
+        |> List.tryLast
+        |> Option.map _.Level
+        |> Option.defaultValue defaultLevel
+
+    /// The level in force at `at`: the last change made at or before it,
+    /// else the deployment default.
+    let levelAt (defaultLevel: TeamVisibilityLevel) (record: TeamConversationPolicyRecord) (at: System.DateTime) =
+        record.Changes
+        |> List.filter (fun c -> c.ChangedAt <= at)
+        |> List.tryLast
+        |> Option.map _.Level
+        |> Option.defaultValue defaultLevel
+
+/// The output part of a team's policy record (Phase 896). Held in the SAME
+/// stored record as the conversation part — the same blob, under the same
+/// guarded write — as an `OutputChanges` member beside `Changes`. A team
+/// that never set an output level stores nothing new, so its record is
+/// byte-identical to one written before Phase 896.
+type TeamOutputPolicyRecord = {
+    /// Every change of the team's output level, oldest first. Empty for a
+    /// team that never chose.
+    OutputChanges: TeamVisibilityChange list
+}
+
+/// Functions over the output part of the record.
+module TeamOutputPolicyRecord =
+    /// A team that has chosen nothing.
+    let empty: TeamOutputPolicyRecord = { OutputChanges = [] }
+
+    /// The member of the stored record that holds the output history.
+    [<Literal>]
+    let MemberName = "OutputChanges"
+
+    /// Whether the team has ever chosen an output level.
+    let isUnset (record: TeamOutputPolicyRecord) = List.isEmpty record.OutputChanges
+
+    /// The output level in force now: the last change, else the deployment
+    /// default.
+    let current (defaultLevel: TeamVisibilityLevel) (record: TeamOutputPolicyRecord) =
+        record.OutputChanges
+        |> List.tryLast
+        |> Option.map _.Level
+        |> Option.defaultValue defaultLevel
 
 /// Reads the output-visibility level in force for a team (Phase 896). The
 /// seam between the store that holds a team's policy record and the
@@ -224,3 +368,39 @@ module TeamOutputVisibility =
         | TeamVisible -> "Every member of this team can see what its modules publish."
         | TeamAdmins -> "Only this team's owners and admins can see restricted output its modules publish."
         | PlatformAdmins -> "Only the platform administrators can see restricted output this team's modules publish."
+// ─── The read-and-set contract (Phase 896; platform tier since 936) ──
+
+/// The output-visibility level in force for the caller's active team
+/// (Phase 896).
+type TeamOutputVisibilityView = {
+    /// False outside a team scope: there is no team level to show or set.
+    InTeamScope: bool
+    /// False when the deployment has not composed team output visibility:
+    /// the level shown is `TeamVisible` and cannot be changed.
+    Enabled: bool
+    /// The level in force now.
+    Level: TeamVisibilityLevel
+    /// The levels this deployment lets a team choose from.
+    Allowed: TeamVisibilityLevel list
+    /// The levels THIS caller may select now. Empty when the caller may not
+    /// change the level at all.
+    Selectable: TeamVisibilityLevel list
+}
+
+/// Read and set the active team's output visibility (Phase 896). Mounted by
+/// the platform in every deployment (Phase 936), answering "not enabled"
+/// until team output visibility is composed; the team is always the
+/// caller's active team, never a request field.
+type TeamOutputVisibilityApi = {
+    /// The level in force for the caller's active team, and what the caller
+    /// may change it to.
+    [<AllowAnonymous>]
+    GetOutputVisibility: unit -> Async<TeamOutputVisibilityView>
+    /// Set the active team's level. Only the team `Owner` may; selecting
+    /// `PlatformAdmins`, or leaving it, also needs a platform admin. A level
+    /// outside the deployment's allowed set is refused, naming the set, and
+    /// so is a level that would leave conversation visibility wider than
+    /// output visibility, naming both.
+    [<RequiresClaim "scope">]
+    SetOutputVisibility: TeamVisibilityLevel -> Async<Result<TeamOutputVisibilityView, string>>
+}

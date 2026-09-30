@@ -387,6 +387,15 @@ let private tryResolveRegisteredInstance<'T when 'T: not struct> (services: ISer
         else
             None)
 
+/// Phase 935 — bind the deployment's `ScopeCarrier` (registered as an
+/// instance beside its DataProtection key ring) into a scheduler that
+/// carries scopes. A scheduler that is not an `IScopeCarrierBinding`, or a
+/// composition with no carrier, is left as it was.
+let private bindScopeCarrier (services: IServiceCollection) (scheduler: obj) : unit =
+    match scheduler, tryResolveRegisteredInstance<ScopeCarrier> services with
+    | (:? IScopeCarrierBinding as binding), Some carrier -> binding.BindScopeCarrier carrier
+    | _ -> ()
+
 let registerJobScheduler
     (services: IServiceCollection)
     (config: ServerConfig)
@@ -474,6 +483,10 @@ let registerJobScheduler
 
         jobSchedulerCell.Value <- Some(scheduler :> IJobScheduler)
 
+        // Phase 935 — the deployment's scope carrier, so a job scheduled
+        // under a resolved scope runs under it after a restart.
+        bindScopeCarrier services scheduler
+
         services.AddSingleton<IJobStore>(jobStore) |> ignore
         services.AddSingleton<IJobScheduler>(scheduler :> IJobScheduler) |> ignore
         services.AddSingleton<JobScheduler.InProcessJobScheduler>(scheduler) |> ignore
@@ -557,6 +570,10 @@ let registerJobScheduler
             None
         | Some scheduler ->
             jobSchedulerCell.Value <- Some scheduler
+
+            // Phase 935 — the companion redeems its jobs' scope tokens
+            // through the deployment's carrier, as the default does.
+            bindScopeCarrier services scheduler
 
             // The store is the companion's projecting decorator, and the
             // Job API, the status board and the maintenance surface all

@@ -66,10 +66,21 @@ the two accepted forms: a JSON number, or the signed string (`"+42"`, `"-7"`; a 
 verify against emits the shape — `Fable.SimpleJson` and the generated `JsonEncode` both write a
 number or the signed string, same as `Int64Converter.Write` — so nothing but hand-written pins stood
 behind it, and its `unsigned` tag was read by nothing, a lenient read no oracle could see. One
-accepted form per type is also simpler than a profile branch. v0.23.0 refused the shape too, so
-against the last tagged release nothing narrows; only a tree built between Phases 845 and 911
-accepted it. An argument type left on the STJ path (no decoder registered) still reads the shape
-through the converter set, unchanged.
+accepted form per type is also simpler than a profile branch. v0.23.0's `asInt64` / `asUInt64`
+refused the shape too, so on the algebra path nothing narrows against the last tagged release;
+only a tree built between Phases 845 and 911 accepted it there.
+
+**The STJ path refuses it too (Phase 937, breaking in 0.24.0).** An argument type with no
+registered decoder is read by the converter set, and `Int64Converter` / `UInt64Converter` used to
+rebuild a value from `high` and `low` — as they did in v0.23.0. They no longer do: any token other
+than a JSON number or the writer's string is refused, naming the type and both accepted forms in
+the words `asInt64` / `asUInt64` use (`expected Int64 as a JSON number or a signed string ("+42",
+"-7"), got object`). The refusal is a `validation`-category 400 before the handler runs, like every
+other argument refusal on this seam; on this path it is reported at the argument, because the record
+converter reads each member through a nested deserialise and STJ's path does not reach the member.
+Unlike the algebra path, **this narrows against v0.23.0**: a hand-built request body that sent the
+object form to an argument type with no registered decoder decoded there and is refused now. The
+caller search below found no such body.
 
 **Callers were checked before the refusal landed.** Every consuming application known to the
 maintainers was searched for request bodies built by hand — raw `fetch` / `XMLHttpRequest` bodies,
@@ -89,6 +100,16 @@ string the library reads exactly, and refuses — as a `DecodeError` on `ProxyRe
 the path — a number it cannot carry exactly: fractional, negative at `uint64`, or beyond ±(2^53 − 1),
 where `JSON.parse` may already have rounded it. A return type with no `int64` / `uint64` anywhere
 takes the unchanged path at no cost. Streaming chunks (`IAsyncEnumerable` fields) take the same pass.
+Since Phase 937 the pass also refuses an OBJECT at an `int64` / `uint64` position, the same way and
+with the path: the library read the `{high, low, unsigned}` form there (at `uint64` it threw an
+unnamed error instead), so the reflective read now accepts exactly what `asInt64` / `asUInt64`
+accept — a digit string, or a number within ±(2^53 − 1). Like the STJ change, this narrows against
+v0.23.0, whose reflective read had no such pass; no SDK writer emits the object form.
+
+**0.24.0 version notes (Phase 937).** Breaking, wire-level only — no public signature moved: the
+STJ `Int64Converter` / `UInt64Converter` and the reflective client response read refuse the Fable
+`Long` object form they accepted in v0.23.0. A number or the string form decodes on both paths
+exactly as before, and both writer oracles Phase 911 pinned stay green.
 
 **A quoted `decimal` is admitted by `asDecimal` (decided Phase 885)**, because that is how the
 browser writes one: `Fable.SimpleJson` sends `"1234.50"`, which the converter set always read and
@@ -136,6 +157,9 @@ is unchanged.
   agrees with STJ over drawn values; the argument facet reports the ratio.
 - `Phase 783`: an in-process request against a registered argument type is refused with the
   algebra's path on a missing or mistyped member, and unchanged on the happy path.
+- `Phase 937` in `ToolUp.Platform.Tests` (the STJ argument path) and in the Fable client harness
+  (the reflective read): the object form at an `int64` and a `uint64` position is refused by name,
+  pinned red first; the digit string and an in-range number still decode.
 - `Remoting STJ wire corpus / TimeSpan`: the converter still loses up to one tick; the algebra
   loses none, over the same 2,000 draws.
 

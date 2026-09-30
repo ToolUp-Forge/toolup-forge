@@ -9,6 +9,12 @@ patch bump stays non-breaking.
 
 ## [Unreleased]
 
+- Phase 935 — handlers receive the resolved scope. A job scheduled through the typed
+  `Schedule(scope, registration)` now runs with that scope on `JobContext.Scope`, across a restart,
+  instead of the anonymous scope. The typed `Schedule` stores the token the platform's `ScopeCarrier`
+  issued for the job as an opaque string on the definition's tags, and each fire asks the platform to
+  redeem it. Composition binds the deployment's carrier through `IScopeCarrierBinding`; no
+  deployment change is needed.
 - Initial release: the **second** implementation of `IJobScheduler` and `IJobStore`, over Quartz.NET 4.
   - `QuartzJobScheduler` — the scheduling policy (`Schedule` validation chain, idempotency, status
     transitions, `TriggerOnce`, `NotifyEventWritten`) expressed against the SDK's own vocabulary, with

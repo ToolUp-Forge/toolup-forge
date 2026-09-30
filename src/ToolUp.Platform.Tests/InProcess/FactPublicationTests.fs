@@ -252,6 +252,9 @@ type private World = {
     Storage: InMemoryBlobStorage
     Events: IEventStore
     Writer: IFactTableWriter
+    /// Phase 935 — a second service over the same substrate, as a restarted
+    /// process builds it: durable over `carrier`, or in process without one.
+    Restart: ScopeCarrier option -> IFactPublication
 }
 
 type private WorldOptions = {
@@ -262,6 +265,9 @@ type private WorldOptions = {
     /// Decorates the table writer the world composes (Phase 932): the
     /// writer the publication service is handed is the decorated one.
     Decorate: IFactTableWriter -> IFactTableWriter
+    /// Phase 935 — build the service with a carrier over the world's own
+    /// key ring, so grants persist.
+    Durable: bool
 }
 
 let private defaults = {
@@ -270,6 +276,7 @@ let private defaults = {
     Signing = PublicationSigning.RecordedProvenance
     Verifier = None
     Decorate = id
+    Durable = false
 }
 
 let private worldWith (options: WorldOptions) : World =
@@ -325,21 +332,23 @@ let private worldWith (options: WorldOptions) : World =
             Signing = options.Signing
     }
 
+    let build (carrier: ScopeCarrier option) =
+        let create =
+            match carrier with
+            | Some carrier -> FactPublication.createDurable carrier
+            | None -> FactPublication.createWith
+
+        create config store storage events gate tables (Some registry) (Some writer) teamRole signer verifier clock
+
     {
         Publication =
-            FactPublication.createWith
-                config
-                store
-                storage
-                events
-                gate
-                tables
-                (Some registry)
-                (Some writer)
-                teamRole
-                signer
-                verifier
-                clock
+            build (
+                if options.Durable then
+                    Some(ScopeCarrier.ofKeyRepository (BlobXmlRepository(storage :> BlobStorage.IBlobStorage)))
+                else
+                    None
+            )
+        Restart = build
         Store = store
         Storage = storage
         Events = events
@@ -1275,6 +1284,194 @@ let private composedWriterTests =
         }
     ]
 
+
+// ─── 7. Grants survive a restart (Phase 935) ─────────────────────────
+
+/// A carrier over the key ring the world's own storage persists — what a
+/// restarted process builds over the same deployment.
+let private ringOf (w: World) : ScopeCarrier =
+    ScopeCarrier.ofKeyRepository (BlobXmlRepository(w.Storage :> BlobStorage.IBlobStorage))
+
+let private durableWorld () =
+    worldWith { defaults with Durable = true }
+
+/// The persisted grant record, as the store holds it.
+let private grantBlob (w: World) (grantId: string) : string =
+    (w.Storage :> BlobStorage.IBlobStorage).Download("_platform", "_fact-publication/grants/" + grantId + ".json")
+    |> Async.RunSynchronously
+    |> Result.map Text.Encoding.UTF8.GetString
+    |> Result.defaultWith (fun e -> failtestf "grant blob: %s" e)
+
+let private rewriteGrantBlob (w: World) (grantId: string) (edit: string -> string) : unit =
+    let before = grantBlob w grantId
+    let after = edit before
+    Expect.notEqual after before "the planted edit changed the record"
+
+    (w.Storage :> BlobStorage.IBlobStorage)
+        .Upload("_platform", "_fact-publication/grants/" + grantId + ".json", Text.Encoding.UTF8.GetBytes after)
+    |> Async.RunSynchronously
+    |> Result.defaultWith (fun e -> failtestf "rewrite: %s" e)
+    |> ignore
+
+let private revenueOf (w: World) (sku: string) : Fact option =
+    groupRows w
+    |> List.tryFind (fun f -> f.Metric.Value = "revenue" && f.Subject.Path = [ north; sku ])
+
+let private restartTests =
+    testList "grants survive a restart (Phase 935)" [
+
+        test "without a carrier, a restart forgets the grant — the pre-935 behaviour, pinned" {
+            let w = world ()
+            commitSource w north [ row "sku-1" 100m 10m ]
+            let grant = grantInForce w north
+            published w north grant.GrantId |> ignore
+
+            let restarted = w.Restart None
+
+            let held = asUser "ann" north (restarted.Grants(teamScope north))
+
+            Expect.isEmpty held "a service built without a carrier holds nothing it did not record itself"
+
+            match restarted.Publish(teamScope north, grant.GrantId) |> Async.RunSynchronously with
+            | Error(PublicationGrantUnknown id) -> Expect.equal id grant.GrantId "the grant is gone"
+            | other -> failtestf "expected the grant to be unknown after a restart, got %A" other
+        }
+
+        test "a grant recorded with a carrier survives a restart and keeps publishing" {
+            let w = durableWorld ()
+            commitSource w north [ row "sku-1" 100m 10m ]
+            let grant = grantInForce w north
+            published w north grant.GrantId |> ignore
+
+            // A new process: a new service and a new carrier over the same
+            // storage and the same key ring.
+            let restarted = w.Restart(Some(ringOf w))
+
+            let held = asUser "ann" north (restarted.Grants(teamScope north))
+
+            match held with
+            | [ restored ] ->
+                Expect.equal restored.GrantId grant.GrantId "the grant is held again"
+                Expect.isTrue (PublicationGrant.inForce restored) "with both consents in force"
+            | other -> failtestf "expected the one grant, got %d" other.Length
+
+            commitSource w north [ row "sku-1" 150m 15m ]
+
+            match restarted.Publish(teamScope north, grant.GrantId) |> Async.RunSynchronously with
+            | Ok _ -> ()
+            | Error e -> failtestf "publish after a restart: %s" (PublicationRefusal.describe e)
+
+            restarted.Refresh(teamScope group, groupSales.Id)
+            |> Async.RunSynchronously
+            |> Result.defaultWith (fun e -> failtestf "refresh: %s" (PublicationRefusal.describe e))
+            |> ignore
+
+            match revenueOf w "sku-1" with
+            | Some fact -> Expect.equal fact.Value (Scalar 150m) "the consolidation received the post-restart run"
+            | None -> failtest "the origin's rows are gone after a restart"
+        }
+
+        test "a restart under a key ring that did not issue the tokens drops both consents, with a named reason" {
+            let w = durableWorld ()
+            commitSource w north [ row "sku-1" 100m 10m ]
+            let grant = grantInForce w north
+            published w north grant.GrantId |> ignore
+
+            let restarted = w.Restart(Some(ScopeCarrier.ephemeral ()))
+
+            match asUser "ann" north (restarted.Grants(teamScope north)) with
+            | [ restored ] ->
+                Expect.isFalse (PublicationGrant.inForce restored) "the grant is held, but not in force"
+
+                Expect.equal
+                    (PublicationGrant.missingConsents restored)
+                    [ PublicationSide.Source; PublicationSide.Target ]
+                    "both consents were dropped"
+            | other -> failtestf "expected the one grant, got %d" other.Length
+
+            let reasons =
+                publicationEvents w group
+                |> List.filter (fun (e, _) -> e.EventType = FactPublicationEvents.RefusedType)
+                |> List.choose (fun (_, p) -> p.Reason)
+
+            Expect.exists
+                reasons
+                (fun r ->
+                    r.Contains "Target team's consent was not restored"
+                    && r.Contains "not issued by this deployment")
+                "the target's audit trail names why its consent was dropped"
+
+            restarted.Refresh(teamScope group, groupSales.Id)
+            |> Async.RunSynchronously
+            |> ignore
+
+            match
+                currentFacts w group
+                |> List.tryFind (fun f -> f.Subject.Path = [ north; "sku-1" ])
+            with
+            | Some { Value = Absent reason } ->
+                Expect.stringContains reason "no longer in force" "the origin is withdrawn with a named reason"
+            | other -> failtestf "expected the origin withdrawn, got %A" other
+        }
+
+        test "an edit of the persisted grant drops the consents it would re-point; a copied token redeems nothing" {
+            let w = durableWorld ()
+            commitSource w north [ row "sku-1" 100m 10m ]
+            let grant = grantInForce w north
+            let other = grantInForce w south
+
+            // Widen the grant's visibility in the store.
+            rewriteGrantBlob w grant.GrantId (fun json -> json.Replace("AggregatesOnly", "Full"))
+
+            // Copy the south grant's target token onto nothing of its own:
+            // lift it into the north grant's record in place of north's.
+            let tokenOf (json: string) =
+                let doc = Text.Json.JsonDocument.Parse json
+                doc.RootElement.GetProperty("TargetConsentToken").GetString()
+
+            let southToken = tokenOf (grantBlob w other.GrantId)
+
+            rewriteGrantBlob w other.GrantId (fun json -> json.Replace(southToken, tokenOf (grantBlob w grant.GrantId)))
+
+            let restarted = w.Restart(Some(ringOf w))
+            let held = asUser "ann" north (restarted.Grants(teamScope north))
+
+            match held |> List.tryFind (fun g -> g.GrantId = grant.GrantId) with
+            | Some restored ->
+                Expect.equal restored.Visibility PublicationVisibility.Full "the edit is in the record"
+                Expect.isFalse (PublicationGrant.inForce restored) "but no consent speaks for it"
+            | None -> failtest "expected the edited grant"
+
+            match asUser "bob" south (restarted.Grants(teamScope south)) with
+            | [ restored ] ->
+                Expect.equal
+                    (PublicationGrant.missingConsents restored)
+                    [ PublicationSide.Target ]
+                    "the lifted token was issued for another grant: the target consent is dropped, the source's stands"
+            | other -> failtestf "expected the south grant, got %d" other.Length
+        }
+
+        test "a withdrawal is persisted without any carried scope" {
+            let w = durableWorld ()
+            commitSource w north [ row "sku-1" 100m 10m ]
+            let grant = grantInForce w north
+
+            asUser "ann" north (w.Publication.Revoke(teamScope north, grant.GrantId))
+            |> Result.defaultWith (fun e -> failtestf "revoke: %s" (PublicationRefusal.describe e))
+            |> ignore
+
+            let json = grantBlob w grant.GrantId
+            let doc = Text.Json.JsonDocument.Parse json
+
+            for field in [ "SourceConsentToken"; "TargetConsentToken" ] do
+                let token = doc.RootElement.GetProperty field
+
+                Expect.isTrue
+                    (token.ValueKind = Text.Json.JsonValueKind.Null)
+                    (sprintf "%s is dropped when the grant is withdrawn" field)
+        }
+    ]
+
 let tests =
     testList "Phase 897 — team-to-team fact publication" [
         consolidationTests
@@ -1283,4 +1480,5 @@ let tests =
         withdrawalTests
         auditTests
         composedWriterTests
+        restartTests
     ]

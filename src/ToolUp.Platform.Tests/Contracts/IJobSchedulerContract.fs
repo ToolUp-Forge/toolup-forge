@@ -581,22 +581,25 @@ let restartTests (name: string) (factory: unit -> RestartableScheduler) =
         }
     ]
 
-/// Phase 818 — the carried mint. What scope does a job's handler receive
-/// on `JobContext.Scope`, and through which store members does a job that
-/// reads the fact base read it?
+/// Phase 818 / 935 — the carried mint. What scope does a job's handler
+/// receive on `JobContext.Scope`, and through which store members does a
+/// job that reads the fact base read it?
 ///
-/// `remints` is the binding's declaration of which of the two lawful
-/// answers it gives. The platform's in-process scheduler RE-MINTS: a job
-/// scheduled with a resolver-minted scope runs under that same scope, on
-/// every dispatch and across a restart. A scheduler outside the platform's
-/// server tier cannot (the `ResolvedScope` constructor is internal) and
-/// hands its handlers the anonymous scope. What NO binding may do is
-/// widen: a string-scheduled job — and one whose registration tried to
-/// claim a provenance through its tags — runs anonymous under both
-/// answers, with its string `ScopeId` untouched (GP 11).
+/// Every binding RE-MINTS (Phase 935 retired the `remints` parameter once
+/// both shipped schedulers answered `true`): a job scheduled with a
+/// resolver-minted scope runs under that same scope, on every dispatch and
+/// across a persistence round-trip, because the typed `Schedule` persists a
+/// token the platform's `ScopeCarrier` issued and the dispatch asks the
+/// platform to redeem it. A binding's `Open` must therefore bind the
+/// carrier the deployment would (`IScopeCarrierBinding`) over key material
+/// that survives its `Close`, as a deployment's key ring does. What NO
+/// binding may do is widen: a string-scheduled job — and one whose
+/// registration tried to claim a scope through the reserved tags, including
+/// a genuine token lifted from another job — runs anonymous, with its string
+/// `ScopeId` untouched (GP 11).
 ///
 /// Dispatches, so it takes a `RestartableScheduler` like `restartTests`.
-let carriedScopeTests (name: string) (remints: bool) (factory: unit -> RestartableScheduler) =
+let carriedScopeTests (name: string) (factory: unit -> RestartableScheduler) =
 
     let recorder () =
         let seen = System.Collections.Concurrent.ConcurrentQueue<JobContext>()
@@ -657,12 +660,10 @@ let carriedScopeTests (name: string) (remints: bool) (factory: unit -> Restartab
         | Error e -> failtestf "TriggerOnce: %s" e
     }
 
-    let answer = if remints then "re-mints" else "cannot re-mint"
-
-    testList $"{name} — the carried scope mint (Phase 818, {answer})" [
+    testList $"{name} — the carried scope mint (Phases 818 and 935)" [
 
         testCaseAsync
-            "a job scheduled under a resolved scope runs under it — or anonymous — on every dispatch, across a restart"
+            "a job scheduled under a resolved scope executes under the same scope across a persistence round-trip"
         <| async {
             let binding = factory ()
             let scope = mint binding.ScopeId
@@ -689,22 +690,15 @@ let carriedScopeTests (name: string) (remints: bool) (factory: unit -> Restartab
             let expectScope (ctx: JobContext) (when': string) =
                 Expect.equal ctx.ScopeId binding.ScopeId (sprintf "%s: the string field is the job's scope id" when')
 
-                if remints then
-                    Expect.equal
-                        ctx.Scope
-                        scope
-                        (sprintf "%s: the handler runs under the scope the request resolved to" when')
+                Expect.equal
+                    ctx.Scope
+                    scope
+                    (sprintf "%s: the handler runs under the scope the request resolved to" when')
 
-                    Expect.equal
-                        ctx.Scope.Storage
-                        (Some(storageFor binding.ScopeId))
-                        (sprintf "%s: the resolver's whole StorageScope, container and persistence included" when')
-                else
-                    Expect.isTrue
-                        ctx.Scope.IsAnonymous
-                        (sprintf
-                            "%s: a scheduler that cannot re-mint hands out the anonymous scope, never a guess"
-                            when')
+                Expect.equal
+                    ctx.Scope.Storage
+                    (Some(storageFor binding.ScopeId))
+                    (sprintf "%s: the resolver's whole StorageScope, container and persistence included" when')
 
             expectScope (Seq.head firstSeen) "first dispatch"
 
@@ -736,6 +730,23 @@ let carriedScopeTests (name: string) (remints: bool) (factory: unit -> Restartab
                 |> Async.RunSynchronously
                 |> scheduled "string Schedule"
 
+            // A genuine token, issued for another job in the same scope
+            // (never fired: only its token is used).
+            let typed =
+                scheduler.Schedule(
+                    StorageScopeResolver.ScopeResolution.ofStorageScope (storageFor binding.ScopeId),
+                    registrationFor binding.ScopeId "carried"
+                )
+                |> Async.RunSynchronously
+                |> scheduled "typed Schedule"
+
+            let lifted =
+                match scheduler.Get(binding.ScopeId, typed) |> Async.RunSynchronously with
+                | Some job -> Map.tryFind ("_platform.scope." + "token") job.Tags
+                | None -> None
+
+            Expect.isSome lifted "the typed Schedule persisted a token with the job"
+
             // A registration that arrives over the wire is only a string
             // Schedule; it must not be able to talk its way to a resolved
             // scope by writing the tags the typed overload writes.
@@ -746,6 +757,7 @@ let carriedScopeTests (name: string) (remints: bool) (factory: unit -> Restartab
                             "_platform.scope." + "provenance", "resolver"
                             "_platform.scope." + "container", "team-container-" + binding.ScopeId
                             "_platform.scope." + "persist", "true"
+                            "_platform.scope." + "token", lifted.Value
                             "origin", "caller"
                         ]
             }
@@ -764,7 +776,13 @@ let carriedScopeTests (name: string) (remints: bool) (factory: unit -> Restartab
                 Expect.isTrue ctx.Scope.IsAnonymous "the typed field is the anonymous scope — never a widening"
 
             match! scheduler.Get(binding.ScopeId, claimed) with
-            | Some job -> Expect.equal (Map.tryFind "origin" job.Tags) (Some "caller") "the caller's own tags survive"
+            | Some job ->
+                Expect.equal (Map.tryFind "origin" job.Tags) (Some "caller") "the caller's own tags survive"
+
+                Expect.isFalse
+                    (job.Tags
+                     |> Map.exists (fun key _ -> key.StartsWith("_platform.scope.", StringComparison.Ordinal)))
+                    "and every reserved key is stripped, the lifted token included"
             | None -> failtest "expected the forged-tag job"
 
             binding.Close scheduler
@@ -897,16 +915,10 @@ let carriedScopeTests (name: string) (remints: bool) (factory: unit -> Restartab
 
             let seen = calls |> List.ofSeq
 
-            if remints then
-                Expect.equal
-                    seen
-                    [ "Get(typed)"; "Assert(typed)" ]
-                    "the fact was read and re-asserted through the ResolvedScope members, and nothing else"
-            else
-                Expect.equal
-                    seen
-                    [ "Get(string)"; "Assert(string)" ]
-                    "without a re-minted scope the handler keys the store on the carried ScopeId, as before"
+            Expect.equal
+                seen
+                [ "Get(typed)"; "Assert(typed)" ]
+                "the fact was read and re-asserted through the ResolvedScope members, and nothing else"
 
             let! heads = inner.Query(scope, ToolUp.Facts.FactQuery.all)
 

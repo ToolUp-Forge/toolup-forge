@@ -1108,6 +1108,12 @@ type ServerApp = {
     ///
     /// Set it with `ServerApp.withModelExecution`.
     ModelExecutionCompose: ComposeModelExecution.ModelExecutionComposeOptions option
+    /// Phase 936 — the team output-visibility declaration (default level and
+    /// allowed set), recorded by `FactsCompose.withTeamOutputVisibility` so
+    /// `compositionManifest` can project it. `None` — the default — means
+    /// team output visibility is not composed, and the manifest carries no
+    /// knob for it (byte-identical to before this field).
+    TeamOutputVisibility: TeamOutputVisibilitySettings option
 }
 
 module ServerApp =
@@ -1168,6 +1174,7 @@ module ServerApp =
         ModuleAIExposures = []
         GrantNotifications = None
         ModelExecutionCompose = None
+        TeamOutputVisibility = None
     }
 
     /// Phase 728 — compose the model-execution leg: register
@@ -2720,7 +2727,20 @@ module ServerApp =
                     (sprintf "DisclosurePurposes.%s" surfaceName)
                     (pairs |> List.map snd |> List.distinct |> String.concat ", "))
 
-        CompositionManifest.build modules companionSlots dataTypes tools (configKnobs @ purposeKnobs)
+        // Phase 936 — the team output-visibility declaration, as
+        // `TeamOutputVisibility.<Default|Allowed>` knobs; none when it is not
+        // composed.
+        let teamOutputVisibilityKnobs =
+            app.TeamOutputVisibility
+            |> Option.map CompositionManifest.teamOutputVisibilityKnobs
+            |> Option.defaultValue []
+
+        CompositionManifest.build
+            modules
+            companionSlots
+            dataTypes
+            tools
+            (configKnobs @ purposeKnobs @ teamOutputVisibilityKnobs)
         |> CompositionManifest.withGrounding metricEntries subjectEntries
         |> CompositionManifest.withPurposes purposeEntries
         // Phase 694 — the canonical-method selector each metric declared.

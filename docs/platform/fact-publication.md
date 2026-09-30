@@ -106,11 +106,27 @@ superseded, in its own lineage, by an absence naming the withdrawal and the gran
 
 ## Where grants live
 
-A grant holds the scope the target owner consented in, and a minted scope is a process value. The
-platform deliberately offers no way to persist and re-mint one outside its scheduler. Grants are
-therefore held by the publication service in process, and a restart forgets them. After a restart
-every consolidation reads its origins as withdrawn at the next refresh, until both owners consent
-again. That is the fail-closed direction: the alternative is a third mint.
+A grant holds the scope the target owner consented in, and a minted scope is a process value. Since
+Phase 935 grants **survive a restart**. Every owner act writes the grant to durable storage (the
+platform-reserved `_platform` container, under `_fact-publication/grants/`), and each consent is
+stored with a token. The platform's `ScopeCarrier` issued that token from the scope the consenting
+owner's request resolved to. It is sealed under the deployment's DataProtection key ring, for this
+grant, this side and this consent. When the service is built after a restart, the platform redeems
+the target's token into the scope the seam writes under. It checks the source's token without
+holding the scope. A consolidation then keeps receiving, and neither owner has to consent again.
+
+A consent whose token does not redeem is dropped on restore. That covers a token that is missing,
+altered, issued under another key ring, or copied from another grant or consent. An audit record in
+both teams' scopes names why. The grant is then not in force, so the target's next refresh withdraws
+the origin with a named reason. This is the same fail-closed direction a restart took before. The
+token binds the grant's teams, tables and visibility and the consent itself. So an edit of those
+fields in the store drops the consent rather than re-pointing it. A withdrawal is persisted with no
+token at all.
+
+The composition's `FactsCompose.withFactPublication` builds the durable service whenever the
+platform's carrier is composed. The carrier is composed beside the DataProtection key ring in every
+`ServerApp`. A service built directly with `FactPublication.createWith` still holds grants in
+process. `FactPublication.createDurable` is the durable form.
 
 ## Signing between teams of one deployment
 

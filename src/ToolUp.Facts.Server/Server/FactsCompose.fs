@@ -1521,8 +1521,10 @@ module FactsCompose =
     //
     // The team's level is read through `ITeamOutputVisibilitySource`, whose
     // implementation lives with the per-team policy record that also holds
-    // the team's conversation level; with no source composed every team
-    // sits at the deployment default declared here.
+    // the team's conversation level — at the platform tier since Phase
+    // 936, and registered here, so a deployment without the AI assistant
+    // honours each team's choice. A deployment that registers its own
+    // source keeps it; with none at all every team sits at the default.
     //
     // Self-contained on purpose: the gate registered by `withFactStore` is
     // decorated in place (`FactDisclosureGate.WithViewerAwareness`), so the
@@ -1569,9 +1571,12 @@ module FactsCompose =
     /// declaration is validated here, and an empty allowed set or a default
     /// outside it fails composition.
     ///
-    /// Arms three things: the settings (read by the store that holds each
-    /// team's choice), the gate's viewer-aware facet, and the middleware
-    /// that establishes the request's viewer. `Surfaceable` facts stay
+    /// Arms: the settings (read by the store that holds each team's
+    /// choice), the platform's `ITeamOutputVisibilitySource` over that
+    /// store and the startup check that the two deployment defaults do not
+    /// conflict (Phase 936), the gate's viewer-aware facet, and the
+    /// middleware that establishes the request's viewer. The declaration
+    /// is recorded on the app, so the composition manifest projects it. `Surfaceable` facts stay
     /// visible to every viewer the scope admits and `Internal` facts are
     /// never disclosed, exactly as before; module permission is not
     /// consulted, because permission governs use, not sight.
@@ -1604,6 +1609,24 @@ module FactsCompose =
             let register (s: IServiceCollection) =
                 s.RemoveAll<TeamOutputVisibilitySettings>() |> ignore
                 s.AddSingleton<TeamOutputVisibilitySettings>(settings) |> ignore
+
+                // Phase 936 — the platform's source over the per-team record,
+                // and the startup check that the two deployment defaults do
+                // not conflict (an instance: preflight refuses a factory).
+                s.TryAddSingleton<ITeamOutputVisibilitySource>(
+                    Func<IServiceProvider, ITeamOutputVisibilitySource>(fun sp ->
+                        TeamPolicyStore.TeamPolicyOutputVisibilitySource(sp) :> ITeamOutputVisibilitySource)
+                )
+
+                s
+                |> Seq.filter (fun d -> d.ImplementationInstance :? TeamPolicyStore.TeamVisibilityDefaultsValidator)
+                |> List.ofSeq
+                |> List.iter (s.Remove >> ignore)
+
+                s.AddSingleton<ConfigValidation.IConfigValidator>(
+                    TeamPolicyStore.TeamVisibilityDefaultsValidator(settings, s) :> ConfigValidation.IConfigValidator
+                )
+                |> ignore
 
                 match
                     s
@@ -1658,6 +1681,7 @@ module FactsCompose =
                             ServiceConfig = serviceConfig
                             PreMiddleware = app.Extensions.PreMiddleware @ [ establishViewer ]
                     }
+                    TeamOutputVisibility = Some settings
             }
     // ─── Phase 897 — team-to-team fact publication (opt-in) ───────────
     //
@@ -1702,7 +1726,15 @@ module FactsCompose =
                     Func<IServiceProvider, IFactPublication>(fun sp ->
                         let teams = tryService<ToolUp.Platform.TeamManagement.ITeamStore> sp
 
-                        FactPublication.createWith
+                        // Phase 935 — grants persist when the platform's
+                        // scope carrier is composed (it is, beside the
+                        // DataProtection key ring, in every composition).
+                        let create =
+                            match tryService<ScopeCarrier> sp with
+                            | Some carrier -> FactPublication.createDurable carrier
+                            | None -> FactPublication.createWith
+
+                        create
                             config
                             (sp.GetRequiredService<IFactStore>())
                             (sp.GetRequiredService<IBlobStorage>())

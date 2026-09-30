@@ -14,6 +14,7 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.NotificationChannel
 open ToolUp.Platform.StorageScopeResolver
 open ToolUp.Platform.TeamManagement
+open ToolUp.Platform.TeamPolicyStore
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Facts
 open ToolUp.AI
@@ -733,6 +734,12 @@ let private requestFor (world: World) (output: TeamOutputVisibilitySettings opti
     output
     |> Option.iter (fun s -> services.AddSingleton<TeamOutputVisibilitySettings>(s) |> ignore)
 
+    // The assistant is composed in these requests: since Phase 936 it
+    // registers the conversation declaration, which is how the platform's
+    // output API knows there are conversations to check a change against.
+    services.AddSingleton<TeamConversationVisibilitySettings>(TeamConversationVisibilitySettings.unrestricted)
+    |> ignore
+
     services.AddSingleton<AccessContext>(
         {
             AccessContext.unrestricted (TeamMember(userId, team)) with
@@ -905,24 +912,31 @@ let private recordTests =
         <| async {
             let! world = newWorld ()
 
-            let validate (output: TeamOutputVisibilitySettings option) =
-                (TeamVisibilityDefaultsValidator((requestFor world output "olga").RequestServices)
-                :> ConfigValidation.IConfigValidator)
-                    .Validate()
+            // The assistant's conversation declaration (the unrestricted
+            // default), as `AIServerApp` registers it.
+            let validate (output: TeamOutputVisibilitySettings) =
+                let services = ServiceCollection()
+
+                services.AddSingleton<TeamConversationVisibilitySettings>(
+                    TeamConversationVisibilitySettings.unrestricted
+                )
+                |> ignore
+
+                (TeamVisibilityDefaultsValidator(output, services) :> ConfigValidation.IConfigValidator).Validate()
 
             let adminsDefault =
                 TeamOutputVisibilitySettings.create TeamAdmins [ TeamVisible; TeamAdmins ]
                 |> Result.defaultWith failwith
 
-            match! validate (Some adminsDefault) with
+            match! validate adminsDefault with
             | ConfigValidation.ValidationResult.Error message ->
                 Expect.stringContains message "TeamAdmins" "names the output default"
             | other -> failtestf "expected a refusal, got %A" other
 
-            let! fine = validate enabled
+            let! fine = validate TeamOutputVisibilitySettings.unrestricted
             Expect.equal fine ConfigValidation.ValidationResult.Ok "the default pair"
-            let! inert = validate None
-            Expect.equal inert ConfigValidation.ValidationResult.Ok "inert when not composed"
+        // Registration (only with the output axis) and the one-axis
+        // cases are pinned through preflight in the Phase 936 list.
         }
     ]
 
@@ -1023,8 +1037,330 @@ let private composeTests =
         }
     ]
 
+// ─── Phase 936 — the per-team record at the platform tier ────────────
+
+/// A record exactly as the store wrote it before Phase 936: the owner chose
+/// `TeamAdmins` for conversations, then for output. Pinned against the
+/// pre-936 store's own serialiser before the move.
+let private legacyRecord =
+    """{"Changes":[{"Level":"TeamAdmins","ChangedBy":"olga","ChangedAt":"2026-09-01T10:00:00.0000000Z"}],"OutputChanges":[{"Level":"TeamAdmins","ChangedBy":"olga","ChangedAt":"2026-09-01T10:05:00.0000000Z"}]}"""
+
+/// Where every record written before Phase 936 lives, spelled out rather
+/// than read from the constant, so renaming the constant goes red here.
+let private legacyBlobName = "team-policies/ai-conversation-visibility.json"
+
+/// A composition with the fact store's gate and team output visibility
+/// declared at `defaultLevel`. `conversation` stands in for the AI
+/// assistant: `Some` registers its conversation declaration the way
+/// `AIServerApp` does, `None` is a facts-only deployment. `conversationFirst`
+/// picks which of the two is registered first.
+let private composeWith
+    (world: World)
+    (store: IFactStore)
+    (events: IEventStore)
+    (defaultLevel: TeamVisibilityLevel)
+    (conversation: TeamConversationVisibilitySettings option)
+    (conversationFirst: bool)
+    =
+    let taint = DisclosureTaintConfig.ofLists [ salesPolicy ] []
+
+    let withGate = {
+        ServerApp.empty with
+            Config = {
+                ServerConfig.defaults with
+                    FactStore = EnabledFactStore
+            }
+            Extensions = {
+                ServerApp.empty.Extensions with
+                    ServiceConfig =
+                        Some(fun s ->
+                            s.AddSingleton<IFactDisclosureGate>(
+                                Func<IServiceProvider, IFactDisclosureGate>(fun _ ->
+                                    FactDisclosureGate(store, events, taint = taint) :> IFactDisclosureGate)
+                            ))
+            }
+    }
+
+    let composed =
+        FactsCompose.withTeamOutputVisibility defaultLevel [ TeamVisible; TeamAdmins ] withGate
+
+    let services = ServiceCollection()
+    services.AddSingleton<IBlobStorage>(world.Storage) |> ignore
+    services.AddSingleton<ITeamStore>(world.Teams) |> ignore
+    services.AddSingleton<IAuditLog>(world.Audit) |> ignore
+
+    let addConversation () =
+        conversation
+        |> Option.iter (fun c -> services.AddSingleton<TeamConversationVisibilitySettings>(c) |> ignore)
+
+    if conversationFirst then
+        addConversation ()
+
+    let configure =
+        composed.Extensions.ServiceConfig
+        |> Option.defaultWith (fun () -> failtest "no config")
+
+    configure services |> ignore
+
+    if not conversationFirst then
+        addConversation ()
+
+    composed, services
+
+let private factsOnly world store events =
+    composeWith world store events TeamVisible None true
+
+/// A request in `services`, by `userId` in the team.
+let private requestIn (services: ServiceCollection) (userId: string) : HttpContext =
+    services.AddSingleton<AccessContext>(
+        {
+            AccessContext.unrestricted (TeamMember(userId, team)) with
+                PlatformRole =
+                    if userId = "pat" then
+                        Some PlatformRole.PlatformAdmin
+                    else
+                        None
+        }
+    )
+    |> ignore
+
+    let ctx = DefaultHttpContext()
+    ctx.RequestServices <- services.BuildServiceProvider()
+    ctx :> HttpContext
+
+let private platformTierTests =
+    testList "Phase 936 — the per-team record at the platform tier" [
+
+        testCaseAsync "a facts-only composition honours a team owner's output level"
+        <| async {
+            let! world = newWorld ()
+
+            let! _ = world.Storage.Upload($"team-{team}", legacyBlobName, Encoding.UTF8.GetBytes legacyRecord)
+
+            let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let store = BlobFactStore.create (InMemoryBlobStorage()) events
+
+            let restricted =
+                assertFact store team (draftWith "margin" (Restricted "sales") 4242m)
+
+            let _, services = factsOnly world store events
+            let gate = services.BuildServiceProvider().GetRequiredService<IFactDisclosureGate>()
+
+            Expect.equal
+                (verdictOf gate (Some member') FactRetrieval restricted.FactId)
+                (Some(FactNotDisclosable "sales"))
+                "the owner chose TeamAdmins: a member is refused, not given the deployment default"
+
+            Expect.equal
+                (verdictOf gate (Some owner) FactRetrieval restricted.FactId)
+                (Some FactDisclosable)
+                "the owner sees it"
+        }
+
+        test "the stored shape is the legacy one, byte for byte" {
+            let at minute =
+                DateTime(2026, 9, 1, 10, minute, 0, DateTimeKind.Utc)
+
+            let conversation: TeamConversationPolicyRecord = {
+                Changes = [
+                    {
+                        Level = TeamAdmins
+                        ChangedBy = "olga"
+                        ChangedAt = at 0
+                    }
+                ]
+            }
+
+            let output: TeamOutputPolicyRecord = {
+                OutputChanges = [
+                    {
+                        Level = TeamAdmins
+                        ChangedBy = "olga"
+                        ChangedAt = at 5
+                    }
+                ]
+            }
+
+            Expect.equal
+                (Encoding.UTF8.GetString(TeamPolicyRecordCodec.serialise conversation output))
+                legacyRecord
+                "the literal is what the store writes"
+
+            Expect.equal TeamConversationPolicyRecord.BlobName legacyBlobName "the blob name is kept"
+        }
+
+        testCaseAsync "a record written before the move reads back the same levels, on both axes"
+        <| async {
+            let! world = newWorld ()
+
+            let! _ = world.Storage.Upload($"team-{team}", legacyBlobName, Encoding.UTF8.GetBytes legacyRecord)
+
+            let store = TeamPolicyStore world.Storage
+
+            match! store.Read $"team-{team}" with
+            | Ok record ->
+                Expect.equal (TeamConversationPolicyRecord.current TeamVisible record) TeamAdmins "conversation level"
+
+                Expect.equal
+                    (TeamConversationPolicyRecord.levelAt
+                        TeamVisible
+                        record
+                        (DateTime(2026, 9, 1, 9, 0, 0, DateTimeKind.Utc)))
+                    TeamVisible
+                    "before the change, the default"
+            | Error e -> failtestf "unreadable: %s" e
+
+            match! store.ReadOutput $"team-{team}" with
+            | Ok output -> Expect.equal (TeamOutputPolicyRecord.current TeamVisible output) TeamAdmins "output level"
+            | Error e -> failtestf "unreadable: %s" e
+
+            // Through both APIs, as a deployment with the assistant reads it.
+            let! conv = (teamConversationVisibilityApi (requestFor world enabled "mia")).GetConversationVisibility()
+            Expect.equal conv.Level TeamAdmins "the assistant reads the conversation level"
+            let! out = (teamOutputVisibilityApi (requestFor world enabled "mia")).GetOutputVisibility()
+            Expect.equal out.Level TeamAdmins "the platform reads the output level"
+
+            // A no-op rewrites nothing; a real write lands in the same blob
+            // and keeps the other axis.
+            let! kept =
+                (teamConversationVisibilityApi (requestFor world enabled "olga")).SetConversationVisibility TeamAdmins
+
+            Expect.isOk kept "a no-op change by the owner"
+            Expect.equal (blobText world) legacyRecord "a no-op change rewrites nothing"
+
+            let! widened = (teamOutputVisibilityApi (requestFor world enabled "olga")).SetOutputVisibility TeamVisible
+            Expect.isOk widened "the owner widens output"
+
+            let! convAfter =
+                (teamConversationVisibilityApi (requestFor world enabled "mia")).GetConversationVisibility()
+
+            Expect.equal convAfter.Level TeamAdmins "the conversation level is kept"
+            let! outAfter = (teamOutputVisibilityApi (requestFor world enabled "mia")).GetOutputVisibility()
+            Expect.equal outAfter.Level TeamVisible "the output change is read back from the same blob"
+        }
+
+        testCaseAsync "facts-only: an owner sets the output level through the platform API, and the gate applies it"
+        <| async {
+            let! world = newWorld ()
+            let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let store = BlobFactStore.create (InMemoryBlobStorage()) events
+
+            let restricted =
+                assertFact store team (draftWith "margin" (Restricted "sales") 4242m)
+
+            let services () = snd (factsOnly world store events)
+
+            let! view = (teamOutputVisibilityApi (requestIn (services ()) "olga")).GetOutputVisibility()
+            Expect.isTrue view.Enabled "enabled without the assistant"
+            Expect.equal view.Selectable [ TeamVisible; TeamAdmins ] "the owner may choose"
+
+            let! byMember = (teamOutputVisibilityApi (requestIn (services ()) "mia")).SetOutputVisibility TeamAdmins
+            Expect.isError byMember "a member may not"
+
+            // No conversation axis: nothing can quote output, so no
+            // policy-change check refuses narrowing it.
+            let! byOwner = (teamOutputVisibilityApi (requestIn (services ()) "olga")).SetOutputVisibility TeamAdmins
+            Expect.isOk byOwner "the owner may, with no assistant composed"
+
+            Expect.equal (world.Audit.Custom OutputVisibilityAudit.LevelChangedKind).Length 1 "the change is audited"
+
+            let gate =
+                (services ()).BuildServiceProvider().GetRequiredService<IFactDisclosureGate>()
+
+            Expect.equal
+                (verdictOf gate (Some member') FactRetrieval restricted.FactId)
+                (Some(FactNotDisclosable "sales"))
+                "the gate applies the owner's choice"
+        }
+
+        testCaseAsync "the startup check runs through preflight, whichever axis is composed first"
+        <| async {
+            let! world = newWorld ()
+            let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let store = BlobFactStore.create (InMemoryBlobStorage()) events
+
+            let preflight defaultLevel conversation conversationFirst =
+                let _, services =
+                    composeWith world store events defaultLevel conversation conversationFirst
+
+                try
+                    ConfigValidatorAggregator.validate services None false
+                    |> List.filter (fun o -> o.Name = TeamVisibilityDefaultsValidator.ValidatorName)
+                    |> List.map _.Result
+                    |> Ok
+                with :? ConfigValidatorAggregator.ConfigPreflightFailedException as ex ->
+                    Error ex.Message
+
+            // Output only (no assistant): nothing to conflict with.
+            Expect.equal
+                (preflight TeamAdmins None true)
+                (Ok [ ConfigValidation.ValidationResult.Ok ])
+                "output axis alone passes, and is registered as a runnable instance"
+
+            // Both axes, conflicting defaults: refused in either order.
+            for conversationFirst in [ true; false ] do
+                match preflight TeamAdmins (Some TeamConversationVisibilitySettings.unrestricted) conversationFirst with
+                | Error message -> Expect.stringContains message "TeamAdmins" "names the output default"
+                | Ok results ->
+                    failtestf "expected a refusal (conversation first: %b), got %A" conversationFirst results
+
+            // Both axes, agreeing defaults.
+            let admins =
+                TeamConversationVisibilitySettings.create TeamAdmins [ TeamVisible; TeamAdmins ]
+                |> Result.defaultWith failwith
+
+            Expect.equal
+                (preflight TeamAdmins (Some admins) false)
+                (Ok [ ConfigValidation.ValidationResult.Ok ])
+                "agreeing defaults pass"
+
+            // Composing the axis twice registers one check, not two.
+            let composed, _ = composeWith world store events TeamVisible None true
+
+            let twice =
+                FactsCompose.withTeamOutputVisibility TeamVisible [ TeamVisible ] composed
+
+            let services = ServiceCollection()
+            services.AddSingleton<IBlobStorage>(world.Storage) |> ignore
+            (twice.Extensions.ServiceConfig |> Option.get) services |> ignore
+
+            Expect.equal
+                (ConfigValidatorAggregator.validate services None false
+                 |> List.filter (fun o -> o.Name = TeamVisibilityDefaultsValidator.ValidatorName)
+                 |> List.length)
+                1
+                "one check"
+        }
+
+        test "the declaration is projected onto the composition manifest" {
+            let withFacts = {
+                ServerApp.empty with
+                    Config = {
+                        ServerConfig.defaults with
+                            FactStore = EnabledFactStore
+                    }
+            }
+
+            let knobsOf app =
+                (ServerApp.compositionManifest app).ConfigKnobs
+                |> List.filter (fun k -> k.Name.StartsWith CompositionManifest.TeamOutputVisibilityKnobPrefix)
+                |> List.map (fun k -> k.Name, k.Value)
+
+            Expect.isEmpty (knobsOf withFacts) "not composed: no knob, the manifest is unchanged"
+
+            Expect.equal
+                (knobsOf (FactsCompose.withTeamOutputVisibility TeamAdmins [ TeamAdmins; TeamVisible ] withFacts))
+                [
+                    "TeamOutputVisibility.Default", "TeamAdmins"
+                    "TeamOutputVisibility.Allowed", "TeamVisible, TeamAdmins"
+                ]
+                "default and allowed set"
+        }
+    ]
+
 let tests =
     testList "Phase 896 team output visibility" [
+        platformTierTests
         ruleTests
         resolverTests
         surfaceTests
