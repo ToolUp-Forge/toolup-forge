@@ -30,10 +30,11 @@ open ToolUp.Elmish
 ///   * `Batched` coalesces across TASKS to the frame, via
 ///     `requestAnimationFrame`. For streams that dispatch many times per
 ///     frame from many tasks (animation, drag, high-rate telemetry).
-///   * `Hydrate` mounts by hydrating the server-rendered tree with the
-///     FIRST model the hook sees (the boot paint, which the loop makes
-///     before `init`'s command runs — so it is `init`'s model, the one the
-///     server rendered), then behaves as `Sync`.
+///
+/// Hydration is not a mode here: `Program.withReactHydrate` mounts through
+/// the store binding (Phase 931), because a push binding hydrating with
+/// `hydrateRoot` and then calling `root.render` for its next model made
+/// React discard the server-rendered tree and render from scratch.
 [<RequireQualifiedAccess>]
 type internal AppMode =
     /// One view construction per task, via the microtask queue. Default.
@@ -41,9 +42,6 @@ type internal AppMode =
     /// Coalesce successive `setState` calls into a single render via
     /// `requestAnimationFrame`.
     | Batched
-    /// Use `ReactDOM.hydrateRoot` (React 18) to hydrate a server-rendered
-    /// tree rather than render from scratch, then as `Sync`.
-    | Hydrate
 
 [<AutoOpen>]
 module internal Helpers =
@@ -311,23 +309,12 @@ module Program =
         let scheduler =
             match mode with
             | AppMode.Batched -> RenderScheduler(fun k -> window.requestAnimationFrame (fun _ -> k ()) |> ignore)
-            | AppMode.Sync
-            | AppMode.Hydrate -> RenderScheduler queueMicrotask
+            | AppMode.Sync -> RenderScheduler queueMicrotask
 
         let setState (model: 'model) (dispatch: Dispatch<'msg>) =
             // First call: mount the root.
             if root.IsNone then
-                let el = getElement placeholderId
-
-                let mountedRoot =
-                    match mode with
-                    | AppMode.Hydrate ->
-                        let initialView = Program.view program model dispatch
-                        hydrateRoot el initialView
-                    | AppMode.Sync
-                    | AppMode.Batched -> createRoot el
-
-                root <- Some mountedRoot
+                root <- Some(createRoot (getElement placeholderId))
 
             lastModel <- Some model
             lastDispatch <- Some dispatch
@@ -361,12 +348,6 @@ module Program =
     let withReactBatched (placeholderId: string) (program: Program<'arg, 'model, 'msg, ReactElement>) =
         withReactImpl placeholderId AppMode.Batched program
 
-    /// Hydrate a server-rendered React tree into the placeholder rather than
-    /// rendering from scratch, then render as `withReactSynchronous`. Use
-    /// when `ToolUp.Platform.Bootstrap.PrerenderExport` has emitted static
-    /// HTML for this route.
-    let withReactHydrate (placeholderId: string) (program: Program<'arg, 'model, 'msg, ReactElement>) =
-        withReactImpl placeholderId AppMode.Hydrate program
     // ─── Phase 852 — the store binding (opt-in) ─────────────────────────
     //
     // `withReactImpl` pushes a freshly constructed view through
@@ -460,3 +441,19 @@ module Program =
         (program: Program<'arg, 'model, 'msg, ReactElement>)
         =
         withReactStoreImpl store placeholderId true program
+
+    /// Hydrate a server-rendered React tree into the placeholder rather than
+    /// rendering from scratch, then render once per task as
+    /// `withReactSynchronous` does. Use when
+    /// `ToolUp.Platform.Bootstrap.PrerenderExport` has emitted static HTML
+    /// for this route.
+    ///
+    /// Phase 931 — it mounts through the store binding, over a store of its
+    /// own, so it adopts the server's nodes and then patches them in place.
+    /// It used to hydrate with `hydrateRoot` and push the next model through
+    /// `root.render`, and React answers a render that arrives before
+    /// hydration completes by discarding the server-rendered tree. A view
+    /// that reads slices wants `withReactStoreHydrate`, over the store its
+    /// view reads.
+    let withReactHydrate (placeholderId: string) (program: Program<'arg, 'model, 'msg, ReactElement>) =
+        withReactStoreImpl (ModelStore.create ()) placeholderId true program

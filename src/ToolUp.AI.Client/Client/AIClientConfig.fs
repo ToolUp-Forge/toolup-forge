@@ -930,6 +930,12 @@ let private composerProgram
     // no-op with no error). One shared definition site
     // (`Client.programLifetimeEffects`) keeps this composer and
     // `Client.program` attaching the same set.
+    //
+    // Phase 931 — the same call captures this Program's dispatcher as the
+    // shell's, lifted through `ShellMsg`, exactly as `Client.run` does for
+    // the plain shell. Without it a module's `OnTeamSwitched` and
+    // `OnAccessibleModulesChanged` callbacks dispatched into nothing in
+    // every AI deployment, so a team switch never reached the shell.
     let progWithShellEffects =
         progWithReporter |> Client.withShellLifetimeEffects config ShellMsg
 

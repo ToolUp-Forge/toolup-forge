@@ -72,11 +72,11 @@
     "ceilings": {
       "retrievalP95Ms": 450,
       "retrievalBlobReadsPerQuery": 0,
-      "factPointReadMs": 2500,
+      "factPointReadMs": 720,
       "factPopulationReadMs": 180,
-      "factAssertMs": 3400,
-      "factBatchAssertMs": 3200,
-      "factBlobReadsPerPointRead": 18000
+      "factAssertMs": 950,
+      "factBatchAssertMs": 1300,
+      "factBlobReadsPerPointRead": 720
     },
     "minimumSamples": {
       "retrievalP95Ms": 5,
@@ -90,24 +90,118 @@
     "baselines": {
       "retrievalP95Ms": 32.38,
       "retrievalBlobReadsPerQuery": 0,
-      "factPointReadMs": 182.52,
+      "factPointReadMs": 51.7,
       "factPopulationReadMs": 13.4,
-      "factAssertMs": 243.71,
-      "factBatchAssertMs": 233.38,
-      "factBlobReadsPerPointRead": 12000
+      "factAssertMs": 68.16,
+      "factBatchAssertMs": 94.13,
+      "factBlobReadsPerPointRead": 480.96
     },
     "notes": {
+      "remeasured": "Phase 929 (2026-09-29) re-took the four fact figures Phase 890's point-read index changed (point read, assert, batch assert, reads per point read), as the minimum over three `load gate` runs on the same machine under the same kind of load: six build-and-test sessions beside it, CPU 94-99%, 8.8-13.9 GB free. The retrieval and population-read baselines are 886's: the three re-runs measured retrieval p95 41.50 / 37.42 / 40.49 ms and population read 17.93 / 23.90 / 17.61 ms, inside the spread of 886's own runs, so moving them would record noise.",
       "machine": "Every baseline is the minimum over three `load gate` runs on 2026-09-28: Windows 11, Intel Core Ultra 9 386H, 16 logical processors, 31.5 GB. It was NOT a quiet machine - six build-and-test sessions ran beside it, CPU load read 93% and 2.5 GB of memory was free - so, like the client block's baselines, these overstate the quiet cost. The per-run spread shows it: the population read's min-over-rounds p95 was 87.15 / 13.40 / 32.54 ms across the three runs.",
       "retrievalP95Ms": "Baseline 32.38 ms (runs: 42.16 / 32.38 / 41.38). The value is the p95 of TOTAL retrieval latency within one round - measured around IRetrievalPipeline.Retrieve by RagTelemetry.RetrievalMeter, embedding, dense search, BM25, fusion and merge included - and the gate reads the minimum over five rounds. Ceiling ~14x (Phase 192's slack ratio).",
       "retrievalBlobReadsPerQuery": "Baseline 0: once the scope's index is loaded (the warm-up pays it), the flat store and the BM25 index answer from memory and read no blob per query. The count is deterministic, so its ceiling is the baseline itself: a retrieval path that starts reading blobs per query has changed shape, whatever the clock says. On object storage each read is a request, which is why this is gated beside the clock rather than instead of it.",
-      "factPointReadMs": "Baseline 182.52 ms (runs: 297.36 / 182.52 / 268.20). A subject-and-metric read (FactQuery.forSubjectMetric, latest week) - which BlobFactStore answers by enumerating and deserialising every fact in the scope. Ceiling ~14x.",
+      "factPointReadMs": "Baseline 51.70 ms (Phase 929 re-measure, runs: 55.35 / 55.86 / 51.70; was 182.52 from 886's runs 297.36 / 182.52 / 268.20). A subject-and-metric read (FactQuery.forSubjectMetric, latest week). Phase 890's point-read index landed between 886's measurement and 929's, so the store no longer enumerates the scope per read, and the old ceiling (2500) sat 48x above what the path now costs - it could no longer see an order-of-magnitude regression. Ceiling 720, ~14x.",
       "factPopulationReadMs": "Baseline 13.40 ms (runs: 87.15 / 13.40 / 32.54 - the widest spread in the block, and the reason its ceiling is ~13x of the quiet-est run rather than of the median). A top-10 population read over one metric's latest week; the scope is above the Phase 702 surface's 512-head threshold, so the surface is consulted (491 blob reads per read on average, cold builds included, against 12,000 for the enumerating point read). Ceiling ~13x.",
-      "factAssertMs": "Baseline 243.71 ms (runs: 252.64 / 243.71 / 347.36). One Assert superseding the latest week of a distinct subject - which reads every fact in scope to find the lineage head. Ceiling ~14x.",
-      "factBatchAssertMs": "Baseline 233.38 ms (runs: 312.27 / 233.38 / 301.97). One AssertBatch of 50 drafts, each superseding. Ceiling ~14x.",
-      "factBlobReadsPerPointRead": "Baseline 12,000 = every fact in the 12,000-fact scope: the point read is O(store), and this count is what says so on any backend. Deterministic, so the ceiling is 1.5x rather than an order of magnitude: reading the scope twice per read is a regression the clock might hide on a busy runner and the count cannot.",
+      "factAssertMs": "Baseline 68.16 ms (Phase 929 re-measure, runs: 82.24 / 68.16 / 73.35; was 243.71). One Assert superseding the latest week of a distinct subject - since Phase 890 the lineage head is found through the point-read index (2 blob reads and 2 lists per assert, not the scope). Ceiling 950, ~14x.",
+      "factBatchAssertMs": "Baseline 94.13 ms (Phase 929 re-measure, runs: 99.48 / 104.85 / 94.13; was 233.38). One AssertBatch of 50 drafts, each superseding (51 blob reads per batch). Ceiling 1300, ~14x.",
+      "factBlobReadsPerPointRead": "Baseline 480.96 (Phase 929 re-measure; identical in all three runs; was 12,000 = the whole scope, before Phase 890's point-read index). Per read the index costs about one leaf plus the fact; the rest is the index the first reads of a fresh scope build, amortised over the 100 measured reads, so the figure depends on the cell and is deterministic for it. Ceiling 720, 1.5x: a point read that goes back to reading the scope (12,000) is 17x over it on any backend, whatever the clock says.",
       "statistic": "Min over rounds, for Phase 192's reason: wallclock noise is one-sided. Each round is a closed loop of N concurrent callers; a round's value is the p95 of its own operations.",
+      "largestMeasured": "Recorded, not gated (Phase 929, carrying Phase 14k's deferred 500,000-chunk p95). The flat store at 500,000 chunks could not be held on the shared machine: stopped 172 s into its seed at a 7.56 GB working set with 2.3 GB of the machine free (CPU 97%, 12.1 GB free when it started). The largest size that ran is 250,000 chunks - p95 1,371.40 ms, p50 1,133.28 ms, 6.7 q/s at 8 callers, 40 queries x 3 rounds, about 6.5 GB of process memory (CPU 94%, 7.0 GB free at start). The flat scan's p95 is linear at about 5.5 us per chunk across 10,000 / 100,000 / 250,000, which puts 500,000 at ~2.75 s. Too large and too slow for a per-push gate; the 10,000-chunk cell above is what is gated. docs/rag/performance.md has the rows.",
       "reproducing": "dotnet build src/ToolUp.RAG.Benchmarks -c Release, then dotnet src/ToolUp.RAG.Benchmarks/bin/Release/net10.0/ToolUp.RAG.Benchmarks.dll load gate --measurements artifacts/perf-budget/load-measurements.json. The full matrix (other stores, blob arms and sizes) is `load retrieval` / `load facts`; docs/rag/performance.md records what it measured.",
       "reviewing-a-change": "Raising a load ceiling is a claim that the fact or retrieval path is now legitimately slower. Say why here, in the same diff; ToolUp.Platform.Build.Tests refuses any ceiling more than 20x its baseline."
+    }
+  },
+  "loadAzurite": {
+    "label": "Fact and retrieval paths under concurrent load - the object-storage arm (Phase 929)",
+    "subject": "src/ToolUp.RAG.Benchmarks `load gate --arm azurite`: retrieval = the `load` block's cell with the blob arm on the Azure Blob companion over the local Azurite emulator; facts = BlobFactStore over the same emulator, 250 subjects x 3 metrics x 4 weeks (3,000 facts), 4 concurrent callers, 10 operations x 5 rounds per operation",
+    "statistic": "min",
+    "ceilings": {
+      "retrievalP95Ms": 400,
+      "retrievalBlobReadsPerQuery": 0,
+      "factPointReadMs": 22000,
+      "factPopulationReadMs": 10000,
+      "factAssertMs": 25000,
+      "factBatchAssertMs": 34000,
+      "factBlobReadsPerPointRead": 360
+    },
+    "minimumSamples": {
+      "retrievalP95Ms": 5,
+      "retrievalBlobReadsPerQuery": 5,
+      "factPointReadMs": 5,
+      "factPopulationReadMs": 5,
+      "factAssertMs": 5,
+      "factBatchAssertMs": 5,
+      "factBlobReadsPerPointRead": 5
+    },
+    "baselines": {
+      "retrievalP95Ms": 28.35,
+      "retrievalBlobReadsPerQuery": 0,
+      "factPointReadMs": 1613.64,
+      "factPopulationReadMs": 741.11,
+      "factAssertMs": 1793.3,
+      "factBatchAssertMs": 2450.52,
+      "factBlobReadsPerPointRead": 240.92
+    },
+    "notes": {
+      "machine": "Every baseline is the minimum over three `load gate --arm azurite` runs on 2026-09-29: Windows 11, Intel Core Ultra 9 386H, 16 logical processors, 31.5 GB, Azurite (mcr.microsoft.com/azure-storage/azurite, blob service only) in Docker Desktop on the same machine. NOT a quiet machine: six build-and-test sessions ran beside it, CPU load read 88-100% and 9-14 GB was free. Each run took 114-148 s of wall time.",
+      "arming": "Not run by CI: the perf-budget job starts no emulator. Run it with `pwsh ./dev-scripts/perf-budget-gate.ps1 -SkipServer -SkipClient -LoadArms azurite` after `docker compose -f compose.parity.yml up -d --wait` and `$env:TOOLUP_PARITY_AZURITE = \"UseDevelopmentStorage=true\"`. An arm that is named but not armed fails; it never falls back to the memory arm.",
+      "retrievalP95Ms": "Baseline 28.35 ms (runs: 40.03 / 28.35 / 37.81) - the memory arm's figure within noise, because the flat store and the BM25 index answer from memory once the warm-up has loaded them; the emulator is paid in the seed and the warm-up, not per query. Ceiling 400, ~14x.",
+      "retrievalBlobReadsPerQuery": "Baseline 0, measured, as on the memory arm: no blob is read per query once warm. Deterministic, so the ceiling is the baseline.",
+      "factPointReadMs": "Baseline 1613.64 ms (runs: 1719.36 / 1613.64 / 1672.12). Every blob read is an HTTP request to the emulator, and a fresh scope's first point reads build the Phase 890 index over the whole scope (240.92 reads per read, amortised over the 50 measured reads) - so the clock is dominated by requests, which is what this arm exists to show. Ceiling 22000, ~13.6x.",
+      "factPopulationReadMs": "Baseline 741.11 ms (runs: 741.11 / 833.83 / 992.47). 310 blob reads per read on average, cold surface builds included. Ceiling 10000, ~13.5x.",
+      "factAssertMs": "Baseline 1793.30 ms (runs: 1952.48 / 1936.76 / 1793.30). Two blob reads and two prefix LISTS per assert; on the emulator the lists over the 3,000-blob scope are the cost - a list is a paged request of its own. Ceiling 25000, ~13.9x.",
+      "factBatchAssertMs": "Baseline 2450.52 ms (runs: 5772.83 / 2450.52 / 3092.75 - the widest spread in the block). 189 blob reads per batch of 50. Ceiling 34000, ~13.9x.",
+      "factBlobReadsPerPointRead": "Baseline 240.92, identical in all three runs: the index build amortised over 50 reads, plus about one leaf and the fact per read. Deterministic for the cell, so the ceiling is 1.5x, as on the memory arm.",
+      "statistic": "Min over rounds, for Phase 192's reason: wallclock noise is one-sided.",
+      "reproducing": "dotnet build src/ToolUp.RAG.Benchmarks -c Release, then dotnet src/ToolUp.RAG.Benchmarks/bin/Release/net10.0/ToolUp.RAG.Benchmarks.dll load gate --arm azurite --measurements artifacts/perf-budget/load-azurite-measurements.json, with TOOLUP_PARITY_AZURITE set.",
+      "reviewing-a-change": "Raising a ceiling is a claim that the path is now legitimately slower on object storage. Say why here, in the same diff; ToolUp.Platform.Build.Tests refuses any ceiling more than 20x its baseline."
+    }
+  },
+  "loadPostgres": {
+    "label": "Fact and retrieval paths under concurrent load - the database arm (Phase 929)",
+    "subject": "src/ToolUp.RAG.Benchmarks `load gate --arm postgres`: retrieval = the `load` block's cell (10,000 chunks, 8 concurrent callers, 200 queries x 5 rounds) with the vector store on the pgvector companion (HNSW index, m=16, ef_construction=64); facts = the `load` block's fact cell - 1,000 subjects x 3 metrics x 4 weeks (12,000 facts), 4 concurrent callers, 20 operations x 5 rounds per operation - against the database-backed fact store (ToolUp.FactStores.Postgres, Phase 888), seeded through AssertBatch. Both over one local PostgreSQL 17, each in a table of its own per run, dropped afterwards.",
+    "statistic": "min",
+    "ceilings": {
+      "retrievalP95Ms": 51,
+      "retrievalBlobReadsPerQuery": 0,
+      "factPointReadMs": 34,
+      "factPopulationReadMs": 170,
+      "factAssertMs": 88,
+      "factBatchAssertMs": 267,
+      "factBlobReadsPerPointRead": 0
+    },
+    "minimumSamples": {
+      "retrievalP95Ms": 5,
+      "retrievalBlobReadsPerQuery": 5,
+      "factPointReadMs": 5,
+      "factPopulationReadMs": 5,
+      "factAssertMs": 5,
+      "factBatchAssertMs": 5,
+      "factBlobReadsPerPointRead": 5
+    },
+    "baselines": {
+      "retrievalP95Ms": 3.65,
+      "retrievalBlobReadsPerQuery": 0,
+      "factPointReadMs": 2.42,
+      "factPopulationReadMs": 8.59,
+      "factAssertMs": 6.27,
+      "factBatchAssertMs": 19.07,
+      "factBlobReadsPerPointRead": 0
+    },
+    "notes": {
+      "machine": "Every baseline is the minimum over three `load gate --arm postgres` runs on 2026-09-29: Windows 11, Intel Core Ultra 9 386H, 16 logical processors, 31.5 GB, PostgreSQL 17 (the pgvector/pgvector:pg17 image, default configuration) in Docker Desktop on the same machine. NOT a quiet machine: six build-and-test sessions ran beside it, CPU load read 94-100% (22% as the third run ended) and about 15 GB was free. Each run took 57-62 s of wall time, 47-54 s of it the pgvector seed (10,000 single-row upserts into an HNSW-indexed table).",
+      "arming": "Not run by CI: the perf-budget job starts no database. Run it with `pwsh ./dev-scripts/perf-budget-gate.ps1 -SkipServer -SkipClient -LoadArms postgres`, with TOOLUP_PGVECTOR_CONNECTION_STRING naming a local PostgreSQL - the same variable the pgvector arm reads, since one local server serves both; the fact store needs no extension. An arm that is named but not armed fails.",
+      "retrievalP95Ms": "Baseline 3.65 ms (runs: 3.81 / 4.03 / 3.65). The minimum over rounds hides a wide spread WITHIN each run: over all 1,000 queries the p50 was 51.24 / 49.84 / 3.59 ms and the p95 69.28 / 67.17 / 62.11 ms - the first rounds after the seed are an order of magnitude slower than the last, as the database settles the freshly built index. The gate reads the minimum, which is stable across runs. Ceiling 51, ~14x.",
+      "retrievalBlobReadsPerQuery": "Baseline 0, measured: the pgvector store keeps nothing in blobs and the BM25 index answers from memory once warm. Deterministic, so the ceiling is the baseline.",
+      "factPointReadMs": "Baseline 2.42 ms (runs: 2.56 / 2.77 / 2.42). One indexed query. Three earlier runs of the fact half alone, the first straight after the container started, read 8.96 / 3.56 / 3.51 ms. Ceiling 34, ~14x.",
+      "factPopulationReadMs": "Baseline 8.59 ms (runs: 12.94 / 10.13 / 8.59). The earlier fact-only runs read 138.86 / 20.68 / 11.72 ms, the first with the database's cache cold straight after the container started - 16x this baseline. So the ceiling is 170 (19.8x, inside the 20x law) rather than ~14x, which a first run on a fresh container would breach with no regression. It scales with the scope: at 300,000 facts the same read measured 296 ms (see docs/rag/performance.md).",
+      "factAssertMs": "Baseline 6.27 ms (runs: 6.57 / 7.36 / 6.27; the fact-only runs 12.02 / 15.74 / 10.02). One superseding assert: a head lookup and a write in one transaction. Ceiling 88, ~14x.",
+      "factBatchAssertMs": "Baseline 19.07 ms (runs: 19.84 / 19.86 / 19.07; the fact-only runs 40.09 / 30.27 / 23.42). One AssertBatch of 50 superseding drafts. Ceiling 267, ~14x.",
+      "factBlobReadsPerPointRead": "Baseline 0, measured: the database store reads no blob, so the harness's counter wraps a store nothing reads. The ceiling is the baseline - a database arm that starts reading blobs has changed shape.",
+      "statistic": "Min over rounds, for Phase 192's reason: wallclock noise is one-sided.",
+      "reproducing": "dotnet build src/ToolUp.RAG.Benchmarks -c Release, then dotnet src/ToolUp.RAG.Benchmarks/bin/Release/net10.0/ToolUp.RAG.Benchmarks.dll load gate --arm postgres --measurements artifacts/perf-budget/load-postgres-measurements.json, with TOOLUP_PGVECTOR_CONNECTION_STRING set.",
+      "reviewing-a-change": "Raising a ceiling is a claim that the database path is now legitimately slower. Say why here, in the same diff; ToolUp.Platform.Build.Tests refuses any ceiling more than 20x its baseline."
     }
   }
 }

@@ -20,7 +20,7 @@ open ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore
 //    claim a gate rather than a comment: `Sql.scopeBoundStatements`
 //    enumerates every statement that touches chunk rows together with
 //    HOW it binds scope, and the test asserts that binding on each — a
-//    `scope = @scope` predicate for the seven that read or mutate rows,
+//    `scope = @scope` predicate for the eight that read or mutate rows,
 //    and identity + conflict target for the two INSERTs. A future
 //    statement added without a binding fails here, in CI, on a fresh
 //    checkout with no Postgres anywhere near it.
@@ -38,6 +38,13 @@ open ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore
 // probe, and the health / preflight judgements; and to the live arm, the
 // small-scope reproduction, the index-use confirmation (EXPLAIN), recall
 // against the exact scan, and the batched write end to end.
+//
+// Phase 928 ran the live arm against a real server (pgvector 0.8.6 on
+// PostgreSQL 17, the `pgvector` service in `compose.parity.yml`), found
+// that the two-key `search` IS served by the approximate index, and
+// replaced the index-use case with one asserting that — and that the
+// fallback's `searchExact` never is — plus a case proving the fallback
+// repairs a starved page exactly.
 //
 // Each live case gets its own table (`pgv_test_<guid>`) and drops it on
 // the way out, so the arm is re-runnable and two concurrent runs against
@@ -142,6 +149,7 @@ let private scopeIsolationTests =
                     "UpsertBatch"
                     "Search"
                     "SearchIndexOrdered"
+                    "SearchExact"
                     "ListChunks"
                     "DeleteChunk"
                     "RestoreChunk"
@@ -167,7 +175,12 @@ let private scopeIsolationTests =
         }
 
         test "multi-scope search issues one scope-parameterised query, never a scope array" {
-            for searchSql in [ Sql.search defaultOptions; Sql.searchIndexOrdered defaultOptions ] do
+            for searchSql in
+                [
+                    Sql.search defaultOptions
+                    Sql.searchIndexOrdered defaultOptions
+                    Sql.searchExact defaultOptions
+                ] do
                 Expect.isFalse
                     (searchSql.Contains "ANY(" || searchSql.Contains "IN (")
                     "a scope-set parameter would move the isolation guarantee inside an array — one query per scope instead"
@@ -578,7 +591,7 @@ let private searchSettingsTests =
             Expect.stringContains
                 indexOrdered
                 "ORDER BY embedding <=> @embedding::vector\nLIMIT"
-                "an ordering-operator index can serve only a single distance sort key"
+                "the index-ordered statement ranks by the distance alone"
 
             Expect.isFalse (indexOrdered.Contains ", chunk_id") "no secondary sort key in the index-ordered statement"
             Expect.stringContains indexOrdered "deleted_at IS NULL" "tombstones stay filtered"
@@ -586,7 +599,19 @@ let private searchSettingsTests =
             Expect.stringContains
                 (Sql.search defaultOptions)
                 ", chunk_id"
-                "the exact statement (and the short-page fallback) keeps the chunk_id tie-break"
+                "the two-key statement keeps the chunk_id tie-break"
+        }
+
+        test "the fallback's exact statement ranks a materialised scope, so no index can serve its ORDER BY" {
+            // Phase 928: the planner serves the two-key `search` from the
+            // HNSW index (an Incremental Sort presorted on the distance),
+            // so only a statement whose ranking happens AFTER the scope's
+            // rows are materialised is exact whatever indexes exist.
+            let exact = Sql.searchExact defaultOptions
+            Expect.stringContains exact "AS MATERIALIZED" "the scope's rows are materialised before they are ranked"
+            Expect.stringContains exact "FROM scoped\nORDER BY" "the ranking reads the materialised rows, not the table"
+            Expect.stringContains exact "deleted_at IS NULL" "tombstones stay filtered"
+            Expect.stringContains exact ", chunk_id" "equal distances tie-break on chunk_id"
         }
     ]
 
@@ -938,17 +963,68 @@ let private explain (connectionString: string) (sql: string) (scopeKey: string) 
 
     String.concat "\n" lines
 
+/// Refresh the planner statistics for a freshly written table, as
+/// autovacuum would in production — a plan read over a never-analysed
+/// table is a plan nobody runs.
+let private analyze (connectionString: string) (table: string) =
+    use dataSource = NpgsqlDataSource.Create connectionString
+    use cmd = dataSource.CreateCommand(sprintf "ANALYZE %s;" table)
+    cmd.ExecuteNonQuery() |> ignore
+
+/// The plan the planner chooses on its own (nothing steered), for the
+/// measurement record.
+let private naturalPlan (connectionString: string) (sql: string) (scopeKey: string) (query: float32 array) (topK: int) =
+    use dataSource = NpgsqlDataSource.Create connectionString
+    use cmd = dataSource.CreateCommand("EXPLAIN " + sql)
+    cmd.Parameters.AddWithValue("scope", scopeKey) |> ignore
+
+    cmd.Parameters.AddWithValue("embedding", Vector.toLiteral (Vector.normalise query))
+    |> ignore
+
+    cmd.Parameters.AddWithValue("top_k", topK) |> ignore
+    use reader = cmd.ExecuteReader()
+    let lines = ResizeArray<string>()
+
+    while reader.Read() do
+        lines.Add(reader.GetString 0)
+
+    String.concat "\n" lines
+
+/// How many rows a search statement returns at the database's default
+/// settings — the page the store sees BEFORE any fallback.
+let private rawCount (connectionString: string) (sql: string) (scopeKey: string) (query: float32 array) (topK: int) =
+    use dataSource = NpgsqlDataSource.Create connectionString
+    use cmd = dataSource.CreateCommand sql
+    cmd.Parameters.AddWithValue("scope", scopeKey) |> ignore
+
+    cmd.Parameters.AddWithValue("embedding", Vector.toLiteral (Vector.normalise query))
+    |> ignore
+
+    cmd.Parameters.AddWithValue("top_k", topK) |> ignore
+    use reader = cmd.ExecuteReader()
+    let mutable n = 0
+
+    while reader.Read() do
+        n <- n + 1
+
+    n
+
 /// Phase 892 live cases — the reproduction, the index-use confirmation,
 /// recall against the exact scan, the batched write and the tuned search
 /// paths. Printed figures are the measurement record the README cites.
 let private phase892LiveTests (connectionString: string) =
     testList "Phase 892 (live)" [
-        testCaseAsync "reproduction: a small scope in a large shared table, approximate index, default width"
+        testCaseAsync
+            "reproduction: small and mid-size scopes in a large shared table, approximate index, default width"
         <| async {
-            // The unmitigated shape the phase set out to reproduce: the
-            // index serves the ORDER BY, nothing widens the scan, no
-            // fallback. What comes back is RECORDED, not asserted — it is
-            // the measurement, and the mitigated case below is the gate.
+            // The unmitigated shape: the index may serve the ORDER BY,
+            // nothing widens the scan, no fallback. What comes back is
+            // RECORDED, not asserted — it is the measurement, and the
+            // mitigated cases below are the gate. Phase 928 ran it against
+            // pgvector 0.8.6: the planner answers a 20-chunk scope from the
+            // `(scope)` index (exact, full page), and the exposed band is a
+            // scope large enough for the planner to route it to the
+            // approximate index yet too small to fill its candidate list.
             let bare = {
                 PgvectorTuning.unchanged with
                     IndexOrderedSearch = true
@@ -958,14 +1034,15 @@ let private phase892LiveTests (connectionString: string) =
                 makeTunedStore connectionString 16 (HnswAnnIndex(16, 64)) bare
 
             try
-                let big = randomVectors 892 5000 16
-                let small = randomVectors 893 20 16
-
                 do!
                     upsertBatch
                         store
                         (Team "big")
-                        (big |> List.mapi (fun i v -> sprintf "big-%05d" i, v, chunk "big" "b"))
+                        (randomVectors 892 5000 16
+                         |> List.mapi (fun i v -> sprintf "big-%05d" i, v, chunk "big" "b"))
+
+                let small = randomVectors 893 20 16
+                let mid = randomVectors 894 250 16
 
                 do!
                     upsertBatch
@@ -973,23 +1050,30 @@ let private phase892LiveTests (connectionString: string) =
                         (Team "small")
                         (small |> List.mapi (fun i v -> sprintf "small-%03d" i, v, chunk "small" "s"))
 
-                let query = small.Head
-                let! results = store.Search [ Team "small" ] query 10
+                do!
+                    upsertBatch
+                        store
+                        (Team "mid")
+                        (mid |> List.mapi (fun i v -> sprintf "mid-%03d" i, v, chunk "mid" "m"))
 
-                let plan =
-                    explain
-                        connectionString
-                        (Sql.searchIndexOrdered { defaultOptions with Table = table })
-                        "team:small"
-                        query
-                        10
+                analyze connectionString table
+                let options = { defaultOptions with Table = table }
 
-                printfn
-                    "[Phase 892 reproduction] small scope (20 chunks) in a 5020-row table, hnsw(16,64), default ef_search, no iterative scan, no fallback: top-10 returned %d rows.\nPlan:\n%s"
-                    results.Length
-                    plan
+                for name, vectors in [ "small", small; "mid", mid ] do
+                    let query = vectors.Head
+                    let! results = store.Search [ Team name ] query 10
 
-                Expect.all results (fun m -> m.Scope = Team "small") "isolation holds whatever the count"
+                    let plan =
+                        naturalPlan connectionString (Sql.searchIndexOrdered options) ("team:" + name) query 10
+
+                    printfn
+                        "[Phase 928 reproduction] %s scope (%d chunks) in a 5270-row table, hnsw(16,64), default ef_search, no iterative scan, no fallback: top-10 returned %d rows.\nPlan:\n%s"
+                        name
+                        vectors.Length
+                        results.Length
+                        plan
+
+                    Expect.all results (fun m -> m.Scope = Team name) "isolation holds whatever the count"
             finally
                 dispose.Dispose()
         }
@@ -1026,8 +1110,15 @@ let private phase892LiveTests (connectionString: string) =
                 dispose.Dispose()
         }
 
-        testCaseAsync "the index serves the distance-only ORDER BY, and not the two-key one"
+        testCaseAsync "EXPLAIN: the index serves both ORDER BY shapes, and never the fallback's exact statement"
         <| async {
+            // Phase 892 read the planner and concluded the two-key ORDER BY
+            // (distance, then chunk_id) could not be served from the
+            // approximate index. Phase 928 ran the plans on pgvector 0.8.6 /
+            // PostgreSQL 17 and REFUTED it: the planner serves it through an
+            // Incremental Sort presorted on the distance. So `search` is
+            // approximate once an index exists, and the fallback needs a
+            // statement no index can serve — `searchExact`.
             let store, dispose, table =
                 makeTunedStore connectionString 16 (HnswAnnIndex(16, 64)) PgvectorTuning.recommended
 
@@ -1036,34 +1127,105 @@ let private phase892LiveTests (connectionString: string) =
                     upsertBatch
                         store
                         (Team "T")
-                        (randomVectors 7 500 16
+                        (randomVectors 7 2000 16
                          |> List.mapi (fun i v -> sprintf "c-%04d" i, v, chunk "c" "x"))
 
+                analyze connectionString table
                 let options = { defaultOptions with Table = table }
                 let query = (randomVectors 8 1 16).Head
                 let indexName = table + "_embedding_hnsw_idx"
 
-                let indexOrderedPlan =
+                let distanceOnlyPlan =
                     explain connectionString (Sql.searchIndexOrdered options) "team:T" query 10
 
-                let totalOrderPlan = explain connectionString (Sql.search options) "team:T" query 10
+                let twoKeyPlan = explain connectionString (Sql.search options) "team:T" query 10
+                let exactPlan = explain connectionString (Sql.searchExact options) "team:T" query 10
 
                 printfn
-                    "[Phase 892 ordering] distance-only plan:\n%s\ntwo-key plan:\n%s"
-                    indexOrderedPlan
-                    totalOrderPlan
+                    "[Phase 928 ordering] distance-only plan:\n%s\ntwo-key plan:\n%s\nexact (fallback) plan:\n%s"
+                    distanceOnlyPlan
+                    twoKeyPlan
+                    exactPlan
+
+                Expect.stringContains distanceOnlyPlan indexName "the index serves a single distance sort key"
 
                 Expect.stringContains
-                    indexOrderedPlan
+                    twoKeyPlan
                     indexName
-                    "a single distance sort key is what an ordering-operator index serves"
+                    "the index serves the two-key ORDER BY too, so `search` is approximate once an index exists"
 
-                // The falsifier for the exact fallback: if a planner ever
-                // serves the two-key ORDER BY from the approximate index,
-                // the "exact" statement is no longer exact.
+                Expect.stringContains
+                    twoKeyPlan
+                    "Incremental Sort"
+                    "the chunk_id tie-break is applied by an Incremental Sort over the index-ordered rows"
+
+                // The falsifier the full top-k guarantee rests on.
                 Expect.isFalse
-                    (totalOrderPlan.Contains indexName)
-                    "the two-key statement must not be served from the approximate index — the exact fallback depends on it"
+                    (exactPlan.Contains indexName)
+                    "the fallback's statement must never be served from the approximate index"
+            finally
+                dispose.Dispose()
+        }
+
+        testCaseAsync "a starved page is repaired exactly by the fallback, whichever ORDER BY produced it"
+        <| async {
+            // Default width, no iterative scan, the two-key statement: the
+            // shape Phase 892 believed was an exact scan. The fallback alone
+            // must turn its short page into the exact top-k.
+            //
+            // A table this size is answered from the (scope) index unless
+            // the planner is steered, so every connection here carries
+            // enable_sort = off: it routes the scope's page to the
+            // approximate index, as the planner chose unprompted for 2,000-
+            // to 20,000-chunk scopes of a 165,000-row table in Phase 928's
+            // measurement. The exact statement still sorts, because nothing
+            // else can serve it, which is the point.
+            let steered =
+                let b = NpgsqlConnectionStringBuilder connectionString
+                b.Options <- "-c enable_sort=off"
+                b.ConnectionString
+
+            let tuning = {
+                PgvectorTuning.unchanged with
+                    ExactFallbackOnShortPage = true
+            }
+
+            let store, dispose, table = makeTunedStore steered 16 (HnswAnnIndex(16, 64)) tuning
+
+            try
+                do!
+                    upsertBatch
+                        store
+                        (Team "big")
+                        (randomVectors 892 5000 16
+                         |> List.mapi (fun i v -> sprintf "big-%05d" i, v, chunk "big" "b"))
+
+                let mid = randomVectors 894 250 16 |> List.mapi (fun i v -> sprintf "mid-%03d" i, v)
+
+                do! upsertBatch store (Team "mid") (mid |> List.map (fun (id, v) -> id, v, chunk "mid" "m"))
+                analyze steered table
+                let options = { defaultOptions with Table = table }
+                let query = (randomVectors 895 1 16).Head
+                let starved = rawCount steered (Sql.search options) "team:mid" query 10
+                let plan = naturalPlan steered (Sql.search options) "team:mid" query 10
+
+                printfn
+                    "[Phase 928 fallback] 250-chunk scope in a 5250-row table, two-key statement, default ef_search, planner steered to the index: the page before the fallback held %d of 10 rows.\nPlan:\n%s"
+                    starved
+                    plan
+
+                // The case's own premise: if the corpus stops starving, it
+                // proves nothing about the fallback, so it says so.
+                Expect.isLessThan starved 10 "precondition: the two-key statement's page is short at the default width"
+
+                let truth =
+                    mid
+                    |> List.sortBy (fun (id, v) -> -(cosine query v), id)
+                    |> List.truncate 10
+                    |> List.map fst
+
+                let! results = store.Search [ Team "mid" ] query 10
+                Expect.equal (results |> List.map _.ChunkId) truth "the fallback returns the exact top-10, in order"
             finally
                 dispose.Dispose()
         }
@@ -1082,6 +1244,7 @@ let private phase892LiveTests (connectionString: string) =
                 let queries = randomVectors 43 50 32
                 let k = 10
                 let mutable hits = 0
+                let timings = ResizeArray<float>()
 
                 for q in queries do
                     let truth =
@@ -1091,15 +1254,23 @@ let private phase892LiveTests (connectionString: string) =
                         |> List.map fst
                         |> Set.ofList
 
+                    let clock = Diagnostics.Stopwatch.StartNew()
                     let! got = store.Search [ Team "T" ] q k
+                    timings.Add clock.Elapsed.TotalMilliseconds
                     hits <- hits + (got |> List.filter (fun m -> truth.Contains m.ChunkId) |> List.length)
 
                 let recall = float hits / float (k * queries.Length)
+                let sorted = timings |> Seq.sort |> Array.ofSeq
 
+                // Phase 928: the store-path latency beside the recall — one
+                // `Search` call, client round-trip included (the settings
+                // statement, the search and the commit on one connection).
                 printfn
-                    "[Phase 892 recall] 5000 x 32-dim, hnsw(16,64), ef_search=100, iterative relaxed: recall@10 = %.3f over %d queries"
+                    "[Phase 892 recall] 5000 x 32-dim, hnsw(16,64), ef_search=100, iterative relaxed: recall@10 = %.3f over %d queries; Search latency mean %.2f ms, p95 %.2f ms"
                     recall
                     queries.Length
+                    (Array.average sorted)
+                    sorted[int (float sorted.Length * 0.95) - 1]
 
                 Expect.isGreaterThanOrEqual recall 0.9 "the recommended settings keep recall@10 at or above 0.9"
             finally

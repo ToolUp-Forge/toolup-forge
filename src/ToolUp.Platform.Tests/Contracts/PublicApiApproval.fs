@@ -404,6 +404,35 @@ let private docFieldKind (f: FieldInfo) =
 
     if isFSharpLiteral then "P" else "F"
 
+/// Phase 929 — the id kind the compiler keys a PROPERTY's doc comment
+/// under. An F# union case with no fields surfaces in metadata as a static
+/// property of the union type, but the compiler writes the case's doc
+/// comment as `T:<Union>.<Case>` — the id a case WITH fields gets for its
+/// nested class — never `P:`. Keyed as `P:`, every documented field-less
+/// case read as undocumented. The case is recognised by the
+/// `CompilationMappingAttribute` the compiler stamps on it (source
+/// construct `UnionCase`, 8, under the kind mask 31), on the property or
+/// its getter.
+let private docPropertyKind (p: PropertyInfo) =
+    let isUnionCase (attrs: Collections.Generic.IList<CustomAttributeData>) =
+        attrs
+        |> Seq.exists (fun a ->
+            a.AttributeType.FullName = "Microsoft.FSharp.Core.CompilationMappingAttribute"
+            && a.ConstructorArguments.Count > 0
+            && (match a.ConstructorArguments[0].Value with
+                | :? int as flags -> flags &&& 31 = 8
+                | _ -> false))
+
+    let getter = p.GetGetMethod true
+
+    if
+        isUnionCase (p.GetCustomAttributesData())
+        || (not (isNull getter) && isUnionCase (getter.GetCustomAttributesData()))
+    then
+        "T"
+    else
+        "P"
+
 /// Phase 258 seam — the sanctioned rendering of an `[<Obsolete>]` marking:
 /// a SEPARATE line derived from the member's token, never a rewrite of it.
 /// See the Phase 258 note in this file's header for why the in-place
@@ -804,7 +833,14 @@ let private renderType (t: Type) : RenderedType =
 
                     sprintf "%s.%s : %s { %s }" fullName p.Name (typeName p.PropertyType) getSet,
                     obsoleteMessageOf (p.GetCustomAttributesData()),
-                    Some(sprintf "P:%s.%s%s" typeDoc p.Name (docParamList [] (p.GetIndexParameters()))))
+                    Some(
+                        sprintf
+                            "%s:%s.%s%s"
+                            (docPropertyKind p)
+                            typeDoc
+                            p.Name
+                            (docParamList [] (p.GetIndexParameters()))
+                    ))
 
             let fields =
                 t.GetFields memberFlags
@@ -971,8 +1007,15 @@ let renderSurfaceDetail (dllPath: string) (resolverPaths: string seq) : SurfaceR
 
     sb.AppendLine "# still be folded into this file in the same PR." |> ignore
 
+    // Phase 933 — the text written is the text compared. Check mode reads
+    // a baseline through `SurfaceDiff.significantLines`, which drops the
+    // SDK-band-dependent constructor on both sides; an approve run that
+    // wrote it anyway put a line in the file the gate never reads, and
+    // every scoped regen on a band that emits it asked for a hand strip.
+    // Same predicate, not a second copy of its literal.
     for line in body do
-        sb.AppendLine line |> ignore
+        if not (isCompilerVersionDependent line) then
+            sb.AppendLine line |> ignore
 
     {
         Text = sb.ToString().Replace("\r\n", "\n")

@@ -126,6 +126,7 @@ ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+Sql.migration(ToolUp.RAG.Ve
 ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+Sql.restoreChunk(ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorOptions) : System.String
 ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+Sql.scopeBoundStatements(ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorOptions) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+Sql+ScopeBinding, System.String]]
 ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+Sql.search(ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorOptions) : System.String
+ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+Sql.searchExact(ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorOptions) : System.String
 ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+Sql.searchIndexOrdered(ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorOptions) : System.String
 ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+Sql.searchSettings(ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorOptions, ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+PgvectorTuning, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]
 ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore+Sql.setLocal(System.Int32) : System.String

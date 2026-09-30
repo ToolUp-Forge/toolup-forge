@@ -26,7 +26,8 @@ open ToolUp.Facts
 // staleness through the cadence; undeclared tables; scope isolation.
 //
 // After the pack: the default writer's audit (one run record per run), its
-// binding refusal, a 10,000-subject run answered by the population read,
+// binding refusal, the provenance case bound to both provenances (a computed
+// run and an imported one, Phase 932), a 10,000-subject run answered by the population read,
 // and the compose-time fact-table preflight.
 
 /// What a binding hands the pack.
@@ -504,6 +505,7 @@ let private newScope () = "team-" + Guid.NewGuid().ToString("N")
 type private DefaultWorld = {
     Fixture: FactTableWriterFixture
     Events: IEventStore
+    Storage: IBlobStorage
 }
 
 let private defaultWorld
@@ -533,6 +535,7 @@ let private defaultWorld
             ScopeB = newScope ()
         }
         Events = events
+        Storage = storage
     }
 
 let private bindAll = [ BindAllFactTables DefaultFactTableWriter.Destination ]
@@ -625,6 +628,170 @@ let defaultWriterObligationTests =
             | FactTableNotBoundHere(id, Some "warehouse", writer) ->
                 Expect.equal (id, writer) (table.Id, DefaultFactTableWriter.Destination) "names table and writer"
             | other -> failtestf "expected FactTableNotBoundHere, got %A" other
+        }
+
+        // ── The provenance case, bound to both provenances (Phase 932) ──
+
+        test "provenance: an unstaged run and a ComputedRun-staged run write the table's own lineage" {
+            let table =
+                skuTable "sku-sales" FactTableHistoryMode.Replace FactTableRequirement.Required
+
+            let world = defaultWorld (fun () -> t0) [ table ] registry bindAll
+            let f = world.Fixture
+
+            runOf f.Writer f.ScopeA table.Id [ [ row "acme" "a1" 10m "core" ] ]
+            |> committed "unstaged"
+            |> ignore
+
+            let run = ok "open" (f.Writer.OpenRun(f.ScopeB, table.Id))
+            ok "stage" (FactTableRunProvenance.stage world.Storage f.ScopeB run.RunId ComputedRun)
+
+            ok "write" (f.Writer.WriteRows(f.ScopeB, run.RunId, [ row "acme" "a1" 10m "core" ]))
+            |> ignore
+
+            ok "commit" (f.Writer.Commit(f.ScopeB, run.RunId)) |> ignore
+
+            for scope in [ f.ScopeA; f.ScopeB ] do
+                let facts = tableFacts f.Facts scope "revenue" @ tableFacts f.Facts scope "segment"
+                Expect.hasLength facts 2 "one fact per cell"
+
+                for fact in facts do
+                    Expect.equal fact.Method (Computed("sales-rollup", "v1", table.Id)) "the table's own lineage"
+
+                Expect.isEmpty
+                    (world.Storage.List(scope, "_fact-tables/provenance/") |> Async.RunSynchronously)
+                    "a computed run leaves no provenance behind (GP 11)"
+        }
+
+        test "provenance: an ImportedRun writes each origin's rows Imported, floored, and names a withdrawal" {
+            let table =
+                skuTable "sku-sales" FactTableHistoryMode.Replace FactTableRequirement.Required
+
+            let world = defaultWorld (fun () -> t0) [ table ] registry bindAll
+            let f = world.Fixture
+            let restricted = Disclosure.Restricted "pricing"
+
+            let cell (brand: string) (sku: string) (metricId: string) (d: Disclosure) : FactTableImportedCell = {
+                Subject = [ brand; sku ]
+                Metric = metricId
+                From = september.From
+                To = september.To
+                Disclosure = d
+            }
+
+            let origin (brand: string) (withdrawal: string option) (cells: FactTableImportedCell list) = {
+                RootMember = brand
+                CertificateRef = "cert:" + brand
+                TriggerRef = "import:" + brand
+                Withdrawal = withdrawal
+                Cells = cells
+            }
+
+            let acme =
+                origin "acme" None [
+                    cell "acme" "a1" "revenue" restricted
+                    cell "acme" "a2" "revenue" Disclosure.Surfaceable
+                ]
+
+            let importedRun (origins: FactTableImportOrigin list) (rows: FactTableRow list) =
+                let run = ok "open" (f.Writer.OpenRun(f.ScopeA, table.Id))
+                ok "stage" (FactTableRunProvenance.stage world.Storage f.ScopeA run.RunId (ImportedRun origins))
+                ok "write" (f.Writer.WriteRows(f.ScopeA, run.RunId, rows)) |> ignore
+                ok "commit" (f.Writer.Commit(f.ScopeA, run.RunId))
+
+            importedRun [
+                acme
+                origin "beta" None [ cell "beta" "b1" "revenue" Disclosure.Surfaceable ]
+            ] [
+                row "acme" "a1" 10m "core"
+                row "acme" "a2" 20m "core"
+                row "zeta" "z1" 5m "edge"
+                row "beta" "b1" 7m "edge"
+            ]
+            |> ignore
+
+            importedRun [ acme; origin "beta" (Some "withdrawn: beta left") [] ] [
+                row "acme" "a1" 10m "core"
+                row "acme" "a2" 20m "core"
+                row "zeta" "z1" 5m "edge"
+            ]
+            |> ignore
+
+            let factAt (metricId: string) (path: string list) =
+                match
+                    tableFacts f.Facts f.ScopeA metricId
+                    |> List.filter (fun x -> x.Subject.Path = path)
+                with
+                | [ fact ] -> fact
+                | other -> failtestf "expected one current %s fact at %A, got %d" metricId path other.Length
+
+            let a1 = factAt "revenue" [ "acme"; "a1" ]
+            Expect.equal a1.Method (Imported "cert:acme") "an origin's row is Imported, naming its certificate"
+            Expect.equal a1.Evidence.TriggerRef (Some "import:acme") "and its evidence names the origin"
+
+            Expect.equal
+                a1.Disclosure
+                (Disclosure.floor restricted Disclosure.Surfaceable)
+                "no wider than the origin published it"
+
+            Expect.equal
+                (factAt "revenue" [ "acme"; "a2" ]).Disclosure
+                Disclosure.Surfaceable
+                "and no narrower than the floor"
+
+            Expect.equal
+                (factAt "segment" [ "acme"; "a1" ]).Disclosure
+                Disclosure.Internal
+                "a cell the origin did not place is narrowed to the bottom"
+
+            Expect.equal
+                (factAt "revenue" [ "zeta"; "z1" ]).Method
+                (Computed("sales-rollup", "v1", table.Id))
+                "a row under no origin keeps the table's own lineage"
+
+            let b1 = factAt "revenue" [ "beta"; "b1" ]
+            Expect.equal b1.Value (Absent "withdrawn: beta left") "a withdrawn origin's removal names the withdrawal"
+            Expect.equal b1.Method (Imported "cert:beta") "in the origin's own lineage"
+
+            Expect.isEmpty
+                (world.Storage.List(f.ScopeA, "_fact-tables/provenance/")
+                 |> Async.RunSynchronously)
+                "the staged provenance is discarded with the run's staging"
+        }
+
+        test "provenance: only an open run takes one, and an abandoned run drops it" {
+            let table =
+                skuTable "sku-sales" FactTableHistoryMode.Replace FactTableRequirement.Required
+
+            let world = defaultWorld (fun () -> t0) [ table ] registry bindAll
+            let f = world.Fixture
+            let imported = ImportedRun []
+
+            match refused "unknown" (FactTableRunProvenance.stage world.Storage f.ScopeA "no-such-run" imported) with
+            | FactTableRunUnknown "no-such-run" -> ()
+            | other -> failtestf "expected FactTableRunUnknown, got %A" other
+
+            let run, _ = runOf f.Writer f.ScopeA table.Id [ [ row "acme" "a1" 10m "core" ] ]
+
+            match refused "committed" (FactTableRunProvenance.stage world.Storage f.ScopeA run.RunId imported) with
+            | FactTableRunClosed(id, "committed") -> Expect.equal id run.RunId "names the run"
+            | other -> failtestf "expected FactTableRunClosed, got %A" other
+
+            let pending = ok "open" (f.Writer.OpenRun(f.ScopeA, table.Id))
+            ok "stage" (FactTableRunProvenance.stage world.Storage f.ScopeA pending.RunId imported)
+
+            Expect.isNonEmpty
+                (world.Storage.List(f.ScopeA, "_fact-tables/provenance/")
+                 |> Async.RunSynchronously)
+                "staged beside the run (the probe below is not vacuous)"
+
+            ok "abandon" (f.Writer.Abandon(f.ScopeA, pending.RunId, "changed my mind"))
+            |> ignore
+
+            Expect.isEmpty
+                (world.Storage.List(f.ScopeA, "_fact-tables/provenance/")
+                 |> Async.RunSynchronously)
+                "an abandoned run's provenance goes with it"
         }
 
         test "a 10,000-subject run commits once and the population read answers over it" {

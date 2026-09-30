@@ -50,6 +50,8 @@
     <ProjectReference Include="..\Storage\AzureBlobStorage\AzureBlobStorage.fsproj" />
     <ProjectReference Include="..\ToolUp.Facts.Core\ToolUp.Facts.Core.fsproj" />
     <ProjectReference Include="..\ToolUp.Facts.Server\ToolUp.Facts.Server.fsproj" />
+    <!-- Phase 929 — the fact half's database arm: the Phase 888 store. -->
+    <ProjectReference Include="..\FactStores\Postgres\PostgresFactStore.fsproj" />
   </ItemGroup>
   <!-- Phase 14k WS5 Item 3 — mixed-dim fixture JSON, linked from the
        co-located RAG.Evaluation/fixtures/ directory into the benchmark

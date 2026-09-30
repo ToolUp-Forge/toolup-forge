@@ -706,5 +706,129 @@ let private loadTests =
         }
     ]
 
+// ─── Phase 929 — the load harness's two storage arms ───────────────────
+//
+// The same measurements as the `load` block, taken with the blob arm on the
+// local Azure Blob emulator (`loadAzurite`) and with the fact store on a
+// local PostgreSQL (`loadPostgres`: the pgvector store for retrieval, the
+// database-backed fact store for facts). Each is its own block, so a CI job
+// that cannot start either never reads a ceiling it cannot meet, and each
+// is held to the `load` block's laws.
+
+let private shippedArmNotes (property: string) =
+    use document = Text.Json.JsonDocument.Parse(shippedBudgetJson ())
+
+    match document.RootElement.TryGetProperty property with
+    | true, block ->
+        match block.TryGetProperty "notes" with
+        | true, notes when notes.ValueKind = Text.Json.JsonValueKind.Object -> [
+            for p in notes.EnumerateObject() do
+                if p.Value.ValueKind = Text.Json.JsonValueKind.String then
+                    yield p.Name, p.Value.GetString()
+          ]
+        | _ -> []
+    | _ -> []
+
+let private armLaws
+    (property: string)
+    (parse: string -> string -> Result<PerfBudget, string list>)
+    (required: PerfMetric list)
+    =
+    let shipped () =
+        match parse "shipped-budget.json" (shippedBudgetJson ()) with
+        | Ok b -> b
+        | Error errors ->
+            failtestf
+                "expected the '%s' block of perf-budgets.json to parse, got: %s"
+                property
+                (String.concat "; " errors)
+
+    testList property [
+        test "a budget with no such block is refused, not read as asserting nothing" {
+            match parse "no-arm.json" (budgetJson (defaultCeilings + "," + loadBlock)) with
+            | Ok _ -> failtestf "a document with no '%s' block parsed" property
+            | Error errors -> Expect.isTrue (mentions $"declares no '{property}' block" errors) $"got: %A{errors}"
+        }
+
+        test "perf-budgets.json budgets every metric the arm measures" {
+            let budget = shipped ()
+
+            for metric in required do
+                Expect.isTrue
+                    (budget.Ceilings |> List.exists (fun (m, _) -> m = metric))
+                    $"the shipped '{property}' block must place a ceiling on '{PerfMetric.key metric}' — the arm measures it, and a measured number nothing budgets is discarded"
+        }
+
+        test "no shipped ceiling is more than 20x its recorded baseline" {
+            let budget = shipped ()
+
+            for metric, ceiling in budget.Ceilings do
+                match budget.Baselines |> List.tryFind (fun (m, _) -> m = metric) with
+                | None -> failtestf "'%s.%s' has a ceiling but no baseline" property (PerfMetric.key metric)
+                | Some(_, baseline) ->
+                    Expect.isLessThanOrEqual
+                        ceiling
+                        (baseline * 20.0)
+                        $"'{property}.{PerfMetric.key metric}' allows {ceiling} {PerfMetric.unit metric} against a {baseline} {PerfMetric.unit metric} baseline — re-measure and lower it, or justify the new baseline in the block's notes."
+        }
+
+        test "every shipped ceiling carries a note saying why it is where it is" {
+            let budget = shipped ()
+            let notes = shippedArmNotes property
+
+            for metric, _ in budget.Ceilings do
+                Expect.isTrue
+                    (notes
+                     |> List.exists (fun (name, text) ->
+                         name = PerfMetric.key metric && not (String.IsNullOrWhiteSpace text)))
+                    $"'{property}.{PerfMetric.key metric}' has no entry in its notes — a ceiling nobody can explain is one nobody can safely raise"
+        }
+    ]
+
+let private armTests =
+    testList "load arms" [
+        armLaws PerfBudgetGate.LoadAzuriteBlockProperty PerfBudgetGate.parseLoadAzuriteBudget PerfMetric.load
+        armLaws PerfBudgetGate.LoadPostgresBlockProperty PerfBudgetGate.parseLoadPostgresBudget PerfMetric.load
+
+        test "the load parser and the arm parsers each read only their own block" {
+            let azurite = loadBlock.Replace("\"load\"", "\"loadAzurite\"").Replace("100", "900")
+
+            let json = budgetJson (defaultCeilings + "," + loadBlock + "," + azurite)
+
+            match
+                PerfBudgetGate.parseLoadBudget "both.json" json, PerfBudgetGate.parseLoadAzuriteBudget "both.json" json
+            with
+            | Ok load, Ok arm ->
+                Expect.equal (load.Ceilings |> List.find (fun (m, _) -> m = RetrievalP95Ms) |> snd) 100.0 "load"
+                Expect.equal (arm.Ceilings |> List.find (fun (m, _) -> m = RetrievalP95Ms) |> snd) 900.0 "arm"
+            | a, b -> failtestf "expected both blocks to parse, got %A / %A" a b
+        }
+
+        // The Phase 909 bundle ceilings sit 1.025x above their baselines;
+        // at one decimal the headroom printed "1.0x", indistinguishable from
+        // a ceiling already reached.
+        test "headroom prints enough precision to tell 1.025x from 1.0x" {
+            let line =
+                PerfFinding.render (WithinCeiling(ClientMinimalBundleKiB, 2663.43, 2730.0, None))
+
+            Expect.stringContains line "(1.025x headroom" $"got: {line}"
+
+            let reached =
+                PerfFinding.render (WithinCeiling(ClientMinimalBundleKiB, 2730.0, 2730.0, None))
+
+            Expect.stringContains reached "(1.0x headroom" $"got: {reached}"
+
+            let clock = PerfFinding.render (WithinCeiling(HotPathMs, 0.5, 7.0, None))
+            Expect.stringContains clock "(14.0x headroom" $"a clock's ratio reads as it did: {clock}"
+        }
+    ]
+
 let tests =
-    testList "PerfBudget" [ parserTests; checkTests; shippedBudgetTests; clientTests; loadTests ]
+    testList "PerfBudget" [
+        parserTests
+        checkTests
+        shippedBudgetTests
+        clientTests
+        loadTests
+        armTests
+    ]

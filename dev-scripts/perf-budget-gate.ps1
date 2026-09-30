@@ -63,6 +63,18 @@
 #
 #   pwsh ./dev-scripts/perf-budget-gate.ps1 -SkipServer -SkipClient
 #
+# Phase 929 — the load half's two STORAGE arms. -LoadArms azurite,postgres
+# runs the same harness's gate configuration once per named arm — the blob
+# arm on the local Azure Blob emulator (TOOLUP_PARITY_AZURITE); the vector
+# store and the fact store on a local PostgreSQL
+# (TOOLUP_PGVECTOR_CONNECTION_STRING) — and
+# decides each against its own block of the budget file (`loadAzurite`,
+# `loadPostgres`). They are off unless named, because each needs a local
+# service the CI job does not start; an arm that is named but not armed is a
+# failure, never a skip:
+#
+#   pwsh ./dev-scripts/perf-budget-gate.ps1 -SkipServer -SkipClient -LoadArms azurite,postgres
+#
 # ── What "cold start" means here, exactly ───────────────────────────────
 #
 # Process start to the host's "Application started." line on stdout. That is
@@ -165,6 +177,11 @@ param(
 
     # Leave out the load half.
     [switch] $SkipLoad,
+
+    # Phase 929 — the load half's storage arms to run and decide as well:
+    # any of azurite, postgres, as a list or one comma-separated string (the
+    # shape `pwsh -File` delivers a list in). None by default.
+    [string[]] $LoadArms = @(),
 
     # Leave out the minimal-app (cold start + hot path) half.
     [switch] $SkipServer
@@ -641,6 +658,48 @@ if (-not $SkipLoad -and -not $EvaluateOnly) {
     }
 }
 
+# ─── The load half's storage arms (Phase 929) ────────────────────────────
+
+$loadArmBlocks = @{ azurite = "VerifyLoadAzuritePerfBudget"; postgres = "VerifyLoadPostgresPerfBudget" }
+$LoadArms = @($LoadArms | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+foreach ($arm in $LoadArms) {
+    if (-not $loadArmBlocks.ContainsKey($arm)) {
+        Write-Error "perf-budget: unknown load arm '$arm' (expected azurite or postgres)."
+        exit 1
+    }
+}
+$loadArmPaths = @{}
+foreach ($arm in $LoadArms) {
+    $loadArmPaths[$arm] = Join-Path $repoRoot "artifacts/perf-budget/load-$arm-measurements.json"
+}
+
+if ($LoadArms.Count -gt 0 -and -not $EvaluateOnly) {
+    $loadDll = Join-Path (Split-Path -Parent (Join-Path $repoRoot $LoadHarness)) "bin/Release/net10.0/ToolUp.RAG.Benchmarks.dll"
+
+    if (-not (Test-Path $loadDll)) {
+        $global:LASTEXITCODE = 0
+        dotnet build (Join-Path $repoRoot $LoadHarness) -c Release --nologo
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "perf-budget: the load harness did not build; there is nothing to measure."
+            exit 1
+        }
+    }
+
+    foreach ($arm in $LoadArms) {
+        if (Test-Path $loadArmPaths[$arm]) { Remove-Item $loadArmPaths[$arm] }
+
+        Write-Host "== perf-budget: load — the $arm arm's gate configuration" -ForegroundColor Cyan
+        $global:LASTEXITCODE = 0
+        dotnet $loadDll load gate --arm $arm --measurements $loadArmPaths[$arm] | Out-Host
+        $armExit = $LASTEXITCODE
+
+        if (-not (Test-Path $loadArmPaths[$arm])) {
+            Write-Error "perf-budget: the load harness's $arm arm exited $armExit and wrote no measurement file."
+            exit 1
+        }
+    }
+}
+
 # ─── Decide ──────────────────────────────────────────────────────────────
 
 function Invoke-Decider {
@@ -700,6 +759,18 @@ $loadVerdict = 0
 if ($decideLoad) {
     Write-Host "== perf-budget: load — decide against the 'load' block of $Budget" -ForegroundColor Cyan
     $loadVerdict = Invoke-Decider -BudgetPath $Budget -Target "VerifyLoadPerfBudget" -Measurements $loadMeasurementsPath
+}
+
+$loadArmVerdict = 0
+foreach ($arm in $LoadArms) {
+    if (-not (Test-Path $loadArmPaths[$arm])) {
+        Write-Error "perf-budget: no $arm measurement file at $($loadArmPaths[$arm]) — run without -EvaluateOnly."
+        exit 1
+    }
+
+    Write-Host "== perf-budget: load — decide the $arm arm against its block of $Budget" -ForegroundColor Cyan
+    $armVerdict = Invoke-Decider -BudgetPath $Budget -Target $loadArmBlocks[$arm] -Measurements $loadArmPaths[$arm]
+    if ($armVerdict -ne 0 -and $loadArmVerdict -eq 0) { $loadArmVerdict = $armVerdict }
 }
 
 if ($TeethCheck) {
@@ -821,10 +892,16 @@ if ($loadVerdict -ne 0) {
     exit $loadVerdict
 }
 
+if ($loadArmVerdict -ne 0) {
+    Write-Host "== perf-budget: load arm BREACHED (exit $loadArmVerdict)" -ForegroundColor Red
+    exit $loadArmVerdict
+}
+
 $halves = @(
     if (-not $SkipServer) { 'server' }
     if ($decideClient) { 'client' }
     if ($decideLoad) { 'load' }
+    foreach ($arm in $LoadArms) { "load ($arm)" }
 )
 Write-Host "== perf-budget: within budget ($($halves -join ', '))" -ForegroundColor Green
 exit 0

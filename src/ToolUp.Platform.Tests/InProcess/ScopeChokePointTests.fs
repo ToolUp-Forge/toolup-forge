@@ -402,8 +402,9 @@ let private sourceGuardTests =
 // dispatch: the job scheduler re-minting the scope a typed `Schedule`
 // persisted. A second mint is a second place a string could be promoted,
 // so the guard is widened to pin who may call it — the scheduler's
-// provenance module and nothing else — and that the recompute path, whose
-// scope is carried from a string-keyed data write, never mints at all.
+// provenance module and nothing else — and that the recompute path never
+// mints at all: it carries the write's resolved scope or its string
+// (Phase 930, section E), and builds neither.
 
 /// Where the carried mint may be called from, by path under `src/`.
 let private carriedMintHome = "ToolUp.Platform.Server/Server/IJobScheduler.fs"
@@ -414,7 +415,7 @@ let private mintDefinitions = [
     "ToolUp.Platform.Server/Server/Scope/StorageScopeResolver.fs"
 ]
 
-/// The recompute path — a carried scope end to end, so no mint belongs in it.
+/// The recompute path — it carries a scope end to end, so no mint belongs in it.
 let private recomputePath = [
     "ToolUp.Facts.Server/Server/RecomputeJobHandler.fs"
     "ToolUp.Facts.Server/Server/ReactiveDataChange.fs"
@@ -494,7 +495,7 @@ let private carriedMintTests =
                 "a second caller of the carried mint is a second place a string could become a resolved scope"
         }
 
-        test "the recompute path mints nothing — its scope is carried from a string-keyed data write" {
+        test "the recompute path mints nothing — it carries the write's scope, and builds none" {
             let src = Path.Combine(repoRoot (), "src")
 
             for file in recomputePath do
@@ -516,10 +517,500 @@ let private carriedMintTests =
         }
     ]
 
+// ── E. The reactive path carries the write's scope (Phase 930) ─────
+//
+// Phase 818 could not type the reactive recompute hop: the data write it
+// reacts to handed over a string and nothing else. Phase 930 carries the
+// ORIGIN's scope instead: a write made while serving a request rides the
+// change with the scope the platform resolved for that request, selected
+// (never built) when it names the shard the write landed in, and the
+// recompute is scheduled through the typed `Schedule` so the job runs
+// under it. The job-admin API schedules through the typed overload too.
+// Pinned here in both directions:
+//
+//   * a resolved write reaches the reaction as the resolver's own value;
+//     a write into another shard, or one with no resolved scope, rides
+//     carried with its string — the scope is selected, not re-derived;
+//   * a recompute never reads the anonymous shard for a job registered
+//     under a real one, whichever form its scope came back in;
+//   * the source of the reactive path and the job-admin API carries no
+//     mint and no pre-797 bag read, with the classifier shown to fire on a
+//     planted string re-derivation before the scan is trusted.
+
+open System.Collections.Concurrent
+
+let private silent =
+    { new ILogger with
+        member _.Debug _ = ()
+        member _.Info _ = ()
+        member _.Warn _ = ()
+        member _.Error(_, _) = ()
+    }
+
+/// A draft citing one input identity, at a fixed subject / period.
+let private draftCiting (inputHash: string) (value: decimal) : FactDraft = {
+    draft value with
+        Evidence = {
+            ResultRef = None
+            InputHashes = [ inputHash ]
+            TriggerRef = None
+        }
+}
+
+let private eagerRegistry () : Grounding.IMetricRegistry =
+    let revenue: Grounding.MetricDefinition = {
+        Id = "revenue"
+        Name = "revenue"
+        Unit = "GBP"
+        Dimensionality = "currency"
+        Direction = Grounding.HigherIsBetter
+        DisplayFormat = "C0"
+        Staleness = Grounding.UntilUpstreamChange
+        ProducingOperation = Some "rollup"
+        CanonicalMethod = None
+        RecomputePolicy = Some Grounding.Eager
+        RollUp = None
+        Context = None
+    }
+
+    let registration: Grounding.MetricRegistration = {
+        Module = "sales"
+        Definition = revenue
+    }
+
+    Grounding.MetricRegistry.build [ registration ] []
+
+/// Recomputes every fact to 120. The draft cites a fresh input identity:
+/// a fact's address folds its inputs, not its value, so a draft citing the
+/// same inputs would be the same fact and supersede nothing.
+let private recomputeTo120 =
+    { new IFactRecomputer with
+        member _.Recompute(_, fact) = async {
+            return Ok(Some(draftCiting (fact.Evidence.InputHashes.Head + ".recomputed") 120m))
+        }
+    }
+
+/// A scheduler that behaves as the in-process one does about scope: a job
+/// scheduled through the typed overload comes back with that scope on
+/// `JobContext.Scope`; a job scheduled through the string overload comes
+/// back anonymous there, with its carried `ScopeId`. `remints = false`
+/// stands in for a scheduler outside the server tier, which hands every job
+/// back anonymous.
+type private CarryingScheduler(handler: unit -> IJobHandler, remints: bool) =
+    let jobs = ConcurrentDictionary<JobId, JobRegistration * ResolvedScope option>()
+    let typed = ConcurrentQueue<ResolvedScope * JobRegistration>()
+    let untyped = ConcurrentQueue<JobRegistration>()
+    let results = ConcurrentQueue<JobResult>()
+
+    member _.Typed = typed |> List.ofSeq
+    member _.Untyped = untyped |> List.ofSeq
+    member _.Results = results |> List.ofSeq
+
+    interface IJobScheduler with
+        member _.RegisterHandler(_, _) = ()
+        member _.RegisterHandlerAsync(_, _) = async { return Ok() }
+
+        member _.Schedule(scope: ResolvedScope, registration: JobRegistration) = async {
+            let id = Guid.NewGuid()
+            typed.Enqueue(scope, registration)
+            jobs[id] <- (registration, Some scope)
+            return Ok id
+        }
+
+        member _.Schedule(registration: JobRegistration) = async {
+            let id = Guid.NewGuid()
+            untyped.Enqueue registration
+            jobs[id] <- (registration, None)
+            return Ok id
+        }
+
+        member _.Cancel(_, _) = async { return () }
+        member _.Disable(_, _) = async { return () }
+        member _.Enable(_, _) = async { return () }
+        member _.Get(_, _) = async { return None }
+        member _.ListJobs _ = async { return [] }
+        member _.GetRecentRuns(_, _, _) = async { return [] }
+
+        member _.TriggerOnce(_, jobId, byUserId) = async {
+            match jobs.TryGetValue jobId with
+            | false, _ -> return Error "unknown job"
+            | true, (registration, scope) ->
+                let ctx: JobContext = {
+                    JobId = jobId
+                    ScopeId = registration.ScopeId
+                    AccessContext = AccessContext.unrestricted (AuthenticatedUser byUserId)
+                    Attempt = 1
+                    Trigger = registration.Trigger
+                    Scope =
+                        match scope with
+                        | Some s when remints -> s
+                        | _ -> ResolvedScope.anonymous
+                    TriggerSource = ScheduledManually byUserId
+                    ScheduledAt = DateTime.UtcNow
+                    RunningAt = DateTime.UtcNow
+                    Payload = registration.Payload
+                    DeadLetterDestination = None
+                }
+
+                let! result = (handler ()).Execute ctx
+                results.Enqueue result
+                return Ok()
+        }
+
+        member _.NotifyEventWritten(_, _, _) = async { return () }
+
+/// The reactive tier over one fact store: a data-object store decorated
+/// the way `FactsCompose` decorates it, with `currentScope` as its scope
+/// source and the reaction wired to the real walk + handler.
+let private reactiveTier (currentScope: unit -> ResolvedScope option) (remints: bool) =
+    let store, _ = freshTier ()
+
+    let lineage =
+        LineageStore.EventStoreLineageStore(InMemoryEventStore.InMemoryEventStore() :> IEventStore) :> ILineageStore
+
+    let handler () =
+        RecomputeJobHandler.create store recomputeTo120 silent
+
+    let scheduler = CarryingScheduler(handler, remints)
+    let registry = Some(eagerRegistry ())
+
+    let react =
+        ReactiveDataChange.reaction
+            (fun () -> store)
+            (fun () -> lineage)
+            (fun () -> Some(scheduler :> IJobScheduler))
+            (fun () -> registry)
+
+    let objects =
+        ReactiveDataChange.decorate
+            (DataObjectStore.DataObjectStore(InMemoryBlobStorage(), silent))
+            (ReactiveDataChange.gate (fun () -> registry) (fun () -> Some(scheduler :> IJobScheduler)))
+            currentScope
+            react
+            silent
+
+    store, scheduler, objects
+
+let private saveInput (objects: IDataObjectStore) (scopeId: string) (body: string) : DataObject =
+    match
+        objects.Save(
+            scopeId,
+            "sales.rollup",
+            Text.Encoding.UTF8.GetBytes body,
+            "rollup",
+            "tester",
+            Map.empty,
+            VersioningPolicy.Versioned
+        )
+        |> Async.RunSynchronously
+    with
+    | Ok dataObject -> dataObject
+    | Error err -> failtestf "data-object save failed: %A" err
+
+let private headValues (store: IFactStore) (scope: ResolvedScope) : FactValue list =
+    store.Query(scope, FactQuery.all) |> Async.RunSynchronously |> List.map _.Value
+
+/// The reactive path and the job-admin API, by path under `src/`.
+let private reactivePath = [
+    "ToolUp.Facts.Server/Server/ReactiveDataChange.fs"
+    "ToolUp.Facts.Server/Server/RecomputeJobHandler.fs"
+    "ToolUp.Platform.Server/Server/JobApiHandler.fs"
+]
+
+/// Every way this path could re-derive a scope from a string: a mint (the
+/// only constructors there are) or the pre-797 bag reads that fed one.
+let private rederivations (source: string) : (string * string) list = mints source @ offences source
+
+let private reactivePathTests =
+    testList "E — the reactive path carries the write's scope (Phase 930)" [
+
+        test "a resolved write rides the change as the resolver's own value; any other write rides carried" {
+            let resolved = ScopeResolution.ofStorageScope (storage (newScopeId ()))
+            let seen = ConcurrentQueue<DataChangeScope>()
+
+            let objects =
+                ReactiveDataChange.decorate
+                    (DataObjectStore.DataObjectStore(InMemoryBlobStorage(), silent))
+                    (fun () -> true)
+                    (fun () -> Some resolved)
+                    (fun change _ -> async { seen.Enqueue change })
+                    silent
+
+            let otherShard = newScopeId ()
+            saveInput objects resolved.ScopeId "v1" |> ignore
+            saveInput objects otherShard "v1" |> ignore
+
+            match List.ofSeq seen with
+            | [ DataChangeScope.Resolved carried; DataChangeScope.Carried scopeId ] ->
+                Expect.isTrue
+                    (obj.ReferenceEquals(carried, resolved))
+                    "the write in the resolved shard carries the resolver's value itself, not a copy built from its id"
+
+                Expect.equal scopeId otherShard "a write into another shard rides carried, with its own string"
+            | other -> failtestf "expected one resolved then one carried change, got %A" other
+        }
+
+        test "a write with no resolved scope rides carried — nothing is built from its string" {
+            let seen = ConcurrentQueue<DataChangeScope>()
+
+            let objects =
+                ReactiveDataChange.decorate
+                    (DataObjectStore.DataObjectStore(InMemoryBlobStorage(), silent))
+                    (fun () -> true)
+                    (fun () -> None)
+                    (fun change _ -> async { seen.Enqueue change })
+                    silent
+
+            let scopeId = newScopeId ()
+            saveInput objects scopeId "v1" |> ignore
+
+            Expect.equal (List.ofSeq seen) [ DataChangeScope.Carried scopeId ] "carried, with the write's string"
+        }
+
+        test "requestScope reads the scope the middleware recorded, and nothing off the request path" {
+            let ctx = DefaultHttpContext() :> HttpContext
+            let accessor = HttpContextAccessor()
+
+            let source =
+                ReactiveDataChange.requestScope (fun () -> Some(accessor :> IHttpContextAccessor))
+
+            Expect.isNone (source ()) "no request, no resolved scope"
+
+            accessor.HttpContext <- ctx
+            let remembered = ScopeResolution.remember ctx (storage (newScopeId ()))
+
+            Expect.equal (source ()) (Some remembered) "the middleware's value, read through forRequest"
+
+            let planted = DefaultHttpContext() :> HttpContext
+            planted.Items["ToolUp.StorageScope"] <- box (storage "team-planted")
+            accessor.HttpContext <- planted
+
+            Expect.equal
+                (source () |> Option.map _.IsAnonymous)
+                (Some true)
+                "a planted StorageScope is not a resolved scope here either"
+
+            Expect.isNone (ReactiveDataChange.requestScope (fun () -> None) ()) "no accessor composed, no scope"
+        }
+
+        testCaseAsync "end to end: a resolved write's recompute is scheduled typed and runs under the write's scope"
+        <| async {
+            let resolved = ScopeResolution.ofStorageScope (storage (newScopeId ()))
+            let store, scheduler, objects = reactiveTier (fun () -> Some resolved) true
+
+            let v1 = saveInput objects resolved.ScopeId "v1"
+            assertUnder store resolved (draftCiting v1.ContentHash 100m) |> ignore
+
+            let decoy =
+                assertUnder store ResolvedScope.anonymous (draftCiting v1.ContentHash 100m)
+
+            saveInput objects resolved.ScopeId "v2" |> ignore
+
+            Expect.hasLength scheduler.Typed 1 "the recompute went through the typed Schedule"
+            Expect.isEmpty scheduler.Untyped "and not through the string one"
+
+            Expect.isTrue
+                (obj.ReferenceEquals(fst scheduler.Typed.Head, resolved))
+                "under the scope the write was made under"
+
+            Expect.equal scheduler.Results [ JobResult.Success ] "the job ran"
+            Expect.equal (headValues store resolved) [ Scalar 120m ] "and recomputed the resolved shard's fact"
+
+            Expect.equal
+                (headValues store ResolvedScope.anonymous)
+                [ decoy.Value ]
+                "the anonymous shard was never read or written"
+        }
+
+        testCaseAsync "a recompute never reads the anonymous shard, whichever form its scope came back in"
+        <| async {
+            // (a) a carried write, (b) a resolved write on a scheduler that
+            // cannot re-mint: both come back anonymous on JobContext.Scope
+            // with the real shard on ScopeId. Each must recompute the real
+            // shard's fact and leave the anonymous shard's decoy alone.
+            let resolved = ScopeResolution.ofStorageScope (storage (newScopeId ()))
+
+            for label, currentScope, remints in
+                [
+                    "a carried write", (fun () -> None), true
+                    "a scheduler that cannot re-mint", (fun () -> Some resolved), false
+                ] do
+                let store, scheduler, objects = reactiveTier currentScope remints
+                let shard = ScopeResolution.ofStorageScope (storage resolved.ScopeId)
+
+                let v1 = saveInput objects resolved.ScopeId "v1"
+                assertUnder store shard (draftCiting v1.ContentHash 100m) |> ignore
+
+                let decoy =
+                    assertUnder store ResolvedScope.anonymous (draftCiting v1.ContentHash 100m)
+
+                saveInput objects resolved.ScopeId "v2" |> ignore
+
+                Expect.equal scheduler.Results [ JobResult.Success ] (sprintf "%s: the job ran" label)
+
+                Expect.equal
+                    (headValues store shard)
+                    [ Scalar 120m ]
+                    (sprintf "%s: the job's own shard was recomputed" label)
+
+                Expect.equal
+                    (headValues store ResolvedScope.anonymous)
+                    [ decoy.Value ]
+                    (sprintf "%s: the anonymous shard was never read or written" label)
+        }
+
+        testCaseAsync "a typed job scope naming another shard is refused, never read under"
+        <| async {
+            let store, _ = freshTier ()
+            let jobShard = ScopeResolution.ofStorageScope (storage (newScopeId ()))
+            let otherShard = ScopeResolution.ofStorageScope (storage (newScopeId ()))
+            let fact = assertUnder store otherShard (draftCiting "h1" 100m)
+
+            let ctx: JobContext = {
+                JobId = Guid.NewGuid()
+                ScopeId = jobShard.ScopeId
+                AccessContext = AccessContext.unrestricted (AuthenticatedUser "tester")
+                Attempt = 1
+                Trigger = Trigger.Manual
+                Scope = otherShard
+                TriggerSource = ScheduledManually "tester"
+                ScheduledAt = DateTime.UtcNow
+                RunningAt = DateTime.UtcNow
+                Payload = RecomputeJobHandler.payloadFor fact.FactId
+                DeadLetterDestination = None
+            }
+
+            let! result = (RecomputeJobHandler.create store recomputeTo120 silent).Execute ctx
+
+            match result with
+            | JobResult.PermanentFailure _ -> ()
+            | other -> failtestf "expected a refusal, got %A" other
+
+            Expect.equal (headValues store otherShard) [ Scalar 100m ] "the other shard's fact is untouched"
+        }
+
+        testCaseAsync "the job-admin API schedules under the request's resolved scope, through the typed overload"
+        <| async {
+            let requestFor (remember: bool) =
+                let scheduler = CarryingScheduler((fun () -> failwith "not run"), true)
+                let services = ServiceCollection()
+                services.AddSingleton<IJobScheduler>(scheduler) |> ignore
+
+                services.AddSingleton<AccessContext>(AccessContext.unrestricted (AuthenticatedUser "user-930"))
+                |> ignore
+
+                let ctx = DefaultHttpContext()
+                ctx.RequestServices <- services.BuildServiceProvider()
+
+                let resolved =
+                    if remember then
+                        Some(ScopeResolution.remember ctx (storage "user-930"))
+                    else
+                        None
+
+                scheduler, ctx :> HttpContext, resolved
+
+            let registration: JobRegistration = {
+                ScopeId = "someone-else"
+                Handler = "h"
+                Payload = "{}"
+                Trigger = Trigger.Manual
+                Idempotency = None
+                RetryPolicy = JobRetryPolicy.defaults
+                ShardKey = None
+                Precision = JobPrecision.Minute
+                CreatedBy = "forged"
+                Tags = Map.empty
+            }
+
+            let scheduler, ctx, resolved = requestFor true
+            let! scheduled = (JobApiHandler.jobApi ctx).Schedule registration
+            Expect.isOk scheduled "scheduled"
+            Expect.hasLength scheduler.Typed 1 "through the typed overload"
+            Expect.isEmpty scheduler.Untyped "and not the string one"
+
+            Expect.isTrue
+                (obj.ReferenceEquals(fst scheduler.Typed.Head, resolved.Value))
+                "under the scope the middleware recorded — so the two read one key"
+
+            Expect.equal (snd scheduler.Typed.Head).ScopeId "user-930" "the caller's forged scope is still overwritten"
+
+            let bypassed, ctx, _ = requestFor false
+            let! scheduled = (JobApiHandler.jobApi ctx).Schedule registration
+            Expect.isOk scheduled "scheduled"
+
+            Expect.equal
+                (bypassed.Untyped |> List.map _.ScopeId)
+                [ "user-930" ]
+                "a request the middleware resolved nothing for keeps the string overload — it builds no scope"
+
+            Expect.isEmpty bypassed.Typed "and nothing typed was invented for it"
+        }
+
+        test "the re-derivation classifier fires on a planted string re-derivation (go-red) and is quiet on a selection" {
+            let planted =
+                String.concat "\n" [
+                    "        | _ -> DataChangeScope.Resolved(ScopeResolution."
+                    + "ofStorageScope { ScopeId = scopeId; Container = scopeId; Persist = true })"
+                    "                            return! s.Schedule(ResolvedScope."
+                    + "ofStorageScope scope, safeRegistration)"
+                    "        match ctx.Items.TryGetValue \"ToolUp." + "StorageScope\" with"
+                ]
+
+            Expect.equal
+                (rederivations planted |> List.map fst |> List.distinct |> List.length)
+                3
+                "each re-derivation is caught"
+
+            Expect.isEmpty
+                (rederivations "        | Some scope when scope.ScopeId = scopeId -> DataChangeScope.Resolved scope")
+                "selecting the resolved scope is not a re-derivation"
+
+            Expect.isEmpty
+                (rederivations "                            return! s.Schedule(resolved, safeRegistration)")
+                "scheduling under the request's scope is not one either"
+        }
+
+        test "the reactive path and the job-admin API re-derive no scope from a string" {
+            let src = Path.Combine(repoRoot (), "src")
+
+            for file in reactivePath do
+                let path = Path.Combine(src, file)
+                Expect.isTrue (File.Exists path) (sprintf "%s exists" file)
+
+                match rederivations (File.ReadAllText path) with
+                | [] -> ()
+                | found ->
+                    failtestf
+                        "%s re-derives a scope from a string:\n%s"
+                        file
+                        (found |> List.map (fun (_, why) -> "  - " + why) |> String.concat "\n")
+
+            let read (file: string) =
+                File.ReadAllText(Path.Combine(src, file))
+
+            Expect.stringContains
+                (read "ToolUp.Facts.Server/Server/ReactiveDataChange.fs")
+                "StorageScopeResolver.ScopeResolution.forRequest ctx"
+                "the reactive path takes its scope from the doors' one read"
+
+            Expect.stringContains
+                (read "ToolUp.Facts.Server/Server/RecomputeJobHandler.fs")
+                "scheduler.Schedule(scope, registrationFor scope.ScopeId fact)"
+                "a resolved change is scheduled through the typed overload"
+
+            Expect.stringContains
+                (read "ToolUp.Platform.Server/Server/JobApiHandler.fs")
+                "s.Schedule(resolved, safeRegistration)"
+                "the job-admin API schedules through the typed overload"
+        }
+    ]
+
 let tests =
     testList "Phase 797 — scope as a choke point" [
         publicSurfaceTests
         requestPathTests
         sourceGuardTests
         carriedMintTests
+        reactivePathTests
     ]
