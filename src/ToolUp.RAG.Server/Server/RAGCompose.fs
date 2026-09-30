@@ -1040,6 +1040,44 @@ let isInProcessVectorStore (store: IVectorStore) : bool =
 /// whose postings live in one process's memory?
 let isInProcessSparseIndex (index: ISparseIndex) : bool = index :? InMemoryBM25Index
 
+/// Phase 866 — the score space the composed pipeline's scores reach the
+/// `MinScore` gate in, or `None` when a supplied pipeline owns retrieval
+/// (`withRetrievalPipeline`) and its space is not the SDK's to see. Every
+/// keyword-index composition but `withoutSparseIndex` fuses.
+let private composedScoreSpace (app: RAGServerApp) : RetrievalScoreSpace option =
+    match app.RetrievalPipelineOverride with
+    | Some _ -> None
+    | None ->
+        let keywordIndex =
+            match app.SparseIndex with
+            | SparseIndexComposition.NoSparseIndex -> false
+            | SparseIndexComposition.InProcessSparseIndex
+            | SparseIndexComposition.SuppliedSparseIndex _
+            | SparseIndexComposition.AnalyzedSparseIndex _ -> true
+
+        Some(RetrievalScoreSpace.ofComposition keywordIndex app.Reranker.IsSome)
+
+/// Phase 866 — warns at startup when a configured `MinScore` cannot be met,
+/// or cannot be confirmed reachable, in the composed pipeline's score space
+/// (`RetrievalScoreSpace.thresholdFinding`). Silent without a threshold and
+/// in the two spaces the SDK can bound, so a deployment that tunes nothing
+/// is unchanged.
+let private minScoreSpaceValidator
+    (space: RetrievalScoreSpace option)
+    (minScore: float option)
+    : ConfigValidation.IConfigValidator =
+    { new ConfigValidation.IConfigValidator with
+        member _.Name = "rag-min-score-space"
+        member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
+
+        member _.Validate() = async {
+            return
+                match RetrievalScoreSpace.thresholdFinding space minScore with
+                | Some message -> ConfigValidation.ValidationResult.Warning message
+                | None -> ConfigValidation.ValidationResult.Ok
+        }
+    }
+
 // ─── composeRAG ───────────────────────────────────────────────────
 //
 // Phase 1h seam (RAG half). `composeRAG : RAGServerApp -> ServerApp`
@@ -2013,6 +2051,9 @@ let composeRAG (app: RAGServerApp) : ServerApp =
             IngestionConcurrency = app.IngestionConcurrency
             IngestionQueueCapacity = app.IngestionQueueCapacity
         }
+        // Phase 866 — warn when the configured MinScore cannot be met, or
+        // cannot be confirmed reachable, in the composed score space.
+        minScoreSpaceValidator (composedScoreSpace app) app.RetrievalDefaults.MinScore
         // Phase 893 — warn when more than one replica runs over an
         // in-process vector store or keyword index: each replica keeps its
         // own, so retrieval differs by which replica served the turn.
@@ -2678,11 +2719,21 @@ module RAGServerApp =
     /// gate (default — every match returned by the pipeline is surfaced).
     /// Use a small positive value (e.g. `0.4`) to refuse weak matches in
     /// regulated-brand or low-tolerance deployments.
+    ///
+    /// Phase 866 — the threshold applies in the composed pipeline's score
+    /// space (`RetrievalScoreSpace`). The default composition builds a
+    /// keyword index, so scores are FUSED and normalised onto `[0, 1]`
+    /// within each query's candidate pool: the best match scores `1.0` and
+    /// the threshold trims the weak tail relative to it. Dense-only
+    /// (`withoutSparseIndex`) scores are cosine similarity, an absolute
+    /// floor. With a reranker composed the threshold reads the reranker's
+    /// own, uncalibrated scale, and a startup validator says so.
     let withMinScore (threshold: float option) (app: RAGServerApp) : RAGServerApp =
-        // Cosine-similarity gate. Values ≥ 1.0 filter out
-        // EVERY match (the assistant goes silent with no
-        // diagnostic); negatives are a no-op gate. Clamp to a
-        // sane [0.0, 0.99] so a fat-fingered threshold can't
+        // Both SDK-known spaces (cosine, normalised fused) top out at 1.0
+        // and the gate keeps only scores strictly above the threshold, so
+        // values ≥ 1.0 filter out EVERY unboosted match (the assistant
+        // goes silent with no diagnostic); negatives are a no-op gate.
+        // Clamp to a sane [0.0, 0.99] so a fat-fingered threshold can't
         // silently disable retrieval entirely.
         let clamped = threshold |> Option.map (fun t -> max 0.0 (min 0.99 t))
 
