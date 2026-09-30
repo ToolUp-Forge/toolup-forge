@@ -8,6 +8,22 @@ open ToolUp.Platform.VectorKnowledgeTypes
 
 // ─── Ingestion job record ─────────────────────────────────────────
 
+/// Phase 867 — one ingestion attempt of one document: which attempt a
+/// chunk belongs to, and how many chunks that attempt enqueued.
+///
+/// Minted by the producer at enqueue time and carried on every job and
+/// retry payload the attempt spawns, so an observer can (a) complete the
+/// document against the work actually enqueued — which an incremental
+/// re-index makes smaller than the document's chunk count — and (b) drop a
+/// late callback from an attempt a newer one has superseded. Identity by
+/// value (portability rule 1): an opaque string, meaningful on any node.
+type IngestionAttempt = {
+    /// Opaque, producer-minted, unique per enqueue of a document.
+    AttemptId: string
+    /// Chunks this attempt enqueued — the attempt's completion target.
+    EnqueuedChunks: int
+}
+
 /// Per-chunk job descriptor passed to `IIngestionStatusObserver` callbacks.
 /// Documents are queued as `DocumentIngestionJob`s (one per upload), but
 /// observers receive an `IngestionJob` per chunk so the existing progress
@@ -35,6 +51,11 @@ type IngestionJob = {
     /// treat `None` as "no re-auth, fall back to historical
     /// publish-to-UploadedBy" for backwards compatibility.
     OriginatingUserId: string option
+    /// Phase 867 — the ingestion attempt this chunk belongs to. `None`
+    /// when the producer mints no attempt, or the job was persisted
+    /// before attempts existed; observers then fall back to the document's
+    /// own chunk count and cannot tell attempts apart.
+    Attempt: IngestionAttempt option
 }
 
 /// Per-document job carrying every chunk produced by a single upload. The
@@ -55,6 +76,9 @@ type DocumentIngestionJob = {
     /// User id of the originating principal. See `IngestionJob.OriginatingUserId`
     /// for the re-auth contract. `None` for non-user enqueue paths.
     OriginatingUserId: string option
+    /// Phase 867 — the attempt this enqueue starts; copied onto every
+    /// per-chunk `IngestionJob` and retry payload. See `IngestionJob.Attempt`.
+    Attempt: IngestionAttempt option
 }
 
 // ─── Ingestion queue ──────────────────────────────────────────────
@@ -692,4 +716,7 @@ type IngestionRetryPayload = {
     ScopeId: string
     Container: string
     OriginatingUserId: string option
+    /// Phase 867 — the attempt the retried chunk belongs to. Absent from a
+    /// payload persisted before 867, which reads back as `None`.
+    Attempt: IngestionAttempt option
 }

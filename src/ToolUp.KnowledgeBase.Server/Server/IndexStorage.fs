@@ -224,12 +224,6 @@ let saveChunkHashes (storage: IBlobStorage) (container: string) (docId: string) 
 
 let statusCache = ConcurrentDictionary<string, IngestionStatus>()
 
-// Per-document chunk-completion counter. Maintained by the ingestion
-// observer (`makeIngestionStatusObserver`) so concurrent chunk callbacks
-// can be aggregated into `Embedding(processed, total)` without re-reading
-// the persisted index for every increment.
-let progressCache = ConcurrentDictionary<string, int>()
-
 // ─── Phase 69c.tail D - change notification over the status cache ──
 //
 // Before this, ingestion progress was a poll and only a poll: the

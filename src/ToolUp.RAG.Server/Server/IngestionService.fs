@@ -45,47 +45,87 @@ let LeaseReclaimInterval = TimeSpan.FromSeconds 30.0
 /// single notification.
 let private ProviderAlertDedupWindow = TimeSpan.FromMinutes 5.0
 
+/// Every exception reachable from `ex`: itself, then its inner
+/// exceptions depth-first — every member of an `AggregateException`, not
+/// only the first. The async machinery wraps a provider's exception in one
+/// or more `AggregateException`s, and a caller may wrap it again; the
+/// classifier must see the typed cause wherever it sits.
+let rec private causeChain (ex: exn) : exn seq = seq {
+    if not (isNull ex) then
+        yield ex
+
+        match ex with
+        | :? AggregateException as agg ->
+            for inner in agg.InnerExceptions do
+                yield! causeChain inner
+        | _ -> yield! causeChain ex.InnerException
+}
+
 /// Classify a per-chunk index failure so the caller can decide between
 /// immediate dead-letter (permanent) and backed-off retry (transient).
-/// The OpenAI embedder surfaces HTTP failures as `HttpRequestException`
-/// (via `EnsureSuccessStatusCode`), whose `StatusCode` is populated on
-/// .NET 5+ — 401/403 (bad credentials) and other 4xx (malformed
-/// request) are permanent; 429 (rate limit) and 5xx are transient.
-/// Timeouts / cancellations / network faults are transient. Anything
-/// unrecognised defaults to `Transient` — the whole point of Phase 14t
-/// is to stop silently DROPPING chunks, so the safe default is "retry,
-/// then dead-letter loudly" rather than "drop".
+///
+/// **The typed provider signal comes first (Phase 867).** An API-backed
+/// provider following the Phase 14u contract does not surface a 401 / 403
+/// as an HTTP exception: it raises `EmbeddingProviderUnavailableException`
+/// (a revoked or wrong key — the same request fails identically). It is
+/// looked for anywhere in the cause chain, before any generic arm, and is
+/// `Permanent` whatever else sits beside it. Before Phase 867 it fell
+/// through to `Transient`, so a revoked key was retried for half an hour,
+/// dead-lettered as transient, and never raised the "provider rejected
+/// credentials" alert from ingestion.
+///
+/// Otherwise the outermost exception (or the first inner of an
+/// `AggregateException`) is classified by shape. A provider that reports
+/// HTTP failures as `HttpRequestException` (via `EnsureSuccessStatusCode`)
+/// populates `StatusCode` on .NET 5+ — 401/403 (bad credentials) and other
+/// 4xx (malformed request) are permanent; 429 (rate limit) and 5xx are
+/// transient. Timeouts / cancellations / network faults are transient.
+/// Anything unrecognised defaults to `Transient` — the whole point of
+/// Phase 14t is to stop silently DROPPING chunks, so the safe default is
+/// "retry, then dead-letter loudly" rather than "drop".
 let classifyIndexFailure (ex: exn) : EmbedFailureClass =
-    let inner =
-        match ex with
-        | :? AggregateException as agg when not (isNull agg.InnerException) -> agg.InnerException
-        | _ -> ex
+    let classifyByShape (ex: exn) =
+        let inner =
+            match ex with
+            | :? AggregateException as agg when not (isNull agg.InnerException) -> agg.InnerException
+            | _ -> ex
 
-    match inner with
-    | :? HttpRequestException as httpEx ->
-        match Option.ofNullable httpEx.StatusCode with
-        | Some code ->
-            let status = int code
+        match inner with
+        | :? HttpRequestException as httpEx ->
+            match Option.ofNullable httpEx.StatusCode with
+            | Some code ->
+                let status = int code
 
-            if status = 401 || status = 403 then
-                Permanent(sprintf "embedding provider rejected credentials (HTTP %d)" status)
-            elif status = 429 then
-                // Rate limit — retryable. The provider's `Retry-After`
-                // header is not recoverable here (`EnsureSuccessStatusCode`
-                // discards the response before the ingestion path sees
-                // it), so the policy's exponential backoff governs.
+                if status = 401 || status = 403 then
+                    Permanent(sprintf "embedding provider rejected credentials (HTTP %d)" status)
+                elif status = 429 then
+                    // Rate limit — retryable. The provider's `Retry-After`
+                    // header is not recoverable here (`EnsureSuccessStatusCode`
+                    // discards the response before the ingestion path sees
+                    // it), so the policy's exponential backoff governs.
+                    Transient None
+                elif status >= 500 then
+                    Transient None
+                else
+                    Permanent(sprintf "embedding provider returned a non-retryable HTTP %d" status)
+            | None ->
+                // No status ⇒ transport / DNS / connection failure — transient.
                 Transient None
-            elif status >= 500 then
-                Transient None
-            else
-                Permanent(sprintf "embedding provider returned a non-retryable HTTP %d" status)
-        | None ->
-            // No status ⇒ transport / DNS / connection failure — transient.
-            Transient None
-    | :? TaskCanceledException
-    | :? TimeoutException
-    | :? OperationCanceledException -> Transient None
-    | _ -> Transient None
+        | :? TaskCanceledException
+        | :? TimeoutException
+        | :? OperationCanceledException -> Transient None
+        | _ -> Transient None
+
+    let credentialsRejected =
+        causeChain ex
+        |> Seq.tryPick (fun cause ->
+            match cause with
+            | EmbeddingProviderUnavailableException(status, _) -> Some status
+            | _ -> None)
+
+    match credentialsRejected with
+    | Some status -> Permanent(sprintf "embedding provider rejected credentials (HTTP %d)" status)
+    | None -> classifyByShape ex
 
 /// Per-scope alert throttling state shared by the background service
 /// (first-attempt failures) and `IngestionRetryJobHandler` (retry
@@ -493,6 +533,7 @@ type IngestionBackgroundService
         ScopeId = doc.ScopeId
         Container = doc.Container
         OriginatingUserId = doc.OriginatingUserId
+        Attempt = doc.Attempt
     }
 
     // ─── Phase 14t — per-chunk retry / dead-letter ───────────────
@@ -539,6 +580,7 @@ type IngestionBackgroundService
                 ScopeId = doc.ScopeId
                 Container = doc.Container
                 OriginatingUserId = doc.OriginatingUserId
+                Attempt = doc.Attempt
             }
 
             // The scheduled job's own backoff is disabled (`Zero`) — the

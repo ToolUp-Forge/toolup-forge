@@ -8,6 +8,7 @@ open ToolUp.Platform.IVectorStore
 open ToolUp.RAG.IngestionTypes
 open SharedTypes
 open KnowledgeBase.ServerIndexStorage
+open KnowledgeBase.ServerIngestionObserver
 open KnowledgeBase.ServerNotes
 open KnowledgeBase.ServerApiDeps
 
@@ -90,6 +91,10 @@ let addNote (deps: KnowledgeApiDeps) (req: AddNoteRequest) : Async<Result<Knowle
                 let chunkPairs =
                     chunks |> List.mapi (fun i chunk -> sprintf "%s:chunk:%d" docId i, chunk)
 
+                // Phase 867 — record the attempt before the enqueue.
+                let! attempt =
+                    beginIngestionAttempt deps.Storage deps.Logger deps.Scope.Container docId chunkPairs.Length
+
                 let job: DocumentIngestionJob = {
                     DocumentId = docId
                     DocumentName = fileName
@@ -98,6 +103,7 @@ let addNote (deps: KnowledgeApiDeps) (req: AddNoteRequest) : Async<Result<Knowle
                     ScopeId = deps.Scope.ScopeId
                     Container = deps.Scope.Container
                     OriginatingUserId = Some deps.UserId
+                    Attempt = Some attempt
                 }
 
                 // Phase 723 — async enqueue: the sync form is a blocking
@@ -196,8 +202,6 @@ let updateNote (deps: KnowledgeApiDeps) (req: UpdateNoteRequest) : Async<Result<
                     // the cross-document loss the lock prevents.
                     do! upsertIndexEntry deps.Storage deps.Scope.Container updatedDoc
 
-                    progressCache.TryRemove(req.DocId) |> ignore
-
                     let mutable returnedDoc = updatedDoc
 
                     if box deps.Queue <> null && not chunks.IsEmpty then
@@ -208,6 +212,17 @@ let updateNote (deps: KnowledgeApiDeps) (req: UpdateNoteRequest) : Async<Result<
                         let chunkPairs =
                             chunks |> List.mapi (fun i chunk -> sprintf "%s:chunk:%d" req.DocId i, chunk)
 
+                        // Phase 867 — a re-save is a new attempt: it
+                        // re-seeds the persisted status and retires the
+                        // previous save's late callbacks.
+                        let! attempt =
+                            beginIngestionAttempt
+                                deps.Storage
+                                deps.Logger
+                                deps.Scope.Container
+                                req.DocId
+                                chunkPairs.Length
+
                         let job: DocumentIngestionJob = {
                             DocumentId = req.DocId
                             DocumentName = fileName
@@ -216,6 +231,7 @@ let updateNote (deps: KnowledgeApiDeps) (req: UpdateNoteRequest) : Async<Result<
                             ScopeId = deps.Scope.ScopeId
                             Container = deps.Scope.Container
                             OriginatingUserId = Some deps.UserId
+                            Attempt = Some attempt
                         }
 
                         // Phase 723 — async enqueue; see `addNote`.
