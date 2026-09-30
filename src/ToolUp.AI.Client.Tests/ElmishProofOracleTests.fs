@@ -161,16 +161,24 @@ let private loopTests =
 // (`ToolUp.Platform.Tests/InProcess/ElmishProofOracleTests.fs`), case for
 // case, restated for the runtime a browser executes.
 
+/// The .NET host's message: since Phase 956 the array ring grows only
+/// from `max_growable` (2^30 - 1) slots or fewer, under the platform
+/// premise `SizeT.fits_u32`.
 [<Literal>]
 let private ArrayRingCeilingMessage =
-    "the extracted ring refused a push at its capacity ceiling"
+    "the extracted ring refused a push: it grows only from 1073741823 slots or fewer, to at most 2147483647"
+
+/// The model's `max_growable`, as the extraction compares it.
+[<Literal>]
+let private MaxGrowable = 1073741823UL
 
 /// `RingBuffer<'item>`'s surface over the extracted functions — all a
 /// replacement of `Ring.fs` would hand-write. The extraction's indices
-/// are `uint64`, which Fable carries as a JavaScript BigInt.
-type private ArrayRing<'item>(size: int) =
-    let ring =
-        ElmishRingArray.elmishRingArray_create (uint64 (max size 0)) Unchecked.defaultof<'item>
+/// are `uint64`, which Fable carries as a JavaScript BigInt — which is
+/// what Phase 956 measured costing the ring its lead on this host's
+/// steady state (the dispatch-shape arm below).
+type private ArrayRing<'item>(ring: ElmishRingArray.elmishRingArray_ring<'item>) =
+    new(size: int) = ArrayRing(ElmishRingArray.elmishRingArray_create (uint64 (max size 0)) Unchecked.defaultof<'item>)
 
     member _.Pop() : 'item option =
         ElmishRingArray.elmishRingArray_pop ring
@@ -208,8 +216,15 @@ let private measuredSequence () = genRingOps (Lcg 850_001) MeasuredOps 65
 let private MeasuredSequenceFingerprint = "1:14575:1899911031"
 
 /// The MINIMUM over `rounds` rounds of `reps` runs each — Phase 849's
-/// statistic.
+/// statistic — after a quarter of a second untimed, as on the .NET host
+/// (Phase 956), so every arm is timed at the tier it runs at in steady
+/// state.
 let private minPerOpNs (rounds: int) (reps: int) (ops: int) (body: unit -> unit) : float =
+    let settled = now ()
+
+    while now () - settled < 250.0 do
+        body ()
+
     List.min [ for _ in 1..rounds -> perOpNs reps ops body ]
 
 [<Emit("process.version")>]
@@ -312,36 +327,51 @@ let private arrayRingTests =
             Expect.isTrue (List.length popped > 1000) $"only {List.length popped} item(s) popped"
             Expect.isFalse (popped |> List.exists isNull) "a pop returned the placeholder")
 
-        testCase "at the capacity ceiling a push is refused, nothing is lost, and the ring goes on working" (fun () ->
-            let rb = ArrayRing<int> MeasuredCapacity
-            let mutable pushed = 0
-            let mutable refused = false
+        testCase "at the capacity ceiling a push is refused, changes nothing, and the wrapper reports it" (fun () ->
+            // The .NET host's case: the extraction's own record built in the
+            // state `at_ceiling` names over a small array, because Phase 956
+            // lifted the ceiling past anything a test can push its way to.
+            let atCeiling () : ElmishRingArray.elmishRingArray_ring<int> = {
+                items = ref [| 10; 11; 12; 13; 14; 15; 16; 17 |]
+                cap = ref (MaxGrowable + 1UL)
+                wix = ref 2UL
+                rix = ref 3UL
+                readable = ref true
+                dflt = 0
+            }
 
-            while not refused && pushed < 70_000 do
+            let raw = atCeiling ()
+            let before = raw.items.Value
+
+            Expect.isFalse
+                (ElmishRingArray.elmishRingArray_push raw 99)
+                "the extraction refuses the push that would grow past max_growable"
+
+            Expect.isTrue (obj.ReferenceEquals(raw.items.Value, before)) "the refused push kept the array"
+            Expect.equal raw.items.Value [| 10; 11; 12; 13; 14; 15; 16; 17 |] "the refused push wrote nothing"
+            Expect.isTrue (raw.cap.Value = MaxGrowable + 1UL) "the refused push moved the capacity"
+
+            Expect.isTrue
+                (raw.wix.Value = 2UL && raw.rix.Value = 3UL && raw.readable.Value)
+                "the refused push moved an index"
+
+            Expect.equal (ElmishRingArray.elmishRingArray_pop raw) (Some 13) "the oldest unread item is still first"
+
+            let rb = ArrayRing<int>(atCeiling ())
+
+            let raised =
                 try
-                    rb.Push(pushed + 1)
-                    pushed <- pushed + 1
-                with e when e.Message = ArrayRingCeilingMessage ->
-                    refused <- true
+                    rb.Push 99
+                    None
+                with e ->
+                    Some e.Message
 
-            Expect.isTrue refused "the array ring never refused a push"
-            Expect.isTrue (rb.Slots > 32_767) "the refusal came before the ceiling"
-            Expect.isTrue (rb.Slots <= 65_535) "the ring grew past the size the proof covers"
-            Expect.equal pushed (rb.Slots - 1) "a ring of n slots holds n - 1 unread items when it refuses"
+            Expect.equal
+                raised
+                (Some ArrayRingCeilingMessage)
+                "the wrapper surfaces a refused push as an exception naming the bound, never swallows it"
 
-            Expect.equal (rb.Pop()) (Some 1) "the oldest item is still first"
-            rb.Push(pushed + 1)
-
-            // A loop, not a list comparison: `node:assert`'s deep equality
-            // recurses per cons cell and tens of thousands overflow it.
-            let mutable inOrder = true
-
-            for expected in 2 .. pushed + 1 do
-                if rb.Pop() <> Some expected then
-                    inOrder <- false
-
-            Expect.isTrue inOrder "every accepted item comes out once, in order"
-            Expect.isNone (rb.Pop()) "and then the ring is empty")
+            Expect.equal (rb.Pop()) (Some 13) "and the ring it wraps is unchanged by the refusal")
 
         testCase "the measured sequence is the draw both hosts make - its fingerprint is pinned" (fun () ->
             Expect.equal
@@ -424,6 +454,53 @@ let private arrayRingTests =
 
             let arrayAloneNs = minPerOpNs 9 100 MeasuredOps (fun () -> arrayAlone () |> ignore)
 
+            // The dispatch loop's own shape (Phase 956, the .NET host's
+            // arm): one push, the pop that takes it, the pop that finds the
+            // ring empty - the ring never grows.
+            let dispatchSteps =
+                Array.init (MeasuredOps + 2) (fun i -> if i % 3 = 0 then i + 1 else -1)
+
+            let walk (push: int -> unit) (pop: unit -> int option) =
+                let mutable sum = 0
+
+                for step in dispatchSteps do
+                    if step >= 0 then
+                        push step
+                    else
+                        match pop () with
+                        | Some v -> sum <- sum + v
+                        | None -> sum <- sum + 1
+
+                sum
+
+            let shippedSteady () =
+                let rb = ToolUp.Elmish.RingBuffer<int> MeasuredCapacity
+                walk rb.Push rb.Pop
+
+            let arraySteady () =
+                let rb = ArrayRing<int> MeasuredCapacity
+                walk rb.Push rb.Pop
+
+            Expect.equal
+                (arraySteady ())
+                (shippedSteady ())
+                "the two rings walked over the dispatch shape must pop the same items"
+
+            let shippedSteadyNs =
+                minPerOpNs 9 100 dispatchSteps.Length (fun () -> shippedSteady () |> ignore)
+
+            let arraySteadyNs =
+                minPerOpNs 9 100 dispatchSteps.Length (fun () -> arraySteady () |> ignore)
+
+            printfn
+                "Phase 956 measurement (Fable/node %s, capacity %d, the dispatch shape push/pop/pop over %d ops, min over rounds): shipped Ring.fs %.1f ns/op; array extraction %.1f ns/op (%.2fx)."
+                (nodeVersion ())
+                MeasuredCapacity
+                dispatchSteps.Length
+                shippedSteadyNs
+                arraySteadyNs
+                (arraySteadyNs / shippedSteadyNs)
+
             printfn
                 "Phase 955 measurement (Fable/node %s, capacity %d, %d ops, 65%% pushes, min over rounds): shipped Ring.fs %.1f ns/op; list extraction %.0f ns/op; array extraction %.1f ns/op (%.2fx the shipped ring). Ring alone, no output list: shipped %.1f ns/op; array extraction %.1f ns/op (%.2fx)."
                 (nodeVersion ())
@@ -442,7 +519,9 @@ let private arrayRingTests =
                  && listNs > 0.0
                  && arrayNs > 0.0
                  && shippedAloneNs > 0.0
-                 && arrayAloneNs > 0.0)
+                 && arrayAloneNs > 0.0
+                 && shippedSteadyNs > 0.0
+                 && arraySteadyNs > 0.0)
                 "every measurement ran")
     ]
 

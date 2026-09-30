@@ -49,20 +49,20 @@ let elmishRingArray_push (rb : elmishRingArray_ring<'t>) (x : 't) : bool =
    let wv = (((rb).wix).Value) in
    (if rdv then (let rv = (((rb).rix).Value) in
                  let w1 = (elmishRingArray_succ_sz cv wv) in
-                 (if (w1 = rv) then (if (cv > (32767UL)) then false else (((vv).[(int wv)] <- x);
-                                                                          let nv = (elmishRingArray_grow vv cv rv (rb).dflt) in
-                                                                          ();
-                                                                          (((rb).items).Value <- nv);
-                                                                          (((rb).cap).Value <- ((cv + cv) + (1UL)));
-                                                                          (((rb).wix).Value <- cv);
-                                                                          (((rb).rix).Value <- (0UL));
-                                                                          true)) else (((vv).[(int wv)] <- x);
-                                                                                       (((rb).wix).Value <- w1);
-                                                                                       true))) else (((vv).[(int wv)] <- x);
-                                                                                                     (((rb).rix).Value <- wv);
-                                                                                                     (((rb).wix).Value <- (elmishRingArray_succ_sz cv wv));
-                                                                                                     (((rb).readable).Value <- true);
-                                                                                                     true)))
+                 (if (w1 = rv) then (if (cv > (1073741823UL)) then false else (((vv).[(int wv)] <- x);
+                                                                               let nv = (elmishRingArray_grow vv cv rv (rb).dflt) in
+                                                                               ();
+                                                                               (((rb).items).Value <- nv);
+                                                                               (((rb).cap).Value <- ((cv + cv) + (1UL)));
+                                                                               (((rb).wix).Value <- cv);
+                                                                               (((rb).rix).Value <- (0UL));
+                                                                               true)) else (((vv).[(int wv)] <- x);
+                                                                                            (((rb).wix).Value <- w1);
+                                                                                            true))) else (((vv).[(int wv)] <- x);
+                                                                                                          (((rb).rix).Value <- wv);
+                                                                                                          (((rb).wix).Value <- (elmishRingArray_succ_sz cv wv));
+                                                                                                          (((rb).readable).Value <- true);
+                                                                                                          true)))
 
 let elmishRingArray_create (size : uint64) (dflt : 't) : elmishRingArray_ring<'t> =
   (let n = (if (size > (2UL)) then size else (2UL)) in
