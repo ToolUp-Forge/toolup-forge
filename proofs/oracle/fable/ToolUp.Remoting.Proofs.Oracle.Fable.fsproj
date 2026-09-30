@@ -48,6 +48,15 @@
              bytes the .NET oracle compiles. It needs nothing of Prims the
              ring does not, so the shim is unchanged. Do not edit. -->
         <Compile Include="../ElmishLoop.fs" />
+        <!-- Phase 955 - the array ring's extraction, GENERATED from
+             ../../ElmishRingArray.fst through Custard's F# backend: the
+             same committed bytes the .NET oracle compiles. The support
+             library Custard writes beside it does not transpile (128-bit
+             integers, console writers, exit, a strict UTF-8 decoder), and
+             the ring uses nothing from it, so this host compiles the EMPTY
+             stand-in beside this file in its place; read its header. -->
+        <Compile Include="FStarCustard.fs" />
+        <Compile Include="../custard/ElmishRingArray.fs" />
     </ItemGroup>
     <ItemGroup>
         <!-- Explicit, as every Fable-compiled project in the tree: the

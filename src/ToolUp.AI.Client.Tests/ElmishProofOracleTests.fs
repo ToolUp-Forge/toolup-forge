@@ -146,6 +146,306 @@ let private loopTests =
                 Expect.isEmpty violations (ElmishLoopDifferential.report check violations))
     ]
 
+// ─── Phase 955 — the extracted ARRAY ring, on this host ──────────────
+//
+// `proofs/ElmishRingArray.fst` is the ring over a mutable array, proved
+// in Pulse to refine the list model; its extraction through Custard's F#
+// backend (`proofs/oracle/custard/ElmishRingArray.fs`) is compiled here by
+// Fable with the rest of the client tier — the same committed bytes the
+// .NET pack runs. What Fable does NOT compile is the support library
+// Custard writes beside it; the ring uses nothing from that file, and
+// this host compiles the empty stand-in `proofs/oracle/fable/FStarCustard.fs`
+// in its place (read its header).
+//
+// The bridge and the cases are the .NET host's
+// (`ToolUp.Platform.Tests/InProcess/ElmishProofOracleTests.fs`), case for
+// case, restated for the runtime a browser executes.
+
+[<Literal>]
+let private ArrayRingCeilingMessage =
+    "the extracted ring refused a push at its capacity ceiling"
+
+/// `RingBuffer<'item>`'s surface over the extracted functions — all a
+/// replacement of `Ring.fs` would hand-write. The extraction's indices
+/// are `uint64`, which Fable carries as a JavaScript BigInt.
+type private ArrayRing<'item>(size: int) =
+    let ring =
+        ElmishRingArray.elmishRingArray_create (uint64 (max size 0)) Unchecked.defaultof<'item>
+
+    member _.Pop() : 'item option =
+        ElmishRingArray.elmishRingArray_pop ring
+
+    member _.Push(item: 'item) : unit =
+        if not (ElmishRingArray.elmishRingArray_push ring item) then
+            invalidOp ArrayRingCeilingMessage
+
+    /// The backing array's length — read by the campaign, never by a client.
+    member _.Slots: int = int ring.cap.Value
+
+let private arrayRing (capacity: int) (ops: RingOp list) : int option list =
+    let rb = ArrayRing<int> capacity
+
+    [
+        for op in ops do
+            match op with
+            | RPush v -> rb.Push v
+            | RPop -> yield rb.Pop()
+    ]
+
+/// The .NET host's second campaign, drawn here from the same seed.
+let private arrayLiveCampaign () = genRingCampaign (Seed + 955) 60
+
+[<Literal>]
+let private MeasuredCapacity = 10
+
+[<Literal>]
+let private MeasuredOps = 4_000
+
+let private measuredSequence () = genRingOps (Lcg 850_001) MeasuredOps 65
+
+/// The literal the .NET host pins: the two hosts time the same operations.
+[<Literal>]
+let private MeasuredSequenceFingerprint = "1:14575:1899911031"
+
+/// The MINIMUM over `rounds` rounds of `reps` runs each — Phase 849's
+/// statistic.
+let private minPerOpNs (rounds: int) (reps: int) (ops: int) (body: unit -> unit) : float =
+    List.min [ for _ in 1..rounds -> perOpNs reps ops body ]
+
+[<Emit("process.version")>]
+let private nodeVersion () : string = jsNative
+
+let private arrayRingTests =
+    testList "Phase 955 - the extracted array ring as implementation (Fable)" [
+
+        testCase
+            "the extracted array ring agrees with the transpiled ring and with the proved model over the corpus"
+            (fun () ->
+                let cases = ringCases ()
+                Expect.isTrue (List.length cases >= 150) $"only {List.length cases} ring case(s)"
+
+                let mismatches =
+                    cases
+                    |> List.collect (fun c ->
+                        let extracted = arrayRing c.Capacity c.Ops
+
+                        [
+                            describeRingMismatch c.Capacity c.Ops extracted c.Expected
+                            describeRingMismatch c.Capacity c.Ops extracted (productionRing c.Capacity c.Ops)
+                        ]
+                        |> List.choose id)
+
+                Expect.isEmpty
+                    mismatches
+                    ($"{List.length mismatches} comparison(s) on which the extracted array ring popped differently from the model or the transpiled ring: "
+                     + String.concat " | " (List.truncate 5 mismatches)))
+
+        testCase "the array ring grows past several doublings, to the sizes the model's grow step gives" (fun () ->
+            // Every capacity the ring can reach from `c` is `c`, `2c + 1`,
+            // `4c + 3`, … — the model's `doubleSize`. The .NET host holds
+            // the slot count to the model's exactly; here the final size is
+            // held to that sequence, and the campaign shown to reach it.
+            let reachable (capacity: int) (slots: int) =
+                let mutable n = max capacity 2
+
+                while n < slots do
+                    n <- n + n + 1
+
+                n = slots
+
+            let sizes =
+                ringCases ()
+                |> List.map (fun c ->
+                    let rb = ArrayRing<int> c.Capacity
+
+                    for op in c.Ops do
+                        match op with
+                        | RPush v -> rb.Push v
+                        | RPop -> rb.Pop() |> ignore
+
+                    c.Capacity, rb.Slots)
+
+            Expect.isTrue
+                (sizes |> List.forall (fun (capacity, slots) -> reachable capacity slots))
+                "a ring ended with a slot count the grow step cannot produce"
+
+            Expect.isTrue
+                (sizes |> List.map snd |> List.max > 111)
+                "the largest backing array the corpus reached is fewer than three doublings of the largest capacity")
+
+        testCase "the extracted array ring agrees with the transpiled ring on sequences the corpus never had" (fun () ->
+            let campaign = arrayLiveCampaign ()
+            Expect.isTrue (List.length campaign >= 100) $"only {List.length campaign} live sequence(s)"
+
+            let mismatches =
+                campaign
+                |> List.choose (fun (capacity, ops) ->
+                    describeRingMismatch capacity ops (arrayRing capacity ops) (productionRing capacity ops))
+
+            Expect.isEmpty
+                mismatches
+                ($"{List.length mismatches} live sequence(s) on which the extracted array ring and the transpiled ring popped differently: "
+                 + String.concat " | " (List.truncate 5 mismatches)))
+
+        testCase "a ring that skips the wrap check is caught against the array ring - go-red" (fun () ->
+            let caught =
+                arrayLiveCampaign ()
+                |> List.filter (fun (capacity, ops) -> brokenRing capacity ops <> arrayRing capacity ops)
+                |> List.length
+
+            Expect.isTrue (caught > 0) "the broken ring was never caught by the comparison with the array ring")
+
+        testCase "a placeholder is never popped - the array ring over a reference type" (fun () ->
+            let popped =
+                arrayLiveCampaign ()
+                |> List.collect (fun (capacity, ops) ->
+                    let rb = ArrayRing<string> capacity
+
+                    [
+                        for op in ops do
+                            match op with
+                            | RPush v -> rb.Push(string v)
+                            | RPop -> yield rb.Pop()
+                    ])
+                |> List.choose id
+
+            Expect.isTrue (List.length popped > 1000) $"only {List.length popped} item(s) popped"
+            Expect.isFalse (popped |> List.exists isNull) "a pop returned the placeholder")
+
+        testCase "at the capacity ceiling a push is refused, nothing is lost, and the ring goes on working" (fun () ->
+            let rb = ArrayRing<int> MeasuredCapacity
+            let mutable pushed = 0
+            let mutable refused = false
+
+            while not refused && pushed < 70_000 do
+                try
+                    rb.Push(pushed + 1)
+                    pushed <- pushed + 1
+                with e when e.Message = ArrayRingCeilingMessage ->
+                    refused <- true
+
+            Expect.isTrue refused "the array ring never refused a push"
+            Expect.isTrue (rb.Slots > 32_767) "the refusal came before the ceiling"
+            Expect.isTrue (rb.Slots <= 65_535) "the ring grew past the size the proof covers"
+            Expect.equal pushed (rb.Slots - 1) "a ring of n slots holds n - 1 unread items when it refuses"
+
+            Expect.equal (rb.Pop()) (Some 1) "the oldest item is still first"
+            rb.Push(pushed + 1)
+
+            // A loop, not a list comparison: `node:assert`'s deep equality
+            // recurses per cons cell and tens of thousands overflow it.
+            let mutable inOrder = true
+
+            for expected in 2 .. pushed + 1 do
+                if rb.Pop() <> Some expected then
+                    inOrder <- false
+
+            Expect.isTrue inOrder "every accepted item comes out once, in order"
+            Expect.isNone (rb.Pop()) "and then the ring is empty")
+
+        testCase "the measured sequence is the draw both hosts make - its fingerprint is pinned" (fun () ->
+            Expect.equal
+                (fingerprint [ renderRingDraw (MeasuredCapacity, measuredSequence ()) ])
+                MeasuredSequenceFingerprint
+                "the measured sequence moved: both hosts must time the same operations")
+
+        testCase "Phase 955 - shipped ring, list extraction and array extraction, measured (informational)" (fun () ->
+            // The .NET host's case, on node: every arm's output asserted
+            // equal before anything is timed, the minimum over rounds.
+            let ops = measuredSequence ()
+            let produced = productionRing MeasuredCapacity ops
+            let modelled = modelRing MeasuredCapacity ops
+            let extracted = arrayRing MeasuredCapacity ops
+
+            Expect.equal
+                (Array.ofList modelled)
+                (Array.ofList produced)
+                "the list extraction and the transpiled ring must agree before they are timed"
+
+            Expect.equal
+                (Array.ofList extracted)
+                (Array.ofList produced)
+                "the array extraction and the transpiled ring must agree before they are timed"
+
+            let popped = produced |> List.choose id |> List.length
+            Expect.isTrue (popped > 1_000) $"the measured sequence popped only {popped} item(s)"
+
+            let shippedNs =
+                minPerOpNs 9 100 MeasuredOps (fun () -> productionRing MeasuredCapacity ops |> ignore)
+
+            let listNs =
+                minPerOpNs 3 1 MeasuredOps (fun () -> modelRing MeasuredCapacity ops |> ignore)
+
+            let arrayNs =
+                minPerOpNs 9 100 MeasuredOps (fun () -> arrayRing MeasuredCapacity ops |> ignore)
+
+            // The ring alone: the sequence walked from an array, no
+            // output list built. A pop is -1; pushed values start at 1.
+            let steps =
+                ops
+                |> List.map (fun op ->
+                    match op with
+                    | RPush v -> v
+                    | RPop -> -1)
+                |> Array.ofList
+
+            let shippedAlone () =
+                let rb = ToolUp.Elmish.RingBuffer<int> MeasuredCapacity
+                let mutable sum = 0
+
+                for step in steps do
+                    if step >= 0 then
+                        rb.Push step
+                    else
+                        match rb.Pop() with
+                        | Some v -> sum <- sum + v
+                        | None -> sum <- sum + 1
+
+                sum
+
+            let arrayAlone () =
+                let rb = ArrayRing<int> MeasuredCapacity
+                let mutable sum = 0
+
+                for step in steps do
+                    if step >= 0 then
+                        rb.Push step
+                    else
+                        match rb.Pop() with
+                        | Some v -> sum <- sum + v
+                        | None -> sum <- sum + 1
+
+                sum
+
+            Expect.equal (arrayAlone ()) (shippedAlone ()) "the two rings walked alone must pop the same items"
+
+            let shippedAloneNs =
+                minPerOpNs 9 100 MeasuredOps (fun () -> shippedAlone () |> ignore)
+
+            let arrayAloneNs = minPerOpNs 9 100 MeasuredOps (fun () -> arrayAlone () |> ignore)
+
+            printfn
+                "Phase 955 measurement (Fable/node %s, capacity %d, %d ops, 65%% pushes, min over rounds): shipped Ring.fs %.1f ns/op; list extraction %.0f ns/op; array extraction %.1f ns/op (%.2fx the shipped ring). Ring alone, no output list: shipped %.1f ns/op; array extraction %.1f ns/op (%.2fx)."
+                (nodeVersion ())
+                MeasuredCapacity
+                MeasuredOps
+                shippedNs
+                listNs
+                arrayNs
+                (arrayNs / shippedNs)
+                shippedAloneNs
+                arrayAloneNs
+                (arrayAloneNs / shippedAloneNs)
+
+            Expect.isTrue
+                (shippedNs > 0.0
+                 && listNs > 0.0
+                 && arrayNs > 0.0
+                 && shippedAloneNs > 0.0
+                 && arrayAloneNs > 0.0)
+                "every measurement ran")
+    ]
+
 let tests =
     testList "Phase 788 - the proved Elmish runtime as oracle (Fable)" [
 
@@ -302,4 +602,7 @@ let tests =
             Expect.isTrue (productionNs > 0.0 && modelNs > 0.0) "both measurements ran")
 
         loopTests
+
+        // Phase 955 — the array ring. Nested, as the loop's list is.
+        arrayRingTests
     ]

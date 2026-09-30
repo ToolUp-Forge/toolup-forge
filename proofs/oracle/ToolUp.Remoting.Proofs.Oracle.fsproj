@@ -80,5 +80,17 @@
              for the ring, its opt/pair and append, so it must follow
              ElmishRing.fs. Later proof phases APPEND their extraction below. -->
         <Compile Include="ElmishLoop.fs" />
+        <!-- Phase 955 - GENERATED from ../ElmishRingArray.fst through
+             Custard's F# backend, not the legacy printer: the ring over a
+             .NET array, and the support library that backend writes beside
+             every module. Both are the bytes of the generated project in
+             custard/ (check.ps1 byte-holds all three of its files and
+             builds that project as generated); they are compiled here as
+             well so the differential host reaches them through the one
+             oracle assembly. FStarCustard.fs carries a nested Prims of its
+             own, over bigint, which the ring does not use and which is
+             distinct from the top-level Prims.fs above. Do not edit. -->
+        <Compile Include="custard/FStarCustard.fs" />
+        <Compile Include="custard/ElmishRingArray.fs" />
     </ItemGroup>
 </Project>

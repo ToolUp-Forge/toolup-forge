@@ -29,7 +29,11 @@
     "is FOR is the second extraction pipeline this release carries (`--codegen Custard`, with an F#",
     "backend) and the Pulse library it ships under lib/fstar/pulse; proofs/README.md records what was",
     "measured on both. Upstream describes `--codegen FSharp` as unmaintained, so the `extract` set below",
-    "names a route that is kept working by this repository's normaliser rather than by the prover."
+    "names a route that is kept working by this repository's normaliser rather than by the prover.",
+    "Phase 955 also appended ElmishRingArray.fst, the first Pulse module and the first extracted through",
+    "that second pipeline: the `custard` set below is its route, and check.ps1 appends one",
+    "`--custard_entry <definition>` per root the module's entry names and the `-o` path. The Pulse",
+    "library is on the prover's own include path (lib/fstar/fstar.include), so the check set is unchanged."
   ],
   "tool": "fstar",
   "version": "v2026.09.27",
@@ -54,7 +58,8 @@
   "flags": {
     "check": ["--cache_checked_modules", "--report_assumes", "error", "--z3rlimit", "60"],
     "extract": ["--codegen", "FSharp"],
+    "custard": ["--codegen", "Custard", "--custard_backend", "FSharp"],
     "quake": ["--quake", "3"],
-    "$comment": "--z3rlimit 60 against modules whose slowest query finishes well inside the default is a deliberate MARGIN, not a requirement: with hints gone, the thing that makes a check flaky is a query landing near the limit on a slower machine, and headroom is the cheapest defence available. `extract` carries no `--extract <module>`: check.ps1 appends one per module from its list, so a second model did not need a second flag set (Phase 790)."
+    "$comment": "--z3rlimit 60 against modules whose slowest query finishes well inside the default is a deliberate MARGIN, not a requirement: with hints gone, the thing that makes a check flaky is a query landing near the limit on a slower machine, and headroom is the cheapest defence available. `extract` carries no `--extract <module>`: check.ps1 appends one per module from its list, so a second model did not need a second flag set (Phase 790). `custard` is the second ROUTE, not a second model's flags: a module whose entry in check.ps1 says `Route = \"Custard\"` is extracted with it and is not normalised (Phase 955)."
   }
 }
