@@ -26,6 +26,10 @@ open ToolUp.Remoting
 /// ±(2^53 − 1), where `JSON.parse` may already have rounded it — is REFUSED
 /// with the path to it, and the proxy raises it as a `DecodeError` on
 /// `ProxyRequestException`, the same carrier the algebra's refusals use.
+/// Phase 937 — an OBJECT at an int64 / uint64 position (the Fable/Long.js
+/// runtime form `{"high","low","unsigned"}`, which the library reads) is
+/// refused the same way, so the reflective read accepts exactly the forms
+/// `JsonDecode.asInt64` / `asUInt64` accept.
 ///
 /// The walk mirrors the shapes the library reads: records by field name,
 /// options, the list/array/seq/set/ResizeArray/HashSet element, tuples by
@@ -45,6 +49,12 @@ module internal ReflectiveWideIntegers =
     let private isSafeInteger (value: float) =
         System.Math.Floor value = value && abs value <= maxSafeInteger
 
+    let private refusedAs (path: string list) (typeName: string) (found: string) : DecodeError =
+        DecodeError.at
+            path
+            (sprintf "%s as an exact integer (a digit string, or a number within ±(2^53 − 1))" typeName)
+            found
+
     let private refusal (path: string list) (typeName: string) (value: float) : DecodeError =
         let found =
             if System.Math.Floor value <> value then
@@ -54,10 +64,13 @@ module internal ReflectiveWideIntegers =
             else
                 sprintf "number %s, beyond the ±(2^53 − 1) a parsed JSON number carries exactly" (string value)
 
-        DecodeError.at
-            path
-            (sprintf "%s as an exact integer (a digit string, or a number within ±(2^53 − 1))" typeName)
-            found
+        refusedAs path typeName found
+
+    /// Phase 937 — an object at an int64 / uint64 position: the Fable/Long.js
+    /// runtime shape `{"high","low","unsigned"}` the library would otherwise
+    /// read. No SDK writer emits it, and the JSON algebra refuses it too.
+    let private objectRefusal (path: string list) (typeName: string) (members: Map<string, Json>) : DecodeError =
+        refusedAs path typeName (sprintf "object of %d member(s)" members.Count)
 
     /// Whether `info` holds an int64 / uint64 anywhere the walk reaches.
     /// Records and unions already on the descent path are not re-entered,
@@ -124,6 +137,8 @@ module internal ReflectiveWideIntegers =
                 Ok(JString((uint64 value).ToString()))
             else
                 Error(refusal path "UInt64" value)
+        | JObject members, TypeInfo.Long -> Error(objectRefusal path "Int64" members)
+        | JObject members, TypeInfo.UInt64 -> Error(objectRefusal path "UInt64" members)
         | JNull, TypeInfo.Option _ -> Ok json
         | _, TypeInfo.Option element -> widen path json (element ())
         | JArray items, TypeInfo.List element
