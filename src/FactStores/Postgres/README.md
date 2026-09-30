@@ -21,7 +21,7 @@ scope and refuses above 300,000, naming this package.
 
 ## Composition
 
-```fsharp
+```fsharp skip=fragment
 ServerApp.empty
 |> ServerApp.withStorage blob
 |> FactsCompose.withFactStore
@@ -39,7 +39,7 @@ registered, and `DateTime.UtcNow` as the transaction-time clock.
 
 To build one directly (a test, a tool, a shared pool):
 
-```fsharp
+```fsharp skip=fragment
 let store =
     PostgresFactStore.createWithDataSource dataSource PostgresFactStoreOptions.defaults events (Some registry) (fun () -> DateTime.UtcNow)
 ```
