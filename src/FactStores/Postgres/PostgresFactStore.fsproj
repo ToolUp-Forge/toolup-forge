@@ -13,6 +13,9 @@
        are free, and the default composition (BlobFactStore) is unchanged. -->
   <ItemGroup>
     <Compile Include="PostgresFactStore.fs" />
+    <!-- Phase 941 - the migration from BlobFactStore; writes rows through
+         PostgresFactStore.fs's row projection, so it compiles after it. -->
+    <Compile Include="FactStoreMigration.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />

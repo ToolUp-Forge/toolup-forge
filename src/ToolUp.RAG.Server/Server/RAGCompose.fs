@@ -1523,20 +1523,29 @@ let composeRAG (app: RAGServerApp) : ServerApp =
 
         // Pick the registered tracer if any; default to the event-store tracer
         // so retrieval traces are persisted out-of-the-box.
-        let retrievalTracer: IRetrievalTracer =
-            let composedTracer =
-                match probe.GetService(typeof<IRetrievalTracer>) with
-                | :? IRetrievalTracer as t -> t
-                | _ -> ToolUp.RAG.RetrievalTracers.createEventStore eventStore ragLogger
+        let composedTracer =
+            match probe.GetService(typeof<IRetrievalTracer>) with
+            | :? IRetrievalTracer as t -> t
+            | _ -> ToolUp.RAG.RetrievalTracers.createEventStore eventStore ragLogger
 
-            // Phase 894 — take the trace write off the request path: the
-            // pipeline enqueues, a background loop writes, a full queue drops
-            // and counts. `0` keeps the inline pre-894 write.
+        // Phase 894 — take the trace write off the request path: the
+        // pipeline enqueues, a background loop writes, a full queue drops
+        // and counts. `0` keeps the inline pre-894 write.
+        let backgroundTracer =
             if app.RetrievalTraceQueueCapacity > 0 then
-                ToolUp.RAG.RetrievalTracers.createBackground composedTracer app.RetrievalTraceQueueCapacity ragLogger
-                :> IRetrievalTracer
+                Some(
+                    ToolUp.RAG.RetrievalTracers.createBackground
+                        composedTracer
+                        app.RetrievalTraceQueueCapacity
+                        ragLogger
+                )
             else
-                composedTracer
+                None
+
+        let retrievalTracer: IRetrievalTracer =
+            match backgroundTracer with
+            | Some background -> background :> IRetrievalTracer
+            | None -> composedTracer
 
         let pipeline: IRetrievalPipeline =
             // Phase 63.A — an override (e.g. the static-corpus pipeline) is
@@ -1724,6 +1733,14 @@ let composeRAG (app: RAGServerApp) : ServerApp =
         let s =
             match sparseIndex with
             | Some index -> s.AddSingleton<ISparseIndex>(index)
+            | None -> s
+
+        // Phase 945 — the off-path trace queue, registered so `/health/rag`
+        // can report its lost-trace count. Absent when traces are written
+        // inline (capacity 0), and then the endpoint omits the block.
+        let s =
+            match backgroundTracer with
+            | Some background -> s.AddSingleton<ToolUp.RAG.RetrievalTracers.BackgroundRetrievalTracer>(background)
             | None -> s
 
         let s =

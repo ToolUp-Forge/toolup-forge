@@ -126,6 +126,227 @@ let private seedCensus (storage: IBlobStorage) (scope: string) (n: int) = async 
         ()
 }
 
+// ─── Phase 941 — migrating a BlobFactStore into the table ────────────
+//
+// The source is a `BlobFactStore` seeded with supersession chains (three
+// versions of most lineages), competing methods and a second metric —
+// 620 facts, small on purpose. The live cases pin why the copy cannot go
+// through `Assert` (red first), then show the raw import answering every
+// AsOf read as the source does, resuming after an interruption to the same
+// rows as an uninterrupted run, replaying a page as a no-op, and a
+// verification that names each planted difference.
+
+// The source's transaction-time clock: a minute per call, from 2026-08-01.
+let private migrationClock () : unit -> DateTime =
+    let current = ref (DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc))
+
+    fun () ->
+        let value = current.Value
+        current.Value <- value.AddMinutes 1.0
+        value
+
+let private blobSource () : BlobFactStore * IBlobStorage =
+    let storage = InMemoryBlobStorage.InMemoryBlobStorage()
+
+    BlobFactStore(
+        storage,
+        InMemoryEventStore.InMemoryEventStore(),
+        None,
+        migrationClock (),
+        FactSurfaceOptions.disabled,
+        FactIndexOptions.disabled
+    ),
+    storage :> IBlobStorage
+
+let private migrationSeed (store: IFactStore) (scope: string) = async {
+    for round in 1..3 do
+        let drafts = [
+            for i in 1..200 do
+                if round < 3 || i % 2 = 0 then
+                    draftFor (sprintf "m%03d" i) "revenue" (sprintf "r%03d-%d" i round) (decimal (i * round))
+        ]
+
+        match! store.AssertBatch(scope, drafts) with
+        | Ok _ -> ()
+        | Error e -> failtestf "seed round %d refused: %s" round e
+
+    let competing = [
+        for i in 1..20 ->
+            {
+                draftFor (sprintf "m%03d" i) "revenue" (sprintf "e%03d" i) 1m with
+                    Method = Computed("estimator", "1", "p0")
+            }
+    ]
+
+    let visits = [
+        for i in 1..100 -> draftFor (sprintf "v%03d" i) "visits" (sprintf "v%03d" i) (decimal i)
+    ]
+
+    for batch in [ competing; visits ] do
+        match! store.AssertBatch(scope, batch) with
+        | Ok _ -> ()
+        | Error e -> failtestf "seed refused: %s" e
+}
+
+[<Literal>]
+let private MigrationSeedFacts = 620
+
+let private draftOf (f: Fact) : FactDraft = {
+    Subject = f.Subject
+    Metric = f.Metric
+    Value = f.Value
+    Period = f.Period
+    Method = f.Method
+    Evidence = f.Evidence
+    Confidence = f.Confidence
+    Disclosure = f.Disclosure
+}
+
+let private byTransactionTime (facts: Fact list) =
+    facts
+    |> List.sortWith (fun a b ->
+        match compare a.AsOf.Ticks b.AsOf.Ticks with
+        | 0 -> String.CompareOrdinal(a.FactId, b.FactId)
+        | c -> c)
+
+let private visibleIds (store: IFactStore) (scope: string) (t: DateTime) = async {
+    let! facts = store.Query(scope, { FactQuery.all with AsOf = Some t })
+    return facts |> List.map _.FactId |> List.sort
+}
+
+let private migrationEvents (log: IEventStore) (scope: string) = async {
+    let! rows = log.ReadBySource(scope, FactEvents.SourceModule)
+    return rows |> List.map _.EventType
+}
+
+let private migrationOfflineTests =
+    testList "Phase 941 — FactStoreMigration (no database)" [
+
+        testCase "the options are validated, each problem named"
+        <| fun _ ->
+            Expect.isEmpty (FactStoreMigrationOptions.validate FactStoreMigrationOptions.defaults) "defaults are usable"
+
+            let problems =
+                FactStoreMigrationOptions.validate {
+                    FactStoreMigrationOptions.defaults with
+                        PageSize = 0
+                        AsOfSamples = -1
+                        SourceName = " "
+                }
+
+            Expect.hasLength problems 3 "three problems, each named"
+
+        testCase "every migration statement that names a scope's rows binds the scope (GP 4)"
+        <| fun _ ->
+            for statement in MigrationSql.scopeBoundStatements "toolup_facts" do
+                Expect.stringContains statement "@scope" "the statement binds the scope"
+
+            Expect.stringContains
+                (MigrationSql.insertStaged "toolup_facts")
+                "ON CONFLICT (scope, fact_id) DO NOTHING"
+                "a replayed row is a no-op by the content-address key"
+
+        testCaseAsync "the export reads every fact blob and names each one it cannot use"
+        <| async {
+            let source, storage = blobSource ()
+            let scope = newScope ()
+            do! migrationSeed source scope
+
+            let good = draftFor "x" "revenue" "x1" 1m
+            let! written = (source :> IFactStore).Assert(scope, good)
+
+            let fact =
+                match written with
+                | Ok f -> f
+                | Error e -> failtestf "assert refused: %s" e
+
+            // One blob that is not JSON, and one that holds a fact under
+            // another fact's name.
+            let! _ = storage.Upload(scope, "_facts/garbage.json", Encoding.UTF8.GetBytes "{ not json")
+            let! bytes = storage.Download(scope, sprintf "_facts/%s.json" fact.FactId)
+
+            match bytes with
+            | Ok b ->
+                let! _ = storage.Upload(scope, "_facts/misnamed.json", b)
+                ()
+            | Error e -> failtestf "download failed: %s" e
+
+            let! export = source.ExportScope scope
+            Expect.hasLength export.Facts (MigrationSeedFacts + 1) "every readable fact"
+
+            Expect.equal
+                (export.Unreadable |> List.map fst |> List.sort)
+                [ "_facts/garbage.json"; "_facts/misnamed.json" ]
+                "both unusable blobs are named"
+
+            let! listed =
+                (source :> IFactStore)
+                    .Query(
+                        scope,
+                        {
+                            FactQuery.all with
+                                IncludeSuperseded = true
+                        }
+                    )
+
+            // Verify the probe: the query path really does skip the garbage
+            // blob silently, which is why the export must not.
+            Expect.equal
+                listed.Length
+                (MigrationSeedFacts + 2)
+                "the query path lists the misnamed copy and drops the garbage"
+        }
+
+        testCaseAsync "the source check passes a valid fact base and names each fact of a broken one"
+        <| async {
+            let source, _ = blobSource ()
+            let scope = newScope ()
+            do! migrationSeed source scope
+            let! export = source.ExportScope scope
+            Expect.isEmpty (FactStoreMigration.validateSource export.Facts) "the seed is a valid fact base"
+
+            let facts = byTransactionTime export.Facts
+            let successor = facts |> List.find (fun f -> f.Supersedes.IsSome)
+            let predecessor = facts |> List.find (fun f -> Some f.FactId = successor.Supersedes)
+
+            // A fork: a second fact superseding the same predecessor.
+            let fork = {
+                successor with
+                    FactId = "fork"
+                    AsOf = successor.AsOf.AddTicks 1L
+            }
+
+            let forked = FactStoreMigration.validateSource (fork :: facts)
+
+            let named =
+                forked
+                |> List.map (function
+                    | InvalidSource(id, _) -> id
+                    | _ -> "")
+
+            Expect.contains named "fork" "the fork is named"
+            Expect.contains named successor.FactId "the second head of the lineage is named"
+
+            // A successor no later than its predecessor.
+            let backwards =
+                facts
+                |> List.map (fun f ->
+                    if f.FactId = successor.FactId then
+                        { f with AsOf = predecessor.AsOf }
+                    else
+                        f)
+                |> FactStoreMigration.validateSource
+
+            Expect.equal
+                (backwards
+                 |> List.map (function
+                     | InvalidSource(id, _) -> id
+                     | _ -> ""))
+                [ successor.FactId ]
+                "the successor whose transaction time does not advance is named"
+        }
+    ]
+
 let offlineTests =
     testList "Phase 888 — PostgresFactStore (no database)" [
 
@@ -296,6 +517,10 @@ let offlineTests =
         // The differential pack, self-bound: the enumerating blob path held
         // to the indexed-and-surfaced one. Proves the pack on every run.
         IFactStoreContract.differentialTests "BlobFactStore (index + surface)" blobReference blobIndexed
+
+        // Phase 941 — the migration's option, statement, export and
+        // source-law checks.
+        migrationOfflineTests
     ]
 
 // ─── Live ────────────────────────────────────────────────────────────
@@ -552,6 +777,358 @@ let private aggregateTests
         | Error e -> failtestf "precise refused: %s" e
     }
 
+let private migrationLiveTests (dataSource: NpgsqlDataSource) =
+    let targetOn (table: string) (events: IEventStore) =
+        PostgresFactStore.createWithDataSource
+            dataSource
+            {
+                PostgresFactStoreOptions.defaults with
+                    Table = table
+            }
+            events
+            None
+            (fun () -> DateTime.UtcNow)
+
+    let scalar (sql: string) (bind: NpgsqlCommand -> unit) = async {
+        use cmd = dataSource.CreateCommand sql
+        bind cmd
+        let! v = cmd.ExecuteScalarAsync() |> Async.AwaitTask
+        return v
+    }
+
+    let execute (sql: string) (bind: NpgsqlCommand -> unit) = async {
+        use cmd = dataSource.CreateCommand sql
+        bind cmd
+        let! n = cmd.ExecuteNonQueryAsync() |> Async.AwaitTask
+        return n
+    }
+
+    let rowsOf (table: string) (scope: string) = async {
+        use cmd =
+            dataSource.CreateCommand(
+                sprintf
+                    "SELECT fact_id, lineage_hash, as_of_ticks, coalesce(supersedes, ''), is_head, payload FROM %s WHERE scope = @scope ORDER BY fact_id"
+                    table
+            )
+
+        cmd.Parameters.AddWithValue("scope", scope) |> ignore
+        use! reader = cmd.ExecuteReaderAsync() |> Async.AwaitTask
+        let rows = ResizeArray<string>()
+
+        let rec loop () = async {
+            let! more = reader.ReadAsync() |> Async.AwaitTask
+
+            if more then
+                rows.Add(
+                    String.concat "|" [
+                        reader.GetString 0
+                        reader.GetString 1
+                        string (reader.GetInt64 2)
+                        reader.GetString 3
+                        string (reader.GetBoolean 4)
+                        reader.GetString 5
+                    ]
+                )
+
+                return! loop ()
+        }
+
+        do! loop ()
+        return List.ofSeq rows
+    }
+
+    let bindScope (scope: string) (cmd: NpgsqlCommand) =
+        cmd.Parameters.AddWithValue("scope", scope) |> ignore
+
+    let options = {
+        FactStoreMigrationOptions.defaults with
+            PageSize = 100
+    }
+
+    testList "Phase 941 — FactStoreMigration (live)" [
+
+        testCaseAsync "a copy through Assert answers AsOf reads differently from the source (pinned red)"
+        <| async {
+            let source, _ = blobSource ()
+            let scope = newScope ()
+            do! migrationSeed source scope
+            let! export = source.ExportScope scope
+
+            // The Assert copy: the target's own clock, a month later.
+            let later = ref (DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc))
+
+            let asserted =
+                PostgresFactStore.createWithDataSource
+                    dataSource
+                    liveOptions
+                    (InMemoryEventStore.InMemoryEventStore())
+                    None
+                    (fun () ->
+                        later.Value <- later.Value.AddMinutes 1.0
+                        later.Value)
+
+            for f in byTransactionTime export.Facts do
+                match! (asserted :> IFactStore).Assert(scope, draftOf f) with
+                | Ok copy -> Expect.equal copy.FactId f.FactId "the content address survives an Assert copy"
+                | Error e -> failtestf "assert copy refused: %s" e
+
+            // Between the first and second versions of every chain.
+            let t = (byTransactionTime export.Facts |> List.item 199).AsOf
+            let! onSource = visibleIds (source :> IFactStore) scope t
+            let! onCopy = visibleIds (asserted :> IFactStore) scope t
+            Expect.hasLength onSource 200 "the source knew the first versions at t"
+            Expect.notEqual onCopy onSource "the Assert copy answers the AsOf read differently"
+
+            let! report = FactStoreMigration.verify source asserted options [ scope ]
+            Expect.isFalse report.Passed "the verification refuses the Assert copy"
+            Expect.equal (FactStoreMigration.exitCode report) 1 "a non-zero exit"
+
+            let columns =
+                report.Scopes.Head.Differences
+                |> List.choose (function
+                    | ColumnDiffers(_, column, _, _) -> Some column
+                    | _ -> None)
+                |> List.distinct
+                |> List.sort
+
+            Expect.equal columns [ "as_of_ticks"; "payload" ] "every row's transaction time moved"
+        }
+
+        testCaseAsync "the migration writes the original rows, every AsOf read matches, and audit is one record"
+        <| async {
+            let source, _ = blobSource ()
+            let scope = newScope ()
+            do! migrationSeed source scope
+            let log = InMemoryEventStore.InMemoryEventStore()
+            let target = targetOn TestTable log
+
+            let! report = FactStoreMigration.migrate source target log options [ scope ]
+            let s = report.Scopes.Head
+            Expect.equal s.Outcome Verified (FactStoreMigration.render report)
+            Expect.isTrue report.Passed "the report passes"
+            Expect.equal (FactStoreMigration.exitCode report) 0 "a zero exit"
+            Expect.equal s.SourceFacts MigrationSeedFacts "every source fact"
+            Expect.equal s.Inserted MigrationSeedFacts "every fact written once"
+            Expect.equal s.TargetFacts MigrationSeedFacts "every row on the target"
+            Expect.equal s.Lineages 320 "200 revenue, 20 estimator and 100 visits lineages"
+            Expect.equal s.Heads 320 "one head per lineage"
+
+            // Independently of the verification: every distinct transaction
+            // time of the source, read on both sides.
+            let! export = source.ExportScope scope
+
+            for t in export.Facts |> List.map _.AsOf |> List.distinct do
+                let! onSource = visibleIds (source :> IFactStore) scope t
+                let! onTarget = visibleIds (target :> IFactStore) scope t
+                Expect.equal onTarget onSource (sprintf "the AsOf read at %O matches" t)
+
+            let! doubled =
+                scalar
+                    (sprintf
+                        "SELECT count(*) FROM (SELECT lineage_hash FROM %s WHERE scope = @scope AND is_head GROUP BY lineage_hash HAVING count(*) > 1) d"
+                        TestTable)
+                    (bindScope scope)
+
+            Expect.equal (Convert.ToInt64 doubled) 0L "one current head per lineage"
+
+            let! kinds = migrationEvents log scope
+            Expect.equal kinds [ FactStoreMigration.MigratedType ] "one migration record and no per-fact event"
+
+            let! rows = (log :> IEventStore).ReadBySource(scope, FactEvents.SourceModule)
+
+            let payload =
+                JsonSerializer.Deserialize<FactStoreMigratedEvent>(
+                    rows.Head.Payload,
+                    ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+                )
+
+            Expect.equal payload.Verification "verified" "the verification result is recorded"
+            Expect.equal payload.SourceFacts MigrationSeedFacts "the counts are recorded"
+            Expect.equal payload.Target ("postgres:" + TestTable) "the target is named"
+
+            // A second run over the same source does nothing.
+            let! again = FactStoreMigration.migrate source target log options [ scope ]
+            Expect.equal again.Scopes.Head.Outcome AlreadyVerified "a verified scope is skipped"
+            let! kinds = migrationEvents log scope
+            Expect.hasLength kinds 1 "a skipped scope adds no audit record"
+        }
+
+        testCaseAsync "an interrupted migration resumes to the uninterrupted result; a replayed page writes nothing"
+        <| async {
+            let source, _ = blobSource ()
+            let scope = newScope ()
+            do! migrationSeed source scope
+            let log = InMemoryEventStore.InMemoryEventStore()
+            let whole = targetOn "toolup_facts_migration_whole" log
+            let resumed = targetOn TestTable log
+
+            let! uninterrupted = FactStoreMigration.migrate source whole log options [ scope ]
+            Expect.isTrue uninterrupted.Passed "the uninterrupted run verifies"
+
+            // Interrupt the second run on its last page: a planted row
+            // already heads the lineage of the last fact written, so that
+            // page's insert fails and rolls back.
+            let! export = source.ExportScope scope
+            let last = byTransactionTime export.Facts |> List.last
+
+            let! lineage =
+                scalar
+                    "SELECT lineage_hash FROM toolup_facts_migration_whole WHERE scope = @scope AND fact_id = @id"
+                    (fun cmd ->
+                        bindScope scope cmd
+                        cmd.Parameters.AddWithValue("id", last.FactId) |> ignore)
+
+            let plant =
+                sprintf
+                    "INSERT INTO %s (scope, fact_id, hierarchy, path, metric, period_from_ticks, period_to_ticks, method_identity, lineage_hash, as_of_ticks, as_of, supersedes, is_head, magnitude, payload) VALUES (@scope, 'planted', 'geography', ARRAY['planted'], 'revenue', 0, 0, 'planted', @lineage, 0, now(), NULL, true, NULL, '{}')"
+                    TestTable
+
+            let! _ =
+                execute plant (fun cmd ->
+                    bindScope scope cmd
+                    cmd.Parameters.AddWithValue("lineage", string lineage) |> ignore)
+
+            let! interrupted = FactStoreMigration.migrate source resumed log options [ scope ]
+            let first = interrupted.Scopes.Head
+
+            match first.Outcome with
+            | CopyFailed _ -> ()
+            | other -> failtestf "the interrupted run should fail its last page, not %A" other
+
+            Expect.equal first.Inserted 600 "six pages committed before the interruption"
+
+            let! _ =
+                execute
+                    (sprintf "DELETE FROM %s WHERE scope = @scope AND fact_id = 'planted'" TestTable)
+                    (bindScope scope)
+
+            let! second = FactStoreMigration.migrate source resumed log options [ scope ]
+            let s = second.Scopes.Head
+            Expect.equal s.Outcome Verified (FactStoreMigration.render second)
+            Expect.equal s.ResumedFrom 600 "the second run continued after the last committed page"
+            Expect.equal s.Inserted 20 "and wrote only the rest"
+
+            let! wholeRows = rowsOf "toolup_facts_migration_whole" scope
+            let! resumedRows = rowsOf TestTable scope
+            Expect.equal resumedRows wholeRows "the resumed rows are the uninterrupted rows, byte for byte"
+
+            // Forget the progress: every page is replayed, and writes nothing.
+            let! _ = execute (sprintf "DELETE FROM %s_migration WHERE scope = @scope" TestTable) (bindScope scope)
+            let! replay = FactStoreMigration.migrate source resumed log options [ scope ]
+            let r = replay.Scopes.Head
+            Expect.equal r.Outcome Verified "the replay verifies"
+            Expect.equal r.ResumedFrom 0 "the replay started from the first page"
+            Expect.equal r.Inserted 0 "a replayed row is a no-op by content address"
+            let! afterReplay = rowsOf TestTable scope
+            Expect.equal afterReplay wholeRows "no row was duplicated or changed"
+
+            let! kinds = migrationEvents log scope
+            Expect.hasLength kinds 4 "one record per scope per run: whole, interrupted, resumed, replayed"
+        }
+
+        testCaseAsync "the verification fails loudly on planted differences, naming each fact"
+        <| async {
+            let source, _ = blobSource ()
+            let scope = newScope ()
+            do! migrationSeed source scope
+            let log = InMemoryEventStore.InMemoryEventStore()
+            let target = targetOn TestTable log
+            let! migrated = FactStoreMigration.migrate source target log options [ scope ]
+            Expect.isTrue migrated.Passed "the clean copy verifies"
+
+            let! export = source.ExportScope scope
+            let facts = byTransactionTime export.Facts
+
+            let superseded =
+                facts
+                |> List.find (fun f -> facts |> List.exists (fun g -> g.Supersedes = Some f.FactId))
+
+            let moved = facts |> List.find (fun f -> f.Metric = MetricRef "visits")
+
+            let lone =
+                facts
+                |> List.findBack (fun f -> f.Metric = MetricRef "visits" && f.FactId <> moved.FactId)
+
+            let one (sql: string) (id: string) =
+                execute (sql.Replace("{table}", TestTable)) (fun cmd ->
+                    bindScope scope cmd
+                    cmd.Parameters.AddWithValue("id", id) |> ignore)
+
+            let! _ = one "DELETE FROM {table} WHERE scope = @scope AND fact_id = @id" superseded.FactId
+
+            let! _ =
+                one
+                    "UPDATE {table} SET as_of_ticks = as_of_ticks + 1 WHERE scope = @scope AND fact_id = @id"
+                    moved.FactId
+
+            let! _ = one "UPDATE {table} SET is_head = false WHERE scope = @scope AND fact_id = @id" lone.FactId
+
+            let! report = FactStoreMigration.verify source target options [ scope ]
+            let s = report.Scopes.Head
+            Expect.equal s.Outcome VerificationFailed "the verification fails"
+            Expect.equal (FactStoreMigration.exitCode report) 1 "a non-zero exit"
+            Expect.contains s.Differences (MissingOnTarget superseded.FactId) "the deleted row is named"
+
+            Expect.contains
+                s.Differences
+                (ColumnDiffers(moved.FactId, "as_of_ticks", string moved.AsOf.Ticks, string (moved.AsOf.Ticks + 1L)))
+                "the moved transaction time is named"
+
+            Expect.contains s.Differences (HeadDiffers(lone.FactId, true, false)) "the cleared head is named"
+
+            Expect.isTrue
+                (s.Differences
+                 |> List.exists (function
+                     | AsOfReadDiffers(_, id, true) -> id = lone.FactId
+                     | _ -> false))
+                "the cleared head's AsOf read differs too"
+
+            let text = FactStoreMigration.render report
+
+            for id in [ superseded.FactId; moved.FactId; lone.FactId ] do
+                Expect.stringContains text id "the rendered report names the fact"
+        }
+
+        testCaseAsync "a source with an unreadable blob is refused, named, and migrates only when allowed"
+        <| async {
+            let source, storage = blobSource ()
+            let scope = newScope ()
+            do! migrationSeed source scope
+            let! _ = storage.Upload(scope, "_facts/garbage.json", Encoding.UTF8.GetBytes "{ not json")
+            let log = InMemoryEventStore.InMemoryEventStore()
+            let target = targetOn TestTable log
+
+            let! refused = FactStoreMigration.migrate source target log options [ scope ]
+            let s = refused.Scopes.Head
+            Expect.equal s.Outcome SourceRefused "the scope is refused"
+
+            Expect.isTrue
+                (s.Differences
+                 |> List.exists (function
+                     | UnreadableSource(blob, _) -> blob = "_facts/garbage.json"
+                     | _ -> false))
+                "the blob is named"
+
+            let! written = scalar (sprintf "SELECT count(*) FROM %s WHERE scope = @scope" TestTable) (bindScope scope)
+            Expect.equal (Convert.ToInt64 written) 0L "nothing was written"
+
+            let! allowed =
+                FactStoreMigration.migrate
+                    source
+                    target
+                    log
+                    {
+                        options with
+                            AllowUnreadableSource = true
+                    }
+                    [ scope ]
+
+            Expect.equal allowed.Scopes.Head.Outcome Verified "the operator's decision migrates the readable facts"
+            let! kinds = migrationEvents log scope
+            Expect.hasLength kinds 2 "a record for the refusal and one for the migration"
+        }
+    ]
+
 let private liveTests (conn: string) =
     let dataSource = NpgsqlDataSource.Create conn
 
@@ -586,6 +1163,9 @@ let private liveTests (conn: string) =
 
         // The shapes the differential seed does not reach (Phase 940).
         aggregateTests blobReference candidate
+
+        // Migrating a blob store into the table (Phase 941).
+        migrationLiveTests dataSource
 
         testList "PostgresFactStore specifics" [
 

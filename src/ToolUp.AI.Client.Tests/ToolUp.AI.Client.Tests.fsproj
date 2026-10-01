@@ -187,6 +187,9 @@
              and the knowledge base list's fact-table badge. Must follow
              ViewMount.fs. -->
         <Compile Include="FactBrowseClientTests.fs" />
+        <!-- Phase 942 — the team output-visibility section and the
+             member-visible notice, mounted. Must follow ViewMount.fs. -->
+        <Compile Include="TeamOutputVisibilityUITests.fs" />
         <!-- Phase 784 — the remoting wire corpus's parity leg. WireCorpus.fs
              is COMPILED IN from ToolUp.Platform.Tests rather than
              transcribed, so the value a committed fixture must decode to is

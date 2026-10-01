@@ -12,7 +12,8 @@ let private jsonOptions = FableConverters.create ()
 
 /// `/health/rag` route: returns the current `RagTelemetrySnapshot` as JSON,
 /// with the ingestion queue's drop counters (Phase 303) merged on under
-/// `IngestionQueueDrops`. Resolves `IRagTelemetry` from DI — `composeWithRAG`
+/// `IngestionQueueDrops` and the retrieval-trace queue's lost-trace count
+/// (Phase 945) under `RetrievalTraces`. Resolves `IRagTelemetry` from DI — `composeWithRAG`
 /// registers a default rolling-window implementation, so the endpoint is
 /// always reachable when RAG is wired. Deployments wanting Prometheus / OTel
 /// export register a custom implementation; the same snapshot shape works for
@@ -57,6 +58,22 @@ let healthHandler: HttpHandler =
                 |}
 
                 node["IngestionQueueDrops"] <- JsonSerializer.SerializeToNode(drops, jsonOptions)
+            | _ -> ()
+
+            // Phase 945 — the retrieval-trace queue's losses, additively
+            // under `RetrievalTraces`. A trace dropped because the queue was
+            // full (or because the trace writer raised) is counted in `Lost`;
+            // `Written` is what reached the writer. The block is omitted when
+            // traces are written inline (no queue is composed).
+            match ctx.RequestServices.GetService(typeof<ToolUp.RAG.RetrievalTracers.BackgroundRetrievalTracer>) with
+            | :? ToolUp.RAG.RetrievalTracers.BackgroundRetrievalTracer as tracer ->
+                let traces = {|
+                    Lost = tracer.Lost
+                    Written = tracer.Written
+                    Capacity = tracer.Capacity
+                |}
+
+                node["RetrievalTraces"] <- JsonSerializer.SerializeToNode(traces, jsonOptions)
             | _ -> ()
 
             let json = node.ToJsonString(jsonOptions)

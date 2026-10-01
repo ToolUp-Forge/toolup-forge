@@ -35,6 +35,8 @@ ToolUp.RAG.IngestionTypes+IIngestionQueue.EnqueueBlockingAsync(ToolUp.RAG.Ingest
 ToolUp.RAG.IngestionTypes+IIngestionQueue.IsDurable : System.Boolean { get }
 ToolUp.RAG.IngestionTypes+IIngestionQueue.Policy : ToolUp.RAG.IngestionTypes+IngestionOverflowPolicy { get }
 ToolUp.RAG.IngestionTypes+IIngestionQueue.RecoverStranded() : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
+ToolUp.RAG.IngestionTypes+IIngestionQueue.TryDequeue() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IngestionLease]]
+ToolUp.RAG.IngestionTypes+IIngestionQueue.WaitForWork(System.Threading.CancellationToken) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
 ToolUp.RAG.IngestionTypes+IIngestionQueueStore (interface)
 ToolUp.RAG.IngestionTypes+IIngestionQueueStore.Claim(System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IngestionLease]]
 ToolUp.RAG.IngestionTypes+IIngestionQueueStore.Complete(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]

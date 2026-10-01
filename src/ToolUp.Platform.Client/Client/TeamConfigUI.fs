@@ -24,6 +24,10 @@ type FormStatus =
 type Tab =
     | ConfigTab
     | FlagsTab
+    /// Phase 942 — the team's output-visibility level. Self-contained: the
+    /// section reads and sets the level itself, so this tab adds nothing to
+    /// `Model`.
+    | OutputVisibilityTab
 
 type Model = {
     /// Currently rendered section. Configuration is the default so
@@ -796,6 +800,213 @@ let private flagsTabView (msgs: TeamConfigMessages) (model: Model) (dispatch: Ms
         ]
     ]
 
+// ─── Phase 942 — team output visibility ─────────────────────────────
+//
+// The client half of the Phase 896 policy, over the platform's
+// `TeamOutputVisibilityApi` (mounted in every deployment since Phase 936,
+// answering `Enabled = false` until the axis is composed). It lives here,
+// in the platform's own team configuration, because that page is in every
+// authenticated deployment — a facts-only one included — where the AI
+// settings page, which holds the conversation level, is not.
+
+let private outputVisibilityApi: TeamOutputVisibilityApi =
+    Api.makeProxy<TeamOutputVisibilityApi> (customOptions = UserSession.withRequestHeaders)
+
+/// The catalog's name for an output level.
+let outputLevelLabel (msgs: TeamConfigMessages) (level: TeamVisibilityLevel) : string =
+    match level with
+    | TeamVisible -> msgs.OutputLevelTeamVisible
+    | TeamAdmins -> msgs.OutputLevelTeamAdmins
+    | PlatformAdmins -> msgs.OutputLevelPlatformAdmins
+
+/// The catalog's sentence saying who sees restricted output at a level.
+let outputLevelDescription (msgs: TeamConfigMessages) (level: TeamVisibilityLevel) : string =
+    match level with
+    | TeamVisible -> msgs.OutputLevelTeamVisibleDescription
+    | TeamAdmins -> msgs.OutputLevelTeamAdminsDescription
+    | PlatformAdmins -> msgs.OutputLevelPlatformAdminsDescription
+
+/// The output-visibility section's markup for one state of the read. Pure —
+/// `OutputVisibilitySection` adds the fetch and the set. `read` is `None`
+/// while the level is loading and `Some (Error reason)` when it could not be
+/// read. `status` reports the last change: `Saving` disables every choice,
+/// and `Failed` shows the server's refusal as it was sent.
+let outputVisibilityView
+    (msgs: TeamConfigMessages)
+    (read: Result<TeamOutputVisibilityView, string> option)
+    (status: FormStatus)
+    (onChoose: TeamVisibilityLevel -> unit)
+    : ReactElement =
+    let note (text: string) =
+        Html.p [ prop.className "text-sm text-gray-500"; prop.text text ]
+
+    let statusLine =
+        match status with
+        | Saved ->
+            Html.p [
+                prop.className "text-sm text-green-700 mb-3"
+                prop.role "status"
+                prop.text msgs.OutputVisibilityUpdated
+            ]
+        | Failed refusal ->
+            Html.p [
+                prop.className "text-sm text-red-700 mb-3"
+                prop.role "alert"
+                prop.text refusal
+            ]
+        | Saving -> Html.p [ prop.className "text-sm text-gray-500 mb-3"; prop.text msgs.Saving ]
+        | Idle -> Html.none
+
+    let body =
+        match read with
+        | None -> note msgs.OutputVisibilityLoading
+        | Some(Error reason) -> note (msgs.OutputVisibilityUnreadable reason)
+        | Some(Ok v) when not v.InTeamScope -> note msgs.OutputVisibilityNoTeam
+        | Some(Ok v) when not v.Enabled -> note msgs.OutputVisibilityNotComposed
+        | Some(Ok v) ->
+            Html.div [
+                prop.children [
+                    Html.p [
+                        prop.className "text-sm font-medium text-gray-800 mb-3"
+                        prop.text (outputLevelDescription msgs v.Level)
+                    ]
+                    statusLine
+                    if List.isEmpty v.Selectable then
+                        note msgs.OutputVisibilityOwnerOnly
+                    else
+                        Html.fieldSet [
+                            prop.className "flex flex-col gap-2"
+                            prop.children [
+                                Html.legend [ prop.className "sr-only"; prop.text msgs.OutputVisibilityHeading ]
+                                for level in v.Allowed do
+                                    let selectable = List.contains level v.Selectable
+                                    let isCurrent = level = v.Level
+
+                                    Html.label [
+                                        prop.key (TeamVisibilityLevel.name level)
+                                        prop.className "flex items-start gap-2 text-sm text-gray-700"
+                                        prop.children [
+                                            Html.input [
+                                                prop.type'.radio
+                                                prop.name "team-output-visibility"
+                                                prop.value (TeamVisibilityLevel.name level)
+                                                prop.className "w-4 h-4 mt-0.5"
+                                                prop.isChecked isCurrent
+                                                prop.disabled (status = Saving || not selectable)
+                                                prop.onChange (fun (_: bool) ->
+                                                    if not isCurrent && selectable then
+                                                        onChoose level)
+                                            ]
+                                            Html.span [
+                                                prop.children [
+                                                    Html.span [
+                                                        prop.className "block font-medium"
+                                                        prop.text (outputLevelLabel msgs level)
+                                                    ]
+                                                    Html.span [
+                                                        prop.className "block text-xs text-gray-500"
+                                                        prop.text (outputLevelDescription msgs level)
+                                                    ]
+                                                ]
+                                            ]
+                                        ]
+                                    ]
+                            ]
+                        ]
+                ]
+            ]
+
+    Html.div [
+        prop.className "flex-1 p-6 overflow-y-auto"
+        prop.children [
+            Html.h2 [
+                prop.className "text-lg font-semibold mb-1"
+                prop.text msgs.OutputVisibilityHeading
+            ]
+            Html.p [
+                prop.className "text-xs text-gray-500 mb-4"
+                prop.text msgs.OutputVisibilityHelp
+            ]
+            body
+        ]
+    ]
+
+/// The team's output-visibility level, read and set over
+/// `TeamOutputVisibilityApi`. Every caller sees the level in force; the
+/// choices offered are the server's `Selectable` for this caller, and a
+/// refusal is shown as the server worded it. Self-contained — its own fetch
+/// and save — so the page's `Model` is untouched.
+[<ReactComponent>]
+let OutputVisibilitySection () =
+    let msgs = (MessageCatalogProvider.useMessages ()).TeamConfig
+
+    let read, setRead =
+        React.useState<Result<TeamOutputVisibilityView, string> option> None
+
+    let status, setStatus = React.useState Idle
+
+    React.useEffectOnce (fun () ->
+        async {
+            try
+                let! loaded = outputVisibilityApi.GetOutputVisibility()
+                setRead (Some(Ok loaded))
+            with ex ->
+                setRead (Some(Error ex.Message))
+        }
+        |> Async.StartImmediate)
+
+    let choose (level: TeamVisibilityLevel) =
+        setStatus Saving
+
+        async {
+            try
+                match! outputVisibilityApi.SetOutputVisibility level with
+                | Ok updated ->
+                    setRead (Some(Ok updated))
+                    setStatus Saved
+                | Error refusal -> setStatus (Failed refusal)
+            with ex ->
+                setStatus (Failed ex.Message)
+        }
+        |> Async.StartImmediate
+
+    outputVisibilityView msgs read status choose
+
+/// The member-visible notice's markup: one line saying who sees the team's
+/// restricted output. Nothing outside a team scope, when the deployment has
+/// not composed the axis (nothing is narrowed, so there is nothing to say),
+/// or when the level could not be read.
+let outputVisibilityNoticeView (msgs: TeamConfigMessages) (view: TeamOutputVisibilityView option) : ReactElement =
+    match view with
+    | Some v when v.InTeamScope && v.Enabled ->
+        Html.p [
+            prop.className "text-xs text-gray-500"
+            prop.title msgs.OutputVisibilityNoticeHint
+            prop.text (outputLevelDescription msgs v.Level)
+        ]
+    | _ -> Html.none
+
+/// Phase 942 — the member-visible notice of the team's output level, for a
+/// surface that serves the team's published output (the fact browse pages
+/// mount it). Every member reaches it, where the configuration page that
+/// changes the level is for team owners and admins.
+[<ReactComponent>]
+let TeamOutputVisibilityNotice () =
+    let msgs = (MessageCatalogProvider.useMessages ()).TeamConfig
+    let view, setView = React.useState<TeamOutputVisibilityView option> None
+
+    React.useEffectOnce (fun () ->
+        async {
+            try
+                let! loaded = outputVisibilityApi.GetOutputVisibility()
+                setView (Some loaded)
+            with _ ->
+                setView None
+        }
+        |> Async.StartImmediate)
+
+    outputVisibilityNoticeView msgs view
+
 // ─── View ────────────────────────────────────────────────────────────
 
 let private sidebar (msgs: TeamConfigMessages) (model: Model) (dispatch: Msg -> unit) =
@@ -898,6 +1109,9 @@ let private tabBar (msgs: TeamConfigMessages) (model: Model) (dispatch: Msg -> u
         prop.children [
             tabButton msgs.ConfigurationTab (model.ActiveTab = ConfigTab) (fun () -> dispatch (SwitchTab ConfigTab))
             tabButton msgs.FeatureFlagsTab (model.ActiveTab = FlagsTab) (fun () -> dispatch (SwitchTab FlagsTab))
+
+            tabButton msgs.OutputVisibilityTab (model.ActiveTab = OutputVisibilityTab) (fun () ->
+                dispatch (SwitchTab OutputVisibilityTab))
         ]
     ]
 
@@ -934,6 +1148,7 @@ let private TeamConfigBody (model: Model) (dispatch: Msg -> unit) =
                 prop.children [ sidebar msgs model dispatch; detail msgs model dispatch ]
             ]
         | FlagsTab -> flagsTabView msgs model dispatch
+        | OutputVisibilityTab -> OutputVisibilitySection()
 
     let body =
         Html.div [

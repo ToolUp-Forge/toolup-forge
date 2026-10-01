@@ -435,6 +435,64 @@ LIMIT @k"""
         clearHeads table
     ]
 
+/// The one row projection every write uses — the store's own write core
+/// and the Phase 941 migration from `BlobFactStore` — so a migrated row
+/// and an asserted row are the same bytes for the same fact.
+module internal FactRow =
+
+    let private jsonOptions = FableConverters.create ()
+
+    /// The fact exactly as `BlobFactStore` serialises it (the `payload`
+    /// column).
+    let serialise (f: Fact) : string =
+        JsonSerializer.Serialize(f, jsonOptions)
+
+    let deserialise (payload: string) : Fact =
+        JsonSerializer.Deserialize<Fact>(payload, jsonOptions)
+
+    let sha256Hex (s: string) =
+        use sha = SHA256.Create()
+
+        sha.ComputeHash(Encoding.UTF8.GetBytes s)
+        |> Array.map (sprintf "%02x")
+        |> String.concat ""
+
+    /// The `lineage_hash` column: the SHA-256 of the fact's lineage key.
+    let lineageHash (f: Fact) =
+        sha256Hex (Fact.lineageKey f.Subject f.Metric f.Period f.Method)
+
+    /// Write `f` as one row of an open `Sql.copyIn` import. Every column
+    /// but the head flag is a projection of the stored payload, so a column
+    /// can never say something the fact does not; `isHead` is the caller's
+    /// (the writer knows which fact ends its lineage).
+    let write (importer: NpgsqlBinaryImporter) (scopeId: string) (f: Fact) (isHead: bool) =
+        let payload = serialise f
+        let stored = deserialise payload
+        importer.StartRow()
+        importer.Write(scopeId, NpgsqlDbType.Text)
+        importer.Write(stored.FactId, NpgsqlDbType.Text)
+        importer.Write(stored.Subject.Hierarchy, NpgsqlDbType.Text)
+        importer.Write(Array.ofList stored.Subject.Path, NpgsqlDbType.Array ||| NpgsqlDbType.Text)
+        importer.Write(stored.Metric.Value, NpgsqlDbType.Text)
+        importer.Write(stored.Period.From.Ticks, NpgsqlDbType.Bigint)
+        importer.Write(stored.Period.To.Ticks, NpgsqlDbType.Bigint)
+        importer.Write(Fact.methodIdentity stored.Method, NpgsqlDbType.Text)
+        importer.Write(lineageHash f, NpgsqlDbType.Text)
+        importer.Write(f.AsOf.Ticks, NpgsqlDbType.Bigint)
+        importer.Write(DateTime(f.AsOf.Ticks, DateTimeKind.Utc), NpgsqlDbType.TimestampTz)
+
+        match f.Supersedes with
+        | Some id -> importer.Write(id, NpgsqlDbType.Text)
+        | None -> importer.WriteNull()
+
+        importer.Write(isHead, NpgsqlDbType.Boolean)
+
+        match PopulationValue.comparable stored.Value with
+        | Some d -> importer.Write(d, NpgsqlDbType.Numeric)
+        | None -> importer.WriteNull()
+
+        importer.Write(payload, NpgsqlDbType.Text)
+
 /// What the store decided about one draft inside a write transaction.
 type internal Disposition = {
     Outcome: BatchAssertOutcome
@@ -468,18 +526,9 @@ type PostgresFactStore
 
     let table = options.Table
 
-    let serialise (f: Fact) : string =
-        JsonSerializer.Serialize(f, jsonOptions)
+    let deserialise (payload: string) : Fact = FactRow.deserialise payload
 
-    let deserialise (payload: string) : Fact =
-        JsonSerializer.Deserialize<Fact>(payload, jsonOptions)
-
-    let sha256Hex (s: string) =
-        use sha = SHA256.Create()
-
-        sha.ComputeHash(Encoding.UTF8.GetBytes s)
-        |> Array.map (sprintf "%02x")
-        |> String.concat ""
+    let sha256Hex (s: string) = FactRow.sha256Hex s
 
     let lineageHashOf (subject: SubjectRef) (metric: MetricRef) (period: TemporalExtent) (method: MethodRef) =
         sha256Hex (Fact.lineageKey subject metric period method)
@@ -1061,8 +1110,6 @@ type PostgresFactStore
         | :? AggregateException as a -> a.InnerExceptions |> Seq.exists isRaceLost
         | _ -> false
 
-    let magnitudeOf (value: FactValue) = PopulationValue.comparable value
-
     // One write attempt: one transaction. Derivation mirrors
     // `BlobFactStore`'s write core exactly — content address, idempotency
     // against the stored set and earlier drafts of the same batch, the
@@ -1249,36 +1296,7 @@ type PostgresFactStore
                 use importer = conn.BeginBinaryImport(Sql.copyIn table)
 
                 for f in writtenFacts do
-                    let payload = serialise f
-                    // The columns are a projection of the stored payload, so a
-                    // column can never say something the fact does not.
-                    let stored = deserialise payload
-                    importer.StartRow()
-                    importer.Write(scopeId, NpgsqlDbType.Text)
-                    importer.Write(stored.FactId, NpgsqlDbType.Text)
-                    importer.Write(stored.Subject.Hierarchy, NpgsqlDbType.Text)
-                    importer.Write(Array.ofList stored.Subject.Path, NpgsqlDbType.Array ||| NpgsqlDbType.Text)
-                    importer.Write(stored.Metric.Value, NpgsqlDbType.Text)
-                    importer.Write(stored.Period.From.Ticks, NpgsqlDbType.Bigint)
-                    importer.Write(stored.Period.To.Ticks, NpgsqlDbType.Bigint)
-                    importer.Write(Fact.methodIdentity stored.Method, NpgsqlDbType.Text)
-
-                    importer.Write(lineageHashOf f.Subject f.Metric f.Period f.Method, NpgsqlDbType.Text)
-
-                    importer.Write(f.AsOf.Ticks, NpgsqlDbType.Bigint)
-                    importer.Write(utc f.AsOf.Ticks, NpgsqlDbType.TimestampTz)
-
-                    match f.Supersedes with
-                    | Some id -> importer.Write(id, NpgsqlDbType.Text)
-                    | None -> importer.WriteNull()
-
-                    importer.Write(finalHeads.Contains f.FactId, NpgsqlDbType.Boolean)
-
-                    match magnitudeOf stored.Value with
-                    | Some d -> importer.Write(d, NpgsqlDbType.Numeric)
-                    | None -> importer.WriteNull()
-
-                    importer.Write(payload, NpgsqlDbType.Text)
+                    FactRow.write importer scopeId f (finalHeads.Contains f.FactId)
 
                 return importer.Complete()
             }
@@ -1373,6 +1391,13 @@ type PostgresFactStore
             let! plan = cmd.ExecuteScalarAsync() |> Async.AwaitTask
             return string plan
         })
+
+    /// The pool and options this store reads and writes through — the
+    /// Phase 941 migration writes its rows into the same table, through
+    /// the same connection pool, as the store it verifies them with.
+    member internal _.DataSource: NpgsqlDataSource = dataSource
+
+    member internal _.Options: PostgresFactStoreOptions = options
 
     interface IDisposable with
         member _.Dispose() =

@@ -322,6 +322,18 @@ type internal FactIndexState =
     /// order — the order the enumeration's stable sorts break ties by.
     | Complete of leaves: FactIndexLeaf list * census: Dictionary<string, int * string>
 
+/// Every fact blob of one scope, read for export (Phase 941 — the
+/// migration into an indexed store reads its source through this). The
+/// query paths skip a blob that will not read or parse; an export must not
+/// lose one silently, so it names each instead.
+type FactScopeExport = {
+    /// Every fact that read, parsed and sits under its own content address,
+    /// in census (listing) order.
+    Facts: Fact list
+    /// Each fact blob that did not, as (blob name, reason).
+    Unreadable: (string * string) list
+}
+
 /// Blob-backed default `IFactStore`. Construct via `BlobFactStore.create`
 /// (or `createWithRegistry` to enable Phase 566 canonical-method
 /// selection — `registry = None` preserves the registry-less behaviour
@@ -1501,6 +1513,46 @@ type BlobFactStore
     member _.RebuildIndex(scopeId: string) : Async<int> = async {
         let! all = loadAll scopeId
         return! writeLeaves scopeId all
+    }
+
+    /// Every fact blob in the scope, read whole (Phase 941): the facts
+    /// exactly as stored — content address, transaction time, supersession
+    /// link — and, unlike every query path, a named entry for each blob
+    /// that failed to download, failed to parse, or holds a fact whose id
+    /// is not its blob name. Read-only; writes no index and no audit.
+    member _.ExportScope(scopeId: string) : Async<FactScopeExport> = async {
+        let! names = storage.List(scopeId, factsPrefix)
+
+        let! read =
+            names
+            |> List.map (fun name -> async {
+                let! r = storage.Download(scopeId, name)
+
+                return
+                    match r with
+                    | Error e -> Error(name, sprintf "download failed: %s" e)
+                    | Ok bytes ->
+                        try
+                            let f = deserialise bytes
+
+                            if f.FactId = factIdOfBlob name then
+                                Ok f
+                            else
+                                Error(name, sprintf "holds fact %s, not the fact its name addresses" f.FactId)
+                        with ex ->
+                            Error(name, sprintf "does not parse as a fact: %s" ex.Message)
+            })
+            |> BlobFanOut.run
+
+        return {
+            Facts = read |> Array.choose Result.toOption |> List.ofArray
+            Unreadable =
+                read
+                |> Array.choose (function
+                    | Error e -> Some e
+                    | Ok _ -> None)
+                |> List.ofArray
+        }
     }
 
     /// Sample the scope's facts and index leaves and check each side

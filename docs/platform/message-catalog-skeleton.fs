@@ -13,7 +13,7 @@
 // message is a FUNCTION field; it is left pointing at the English message until you
 // replace it with a lambda of the shape its comment names.
 //
-// Leaves: 1455 (213 parameterised).
+// Leaves: 1471 (214 parameterised).
 
 module ToolUp.Platform.Localization.Skeleton
 
@@ -1585,6 +1585,39 @@ let catalog (c: MessageCatalog) : MessageCatalog = {
                 ConfigurationTab = "Configuration"
                 // en: "Feature flags"
                 FeatureFlagsTab = "Feature flags"
+                // en: "Output visibility"
+                OutputVisibilityTab = "Output visibility"
+                // en: "Who can see restricted module output"
+                OutputVisibilityHeading = "Who can see restricted module output"
+                // en: "Each module marks the output it publishes as surfaceable, restricted or internal. This level decides who in the team sees the restricted part, wherever it is served: browsing, search, assistant answers and exports. It does not decide who may use a module."
+                OutputVisibilityHelp = "Each module marks the output it publishes as surfaceable, restricted or internal. This level decides who in the team sees the restricted part, wherever it is served: browsing, search, assistant answers and exports. It does not decide who may use a module."
+                // en: "Loading output visibility..."
+                OutputVisibilityLoading = "Loading output visibility..."
+                // en (string -> string): "Couldn't read this team's output visibility: {a}"
+                // translate as `fun (a: string) -> $"…"`; left as the English message until you do
+                OutputVisibilityUnreadable = c.TeamConfig.OutputVisibilityUnreadable
+                // en: "Output visibility is set per team. Switch to a team to see or change its level."
+                OutputVisibilityNoTeam = "Output visibility is set per team. Switch to a team to see or change its level."
+                // en: "This deployment has not enabled team output visibility, so there is no level to choose. Restricted output is shown to whoever the deployment's disclosure policies admit, as before."
+                OutputVisibilityNotComposed = "This deployment has not enabled team output visibility, so there is no level to choose. Restricted output is shown to whoever the deployment's disclosure policies admit, as before."
+                // en: "Only the team owner can change this."
+                OutputVisibilityOwnerOnly = "Only the team owner can change this."
+                // en: "Output visibility updated."
+                OutputVisibilityUpdated = "Output visibility updated."
+                // en: "Every team member"
+                OutputLevelTeamVisible = "Every team member"
+                // en: "Team owners and admins"
+                OutputLevelTeamAdmins = "Team owners and admins"
+                // en: "Platform administrators"
+                OutputLevelPlatformAdmins = "Platform administrators"
+                // en: "Every member of this team can see what its modules publish."
+                OutputLevelTeamVisibleDescription = "Every member of this team can see what its modules publish."
+                // en: "Only this team's owners and admins can see restricted output its modules publish."
+                OutputLevelTeamAdminsDescription = "Only this team's owners and admins can see restricted output its modules publish."
+                // en: "Only the platform administrators can see restricted output this team's modules publish."
+                OutputLevelPlatformAdminsDescription = "Only the platform administrators can see restricted output this team's modules publish."
+                // en: "Set by your team owner in the team's configuration."
+                OutputVisibilityNoticeHint = "Set by your team owner in the team's configuration."
         }
         TenantLifecycleAdmin = {
             c.TenantLifecycleAdmin with

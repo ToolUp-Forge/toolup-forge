@@ -105,6 +105,32 @@ and `TeamOutputVisibility.Allowed`, which the composition inspector shows. It is
 which reports `ServerConfig` rather than the manifest. The move is described in
 [the Phase 936 migration note](../migrations/936-team-policy-record-platform-tier.md).
 
+## Where a team sees and sets it
+
+Phase 942 gives the API a client. It adds no API of its own: both pieces below call
+`TeamOutputVisibilityApi` and show what it returns.
+
+- **The owner's control** is the **Output visibility** tab of the platform's team configuration page
+  (`TeamConfigUI`, the `_sdk.TeamConfig` built-in). That page is in every authenticated deployment, so
+  a deployment that composes facts without the AI assistant reaches it. The AI settings page, which
+  holds the conversation level, is there only with the assistant. The tab shows the level in force,
+  each allowed level with a sentence on who sees restricted output at it, and a choice for each level
+  in the caller's `Selectable`. A level the server did not offer this caller is shown but disabled. A
+  team admin who is not the owner sees the level and is told only the owner can change it. A refused
+  change shows the server's refusal word for word, for example a level outside the allowed set or one
+  that would leave conversations wider than output.
+- **When the axis is not composed**, the tab says so and offers nothing to choose. Outside a team
+  scope it says the level is set per team.
+- **The member-visible notice** is one line at the top of the fact browse **Tables** page
+  (`TeamConfigUI.TeamOutputVisibilityNotice`). It says who sees the team's restricted output, and its
+  tooltip says where the level is set. Every member reaches that page, while the configuration page is
+  for team owners and admins. The notice says nothing when the axis is not composed, because nothing
+  is narrowed then. This matches the line Phase 859 shows for conversations, under the conversation
+  composer.
+
+Every string is in the message catalog (`TeamConfigMessages`, the `OutputVisibility*` and
+`OutputLevel*` fields), so a translation covers the tab and the notice like the rest of the page.
+
 ## The one coupling: conversations can quote output
 
 An answer in a conversation can quote a restricted fact. Suppose output is limited to team admins and

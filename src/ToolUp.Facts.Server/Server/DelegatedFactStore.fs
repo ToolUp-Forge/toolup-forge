@@ -30,6 +30,14 @@ open ToolUp.Platform.Grounding
 //     the fact tier naming the run) and walks the facts minted under earlier
 //     runs through the Phase 561 path, so they read as superseded.
 //
+// **Imported runs (Phase 938).** A run opened with an imported provenance
+// keeps it beside the run, and every row of that run is minted through
+// `FactTableRunProvenance.rewrite` — so a row under an origin mints an
+// `Imported` fact, exactly as the default writer would have written it. The
+// certificates a table's runs have imported under are recorded per table, so
+// the refresh and the read path retire a quoted imported fact as they retire
+// a computed one.
+//
 // **What the fact tier holds** is the delegate records and exactly what was
 // quoted. A subject nobody asked about has no fact.
 //
@@ -128,6 +136,47 @@ module DelegateMint =
             Value = Absent(sprintf "removed by fact-table run %s" (DelegateFact.token run.Watermark))
         }
 
+    /// The draft a row of a run opened with `provenance` mints (Phase 938):
+    /// `draftOf`, rewritten as the provenance says — identical to it for a
+    /// computed run.
+    let draftUnder
+        (provenance: FactTableRunProvenance)
+        (delegateFact: DelegateFact)
+        (run: DelegateRun)
+        (row: DelegateTableRow)
+        : FactDraft =
+        draftOf delegateFact run row |> FactTableRunProvenance.rewrite provenance
+
+    /// The content-addressed id a row of a run opened with `provenance`
+    /// mints under.
+    let factIdUnder
+        (provenance: FactTableRunProvenance)
+        (delegateFact: DelegateFact)
+        (run: DelegateRun)
+        (row: DelegateTableRow)
+        : string =
+        let draft = draftUnder provenance delegateFact run row
+        Fact.compute draft.Subject draft.Metric draft.Period draft.Method draft.Evidence.InputHashes
+
+    /// The absence that supersedes a quoted fact whose row a run opened with
+    /// `provenance` no longer carries: `removedDraft`, naming an origin's
+    /// withdrawal where the provenance records one, and always in the QUOTED
+    /// fact's own lineage — so it supersedes that fact whichever lineage the
+    /// run would have minted the row into.
+    let removedDraftUnder
+        (provenance: FactTableRunProvenance)
+        (delegateFact: DelegateFact)
+        (run: DelegateRun)
+        (fact: Fact)
+        : FactDraft =
+        let draft =
+            removedDraft delegateFact run fact |> FactTableRunProvenance.rewrite provenance
+
+        if Fact.methodIdentity draft.Method = Fact.methodIdentity fact.Method then
+            draft
+        else
+            { draft with Method = fact.Method }
+
     /// The delegate's record: one fact per delegate, at the hierarchy root,
     /// whose value points at the run (`Series` of the watermark token). A
     /// refresh re-asserts it, and it supersedes the last one.
@@ -218,6 +267,21 @@ type internal DelegateTableStore(storage: IBlobStorage) =
 
     let CacheCap = 8
 
+    // A committed run's provenance, and the imported lineages as of a
+    // committed run — keyed as the rows are, and immutable under that key
+    // for the same reason.
+    let provenanceCache =
+        ConcurrentDictionary<string * string * int64 * string, FactTableRunProvenance>()
+
+    let lineageCache =
+        ConcurrentDictionary<string * string * int64 * string, string list>()
+
+    let remember (store: ConcurrentDictionary<_, _>) key value =
+        if store.Count >= CacheCap then
+            store.Clear()
+
+        store[key] <- value
+
     member _.RecordName(runId: string) = sprintf "%sruns/%s.json" root runId
     member _.RecordsPrefix = sprintf "%sruns/" root
     member _.StagedPrefix(runId: string) = sprintf "%sstaged/%s/" root runId
@@ -231,6 +295,15 @@ type internal DelegateTableStore(storage: IBlobStorage) =
         sprintf "%srows/%s/%020d.json" root tableId sequence
 
     member _.QuoteName(factId: string) = sprintf "%squotes/%s.json" root factId
+
+    /// Where a run's provenance is kept (Phase 938) — only for an imported
+    /// run; a computed run keeps nothing.
+    member _.ProvenanceName(runId: string) =
+        sprintf "%sprovenance/%s.json" root runId
+
+    /// Where the certificates a table's runs imported under are recorded.
+    member _.LineagesName(tableId: string) =
+        sprintf "%slineages/%s.json" root tableId
 
     member _.Storage = storage
 
@@ -293,6 +366,65 @@ type internal DelegateTableStore(storage: IBlobStorage) =
                 return Ok image
     }
 
+    /// The provenance a committed run was opened with: `ComputedRun` when it
+    /// kept none.
+    member this.Provenance(scopeId: string, run: DelegateRun) : Async<Result<FactTableRunProvenance, string>> = async {
+        let key = scopeId, run.TableId, run.Watermark.Sequence, run.Watermark.ContentDigest
+
+        match provenanceCache.TryGetValue key with
+        | true, provenance -> return Ok provenance
+        | _ ->
+            match! FactTableRunProvenance.read storage scopeId (this.ProvenanceName run.RunId) with
+            | Error e -> return Error(FactTableWriteError.describe e)
+            | Ok provenance ->
+                remember provenanceCache key provenance
+                return Ok provenance
+    }
+
+    /// The certificates the table's runs have imported under, as of the
+    /// committed run `current` — every lineage besides the delegate's own a
+    /// quoted fact of the table can sit in.
+    member this.ImportedLineages(scopeId: string, current: DelegateRun) : Async<Result<string list, string>> = async {
+        let key =
+            scopeId, current.TableId, current.Watermark.Sequence, current.Watermark.ContentDigest
+
+        match lineageCache.TryGetValue key with
+        | true, lineages -> return Ok lineages
+        | _ ->
+            match! FactTableBlobIo.tryGet<string list> storage scopeId (this.LineagesName current.TableId) with
+            | Error e -> return Error(FactTableWriteError.describe e)
+            | Ok found ->
+                let lineages = found |> Option.defaultValue []
+                remember lineageCache key lineages
+                return Ok lineages
+    }
+
+    /// Record the certificates an imported run adds to the table's
+    /// lineages. A computed run adds none and writes nothing.
+    member this.RecordLineages
+        (scopeId: string, tableId: string, provenance: FactTableRunProvenance)
+        : Async<Result<unit, FactTableWriteError>> =
+        async {
+            match provenance with
+            | ComputedRun -> return Ok()
+            | ImportedRun origins ->
+                match! FactTableBlobIo.tryGet<string list> storage scopeId (this.LineagesName tableId) with
+                | Error e -> return Error e
+                | Ok found ->
+                    let known = found |> Option.defaultValue []
+
+                    let added =
+                        origins
+                        |> List.map _.CertificateRef
+                        |> List.distinct
+                        |> List.filter (fun c -> not (List.contains c known))
+
+                    if List.isEmpty added then
+                        return Ok()
+                    else
+                        return! FactTableBlobIo.put storage scopeId (this.LineagesName tableId) (known @ added)
+        }
+
     /// Answer one typed read over a run's rows. The ONLY question the table
     /// is ever asked — so nothing a caller supplies can become a query.
     member this.Read
@@ -304,9 +436,18 @@ type internal DelegateTableStore(storage: IBlobStorage) =
             freshnessOf: PopulationMember -> FactFreshness
         ) : Async<Result<DelegateTableAnswer, string>> =
         async {
-            match! this.Rows(scopeId, run) with
+            let! loaded = async {
+                match! this.Rows(scopeId, run) with
+                | Error e -> return Error e
+                | Ok rows ->
+                    match! this.Provenance(scopeId, run) with
+                    | Error e -> return Error e
+                    | Ok provenance -> return Ok(rows, provenance)
+            }
+
+            match loaded with
             | Error e -> return Error e
-            | Ok rows ->
+            | Ok(rows, provenance) ->
                 let column = delegateFact.Query.ValueColumn
 
                 let cell (row: FactTableRow) : DelegateTableRow option =
@@ -345,11 +486,18 @@ type internal DelegateTableStore(storage: IBlobStorage) =
                             threshold |> Option.forall (fun t -> ValueThreshold.satisfies t r.Value))
                         |> Array.toList
 
-                    let methodIdentity = Fact.methodIdentity delegateFact.Method
-
                     let memberOf (row: DelegateTableRow) : PopulationMember * DelegateTableRow =
+                        // The id and lineage the row is minted under.
+                        let draft = DelegateMint.draftUnder provenance delegateFact run row
+
                         {
-                            FactId = DelegateMint.factIdOf delegateFact run row
+                            FactId =
+                                Fact.compute
+                                    draft.Subject
+                                    draft.Metric
+                                    draft.Period
+                                    draft.Method
+                                    draft.Evidence.InputHashes
                             Subject = {
                                 Hierarchy = delegateFact.Query.Hierarchy
                                 Path = row.Subject
@@ -358,7 +506,7 @@ type internal DelegateTableStore(storage: IBlobStorage) =
                             PeriodFrom = row.Period.From
                             PeriodTo = row.Period.To
                             AsOf = run.Watermark.CommittedAt
-                            MethodIdentity = methodIdentity
+                            MethodIdentity = Fact.methodIdentity draft.Method
                         },
                         row
 
@@ -426,6 +574,47 @@ type internal DelegateTableStore(storage: IBlobStorage) =
         | Ok() -> return Ok()
         | Error e -> return Error(FactTableWriteError.describe e)
     }
+
+/// The lineages a delegate's quoted facts sit in (Phase 938): its own
+/// method, and `Imported` under each certificate the table's runs imported
+/// under. Every walk that retires quoted facts walks all of them.
+module internal DelegateLineages =
+
+    /// Whether `fact`, in the lineage `method`, was minted by `delegateFact`
+    /// from a run of its table other than `currentToken`.
+    let isStale (delegateFact: DelegateFact) (currentToken: string) (method: MethodRef) (fact: Fact) : bool =
+        Fact.methodIdentity fact.Method = Fact.methodIdentity method
+        && FactInvalidation.isMintedUnderStaleRun { delegateFact with Method = method } currentToken fact
+
+    /// The imported lineages' current heads a query narrowed by `narrow`
+    /// returns, each paired with its lineage.
+    let importedHeads
+        (query: FactQuery -> Async<Fact list>)
+        (delegateFact: DelegateFact)
+        (lineages: string list)
+        (narrow: FactQuery -> FactQuery)
+        : Async<(MethodRef * Fact) list> =
+        async {
+            let! found =
+                lineages
+                |> List.map (fun certificateRef -> async {
+                    let method = Imported certificateRef
+
+                    let! heads =
+                        query (
+                            narrow {
+                                FactQuery.all with
+                                    Metric = Some delegateFact.Metric
+                                    Method = Some method
+                            }
+                        )
+
+                    return heads |> List.map (fun f -> method, f)
+                })
+                |> Async.Sequential
+
+            return found |> List.concat
+        }
 
 // The accessor pair a delegated read runs over — the inner store bound to
 // the scope form the caller holds, so the typed (`ResolvedScope`) door
@@ -527,16 +716,19 @@ type DelegatedFactStore
     // read of an unchanged table re-asserts identical tuples, which the
     // store answers idempotently by content address.
     let mint (ops: InnerScope) (d: DelegateFact) (run: DelegateRun) (rows: DelegateTableRow list) = async {
-        let rec go (remaining: DelegateTableRow list) (acc: Fact list) = async {
-            match remaining with
-            | [] -> return Ok(List.rev acc)
-            | row :: rest ->
-                match! ops.Assert(DelegateMint.draftOf d run row) with
-                | Ok fact -> return! go rest (fact :: acc)
-                | Error e -> return Error e
-        }
+        match! tables.Provenance(ops.ScopeId, run) with
+        | Error e -> return Error e
+        | Ok provenance ->
+            let rec go (remaining: DelegateTableRow list) (acc: Fact list) = async {
+                match remaining with
+                | [] -> return Ok(List.rev acc)
+                | row :: rest ->
+                    match! ops.Assert(DelegateMint.draftUnder provenance d run row) with
+                    | Ok fact -> return! go rest (fact :: acc)
+                    | Error e -> return Error e
+            }
 
-        return! go rows []
+            return! go rows []
     }
 
     // Quote rows of a run that is NO LONGER current: the fact minted while
@@ -544,22 +736,25 @@ type DelegatedFactStore
     // the log. Never an ordinary assertion — that would make a past value
     // the current head of its lineage.
     let quoteHistorical (ops: InnerScope) (d: DelegateFact) (run: DelegateRun) (rows: DelegateTableRow list) = async {
-        let rec go (remaining: DelegateTableRow list) (acc: Fact list) = async {
-            match remaining with
-            | [] -> return Ok(List.rev acc)
-            | row :: rest ->
-                let draft = DelegateMint.draftOf d run row
-                let rebuilt = DelegateMint.reconstruct draft run.Watermark.CommittedAt
+        match! tables.Provenance(ops.ScopeId, run) with
+        | Error e -> return Error e
+        | Ok provenance ->
+            let rec go (remaining: DelegateTableRow list) (acc: Fact list) = async {
+                match remaining with
+                | [] -> return Ok(List.rev acc)
+                | row :: rest ->
+                    let draft = DelegateMint.draftUnder provenance d run row
+                    let rebuilt = DelegateMint.reconstruct draft run.Watermark.CommittedAt
 
-                match! ops.Get rebuilt.FactId with
-                | Some stored -> return! go rest (stored :: acc)
-                | None ->
-                    match! tables.RecordQuote(ops.ScopeId, rebuilt) with
-                    | Ok() -> return! go rest (rebuilt :: acc)
-                    | Error e -> return Error e
-        }
+                    match! ops.Get rebuilt.FactId with
+                    | Some stored -> return! go rest (stored :: acc)
+                    | None ->
+                        match! tables.RecordQuote(ops.ScopeId, rebuilt) with
+                        | Ok() -> return! go rest (rebuilt :: acc)
+                        | Error e -> return Error e
+            }
 
-        return! go rows []
+            return! go rows []
     }
 
     // The quoted heads of one subject minted from a run that is no longer
@@ -583,18 +778,36 @@ type DelegatedFactStore
                         Method = Some d.Method
                 }
 
+            // The imported lineages too (Phase 938). A table that never
+            // imported records none, and asks nothing more.
+            let! lineages = tables.ImportedLineages(ops.ScopeId, run)
+
+            let! imported =
+                match lineages with
+                | Ok(_ :: _ as certificates) ->
+                    DelegateLineages.importedHeads ops.Query d certificates (fun q -> { q with Subject = Some subject })
+                | _ -> async.Return []
+
+            let! provenance = tables.Provenance(ops.ScopeId, run)
+
             let removed =
-                heads
-                |> List.filter (fun f ->
-                    FactInvalidation.isMintedUnderStaleRun d token f
+                (heads |> List.map (fun f -> d.Method, f)) @ imported
+                |> List.filter (fun (method, f) ->
+                    DelegateLineages.isStale d token method f
                     && not (
                         live
                         |> List.exists (fun r -> r.Period.From = f.Period.From && r.Period.To = f.Period.To)
                     ))
 
-            for fact in removed do
-                let! _ = ops.Assert(DelegateMint.removedDraft d run fact)
-                ()
+            // A run whose provenance cannot be read retires nothing now
+            // rather than minting an absence that names the wrong origin;
+            // the next read retries, as a failed assertion is retried.
+            match provenance with
+            | Error _ -> ()
+            | Ok provenance ->
+                for _, fact in removed do
+                    let! _ = ops.Assert(DelegateMint.removedDraftUnder provenance d run fact)
+                    ()
         }
 
     // The point door's refusal: a typed `Absent` fact whose reason is the
@@ -950,24 +1163,27 @@ module internal DelegateRefresh =
         (fact: Fact)
         : Async<Result<FactDraft, string>> =
         async {
-            match!
-                tables.Read(
-                    scopeId,
-                    delegateFact,
-                    commit.Run,
-                    DelegateTableRead.Point(fact.Subject.Path, Some fact.Period),
-                    (fun _ -> Fresh)
-                )
-            with
+            match! tables.Provenance(scopeId, commit.Run) with
             | Error e -> return Error e
-            | Ok(DelegateTableAnswer.Rows rows) ->
-                match
-                    rows
-                    |> List.tryFind (fun r -> r.Period.From = fact.Period.From && r.Period.To = fact.Period.To)
+            | Ok provenance ->
+                match!
+                    tables.Read(
+                        scopeId,
+                        delegateFact,
+                        commit.Run,
+                        DelegateTableRead.Point(fact.Subject.Path, Some fact.Period),
+                        (fun _ -> Fresh)
+                    )
                 with
-                | Some row -> return Ok(DelegateMint.draftOf delegateFact commit.Run row)
-                | None -> return Ok(DelegateMint.removedDraft delegateFact commit.Run fact)
-            | Ok _ -> return Ok(DelegateMint.removedDraft delegateFact commit.Run fact)
+                | Error e -> return Error e
+                | Ok(DelegateTableAnswer.Rows rows) ->
+                    match
+                        rows
+                        |> List.tryFind (fun r -> r.Period.From = fact.Period.From && r.Period.To = fact.Period.To)
+                    with
+                    | Some row -> return Ok(DelegateMint.draftUnder provenance delegateFact commit.Run row)
+                    | None -> return Ok(DelegateMint.removedDraftUnder provenance delegateFact commit.Run fact)
+                | Ok _ -> return Ok(DelegateMint.removedDraftUnder provenance delegateFact commit.Run fact)
         }
 
     /// Refresh the delegates of one table after a commit: assert each
@@ -1000,7 +1216,27 @@ module internal DelegateRefresh =
                         match! store.Assert(scopeId, DelegateMint.recordDraft d run) with
                         | Error e -> return Error e
                         | Ok _ ->
-                            let! stale = FactInvalidation.staleDelegatedHeads store scopeId d token
+                            let! own = FactInvalidation.staleDelegatedHeads store scopeId d token
+
+                            // The imported lineages too (Phase 938).
+                            let! imported = async {
+                                match! tables.ImportedLineages(scopeId, commit.Run) with
+                                | Ok(_ :: _ as certificates) ->
+                                    let! heads =
+                                        DelegateLineages.importedHeads
+                                            (fun q -> store.Query(scopeId, q))
+                                            d
+                                            certificates
+                                            id
+
+                                    return
+                                        heads
+                                        |> List.filter (fun (method, f) -> DelegateLineages.isStale d token method f)
+                                        |> List.map snd
+                                | _ -> return []
+                            }
+
+                            let stale = own @ imported
 
                             let rec supersede (facts: Fact list) (done': Fact list) = async {
                                 match facts with
@@ -1113,6 +1349,11 @@ type DelegateTableWriter
             ()
     }
 
+    // An ended run's kept provenance goes with it; a committed run's stays,
+    // because its rows are minted under it for as long as they are read.
+    let discardProvenance (scopeId: string) (runId: string) =
+        FactTableRunProvenance.discard storage scopeId (tables.ProvenanceName runId)
+
     let stagedRows (scopeId: string) (runId: string) = async {
         let! names = storage.List(scopeId, tables.StagedPrefix runId)
 
@@ -1148,6 +1389,7 @@ type DelegateTableWriter
         | Error e -> return Error e
         | Ok() ->
             do! discardStaged scopeId run.RunId
+            do! discardProvenance scopeId run.RunId
             do! audit scopeId table closed FactTableEvents.RunRejectedType "Rejected" None (Some reason)
             return Error error
     }
@@ -1258,57 +1500,71 @@ type DelegateTableWriter
                                     Status = FactTableRunStatus.Committed result
                             }
 
-                            match! FactTableBlobIo.put storage scopeId (tables.RowsName table.Id next) image with
+                            // The run's imported lineages are recorded before
+                            // it becomes current, so every walk that reads
+                            // the current run finds them.
+                            let! recorded = async {
+                                match!
+                                    FactTableRunProvenance.read storage scopeId (tables.ProvenanceName run.RunId)
+                                with
+                                | Error e -> return Error e
+                                | Ok provenance -> return! tables.RecordLineages(scopeId, table.Id, provenance)
+                            }
+
+                            match recorded with
                             | Error e -> return Error e
                             | Ok() ->
-                                // The swap: the table's current run moves here.
-                                let head' = {
-                                    Commits = head.Commits @ [ { Run = reach; Commit = result } ]
-                                }
-
-                                match! FactTableBlobIo.put storage scopeId (tables.HeadName table.Id) head' with
+                                match! FactTableBlobIo.put storage scopeId (tables.RowsName table.Id next) image with
                                 | Error e -> return Error e
                                 | Ok() ->
-                                    match!
-                                        FactTableBlobIo.put storage scopeId (tables.RecordName run.RunId) committed
-                                    with
+                                    // The swap: the table's current run moves here.
+                                    let head' = {
+                                        Commits = head.Commits @ [ { Run = reach; Commit = result } ]
+                                    }
+
+                                    match! FactTableBlobIo.put storage scopeId (tables.HeadName table.Id) head' with
                                     | Error e -> return Error e
                                     | Ok() ->
-                                        do! discardStaged scopeId run.RunId
+                                        match!
+                                            FactTableBlobIo.put storage scopeId (tables.RecordName run.RunId) committed
+                                        with
+                                        | Error e -> return Error e
+                                        | Ok() ->
+                                            do! discardStaged scopeId run.RunId
 
-                                        do!
-                                            audit
-                                                scopeId
-                                                table
-                                                committed
-                                                FactTableEvents.RunCommittedType
-                                                "Committed"
-                                                (Some result)
-                                                None
-
-                                        match store () with
-                                        | Some composed ->
-                                            let! _ =
-                                                DelegateRefresh.afterCommit
-                                                    composed
-                                                    tables
-                                                    delegates
+                                            do!
+                                                audit
                                                     scopeId
-                                                    table.Id
-                                                    reach
+                                                    table
+                                                    committed
+                                                    FactTableEvents.RunCommittedType
+                                                    "Committed"
+                                                    (Some result)
+                                                    None
 
-                                            ()
-                                        | None -> ()
+                                            match store () with
+                                            | Some composed ->
+                                                let! _ =
+                                                    DelegateRefresh.afterCommit
+                                                        composed
+                                                        tables
+                                                        delegates
+                                                        scopeId
+                                                        table.Id
+                                                        reach
 
-                                        return Ok result
+                                                ()
+                                            | None -> ()
+
+                                            return Ok result
     }
 
     interface IFactTableWriter with
 
-        member _.OpenRun(scopeId, tableId) = async {
+        member _.OpenRun(scopeId, tableId, ?provenance) = async {
             if not (isDelegated tableId) then
                 match inner with
-                | Some w -> return! w.OpenRun(scopeId, tableId)
+                | Some w -> return! w.OpenRun(scopeId, tableId, ?provenance = provenance)
                 | None ->
                     match registrations.TryGetTable tableId with
                     | None -> return Error(FactTableUndeclared tableId)
@@ -1334,9 +1590,20 @@ type DelegateTableWriter
                             Status = FactTableRunStatus.Open
                         }
 
-                        match! FactTableBlobIo.put storage scopeId (tables.RecordName run.RunId) run with
+                        // The provenance first, as the default writer keeps it:
+                        // a run whose record exists never lacks it.
+                        match!
+                            FactTableRunProvenance.keep
+                                storage
+                                scopeId
+                                (tables.ProvenanceName run.RunId)
+                                (defaultArg provenance ComputedRun)
+                        with
                         | Error e -> return Error e
-                        | Ok() -> return Ok run
+                        | Ok() ->
+                            match! FactTableBlobIo.put storage scopeId (tables.RecordName run.RunId) run with
+                            | Error e -> return Error e
+                            | Ok() -> return Ok run
         }
 
         member _.WriteRows(scopeId, runId, rows) = async {
@@ -1405,6 +1672,7 @@ type DelegateTableWriter
                     | Error e -> return Error e
                     | Ok() ->
                         do! discardStaged scopeId runId
+                        do! discardProvenance scopeId runId
 
                         match registrations.TryGetTable run.TableId with
                         | Some table ->
