@@ -67,8 +67,8 @@ ServerApp.empty
 |> FactsCompose.withFactTableWriter   // binds every table to the default writer
 ```
 
-A composition that declares a table gets a structural preflight (`FactTablePreflight`, validator
-`fact-table-declarations`), which runs even under `SkipPreflight`:
+A composition that declares a table, or binds one by name, gets a structural preflight
+(`FactTablePreflight`, validator `fact-table-declarations`), which runs even under `SkipPreflight`:
 
 | Rule | Severity | Fires when |
 |---|---|---|
@@ -78,6 +78,7 @@ A composition that declares a table gets a structural preflight (`FactTablePrefl
 | `fact-table-unknown-subject-level` | error | the hierarchy is not registered, or the level is not one of its levels |
 | `fact-table-unbound-required` | error | a `Required` table is bound to no store; the app refuses to start, naming the table |
 | `fact-table-metric-two-homes` | warning | two tables carry one metric at one level, or a table carries a metric the composition also recomputes fact by fact (`Eager` / `OnQuery` recompute policy) |
+| `fact-table-binding-undeclared` | error | a by-name binding (`ServerApp.bindFactTables`, or `FactsCompose.withDelegateFacts`) names a table no module declares |
 
 These rules are a separate family from `CompositionValidator.rules` and are exported as their own
 `ruleManifest`. That keeps the published composition rule manifest, and every composition that
