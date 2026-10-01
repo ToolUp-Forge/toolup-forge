@@ -1133,6 +1133,11 @@ type PgvectorVectorStore
     new(dataSource: NpgsqlDataSource, options: PgvectorOptions, ownsDataSource: bool, ?logger: ILogger) =
         new PgvectorVectorStore(dataSource, options, PgvectorTuning.unchanged, None, ownsDataSource, logger)
 
+    /// Phase 963 — every replica searches the one pgvector table, so a
+    /// write on one replica is visible to every replica's next search.
+    interface IVectorStoreLocality with
+        member _.IndexLocality = Some VectorIndexLocality.Shared
+
     interface IVectorStore with
 
         member _.Upsert scope chunkId vector chunk = async {

@@ -607,7 +607,9 @@ let private liveOptions = {
 
 /// The rows a plan touched: every scan node's rows returned plus the rows
 /// its filter or recheck discarded, times its loops — and whether any node
-/// was a sequential scan.
+/// was a sequential scan. A scan of a sub-select's output, a function's or
+/// a CTE's reads no table row, so it is not counted (Phase 962: the
+/// population summary's UNION branches plan as sub-query scans).
 let private touchedRows (planJson: string) : int64 * bool =
     use doc = JsonDocument.Parse planJson
     let mutable touched = 0L
@@ -621,7 +623,11 @@ let private touchedRows (planJson: string) : int64 * bool =
     let rec walk (node: JsonElement) =
         let nodeType = node.GetProperty("Node Type").GetString()
 
-        if nodeType.Contains "Scan" then
+        let readsTable =
+            nodeType.Contains "Scan"
+            && not (List.contains nodeType [ "Subquery Scan"; "Function Scan"; "CTE Scan" ])
+
+        if readsTable then
             if nodeType = "Seq Scan" then
                 sequential <- true
 
@@ -644,6 +650,54 @@ let private touchedRows (planJson: string) : int64 * bool =
         walk (entry.GetProperty "Plan")
 
     touched, sequential
+
+/// Phase 962 — every scan node of an executed plan as (node type, index
+/// name), so a case can say WHICH index answered and whether it was
+/// index-only.
+let private scanNodes (planJson: string) : (string * string) list =
+    use doc = JsonDocument.Parse planJson
+    let found = ResizeArray<string * string>()
+
+    let rec walk (node: JsonElement) =
+        let nodeType = node.GetProperty("Node Type").GetString()
+
+        if nodeType.Contains "Scan" then
+            let index =
+                match node.TryGetProperty "Index Name" with
+                | true, v -> v.GetString()
+                | _ -> ""
+
+            found.Add((nodeType, index))
+
+        match node.TryGetProperty "Plans" with
+        | true, plans ->
+            for child in plans.EnumerateArray() do
+                walk child
+        | _ -> ()
+
+    for entry in doc.RootElement.EnumerateArray() do
+        walk (entry.GetProperty "Plan")
+
+    List.ofSeq found
+
+/// Phase 962 — the population index cases: subjects x weekly periods of
+/// one metric, so the latest week is one 52nd of the scope's history.
+[<Literal>]
+let private HistorySubjects = 400
+
+[<Literal>]
+let private HistoryWeeks = 52
+
+let private historyWeek (w: int) : TemporalExtent = {
+    From = DateTime(2025, 1, 6, 0, 0, 0, DateTimeKind.Utc).AddDays(7.0 * float w)
+    To = DateTime(2025, 1, 6, 0, 0, 0, DateTimeKind.Utc).AddDays(7.0 * float (w + 1))
+    Label = Some(sprintf "W%02d" (w + 1))
+}
+
+let private historyDraft (subject: int) (w: int) (tag: string) : FactDraft = {
+    (draftFor (sprintf "h%04d" subject) "history" tag (decimal ((subject * 7 + w) % 1000))) with
+        Period = historyWeek w
+}
 
 [<Literal>]
 let private ScaleSubjects = 300_000
@@ -1439,6 +1493,103 @@ let private liveTests (conn: string) =
                 // The lineage's two facts, visited by the heads branch and the
                 // successor probe — a handful, whatever the scope's size.
                 Expect.isLessThanOrEqual touched 10L "the rows touched are the lineage's, not the scope's"
+            }
+
+            testCaseAsync "the migration builds the covering population index and retires pop_idx (Phase 962)"
+            <| async {
+                let _ = store None (fun () -> DateTime.UtcNow)
+
+                use cmd =
+                    dataSource.CreateCommand "SELECT indexname FROM pg_indexes WHERE tablename = @table"
+
+                cmd.Parameters.AddWithValue("table", TestTable) |> ignore
+                use! reader = cmd.ExecuteReaderAsync() |> Async.AwaitTask
+                let names = ResizeArray<string>()
+
+                while reader.Read() do
+                    names.Add(reader.GetString 0)
+
+                Expect.contains names (TestTable + "_population_idx") "the covering population index exists"
+                Expect.isFalse (names.Contains(TestTable + "_pop_idx")) "the index it replaces is dropped"
+            }
+
+            testCaseAsync
+                "a latest-week population read is index-only over that week, however long the history and however stale the statistics (Phase 962)"
+            <| async {
+                // A table of its own, rebuilt per run: what the statistics
+                // know must be exactly what this case wrote, not what the
+                // shared test table accumulated across runs and packs.
+                let table = TestTable + "_history"
+                do! execute (sprintf "DROP TABLE IF EXISTS %s" table)
+                let scope = "history-" + Guid.NewGuid().ToString("N").Substring(0, 12)
+
+                let s =
+                    PostgresFactStore.createWithDataSource
+                        dataSource
+                        { liveOptions with Table = table }
+                        (events ())
+                        None
+                        (fun () -> DateTime.UtcNow)
+
+                let facts = s :> IFactStore
+
+                let drafts = [
+                    for subject in 0 .. HistorySubjects - 1 do
+                        for w in 0 .. HistoryWeeks - 1 -> historyDraft subject w "seed"
+                ]
+
+                for chunk in List.chunkBySize 5_000 drafts do
+                    match! facts.AssertBatch(scope, chunk) with
+                    | Ok _ -> ()
+                    | Error e -> failtestf "seed failed: %s" e
+
+                // Statistics and the visibility map taken BEFORE the
+                // supersessions below, so the read is planned on a table
+                // whose statistics predate its history: the state the old
+                // `IN` form of the AsOf branch was planned into a walk of.
+                do! execute (sprintf "VACUUM (ANALYZE) %s" table)
+                let latest = HistoryWeeks - 1
+
+                for subject in 0..99 do
+                    match! facts.Assert(scope, historyDraft subject latest "revised") with
+                    | Ok _ -> ()
+                    | Error e -> failtestf "revision failed: %s" e
+
+                let query = {
+                    PopulationQuery.create (MetricRef "history") "geography" with
+                        PeriodOverlaps = Some(historyWeek latest)
+                        Ordering = Descending
+                }
+
+                let! plan = s.ExplainPopulation(scope, query)
+                let touched, sequential = touchedRows plan
+                let scans = scanNodes plan
+
+                let! answer = facts.QueryPopulation(scope, query)
+
+                printfn
+                    "Phase 962: %d subjects x %d weeks, 100 revised after ANALYZE — the latest-week summary touched %d rows; scans %A"
+                    HistorySubjects
+                    HistoryWeeks
+                    touched
+                    scans
+
+                match answer with
+                | Ok result -> Expect.equal result.Stats.SubjectCount HistorySubjects "one head per subject"
+                | Error e -> failtestf "population read refused: %s" e
+
+                Expect.isFalse sequential "no sequential scan"
+
+                Expect.isTrue
+                    (scans |> List.contains ("Index Only Scan", table + "_population_idx"))
+                    "the heads are read index-only from the covering population index"
+
+                // The latest week's heads, and nothing of the 51 earlier
+                // weeks or of the revised rows' predecessors.
+                Expect.isLessThanOrEqual
+                    touched
+                    (int64 HistorySubjects + 10L)
+                    "the rows touched are the asked week's population, not the metric's history"
             }
         ]
     ]

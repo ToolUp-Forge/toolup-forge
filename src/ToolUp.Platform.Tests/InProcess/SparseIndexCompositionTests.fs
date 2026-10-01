@@ -107,6 +107,48 @@ let private externalVectorStore () =
         member _.Erase(s, u, p, d) = inner.Erase(s, u, p, d)
     }
 
+/// Phase 963 — a planted pass-through decorator (telemetry, caching or a
+/// disclosure gate would have this shape). No vector-store decorator exists
+/// in `src/`, so the blind spot a name match has for one is shown here. It
+/// forwards its inner store's locality declaration, as the
+/// `IVectorStoreLocality` contract asks of every decorator.
+type private TracingVectorStore(inner: IVectorStore) =
+    interface IVectorStoreLocality with
+        member _.IndexLocality = VectorIndexLocality.declared inner
+
+    interface IVectorStore with
+        member _.Upsert s c v t = inner.Upsert s c v t
+        member _.Search s q k = inner.Search s q k
+        member _.ListChunks s d = inner.ListChunks s d
+        member _.DeleteChunk s c = inner.DeleteChunk s c
+        member _.RestoreChunk s c = inner.RestoreChunk s c
+        member _.Vacuum s r = inner.Vacuum s r
+        member _.DeleteByScope s = inner.DeleteByScope s
+        member _.ListScopes() = inner.ListScopes()
+        member _.Erase(s, u, p, d) = inner.Erase(s, u, p, d)
+
+/// Phase 963 — a type that only BORROWS the HNSW companion's name. It holds
+/// no index of its own: every call goes to the external (cross-replica)
+/// store it was handed.
+module private Impostor =
+    type HnswVectorStore(shared: IVectorStore) =
+        interface IVectorStore with
+            member _.Upsert s c v t = shared.Upsert s c v t
+            member _.Search s q k = shared.Search s q k
+            member _.ListChunks s d = shared.ListChunks s d
+            member _.DeleteChunk s c = shared.DeleteChunk s c
+            member _.RestoreChunk s c = shared.RestoreChunk s c
+            member _.Vacuum s r = shared.Vacuum s r
+            member _.DeleteByScope s = shared.DeleteByScope s
+            member _.ListScopes() = shared.ListScopes()
+            member _.Erase(s, u, p, d) = shared.Erase(s, u, p, d)
+
+let private newHnswStore () =
+    new ToolUp.RAG.VectorStores.Hnsw.HnswVectorStore.HnswVectorStore(
+        InMemoryBlobStorage() :> BlobStorage.IBlobStorage,
+        flushIntervalMs = 60000
+    )
+
 let private newApp () =
     RAGServerApp.create stubFactory stubProfile constantEmbedder
     |> RAGServerApp.withStorage (InMemoryBlobStorage() :> BlobStorage.IBlobStorage)
@@ -530,6 +572,72 @@ let tests =
 
                 Expect.stringContains message "InMemoryVectorStore" "the in-process vector store"
                 Expect.isFalse (message.Contains "InMemoryBM25Index") "no keyword index is composed"
+            }
+
+            // Phase 963 — the vector half reads the store's DECLARED locality,
+            // never its type name.
+            test "a decorator over the HNSW store still warns, naming the composed store" {
+                use hnsw = newHnswStore ()
+
+                let message =
+                    newApp ()
+                    |> RAGServerApp.withVectorStore (TracingVectorStore(hnsw) :> IVectorStore)
+                    |> RAGServerApp.withSparseIndex (externalIndex ())
+                    |> withReplicas 2
+                    |> replicaVerdict
+                    |> warningText
+
+                Expect.stringContains
+                    message
+                    "the vector store is the in-process"
+                    "the wrapped index is still per-process"
+
+                Expect.stringContains message "TracingVectorStore" "named as the type the deployment composed"
+            }
+
+            test "a type that only borrows the HNSW name is not classed as in-process" {
+                let impostor = Impostor.HnswVectorStore(externalVectorStore ()) :> IVectorStore
+
+                Expect.isFalse (isInProcessVectorStore impostor) "the name is not the locality"
+
+                let verdict =
+                    newApp ()
+                    |> RAGServerApp.withVectorStore impostor
+                    |> RAGServerApp.withSparseIndex (externalIndex ())
+                    |> withReplicas 2
+                    |> replicaVerdict
+
+                Expect.equal verdict ConfigValidation.ValidationResult.Ok "no in-process index is composed"
+            }
+
+            test "the shipped stores declare their locality" {
+                use hnsw = newHnswStore ()
+
+                use inMemory =
+                    new InMemoryVectorStore(InMemoryBlobStorage() :> BlobStorage.IBlobStorage, flushIntervalMs = 60000)
+
+                Expect.isTrue (isInProcessVectorStore (hnsw :> IVectorStore)) "HNSW keeps its graph in the process"
+                Expect.isTrue (isInProcessVectorStore (inMemory :> IVectorStore)) "so does the in-memory store"
+
+                // The I/O-free constructor: nothing here touches a database.
+                use dataSource = Npgsql.NpgsqlDataSource.Create "Host=localhost;Database=unused"
+
+                use pgvector =
+                    new ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore.PgvectorVectorStore(
+                        dataSource,
+                        ToolUp.RAG.VectorStores.Pgvector.PgvectorVectorStore.PgvectorOptions.forDimensions 4,
+                        false
+                    )
+
+                Expect.equal
+                    (VectorIndexLocality.declared (pgvector :> IVectorStore))
+                    (Some VectorIndexLocality.Shared)
+                    "every replica searches the one pgvector table"
+
+                Expect.equal
+                    (VectorIndexLocality.declared (TracingVectorStore(externalVectorStore ()) :> IVectorStore))
+                    None
+                    "a decorator over an undeclared store passes the absence through"
             }
         ]
 

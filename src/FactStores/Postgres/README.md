@@ -81,10 +81,41 @@ CREATE TABLE IF NOT EXISTS toolup_facts (
 CREATE INDEX IF NOT EXISTS toolup_facts_point_idx ON toolup_facts (scope, hierarchy, path, metric, period_from_ticks);
 CREATE INDEX IF NOT EXISTS toolup_facts_lineage_idx ON toolup_facts (scope, lineage_hash);
 CREATE UNIQUE INDEX IF NOT EXISTS toolup_facts_head_idx ON toolup_facts (scope, lineage_hash) WHERE is_head;
-CREATE INDEX IF NOT EXISTS toolup_facts_pop_idx ON toolup_facts (scope, metric, is_head);
+CREATE INDEX IF NOT EXISTS toolup_facts_population_idx ON toolup_facts (scope, metric, hierarchy, period_to_ticks)
+    INCLUDE (period_from_ticks, as_of_ticks, magnitude, method_identity, path, fact_id) WHERE is_head;
+DROP INDEX IF EXISTS toolup_facts_pop_idx;
 CREATE INDEX IF NOT EXISTS toolup_facts_succ_idx ON toolup_facts (scope, supersedes) WHERE supersedes IS NOT NULL;
 CREATE INDEX IF NOT EXISTS toolup_facts_txtime_idx ON toolup_facts (scope, as_of_ticks);
 ```
+
+**The population index (Phase 962).** `toolup_facts_population_idx` covers the
+population read: the current heads of one metric, keyed by the period's END so
+the latest period is a narrow range, and carrying every column the summary, the
+method mix and the top k read, so the read is an index-only scan of the asked
+period's heads. It replaces Phase 888's `toolup_facts_pop_idx`
+`(scope, metric, is_head)`, which `AutoMigrate` drops once the new index exists.
+
+- **`VerifyOnly` checks only that the table exists**, not its indexes. A
+  `VerifyOnly` deployment adds the population index out of band, then drops
+  `toolup_facts_pop_idx`. Without it every population read scans the table.
+  `ExplainPopulation(scope, query)` returns the executed plan of a population
+  read's summary: an `Index Only Scan` on the population index is the check.
+- **On a populated table, build it `CONCURRENTLY` first.** `AutoMigrate`'s plain
+  `CREATE INDEX` holds a lock that blocks writes while it builds: 6 s for
+  3,900,000 rows on the machine `docs/rag/performance.md` names, so about
+  75 s at 46,800,000. `CREATE INDEX CONCURRENTLY` does not block writes. Run it
+  under the same name before upgrading, and the migration's `IF NOT EXISTS`
+  then finds it in place:
+
+  ```sql
+  CREATE INDEX CONCURRENTLY IF NOT EXISTS toolup_facts_population_idx ON toolup_facts (scope, metric, hierarchy, period_to_ticks)
+      INCLUDE (period_from_ticks, as_of_ticks, magnitude, method_identity, path, fact_id) WHERE is_head;
+  DROP INDEX CONCURRENTLY IF EXISTS toolup_facts_pop_idx;
+  ```
+
+  A `CONCURRENTLY` build that fails leaves an INVALID index of that name, and
+  `IF NOT EXISTS` then skips it. Drop it and build again; `pg_index.indisvalid`
+  says which state it is in.
 
 `payload` is the fact exactly as `BlobFactStore` serialises it; every other
 column is a projection of that payload, written in the same row. Valid and
@@ -112,7 +143,8 @@ and the test pack asserts each one binds it.
   storage failure rolls the whole batch back.
 - **AsOf reads (law L4)** come from the same table: the current heads written
   by `t`, plus the predecessors of successors written after `t` (driven from
-  the transaction-time index). No separate read model, so a head dated ahead
+  the transaction-time index by the statement's shape, not by the planner's
+  statistics, since Phase 962). No separate read model, so a head dated ahead
   of the reading clock is simply not yet visible.
 - **Population reads** push down the subject set, the metric, the period,
   visibility, a single named method and — when no canonical selection can
@@ -148,7 +180,10 @@ and the test pack asserts each one binds it.
 (`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`) of a point read's visible-heads
 statement — which index answered, and how many rows it touched. At 300,000
 subjects in one scope a subject-and-metric point read touched 5 rows, with
-no sequential scan.
+no sequential scan. `ExplainPopulation(scope, query)` does the same for a
+population read's summary statement (Phase 962): on a correctly indexed table
+it is an `Index Only Scan` on `toolup_facts_population_idx` touching one row per
+subject of the asked period.
 
 **The population read is linear in the population, not flat (Phase 940,
 measured).** Measured on one local PostgreSQL 17 with four concurrent callers,
@@ -169,6 +204,24 @@ instant, a period, a subject prefix and a threshold the caller chooses. No
 per-query read can therefore touch fewer rows than the population. A flat read
 needs an aggregate maintained on every write, and this companion does not build
 one. `docs/rag/performance.md` has the breakdown and the reasoning.
+
+**History no longer costs the read anything (Phase 962, measured).** Phase 940's
+cell had 4 weeks of history. At 3 metrics x 52 weeks, one metric's latest week is
+1/156 of the table, and before the population index every statement scanned the
+whole table. Population read p50 / p95 in ms, four concurrent callers:
+
+| Subjects (facts) | Before | After |
+|---:|---|---|
+| 25,000 (3,900,000) | 1,286.42 / 1,959.17 | 32.98 / 39.00 |
+| 100,000 (15,600,000) | 16,268.31 / 16,721.22 | 124.40 / 141.21 |
+
+A 300,000-subject population read 386.65 / 520.37. The read still grows with the
+population, at about 1.2 µs per subject. A write-maintained aggregate was
+prototyped and measured. Its read was flat (0.05 ms), but no shipped caller's
+question can be answered by it alone, and four concurrent writers to one metric's
+period queued on its row, tripling their median assert. So it was not built. The
+index costs about 247 bytes a row and about 8% of bulk-seed throughput, with no
+measurable change per assert. The performance document has the full tables.
 
 ## Migrating from `BlobFactStore` (Phase 941)
 

@@ -75,6 +75,10 @@
 #
 #   pwsh ./dev-scripts/perf-budget-gate.ps1 -SkipServer -SkipClient -LoadArms azurite,postgres
 #
+# Phase 962 — a third arm, postgres-history, runs the fact store's population
+# read over a table with a year of weekly history per subject, against the
+# `loadPostgresHistory` block, on the same local PostgreSQL.
+#
 # ── What "cold start" means here, exactly ───────────────────────────────
 #
 # Process start to the host's "Application started." line on stdout. That is
@@ -179,7 +183,7 @@ param(
     [switch] $SkipLoad,
 
     # Phase 929 — the load half's storage arms to run and decide as well:
-    # any of azurite, postgres, as a list or one comma-separated string (the
+    # any of azurite, postgres, postgres-history, as a list or one comma-separated string (the
     # shape `pwsh -File` delivers a list in). None by default.
     [string[]] $LoadArms = @(),
 
@@ -660,11 +664,11 @@ if (-not $SkipLoad -and -not $EvaluateOnly) {
 
 # ─── The load half's storage arms (Phase 929) ────────────────────────────
 
-$loadArmBlocks = @{ azurite = "VerifyLoadAzuritePerfBudget"; postgres = "VerifyLoadPostgresPerfBudget" }
+$loadArmBlocks = @{ azurite = "VerifyLoadAzuritePerfBudget"; postgres = "VerifyLoadPostgresPerfBudget"; "postgres-history" = "VerifyLoadPostgresHistoryPerfBudget" }
 $LoadArms = @($LoadArms | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 foreach ($arm in $LoadArms) {
     if (-not $loadArmBlocks.ContainsKey($arm)) {
-        Write-Error "perf-budget: unknown load arm '$arm' (expected azurite or postgres)."
+        Write-Error "perf-budget: unknown load arm '$arm' (expected azurite, postgres or postgres-history)."
         exit 1
     }
 }

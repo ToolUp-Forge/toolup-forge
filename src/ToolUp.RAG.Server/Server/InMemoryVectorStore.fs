@@ -518,6 +518,11 @@ type InMemoryVectorStore
         else
             None
 
+    /// Phase 963 — the index is this process's in-memory map; each replica
+    /// holds its own (flushed to blob storage, but searched from memory).
+    interface IVectorStoreLocality with
+        member _.IndexLocality = Some VectorIndexLocality.InProcess
+
     interface IVectorStore with
 
         member _.Upsert scope chunkId vector chunk = async {
