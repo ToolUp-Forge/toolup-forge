@@ -88,10 +88,15 @@ let saveIndex (storage: IBlobStorage) (container: string) (docs: KnowledgeDocume
 
 // ─── Phase 864 — guarded index writes ─────────────────────────────
 //
-// The index writers below (`upsertIndexEntry`, `updateIndexStatus`,
-// `updateIndexChunkCount`, and `appendVersion` for the per-document version
-// history) are read-modify-writes of one shared blob. They run through
-// `BlobMapStore`, so:
+// Every production write of `index.json` is a read-modify-write of one
+// shared blob, and every one goes through `updateIndexEntries` below — the
+// one place a new writer goes. Phase 959 moved the last hand-rolled
+// load-map-save writers onto it (the two `MarkIngestionFailed` closures, the
+// delete path, the ingestion observer and the retention sweep); the named
+// writers (`upsertIndexEntry`, `updateIndexStatus`, `updateIndexChunkCount`,
+// `removeIndexEntries`) are thin wrappers over it, and `appendVersion` runs
+// the same helper over the per-document version history. Through
+// `BlobMapStore`:
 //
 //   * an index that exists and cannot be read, or does not decode, is never
 //     read as empty and overwritten with empty-plus-one — the write is
@@ -104,7 +109,9 @@ let saveIndex (storage: IBlobStorage) (container: string) (docs: KnowledgeDocume
 // `loadIndex` / `saveIndex` above are not guarded: `loadIndex` is the read
 // path the listing surfaces use, and it still reads an unreadable index as
 // empty for display; `saveIndex` is a whole-index overwrite (since Phase
-// 863 a refused one raises).
+// 863 a refused one raises) kept for seeding a fixed index, and no
+// production writer calls it — a load-map-save over it is exactly the lost
+// update this section exists to prevent.
 
 let private indexLogger = ConsoleLogger.ConsoleLogger() :> ILogger
 
@@ -129,33 +136,58 @@ let private indexStores =
 let private indexStoreFor (storage: IBlobStorage) =
     indexStores.GetValue(storage, fun s -> BlobMapStore<KnowledgeDocument list>(s, indexCodec, indexLogger))
 
-let private raiseOnFailure (result: Result<unit, BlobMapStoreError>) =
+let private raiseOnFailure (result: Result<'R, BlobMapStoreError>) : 'R =
     match result with
-    | Ok() -> ()
+    | Ok value -> value
     | Error e -> raise (KnowledgeIndexWriteFailed(BlobMapStoreError.describe e))
 
-/// Guarded read-modify-write of `index.json`. `change` is pure over the
-/// current documents (absent = none) and returns `None` for "nothing to
-/// write"; it may run more than once.
+/// Phase 959 — the guarded read-modify-write of `index.json`, and the one
+/// place an index writer goes. `change` is pure over the current documents
+/// (an absent index is the empty list) and decides with `BlobUpdate`:
+/// `Write(documents, result)` persists, `Keep result` writes nothing. It may
+/// run more than once — on a lost precondition it is replayed over the
+/// fresh read — so it must not have effects; act on the returned `result`
+/// instead. A write that cannot complete raises `KnowledgeIndexWriteFailed`
+/// and writes nothing.
+///
+/// This takes no lock. On a backend with conditional writes the write is
+/// safe against every other writer without one; on a backend without them
+/// the in-process `acquireContainerLock` is what serialises writers, so a
+/// caller holds it around this call (the named writers below take it
+/// themselves; the ingestion observer holds it across its own read of the
+/// attempt marker). Never call a named writer from inside the lock — the
+/// semaphore is non-reentrant.
+let updateIndexEntries
+    (storage: IBlobStorage)
+    (container: string)
+    (change: KnowledgeDocument list -> BlobUpdate<KnowledgeDocument list, 'R>)
+    : Async<'R> =
+    async {
+        let! result =
+            (indexStoreFor storage)
+                .Update(container, indexBlobName, fun current -> change (Option.defaultValue [] current))
+
+        return raiseOnFailure result
+    }
+
+/// Guarded write of `index.json` where `change` returns `None` for
+/// "nothing to write" — the shape the named writers share.
 let private updateIndex
     (storage: IBlobStorage)
     (container: string)
     (change: KnowledgeDocument list -> KnowledgeDocument list option)
     =
-    async {
-        let! result =
-            (indexStoreFor storage)
-                .Update(
-                    container,
-                    indexBlobName,
-                    fun current ->
-                        match change (Option.defaultValue [] current) with
-                        | Some updated -> BlobUpdate.Write(updated, ())
-                        | None -> BlobUpdate.Keep()
-                )
+    updateIndexEntries storage container (fun existing ->
+        match change existing with
+        | Some updated -> BlobUpdate.Write(updated, ())
+        | None -> BlobUpdate.Keep())
 
-        raiseOnFailure result
-    }
+/// Phase 959 — whether index writes on this storage run as conditional
+/// writes, asked through the same `BlobMapStore` (and so the same cached
+/// capability probe) the writers use. `false` means a writer on another
+/// replica can lose an index update.
+let indexWritesAreConditional (storage: IBlobStorage) (container: string) : Async<bool> =
+    (indexStoreFor storage).SupportsConditionalWrites(container, indexBlobName)
 
 // ─── Phase 510 — version + chunk-hash sidecars ────────────────────
 //
@@ -497,6 +529,27 @@ let updateIndexChunkCount (storage: IBlobStorage) (container: string) (docId: st
                             else
                                 d)
                     ))
+    finally
+        lock.Release() |> ignore
+}
+
+/// Phase 959 — remove documents from the index. Same locking semantics as
+/// `updateIndexStatus`; the removal is computed over the index as it stands
+/// at the write, so a document added concurrently (on this replica or, on a
+/// conditional backend, any other) survives. Writes nothing when none of
+/// `docIds` is listed. Used by the delete path and the retention sweep.
+let removeIndexEntries (storage: IBlobStorage) (container: string) (docIds: string list) = async {
+    let removing = Set.ofList docIds
+    let lock = acquireContainerLock container
+    do! lock.WaitAsync() |> Async.AwaitTask
+
+    try
+        do!
+            updateIndex storage container (fun existing ->
+                if existing |> List.exists (fun d -> removing.Contains d.Id) then
+                    Some(existing |> List.filter (fun d -> not (removing.Contains d.Id)))
+                else
+                    None)
     finally
         lock.Release() |> ignore
 }

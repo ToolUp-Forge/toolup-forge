@@ -20,14 +20,47 @@ failed memoisation write let a retry re-execute a call the store had claimed to 
 handled, and the only discard that survives is one that says why on its own line.
 
 `dotnet run --project Build.fsproj -- VerifyUploadResults` enforces it over production code under
-`src/` (test projects excluded — a fixture that seeds a blob is not a store). It fails on
-`let! _ = ….Upload(` — and on the conditional `….UploadWithETag(`, whose result also carries the
-precondition — in both layouts Fantomas produces, the one-line form and the form with the call on
-the next line, and names each site. CI runs it in the `source-citations` job.
+`src/` (test projects excluded — a fixture that seeds a blob is not a store), and CI runs it in the
+`source-citations` job. It knows two shapes of discard, for `….Upload(` and for the conditional
+`….UploadWithETag(`, whose result also carries the precondition, and names each site.
 
-The gate is textual and catches that shape only. A result dropped some other way — a list of
-uploads run through `Async.Parallel |> Async.Ignore`, say — is the same defect, and a reviewer
-holds it to the same rule.
+**The single call** — `let! _ = ….Upload(`, in both layouts Fantomas produces (the one-line form
+and the form with the call on the next line), or the same call ended by `|> Async.Ignore`.
+
+**The fan-out** — a list of uploads run through `Async.Parallel` and then discarded. Every result
+is dropped at once, and no line of it binds `_` to an upload, so it reads as harmless:
+
+```fsharp skip=fragment
+do!
+    matched
+    |> List.map (fun (name, doc) -> storage.Upload(container, name, redact doc))
+    |> Async.Parallel
+    |> Async.Ignore   // one refused write of N reads as N successes
+```
+
+Two data-subject erasure paths shipped exactly this until Phase 960: a refused redaction was
+dropped with the rest, the erasure reported success, and the erasure ledger recorded completion
+over a blob that still named the subject. The gate walks the whole discarded expression — the
+pipeline an `Async.Ignore` ends, or everything a multi-line `let! _ =` binds — and reports an upload
+call inside it whose result is the element's value. A fan-out that handles each result where it is
+made (`let! r = storage.Upload(…)` then a `match`, or `match! storage.Upload(…) with`) discards
+nothing and is not a site. Collect the results instead, and act on the refusals:
+
+```fsharp skip=fragment
+let! outcomes =
+    matched
+    |> List.map (fun (name, doc) -> async {
+        let! result = storage.Upload(container, name, redact doc)
+        return name, result
+    })
+    |> Async.Parallel
+
+let refused = outcomes |> Array.choose (fun (name, r) -> if Result.isOk r then None else Some name)
+```
+
+The gate is textual. A result dropped some other way — through a helper that returns the
+upload's `Result` under another name, say — is the same defect, and a reviewer holds it to the
+same rule.
 
 ## Choosing: propagate, or declare best-effort
 
@@ -76,6 +109,7 @@ one line, the write is not best-effort.
 | `PersistentEventStore` | canonical event blob | raises `EventStoreWriteException`; the audit log's failure policy acts on it |
 | `PersistentEventStore` | `_by-type` / `_by-source` index refs | best-effort by design — canonical is authoritative, drift shows in `IndexConsistencyCheck` and `Rebuild` repairs it |
 | `BlobIdempotencyStore` | memoised response | raises; the dispatcher answers the call, logs it as NOT memoised, and still emits the method's audit event |
+| `BlobConfigStore`, `DataObjectStore` | an erasure's redactions, fanned out | every result collected; a refusal fails the erasure with `HandlerPartialFailure` naming the blobs not redacted (those that landed stay redacted, so a re-run finishes), and the erasure ledger records `ErasureFailed`. The tombstone content is written before any metadata names it |
 
 The rest of the tree was swept to the same rule in Phase 863. The patterns, by what the write is:
 

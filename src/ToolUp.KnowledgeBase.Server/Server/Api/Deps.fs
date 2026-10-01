@@ -475,13 +475,10 @@ module KnowledgeApiDeps =
             let status = IngestionStatus.Failed reason
             setStatus docId status
 
-            let! existing = loadIndex storage scope.Container
-
-            let updated =
-                existing
-                |> List.map (fun d -> if d.Id = docId then { d with Status = status } else d)
-
-            do! saveIndex storage scope.Container updated
+            // Phase 959 — the guarded index writer, not a load-map-save: a
+            // concurrent upsert on this or another replica is not overwritten,
+            // and a refused write raises `KnowledgeIndexWriteFailed`.
+            do! updateIndexStatus storage scope.Container docId status
 
             if not (isNull (box notifications)) then
                 try

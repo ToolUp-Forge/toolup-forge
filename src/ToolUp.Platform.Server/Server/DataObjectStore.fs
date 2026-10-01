@@ -869,8 +869,16 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
                         let tombstoneBytes = Encoding.UTF8.GetBytes Erasure.TombstoneMarker
                         let tombstoneHash = sha256Hex tombstoneBytes
 
-                        if redactContent then
-                            do! uploadContentIfMissing container tombstoneHash tombstoneBytes |> Async.Ignore
+                        // Phase 960 — the tombstone content must exist before
+                        // any metadata names it: redacted metadata pointing at
+                        // a blob that was never written leaves the object
+                        // unreadable. A refused write stops the erasure here,
+                        // with nothing rewritten.
+                        let! tombstoneWrite =
+                            if redactContent then
+                                uploadContentIfMissing container tombstoneHash tombstoneBytes
+                            else
+                                async.Return(Ok())
 
                         let redact (m: DataObject) = {
                             m with
@@ -889,31 +897,99 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
                                 ContentHash = (if redactContent then tombstoneHash else m.ContentHash)
                         }
 
-                        do!
-                            matched
-                            |> List.collect (fun (_, metas) ->
-                                metas
-                                |> List.choose (fun (name, mo) -> mo |> Option.map (fun m -> name, redact m)))
-                            |> List.map (fun (name, m) -> blobStorage.Upload(container, name, Json.serialize m))
-                            |> Async.Parallel
-                            |> Async.Ignore
-
-                        if redactContent then
-                            // The redacted metadata now names the
-                            // tombstone hash, so the originals are
-                            // released — minus the tombstone itself,
-                            // which is live and freshly written.
-                            let! _ = collectOrphanedContent container (releasedHashes.Remove tombstoneHash)
-                            ()
-
                         let verb = if redactContent then "tombstoned" else "redacted"
 
-                        return
-                            Result.Ok {
+                        match tombstoneWrite with
+                        | Error err ->
+                            return
+                                Result.Error(
+                                    HandlerPartialFailure(
+                                        "data-objects",
+                                        {
+                                            HandlerName = "data-objects"
+                                            RecordsAffected = 0
+                                            Note = Some(sprintf "0 object(s) %s in scope %s" verb scopeId)
+                                        },
+                                        sprintf
+                                            "the tombstone content blob %s was NOT written (%A); no metadata was redacted and all %d matched object(s) still name the subject"
+                                            (contentBlobName tombstoneHash)
+                                            err
+                                            matched.Length
+                                    )
+                                )
+                        | Ok() ->
+                            // Phase 960 — every metadata redaction's result is
+                            // collected, per object. A refused one fails the
+                            // erasure, naming the blobs that still carry the
+                            // subject; the ones that landed stay redacted, so
+                            // a re-run finishes the job.
+                            let! outcomes =
+                                matched
+                                |> List.map (fun (oid, metas) -> async {
+                                    let! writes =
+                                        metas
+                                        |> List.choose (fun (name, mo) -> mo |> Option.map (fun m -> name, redact m))
+                                        |> List.map (fun (name, m) -> async {
+                                            let! result = blobStorage.Upload(container, name, Json.serialize m)
+                                            return name, result
+                                        })
+                                        |> Async.Parallel
+
+                                    return oid, writes
+                                })
+                                |> Async.Parallel
+
+                            let refused =
+                                outcomes
+                                |> Array.collect snd
+                                |> Array.choose (fun (name, result) ->
+                                    match result with
+                                    | Ok _ -> None
+                                    | Error e -> Some(sprintf "%s (%s)" name e))
+                                |> List.ofArray
+
+                            let redactedObjects =
+                                outcomes
+                                |> Array.filter (fun (_, writes) ->
+                                    writes
+                                    |> Array.forall (fun (_, result) ->
+                                        match result with
+                                        | Ok _ -> true
+                                        | Error _ -> false))
+                                |> Array.length
+
+                            if redactContent then
+                                // The redacted metadata now names the
+                                // tombstone hash, so the originals are
+                                // released — minus the tombstone itself,
+                                // which is live and freshly written. A hash
+                                // still named by metadata whose redaction was
+                                // refused is not an orphan, so the pass keeps
+                                // it; only bytes nothing names are reclaimed.
+                                let! _ = collectOrphanedContent container (releasedHashes.Remove tombstoneHash)
+                                ()
+
+                            let summary = {
                                 HandlerName = "data-objects"
-                                RecordsAffected = matched.Length
-                                Note = Some(sprintf "%d object(s) %s in scope %s" matched.Length verb scopeId)
+                                RecordsAffected = redactedObjects
+                                Note = Some(sprintf "%d object(s) %s in scope %s" redactedObjects verb scopeId)
                             }
+
+                            if refused.IsEmpty then
+                                return Result.Ok summary
+                            else
+                                return
+                                    Result.Error(
+                                        HandlerPartialFailure(
+                                            "data-objects",
+                                            summary,
+                                            sprintf
+                                                "%d of %d object(s) were NOT fully redacted; these metadata blob(s) still name the subject: %s"
+                                                (matched.Length - redactedObjects)
+                                                matched.Length
+                                                (String.concat "; " refused)
+                                        )
+                                    )
         }
     // ─── Phase 753 — compare-and-set save ────────────────────────────
     //

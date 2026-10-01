@@ -1590,8 +1590,11 @@ let deleteDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<unit,
                     // Phase 867 — and the current ingestion attempt.
                     do! forgetIngestionAttempt deps.Storage deps.Scope.Container docId
 
-                    let updated = existing |> List.filter (fun d -> d.Id <> docId)
-                    do! saveIndex deps.Storage deps.Scope.Container updated
+                    // Phase 959 — removed from the index as it stands NOW,
+                    // through the guarded writer: the `existing` snapshot
+                    // above is stale by the time the fan-out completes, and
+                    // writing it back would drop any document added since.
+                    do! removeIndexEntries deps.Storage deps.Scope.Container [ docId ]
 
                     // Phase 14x — drop the content-hash dedup ref so a
                     // future upload of the same bytes re-ingests fresh

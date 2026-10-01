@@ -218,30 +218,90 @@ let private builtInTools: (AIToolDefinition * (HttpContext -> string -> Async<st
 ///         rag with AI = ToolUp.KnowledgeBase.Server.AICompose.register rag.AI
 ///     })
 /// Warn when the Knowledge Base is composed on a declared multi-instance
-/// deployment (`ReplicaCount > 1`). KB index read-modify-write
-/// (`upsertIndexEntry` / `updateIndexStatus` / `updateIndexChunkCount` in
-/// `IndexStorage`) is serialised by a per-process `SemaphoreSlim` — it
-/// serialises within one process but NOT across replicas, so two pods
-/// ingesting concurrently can lose an index entry or mismatch chunk
-/// counts (the blob + chunks persist, but the `index.json` write is
-/// clobbered). The cross-replica fix is ETag-conditional-write CAS on the
-/// index blob (deferred). `Warning`, not `Error`: many KB deployments
-/// funnel ingestion through a single writer in practice.
-type private KnowledgeBaseIndexInstanceValidator(serverConfig: ServerConfig) =
+/// deployment (`ReplicaCount > 1`) over blob storage that does NOT support
+/// conditional writes — and only then.
+///
+/// Every `index.json` write goes through `IndexStorage.updateIndexEntries`,
+/// the guarded read-modify-write over `BlobMapStore` (Phase 959 finished
+/// moving the writers onto it). On a backend with conditional writes that
+/// helper replays a lost precondition, so replicas writing the index
+/// concurrently lose nothing and there is nothing to warn about. On a
+/// backend without them it falls back to unconditional writes: the
+/// per-process lock still serialises one replica's writers, but two
+/// replicas can clobber each other's index entries. That is the case this
+/// warns about, naming the backend.
+///
+/// The capability is the helper's own probe (`BlobMapStore`
+/// `SupportsConditionalWrites`), not a type test, because a decorator can
+/// implement the conditional seam over a store that does not honour it.
+/// The storage is the last `IBlobStorage` instance registered in the
+/// service collection at preflight — after every companion's
+/// `ServiceConfig` has run. `Warning`, not `Error`: many deployments
+/// funnel knowledge-base writes through a single replica.
+type internal KnowledgeBaseIndexInstanceValidator(serverConfig: ServerConfig, services: IServiceCollection) =
+
+    let composedStorage () : IBlobStorage option =
+        services
+        |> Seq.filter (fun d ->
+            not (isNull d.ServiceType)
+            && d.ServiceType = typeof<IBlobStorage>
+            && not d.IsKeyedService)
+        |> Seq.tryLast
+        |> Option.bind (fun d ->
+            match d.ImplementationInstance with
+            | :? IBlobStorage as storage -> Some storage
+            | _ -> None)
+
+    // The KB platform container: probing it writes nothing on a
+    // conditional backend (an `IfMatch` against an absent blob is refused).
+    static let probeContainer = "_platform"
+
     interface ConfigValidation.IConfigValidator with
         member _.Name = "knowledge-base:index-instance"
         member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
 
         member _.Validate() = async {
-            if serverConfig.ReplicaCount > 1 then
-                return
-                    ConfigValidation.ValidationResult.Warning(
-                        sprintf
-                            "Knowledge Base is composed with ServerConfig.ReplicaCount = %d. KB index read-modify-write (upsertIndexEntry / updateIndexStatus / updateIndexChunkCount) is serialised by a per-process lock only — two replicas ingesting concurrently can lose an index entry or mismatch chunk counts (the blob + chunks persist, but the index.json write is clobbered). Until cross-replica ETag-CAS lands, funnel ingestion through a single writer replica for multi-instance KB deployments."
-                            serverConfig.ReplicaCount
-                    )
-            else
+            if serverConfig.ReplicaCount <= 1 then
                 return ConfigValidation.ValidationResult.Ok
+            else
+                match composedStorage () with
+                | None ->
+                    return
+                        ConfigValidation.ValidationResult.Warning(
+                            sprintf
+                                "Knowledge Base is composed with ServerConfig.ReplicaCount = %d, and the composed blob storage is not registered as an instance, so whether it supports conditional writes cannot be checked. Knowledge-base index writes go through the guarded read-modify-write helper (BlobMapStore); on a backend without conditional writes two replicas can lose each other's index entries. Use a backend implementing IConditionalBlobStorage for multi-instance deployments."
+                                serverConfig.ReplicaCount
+                        )
+                | Some storage ->
+                    let backend = storage.GetType().Name
+
+                    let! conditional = async {
+                        try
+                            let! supported = indexWritesAreConditional storage probeContainer
+                            return Ok supported
+                        with ex ->
+                            return Error ex.Message
+                    }
+
+                    match conditional with
+                    | Ok true -> return ConfigValidation.ValidationResult.Ok
+                    | Ok false ->
+                        return
+                            ConfigValidation.ValidationResult.Warning(
+                                sprintf
+                                    "Knowledge Base is composed with ServerConfig.ReplicaCount = %d over blob storage %s, which does not support conditional writes. Knowledge-base index writes go through the guarded read-modify-write helper (BlobMapStore), which on this backend falls back to unconditional writes, so two replicas writing the index concurrently can lose an entry or a status update (the document's blob and chunks persist; its index.json entry is clobbered). Use a backend implementing IConditionalBlobStorage, or funnel knowledge-base writes through a single replica."
+                                    serverConfig.ReplicaCount
+                                    backend
+                            )
+                    | Error reason ->
+                        return
+                            ConfigValidation.ValidationResult.Warning(
+                                sprintf
+                                    "Knowledge Base is composed with ServerConfig.ReplicaCount = %d over blob storage %s, and the conditional-write probe failed (%s), so index writes may fall back to unconditional writes that two replicas can clobber. Use a backend implementing IConditionalBlobStorage for multi-instance deployments."
+                                    serverConfig.ReplicaCount
+                                    backend
+                                    reason
+                            )
         }
 
 let register (app: AIServerApp) : AIServerApp =
@@ -250,12 +310,15 @@ let register (app: AIServerApp) : AIServerApp =
             AITools = app.Base.AITools @ builtInTools
     }
 
-    // Investigate-gaps #4 — surface the per-process index-lock hazard at
-    // startup on a declared multi-instance KB deployment.
-    let baseWithValidator =
-        ServerApp.withConfigValidator
-            (KnowledgeBaseIndexInstanceValidator(baseWithTools.Config) :> ConfigValidation.IConfigValidator)
-            baseWithTools
+    // Investigate-gaps #4, narrowed by Phase 959 — warn at startup on a
+    // declared multi-instance deployment whose blob storage cannot do
+    // conditional writes. Registered from `ServiceConfig` (not through
+    // `withConfigValidator`) because it reads the composed `IBlobStorage`
+    // out of the service collection, which only exists there.
+    let registerIndexInstanceValidator (s: IServiceCollection) : IServiceCollection =
+        s.AddSingleton<ConfigValidation.IConfigValidator>(
+            KnowledgeBaseIndexInstanceValidator(baseWithTools.Config, s) :> ConfigValidation.IConfigValidator
+        )
 
     // Phase 54d — register the KB offboard-purge hook when the deployment
     // opted into the tenant-lifecycle substrate. Threaded through the
@@ -265,7 +328,7 @@ let register (app: AIServerApp) : AIServerApp =
     // `ComposeTenantLifecycle` gates on. The hook self-`Skipped`s when no
     // `IBlobStorage` is composed, so the gate is the only condition.
     let registerLifecycleHook (s: IServiceCollection) : IServiceCollection =
-        match baseWithValidator.Config.TenantLifecycle with
+        match baseWithTools.Config.TenantLifecycle with
         | EnabledTenantLifecycle ->
             s.AddSingleton<ITenantLifecycle>(fun (sp: IServiceProvider) -> KnowledgeBaseLifecycle.create sp)
         | NoTenantLifecycle -> s
@@ -285,14 +348,14 @@ let register (app: AIServerApp) : AIServerApp =
             KnowledgeBase.ServerApiNarrativeIngestor.create sp)
 
     let baseWithLifecycle = {
-        baseWithValidator with
+        baseWithTools with
             Extensions = {
-                baseWithValidator.Extensions with
+                baseWithTools.Extensions with
                     ServiceConfig =
                         let register (s: IServiceCollection) =
-                            registerNarrativeIngestor (registerLifecycleHook s)
+                            registerIndexInstanceValidator (registerNarrativeIngestor (registerLifecycleHook s))
 
-                        match baseWithValidator.Extensions.ServiceConfig with
+                        match baseWithTools.Extensions.ServiceConfig with
                         | None -> Some register
                         | Some baseFn -> Some(fun s -> register (baseFn s))
             }

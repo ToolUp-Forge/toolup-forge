@@ -245,11 +245,14 @@ let sweepScope
                 let orphanChunks = failedOutcomes |> List.sumBy fst
                 let failures = failedOutcomes |> List.map snd
                 let purgedIds = purgedDocs |> List.map _.Id
-                let purgedIdSet = Set.ofList purgedIds
 
                 if not purgedIds.IsEmpty then
-                    let survivorsIndex = index |> List.filter (fun d -> not (purgedIdSet.Contains d.Id))
-                    do! saveIndex storage container survivorsIndex
+                    // Phase 959 — the purged entries are removed from the index
+                    // as it stands at the write, through the guarded writer.
+                    // The snapshot read at the top of the sweep is stale by now:
+                    // writing it back dropped every document uploaded while the
+                    // fan-out ran.
+                    do! removeIndexEntries storage container purgedIds
                     KnowledgeBase.ServerInventory.invalidateInventoryCache container
 
                 let reclaimed = purgedDocs |> List.sumBy _.SizeBytes
