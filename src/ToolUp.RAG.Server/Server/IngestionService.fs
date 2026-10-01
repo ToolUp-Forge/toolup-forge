@@ -916,6 +916,54 @@ type IngestionBackgroundService
             slot.Release()
     }
 
+    // ─── Phase 869 — the drain set ───────────────────────────────────
+    //
+    // Every document the drain loop starts runs through `Background.start`
+    // under `jobs`, and its lease sits in `unsettled` until `processJob` has
+    // run to its end (which settles the lease: `Ack`, or `Abandon` on the
+    // durable arm). A document still in `unsettled` when the shutdown window
+    // closes is cancelled and handed back to the queue by `StopAsync`.
+    let jobs = Background.DrainSet()
+    let unsettled = ConcurrentDictionary<string, IngestionLease>()
+
+    /// Start `lease`'s document on the drain set. Its lease leaves
+    /// `unsettled` only when `processJob` returns — a cancelled document
+    /// never reaches that line, so it stays to be handed back.
+    let startJob (slot: WorkerSlot) (lease: IngestionLease) =
+        unsettled[lease.LeaseId] <- lease
+
+        Background.start
+            jobs
+            logger
+            $"[IngestionBackgroundService] event=process_job_unhandled doc={lease.Job.DocumentId} attempt={lease.Attempt}"
+            (async {
+                do! processJob slot lease
+                unsettled.TryRemove lease.LeaseId |> ignore
+            })
+
+    /// Hand every unsettled lease back to the queue — redelivered on a
+    /// durable queue (subject to its attempt cap); recorded and dropped on the
+    /// in-memory one, which dies with the process either way.
+    let handBackUnsettled () = async {
+        let mutable returned = 0
+
+        for leaseId in List.ofSeq unsettled.Keys do
+            match unsettled.TryRemove leaseId with
+            | true, lease ->
+                try
+                    do! queue.Abandon(lease.LeaseId, "the ingestion service stopped before this document finished")
+
+                    returned <- returned + 1
+                with ex ->
+                    logger.Error(
+                        $"[IngestionBackgroundService] event=hand_back_failed doc={lease.Job.DocumentId} lease={lease.LeaseId}",
+                        Some ex
+                    )
+            | _ -> ()
+
+        return returned
+    }
+
     override _.ExecuteAsync(stoppingToken: CancellationToken) = task {
         // Register the retry job handler up front (idempotent) so the
         // first scheduled retry has no registration race. No-op when no
@@ -982,7 +1030,7 @@ type IngestionBackgroundService
 
                         // Fire the job without awaiting; it owns the slot
                         // now and releases it when done.
-                        Async.Start(processJob (WorkerSlot(sem, stealIdle)) claimed, stoppingToken)
+                        startJob (WorkerSlot(sem, stealIdle)) claimed
                     | None ->
                         if owned then
                             sem.Release() |> ignore
@@ -1000,8 +1048,41 @@ type IngestionBackgroundService
                 )
     }
 
+    member private _.StopBase(cancellationToken: CancellationToken) = base.StopAsync cancellationToken
+
+    /// Phase 869 — stop taking documents, let the ones in flight finish
+    /// within the host's shutdown window, and hand the rest back. The base
+    /// stop cancels the drain loop (nothing new is dequeued); the documents
+    /// already started are NOT cancelled by it — they run on `jobs`, not on
+    /// the loop's token — so each gets the window to finish and acknowledge.
+    /// When the window closes first, the unfinished ones are cancelled and
+    /// returned to the queue, so a durable queue redelivers them at once
+    /// rather than after their lease expires.
+    override this.StopAsync(cancellationToken: CancellationToken) =
+        task {
+            do! this.StopBase cancellationToken
+            let! drained = jobs.WaitAsync cancellationToken
+
+            if not drained then
+                jobs.Cancel()
+                let! returned = handBackUnsettled () |> Async.StartAsTask
+
+                logger.Warn(
+                    sprintf
+                        "[IngestionBackgroundService] event=ingestion_handed_back_at_shutdown count=%d durable=%b — the host's shutdown window closed before these documents finished"
+                        returned
+                        queue.IsDurable
+                )
+        }
+        :> Task
+
     interface IDisposable with
-        member _.Dispose() = sem.Dispose()
+        // Phase 869 — a document still running releases its worker slot as it
+        // ends, so the semaphore is disposed only once every started document
+        // has ended.
+        member _.Dispose() =
+            jobs.WaitAsync(CancellationToken.None).ContinueWith(fun (_: Task<bool>) -> sem.Dispose())
+            |> ignore
 
 // ─── Convenience constructor (default concurrency) ────────────────
 

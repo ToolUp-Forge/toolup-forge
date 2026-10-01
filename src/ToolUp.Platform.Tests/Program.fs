@@ -1568,6 +1568,8 @@ let private registeredTests =
         // validated method (behavioural, over a TestServer) and the
         // default audit write off the response path.
         ServerRemotingTailTests.tests
+        // Phase 869 - shutdown flushes and drains.
+        ShutdownDrainTests.tests
         // Phase 69n — fromContextAsync build-once dispatcher table.
         // Source-audit pack pinning the `buildDispatcherTable` carve +
         // the compose-time bind in the FromContextAsync arm.
