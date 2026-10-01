@@ -152,7 +152,7 @@ type BlobRenderCache(blobStorage: IBlobStorage, container: string) =
             | None -> () // NoCache — never store
             | Some stored ->
                 let bytes = JsonSerializer.SerializeToUtf8Bytes(stored, jsonOptions)
-                let! _ = blobStorage.Upload(container, blobName key, bytes)
+                let! _ = blobStorage.Upload(container, blobName key, bytes) // best-effort-write: a cache fill; a miss re-renders the page
                 return ()
         }
 

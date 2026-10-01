@@ -66,10 +66,24 @@ let loadIndex (storage: IBlobStorage) (container: string) = async {
     | Error _ -> return []
 }
 
+/// Raised by the guarded index writers when the read-modify-write could
+/// not complete — the index was unreadable or undecodable, the write
+/// failed, or the retry budget was exhausted. Nothing was written. Every
+/// caller runs inside a `try … with` that logs or routes the failure (the
+/// upload handler surfaces it to the client, the ingestion observer logs
+/// it), which is the point: before Phase 864 each of these cases was a
+/// silent success. Phase 863 — `saveIndex` raises it too, for a refused
+/// whole-index write.
+exception KnowledgeIndexWriteFailed of message: string
+
+/// Phase 863 — a refused write raises `KnowledgeIndexWriteFailed` rather
+/// than reading as saved.
 let saveIndex (storage: IBlobStorage) (container: string) (docs: KnowledgeDocument list) = async {
     let bytes = (toJson docs: string) |> Encoding.UTF8.GetBytes
-    let! _ = storage.Upload(container, indexBlobName, bytes)
-    ()
+
+    match! storage.Upload(container, indexBlobName, bytes) with
+    | Ok _ -> return ()
+    | Error storageError -> return raise (KnowledgeIndexWriteFailed(sprintf "index write refused: %s" storageError))
 }
 
 // ─── Phase 864 — guarded index writes ─────────────────────────────
@@ -87,18 +101,10 @@ let saveIndex (storage: IBlobStorage) (container: string) (docs: KnowledgeDocume
 //     different replicas lose no update — a lost precondition re-reads and
 //     replays the change.
 //
-// `loadIndex` / `saveIndex` above are unchanged: `loadIndex` is the read
+// `loadIndex` / `saveIndex` above are not guarded: `loadIndex` is the read
 // path the listing surfaces use, and it still reads an unreadable index as
-// empty for display.
-
-/// Raised by the guarded index writers when the read-modify-write could
-/// not complete — the index was unreadable or undecodable, the write
-/// failed, or the retry budget was exhausted. Nothing was written. Every
-/// caller runs inside a `try … with` that logs or routes the failure (the
-/// upload handler surfaces it to the client, the ingestion observer logs
-/// it), which is the point: before Phase 864 each of these cases was a
-/// silent success.
-exception KnowledgeIndexWriteFailed of message: string
+// empty for display; `saveIndex` is a whole-index overwrite (since Phase
+// 863 a refused one raises).
 
 let private indexLogger = ConsoleLogger.ConsoleLogger() :> ILogger
 
@@ -216,8 +222,34 @@ let loadChunkHashes (storage: IBlobStorage) (container: string) (docId: string) 
 /// was never actually written (silently missing content).
 let saveChunkHashes (storage: IBlobStorage) (container: string) (docId: string) (hashes: string list) = async {
     let bytes = (toJson hashes: string) |> Encoding.UTF8.GetBytes
-    let! _ = storage.Upload(container, chunkHashesBlobName docId, bytes)
-    ()
+
+    // Phase 863 — a refused write must not leave the PREVIOUS manifest
+    // standing: it describes content the indexes no longer hold, so a later
+    // version matching it would diff as "unchanged" and skip chunks that are
+    // not there. An ABSENT manifest only costs a full re-embed, so a refused
+    // write falls back to deleting it, and raises only if that fails too.
+    match! storage.Upload(container, chunkHashesBlobName docId, bytes) with
+    | Ok _ -> return ()
+    | Error writeError ->
+        match! storage.Delete(container, chunkHashesBlobName docId) with
+        | Ok() ->
+            indexLogger.Warn(
+                sprintf
+                    "[KnowledgeBase] chunk-hash manifest for %s could not be written (%s); cleared instead, so the next re-upload re-embeds every chunk"
+                    docId
+                    writeError
+            )
+        | Error deleteError ->
+            return
+                raise (
+                    KnowledgeIndexWriteFailed(
+                        sprintf
+                            "chunk-hash manifest for %s could not be written (%s) nor cleared (%s)"
+                            docId
+                            writeError
+                            deleteError
+                    )
+                )
 }
 
 // ─── In-memory status cache ───────────────────────────────────────

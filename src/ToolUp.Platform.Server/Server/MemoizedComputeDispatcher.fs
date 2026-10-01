@@ -635,10 +635,23 @@ type MemoizedComputeDispatcher
         | Some blobStore ->
             // Best-effort: a memo that cannot persist still memoizes
             // in-process, so a blob failure must not turn a successful
-            // poll into a failed one.
+            // poll into a failed one. Not silent, though (Phase 863): a
+            // refused write is logged at Warn.
             let name = ComputeMemoLayout.entryBlob key.ScopeId (ComputeMemoKey.digest key)
-            let! _ = blobStore.Upload(container, name, serialise key entry)
-            return ()
+
+            match! blobStore.Upload(container, name, serialise key entry) with
+            | Ok _ -> return ()
+            | Error storageError ->
+                match logger with
+                | Some log ->
+                    log.Warn(
+                        sprintf
+                            "MemoizedComputeDispatcher: memo entry %s/%s was not persisted (%s) — memoized in-process only"
+                            container
+                            name
+                            storageError
+                    )
+                | None -> ()
         | None -> return ()
     }
 

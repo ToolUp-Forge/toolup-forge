@@ -21,8 +21,13 @@ handled, and the only discard that survives is one that says why on its own line
 
 `dotnet run --project Build.fsproj -- VerifyUploadResults` enforces it over production code under
 `src/` (test projects excluded — a fixture that seeds a blob is not a store). It fails on
-`let! _ = ….Upload(` in both layouts Fantomas produces, the one-line form and the form with the
-call on the next line, and names each site.
+`let! _ = ….Upload(` — and on the conditional `….UploadWithETag(`, whose result also carries the
+precondition — in both layouts Fantomas produces, the one-line form and the form with the call on
+the next line, and names each site. CI runs it in the `source-citations` job.
+
+The gate is textual and catches that shape only. A result dropped some other way — a list of
+uploads run through `Async.Parallel |> Async.Ignore`, say — is the same defect, and a reviewer
+holds it to the same rule.
 
 ## Choosing: propagate, or declare best-effort
 
@@ -71,3 +76,12 @@ one line, the write is not best-effort.
 | `PersistentEventStore` | canonical event blob | raises `EventStoreWriteException`; the audit log's failure policy acts on it |
 | `PersistentEventStore` | `_by-type` / `_by-source` index refs | best-effort by design — canonical is authoritative, drift shows in `IndexConsistencyCheck` and `Rebuild` repairs it |
 | `BlobIdempotencyStore` | memoised response | raises; the dispatcher answers the call, logs it as NOT memoised, and still emits the method's audit event |
+
+The rest of the tree was swept to the same rule in Phase 863. The patterns, by what the write is:
+
+| The write is… | Disposition | Examples |
+|---|---|---|
+| the record a caller or a later read depends on, with a `Result` (or status) to carry it | returned as that failure | an active-team switch, a feature-flag erasure, a knowledge note or narrative (source persisted first, so a refusal moves nothing else), an upload whose original or archived predecessor did not land (`UploadRejected`) |
+| the same, behind an `Async<unit>` it cannot change | raised | the export ticket's status and envelope, the lifecycle ledger, a peer job result or group binding, a round's state, the KB index, the membership doctor's save |
+| one of two writes where the second destroys the first's source | the second runs only if the first landed | outbox and pending-invite quarantine: copy, then delete or heal |
+| a cache, a derived index, a resumable cursor, or a copy of a record held elsewhere | best-effort: `Warn`, or the marker where no logger is in reach | the render cache, `BlobIndex` refs, the audit-replicator cursor, the ingestion-run history, the compute memo, the IndexNow state |

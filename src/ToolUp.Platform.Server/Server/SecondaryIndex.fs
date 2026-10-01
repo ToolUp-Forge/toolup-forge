@@ -206,7 +206,7 @@ module BlobIndex =
         let add key value payload = async {
             let blobName = leafName indexPrefix keyToSegment valueToSegment key value
             let bytes = payload |> Option.defaultValue Array.empty
-            let! _ = storage.Upload(container, blobName, bytes)
+            let! _ = storage.Upload(container, blobName, bytes) // best-effort-write: the drift contract above — canonical state is authoritative; a missed ref shows in IndexConsistencyCheck and Rebuild re-writes it
             return ()
         }
 
@@ -251,12 +251,22 @@ module BlobIndex =
             let! entries = loader ()
             let entryList = entries |> List.ofSeq
 
-            let! _ =
+            // Phase 863 — `Rebuild` is the repair, so its count is of the
+            // entries actually WRITTEN: a refused write is not counted, and a
+            // caller comparing the count with what it loaded sees the gap.
+            let! written =
                 entryList
-                |> List.map (fun (key, value, payload) -> add key value payload)
+                |> List.map (fun (key, value, payload) -> async {
+                    let blobName = leafName indexPrefix keyToSegment valueToSegment key value
+                    let bytes = payload |> Option.defaultValue Array.empty
+
+                    match! storage.Upload(container, blobName, bytes) with
+                    | Ok _ -> return 1
+                    | Error _ -> return 0
+                })
                 |> Async.Parallel
 
-            return entryList.Length
+            return Array.sum written
         }
 
         {

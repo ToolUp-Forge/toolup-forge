@@ -24,8 +24,12 @@ let loadAIContext (storage: IBlobStorage) (container: string) : Async<AIContextE
 
 let saveAIContext (storage: IBlobStorage) (container: string) (entry: AIContextEntry) = async {
     let bytes = (toJson entry: string) |> Encoding.UTF8.GetBytes
-    let! _ = storage.Upload(container, aiContextBlobName, bytes)
-    ()
+
+    // Phase 863 — the standing context IS the write; a refused one raises
+    // rather than reporting a save (and auditing a change) that never landed.
+    match! storage.Upload(container, aiContextBlobName, bytes) with
+    | Ok _ -> return ()
+    | Error storageError -> return failwithf "the standing AI context could not be written: %s" storageError
 }
 
 // ─── Inventory summary publish ────────────────────────────────────

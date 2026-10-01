@@ -212,12 +212,15 @@ module DerivativeJobs =
             | Ok bytes -> DerivativeJobsJson.tryFromJson<DerivativeStatus> (System.Text.Encoding.UTF8.GetString bytes)
     }
 
+    /// Phase 863 — returns the write's result: each caller decides what a
+    /// refused status write means for it (see the two call sites).
     let internal writeStatus (blob: IBlobStorage) (container: string) (hash: string) (name: string) (status) = async {
         let bytes =
             System.Text.Encoding.UTF8.GetBytes(DerivativeJobsJson.toJson (status: DerivativeStatus))
 
-        let! _ = blob.Upload(container, statusKey hash name, bytes)
-        return ()
+        match! blob.Upload(container, statusKey hash name, bytes) with
+        | Ok _ -> return Ok()
+        | Error storageError -> return Error storageError
     }
 
     let internal clearStatus (blob: IBlobStorage) (container: string) (hash: string) (name: string) = async {
@@ -230,9 +233,17 @@ module DerivativeJobs =
     let internal writeDeadLetter (blob: IBlobStorage) (record: DerivativeDeadLetterRecord) = async {
         let bytes = System.Text.Encoding.UTF8.GetBytes(DerivativeJobsJson.toJson record)
 
-        let! _ = blob.Upload(record.ScopeContainer, deadLetterKey record.ContentHash record.DerivativeName, bytes)
-
-        return ()
+        // Phase 863 — a refused write raises, so the caller's `DeadLettered`
+        // flag says what actually happened instead of always `true`.
+        match! blob.Upload(record.ScopeContainer, deadLetterKey record.ContentHash record.DerivativeName, bytes) with
+        | Ok _ -> return ()
+        | Error storageError ->
+            return
+                failwithf
+                    "dead-letter record for %s/%s could not be written: %s"
+                    record.ContentHash
+                    record.DerivativeName
+                    storageError
     }
 
     /// Read a persisted dead-letter record, if one exists. The read
@@ -329,7 +340,20 @@ type DerivativeJobCoordinator
                         let correlationId = string jobId
                         let pending = StatusPending(correlationId, DateTimeOffset.UtcNow)
 
-                        do! DerivativeJobs.writeStatus blobStorage scopeContainer hash derivativeName pending
+                        // Best-effort by design (Phase 863): the job writes its
+                        // own terminal status, and a missing Pending only lets
+                        // a later request schedule the same content-addressed
+                        // derivation again. Logged, never silent.
+                        match! DerivativeJobs.writeStatus blobStorage scopeContainer hash derivativeName pending with
+                        | Ok() -> ()
+                        | Error storageError ->
+                            logger.Warn(
+                                sprintf
+                                    "[AssetStore] pending status for %s/%s was not recorded: %s"
+                                    hash
+                                    derivativeName
+                                    storageError
+                            )
 
                         match! scheduler.TriggerOnce(scopeContainer, jobId, "_assetstore") with
                         | Ok() -> ()
@@ -485,13 +509,20 @@ type DerivativeJobHandler
                 let recordFailure (message: string) = async {
                     let failedAt = DateTimeOffset.UtcNow
 
-                    do!
+                    // Phase 863 — the Failed status is what the request path
+                    // reads; unrecorded, it would answer Pending forever. A
+                    // refused write raises, and the scheduler re-runs the job.
+                    match!
                         DerivativeJobs.writeStatus
                             blobStorage
                             container
                             hash
                             name
                             (StatusFailed(message, ctx.Attempt, failedAt))
+                    with
+                    | Ok() -> ()
+                    | Error storageError ->
+                        return failwithf "failed status for %s/%s could not be recorded: %s" hash name storageError
 
                     do!
                         notify container {

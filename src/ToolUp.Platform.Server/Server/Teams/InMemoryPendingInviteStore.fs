@@ -143,9 +143,21 @@ module PendingInviteStore =
                 // here would persist empty-plus-one and erase every other
                 // pending invite irreversibly.
                 let target = quarantineBlobName ()
-                let! _ = storage.Upload(platformContainer, target, bytes)
-                let! _ = storage.Delete(platformContainer, blobName)
-                return raise (PendingInvitesBlobCorrupt(target, reason))
+
+                // Phase 863 — free the canonical name only once the copy has
+                // landed. A refused copy leaves the corrupt blob where it is
+                // (still failing closed), because deleting it then would
+                // destroy the only copy of the bytes.
+                match! storage.Upload(platformContainer, target, bytes) with
+                | Ok _ ->
+                    let! _ = storage.Delete(platformContainer, blobName)
+                    return raise (PendingInvitesBlobCorrupt(target, reason))
+                | Error storageError ->
+                    return
+                        failwithf
+                            "pending-invites blob is corrupt (%s) and could not be quarantined (%s); it was left in place and nothing was written"
+                            reason
+                            storageError
         | Error _ -> return Map.empty
     }
 
@@ -164,13 +176,18 @@ module PendingInviteStore =
 
     let private writeAndInvalidate (storage: IBlobStorage) (map: Map<string, PendingInviteByEmail>) : Async<unit> = async {
         let bytes = encodeMap map
-        let! _ = storage.Upload(platformContainer, blobName, bytes)
 
-        cache <-
-            Some {
-                Map = map
-                LoadedAt = DateTime.UtcNow
-            }
+        // Phase 863 — the canonical write: a refused one raises (every store
+        // method maps it to `StorageFailed`) and leaves the cache untouched,
+        // so a later read never serves a map that was never stored.
+        match! storage.Upload(platformContainer, blobName, bytes) with
+        | Ok _ ->
+            cache <-
+                Some {
+                    Map = map
+                    LoadedAt = DateTime.UtcNow
+                }
+        | Error storageError -> return failwithf "pending-invites blob could not be written: %s" storageError
     }
 
     /// Split the blob into the entries to keep (`ExpiresAt` at or after

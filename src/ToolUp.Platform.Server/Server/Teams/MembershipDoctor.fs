@@ -350,10 +350,18 @@ module MembershipDoctorStorage =
         {
             SaveMemberships =
                 fun userId rows -> async {
-                    let! _ =
+                    // Phase 863 — a refused save raises, so `repair` stops
+                    // before it audits a removal that did not happen.
+                    match!
                         storage.Upload(platformContainer, membershipBlobName userId, Json.serializeMemberships rows)
-
-                    return ()
+                    with
+                    | Ok _ -> return ()
+                    | Error storageError ->
+                        return
+                            failwithf
+                                "MembershipDoctor: memberships for user %s could not be written: %s"
+                                userId
+                                storageError
                 }
             ClearActiveTeam =
                 fun userId teamId -> async {

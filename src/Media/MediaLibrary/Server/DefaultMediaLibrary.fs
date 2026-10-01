@@ -484,28 +484,43 @@ type DefaultMediaLibrary
                     // rendition entry.
                     let mutable masterBlob = None
                     let mutable totalBytes = 0L
+                    // Phase 863 — a rendition with a file missing does not
+                    // play, so the first refused write fails the item rather
+                    // than publishing a manifest over segments never stored.
+                    let mutable writeFailure = None
 
                     for file in files do
-                        let path = MediaPaths.derivedDir id + file.BlobSuffix
-                        let! _ = blobStorage.Upload(container, path, file.Bytes)
-                        totalBytes <- totalBytes + int64 file.Bytes.Length
+                        if Option.isNone writeFailure then
+                            let path = MediaPaths.derivedDir id + file.BlobSuffix
 
-                        if file.IsMasterManifest then
-                            masterBlob <- Some(path, file.MimeType, file.RenditionName)
+                            match! blobStorage.Upload(container, path, file.Bytes) with
+                            | Error storageError ->
+                                writeFailure <-
+                                    Some(sprintf "rendition file %s could not be stored: %s" path storageError)
+                            | Ok _ ->
+                                totalBytes <- totalBytes + int64 file.Bytes.Length
 
-                    let rendition =
-                        match masterBlob with
-                        | Some(path, mime, name) -> [
-                            {
-                                Name = name
-                                BlobName = path
-                                MimeType = mime
-                                SizeBytes = totalBytes
-                            }
-                          ]
-                        | None -> []
+                                if file.IsMasterManifest then
+                                    masterBlob <- Some(path, file.MimeType, file.RenditionName)
 
-                    return rendition, MediaIngestionStatus.Ready
+                    match writeFailure with
+                    | Some reason ->
+                        logger.Warn(sprintf "[MediaLibrary] HLS persist failed: %s" reason)
+                        return [], MediaIngestionStatus.Failed reason
+                    | None ->
+                        let rendition =
+                            match masterBlob with
+                            | Some(path, mime, name) -> [
+                                {
+                                    Name = name
+                                    BlobName = path
+                                    MimeType = mime
+                                    SizeBytes = totalBytes
+                                }
+                              ]
+                            | None -> []
+
+                        return rendition, MediaIngestionStatus.Ready
                 | Error e -> return [], MediaIngestionStatus.Failed e
             else
                 return [], MediaIngestionStatus.Ready

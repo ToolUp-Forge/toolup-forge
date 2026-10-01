@@ -452,8 +452,15 @@ type BlobRoundStateStore(blobs: IBlobStorage) =
     interface IRoundStateStore with
         member _.Save(scopeId: string, state: RoundState) = async {
             let payload = Encoding.UTF8.GetBytes(JsonRpc.serialize state)
-            let! _ = blobs.Upload(container, blobNameFor scopeId state.RunId, payload)
-            return ()
+
+            // Phase 863 — a refused write raises, so the round is not
+            // announced: announced-but-unpersisted is exactly the state the
+            // `Save` contract exists to prevent.
+            match! blobs.Upload(container, blobNameFor scopeId state.RunId, payload) with
+            | Ok _ -> return ()
+            | Error storageError ->
+                return
+                    failwithf "BlobRoundStateStore: state of run %s could not be written: %s" state.RunId storageError
         }
 
         member _.TryLoad(scopeId: string, runId: string) = async {

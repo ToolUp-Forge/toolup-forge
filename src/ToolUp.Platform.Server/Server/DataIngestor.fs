@@ -142,11 +142,18 @@ type DataIngestor
 
     let connectorByKind = connectors |> List.map (fun c -> c.Kind, c) |> Map.ofList
 
+    // Best-effort by design (Phase 863): the run history is a query-side
+    // copy — `emitEvent` below carries the same serialised run to
+    // `IEventStore`, the durable record. A refused write is logged at Warn
+    // exactly as a raised one is.
     let recordRun (run: IngestionRun) = async {
         try
             let bytes = Json.serialize run
-            let! _ = storage.Upload(platformContainer, runBlob run, bytes)
-            return ()
+
+            match! storage.Upload(platformContainer, runBlob run, bytes) with
+            | Ok _ -> return ()
+            | Error storageError ->
+                logger.Warn $"[DataIngestor] failed to persist IngestionRun {run.RunId}: {storageError}"
         with ex ->
             logger.Warn $"[DataIngestor] failed to persist IngestionRun {run.RunId}: {ex.Message}"
     }

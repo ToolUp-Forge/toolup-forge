@@ -3802,6 +3802,10 @@ let main args =
     //   let! _ =
     //       storage.Upload(container, name, bytes)
     //
+    // `UploadWithETag` (the conditional write) is the same call for this
+    // purpose and is matched too: its `Result` says whether the write — or
+    // the precondition — held, and discarding it discards both.
+    //
     // Where best-effort IS the design the site matches the `Error` and logs
     // it at Warn, which is not this shape. A discard that must stay a
     // discard carries the marker `// best-effort-write: <why>` on the
@@ -3849,10 +3853,10 @@ let main args =
         }
 
         let oneLine =
-            System.Text.RegularExpressions.Regex(@"^\s*let!\s+_\s*=\s*\S.*\.Upload\s*\(")
+            System.Text.RegularExpressions.Regex(@"^\s*let!\s+_\s*=\s*\S.*\.Upload(WithETag)?\s*\(")
 
         let bindOnly = System.Text.RegularExpressions.Regex(@"^\s*let!\s+_\s*=\s*$")
-        let uploadCall = System.Text.RegularExpressions.Regex(@"\.Upload\s*\(")
+        let uploadCall = System.Text.RegularExpressions.Regex(@"\.Upload(WithETag)?\s*\(")
         let marker = System.Text.RegularExpressions.Regex(@"//\s*best-effort-write:\s*\S")
 
         let isComment (line: string) =
