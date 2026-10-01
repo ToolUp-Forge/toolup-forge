@@ -542,19 +542,28 @@ let runRetrievalCell (cell: RetrievalCell) : Async<Result<RetrievalResult, strin
                     let texts = Array.init count (fun j -> chunkText cell.Seed (start + j))
                     let! embedded = embedder.GenerateEmbeddings texts
 
-                    for j in 0 .. count - 1 do
-                        let chunkId = sprintf "c%07d" (start + j)
+                    let rows = [
+                        for j in 0 .. count - 1 ->
+                            let chunk: TextChunk = {
+                                Content = texts[j]
+                                Metadata = Map.empty
+                            }
 
-                        let chunk: TextChunk = {
-                            Content = texts[j]
-                            Metadata = Map.empty
-                        }
+                            sprintf "c%07d" (start + j), embedded[j], chunk
+                    ]
 
-                        let vector = embedded[j]
-                        do! store.Upsert scope chunkId vector chunk
+                    // Phase 946 — one batched write per embedding batch
+                    // (`IVectorStoreBatch`, one round-trip on pgvector)
+                    // where the store offers it, one `Upsert` per chunk
+                    // where it does not. Seeding pgvector one upsert at a
+                    // time took 1,002 s for 100,000 chunks.
+                    do! upsertBatch store scope rows
+
+                    for chunkId, _, chunk in rows do
                         do! sparse.Upsert scope chunkId chunk
 
-                        if keepVectors then
+                    if keepVectors then
+                        for j in 0 .. count - 1 do
                             vectors[start + j] <- embedded[j]
 
                 seedClock.Stop()
