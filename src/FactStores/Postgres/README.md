@@ -170,7 +170,94 @@ per-query read can therefore touch fewer rows than the population. A flat read
 needs an aggregate maintained on every write, and this companion does not build
 one. `docs/rag/performance.md` has the breakdown and the reasoning.
 
-Migrating an existing blob store's facts into the table is not provided yet.
+## Migrating from `BlobFactStore` (Phase 941)
+
+`FactStoreMigration.migrate` moves a deployment's facts from its
+`BlobFactStore` into the table without losing history, and proves the copy.
+
+**Why not re-assert the facts.** `IFactStore.Assert` stamps a new transaction
+time. Every `AsOf` read depends on each fact's original transaction time and
+its supersession link (law L4), so a copy through `Assert` answers "what did
+we know at `t`" differently from the source. The migration writes each row
+raw instead, through the same row projection the store's own writes use:
+original content address, transaction time, supersession link and head flag.
+
+**What it does, per scope.**
+
+1. Reads every fact blob (`BlobFactStore.ExportScope`). A blob that does not
+   read, parse, or sit under its own content address refuses the scope and is
+   named, unless `AllowUnreadableSource` says otherwise (the blob store's own
+   reads skip such a blob, so accepting it preserves every read).
+2. Checks the source is a fact base the table can hold: content addresses
+   unique, every chain linear with strictly increasing transaction time, one
+   current head per lineage. A violation refuses the scope, naming each fact.
+3. Writes the facts in (transaction time, content address) order, a page per
+   transaction (`PageSize`, default 1,000). Each page is staged with a binary
+   `COPY` and inserted with `ON CONFLICT (scope, fact_id) DO NOTHING`, under
+   the scope's exclusive write lock, and records its progress in
+   `<table>_migration` in the same transaction.
+4. Verifies source against target: every row's presence, payload,
+   transaction time, supersession column, lineage hash and head flag; every
+   lineage's chain as the target's columns walk it; and both stores' `AsOf`
+   reads (current heads and history) at `AsOfSamples` of the source's
+   transaction times, one tick before each, and the end of time. Each
+   difference names its fact id.
+5. Writes one `FactStoreMigrated` audit record to `IEventStore` under the
+   reserved `_facts` source: source, target, counts and verification result.
+   The per-fact `FactAsserted` history already lives in `IEventStore`, so no
+   per-fact event is re-emitted.
+
+**Resumable.** An interrupted run leaves its committed pages and their
+progress row; the next run continues after the last committed page. A page
+replayed from the start writes nothing, because the content address is the
+primary key. A scope an earlier run verified over the same source facts (a
+digest of their content addresses) is skipped.
+
+**Where to run it.** It is a compose-time / operator entry point, not a
+`toolup` CLI command: the CLI is a dependency-free host (pure BCL +
+`FSharp.Core`), and the migration needs Npgsql and the fact tier, which live
+in this package. Run it from a small console or script that references this
+package and can build the deployment's blob backend:
+
+```fsharp skip=fragment
+let events: IEventStore = (* the deployment's event store *)
+let source = BlobFactStore(blobStorage, events, registry, (fun () -> DateTime.UtcNow))
+use target = PostgresFactStore.create connectionString PostgresFactStoreOptions.defaults events registry (fun () -> DateTime.UtcNow)
+let! scopes = scopeEnumerator.ListScopes()
+let! report = FactStoreMigration.migrate source target events FactStoreMigrationOptions.defaults scopes
+printfn "%s" (FactStoreMigration.render report)
+exit (FactStoreMigration.exitCode report)   // 0 only when every scope verified
+```
+
+Build both stores with the same metric registry (or both without one): the
+verification compares their `AsOf` reads, and the registry decides the
+canonical-method selection those reads apply. `FactStoreMigration.verify`
+runs the same check without writing anything.
+
+**The procedure.**
+
+1. **Stop writers.** Every replica that asserts facts, including scheduled
+   recomputation. The verification is a snapshot comparison, so a fact
+   written to the blob store mid-run is simply not migrated.
+2. **Migrate.** Run `migrate` over every scope. Re-run it until the exit code
+   is `0`; a re-run continues where the last one stopped and skips verified
+   scopes.
+3. **Verify.** `migrate` verifies each scope it copies. Read the rendered
+   report: a failed scope lists each difference by fact id. Run `verify` again
+   immediately before the switch if any time has passed.
+4. **Switch the composition.** Add `PostgresFactStoreCompose.withPostgresFactStore`
+   straight after `FactsCompose.withFactStore`, deploy, and restart writers.
+5. **Roll back** by removing that line and redeploying. The migration never
+   writes to or deletes from the blob store, so the blob store is exactly as
+   it was when writers stopped. Facts asserted after the switch are in the
+   table only; before rolling back past them, decide whether to lose them or
+   re-assert them against the blob store. To retry a migration from nothing,
+   delete the scope's rows and its progress row:
+   `DELETE FROM toolup_facts WHERE scope = '<scope>'` and
+   `DELETE FROM toolup_facts_migration WHERE scope = '<scope>'`.
+
+Memory: a scope is read whole, as the blob store's own population read and
+assert already do; the rows are written a page at a time.
 
 ## Testing
 

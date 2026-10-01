@@ -147,6 +147,9 @@ let allTests =
         // whole-tree hydrating binding adopts the server markup, and the
         // conversation panel's fact link, mounted.
         ComposerStoreTests.tests931
+        // Phase 942 - the team output-visibility section and the member
+        // notice, mounted.
+        TeamOutputVisibilityUITests.tests
     ]
 
 // Phase 849 — `output/Program.js ClientBench` runs the browser-runtime

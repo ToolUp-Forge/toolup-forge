@@ -268,6 +268,10 @@ type private WorldOptions = {
     /// Phase 935 — build the service with a carrier over the world's own
     /// key ring, so grants persist.
     Durable: bool
+    /// Phase 938 — bind the TARGET table to the delegate writer (Phase 889)
+    /// and compose the delegated store over the fact store, so a
+    /// consolidation lands in a table no default writer holds.
+    DelegateTarget: bool
 }
 
 let private defaults = {
@@ -277,6 +281,7 @@ let private defaults = {
     Verifier = None
     Decorate = id
     Durable = false
+    DelegateTarget = false
 }
 
 let private worldWith (options: WorldOptions) : World =
@@ -288,11 +293,53 @@ let private worldWith (options: WorldOptions) : World =
         tick <- tick.AddSeconds 1.0
         tick
 
-    let store =
+    let tables =
+        if options.DelegateTarget then
+            FactTableRegistry.build [
+                for t in [ regionalSales; groupSales ] ->
+                    {
+                        FactTableRegistration.Module = "sales"
+                        Definition = t
+                    }
+            ] [
+                BindAllFactTables DefaultFactTableWriter.Destination
+                BindFactTable(groupSales.Id, DelegateFact.Destination)
+            ]
+        else
+            tables
+
+    let factStore =
         BlobFactStore.createWithRegistryAndClock storage events (Some registry) clock
 
+    let delegates =
+        if options.DelegateTarget then
+            DelegateFacts.resolve tables (Some registry) [ groupSales.Id ]
+            |> Result.defaultWith (fun e -> failtestf "resolve: %s" e)
+        else
+            []
+
+    let store =
+        if List.isEmpty delegates then
+            factStore
+        else
+            DelegatedFactStore.create factStore storage delegates (Some registry) clock :> IFactStore
+
     let writer =
-        DefaultFactTableWriter.createWithClock store storage events tables (Some registry) clock
+        let defaultWriter =
+            DefaultFactTableWriter.createWithClock store storage events tables (Some registry) clock
+
+        if List.isEmpty delegates then
+            defaultWriter
+        else
+            DelegatedFactStore.writer
+                (Some defaultWriter)
+                storage
+                events
+                tables
+                (Some registry)
+                delegates
+                (fun () -> Some store)
+                clock
         |> options.Decorate
 
     let taint = DisclosureTaintConfig.ofLists [ salesPolicy options.Permit ] []
@@ -1472,6 +1519,87 @@ let private restartTests =
         }
     ]
 
+// ─── 8. A consolidation into a delegate-bound table (Phase 938) ──────
+
+/// The target's current facts for one cell, asked of the COMPOSED store at
+/// the cell's subject — a point read, which a delegated table answers by
+/// minting the row it holds.
+let private cellAt (w: World) (metricId: string) (path: string list) : Fact list =
+    w.Store.Query(
+        teamScope group,
+        FactQuery.forSubjectMetric
+            {
+                Hierarchy = groupProducts.Id
+                Path = path
+            }
+            (MetricRef metricId)
+    )
+    |> Async.RunSynchronously
+
+let private delegateTargetTests =
+    testList "a consolidation into a delegate-bound table (Phase 938)" [
+
+        test "a consolidation into a delegate-bound table writes Imported rows" {
+            let w = worldWith { defaults with DelegateTarget = true }
+            commitSource w north [ row "sku-1" 100m 10m; row "sku-2" 300m 30m ]
+            let grant = grantInForce w north
+
+            // Red before Phase 938: the consolidation was refused here with
+            // FactTableNotBoundHere, because only the default writer read a
+            // staged provenance.
+            let receipt = published w north grant.GrantId
+            Expect.isNonEmpty receipt.TargetRun "the consolidation committed a run of the target"
+
+            match cellAt w "revenue" [ north; "sku-1" ] with
+            | [ fact ] ->
+                Expect.equal fact.Value (Scalar 100m) "the origin's value"
+
+                Expect.equal
+                    fact.Method
+                    (Imported(PublicationGrant.certificateRef grant))
+                    "Imported, naming the grant's certificate"
+
+                Expect.stringContains
+                    (fact.Evidence.TriggerRef |> Option.defaultValue "")
+                    ("origin:" + north)
+                    "the evidence names the origin"
+            | other -> failtestf "expected one current fact, got %d" other.Length
+
+            let runs =
+                w.Writer.Runs(group, groupSales.Id)
+                |> Async.RunSynchronously
+                |> Result.defaultWith (fun e -> failtestf "runs: %s" (FactTableWriteError.describe e))
+
+            Expect.hasLength runs 1 "the delegate writer holds the consolidation run"
+        }
+
+        test "a withdrawal from a delegate-bound table supersedes the quoted rows, naming the withdrawal" {
+            let w = worldWith { defaults with DelegateTarget = true }
+            commitSource w north [ row "sku-1" 100m 10m ]
+            let grant = grantInForce w north
+            published w north grant.GrantId |> ignore
+
+            // Quote the row, so the fact tier holds a head to withdraw.
+            Expect.hasLength (cellAt w "revenue" [ north; "sku-1" ]) 1 "quoted before the withdrawal"
+
+            asUser owners[north] north (w.Publication.Revoke(teamScope north, grant.GrantId))
+            |> Result.defaultWith (fun e -> failtestf "revoke: %s" (PublicationRefusal.describe e))
+            |> ignore
+
+            w.Publication.Refresh(teamScope group, groupSales.Id)
+            |> Async.RunSynchronously
+            |> Result.defaultWith (fun e -> failtestf "refresh: %s" (PublicationRefusal.describe e))
+            |> ignore
+
+            match cellAt w "revenue" [ north; "sku-1" ] with
+            | [ { Value = Absent reason } as fact ] ->
+                Expect.stringContains reason "withdrawn" "the absence names the withdrawal"
+
+                Expect.equal fact.Method (Imported(PublicationGrant.certificateRef grant)) "in the origin's own lineage"
+            | other -> failtestf "expected the quoted row withdrawn, got %A" other
+        }
+    ]
+
 let tests =
     testList "Phase 897 — team-to-team fact publication" [
         consolidationTests
@@ -1481,4 +1609,5 @@ let tests =
         auditTests
         composedWriterTests
         restartTests
+        delegateTargetTests
     ]

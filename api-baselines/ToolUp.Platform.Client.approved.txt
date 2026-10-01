@@ -2130,9 +2130,15 @@ SidebarPreferences+UserSidebarPreferences.PinnedModuleIds : Microsoft.FSharp.Col
 SidebarPreferences+UserSidebarPreferencesModule (class)
 SidebarPreferences+UserSidebarPreferencesModule.empty : SidebarPreferences+UserSidebarPreferences { get }
 TeamConfigUI (class)
+TeamConfigUI.OutputVisibilitySection() : Fable.React.ReactElement
+TeamConfigUI.TeamOutputVisibilityNotice() : Fable.React.ReactElement
 TeamConfigUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule
 TeamConfigUI.init() : System.Tuple`2[TeamConfigUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[TeamConfigUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 TeamConfigUI.moduleId : System.String { get }
+TeamConfigUI.outputLevelDescription(ToolUp.Platform.TeamConfigMessages, ToolUp.Platform.TeamVisibilityLevel) : System.String
+TeamConfigUI.outputLevelLabel(ToolUp.Platform.TeamConfigMessages, ToolUp.Platform.TeamVisibilityLevel) : System.String
+TeamConfigUI.outputVisibilityNoticeView(ToolUp.Platform.TeamConfigMessages, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamOutputVisibilityView]) : Fable.React.ReactElement
+TeamConfigUI.outputVisibilityView(ToolUp.Platform.TeamConfigMessages, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.TeamOutputVisibilityView, System.String]], TeamConfigUI+FormStatus, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.TeamVisibilityLevel, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 TeamConfigUI.update(TeamConfigUI+Msg, TeamConfigUI+Model) : System.Tuple`2[TeamConfigUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[TeamConfigUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 TeamConfigUI+FormStatus (class)
 TeamConfigUI+FormStatus.Idle : TeamConfigUI+FormStatus { get }
@@ -2252,10 +2258,13 @@ TeamConfigUI+Tab.ConfigTab : TeamConfigUI+Tab { get }
 TeamConfigUI+Tab.FlagsTab : TeamConfigUI+Tab { get }
 TeamConfigUI+Tab.IsConfigTab : System.Boolean { get }
 TeamConfigUI+Tab.IsFlagsTab : System.Boolean { get }
+TeamConfigUI+Tab.IsOutputVisibilityTab : System.Boolean { get }
+TeamConfigUI+Tab.OutputVisibilityTab : TeamConfigUI+Tab { get }
 TeamConfigUI+Tab.Tag : System.Int32 { get }
 TeamConfigUI+Tab+Tags (class)
 TeamConfigUI+Tab+Tags.ConfigTab : System.Int32 (literal)
 TeamConfigUI+Tab+Tags.FlagsTab : System.Int32 (literal)
+TeamConfigUI+Tab+Tags.OutputVisibilityTab : System.Int32 (literal)
 TeamManagerUI (class)
 TeamManagerUI.adminTile(ToolUp.Platform.ModuleDefinition) : ToolUp.Platform.AdminTile
 TeamManagerUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule
@@ -5876,7 +5885,7 @@ ToolUp.Platform.SlotFill`1+Tags.Default : System.Int32 (literal)
 ToolUp.Platform.SlotFill`1+Tags.Empty : System.Int32 (literal)
 ToolUp.Platform.SlotFill`1+Tags.External : System.Int32 (literal)
 ToolUp.Platform.TeamConfigMessages (class)
-ToolUp.Platform.TeamConfigMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String)
+ToolUp.Platform.TeamConfigMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.TeamConfigMessages.ClearAllButton : System.String { get }
 ToolUp.Platform.TeamConfigMessages.ClearOverrideButton : System.String { get }
 ToolUp.Platform.TeamConfigMessages.ConfigurationTab : System.String { get }
@@ -5898,6 +5907,22 @@ ToolUp.Platform.TeamConfigMessages.ModulesHeading : System.String { get }
 ToolUp.Platform.TeamConfigMessages.NoConfigurableModules : System.String { get }
 ToolUp.Platform.TeamConfigMessages.NoEditableConfig : System.String { get }
 ToolUp.Platform.TeamConfigMessages.NoFlagsDeclared : System.String { get }
+ToolUp.Platform.TeamConfigMessages.OutputLevelPlatformAdmins : System.String { get }
+ToolUp.Platform.TeamConfigMessages.OutputLevelPlatformAdminsDescription : System.String { get }
+ToolUp.Platform.TeamConfigMessages.OutputLevelTeamAdmins : System.String { get }
+ToolUp.Platform.TeamConfigMessages.OutputLevelTeamAdminsDescription : System.String { get }
+ToolUp.Platform.TeamConfigMessages.OutputLevelTeamVisible : System.String { get }
+ToolUp.Platform.TeamConfigMessages.OutputLevelTeamVisibleDescription : System.String { get }
+ToolUp.Platform.TeamConfigMessages.OutputVisibilityHeading : System.String { get }
+ToolUp.Platform.TeamConfigMessages.OutputVisibilityHelp : System.String { get }
+ToolUp.Platform.TeamConfigMessages.OutputVisibilityLoading : System.String { get }
+ToolUp.Platform.TeamConfigMessages.OutputVisibilityNoTeam : System.String { get }
+ToolUp.Platform.TeamConfigMessages.OutputVisibilityNotComposed : System.String { get }
+ToolUp.Platform.TeamConfigMessages.OutputVisibilityNoticeHint : System.String { get }
+ToolUp.Platform.TeamConfigMessages.OutputVisibilityOwnerOnly : System.String { get }
+ToolUp.Platform.TeamConfigMessages.OutputVisibilityTab : System.String { get }
+ToolUp.Platform.TeamConfigMessages.OutputVisibilityUnreadable : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
+ToolUp.Platform.TeamConfigMessages.OutputVisibilityUpdated : System.String { get }
 ToolUp.Platform.TeamConfigMessages.RequiredMarker : System.String { get }
 ToolUp.Platform.TeamConfigMessages.SaveButton : System.String { get }
 ToolUp.Platform.TeamConfigMessages.SaveOverrideButton : System.String { get }

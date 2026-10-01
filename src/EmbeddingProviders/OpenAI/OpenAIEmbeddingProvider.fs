@@ -200,7 +200,9 @@ type private OpenAIEmbeddingProviderImpl
     /// One HTTP attempt. Never throws for a non-2xx response — it reads
     /// the body and returns a classified `AttemptFailed`; only the
     /// transport/timeout `catch` arms build a `Transient` failure.
-    let sendOnce (apiKey: string) (requestJson: string) : Async<EmbedAttempt> = async {
+    /// `requestTimeout` is the configured `RequestTimeout`, or a per-call
+    /// override's smaller bound (Phase 945).
+    let sendOnce (requestTimeout: TimeSpan) (apiKey: string) (requestJson: string) : Async<EmbedAttempt> = async {
         let content = new StringContent(requestJson, Encoding.UTF8, "application/json")
 
         use request = new HttpRequestMessage(HttpMethod.Post, "/v1/embeddings")
@@ -216,7 +218,7 @@ type private OpenAIEmbeddingProviderImpl
         // send: a response whose headers arrive promptly and whose body
         // then stalls is the same hung ingest slot the timeout exists to
         // free.
-        use cts = new CancellationTokenSource(resilience.RequestTimeout)
+        use cts = new CancellationTokenSource(requestTimeout)
 
         try
             let! response = client.SendAsync(request, cts.Token) |> Async.AwaitTask
@@ -261,7 +263,7 @@ type private OpenAIEmbeddingProviderImpl
                 AttemptFailed(
                     EmbedderFailureClass.Transient,
                     None,
-                    sprintf "request timed out after %g s" resilience.RequestTimeout.TotalSeconds,
+                    sprintf "request timed out after %g s" requestTimeout.TotalSeconds,
                     None
                 )
         | :? HttpRequestException as ex ->
@@ -270,7 +272,10 @@ type private OpenAIEmbeddingProviderImpl
             return AttemptFailed(EmbedderFailureClass.Transient, None, ex.Message, None)
     }
 
-    let postEmbedding (requestJson: string) : Async<JsonDocument> = async {
+    /// One embedding call under `policy`'s retry loop, each request bounded
+    /// by `requestTimeout`. Every call passes the configured resilience
+    /// except a per-call override (Phase 945).
+    let postEmbeddingUnder (policy: EmbedderRetryPolicy) (requestTimeout: TimeSpan) (requestJson: string) = async {
         if not (breakerAllowsCall ()) then
             return
                 raise (
@@ -283,10 +288,8 @@ type private OpenAIEmbeddingProviderImpl
 
             match apiKeyOpt with
             | Some apiKey when not (String.IsNullOrWhiteSpace apiKey) ->
-                let policy = resilience.Retry
-
                 let rec loop attemptsMade = async {
-                    let! attempt = sendOnce apiKey requestJson
+                    let! attempt = sendOnce requestTimeout apiKey requestJson
                     let attemptsMade = attemptsMade + 1
 
                     match attempt with
@@ -359,6 +362,10 @@ type private OpenAIEmbeddingProviderImpl
                         )
                     )
     }
+
+    /// One embedding call under the configured resilience.
+    let postEmbedding (requestJson: string) : Async<JsonDocument> =
+        postEmbeddingUnder resilience.Retry resilience.RequestTimeout requestJson
 
     let parseEmbedding (el: JsonElement) =
         el.GetProperty("embedding").EnumerateArray()
@@ -445,6 +452,26 @@ type private OpenAIEmbeddingProviderImpl
                     results.AddRange(reassembleByIndex batch.Length doc)
 
                 return results.ToArray()
+        }
+
+    // Phase 945 — the per-call override: the query path asks for a single
+    // request bounded by its own budget, so the provider's ingestion-tuned
+    // retry sequence never runs inside a chat turn. The breaker, metrics
+    // and audit apply exactly as on a configured call.
+    interface IEmbeddingProviderCallOverride with
+        member _.GenerateEmbeddingWith(callOverride: EmbedCallOverride, text: string) = async {
+            let requestTimeout =
+                match callOverride.RequestTimeout with
+                | Some bound when bound > TimeSpan.Zero -> min bound resilience.RequestTimeout
+                | _ -> resilience.RequestTimeout
+
+            let! doc =
+                postEmbeddingUnder
+                    callOverride.Retry
+                    requestTimeout
+                    (JsonSerializer.Serialize {| model = model; input = text |})
+
+            return reassembleByIndex 1 doc |> Array.head
         }
 
 // ─── Factory functions ────────────────────────────────────────────

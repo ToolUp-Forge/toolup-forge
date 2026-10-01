@@ -5612,6 +5612,14 @@ ToolUp.Platform.IEmbeddingCache+IEmbeddingCache.TryGet(ToolUp.Platform.IEmbeddin
 ToolUp.Platform.IEmbeddingProvider (class)
 ToolUp.Platform.IEmbeddingProvider.KnowledgeEmbeddingProviderUnavailableEvent : System.String (literal)
 ToolUp.Platform.IEmbeddingProvider.batchedFallback(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.Single[]]], System.Collections.Generic.IEnumerable`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[System.Single[][]]
+ToolUp.Platform.IEmbeddingProvider+EmbedCallOverride (class)
+ToolUp.Platform.IEmbeddingProvider+EmbedCallOverride..ctor(ToolUp.Platform.IEmbeddingProvider+EmbedderRetryPolicy, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.IEmbeddingProvider+EmbedCallOverride.RequestTimeout : Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan] { get }
+ToolUp.Platform.IEmbeddingProvider+EmbedCallOverride.Retry : ToolUp.Platform.IEmbeddingProvider+EmbedderRetryPolicy { get }
+ToolUp.Platform.IEmbeddingProvider+EmbedCallOverrideModule (class)
+ToolUp.Platform.IEmbeddingProvider+EmbedCallOverrideModule.generate(ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, ToolUp.Platform.IEmbeddingProvider+EmbedCallOverride, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Single[]]
+ToolUp.Platform.IEmbeddingProvider+EmbedCallOverrideModule.isSupported(ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider) : System.Boolean
+ToolUp.Platform.IEmbeddingProvider+EmbedCallOverrideModule.singleAttemptWithin(System.TimeSpan) : ToolUp.Platform.IEmbeddingProvider+EmbedCallOverride
 ToolUp.Platform.IEmbeddingProvider+EmbedderCircuitBreaker (class)
 ToolUp.Platform.IEmbeddingProvider+EmbedderCircuitBreaker..ctor(System.Int32, System.TimeSpan)
 ToolUp.Platform.IEmbeddingProvider+EmbedderCircuitBreaker.Cooldown : System.TimeSpan { get }
@@ -5679,6 +5687,8 @@ ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider.GenerateEmbedding(System.S
 ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider.GenerateEmbeddings(System.Collections.Generic.IEnumerable`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[System.Single[][]]
 ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider.ModelId : System.String { get }
 ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider.ProviderId : System.String { get }
+ToolUp.Platform.IEmbeddingProvider+IEmbeddingProviderCallOverride (interface)
+ToolUp.Platform.IEmbeddingProvider+IEmbeddingProviderCallOverride.GenerateEmbeddingWith(ToolUp.Platform.IEmbeddingProvider+EmbedCallOverride, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Single[]]
 ToolUp.Platform.IEmbeddingProvider+IScopedEmbeddingProviderFactory (interface)
 ToolUp.Platform.IEmbeddingProvider+IScopedEmbeddingProviderFactory.For(ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider
 ToolUp.Platform.IEmbeddingProvider+IScopedEmbeddingProviderFactory.ResetScope(ToolUp.Platform.VectorKnowledgeTypes+VectorScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]

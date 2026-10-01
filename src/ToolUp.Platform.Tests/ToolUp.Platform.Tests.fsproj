@@ -407,6 +407,9 @@
         <!-- Phase 14t — embedder retry + dead-letter classification / backoff /
              alert-throttling unit coverage. -->
         <Compile Include="InProcess\IngestionEmbedderRetryTests.fs" />
+        <!-- Phase 945 — the per-call embedder override's conformance pack,
+             bound in IngestionBackpressureTests below. -->
+        <Compile Include="Contracts\IEmbeddingProviderCallOverrideContract.fs" />
         <!-- Phase 303 — ingestion-queue backpressure observability: queue drop
              counters + emitIngestionDrop audit/notification triple. -->
         <Compile Include="InProcess\IngestionBackpressureTests.fs" />

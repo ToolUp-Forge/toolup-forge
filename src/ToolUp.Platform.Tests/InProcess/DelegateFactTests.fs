@@ -867,6 +867,82 @@ let private compositionTests =
         }
     ]
 
+// ─── 8. Imported runs (Phase 938) ────────────────────────────────────
+
+let private kept (w: World) (prefix: string) : string list =
+    w.Storage.List(w.Scope.ScopeId, "_delegate-tables/" + prefix)
+    |> Async.RunSynchronously
+
+let private importedTests =
+    testList "imported runs (Phase 938)" [
+
+        test "a computed run keeps no provenance and records no lineage (GP 11)" {
+            let w = delegatedWorld FactTableHistoryMode.AppendByRun
+            commit w (population 20) |> ignore
+            point w "revenue" [ "brand-01"; "sku-000001" ] |> ignore
+
+            Expect.isEmpty (kept w "provenance/") "no provenance for a computed run"
+            Expect.isEmpty (kept w "lineages/") "and no imported lineage"
+        }
+
+        test "an imported run keeps its provenance once committed, and an abandoned one drops it" {
+            let w = delegatedWorld FactTableHistoryMode.AppendByRun
+
+            let imported =
+                ImportedRun [
+                    {
+                        RootMember = "brand-01"
+                        CertificateRef = "cert:brand-01"
+                        TriggerRef = "import:brand-01"
+                        Withdrawal = None
+                        Cells = []
+                    }
+                ]
+
+            let openImported () =
+                match
+                    w.Writer.OpenRun(w.Scope.ScopeId, "sku-sales", imported)
+                    |> Async.RunSynchronously
+                with
+                | Ok run -> run
+                | Error e -> failtestf "open: %s" (FactTableWriteError.describe e)
+
+            let committed = openImported ()
+
+            w.Writer.WriteRows(w.Scope.ScopeId, committed.RunId, population 20)
+            |> Async.RunSynchronously
+            |> Result.defaultWith (fun e -> failtestf "write: %s" (FactTableWriteError.describe e))
+            |> ignore
+
+            w.Writer.Commit(w.Scope.ScopeId, committed.RunId)
+            |> Async.RunSynchronously
+            |> Result.defaultWith (fun e -> failtestf "commit: %s" (FactTableWriteError.describe e))
+            |> ignore
+
+            Expect.hasLength (kept w "provenance/") 1 "a committed run's provenance stays: its rows are minted under it"
+            Expect.hasLength (kept w "lineages/") 1 "and the table records the lineage it imported under"
+
+            match point w "revenue" [ "brand-01"; "sku-000001" ] with
+            | [ fact ] -> Expect.equal fact.Method (Imported "cert:brand-01") "the origin's row mints Imported"
+            | other -> failtestf "expected one fact, got %d" other.Length
+
+            match point w "revenue" [ "brand-02"; "sku-000002" ] with
+            | [ fact ] ->
+                Expect.equal fact.Method (Computed("sales-rollup", "v1", "sku-sales")) "a row under no origin does not"
+            | other -> failtestf "expected one fact, got %d" other.Length
+
+            let abandoned = openImported ()
+            Expect.hasLength (kept w "provenance/") 2 "kept while open"
+
+            w.Writer.Abandon(w.Scope.ScopeId, abandoned.RunId, "changed my mind")
+            |> Async.RunSynchronously
+            |> Result.defaultWith (fun e -> failtestf "abandon: %s" (FactTableWriteError.describe e))
+            |> ignore
+
+            Expect.hasLength (kept w "provenance/") 1 "an abandoned run's provenance goes with it"
+        }
+    ]
+
 /// Every Phase 889 case.
 let tests =
     testList "Phase 889 — delegate facts" [
@@ -877,4 +953,5 @@ let tests =
         refreshTests
         walkTests
         compositionTests
+        importedTests
     ]

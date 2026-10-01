@@ -99,6 +99,7 @@ ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolU
 ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
 ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Facts.FactSurfaceOptions)
 ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Facts.FactSurfaceOptions, ToolUp.Facts.FactIndexOptions)
+ToolUp.Facts.BlobFactStore.ExportScope(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.FactScopeExport]
 ToolUp.Facts.BlobFactStore.IndexConsistencyCheck(System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SecondaryIndex+IndexConsistencyEntry]]
 ToolUp.Facts.BlobFactStore.RebuildIndex(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
 ToolUp.Facts.BlobFactStoreModule (class)
@@ -522,10 +523,13 @@ ToolUp.Facts.DelegateFacts.resolve(ToolUp.Platform.Grounding.IFactTableRegistry,
 ToolUp.Facts.DelegateMint (class)
 ToolUp.Facts.DelegateMint.RecordPeriod : ToolUp.Facts.TemporalExtent { get }
 ToolUp.Facts.DelegateMint.draftOf(ToolUp.Facts.DelegateFact, ToolUp.Facts.DelegateRun, ToolUp.Facts.DelegateTableRow) : ToolUp.Facts.FactDraft
+ToolUp.Facts.DelegateMint.draftUnder(ToolUp.Facts.FactTableRunProvenance, ToolUp.Facts.DelegateFact, ToolUp.Facts.DelegateRun, ToolUp.Facts.DelegateTableRow) : ToolUp.Facts.FactDraft
 ToolUp.Facts.DelegateMint.factIdOf(ToolUp.Facts.DelegateFact, ToolUp.Facts.DelegateRun, ToolUp.Facts.DelegateTableRow) : System.String
+ToolUp.Facts.DelegateMint.factIdUnder(ToolUp.Facts.FactTableRunProvenance, ToolUp.Facts.DelegateFact, ToolUp.Facts.DelegateRun, ToolUp.Facts.DelegateTableRow) : System.String
 ToolUp.Facts.DelegateMint.reconstruct(ToolUp.Facts.FactDraft, System.DateTime) : ToolUp.Facts.Fact
 ToolUp.Facts.DelegateMint.recordDraft(ToolUp.Facts.DelegateFact, ToolUp.Facts.DelegateRun) : ToolUp.Facts.FactDraft
 ToolUp.Facts.DelegateMint.removedDraft(ToolUp.Facts.DelegateFact, ToolUp.Facts.DelegateRun, ToolUp.Facts.Fact) : ToolUp.Facts.FactDraft
+ToolUp.Facts.DelegateMint.removedDraftUnder(ToolUp.Facts.FactTableRunProvenance, ToolUp.Facts.DelegateFact, ToolUp.Facts.DelegateRun, ToolUp.Facts.Fact) : ToolUp.Facts.FactDraft
 ToolUp.Facts.DelegateMint.triggerRef(System.String, System.String) : System.String
 ToolUp.Facts.DelegateTableCommit (class)
 ToolUp.Facts.DelegateTableCommit..ctor(ToolUp.Facts.DelegateRun, ToolUp.Platform.Grounding.FactTableCommit)
@@ -750,6 +754,10 @@ ToolUp.Facts.FactQueryTool (class)
 ToolUp.Facts.FactQueryTool.definition : ToolUp.Platform.AIToolDefinition { get }
 ToolUp.Facts.FactQueryTool.execute(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.Facts.FactQueryTool.executeWith(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Facts.FactScopeExport (class)
+ToolUp.Facts.FactScopeExport..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]])
+ToolUp.Facts.FactScopeExport.Facts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact] { get }
+ToolUp.Facts.FactScopeExport.Unreadable : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
 ToolUp.Facts.FactStoreEvidenceSource (class)
 ToolUp.Facts.FactStoreEvidenceSource..ctor(ToolUp.Facts.IFactStore)
 ToolUp.Facts.FactStoreEvidenceSourceModule (class)
@@ -791,6 +799,20 @@ ToolUp.Facts.FactTableHead..ctor(System.Int64, System.String, ToolUp.Platform.Gr
 ToolUp.Facts.FactTableHead.Commit : ToolUp.Platform.Grounding.FactTableCommit { get }
 ToolUp.Facts.FactTableHead.RunId : System.String { get }
 ToolUp.Facts.FactTableHead.Sequence : System.Int64 { get }
+ToolUp.Facts.FactTableImportOrigin (class)
+ToolUp.Facts.FactTableImportOrigin..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableImportedCell])
+ToolUp.Facts.FactTableImportOrigin.Cells : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableImportedCell] { get }
+ToolUp.Facts.FactTableImportOrigin.CertificateRef : System.String { get }
+ToolUp.Facts.FactTableImportOrigin.RootMember : System.String { get }
+ToolUp.Facts.FactTableImportOrigin.TriggerRef : System.String { get }
+ToolUp.Facts.FactTableImportOrigin.Withdrawal : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactTableImportedCell (class)
+ToolUp.Facts.FactTableImportedCell..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.DateTime, System.DateTime, ToolUp.Facts.Disclosure)
+ToolUp.Facts.FactTableImportedCell.Disclosure : ToolUp.Facts.Disclosure { get }
+ToolUp.Facts.FactTableImportedCell.From : System.DateTime { get }
+ToolUp.Facts.FactTableImportedCell.Metric : System.String { get }
+ToolUp.Facts.FactTableImportedCell.Subject : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.FactTableImportedCell.To : System.DateTime { get }
 ToolUp.Facts.FactTableRow (class)
 ToolUp.Facts.FactTableRow..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Facts.TemporalExtent, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.FactValue])
 ToolUp.Facts.FactTableRow.Period : ToolUp.Facts.TemporalExtent { get }
@@ -811,6 +833,18 @@ ToolUp.Facts.FactTableRunEvent.RunId : System.String { get }
 ToolUp.Facts.FactTableRunEvent.SchemaVersion : System.Int32 { get }
 ToolUp.Facts.FactTableRunEvent.StagedRows : System.Int32 { get }
 ToolUp.Facts.FactTableRunEvent.TableId : System.String { get }
+ToolUp.Facts.FactTableRunProvenance (class)
+ToolUp.Facts.FactTableRunProvenance.ComputedRun : ToolUp.Facts.FactTableRunProvenance { get }
+ToolUp.Facts.FactTableRunProvenance.IsComputedRun : System.Boolean { get }
+ToolUp.Facts.FactTableRunProvenance.IsImportedRun : System.Boolean { get }
+ToolUp.Facts.FactTableRunProvenance.Tag : System.Int32 { get }
+ToolUp.Facts.FactTableRunProvenance+ImportedRun (class)
+ToolUp.Facts.FactTableRunProvenance+ImportedRun.origins : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableImportOrigin] { get }
+ToolUp.Facts.FactTableRunProvenance+Tags (class)
+ToolUp.Facts.FactTableRunProvenance+Tags.ComputedRun : System.Int32 (literal)
+ToolUp.Facts.FactTableRunProvenance+Tags.ImportedRun : System.Int32 (literal)
+ToolUp.Facts.FactTableRunProvenanceModule (class)
+ToolUp.Facts.FactTableRunProvenanceModule.rewrite(ToolUp.Facts.FactTableRunProvenance) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactDraft, ToolUp.Facts.FactDraft]
 ToolUp.Facts.FactTableSnapshot (class)
 ToolUp.Facts.FactTableSnapshot..ctor(System.String, System.Int64, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableSnapshotRow])
 ToolUp.Facts.FactTableSnapshot.Rows : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableSnapshotRow] { get }
@@ -982,7 +1016,7 @@ ToolUp.Facts.IFactStore.QueryWithCompetition(ToolUp.Platform.ResolvedScope, Tool
 ToolUp.Facts.IFactTableWriter (interface)
 ToolUp.Facts.IFactTableWriter.Abandon(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Grounding.FactTableRunRecord, ToolUp.Facts.FactTableWriteError]]
 ToolUp.Facts.IFactTableWriter.Commit(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Grounding.FactTableCommit, ToolUp.Facts.FactTableWriteError]]
-ToolUp.Facts.IFactTableWriter.OpenRun(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Grounding.FactTableRunRecord, ToolUp.Facts.FactTableWriteError]]
+ToolUp.Facts.IFactTableWriter.OpenRun(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactTableRunProvenance]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Grounding.FactTableRunRecord, ToolUp.Facts.FactTableWriteError]]
 ToolUp.Facts.IFactTableWriter.Runs(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableRunRecord], ToolUp.Facts.FactTableWriteError]]
 ToolUp.Facts.IFactTableWriter.Status(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Grounding.FactTableStatus, ToolUp.Facts.FactTableWriteError]]
 ToolUp.Facts.IFactTableWriter.WriteRows(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableRow]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Grounding.FactTableRunRecord, ToolUp.Facts.FactTableWriteError]]

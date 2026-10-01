@@ -419,9 +419,9 @@ module internal Consolidation =
 
                 // The run goes through the COMPOSED writer (Phase 932), so its
                 // decorations reach a consolidation run as they reach any
-                // other. The imported provenance is staged on the run, and
-                // only the default writer reads it — so a target bound
-                // anywhere else is refused, as it always was.
+                // other, and it is opened with its imported provenance
+                // (Phase 938), which every writer honours — so the target may
+                // be bound to whichever store the deployment composes.
                 let writer =
                     deps.Writer
                     |> Option.defaultWith (fun () ->
@@ -438,44 +438,26 @@ module internal Consolidation =
 
                 let rows = inForce |> List.collect (fun o -> o.Rows |> List.map _.Row)
 
-                match deps.Tables.DestinationOf table.Id with
-                | boundTo when boundTo <> Some DefaultFactTableWriter.Destination ->
-                    return
-                        Error(
-                            storageFailure (
-                                FactTableNotBoundHere(table.Id, boundTo, DefaultFactTableWriter.Destination)
-                            )
-                        )
-                | _ ->
-                    match! writer.OpenRun(targetScopeId, table.Id) with
-                    | Error e -> return Error(storageFailure e)
-                    | Ok run ->
-                        let! written = async {
-                            match! FactTableRunProvenance.stage deps.Storage targetScopeId run.RunId provenance with
-                            | Error e -> return Error e
-                            | Ok() -> return! writer.WriteRows(targetScopeId, run.RunId, rows)
-                        }
+                match! writer.OpenRun(targetScopeId, table.Id, provenance) with
+                | Error e -> return Error(storageFailure e)
+                | Ok run ->
+                    match! writer.WriteRows(targetScopeId, run.RunId, rows) with
+                    | Error e ->
+                        let! _ = writer.Abandon(targetScopeId, run.RunId, FactTableWriteError.describe e)
+                        return Error(storageFailure e)
+                    | Ok _ ->
+                        match! writer.Commit(targetScopeId, run.RunId) with
+                        | Error e -> return Error(storageFailure e)
+                        | Ok commit ->
+                            // The withdrawn origins' rows are now absences;
+                            // their ledger entries go with them.
+                            for originTeam in withdrawals |> Map.keys do
+                                let! _ =
+                                    deps.Storage.Delete(targetScopeId, PublicationLedger.originName table.Id originTeam)
 
-                        match written with
-                        | Error e ->
-                            let! _ = writer.Abandon(targetScopeId, run.RunId, FactTableWriteError.describe e)
-                            return Error(storageFailure e)
-                        | Ok _ ->
-                            match! writer.Commit(targetScopeId, run.RunId) with
-                            | Error e -> return Error(storageFailure e)
-                            | Ok commit ->
-                                // The withdrawn origins' rows are now absences;
-                                // their ledger entries go with them.
-                                for originTeam in withdrawals |> Map.keys do
-                                    let! _ =
-                                        deps.Storage.Delete(
-                                            targetScopeId,
-                                            PublicationLedger.originName table.Id originTeam
-                                        )
+                                ()
 
-                                    ()
-
-                                return Ok(commit, withdrawals |> Map.keys |> List.ofSeq)
+                            return Ok(commit, withdrawals |> Map.keys |> List.ofSeq)
         }
 
     /// Write one audit record under the `_facts` source module.

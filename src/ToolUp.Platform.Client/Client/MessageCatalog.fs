@@ -945,6 +945,26 @@ module MessageCatalog =
             ModuleNotAvailable = fun key -> $"Module '{key}' is not available for configuration."
             ConfigurationTab = "Configuration"
             FeatureFlagsTab = "Feature flags"
+            OutputVisibilityTab = "Output visibility"
+            OutputVisibilityHeading = "Who can see restricted module output"
+            OutputVisibilityHelp =
+                "Each module marks the output it publishes as surfaceable, restricted or internal. This level decides who in the team sees the restricted part, wherever it is served: browsing, search, assistant answers and exports. It does not decide who may use a module."
+            OutputVisibilityLoading = "Loading output visibility..."
+            OutputVisibilityUnreadable = fun reason -> $"Couldn't read this team's output visibility: {reason}"
+            OutputVisibilityNoTeam = "Output visibility is set per team. Switch to a team to see or change its level."
+            OutputVisibilityNotComposed =
+                "This deployment has not enabled team output visibility, so there is no level to choose. Restricted output is shown to whoever the deployment's disclosure policies admit, as before."
+            OutputVisibilityOwnerOnly = "Only the team owner can change this."
+            OutputVisibilityUpdated = "Output visibility updated."
+            OutputLevelTeamVisible = "Every team member"
+            OutputLevelTeamAdmins = "Team owners and admins"
+            OutputLevelPlatformAdmins = "Platform administrators"
+            OutputLevelTeamVisibleDescription = "Every member of this team can see what its modules publish."
+            OutputLevelTeamAdminsDescription =
+                "Only this team's owners and admins can see restricted output its modules publish."
+            OutputLevelPlatformAdminsDescription =
+                "Only the platform administrators can see restricted output this team's modules publish."
+            OutputVisibilityNoticeHint = "Set by your team owner in the team's configuration."
         }
         TenantLifecycleAdmin = {
             Heading = "Tenant lifecycle"
