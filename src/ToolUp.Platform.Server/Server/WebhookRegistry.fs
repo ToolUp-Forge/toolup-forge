@@ -631,7 +631,9 @@ type BlobWebhookDeliveryLog(storage: IBlobStorage) =
                     | Some ts -> ts < olderThan
                     | None -> false)
 
-            let! _ =
+            // Phase 966 — retention pruning, not an operation's own delete: a row a
+            // refused delete leaves matches the same age predicate on the next `Prune`.
+            let! _ = // best-effort-write: retention prune — the next Prune re-matches any row left behind
                 toDelete
                 |> List.map (fun name -> storage.Delete(platformContainer, name))
                 |> Async.Parallel

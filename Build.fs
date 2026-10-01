@@ -3870,13 +3870,18 @@ let main args =
     // element's value inside a pipeline that runs through `Async.Parallel`.
     // A single `Delete` discarded where it is made (`let! _ =`, or its own
     // `|> Async.Ignore`) stays out of scope — a delete that is cleanup is
-    // recoverable by the next pass; this check is about erasure. The
-    // `Delete` walk is also confined to the `Async.Ignore`-terminated
-    // pipeline (the shape both erasure paths had): a `let! _ =` that binds a
-    // `Delete` fan-out is not reported, because every site that binds one
-    // today is a cleanup pass (orphaned-content reclamation, a derivative
-    // cache, delivery-log pruning) or a per-object `Delete` / `Evict`, which
-    // are not erasure and are held to review.
+    // recoverable by the next pass.
+    //
+    // Phase 966 — the `let! _ =` shape of the same fan-out. Phase 965 left
+    // it out on the claim that every site binding one was cleanup; measured,
+    // three were not: `IDataObjectStore.Delete` and `Evict` and
+    // `DeleteIfVersion` removed an object's version blobs that way and read
+    // a refused one as success. The walk now covers a `let! _ =` that binds
+    // a `Delete` fan-out (the expression on the following lines, or on the
+    // binding's own line) exactly as it covers the `Async.Ignore`
+    // pipeline. The sites that ARE cleanup — orphaned-content reclamation,
+    // a derivative cleanup after an asset delete, delivery-log pruning —
+    // each say so with the marker, which is the claim a reviewer reads.
     //
     // Scope: production code under `src/`. Test projects (a directory named
     // `*.Tests`) are excluded — a fixture that seeds a blob is not a store,
@@ -3919,7 +3924,10 @@ let main args =
         let oneLine =
             System.Text.RegularExpressions.Regex(@"^\s*let!\s+_\s*=\s*\S.*\.Upload(WithETag)?\s*\(")
 
-        let bindOnly = System.Text.RegularExpressions.Regex(@"^\s*let!\s+_\s*=\s*$")
+        // A trailing comment is allowed after the `=`: that is where the
+        // best-effort marker sits on the multi-line form (Phase 966), and an
+        // unrelated comment there must not let a discard slip past the walk.
+        let bindOnly = System.Text.RegularExpressions.Regex(@"^\s*let!\s+_\s*=\s*(//.*)?$")
         let uploadCall = System.Text.RegularExpressions.Regex(@"\.Upload(WithETag)?\s*\(")
         let marker = System.Text.RegularExpressions.Regex(@"//\s*best-effort-write:\s*\S")
 
@@ -4014,6 +4022,9 @@ let main args =
                 @"\b(let|use)!\s+(?!_\s*=)[^=]*=\s*\S.*\.Delete\s*\(|\bmatch!\s.*\.Delete\s*\("
             )
 
+        let letDiscardsValue =
+            System.Text.RegularExpressions.Regex(@"^\s*let!\s+_\s*=\s*\S")
+
         let isDeleteElementValue (lines: string array) (j: int) =
             deleteCall.IsMatch lines[j]
             && not (consumedDelete.IsMatch lines[j])
@@ -4052,7 +4063,12 @@ let main args =
                                 // it (Phase 960).
                                 let bound = boundBelow lines i
 
-                                match bound |> List.tryFind (isDiscardedCall lines) with
+                                // Phase 966 — a `Delete` is a site here only
+                                // when what the binding discards is a
+                                // fan-out, as in the `Async.Ignore` pipeline.
+                                let fanOut = bound |> List.exists (fun j -> asyncParallel.IsMatch lines[j])
+
+                                match bound |> List.tryFind (isProducer lines fanOut) with
                                 | Some j ->
                                     let elided = if bound.Head = j then " " else " … "
 
@@ -4062,6 +4078,15 @@ let main args =
                                         line.Trim() + elided + lines[j].Trim(),
                                         marker.IsMatch line || marker.IsMatch lines[j]
                                 | None -> ()
+                            elif
+                                // Phase 966 — a one-line `let! _ =` over a
+                                // `Delete` fan-out.
+                                letDiscardsValue.IsMatch line
+                                && asyncParallel.IsMatch line
+                                && deleteCall.IsMatch line
+                                && not (consumedDelete.IsMatch line)
+                            then
+                                yield rel, i + 1, line.Trim(), marker.IsMatch line
                             elif asyncIgnore.IsMatch line then
                                 // Phase 960 — `… |> Async.Ignore` over an
                                 // upload, on one line or as the last stage of

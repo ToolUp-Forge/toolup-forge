@@ -357,7 +357,11 @@ type DefaultAssetStore
                     // Cascade derivative cache for this hash.
                     let! derivativeNames = blobStorage.List(scopeContainer, derivativePrefix record.ContentHash)
 
-                    let! _ =
+                    // Phase 966 — the record is already gone (its delete is the operation, and
+                    // is propagated above). A derivative left behind is a render-cache entry
+                    // keyed by content hash: never served for a deleted record, valid again if
+                    // the same bytes return.
+                    let! _ = // best-effort-write: derivative cache cleanup — a leftover entry is never served and is valid if the bytes return
                         derivativeNames
                         |> List.map (fun name -> blobStorage.Delete(scopeContainer, name))
                         |> Async.Parallel
