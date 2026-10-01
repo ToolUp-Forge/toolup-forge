@@ -240,10 +240,21 @@ type BlobPeerJobResultStore(blobs: IBlobStorage, retention: PeerJobRetentionPoli
         | None, Some read -> Some read
         | None, None -> None
 
-    let writeDocument (scopeId: string) (jobId: PeerJobId) (doc: PeerJobDocument) = async {
+    /// Phase 863 — the write's own result, for the one caller that may
+    /// lose it (the delete-on-read stamp in `TryGetResult`).
+    let tryWriteDocument (scopeId: string) (jobId: PeerJobId) (doc: PeerJobDocument) = async {
         let payload = Encoding.UTF8.GetBytes(JsonRpc.serialize doc)
-        let! _ = blobs.Upload(container, blobNameFor scopeId jobId, payload)
-        return ()
+        return! blobs.Upload(container, blobNameFor scopeId jobId, payload)
+    }
+
+    /// Phase 863 — the result document IS the job's outcome, so a refused
+    /// write raises: a poller must never read `Pending` forever over a
+    /// result the store claimed to have saved.
+    let writeDocument (scopeId: string) (jobId: PeerJobId) (doc: PeerJobDocument) = async {
+        match! tryWriteDocument scopeId jobId doc with
+        | Ok _ -> return ()
+        | Error storageError ->
+            return failwithf "BlobPeerJobResultStore: result for job %O could not be written: %s" jobId storageError
     }
 
     /// The pre-316 call shape, unchanged: the generous default policy on
@@ -303,11 +314,16 @@ type BlobPeerJobResultStore(blobs: IBlobStorage, retention: PeerJobRetentionPoli
                     // window forward, or a polling loop would keep the
                     // result alive indefinitely.
                     if policy.DeleteOnRead && Option.isNone doc.ReadExpiresAt then
-                        do!
-                            writeDocument scopeId jobId {
+                        // Best-effort by design (Phase 863): the result is
+                        // served either way, and an unstamped document has its
+                        // grace clock started by the next read instead.
+                        let! _ =
+                            tryWriteDocument scopeId jobId {
                                 doc with
                                     ReadExpiresAt = Some(readAt.Add policy.GraceWindow)
                             }
+
+                        ()
 
                     return
                         Some {
@@ -715,10 +731,12 @@ type BlobPeerGroupJobMap(blobs: IBlobStorage, retention: PeerJobRetentionPolicy,
     let blobNameFor (scopeId: string) (groupJobId: PeerJobId) =
         $"peers/groups/jobs/{scopeId}/{groupJobId}.json"
 
-    let writeDocument (scopeId: string) (groupJobId: PeerJobId) (doc: PeerGroupJobDocument) = async {
+    /// Phase 863 — the write's own result. `Bind` raises on a refusal (the
+    /// binding is what a poll resolves, so an unstored one strands the
+    /// handle); `MarkTerminalObserved` may lose it (see there).
+    let tryWriteDocument (scopeId: string) (groupJobId: PeerJobId) (doc: PeerGroupJobDocument) = async {
         let payload = Encoding.UTF8.GetBytes(JsonRpc.serialize doc)
-        let! _ = blobs.Upload(container, blobNameFor scopeId groupJobId, payload)
-        return ()
+        return! blobs.Upload(container, blobNameFor scopeId groupJobId, payload)
     }
 
     let readDocument (scopeId: string) (groupJobId: PeerJobId) = async {
@@ -759,12 +777,21 @@ type BlobPeerGroupJobMap(blobs: IBlobStorage, retention: PeerJobRetentionPolicy,
         member _.Bind(scopeId: string, groupJobId: PeerJobId, binding: PeerGroupJobBinding) = async {
             let boundAt = clock ()
 
-            do!
-                writeDocument scopeId groupJobId {
+            let! written =
+                tryWriteDocument scopeId groupJobId {
                     Binding = binding
                     ExpiresAt = policy.Ttl |> Option.map (fun ttl -> boundAt.Add ttl)
                     TerminalObservedAt = None
                 }
+
+            match written with
+            | Ok _ -> return ()
+            | Error storageError ->
+                return
+                    failwithf
+                        "BlobPeerGroupJobMap: binding for group job %O could not be written: %s"
+                        groupJobId
+                        storageError
         }
 
         member _.TryGet(scopeId: string, groupJobId: PeerJobId) = async {
@@ -794,8 +821,12 @@ type BlobPeerGroupJobMap(blobs: IBlobStorage, retention: PeerJobRetentionPolicy,
                 if isExpired readAt doc || doc.TerminalObservedAt.IsSome then
                     return false
                 else
-                    do!
-                        writeDocument scopeId groupJobId {
+                    // Best-effort de-duplication by contract (see the
+                    // interface): an unstored mark still claims, because a
+                    // duplicated audit row is recoverable where a missing one
+                    // is not — a later poll may emit it once more.
+                    let! _ =
+                        tryWriteDocument scopeId groupJobId {
                             doc with
                                 TerminalObservedAt = Some readAt
                         }

@@ -101,6 +101,10 @@ let private conventionOriginalBlobName (docId: string) (fileName: string) =
 /// failing the upload: the document is already admitted by this point,
 /// and an original that landed at the legacy path is fully retrievable
 /// (the read helper below tries both) where a refused upload is not.
+///
+/// Phase 863 — `Error` when the bytes landed NOWHERE (the convention blob
+/// refused them, after the store did where one is composed); the upload is
+/// then rejected rather than indexed over an original that does not exist.
 let private saveOriginal
     (deps: KnowledgeApiDeps)
     (docId: string)
@@ -108,12 +112,13 @@ let private saveOriginal
     (ext: string)
     (contentHash: string option)
     (bytes: byte[])
-    : Async<unit> =
+    : Async<Result<unit, string>> =
     async {
         match deps.DataObjectStore with
         | None ->
-            let! _ = deps.Storage.Upload(deps.Scope.Container, conventionOriginalBlobName docId safeName, bytes)
-            ()
+            match! deps.Storage.Upload(deps.Scope.Container, conventionOriginalBlobName docId safeName, bytes) with
+            | Ok _ -> return Ok()
+            | Error storageError -> return Error storageError
         | Some store ->
             let metadata =
                 Map [
@@ -138,7 +143,7 @@ let private saveOriginal
                 )
 
             match saved with
-            | Ok _ -> ()
+            | Ok _ -> return Ok()
             | Error err ->
                 deps.Logger.Warn(
                     sprintf
@@ -147,8 +152,16 @@ let private saveOriginal
                         err
                 )
 
-                let! _ = deps.Storage.Upload(deps.Scope.Container, conventionOriginalBlobName docId safeName, bytes)
-                ()
+                match! deps.Storage.Upload(deps.Scope.Container, conventionOriginalBlobName docId safeName, bytes) with
+                | Ok _ -> return Ok()
+                | Error storageError ->
+                    return
+                        Error(
+                            sprintf
+                                "the object store refused it (%A) and so did the convention blob (%s)"
+                                err
+                                storageError
+                        )
     }
 
 /// Read a document's live original bytes, store first.
@@ -406,41 +419,63 @@ let private deleteOrphanTail
 /// version's bytes twice; retiring the copy needs a locator field on
 /// `KnowledgeDocumentVersion` and is recorded as follow-up work in
 /// `docs/migrations/105-kb-original-retention-idataobjectstore.md`.
-let private archiveSupersededVersion (deps: KnowledgeApiDeps) (prior: KnowledgeDocument) : Async<unit> = async {
+///
+/// Phase 863 — a refused archive copy is `Error`, and nothing is recorded:
+/// the caller then rejects the new version rather than overwrite the only
+/// remaining copy of the prior one.
+let private archiveSupersededVersion (deps: KnowledgeApiDeps) (prior: KnowledgeDocument) : Async<Result<unit, string>> = async {
     let archivedBlobName =
         versionedOriginalBlobName prior.Id prior.Version prior.FileName
 
-    match! readOriginalBytes deps prior.Id prior.FileName with
-    | Some priorBytes ->
-        let! _ = deps.Storage.Upload(deps.Scope.Container, archivedBlobName, priorBytes)
-        ()
-    | None ->
-        // The prior original is already gone (an earlier partial delete,
-        // a legacy document whose blob was pruned). Losing bytes we never
-        // had is not a reason to refuse the new version — but the record
-        // below must not then claim they are retrievable, so say so
-        // loudly and carry on.
-        deps.Logger.Warn(
-            sprintf
-                "[KnowledgeBase] Superseding %s v%d but its original could not be read from the object store or the convention blob; the version record is written without preserved bytes."
-                prior.Id
-                prior.Version
-        )
+    let! copied = async {
+        match! readOriginalBytes deps prior.Id prior.FileName with
+        | Some priorBytes ->
+            match! deps.Storage.Upload(deps.Scope.Container, archivedBlobName, priorBytes) with
+            | Ok _ -> return Ok()
+            | Error storageError ->
+                return
+                    Error(
+                        sprintf
+                            "version %d of %s could not be preserved before it was superseded: %s"
+                            prior.Version
+                            prior.Id
+                            storageError
+                    )
+        | None ->
+            // The prior original is already gone (an earlier partial delete,
+            // a legacy document whose blob was pruned). Losing bytes we never
+            // had is not a reason to refuse the new version — but the record
+            // below must not then claim they are retrievable, so say so
+            // loudly and carry on.
+            deps.Logger.Warn(
+                sprintf
+                    "[KnowledgeBase] Superseding %s v%d but its original could not be read from the object store or the convention blob; the version record is written without preserved bytes."
+                    prior.Id
+                    prior.Version
+            )
 
-    do!
-        appendVersion deps.Storage deps.Scope.Container {
-            DocumentId = prior.Id
-            Version = prior.Version
-            FileName = prior.FileName
-            FileType = prior.FileType
-            SizeBytes = prior.SizeBytes
-            ChunkCount = prior.ChunkCount
-            ContentHash = prior.ContentHash
-            UploadedAt = prior.UploadedAt
-            UploadedBy = prior.UploadedBy
-            OriginalBlobName = archivedBlobName
-            SupersededAt = Some DateTimeOffset.UtcNow
-        }
+            return Ok()
+    }
+
+    match copied with
+    | Error reason -> return Error reason
+    | Ok() ->
+        do!
+            appendVersion deps.Storage deps.Scope.Container {
+                DocumentId = prior.Id
+                Version = prior.Version
+                FileName = prior.FileName
+                FileType = prior.FileType
+                SizeBytes = prior.SizeBytes
+                ChunkCount = prior.ChunkCount
+                ContentHash = prior.ContentHash
+                UploadedAt = prior.UploadedAt
+                UploadedBy = prior.UploadedBy
+                OriginalBlobName = archivedBlobName
+                SupersededAt = Some DateTimeOffset.UtcNow
+            }
+
+        return Ok()
 }
 
 /// Persist + ingest path for a non-duplicate upload — the pre-14x body
@@ -465,12 +500,6 @@ let private persistAndIngest
     (predecessor: KnowledgeDocument option)
     : Async<KnowledgeDocument> =
     async {
-        // Phase 510 — archive the outgoing version FIRST. Everything
-        // below overwrites the live blob and the live index entry, so
-        // the prior version has to be preserved before either happens.
-        match predecessor with
-        | Some prior -> do! archiveSupersededVersion deps prior
-        | None -> ()
         // Persist the raw blob synchronously so a refresh during extraction
         // still finds the source file. ChunkCount stays 0 until extraction
         // completes — the observer reads it from the index, so the chunk
@@ -503,299 +532,334 @@ let private persistAndIngest
                 | None -> []
         }
 
-        // Phase 105 — through `IDataObjectStore` when the deployment
-        // composed `withObjectStoreRetention`, else the pre-105
-        // convention blob.
-        do! saveOriginal deps docId safeName ext contentHash bytes
+        // Phase 510 — archive the outgoing version FIRST. Everything
+        // below overwrites the live blob and the live index entry, so
+        // the prior version has to be preserved before either happens.
+        // Phase 105 — the original then goes through `IDataObjectStore`
+        // when the deployment composed `withObjectStoreRetention`, else the
+        // pre-105 convention blob.
+        //
+        // Phase 863 — either write refused rejects the upload before the
+        // index entry is written: an indexed document whose bytes (or whose
+        // predecessor's preserved bytes) were never stored is the silent
+        // loss this path used to produce.
+        let! stored = async {
+            match predecessor with
+            | Some prior ->
+                match! archiveSupersededVersion deps prior with
+                | Error reason -> return Error reason
+                | Ok() -> return! saveOriginal deps docId safeName ext contentHash bytes
+            | None -> return! saveOriginal deps docId safeName ext contentHash bytes
+        }
 
-        // Phase 116 — atomic index RMW so a concurrent upload to the same
-        // container can't clobber this entry (or vice versa). Released before
-        // the background extraction below, which re-acquires the same
-        // container lock via `updateIndexStatus`.
-        do! upsertIndexEntry deps.Storage deps.Scope.Container doc
+        match stored with
+        | Error reason ->
+            deps.Logger.Warn(sprintf "[KnowledgeBase] Upload of %s (docId=%s) not stored: %s" safeName docId reason)
 
-        // Phase 510 — a superseded version's hash ref no longer describes
-        // anything live (the lineage now carries the NEW bytes' hash), so
-        // drop it. Left behind it would be a ref that `findDuplicate`
-        // resolves to a candidate id and then correctly rejects on the
-        // hash-verification step — harmless, but it accumulates one dead
-        // ref per version forever. `Remove` is idempotent.
-        match predecessor with
-        | Some prior ->
-            match prior.ContentHash with
-            | Some priorHash when Some priorHash <> contentHash -> do! (contentHashIndex deps).Remove priorHash prior.Id
-            | _ -> ()
-        | None -> ()
+            return {
+                doc with
+                    Status = UploadRejected(sprintf "The document could not be stored: %s" reason)
+            }
+        | Ok() ->
+            // Phase 116 — atomic index RMW so a concurrent upload to the same
+            // container can't clobber this entry (or vice versa). Released before
+            // the background extraction below, which re-acquires the same
+            // container lock via `updateIndexStatus`.
+            do! upsertIndexEntry deps.Storage deps.Scope.Container doc
 
-        // Phase 14x — register the content hash in the O(1) dedup index.
-        // Written after the canonical index entry so a crash between the
-        // two writes leaves a missing ref (dedup miss → harmless
-        // re-ingest), never a ref with no canonical entry behind it.
-        match contentHash with
-        | Some hash -> do! (contentHashIndex deps).Add hash docId None
-        | None -> ()
+            // Phase 510 — a superseded version's hash ref no longer describes
+            // anything live (the lineage now carries the NEW bytes' hash), so
+            // drop it. Left behind it would be a ref that `findDuplicate`
+            // resolves to a candidate id and then correctly rejects on the
+            // hash-verification step — harmless, but it accumulates one dead
+            // ref per version forever. `Remove` is idempotent.
+            match predecessor with
+            | Some prior ->
+                match prior.ContentHash with
+                | Some priorHash when Some priorHash <> contentHash ->
+                    do! (contentHashIndex deps).Remove priorHash prior.Id
+                | _ -> ()
+            | None -> ()
 
-        // Seed initial cache state. The background extractor flips this to
-        // ExtractingText as soon as it starts running.
-        setStatus docId Queued
+            // Phase 14x — register the content hash in the O(1) dedup index.
+            // Written after the canonical index entry so a crash between the
+            // two writes leaves a missing ref (dedup miss → harmless
+            // re-ingest), never a ref with no canonical entry behind it.
+            match contentHash with
+            | Some hash -> do! (contentHashIndex deps).Add hash docId None
+            | None -> ()
 
-        // Spawn extraction off the request path. UploadDocument returns
-        // within the time it takes to persist the raw blob (~hundreds of
-        // ms), not the time it takes to OCR a PDF (~10s). Status flow
-        // mirrors the synchronous predecessor:
-        //   Queued → ExtractingText → Embedding(0, n) → Complete(n) | Failed reason
-        // Errors are caught and routed through `deps.MarkIngestionFailed`
-        // so the user sees a Failed badge rather than a doc stuck in
-        // ExtractingText. Async.Start swallows otherwise-unobserved
-        // exceptions, so the try/with is non-negotiable.
-        let extractAndEnqueue = async {
-            try
-                let extractingStatus = ExtractingText
+            // Seed initial cache state. The background extractor flips this to
+            // ExtractingText as soon as it starts running.
+            setStatus docId Queued
 
-                setStatus docId extractingStatus
+            // Spawn extraction off the request path. UploadDocument returns
+            // within the time it takes to persist the raw blob (~hundreds of
+            // ms), not the time it takes to OCR a PDF (~10s). Status flow
+            // mirrors the synchronous predecessor:
+            //   Queued → ExtractingText → Embedding(0, n) → Complete(n) | Failed reason
+            // Errors are caught and routed through `deps.MarkIngestionFailed`
+            // so the user sees a Failed badge rather than a doc stuck in
+            // ExtractingText. Async.Start swallows otherwise-unobserved
+            // exceptions, so the try/with is non-negotiable.
+            let extractAndEnqueue = async {
+                try
+                    let extractingStatus = ExtractingText
 
-                do! updateIndexStatus deps.Storage deps.Scope.Container docId extractingStatus
+                    setStatus docId extractingStatus
 
-                let! extracted = extractChunks deps.OcrProvider deps.TableExtractor docId safeName bytes
+                    do! updateIndexStatus deps.Storage deps.Scope.Container docId extractingStatus
 
-                // Phase 103 — stamp the structured original-document ref
-                // (+ Phase 106 neutral locator) into each chunk so retrieval
-                // surfaces `RetrievedSource.OriginalRef` without rebuilding
-                // the blob-name convention.
-                // Phase 502.C — and the document's tags, so a tagged
-                // lineage's new version is filterable the moment it is
-                // indexed rather than only after a manual re-tag.
-                let chunks =
-                    stampOriginalRefs docId safeName ext (int64 bytes.Length) extracted
-                    |> stampTags doc.Tags
+                    let! extracted = extractChunks deps.OcrProvider deps.TableExtractor docId safeName bytes
 
-                if box deps.Queue <> null && not chunks.IsEmpty then
-                    // Phase 510 — incremental re-index. On a supersede,
-                    // compare each new chunk's content hash against the
-                    // previous version's manifest and enqueue only the
-                    // positions that actually changed. On a first ingest
-                    // there is no manifest, `changed` is every index, and
-                    // the enqueued set is byte-for-byte what pre-510
-                    // enqueued.
-                    let newHashes = chunks |> List.map (fst >> chunkContentHash)
+                    // Phase 103 — stamp the structured original-document ref
+                    // (+ Phase 106 neutral locator) into each chunk so retrieval
+                    // surfaces `RetrievedSource.OriginalRef` without rebuilding
+                    // the blob-name convention.
+                    // Phase 502.C — and the document's tags, so a tagged
+                    // lineage's new version is filterable the moment it is
+                    // indexed rather than only after a manual re-tag.
+                    let chunks =
+                        stampOriginalRefs docId safeName ext (int64 bytes.Length) extracted
+                        |> stampTags doc.Tags
 
-                    let! previousHashes =
+                    if box deps.Queue <> null && not chunks.IsEmpty then
+                        // Phase 510 — incremental re-index. On a supersede,
+                        // compare each new chunk's content hash against the
+                        // previous version's manifest and enqueue only the
+                        // positions that actually changed. On a first ingest
+                        // there is no manifest, `changed` is every index, and
+                        // the enqueued set is byte-for-byte what pre-510
+                        // enqueued.
+                        let newHashes = chunks |> List.map (fst >> chunkContentHash)
+
+                        let! previousHashes =
+                            match predecessor with
+                            | Some prior -> loadChunkHashes deps.Storage deps.Scope.Container prior.Id
+                            | None -> async.Return []
+
+                        let changed = changedChunkIndices previousHashes newHashes
+
+                        let chunkPairs =
+                            chunks
+                            |> List.mapi (fun i (chunk, _) -> i, (sprintf "%s:chunk:%d" docId i, chunk))
+                            |> List.filter (fun (i, _) -> changed.Contains i)
+                            |> List.map snd
+
+                        // Phase 510 — the shorter-re-upload orphan tail. Run
+                        // BEFORE the enqueue so the stale ids are gone from
+                        // every index even if the queue then refuses the job
+                        // (a refused ingestion leaves the document `Failed` and
+                        // retryable, whereas a surviving tail would keep being
+                        // served as live content with nothing to signal it) —
+                        // and BEFORE the index writes below, so that by the
+                        // time the index reports this document past extraction
+                        // the previous version's tail is already unreachable.
+                        // Ordering, not just hygiene: everything Phase 510
+                        // derives sits ABOVE the status write, keeping that
+                        // write adjacent to the enqueue exactly as pre-510 —
+                        // an observer that sees `Embedding` must never find
+                        // the supersede's cleanup still pending.
                         match predecessor with
-                        | Some prior -> loadChunkHashes deps.Storage deps.Scope.Container prior.Id
-                        | None -> async.Return []
+                        | Some prior -> do! deleteOrphanTail deps docId chunks.Length prior.ChunkCount
+                        | None -> ()
 
-                    let changed = changedChunkIndices previousHashes newHashes
+                        // Stamp ChunkCount BEFORE enqueue: it is the
+                        // document's FULL chunk count, the figure `Complete`
+                        // reports, and the first chunk callback can fire
+                        // before this method returns.
+                        do! updateIndexChunkCount deps.Storage deps.Scope.Container docId chunks.Length
 
-                    let chunkPairs =
-                        chunks
-                        |> List.mapi (fun i (chunk, _) -> i, (sprintf "%s:chunk:%d" docId i, chunk))
-                        |> List.filter (fun (i, _) -> changed.Contains i)
-                        |> List.map snd
+                        // Phase 867 — the attempt completes against what it
+                        // ENQUEUED, which an incremental re-index makes a
+                        // strict subset of `chunks`. Counting against the full
+                        // chunk count left such a re-upload at
+                        // `Embedding(k, n)` for good.
+                        let! attempt =
+                            if List.isEmpty chunkPairs then
+                                async.Return None
+                            else
+                                async {
+                                    let initialStatus = Embedding(0, chunkPairs.Length)
 
-                    // Phase 510 — the shorter-re-upload orphan tail. Run
-                    // BEFORE the enqueue so the stale ids are gone from
-                    // every index even if the queue then refuses the job
-                    // (a refused ingestion leaves the document `Failed` and
-                    // retryable, whereas a surviving tail would keep being
-                    // served as live content with nothing to signal it) —
-                    // and BEFORE the index writes below, so that by the
-                    // time the index reports this document past extraction
-                    // the previous version's tail is already unreachable.
-                    // Ordering, not just hygiene: everything Phase 510
-                    // derives sits ABOVE the status write, keeping that
-                    // write adjacent to the enqueue exactly as pre-510 —
-                    // an observer that sees `Embedding` must never find
-                    // the supersede's cleanup still pending.
-                    match predecessor with
-                    | Some prior -> do! deleteOrphanTail deps docId chunks.Length prior.ChunkCount
-                    | None -> ()
+                                    // Seed the cache; the observer's `AddOrUpdate` won't
+                                    // overwrite a fresher value (e.g. one already advanced
+                                    // to Embedding(1, n) by a racing callback).
+                                    updateStatus docId initialStatus (fun existing ->
+                                        match existing with
+                                        | Queued
+                                        | ExtractingText -> initialStatus
+                                        | other -> other)
 
-                    // Stamp ChunkCount BEFORE enqueue: it is the
-                    // document's FULL chunk count, the figure `Complete`
-                    // reports, and the first chunk callback can fire
-                    // before this method returns.
-                    do! updateIndexChunkCount deps.Storage deps.Scope.Container docId chunks.Length
+                                    let! attempt =
+                                        beginIngestionAttempt
+                                            deps.Storage
+                                            deps.Logger
+                                            deps.Scope.Container
+                                            docId
+                                            chunkPairs.Length
 
-                    // Phase 867 — the attempt completes against what it
-                    // ENQUEUED, which an incremental re-index makes a
-                    // strict subset of `chunks`. Counting against the full
-                    // chunk count left such a re-upload at
-                    // `Embedding(k, n)` for good.
-                    let! attempt =
-                        if List.isEmpty chunkPairs then
-                            async.Return None
-                        else
-                            async {
-                                let initialStatus = Embedding(0, chunkPairs.Length)
+                                    return Some attempt
+                                }
 
-                                // Seed the cache; the observer's `AddOrUpdate` won't
-                                // overwrite a fresher value (e.g. one already advanced
-                                // to Embedding(1, n) by a racing callback).
-                                updateStatus docId initialStatus (fun existing ->
-                                    match existing with
-                                    | Queued
-                                    | ExtractingText -> initialStatus
-                                    | other -> other)
+                        let job: DocumentIngestionJob = {
+                            DocumentId = docId
+                            DocumentName = safeName
+                            Chunks = chunkPairs
+                            Scope = deps.VectorScope
+                            ScopeId = deps.Scope.ScopeId
+                            Container = deps.Scope.Container
+                            OriginatingUserId = Some deps.UserId
+                            Attempt = attempt
+                        }
 
-                                let! attempt =
-                                    beginIngestionAttempt
-                                        deps.Storage
-                                        deps.Logger
-                                        deps.Scope.Container
-                                        docId
-                                        chunkPairs.Length
+                        // An unchanged re-upload can leave nothing to
+                        // enqueue at all. That is a legitimate terminal
+                        // outcome, not an empty job to push through the
+                        // queue: the document is already fully indexed at
+                        // this content.
+                        // Phase 723 — `EnqueueAsync`, not `Enqueue`. On the
+                        // in-memory default the two are the same lock-free
+                        // channel write; on a queue backed by an
+                        // `IIngestionQueueStore` the sync form is
+                        // `Async.RunSynchronously` over a store round-trip
+                        // taken on the request thread. Awaiting it costs
+                        // nothing on the default arm and stops occupying a
+                        // thread-pool thread on the durable one.
+                        let! accepted =
+                            if List.isEmpty chunkPairs then
+                                async { return true }
+                            else
+                                deps.Queue.EnqueueAsync(job)
 
-                                return Some attempt
-                            }
+                        if not (List.isEmpty chunkPairs) then
+                            deps.RecordEnqueue accepted
 
-                    let job: DocumentIngestionJob = {
-                        DocumentId = docId
-                        DocumentName = safeName
-                        Chunks = chunkPairs
-                        Scope = deps.VectorScope
-                        ScopeId = deps.Scope.ScopeId
-                        Container = deps.Scope.Container
-                        OriginatingUserId = Some deps.UserId
-                        Attempt = attempt
-                    }
+                        // Written after the tail delete + enqueue decision so
+                        // the manifest never claims content the indexes do
+                        // not hold (see `saveChunkHashes`).
+                        if accepted then
+                            do! saveChunkHashes deps.Storage deps.Scope.Container docId newHashes
 
-                    // An unchanged re-upload can leave nothing to
-                    // enqueue at all. That is a legitimate terminal
-                    // outcome, not an empty job to push through the
-                    // queue: the document is already fully indexed at
-                    // this content.
-                    // Phase 723 — `EnqueueAsync`, not `Enqueue`. On the
-                    // in-memory default the two are the same lock-free
-                    // channel write; on a queue backed by an
-                    // `IIngestionQueueStore` the sync form is
-                    // `Async.RunSynchronously` over a store round-trip
-                    // taken on the request thread. Awaiting it costs
-                    // nothing on the default arm and stops occupying a
-                    // thread-pool thread on the durable one.
-                    let! accepted =
-                        if List.isEmpty chunkPairs then
-                            async { return true }
-                        else
-                            deps.Queue.EnqueueAsync(job)
+                        if accepted && List.isEmpty chunkPairs then
+                            // Nothing changed — the observer will never fire,
+                            // so settle the terminal status here rather than
+                            // leaving the document at an in-flight status.
+                            let terminal = Complete chunks.Length
+                            setStatus docId terminal
+                            do! updateIndexStatus deps.Storage deps.Scope.Container docId terminal
 
-                    if not (List.isEmpty chunkPairs) then
-                        deps.RecordEnqueue accepted
+                            deps.Logger.Info(
+                                sprintf
+                                    "[KnowledgeBase] Re-upload of '%s' (docId=%s v%d) changed no chunk content; %d chunk(s) reused, nothing re-embedded."
+                                    safeName
+                                    docId
+                                    doc.Version
+                                    chunks.Length
+                            )
+                        elif accepted && chunkPairs.Length < chunks.Length then
+                            deps.Logger.Info(
+                                sprintf
+                                    "[KnowledgeBase] Incremental re-index of '%s' (docId=%s v%d): %d of %d chunk(s) changed and were re-embedded; %d reused."
+                                    safeName
+                                    docId
+                                    doc.Version
+                                    chunkPairs.Length
+                                    chunks.Length
+                                    (chunks.Length - chunkPairs.Length)
+                            )
 
-                    // Written after the tail delete + enqueue decision so
-                    // the manifest never claims content the indexes do
-                    // not hold (see `saveChunkHashes`).
-                    if accepted then
-                        do! saveChunkHashes deps.Storage deps.Scope.Container docId newHashes
+                        if not accepted then
+                            let reason =
+                                sprintf
+                                    "Knowledge-base ingestion queue is full (%d/%d). Try again in a few seconds."
+                                    deps.Queue.Count
+                                    deps.Queue.Capacity
 
-                    if accepted && List.isEmpty chunkPairs then
-                        // Nothing changed — the observer will never fire,
-                        // so settle the terminal status here rather than
-                        // leaving the document at an in-flight status.
-                        let terminal = Complete chunks.Length
+                            do! deps.MarkIngestionFailed docId safeName reason
+                    elif chunks.IsEmpty then
+                        // Phase 510 — the degenerate orphan tail. An empty new
+                        // version (a recognised-but-empty file, an unsupported
+                        // format, a scan with no OCR composed) skips the
+                        // extract-and-enqueue branch above — and with it the
+                        // shorter-tail deletion — so on a supersede the ENTIRE
+                        // previous version's namespace (`{docId}:chunk:0 ..
+                        // oldCount-1`) would survive in the vector store and
+                        // the sparse index under the live document id, exactly
+                        // the leak `deleteOrphanTail` closes for the shorter-
+                        // tail case, in the all-chunks-are-tail form. Same
+                        // ordering discipline as that path: the deletion (and
+                        // the manifest reset below) completes BEFORE the
+                        // terminal status lands in the index, so an observer
+                        // that sees the document settle never finds the
+                        // supersede's cleanup still pending.
+                        match predecessor with
+                        | Some prior ->
+                            do! deleteOrphanTail deps docId 0 prior.ChunkCount
+
+                            // The chunk-hash manifest must not keep describing
+                            // the chunks just deleted: a later version whose
+                            // content matched them would diff as "unchanged"
+                            // and skip re-embedding positions the indexes no
+                            // longer hold — silently missing content, not the
+                            // harmless redundant re-embed `saveChunkHashes`'s
+                            // crash-ordering argument tolerates.
+                            do! saveChunkHashes deps.Storage deps.Scope.Container docId []
+                        | None -> ()
+
+                        // Phase 119 — distinguish "no extractor for this type"
+                        // (stored but never searchable) from a recognised-but-empty
+                        // file. The pre-119 code reported both as `Complete 0`, which
+                        // read as a successful index of an empty document and hid the
+                        // fact that an unsupported upload would never be retrievable.
+                        //
+                        // Phase 500 adds the third case the pair above could
+                        // not express: a recognised file with no TEXT LAYER
+                        // (a scanned PDF, an image) and no `IOcrProvider`
+                        // composed. That is neither an unrecognised type nor
+                        // a successful index of an empty document — it is a
+                        // missing capability, and reporting it as `Complete
+                        // 0` told the user their scan was searchable when it
+                        // was not. Checked FIRST because a scanned PDF is a
+                        // *supported* extension and would otherwise be
+                        // absorbed by the `Complete 0` arm. The probe reads
+                        // nothing at all when an OCR companion IS composed
+                        // (GP 13).
+                        let terminal =
+                            match ocrUnavailableDetail deps.OcrProvider safeName bytes with
+                            | Some detail -> OcrUnavailable detail
+                            | None ->
+                                if isSupportedExtension ext then
+                                    Complete 0
+                                else
+                                    UnsupportedFormat(sprintf "no extractor for '.%s' — stored but not searchable" ext)
+
                         setStatus docId terminal
                         do! updateIndexStatus deps.Storage deps.Scope.Container docId terminal
 
-                        deps.Logger.Info(
-                            sprintf
-                                "[KnowledgeBase] Re-upload of '%s' (docId=%s v%d) changed no chunk content; %d chunk(s) reused, nothing re-embedded."
-                                safeName
-                                docId
-                                doc.Version
-                                chunks.Length
-                        )
-                    elif accepted && chunkPairs.Length < chunks.Length then
-                        deps.Logger.Info(
-                            sprintf
-                                "[KnowledgeBase] Incremental re-index of '%s' (docId=%s v%d): %d of %d chunk(s) changed and were re-embedded; %d reused."
-                                safeName
-                                docId
-                                doc.Version
-                                chunkPairs.Length
-                                chunks.Length
-                                (chunks.Length - chunkPairs.Length)
-                        )
+                    do! deps.PublishInventory()
+                with ex ->
+                    deps.Logger.Error(sprintf "[KnowledgeBase] Extraction failed for %s/%s" docId safeName, Some ex)
 
-                    if not accepted then
-                        let reason =
-                            sprintf
-                                "Knowledge-base ingestion queue is full (%d/%d). Try again in a few seconds."
-                                deps.Queue.Count
-                                deps.Queue.Capacity
-
+                    let reason = classify safeName ex
+                    // Phase 863 — the failure record can itself be refused by storage;
+                    // this handler is the last stop before `Async.Start`, so it logs
+                    // that instead of letting it escape the background computation.
+                    try
                         do! deps.MarkIngestionFailed docId safeName reason
-                elif chunks.IsEmpty then
-                    // Phase 510 — the degenerate orphan tail. An empty new
-                    // version (a recognised-but-empty file, an unsupported
-                    // format, a scan with no OCR composed) skips the
-                    // extract-and-enqueue branch above — and with it the
-                    // shorter-tail deletion — so on a supersede the ENTIRE
-                    // previous version's namespace (`{docId}:chunk:0 ..
-                    // oldCount-1`) would survive in the vector store and
-                    // the sparse index under the live document id, exactly
-                    // the leak `deleteOrphanTail` closes for the shorter-
-                    // tail case, in the all-chunks-are-tail form. Same
-                    // ordering discipline as that path: the deletion (and
-                    // the manifest reset below) completes BEFORE the
-                    // terminal status lands in the index, so an observer
-                    // that sees the document settle never finds the
-                    // supersede's cleanup still pending.
-                    match predecessor with
-                    | Some prior ->
-                        do! deleteOrphanTail deps docId 0 prior.ChunkCount
+                    with markEx ->
+                        deps.Logger.Error(
+                            sprintf "[KnowledgeBase] Could not record the extraction failure for %s/%s" docId safeName,
+                            Some markEx
+                        )
 
-                        // The chunk-hash manifest must not keep describing
-                        // the chunks just deleted: a later version whose
-                        // content matched them would diff as "unchanged"
-                        // and skip re-embedding positions the indexes no
-                        // longer hold — silently missing content, not the
-                        // harmless redundant re-embed `saveChunkHashes`'s
-                        // crash-ordering argument tolerates.
-                        do! saveChunkHashes deps.Storage deps.Scope.Container docId []
-                    | None -> ()
+                    do! deps.PublishInventory()
+            }
 
-                    // Phase 119 — distinguish "no extractor for this type"
-                    // (stored but never searchable) from a recognised-but-empty
-                    // file. The pre-119 code reported both as `Complete 0`, which
-                    // read as a successful index of an empty document and hid the
-                    // fact that an unsupported upload would never be retrievable.
-                    //
-                    // Phase 500 adds the third case the pair above could
-                    // not express: a recognised file with no TEXT LAYER
-                    // (a scanned PDF, an image) and no `IOcrProvider`
-                    // composed. That is neither an unrecognised type nor
-                    // a successful index of an empty document — it is a
-                    // missing capability, and reporting it as `Complete
-                    // 0` told the user their scan was searchable when it
-                    // was not. Checked FIRST because a scanned PDF is a
-                    // *supported* extension and would otherwise be
-                    // absorbed by the `Complete 0` arm. The probe reads
-                    // nothing at all when an OCR companion IS composed
-                    // (GP 13).
-                    let terminal =
-                        match ocrUnavailableDetail deps.OcrProvider safeName bytes with
-                        | Some detail -> OcrUnavailable detail
-                        | None ->
-                            if isSupportedExtension ext then
-                                Complete 0
-                            else
-                                UnsupportedFormat(sprintf "no extractor for '.%s' — stored but not searchable" ext)
+            Async.Start extractAndEnqueue
 
-                    setStatus docId terminal
-                    do! updateIndexStatus deps.Storage deps.Scope.Container docId terminal
-
-                do! deps.PublishInventory()
-            with ex ->
-                deps.Logger.Error(sprintf "[KnowledgeBase] Extraction failed for %s/%s" docId safeName, Some ex)
-
-                let reason = classify safeName ex
-                do! deps.MarkIngestionFailed docId safeName reason
-                do! deps.PublishInventory()
-        }
-
-        Async.Start extractAndEnqueue
-
-        do! deps.PublishInventory()
-        return doc
+            do! deps.PublishInventory()
+            return doc
     }
 
 /// Phase 512 — the scope's corpus quota, evaluated against the live

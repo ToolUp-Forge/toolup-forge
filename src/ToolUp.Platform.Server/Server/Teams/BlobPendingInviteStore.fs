@@ -187,26 +187,68 @@ type BlobPendingInviteStore
                 // same bytes, which is fine to lose). Then heal the canonical
                 // blob to empty ONLY if it is still the corrupt version we
                 // read — a peer that already healed or repaired it wins.
-                let! _ = storage.UploadWithETag(container, quarantine, bytes, IfAbsent)
-
-                let! _ =
-                    storage.UploadWithETag(container, blobName, PendingInviteStore.encodeMap Map.empty, IfMatch etag)
-
-                logger.Error(
-                    sprintf
-                        "[BlobPendingInviteStore] %s aborted: pending-invites blob was corrupt and has been quarantined to %s (%s). No invites were overwritten; the store self-heals to empty on the next read."
-                        op
-                        quarantine
-                        reason,
-                    None
-                )
-
-                return
-                    Error(
-                        PendingInviteStoreError.StorageFailed(
-                            sprintf "pending-invites blob was corrupt (quarantined to %s)" quarantine
-                        )
+                //
+                // Phase 863 — the heal runs only once the copy is safe. A
+                // refused copy (anything but the peer collision above) leaves
+                // the corrupt blob in place: healing it then would destroy the
+                // only copy of the bytes.
+                match! storage.UploadWithETag(container, quarantine, bytes, IfAbsent) with
+                | Error(ConditionalWriteFailure storageError) ->
+                    logger.Error(
+                        sprintf
+                            "[BlobPendingInviteStore] %s aborted: pending-invites blob is corrupt (%s) and could not be quarantined to %s (%s). It was left in place and no invites were overwritten."
+                            op
+                            reason
+                            quarantine
+                            storageError,
+                        None
                     )
+
+                    return
+                        Error(
+                            PendingInviteStoreError.StorageFailed(
+                                sprintf "pending-invites blob is corrupt and could not be quarantined: %s" storageError
+                            )
+                        )
+                | Ok _
+                | Error(ETagMismatch _) ->
+                    // The heal is best-effort by design: a lost precondition
+                    // means a peer healed or repaired it first, and any other
+                    // refusal leaves the corrupt blob for the next read to
+                    // quarantine again — logged at Warn, never silent.
+                    match!
+                        storage.UploadWithETag(
+                            container,
+                            blobName,
+                            PendingInviteStore.encodeMap Map.empty,
+                            IfMatch etag
+                        )
+                    with
+                    | Ok _
+                    | Error(ETagMismatch _) -> ()
+                    | Error(ConditionalWriteFailure storageError) ->
+                        logger.Warn(
+                            sprintf
+                                "[BlobPendingInviteStore] %s: the quarantined pending-invites blob could not be healed to empty (%s); the next read quarantines it again."
+                                op
+                                storageError
+                        )
+
+                    logger.Error(
+                        sprintf
+                            "[BlobPendingInviteStore] %s aborted: pending-invites blob was corrupt and has been quarantined to %s (%s). No invites were overwritten; the store self-heals to empty on the next read."
+                            op
+                            quarantine
+                            reason,
+                        None
+                    )
+
+                    return
+                        Error(
+                            PendingInviteStoreError.StorageFailed(
+                                sprintf "pending-invites blob was corrupt (quarantined to %s)" quarantine
+                            )
+                        )
     }
 
     /// The read-modify-write loop every mutation goes through. `plan`

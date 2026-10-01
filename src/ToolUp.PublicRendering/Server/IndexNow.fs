@@ -210,7 +210,7 @@ type BlobIndexNowStateStore(blobStorage: IBlobStorage, container: string, blobNa
         member _.Write(state: IndexNowSubmissionState) : Async<unit> = async {
             try
                 let bytes = Encoding.UTF8.GetBytes(IndexNowSubmissionState.serialize state)
-                let! _ = blobStorage.Upload(container, blobName, bytes)
+                let! _ = blobStorage.Upload(container, blobName, bytes) // best-effort-write: the IIndexNowStateStore contract — a lost write only costs a re-submit
                 return ()
             with _ ->
                 return ()

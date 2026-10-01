@@ -139,24 +139,42 @@ type BlobFeatureFlagStore(storage: IBlobStorage) =
                                 else
                                     v)
 
-                    if Map.isEmpty updated then
-                        let! _ = storage.Delete(platformContainer, docBlob)
-                        ()
-                    else
-                        let! _ = storage.Upload(platformContainer, docBlob, Json.serialize updated)
-                        ()
+                    // Phase 863 — an erasure that did not land is not
+                    // reported as one: a refused rewrite fails the handler.
+                    let! written =
+                        if Map.isEmpty updated then
+                            async {
+                                let! _ = storage.Delete(platformContainer, docBlob)
+                                return Ok()
+                            }
+                        else
+                            async {
+                                match! storage.Upload(platformContainer, docBlob, Json.serialize updated) with
+                                | Ok _ -> return Ok()
+                                | Error storageError -> return Error storageError
+                            }
 
-                    let verb =
-                        match policy with
-                        | ErasurePolicy.HardDelete -> "removed"
-                        | _ -> "redacted"
+                    match written with
+                    | Error storageError ->
+                        return
+                            Result.Error(
+                                ErasureError.StoreUnreachable(
+                                    "feature-flags",
+                                    sprintf "flag document %s could not be rewritten: %s" docBlob storageError
+                                )
+                            )
+                    | Ok() ->
+                        let verb =
+                            match policy with
+                            | ErasurePolicy.HardDelete -> "removed"
+                            | _ -> "redacted"
 
-                    return
-                        Result.Ok {
-                            HandlerName = "feature-flags"
-                            RecordsAffected = matchedKeys.Length
-                            Note = Some(sprintf "%d flag(s) %s in scope %s" matchedKeys.Length verb scopeId)
-                        }
+                        return
+                            Result.Ok {
+                                HandlerName = "feature-flags"
+                                RecordsAffected = matchedKeys.Length
+                                Note = Some(sprintf "%d flag(s) %s in scope %s" matchedKeys.Length verb scopeId)
+                            }
         }
 
 /// Convenience factory — construct and upcast. Mirrors the `create`

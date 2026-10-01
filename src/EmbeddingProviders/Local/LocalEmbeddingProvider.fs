@@ -686,7 +686,7 @@ let createPersistent (blobStorage: IBlobStorage) : IEmbeddingProvider =
 
     let persister (count: int, dict: ConcurrentDictionary<string, int>) = async {
         let bytes = serializeState count dict
-        let! _ = blobStorage.Upload(platformContainer, stateBlobName, bytes)
+        let! _ = blobStorage.Upload(platformContainer, stateBlobName, bytes) // best-effort-write: dev-only IDF snapshot; every update rewrites the whole state, and a missing one rebuilds from empty (see above)
         return ()
     }
 
@@ -764,7 +764,7 @@ type ScopedLocalEmbeddingProviders(blobStorage: IBlobStorage option) =
 
             let persister (count: int, dict: ConcurrentDictionary<string, int>) = async {
                 let bytes = serializeState count dict
-                let! _ = storage.Upload(platformContainer, blobName, bytes)
+                let! _ = storage.Upload(platformContainer, blobName, bytes) // best-effort-write: dev-only IDF snapshot; every update rewrites the whole state, and a missing one rebuilds from empty
                 return ()
             }
 

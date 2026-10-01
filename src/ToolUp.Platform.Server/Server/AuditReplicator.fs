@@ -116,20 +116,26 @@ type BlobAuditReplicatorCursorStore(blobStorage: IBlobStorage, logger: ILogger) 
             let json = toCursorJson cursor
             let bytes = System.Text.Encoding.UTF8.GetBytes json
 
-            try
-                let! _ = blobStorage.Upload(cursorContainer, blobName, bytes)
-                return ()
-            with ex ->
-                // Cursor write failures are visible at the next sweep —
-                // we'll re-deliver the batch (sink is idempotent). Log
-                // at Warn so operators see drift but don't escalate.
+            // Best-effort by design (Phase 863): cursor write failures are
+            // visible at the next sweep — we'll re-deliver the batch (sink
+            // is idempotent). Log at Warn so operators see drift but don't
+            // escalate. A refused write (`Error`) and a raised one take the
+            // same path.
+            let warn (detail: string) =
                 logger.Warn(
                     sprintf
                         "[AuditReplicator] cursor save failed sink=%s scope=%s: %s — next sweep will retry"
                         sinkName
                         scopeId
-                        ex.Message
+                        detail
                 )
+
+            try
+                match! blobStorage.Upload(cursorContainer, blobName, bytes) with
+                | Ok _ -> return ()
+                | Error storageError -> warn storageError
+            with ex ->
+                warn ex.Message
         }
 
 // ─── Hook decorator ─────────────────────────────────────────────────
