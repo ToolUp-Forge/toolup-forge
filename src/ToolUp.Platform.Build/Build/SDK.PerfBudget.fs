@@ -122,6 +122,13 @@ type PerfMetric =
     /// Kibibytes. (The two bundle cases sit last so no earlier case's tag
     /// moves.)
     | ClientShellBundleKiB
+    /// Phase 962 — the table rows one population read's summary statement
+    /// touches on the database-backed fact store, read from its executed
+    /// plan (rows returned plus rows a filter discarded, per scan node). A
+    /// COUNT, for `FactBlobReadsPerPointRead`'s reason: an index the read
+    /// stops using shows here as a multiple of the population whatever the
+    /// clock says. Rows. (Last, so no earlier case's tag moves.)
+    | FactPopulationRowsPerRead
 
 module PerfMetric =
 
@@ -145,6 +152,7 @@ module PerfMetric =
         | FactAssertMs -> "factAssertMs"
         | FactBatchAssertMs -> "factBatchAssertMs"
         | FactBlobReadsPerPointRead -> "factBlobReadsPerPointRead"
+        | FactPopulationRowsPerRead -> "factPopulationRowsPerRead"
 
     /// The metrics the budget file's top level (the server block) budgets,
     /// in report order.
@@ -172,8 +180,19 @@ module PerfMetric =
         FactBlobReadsPerPointRead
     ]
 
+    /// Phase 962 — the metrics the budget file's `loadPostgresHistory`
+    /// block budgets: the population read over a table with a year of weekly
+    /// history per subject, as a clock and as the rows it touches, and the
+    /// two asserts that pay the population index's write cost there.
+    let loadPostgresHistory = [
+        FactPopulationReadMs
+        FactPopulationRowsPerRead
+        FactAssertMs
+        FactBatchAssertMs
+    ]
+
     /// Every metric the gate knows, in report order.
-    let all = server @ client @ load
+    let all = server @ client @ load @ [ FactPopulationRowsPerRead ]
 
     let tryParse (token: string) =
         all
@@ -196,6 +215,7 @@ module PerfMetric =
         | FactBlobReadsPerPointRead -> "reads"
         | ClientMinimalBundleKiB
         | ClientShellBundleKiB -> "KiB"
+        | FactPopulationRowsPerRead -> "rows"
 
     /// What a regression in this metric would mean, rendered into the
     /// failure so a CI log is actionable without opening this file.
@@ -215,6 +235,7 @@ module PerfMetric =
         | FactAssertMs -> "the p95 latency of one single-fact assert under concurrent load"
         | FactBatchAssertMs -> "the p95 latency of one batch assert under concurrent load"
         | FactBlobReadsPerPointRead -> "the blob reads one subject-and-metric fact read costs"
+        | FactPopulationRowsPerRead -> "the table rows one population read's summary touches in the database"
 
 /// Phase 192 — one statistic the measuring half produced, with the
 /// evidence that it measured a real thing.
@@ -682,6 +703,12 @@ module PerfBudgetGate =
     [<Literal>]
     let LoadPostgresBlockProperty = "loadPostgres"
 
+    /// Phase 962 — the property the database arm's deep-history population
+    /// cell is budgeted under: a year of weekly facts per subject, so the
+    /// latest week is one 52nd of each metric's rows.
+    [<Literal>]
+    let LoadPostgresHistoryBlockProperty = "loadPostgresHistory"
+
     /// Phase 929 — parse the budget document's `loadAzurite` block. Same
     /// shape and metric set as the `load` block, and REFUSED when absent.
     let parseLoadAzuriteBudget (label: string) (json: string) : Result<PerfBudget, string list> =
@@ -691,6 +718,17 @@ module PerfBudgetGate =
     /// shape and metric set as the `load` block, and REFUSED when absent.
     let parseLoadPostgresBudget (label: string) (json: string) : Result<PerfBudget, string list> =
         parseNestedBlock LoadPostgresBlockProperty "load (postgres arm)" PerfMetric.load label json
+
+    /// Phase 962 — parse the budget document's `loadPostgresHistory` block,
+    /// restricted to `PerfMetric.loadPostgresHistory`, and REFUSED when
+    /// absent.
+    let parseLoadPostgresHistoryBudget (label: string) (json: string) : Result<PerfBudget, string list> =
+        parseNestedBlock
+            LoadPostgresHistoryBlockProperty
+            "load (postgres-history arm)"
+            PerfMetric.loadPostgresHistory
+            label
+            json
 
     /// Parse a measurement run. Same all-defects-at-once contract as
     /// the budget parser.
@@ -915,6 +953,14 @@ module PerfBudgetGate =
     let verifyLoadPostgres (options: PerfBudgetGateOptions) : Result<PerfBudget * PerfFinding list, string list> =
         verifyWith parseLoadPostgresBudget options
 
+    /// Phase 962 — the same load-and-check against the budget file's
+    /// `loadPostgresHistory` block and a run of the harness's
+    /// postgres-history arm.
+    let verifyLoadPostgresHistory
+        (options: PerfBudgetGateOptions)
+        : Result<PerfBudget * PerfFinding list, string list> =
+        verifyWith parseLoadPostgresHistoryBudget options
+
     /// FAKE's `Target` module cannot be reached fully-qualified from
     /// here — the same binding collision the Core-Web-Vitals target
     /// documents — so the FAKE surface is reached through a nested
@@ -974,7 +1020,9 @@ module PerfBudgetGate =
     /// added a third, `VerifyLoadPerfBudget`, deciding the load harness's
     /// run against the same file's `load` block; Phase 929 its two arms,
     /// `VerifyLoadAzuritePerfBudget` (the `loadAzurite` block) and
-    /// `VerifyLoadPostgresPerfBudget` (the `loadPostgres` block).
+    /// `VerifyLoadPostgresPerfBudget` (the `loadPostgres` block); Phase 962
+    /// `VerifyLoadPostgresHistoryPerfBudget` (the `loadPostgresHistory`
+    /// block).
     ///
     /// Options are resolved INSIDE the target body, not at
     /// registration: a repo registering this target must stay runnable
@@ -985,3 +1033,4 @@ module PerfBudgetGate =
         decideTarget "VerifyLoadPerfBudget" verifyLoad
         decideTarget "VerifyLoadAzuritePerfBudget" verifyLoadAzurite
         decideTarget "VerifyLoadPostgresPerfBudget" verifyLoadPostgres
+        decideTarget "VerifyLoadPostgresHistoryPerfBudget" verifyLoadPostgresHistory

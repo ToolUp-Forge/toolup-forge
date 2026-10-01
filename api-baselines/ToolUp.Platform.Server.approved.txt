@@ -6314,6 +6314,20 @@ ToolUp.Platform.IVectorStore+IVectorStore.Upsert(ToolUp.Platform.VectorKnowledge
 ToolUp.Platform.IVectorStore+IVectorStore.Vacuum(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.DateTimeOffset) : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
 ToolUp.Platform.IVectorStore+IVectorStoreBatch (interface)
 ToolUp.Platform.IVectorStore+IVectorStoreBatch.UpsertBatch(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.Single[], ToolUp.Platform.VectorKnowledgeTypes+TextChunk]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.IVectorStore+IVectorStoreLocality (interface)
+ToolUp.Platform.IVectorStore+IVectorStoreLocality.IndexLocality : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IVectorStore+VectorIndexLocality] { get }
+ToolUp.Platform.IVectorStore+VectorIndexLocality (class)
+ToolUp.Platform.IVectorStore+VectorIndexLocality.InProcess : ToolUp.Platform.IVectorStore+VectorIndexLocality { get }
+ToolUp.Platform.IVectorStore+VectorIndexLocality.IsInProcess : System.Boolean { get }
+ToolUp.Platform.IVectorStore+VectorIndexLocality.IsShared : System.Boolean { get }
+ToolUp.Platform.IVectorStore+VectorIndexLocality.Shared : ToolUp.Platform.IVectorStore+VectorIndexLocality { get }
+ToolUp.Platform.IVectorStore+VectorIndexLocality.Tag : System.Int32 { get }
+ToolUp.Platform.IVectorStore+VectorIndexLocality+Tags (class)
+ToolUp.Platform.IVectorStore+VectorIndexLocality+Tags.InProcess : System.Int32 (literal)
+ToolUp.Platform.IVectorStore+VectorIndexLocality+Tags.Shared : System.Int32 (literal)
+ToolUp.Platform.IVectorStore+VectorIndexLocalityModule (class)
+ToolUp.Platform.IVectorStore+VectorIndexLocalityModule.declared(ToolUp.Platform.IVectorStore+IVectorStore) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IVectorStore+VectorIndexLocality]
+ToolUp.Platform.IVectorStore+VectorIndexLocalityModule.isInProcess(ToolUp.Platform.IVectorStore+IVectorStore) : System.Boolean
 ToolUp.Platform.IWebhookDeliveryLog (interface)
 ToolUp.Platform.IWebhookDeliveryLog.ListRecent(System.String, System.Guid, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WebhookDelivery]]
 ToolUp.Platform.IWebhookDeliveryLog.Prune(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]

@@ -104,6 +104,7 @@ ToolUp.FactStores.Postgres.PostgresFactSchemaMode+Tags (class)
 ToolUp.FactStores.Postgres.PostgresFactSchemaMode+Tags.AutoMigrate : System.Int32 (literal)
 ToolUp.FactStores.Postgres.PostgresFactSchemaMode+Tags.VerifyOnly : System.Int32 (literal)
 ToolUp.FactStores.Postgres.PostgresFactStore (class)
+ToolUp.FactStores.Postgres.PostgresFactStore.ExplainPopulation(System.String, ToolUp.Facts.PopulationQuery) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.FactStores.Postgres.PostgresFactStore.ExplainQuery(System.String, ToolUp.Facts.FactQuery) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.FactStores.Postgres.PostgresFactStoreCompose (class)
 ToolUp.FactStores.Postgres.PostgresFactStoreCompose.withPostgresFactStore(System.String, ToolUp.FactStores.Postgres.PostgresFactStoreOptions, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp

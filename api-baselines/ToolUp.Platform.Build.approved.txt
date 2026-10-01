@@ -352,6 +352,7 @@ ToolUp.Platform.PerfBudgetGate.ClientBlockProperty : System.String (literal)
 ToolUp.Platform.PerfBudgetGate.LoadAzuriteBlockProperty : System.String (literal)
 ToolUp.Platform.PerfBudgetGate.LoadBlockProperty : System.String (literal)
 ToolUp.Platform.PerfBudgetGate.LoadPostgresBlockProperty : System.String (literal)
+ToolUp.Platform.PerfBudgetGate.LoadPostgresHistoryBlockProperty : System.String (literal)
 ToolUp.Platform.PerfBudgetGate.MeasurementSchemaToken : System.String (literal)
 ToolUp.Platform.PerfBudgetGate.MinStatistic : System.String (literal)
 ToolUp.Platform.PerfBudgetGate.breaches(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]
@@ -361,6 +362,7 @@ ToolUp.Platform.PerfBudgetGate.parseClientBudget(System.String, System.String) :
 ToolUp.Platform.PerfBudgetGate.parseLoadAzuriteBudget(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.PerfBudgetGate.parseLoadBudget(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.PerfBudgetGate.parseLoadPostgresBudget(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.PerfBudgetGate.parseLoadPostgresHistoryBudget(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.PerfBudgetGate.parseMeasurements(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PerfMeasurementRun, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.PerfBudgetGate.registerTarget() : System.Void
 ToolUp.Platform.PerfBudgetGate.report(ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]) : System.String
@@ -369,6 +371,7 @@ ToolUp.Platform.PerfBudgetGate.verifyClient(ToolUp.Platform.PerfBudgetGateOption
 ToolUp.Platform.PerfBudgetGate.verifyLoad(ToolUp.Platform.PerfBudgetGateOptions) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]], Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.PerfBudgetGate.verifyLoadAzurite(ToolUp.Platform.PerfBudgetGateOptions) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]], Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.PerfBudgetGate.verifyLoadPostgres(ToolUp.Platform.PerfBudgetGateOptions) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]], Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Platform.PerfBudgetGate.verifyLoadPostgresHistory(ToolUp.Platform.PerfBudgetGateOptions) : Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[ToolUp.Platform.PerfBudget, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfFinding]], Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 ToolUp.Platform.PerfBudgetGateOptions (class)
 ToolUp.Platform.PerfBudgetGateOptions..ctor(System.String, System.String)
 ToolUp.Platform.PerfBudgetGateOptions.BudgetFile : System.String { get }
@@ -444,6 +447,7 @@ ToolUp.Platform.PerfMetric.FactBatchAssertMs : ToolUp.Platform.PerfMetric { get 
 ToolUp.Platform.PerfMetric.FactBlobReadsPerPointRead : ToolUp.Platform.PerfMetric { get }
 ToolUp.Platform.PerfMetric.FactPointReadMs : ToolUp.Platform.PerfMetric { get }
 ToolUp.Platform.PerfMetric.FactPopulationReadMs : ToolUp.Platform.PerfMetric { get }
+ToolUp.Platform.PerfMetric.FactPopulationRowsPerRead : ToolUp.Platform.PerfMetric { get }
 ToolUp.Platform.PerfMetric.HotPathMs : ToolUp.Platform.PerfMetric { get }
 ToolUp.Platform.PerfMetric.IsClientBootMs : System.Boolean { get }
 ToolUp.Platform.PerfMetric.IsClientDecodePerResponseUs : System.Boolean { get }
@@ -456,6 +460,7 @@ ToolUp.Platform.PerfMetric.IsFactBatchAssertMs : System.Boolean { get }
 ToolUp.Platform.PerfMetric.IsFactBlobReadsPerPointRead : System.Boolean { get }
 ToolUp.Platform.PerfMetric.IsFactPointReadMs : System.Boolean { get }
 ToolUp.Platform.PerfMetric.IsFactPopulationReadMs : System.Boolean { get }
+ToolUp.Platform.PerfMetric.IsFactPopulationRowsPerRead : System.Boolean { get }
 ToolUp.Platform.PerfMetric.IsHotPathMs : System.Boolean { get }
 ToolUp.Platform.PerfMetric.IsRetrievalBlobReadsPerQuery : System.Boolean { get }
 ToolUp.Platform.PerfMetric.IsRetrievalP95Ms : System.Boolean { get }
@@ -474,6 +479,7 @@ ToolUp.Platform.PerfMetric+Tags.FactBatchAssertMs : System.Int32 (literal)
 ToolUp.Platform.PerfMetric+Tags.FactBlobReadsPerPointRead : System.Int32 (literal)
 ToolUp.Platform.PerfMetric+Tags.FactPointReadMs : System.Int32 (literal)
 ToolUp.Platform.PerfMetric+Tags.FactPopulationReadMs : System.Int32 (literal)
+ToolUp.Platform.PerfMetric+Tags.FactPopulationRowsPerRead : System.Int32 (literal)
 ToolUp.Platform.PerfMetric+Tags.HotPathMs : System.Int32 (literal)
 ToolUp.Platform.PerfMetric+Tags.RetrievalBlobReadsPerQuery : System.Int32 (literal)
 ToolUp.Platform.PerfMetric+Tags.RetrievalP95Ms : System.Int32 (literal)
@@ -483,6 +489,7 @@ ToolUp.Platform.PerfMetricModule.client : Microsoft.FSharp.Collections.FSharpLis
 ToolUp.Platform.PerfMetricModule.describe(ToolUp.Platform.PerfMetric) : System.String
 ToolUp.Platform.PerfMetricModule.key(ToolUp.Platform.PerfMetric) : System.String
 ToolUp.Platform.PerfMetricModule.load : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfMetric] { get }
+ToolUp.Platform.PerfMetricModule.loadPostgresHistory : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfMetric] { get }
 ToolUp.Platform.PerfMetricModule.server : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PerfMetric] { get }
 ToolUp.Platform.PerfMetricModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PerfMetric]
 ToolUp.Platform.PerfMetricModule.unit(ToolUp.Platform.PerfMetric) : System.String

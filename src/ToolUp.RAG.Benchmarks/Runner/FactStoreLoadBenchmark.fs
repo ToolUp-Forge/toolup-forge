@@ -82,7 +82,35 @@ type FactResult = {
     Facts: int
     SeedSeconds: float
     Operations: FactOpResult list
+    /// Phase 962 — the table rows one population read's summary statement
+    /// touched, from its executed plan; `None` for a store with no plan to
+    /// read (the blob store).
+    PopulationRowsPerRead: float option
 }
+
+/// Phase 962 — where a `postgres` cell's rows live. By default each run
+/// seeds a table of its own and drops it afterwards. `Keep` leaves the
+/// table and prints its name and scope; `Table` and `Scope` together point
+/// a later run at a table a kept run seeded, so one seed can be measured
+/// under several index designs (the run skips the seed and still proves a
+/// seeded fact reads back). Ignored by the `blob` store.
+type PostgresTable = {
+    /// An existing table to measure instead of seeding a fresh one.
+    Table: string option
+    /// The scope the existing table was seeded under.
+    Scope: string option
+    /// Leave the table in place after the run.
+    Keep: bool
+}
+
+/// The default `PostgresTable`: a fresh table, dropped afterwards.
+module PostgresTable =
+    /// A fresh table per run, dropped afterwards.
+    let fresh: PostgresTable = {
+        Table = None
+        Scope = None
+        Keep = false
+    }
 
 let private json = FableConverters.create ()
 
@@ -210,6 +238,12 @@ type private FactBackend = {
     /// Seed facts `0 .. total - 1` (fact `n` is `seededFact` of its
     /// subject, metric and week) into `scope`.
     Seed: string -> int -> (int -> int * int * int) -> Async<unit>
+    /// Phase 962 — the scope of an already-seeded table, when the run
+    /// reuses one (`Seed` is then skipped).
+    Reused: string option
+    /// Phase 962 — the executed plan of a population read's summary, for a
+    /// store that has one (`PostgresFactStore.ExplainPopulation`).
+    ExplainPopulation: (string -> PopulationQuery -> Async<string>) option
     Cleanup: unit -> unit
 }
 
@@ -253,7 +287,18 @@ let private seedThroughBatches (store: IFactStore) (scope: string) (total: int) 
     ()
 }
 
-let private resolveFactBackend (cell: FactCell) : Result<FactBackend, string> =
+/// Phase 962 — settle a freshly seeded database table the way autovacuum
+/// settles a live one: statistics for the planner, and the visibility map
+/// an index-only scan needs. Without it the first reads measure a table no
+/// running deployment has for long, and whether a plan is index-only
+/// depends on when autovacuum happened to wake.
+let private settleTable (connectionString: string) (table: string) =
+    use dataSource = Npgsql.NpgsqlDataSource.Create connectionString
+    use vacuum = dataSource.CreateCommand($"VACUUM (ANALYZE) {table}")
+    vacuum.CommandTimeout <- 0
+    vacuum.ExecuteNonQuery() |> ignore
+
+let private resolveFactBackend (target: PostgresTable) (cell: FactCell) : Result<FactBackend, string> =
     match cell.Store.Trim().ToLowerInvariant() with
     | "blob" ->
         resolveBlobArm cell.BlobArm
@@ -267,6 +312,8 @@ let private resolveFactBackend (cell: FactCell) : Result<FactBackend, string> =
                 Store = BlobFactStore.create storage (InMemoryEventStore.InMemoryEventStore())
                 Counting = counting
                 Seed = seedBlobs storage
+                Reused = None
+                ExplainPopulation = None
                 Cleanup = arm.Cleanup
             })
     | "postgres" ->
@@ -278,10 +325,18 @@ let private resolveFactBackend (cell: FactCell) : Result<FactBackend, string> =
         | connectionString ->
             // A table of its own per run, dropped afterwards: the indexes
             // are measured as the run built them, never over an earlier
-            // run's rows.
+            // run's rows — unless the caller names a kept table (Phase 962).
+            let reused =
+                match target.Table, target.Scope with
+                | Some table, Some scope -> Some(table, scope)
+                | _ -> None
+
             let options = {
                 PostgresFactStoreOptions.defaults with
-                    Table = "toolup_load_" + Guid.NewGuid().ToString("N").Substring(0, 12)
+                    Table =
+                        match reused with
+                        | Some(table, _) -> table
+                        | None -> "toolup_load_" + Guid.NewGuid().ToString("N").Substring(0, 12)
             }
 
             let store =
@@ -297,27 +352,78 @@ let private resolveFactBackend (cell: FactCell) : Result<FactBackend, string> =
                 BlobLabel = "none"
                 Store = store :> IFactStore
                 Counting = CountingBlobStorage(MemoryBlobStorage())
-                Seed = seedThroughBatches store
+                Seed =
+                    fun scope total coords -> async {
+                        do! seedThroughBatches store scope total coords
+                        settleTable connectionString options.Table
+                    }
+                Reused = reused |> Option.map snd
+                ExplainPopulation = Some(fun scope query -> store.ExplainPopulation(scope, query))
                 Cleanup =
                     fun () ->
                         (store :> IDisposable).Dispose()
 
-                        try
-                            use dataSource = Npgsql.NpgsqlDataSource.Create connectionString
-                            use drop = dataSource.CreateCommand($"DROP TABLE IF EXISTS {options.Table}")
-                            drop.ExecuteNonQuery() |> ignore
-                        with ex ->
-                            eprintfn "[load] could not drop %s: %s" options.Table ex.Message
+                        if target.Keep || reused.IsSome then
+                            printfn
+                                "[load] kept table %s (pass --table %s --scope <the scope above> to measure it again)"
+                                options.Table
+                                options.Table
+                        else
+                            try
+                                use dataSource = Npgsql.NpgsqlDataSource.Create connectionString
+                                use drop = dataSource.CreateCommand($"DROP TABLE IF EXISTS {options.Table}")
+                                drop.ExecuteNonQuery() |> ignore
+                            with ex ->
+                                eprintfn "[load] could not drop %s: %s" options.Table ex.Message
             }
     | other -> Error $"unknown fact store '{other}' (expected blob|postgres)"
 
+/// Phase 962 — the table rows an executed plan (`EXPLAIN (ANALYZE, FORMAT
+/// JSON)`) touched: per scan node that reads a table, its rows returned plus
+/// the rows its filter or recheck discarded, times its loops. A scan of a
+/// sub-select's, a function's or a CTE's output reads no table row.
+let private touchedRows (planJson: string) : float =
+    use doc = JsonDocument.Parse planJson
+    let mutable touched = 0.0
+
+    let number (node: JsonElement) (name: string) =
+        match node.TryGetProperty name with
+        | true, v -> v.GetDouble()
+        | _ -> 0.0
+
+    let rec walk (node: JsonElement) =
+        let nodeType = node.GetProperty("Node Type").GetString()
+
+        if
+            nodeType.Contains "Scan"
+            && not (List.contains nodeType [ "Subquery Scan"; "Function Scan"; "CTE Scan" ])
+        then
+            touched <-
+                touched
+                + max 1.0 (number node "Actual Loops")
+                  * (number node "Actual Rows"
+                     + number node "Rows Removed by Filter"
+                     + number node "Rows Removed by Index Recheck")
+
+        match node.TryGetProperty "Plans" with
+        | true, plans ->
+            for child in plans.EnumerateArray() do
+                walk child
+        | _ -> ()
+
+    for entry in doc.RootElement.EnumerateArray() do
+        walk (entry.GetProperty "Plan")
+
+    touched
+
 /// Run one fact cell: seed, prove the seed readable, then measure the four
 /// operations in turn — reads first, so the writes do not change what the
-/// reads were measured over.
-let runFactCell (cell: FactCell) : Async<Result<FactResult, string>> = async {
+/// reads were measured over. Phase 962: a `postgres` cell may keep its
+/// table, or measure one a kept run seeded (`PostgresTable`).
+let runFactCellOn (target: PostgresTable) (cell: FactCell) : Async<Result<FactResult, string>> = async {
     match
         (try
-            resolveFactBackend cell
+            resolveFactBackend target cell
          with ex ->
              Error ex.Message)
     with
@@ -326,16 +432,28 @@ let runFactCell (cell: FactCell) : Async<Result<FactResult, string>> = async {
         try
             let counting = backend.Counting
             let store = backend.Store
-            let scope = "load-" + Guid.NewGuid().ToString("N").Substring(0, 12)
-            let latest = cell.Weeks - 1
 
-            // Seed, in parallel batches.
+            let scope =
+                backend.Reused
+                |> Option.defaultWith (fun () -> "load-" + Guid.NewGuid().ToString("N").Substring(0, 12))
+
+            let latest = cell.Weeks - 1
+            // Phase 962 — the asserts' input tags carry a per-run salt, so a
+            // run over a kept table supersedes rather than repeating an
+            // earlier run's drafts (an idempotent skip would flatter it).
+            let salt = Guid.NewGuid().ToString("N").Substring(0, 6)
+
+            // Seed, in parallel batches (not when measuring a kept table).
             let seedClock = Stopwatch.StartNew()
             let total = cell.Subjects * cell.Metrics * cell.Weeks
 
-            do!
-                backend.Seed scope total (fun n ->
-                    n / (cell.Metrics * cell.Weeks), (n / cell.Weeks) % cell.Metrics, n % cell.Weeks)
+            if backend.Reused.IsNone then
+                do!
+                    backend.Seed scope total (fun n ->
+                        n / (cell.Metrics * cell.Weeks), (n / cell.Weeks) % cell.Metrics, n % cell.Weeks)
+
+                if target.Keep then
+                    printfn "[load] seeded scope %s" scope
 
             seedClock.Stop()
 
@@ -376,14 +494,16 @@ let runFactCell (cell: FactCell) : Async<Result<FactResult, string>> = async {
                         failwithf "fact %s is missing" fact.FactId
                 })
 
+            let populationQuery (metric: int) = {
+                PopulationQuery.create (metricOf metric) hierarchy with
+                    PeriodOverlaps = Some(week latest)
+                    Ordering = Descending
+                    TopK = 10
+            }
+
             let population =
                 measureOperation "population read (one metric, latest week, top 10)" counting cell (fun _ i -> async {
-                    let query = {
-                        PopulationQuery.create (metricOf (i % cell.Metrics)) hierarchy with
-                            PeriodOverlaps = Some(week latest)
-                            Ordering = Descending
-                            TopK = 10
-                    }
+                    let query = populationQuery (i % cell.Metrics)
 
                     match! store.QueryPopulation(scope, query) with
                     | Ok result when result.Stats.SubjectCount = cell.Subjects -> ()
@@ -395,6 +515,17 @@ let runFactCell (cell: FactCell) : Async<Result<FactResult, string>> = async {
                     | Error e -> failwithf "population read refused: %s" e
                 })
 
+            // Phase 962 — the rows that read touches, from its executed
+            // plan, once and after the clocked rounds (so it is warm, as
+            // they were): a count that survives a change of machine.
+            let! populationRows =
+                match backend.ExplainPopulation with
+                | Some explain -> async {
+                    let! plan = explain scope (populationQuery 0)
+                    return Some(touchedRows plan)
+                  }
+                | None -> async { return None }
+
             // Writes: each assert revises the latest week of a distinct
             // subject (new inputs, so it SUPERSEDES rather than being an
             // idempotent skip — a skip costs one List and would flatter
@@ -402,7 +533,7 @@ let runFactCell (cell: FactCell) : Async<Result<FactResult, string>> = async {
             let single =
                 measureOperation "single assert (supersedes the latest week)" counting cell (fun round i -> async {
                     let subject = (round * cell.OpsPerRound + i) % cell.Subjects
-                    let tag = sprintf "single-%d-%d" round i
+                    let tag = sprintf "single-%s-%d-%d" salt round i
 
                     match! store.Assert(scope, draftFor subject 0 latest tag) with
                     | Ok _ -> ()
@@ -412,7 +543,7 @@ let runFactCell (cell: FactCell) : Async<Result<FactResult, string>> = async {
             let batch =
                 measureOperation (sprintf "batch assert (%d drafts)" cell.BatchSize) counting cell (fun round i -> async {
                     let first = ((round * cell.OpsPerRound + i) * cell.BatchSize) % cell.Subjects
-                    let tag = sprintf "batch-%d-%d" round i
+                    let tag = sprintf "batch-%s-%d-%d" salt round i
 
                     let drafts = [
                         for k in 0 .. cell.BatchSize - 1 do
@@ -434,6 +565,7 @@ let runFactCell (cell: FactCell) : Async<Result<FactResult, string>> = async {
                     Facts = total
                     SeedSeconds = seedClock.Elapsed.TotalSeconds
                     Operations = [ pointRead; byId; population; single; batch ]
+                    PopulationRowsPerRead = populationRows
                 }
         with ex ->
             backend.Cleanup()
@@ -447,6 +579,9 @@ let runFactCell (cell: FactCell) : Async<Result<FactResult, string>> = async {
                 Error
                     $"facts/{cell.Store}/{cell.BlobArm} at {cell.Subjects} subjects x {cell.Metrics} metrics x {cell.Weeks} weeks failed: {inner}"
 }
+
+/// Run one fact cell on a fresh table (`runFactCellOn PostgresTable.fresh`).
+let runFactCell (cell: FactCell) : Async<Result<FactResult, string>> = runFactCellOn PostgresTable.fresh cell
 
 /// The printed rows for one fact result — one per operation, each naming
 /// its backend, population, concurrency and statistic.
@@ -473,6 +608,18 @@ let renderFacts (r: FactResult) : string list = [
             op.BlobReadsPerOp
             op.BlobListsPerOp
             r.SeedSeconds
+    match r.PopulationRowsPerRead with
+    | Some rows ->
+        sprintf
+            "facts | store=%s blob=%s | subjects=%d metrics=%d weeks=%d (%d facts) | population read summary touched %.0f rows (executed plan)"
+            r.StoreLabel
+            r.BlobLabel
+            r.Cell.Subjects
+            r.Cell.Metrics
+            r.Cell.Weeks
+            r.Facts
+            rows
+    | None -> ()
 ]
 
 /// The fact gate's configuration — what `perf-budget-gate.ps1` runs on
@@ -529,6 +676,18 @@ let factGateSamples (r: FactResult) : GateSample list =
             Median = pointRead.BlobReadsPerOp
             Max = pointRead.BlobReadsPerOp
         }
+        match r.PopulationRowsPerRead with
+        | Some rows -> {
+            Metric = "factPopulationRowsPerRead"
+            Value = rows
+            Rounds = r.Cell.Rounds
+            Observed = rows > 0.0
+            Evidence =
+                $"table rows the population read's summary touched, from its executed plan (one metric, latest week) — {where}"
+            Median = rows
+            Max = rows
+          }
+        | None -> ()
     ]
 
 /// Phase 929 — the fact gate's configuration over the object-storage
@@ -545,6 +704,17 @@ let azuriteGateFactCell: FactCell = {
 /// Phase 929 — the fact gate's configuration over the database-backed
 /// store (Phase 888): the memory arm's population, so the two rows compare.
 let postgresGateFactCell: FactCell = { gateFactCell with Store = "postgres" }
+
+/// Phase 962 — the database arm's deep-history cell: a year of weekly facts
+/// per subject, so one metric's latest week is one 156th of the table and a
+/// population read that stops using the population index touches the
+/// table (or the metric's history) instead of the week. Sized to seed in
+/// about a minute and a half through `AssertBatch`.
+let postgresHistoryGateFactCell: FactCell = {
+    postgresGateFactCell with
+        Subjects = 2_500
+        Weeks = 52
+}
 
 /// The gate configuration each arm runs: its measurement label, the
 /// retrieval cell (optional, so an arm may budget facts alone) and the fact
@@ -575,7 +745,9 @@ let gateArm (arm: string) : Result<string * RetrievalCell option * FactCell, str
             },
             postgresGateFactCell
         )
-    | other -> Error $"unknown gate arm '{other}' (expected memory|azurite|postgres)"
+    | "postgres-history" ->
+        Ok("Phase 962 load harness - gate configuration, postgres arm, deep history", None, postgresHistoryGateFactCell)
+    | other -> Error $"unknown gate arm '{other}' (expected memory|azurite|postgres|postgres-history)"
 
 // ─── The `load` command ─────────────────────────────────────────────
 
@@ -590,7 +762,7 @@ module LoadCommand =
             "Usage: dotnet run --project src/ToolUp.RAG.Benchmarks -c Release -- load <gate|retrieval|facts> [options]"
 
         eprintfn ""
-        eprintfn "  load gate      [--arm memory|azurite|postgres] [--measurements <path>]"
+        eprintfn "  load gate      [--arm memory|azurite|postgres|postgres-history] [--measurements <path>]"
         eprintfn "                 the gate configuration of one arm; writes the measurement file"
 
         eprintfn
@@ -602,6 +774,7 @@ module LoadCommand =
             "  load facts     [--store blob|postgres] [--blob memory|disk|azurite] [--subjects 300000] [--metrics 3] [--weeks 52]"
 
         eprintfn "                 [--concurrency 4] [--ops 20] [--rounds 5] [--batch 50] [--out <path>]"
+        eprintfn "                 [--keep yes] [--table <kept table> --scope <its scope>]   (postgres only)"
         eprintfn ""
 
         eprintfn
@@ -748,7 +921,13 @@ module LoadCommand =
             BatchSize = int' o "batch" 50
         }
 
-        match runFactCell cell |> Async.RunSynchronously with
+        let target: PostgresTable = {
+            Table = o.TryFind "table"
+            Scope = o.TryFind "scope"
+            Keep = (o.TryFind "keep" = Some "yes")
+        }
+
+        match runFactCellOn target cell |> Async.RunSynchronously with
         | Ok r ->
             emit (o.TryFind "out") (renderFacts r)
             0
