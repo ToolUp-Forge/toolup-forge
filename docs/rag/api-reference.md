@@ -7,9 +7,8 @@ Public surface of `ToolUp.RAG`. Types are listed by package.
 ### `IngestionTypes`
 
 ```fsharp skip=fragment
-// One job per CHUNK, not per document: the queue's unit of work is the
-// thing that gets embedded, so a large document's failure retries only
-// the chunk that failed.
+// One job per CHUNK: what the background service hands each observer
+// and the retry path, after it embeds the queued document's chunks.
 type IngestionJob = {
     ChunkId: string
     DocumentId: string
@@ -29,13 +28,69 @@ type IngestionAttempt = {
     EnqueuedChunks: int
 }
 
-type IngestionQueue =
-    member Enqueue: IngestionJob -> Async<Result<unit, IngestionEnqueueError>>
-    member Dequeue: CancellationToken -> Async<IngestionJob>
+// The queue's unit is one DOCUMENT (one upload); the background service
+// fans it out into the per-chunk `IngestionJob`s above.
+type DocumentIngestionJob = {
+    DocumentId: string
+    DocumentName: string
+    Chunks: (string * TextChunk) list
+    Scope: VectorScope
+    ScopeId: string
+    Container: string
+    OriginatingUserId: string option
+    Attempt: IngestionAttempt option
+}
+
+type IngestionOverflowPolicy =
+    | DropWrite
+    | Block
+    | Refuse
+
+type IngestionLease = {
+    LeaseId: string
+    Job: DocumentIngestionJob
+    Attempt: int
+}
+
+// The seam the background service drains.
+type IIngestionQueue =
+    abstract IsDurable: bool
+    abstract Capacity: int
+    abstract Policy: IngestionOverflowPolicy
+    abstract EnqueueAsync: job: DocumentIngestionJob -> Async<bool>
+    abstract EnqueueBlockingAsync: job: DocumentIngestionJob -> Async<unit>
+    abstract Dequeue: ct: CancellationToken -> Async<IngestionLease option>
+    // Phase 945 — wait for work without taking it, then take it without waiting.
+    abstract WaitForWork: ct: CancellationToken -> Async<bool>
+    abstract TryDequeue: unit -> Async<IngestionLease option>
+    abstract Ack: leaseId: string -> Async<unit>
+    abstract Abandon: leaseId: string * reason: string -> Async<unit>
+    abstract RecoverStranded: unit -> Async<int>
+
+// The shipped implementation (it also implements IIngestionQueue).
+type IngestionQueue(?capacity: int, ?overflowPolicy: IngestionOverflowPolicy, ?store: IIngestionQueueStore,
+                    ?leaseDuration: TimeSpan, ?claimPollInterval: TimeSpan) =
+    member Enqueue: DocumentIngestionJob -> bool
+    member EnqueueAsync: DocumentIngestionJob -> Async<bool>
+    member EnqueueBlocking: DocumentIngestionJob -> Async<unit>
     member Count: int
+    member Capacity: int
+    member Policy: IngestionOverflowPolicy
+    member IsDurable: bool
+    member BackingName: string
+    member Dropped: int64
+    member DroppedLast60s: int
+    interface IIngestionQueue
 ```
 
-Channel-backed unbounded queue (bounded with `withIngestionQueueCapacity`). Thread-safe enqueue; single-reader dequeue served by the background service.
+A bounded queue of document jobs (capacity 5,000 by default; `withIngestionQueueCapacity` sets it).
+`Enqueue` / `EnqueueAsync` return `false` when the queue is full, and the overflow policy decides
+what the caller does with that: `DropWrite` drops and counts it, `Block` waits for space
+(`EnqueueBlocking`), `Refuse` drops and fails loudly when drops are sustained. With no store the
+queue is a process-local channel; composing an `IIngestionQueueStore` makes it durable, with
+lease-based at-least-once delivery (`Dequeue` / `TryDequeue` take a lease, `Ack` or `Abandon`
+settles it). A drainer waits with `WaitForWork` before taking a worker permit, then takes the job
+with `TryDequeue`, looping on `None`, so no permit is held through an idle wait (Phase 945).
 
 ### `IIngestionStatusObserver`
 
@@ -187,7 +242,7 @@ RAG-specific builders:
 > overrun or fault; pass `withFactClausePlanning false` when the fact tier is composed for its tool
 > surface alone and a second model call per chat turn is not wanted.
 - `withIngestionConcurrency: int -> RAGServerApp -> RAGServerApp` (default 2)
-- `withIngestionQueueCapacity: int -> RAGServerApp -> RAGServerApp` (default unbounded)
+- `withIngestionQueueCapacity: int -> RAGServerApp -> RAGServerApp` (default 5,000 documents)
 - `withTelemetry: IRagTelemetry -> RAGServerApp -> RAGServerApp`
 - `withVectorStore: IVectorStore -> RAGServerApp -> RAGServerApp` (default `InMemoryVectorStore`)
 - `withEmbeddingCache: IEmbeddingCache -> RAGServerApp -> RAGServerApp`
