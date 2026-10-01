@@ -465,6 +465,38 @@ let offlineTests =
             let _, many = composed 3 FactsCompose.withFactStore
             Expect.hasLength (scaleValidators many) 1 "three replicas compose the guard"
 
+        // Phase 946 — the blob fact store's index check (Phase 890) reaches
+        // /dev/inspect through the DI-registered inspector seam.
+        testCaseAsync "the fact store's index check is one of /dev/inspect's inspectors (Phase 946)"
+        <| async {
+            let _, sp = composed 1 FactsCompose.withFactStore
+            let inspectors = DevDiagnosticsHandler.indexInspectors [] sp
+
+            Expect.hasLength inspectors 1 "the facts companion registers one inspector"
+
+            let! entries = inspectors.Head "team-scale"
+
+            Expect.equal
+                (entries |> List.map _.StoreName |> List.distinct)
+                [ "facts" ]
+                "it samples the fact store's index"
+
+            // A replaced store is not the blob store: nothing to sample.
+            let replacement, _ = blobIndexed None (fun () -> DateTime.UtcNow)
+
+            let _, replaced =
+                composed
+                    1
+                    (FactsCompose.withFactStore
+                     >> FactsCompose.withFactStoreImplementation "test" (fun _ -> replacement))
+
+            match DevDiagnosticsHandler.indexInspectors [] replaced with
+            | [ inspector ] ->
+                let! none = inspector "team-scale"
+                Expect.isEmpty none "the replacement's index is not this inspector's"
+            | other -> failtestf "expected the one registered inspector, got %d" other.Length
+        }
+
         // Phase 946 — the compose-time preflight reads every validator as
         // an INSTANCE registration and refuses a factory, so a guard
         // registered through a factory made a multi-replica composition

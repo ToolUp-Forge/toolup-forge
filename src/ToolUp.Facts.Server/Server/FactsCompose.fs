@@ -187,6 +187,11 @@ type BlobFactStoreScaleValidator
         }
 
 
+/// Phase 946 — the blob fact store a composition built, once its
+/// `IFactStore` has been resolved, for the `/dev/inspect` index inspector.
+type internal ComposedBlobFactStore() =
+    member val Instance: BlobFactStore option = None with get, set
+
 /// Phase 946 — the registered form of `BlobFactStoreScaleValidator`: an
 /// instance (the compose-time preflight refuses a factory registration)
 /// that builds the guard when it runs, from the instance registrations of
@@ -260,6 +265,8 @@ module FactsCompose =
     // Register the fact-store DI singletons (lazy factories over the
     // composed substrate).
     let private registerFactStore (services: IServiceCollection) : IServiceCollection =
+        let composedBlob = ComposedBlobFactStore()
+
         services
             // Phase 703 — the store is composed WITH the metric registry.
             // It was registry-less until now, and that was a wiring gap
@@ -277,10 +284,36 @@ module FactsCompose =
             // (GP 11).
             .AddSingleton<IFactStore>(
                 Func<IServiceProvider, IFactStore>(fun sp ->
-                    BlobFactStore.createWithRegistry
-                        (sp.GetRequiredService<IBlobStorage>())
-                        (sp.GetRequiredService<IEventStore>())
-                        (tryService<Grounding.IMetricRegistry> sp))
+                    let store =
+                        BlobFactStore.createWithRegistry
+                            (sp.GetRequiredService<IBlobStorage>())
+                            (sp.GetRequiredService<IEventStore>())
+                            (tryService<Grounding.IMetricRegistry> sp)
+
+                    // Phase 946 — remember the blob store this composition
+                    // built, for the /dev/inspect index inspector below.
+                    match store with
+                    | :? BlobFactStore as blob -> composedBlob.Instance <- Some blob
+                    | _ -> ()
+
+                    store)
+            )
+            // Phase 946 — the fact store's index check (Phase 890) on
+            // /dev/inspect. Resolving the composed IFactStore first builds
+            // it, so the inspector samples the blob store this composition
+            // built; a replacement (`withFactStoreImplementation`) never
+            // builds one, and the inspector samples nothing.
+            .AddSingleton<DevDiagnosticsHandler.IIndexConsistencyInspector>(
+                Func<IServiceProvider, DevDiagnosticsHandler.IIndexConsistencyInspector>(fun sp ->
+                    { new DevDiagnosticsHandler.IIndexConsistencyInspector with
+                        member _.Inspect(scopeId) = async {
+                            sp.GetService<IFactStore>() |> ignore
+
+                            match composedBlob.Instance with
+                            | Some blob -> return! blob.IndexConsistencyCheck(scopeId, 20)
+                            | None -> return []
+                        }
+                    })
             )
             .AddSingleton<IFactEvidenceSource>(
                 Func<IServiceProvider, IFactEvidenceSource>(fun sp ->
