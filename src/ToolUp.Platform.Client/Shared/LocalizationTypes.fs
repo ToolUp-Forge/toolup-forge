@@ -1419,6 +1419,38 @@ type TeamConfigMessages = {
     ModuleNotAvailable: string -> string
     ConfigurationTab: string
     FeatureFlagsTab: string
+    /// Phase 942 — the tab holding the team's output-visibility level.
+    OutputVisibilityTab: string
+    /// Heading of the output-visibility section.
+    OutputVisibilityHeading: string
+    /// Prose under the heading: what the level governs and what it does not.
+    OutputVisibilityHelp: string
+    /// While the team's level is being read.
+    OutputVisibilityLoading: string
+    /// The level could not be read. Takes the reason.
+    OutputVisibilityUnreadable: string -> string
+    /// The caller has no active team, so there is no team level.
+    OutputVisibilityNoTeam: string
+    /// The deployment has not composed team output visibility.
+    OutputVisibilityNotComposed: string
+    /// The caller may see the level but not change it.
+    OutputVisibilityOwnerOnly: string
+    /// Status line after a successful change.
+    OutputVisibilityUpdated: string
+    /// Name of the `TeamVisible` level.
+    OutputLevelTeamVisible: string
+    /// Name of the `TeamAdmins` level.
+    OutputLevelTeamAdmins: string
+    /// Name of the `PlatformAdmins` level.
+    OutputLevelPlatformAdmins: string
+    /// Who sees restricted output at `TeamVisible`.
+    OutputLevelTeamVisibleDescription: string
+    /// Who sees restricted output at `TeamAdmins`.
+    OutputLevelTeamAdminsDescription: string
+    /// Who sees restricted output at `PlatformAdmins`.
+    OutputLevelPlatformAdminsDescription: string
+    /// Tooltip on the member-visible notice: where the level is set.
+    OutputVisibilityNoticeHint: string
 }
 
 /// The built-in tenant-lifecycle diagnostics admin module
