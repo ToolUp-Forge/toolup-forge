@@ -419,6 +419,44 @@ let tests =
                     "a record after shutdown is refused by the queue, so the emitter writes it inline"
             }
 
+            // Phase 869 — the case above was intermittent on a cold, loaded
+            // run (0 of 50 written). .NET 10's `BackgroundService.StartAsync`
+            // queues `ExecuteAsync` through `Task.Run(…, stoppingToken)`, so a
+            // stop that reaches the token before the pool runs the work item
+            // cancels the drain loop before it ever starts. A start whose
+            // token is already cancelled is that state, deterministically.
+            test "a drain whose loop never ran still writes every accepted record at stop" {
+                let store = InMemoryEventStore.InMemoryEventStore()
+                let auditLog = AuditLog.EventStoreAuditLog(store, QuietLogger()) :> IAuditLog
+                let queue = RemotingAuditQueue(RemotingAuditQueue.DefaultCapacity)
+
+                let service =
+                    new RemotingAuditDrainService.RemotingAuditDrainService(
+                        queue,
+                        QuietLogger(),
+                        fun () -> CountingMetrics() :> Metrics.IMetricsSink
+                    )
+
+                for i in 1..50 do
+                    Expect.isTrue
+                        (queue.TryEnqueue {
+                            AuditLog = auditLog
+                            ScopeId = "scope-869"
+                            Event = platformEvent (sprintf "M%d" i)
+                        })
+                        "accepted"
+
+                service.StartAsync(CancellationToken(true)).Wait()
+                service.StopAsync(CancellationToken.None).Wait()
+
+                let trail =
+                    auditLog.GetAuditTrail("scope-869", None, Some "RemotingMethodAudited")
+                    |> Async.RunSynchronously
+
+                Expect.equal trail.Length 50 "every accepted record was written although the loop never ran"
+                Expect.equal queue.Count 0 "nothing left behind"
+            }
+
             test "compose registers the queue only where a drain can honour it" {
                 let enabled = {
                     ServerConfig.defaults with
