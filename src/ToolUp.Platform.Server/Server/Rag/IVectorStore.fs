@@ -73,9 +73,12 @@ type IVectorStore =
     /// List the scopes the store currently has chunks for (visible or
     /// tombstoned). Used by `ReembeddingService` to enumerate work after
     /// a model swap; allows the service to operate without requiring the
-    /// composing app to enumerate scopes itself. Implementations that lazy-
-    /// load scopes (e.g. `InMemoryVectorStore`) return only the scopes
-    /// loaded so far — eager enumeration of cold scopes is not required.
+    /// composing app to enumerate scopes itself. Since Phase 861 the shipped
+    /// in-memory stores (`InMemoryVectorStore`, `HnswVectorStore`) lazy-load
+    /// scopes but list the persisted ones as well as the loaded ones, so a
+    /// cold scope is enumerated after a restart; an implementation that
+    /// cannot enumerate its persisted scopes may still return only the
+    /// scopes it has loaded.
     abstract ListScopes: unit -> Async<VectorScope list>
 
     /// Phase 9h — GDPR Article 17 erasure surface. Erase (or
