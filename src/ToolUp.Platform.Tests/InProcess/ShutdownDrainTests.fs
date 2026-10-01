@@ -274,8 +274,65 @@ let private claimAll (store: IIngestionQueueStore) = async {
     return List.ofSeq claimed
 }
 
+/// A store whose next `Claim`, once armed, takes the lease and then holds it
+/// until released — the instant a claim lands as the stop arrives.
+type private GatedClaimStore(inner: IIngestionQueueStore) =
+    let mutable armed = false
+    let claimed = TaskCompletionSource()
+    let release = TaskCompletionSource()
+
+    member _.Arm() = armed <- true
+    member _.Claimed = claimed.Task
+    member _.Release() = release.TrySetResult() |> ignore
+
+    interface IIngestionQueueStore with
+        member _.Name = inner.Name
+        member _.Enqueue(job, capacity) = inner.Enqueue(job, capacity)
+
+        member _.Claim leaseDuration = async {
+            let! lease = inner.Claim leaseDuration
+
+            if armed && lease.IsSome then
+                armed <- false
+                claimed.TrySetResult() |> ignore
+                do! release.Task |> Async.AwaitTask
+
+            return lease
+        }
+
+        member _.Complete leaseId = inner.Complete leaseId
+        member _.Release leaseId = inner.Release leaseId
+        member _.ReclaimExpired() = inner.ReclaimExpired()
+        member _.Depth() = inner.Depth()
+
 let private ingestion =
     testList "an ingestion job in flight at stop is finished or handed back" [
+        testCaseAsync "a document claimed as the stop arrives is processed, not stranded under its lease"
+        <| async {
+            let inner = InMemoryIngestionQueueStore()
+            let store = GatedClaimStore(inner)
+            let q = IngestionQueue(10, DropWrite, store)
+            let pipeline = HoldingPipeline(TimeSpan.Zero)
+            use svc = ingestionService q pipeline
+            do! (svc :> IHostedService).StartAsync CancellationToken.None |> Async.AwaitTask
+
+            store.Arm()
+            Expect.isTrue (q.Enqueue(mkJob "d1")) "accepted"
+            let! claimed = waitUntil 5000 (fun () -> store.Claimed.IsCompleted)
+            Expect.isTrue claimed "the drain loop's claim has taken the lease"
+
+            // The stop signals the loop while the claim is still returning.
+            let stopping = Async.StartAsTask(stopWithin (TimeSpan.FromSeconds 10.0) svc)
+
+            do! Async.Sleep 200
+            store.Release()
+            let! _ = stopping |> Async.AwaitTask
+
+            Expect.equal pipeline.Indexed [ "d1:chunk:0" ] "the claimed document was processed"
+            let! depth = (inner :> IIngestionQueueStore).Depth()
+            Expect.equal depth 0 "and acknowledged — no lease left to wait out its expiry"
+        }
+
         testCaseAsync "a document in flight at stop is finished inside the window"
         <| async {
             let store = InMemoryIngestionQueueStore()

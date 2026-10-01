@@ -1006,7 +1006,12 @@ type IngestionBackgroundService
                     let mutable handedOff = false
 
                     try
-                        let! lease = Async.StartAsTask(queue.TryDequeue(), cancellationToken = stoppingToken)
+                        // Phase 869 — NOT under the stopping token. The claim
+                        // is one store call that never waits; cancelled at the
+                        // bind after it, a lease it had already taken was
+                        // dropped and sat out its expiry. A claim that returns
+                        // is started, and the stop waits for it like any other.
+                        let! lease = Async.StartAsTask(queue.TryDequeue())
 
                         match lease with
                         | Some claimed ->

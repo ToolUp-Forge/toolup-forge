@@ -2575,6 +2575,10 @@ module RAGServerApp =
     /// `src/VectorStores/<Name>/` (e.g. `Hnsw/` for HNSW.Net) provide
     /// implementations. Without one, RAG uses the in-memory flat-scan
     /// `InMemoryVectorStore` — fine up to ~50k chunks per scope.
+    ///
+    /// Phase 869 — a supplied store stays the caller's: the composition
+    /// flushes and disposes at stop only the store it constructed, so dispose
+    /// a supplied one yourself once the host has stopped.
     let withVectorStore (store: IVectorStore) (app: RAGServerApp) : RAGServerApp = { app with VectorStore = Some store }
 
     /// Phase 633 — substitute the `IEmbeddingCache` the composition wraps
@@ -3148,6 +3152,9 @@ module RAGServerApp =
     /// together with `withSparseAnalyzer` is refused at composition; use
     /// `withAnalyzedSparseIndex` to have the index built for the analyzer.
     /// Ignored when `withRetrievalPipeline` replaces the whole pipeline.
+    ///
+    /// Phase 869 — as with `withVectorStore`, a supplied index stays the
+    /// caller's to dispose; the composition flushes only what it constructed.
     let withSparseIndex (index: ISparseIndex) (app: RAGServerApp) : RAGServerApp = {
         app with
             SparseIndex = SparseIndexComposition.SuppliedSparseIndex index
