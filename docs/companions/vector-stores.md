@@ -43,7 +43,14 @@ type TracingVectorStore(inner: IVectorStore) =
 
 The member returns an option because F# implements interfaces statically. A decorator answers the probe whatever it wraps, and `None` passes an undeclared inner store through as undeclared. A decorator that does not implement the interface reads as undeclared, whatever it wraps. The warning names the composed type, which is the decorator.
 
-The keyword-index half of the same warning still recognises `InMemoryBM25Index` by a type test, so a decorator around that index is not seen as in-process.
+The keyword-index half of the same warning asks the same question of the composed `ISparseIndex`, through the optional `ISparseIndexLocality` interface beside it (Phase 964). It answers with the same `VectorIndexLocality`, because the question and its two answers do not change with the kind of index:
+
+| Keyword index | Declares | Why |
+|---|---|---|
+| `InMemoryBM25Index` | `InProcess` | the postings are the process's in-memory maps, flushed to blob storage but searched from memory |
+| `ToolUp.SparseIndices.Postgres` | `Shared` | every replica searches the one full-text table |
+
+A keyword-index decorator forwards its inner index's declaration with `member _.IndexLocality = SparseIndexLocality.declared inner`, exactly as a vector-store decorator does. An index that declares nothing is read as not in-process.
 
 ## Picking a store
 

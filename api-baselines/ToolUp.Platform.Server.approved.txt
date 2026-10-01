@@ -6244,6 +6244,11 @@ ToolUp.Platform.ISparseIndex+ISparseIndex.DeleteChunk(ToolUp.Platform.VectorKnow
 ToolUp.Platform.ISparseIndex+ISparseIndex.Erase(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
 ToolUp.Platform.ISparseIndex+ISparseIndex.Search(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorScope], System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+VectorMatch]]
 ToolUp.Platform.ISparseIndex+ISparseIndex.Upsert(ToolUp.Platform.VectorKnowledgeTypes+VectorScope, System.String, ToolUp.Platform.VectorKnowledgeTypes+TextChunk) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.ISparseIndex+ISparseIndexLocality (interface)
+ToolUp.Platform.ISparseIndex+ISparseIndexLocality.IndexLocality : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IVectorStore+VectorIndexLocality] { get }
+ToolUp.Platform.ISparseIndex+SparseIndexLocality (class)
+ToolUp.Platform.ISparseIndex+SparseIndexLocality.declared(ToolUp.Platform.ISparseIndex+ISparseIndex) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IVectorStore+VectorIndexLocality]
+ToolUp.Platform.ISparseIndex+SparseIndexLocality.isInProcess(ToolUp.Platform.ISparseIndex+ISparseIndex) : System.Boolean
 ToolUp.Platform.IStatementEnvelopeSigner (interface)
 ToolUp.Platform.IStatementEnvelopeSigner.KeyId() : System.String
 ToolUp.Platform.IStatementEnvelopeSigner.SignPreAuthenticated(System.Byte[]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EnvelopeKeySignature, System.String]]
