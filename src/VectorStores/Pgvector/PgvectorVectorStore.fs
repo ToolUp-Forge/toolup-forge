@@ -1313,11 +1313,59 @@ type PgvectorVectorStore
 
 // ─── create-time probe (507.C) ───────────────────────────────────────
 
+/// Phase 964 — whether `AutoMigrate` builds the IVFFlat index now. IVFFlat
+/// clusters the rows present when it is built, so an index built on an
+/// empty table has nothing to cluster: measured (live arm), 10,000 clustered
+/// rows loaded after an empty-table build answered recall@10 = 0.017 at
+/// `probes` 1, against 0.837 for the same index built after the load, and a
+/// restart did not repair it (`CREATE INDEX IF NOT EXISTS` keeps the empty
+/// build). pgvector's own build says the same ("ivfflat index created with
+/// little data … Drop the index until the table has more data"). So the
+/// build is deferred while the table holds fewer rows than `lists`, and
+/// the store answers by exact scan meanwhile; the first `create` after the
+/// load builds it. `Some warning` names the deferral, `None` builds (or the
+/// index already exists).
+let private ivfFlatDeferral (dataSource: NpgsqlDataSource) (options: PgvectorOptions) : Async<string option> = async {
+    match options.AnnIndex with
+    | IvfFlatAnnIndex lists ->
+        let indexName = sprintf "%s_embedding_ivfflat_idx" options.Table
+        use exists = dataSource.CreateCommand "SELECT to_regclass(@index) IS NOT NULL;"
+
+        exists.Parameters.AddWithValue("index", indexName) |> ignore
+        let! found = exists.ExecuteScalarAsync() |> Async.AwaitTask
+
+        if Convert.ToBoolean found then
+            return None
+        else
+            use count =
+                dataSource.CreateCommand(
+                    sprintf "SELECT count(*) FROM (SELECT 1 FROM %s LIMIT %d) AS sampled;" options.Table lists
+                )
+
+            let! rows = count.ExecuteScalarAsync() |> Async.AwaitTask
+            let rows = Convert.ToInt64 rows
+
+            if rows >= int64 lists then
+                return None
+            else
+                return
+                    Some(
+                        sprintf
+                            "[PgvectorVectorStore] The IVFFlat index (lists = %d) on '%s' is not built yet: the table holds %d row(s), fewer than its lists, and an IVFFlat index clusters the rows present when it is built, so one built now would keep near-random lists after the load. Every search is an exact scan until it is built. Restart once the initial load is in and AutoMigrate builds it, or build it out of band after the load: %s"
+                            lists
+                            options.Table
+                            rows
+                            (Sql.migration options |> List.last)
+                    )
+    | _ -> return None
+}
+
 /// Connectivity + extension + schema reconciliation, run once at
 /// construction. Every failure is a descriptive `PgvectorStoreException`
 /// naming the operator action — never a deferred failure on the first
-/// retrieval of a live request.
-let private probeAndMigrate (dataSource: NpgsqlDataSource) (options: PgvectorOptions) : Async<unit> = async {
+/// retrieval of a live request. Returns the Phase 964 IVFFlat deferral
+/// warning, when the build was deferred.
+let private probeAndMigrate (dataSource: NpgsqlDataSource) (options: PgvectorOptions) : Async<string option> = async {
     // 1. Connectivity. A store that cannot reach its database must not
     //    be composed at all.
     try
@@ -1365,21 +1413,39 @@ let private probeAndMigrate (dataSource: NpgsqlDataSource) (options: PgvectorOpt
             fail
                 "[PgvectorVectorStore] The `vector` extension is not installed in the target database. SchemaMode = VerifyOnly, so this companion will not create it — run `CREATE EXTENSION vector;` as a superuser, then restart."
 
-    // 3. Schema.
+    // 3. Schema. The approximate index is the last statement, built after
+    //    the table — or, for an IVFFlat index over a table too small to
+    //    cluster, deferred (Phase 964).
+    let run (statement: string) = async {
+        try
+            use cmd = dataSource.CreateCommand statement
+            let! _ = cmd.ExecuteNonQueryAsync() |> Async.AwaitTask
+            ()
+        with ex ->
+            fail (
+                sprintf
+                    "[PgvectorVectorStore] Schema migration failed on `%s`: %s. Either grant this role DDL rights on the target schema, or provision the table out of band and compose with SchemaMode = VerifyOnly."
+                    (statement.Split '\n' |> Array.head)
+                    ex.Message
+            )
+    }
+
     match options.SchemaMode with
     | AutoMigrate ->
-        for statement in Sql.migration options do
-            try
-                use cmd = dataSource.CreateCommand statement
-                let! _ = cmd.ExecuteNonQueryAsync() |> Async.AwaitTask
-                ()
-            with ex ->
-                fail (
-                    sprintf
-                        "[PgvectorVectorStore] Schema migration failed on `%s`: %s. Either grant this role DDL rights on the target schema, or provision the table out of band and compose with SchemaMode = VerifyOnly."
-                        (statement.Split '\n' |> Array.head)
-                        ex.Message
-                )
+        let tableStatements = Sql.migration { options with AnnIndex = NoAnnIndex }
+
+        for statement in tableStatements do
+            do! run statement
+
+        let! deferred = ivfFlatDeferral dataSource options
+
+        match deferred with
+        | Some _ -> ()
+        | None ->
+            for statement in Sql.migration options |> List.skip tableStatements.Length do
+                do! run statement
+
+        return deferred
     | VerifyOnly ->
         use cmd = dataSource.CreateCommand Sql.tableRegclass
         cmd.Parameters.AddWithValue("table", options.Table) |> ignore
@@ -1391,7 +1457,19 @@ let private probeAndMigrate (dataSource: NpgsqlDataSource) (options: PgvectorOpt
                     "[PgvectorVectorStore] Table '%s' does not exist in the target database and SchemaMode = VerifyOnly. Provision it with the DDL in the companion README, or compose with SchemaMode = AutoMigrate."
                     options.Table
             )
+
+        return None
 }
+
+/// Phase 964 — log the IVFFlat deferral, once, at `create`.
+let private warnIfIvfFlatDeferred (log: ILogger option) (deferred: string option) =
+    match deferred with
+    | None -> ()
+    | Some warning ->
+        let logger =
+            log |> Option.defaultWith (fun () -> ConsoleLogger.ConsoleLogger() :> ILogger)
+
+        logger.Warn warning
 
 /// Phase 892 — the installed extension version, read once at `create` by
 /// the tuned entry points; it decides whether iterative scanning is sent.
@@ -1459,13 +1537,15 @@ let createTunedWithDataSource
     validateOrFail options
     validateTuningOrFail options tuning
 
-    let version =
+    let deferred, version =
         async {
-            do! probeAndMigrate dataSource options
-            return! readExtensionVersion dataSource
+            let! deferred = probeAndMigrate dataSource options
+            let! version = readExtensionVersion dataSource
+            return deferred, version
         }
         |> Async.RunSynchronously
 
+    warnIfIvfFlatDeferred logger deferred
     warnIfIterativeUnavailable logger tuning options version
     new PgvectorVectorStore(dataSource, options, tuning, version, false, logger) :> IVectorStore
 
@@ -1500,17 +1580,19 @@ let createTuned
         with ex ->
             fail (sprintf "[PgvectorVectorStore] The connection string could not be parsed: %s" ex.Message)
 
-    let version =
+    let deferred, version =
         try
             async {
-                do! probeAndMigrate dataSource options
-                return! readExtensionVersion dataSource
+                let! deferred = probeAndMigrate dataSource options
+                let! version = readExtensionVersion dataSource
+                return deferred, version
             }
             |> Async.RunSynchronously
         with _ ->
             dataSource.Dispose()
             reraise ()
 
+    warnIfIvfFlatDeferred logger deferred
     warnIfIterativeUnavailable logger tuning options version
     new PgvectorVectorStore(dataSource, options, tuning, version, true, logger) :> IVectorStore
 

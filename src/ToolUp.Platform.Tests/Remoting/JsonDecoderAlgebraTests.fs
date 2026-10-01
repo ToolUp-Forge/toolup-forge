@@ -41,6 +41,21 @@ type private ProbeApi = { DoThing: string -> Async<unit> }
 /// (`Int64Converter` / `UInt64Converter`) rather than the algebra's.
 type WideArgument = { Count: int64; Size: uint64 }
 
+/// Phase 964 — `WideArgument` nested under each converter that reads its
+/// members through a nested `Deserialize`: a record, a list, a map, a
+/// union (single- and multi-field cases) and a tuple. Never registered.
+type WideHolder = {
+    Inner: WideArgument
+    Items: WideArgument list
+    ByName: Map<string, WideArgument>
+    Choice: WideChoice
+    Paired: int * WideArgument
+}
+
+and WideChoice =
+    | Holds of WideArgument
+    | Pair of int * WideArgument
+
 // ─── The corpus types' decoders ──────────────────────────────────────
 
 let private priority: JsonDecoder<Priority> =
@@ -464,6 +479,18 @@ let private declaredStrictness = [
     // it.
     "missing-field-record"
 ]
+
+/// Phase 964 — the member path an STJ argument-path refusal reports for
+/// `text` read as `'T` (which must be refused, naming `Int64`).
+let private stjRefusalPath<'T> (text: string) : string list =
+    JsonDecoders.resetForTests ()
+    use doc = JsonDocument.Parse text
+
+    match ToolUp.Remoting.Json.SystemTextJson.FableConverters.tryDeserialise<'T> doc.RootElement jsonOptions with
+    | Error e ->
+        Expect.stringContains (DecodeError.render e) "Int64" "still names the refused type"
+        e.Path
+    | Ok decoded -> failtestf "`%s` should have been refused, decoded to %A" text decoded
 
 let tests =
     testList "Phase 799 — the JSON wire joins the decoder algebra" [
@@ -2329,10 +2356,7 @@ let tests =
                 match decodeArgument text with
                 | Error e ->
                     let rendered = DecodeError.render e
-                    // No path assertion: the record converter reads each
-                    // member through a nested `Deserialize`, so STJ reports
-                    // the refusal at the root (`$`) on this path — the same
-                    // as for every other converter refusal it carries.
+                    // The member path is pinned by the Phase 964 list below.
                     Expect.isTrue (e.Expected = "WideArgument") (sprintf "`%s`: names the argument type" text)
                     Expect.stringContains rendered typeName (sprintf "`%s`: names the type" text)
 
@@ -2386,5 +2410,79 @@ let tests =
                     match decodeArgument text with
                     | Ok decoded -> Expect.equal decoded expected (sprintf "`%s` decodes" text)
                     | Error e -> failtestf "`%s` was refused: %s" text (DecodeError.render e)
+        ]
+
+        // ─── Phase 964 — STJ argument-path refusals name the member ─────
+        //
+        // The record, union, tuple, list and map converters read each
+        // member through a nested `Deserialize`, which starts a fresh STJ
+        // path, so a refusal inside a member used to report the root and
+        // no member. Pinned red first: every case below reported `[]`.
+        testList "Phase 964 — STJ argument-path refusals name the member" [
+            let longObject = """{"high":1,"low":705032704,"unsigned":false}"""
+            let good = """{"Count":"+1","Size":"1"}"""
+            let bad = sprintf """{"Count":%s,"Size":"1"}""" longObject
+
+            let holder (inner: string) (item: string) (named: string) (choice: string) (paired: string) =
+                sprintf
+                    """{"Inner":%s,"Items":[%s,%s],"ByName":{"a":%s,"b":%s},"Choice":%s,"Paired":[1,%s]}"""
+                    inner
+                    good
+                    item
+                    good
+                    named
+                    choice
+                    paired
+
+            let okChoice = sprintf """{"Holds":%s}""" good
+
+            testCase "964 — a record member"
+            <| fun () -> Expect.equal (stjRefusalPath<WideArgument> bad) [ "Count" ] "names the field"
+
+            testCase "964 — a record nested in a record"
+            <| fun () ->
+                Expect.equal
+                    (stjRefusalPath<WideHolder> (holder bad good good okChoice good))
+                    [ "Inner"; "Count" ]
+                    "names the field under its parent"
+
+            testCase "964 — a record in a list"
+            <| fun () ->
+                Expect.equal
+                    (stjRefusalPath<WideHolder> (holder good bad good okChoice good))
+                    [ "Items[1]"; "Count" ]
+                    "names the element's index"
+
+            testCase "964 — a record under a map key"
+            <| fun () ->
+                Expect.equal
+                    (stjRefusalPath<WideHolder> (holder good good bad okChoice good))
+                    [ "ByName"; "b"; "Count" ]
+                    "names the key"
+
+            testCase "964 — a single-field union case"
+            <| fun () ->
+                Expect.equal
+                    (stjRefusalPath<WideHolder> (holder good good good (sprintf """{"Holds":%s}""" bad) good))
+                    [ "Choice"; "Holds"; "Count" ]
+                    "names the case"
+
+            testCase "964 — a multi-field union case"
+            <| fun () ->
+                Expect.equal
+                    (stjRefusalPath<WideHolder> (holder good good good (sprintf """{"Pair":[1,%s]}""" bad) good))
+                    [ "Choice"; "Pair[1]"; "Count" ]
+                    "names the case and the field's position"
+
+            testCase "964 — a tuple element"
+            <| fun () ->
+                Expect.equal
+                    (stjRefusalPath<WideHolder> (holder good good good okChoice bad))
+                    [ "Paired[1]"; "Count" ]
+                    "names the element's position"
+
+            testCase "964 — a tuple at the root"
+            <| fun () ->
+                Expect.equal (stjRefusalPath<int * WideArgument> (sprintf "[1,%s]" bad)) [ "[1]"; "Count" ] "root index"
         ]
     ]

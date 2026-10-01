@@ -236,6 +236,42 @@ let private migrationOfflineTests =
 
             Expect.hasLength problems 3 "three problems, each named"
 
+        testCase "Phase 964 — the scope bound is validated, counted without a read, and refuses above it only"
+        <| fun _ ->
+            Expect.equal
+                FactStoreMigrationOptions.defaults.MaxScopeFacts
+                300_000
+                "the default bound is the plane's stated population"
+
+            Expect.equal
+                (FactStoreMigrationOptions.validate {
+                    FactStoreMigrationOptions.defaults with
+                        MaxScopeFacts = 0
+                })
+                [ "MaxScopeFacts must be at least 1 (got 0)." ]
+                "a bound below one is named"
+
+            let bounded = {
+                FactStoreMigrationOptions.defaults with
+                    MaxScopeFacts = 10
+            }
+
+            Expect.isNone (FactStoreMigration.scopeBound bounded 10) "a scope at the bound migrates"
+
+            Expect.equal
+                (FactStoreMigration.scopeBound bounded 11)
+                (Some(ScopeExceedsBound(11, 10)))
+                "a scope above it is refused"
+
+            let source, _ = blobSource ()
+            let scope = newScope ()
+            migrationSeed source scope |> Async.RunSynchronously
+
+            Expect.equal
+                (source.CountScope scope |> Async.RunSynchronously)
+                MigrationSeedFacts
+                "the count is the scope's fact blobs"
+
         testCase "every migration statement that names a scope's rows binds the scope (GP 4)"
         <| fun _ ->
             for statement in MigrationSql.scopeBoundStatements "toolup_facts" do
@@ -1252,6 +1288,50 @@ let private migrationLiveTests (dataSource: NpgsqlDataSource) =
             Expect.equal allowed.Scopes.Head.Outcome Verified "the operator's decision migrates the readable facts"
             let! kinds = migrationEvents log scope
             Expect.hasLength kinds 2 "a record for the refusal and one for the migration"
+        }
+
+        // Phase 964 — a scope is read and verified whole, so one over the
+        // bound is refused before any fact is read, by count and bound.
+        testCaseAsync
+            "a scope above MaxScopeFacts is refused by name before it is read, and migrates under a raised bound"
+        <| async {
+            let source, _ = blobSource ()
+            let scope = newScope ()
+            do! migrationSeed source scope
+            let log = InMemoryEventStore.InMemoryEventStore()
+            let target = targetOn TestTable log
+            let bounded = { options with MaxScopeFacts = 100 }
+
+            let! refused = FactStoreMigration.migrate source target log bounded [ scope ]
+            let s = refused.Scopes.Head
+            Expect.equal s.Outcome SourceRefused "the scope is refused"
+
+            Expect.equal
+                s.Differences
+                [ ScopeExceedsBound(MigrationSeedFacts, 100) ]
+                "naming the scope's fact count and the bound"
+
+            Expect.stringContains (FactStoreMigration.render refused) "MaxScopeFacts" "the report names the option"
+            Expect.equal (FactStoreMigration.exitCode refused) 1 "a non-zero exit"
+
+            let! written = scalar (sprintf "SELECT count(*) FROM %s WHERE scope = @scope" TestTable) (bindScope scope)
+            Expect.equal (Convert.ToInt64 written) 0L "nothing was written"
+
+            let! checkedOnly = FactStoreMigration.verify source target bounded [ scope ]
+            Expect.equal checkedOnly.Scopes.Head.Outcome SourceRefused "verify refuses the same scope"
+
+            let! raised =
+                FactStoreMigration.migrate
+                    source
+                    target
+                    log
+                    {
+                        options with
+                            MaxScopeFacts = MigrationSeedFacts
+                    }
+                    [ scope ]
+
+            Expect.equal raised.Scopes.Head.Outcome Verified "a scope at the bound migrates"
         }
     ]
 

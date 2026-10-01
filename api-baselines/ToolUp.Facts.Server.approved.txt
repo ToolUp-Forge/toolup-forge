@@ -99,6 +99,7 @@ ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolU
 ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])
 ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Facts.FactSurfaceOptions)
 ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Facts.FactSurfaceOptions, ToolUp.Facts.FactIndexOptions)
+ToolUp.Facts.BlobFactStore.CountScope(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
 ToolUp.Facts.BlobFactStore.ExportScope(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.FactScopeExport]
 ToolUp.Facts.BlobFactStore.IndexConsistencyCheck(System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SecondaryIndex+IndexConsistencyEntry]]
 ToolUp.Facts.BlobFactStore.RebuildIndex(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]

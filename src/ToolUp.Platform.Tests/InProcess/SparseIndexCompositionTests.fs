@@ -127,6 +127,22 @@ type private TracingVectorStore(inner: IVectorStore) =
         member _.ListScopes() = inner.ListScopes()
         member _.Erase(s, u, p, d) = inner.Erase(s, u, p, d)
 
+/// Phase 964 — a planted pass-through decorator over a keyword index, the
+/// sparse twin of `TracingVectorStore`. No keyword-index decorator exists
+/// in `src/`, so the blind spot a type test has for one is shown here. It
+/// forwards its inner index's locality declaration, as the
+/// `ISparseIndexLocality` contract asks of every decorator.
+type private TracingSparseIndex(inner: ISparseIndex) =
+    interface ISparseIndexLocality with
+        member _.IndexLocality = SparseIndexLocality.declared inner
+
+    interface ISparseIndex with
+        member _.Upsert s c t = inner.Upsert s c t
+        member _.Search s q k = inner.Search s q k
+        member _.DeleteByScope s = inner.DeleteByScope s
+        member _.DeleteChunk s c = inner.DeleteChunk s c
+        member _.Erase(s, u, p, d) = inner.Erase(s, u, p, d)
+
 /// Phase 963 — a type that only BORROWS the HNSW companion's name. It holds
 /// no index of its own: every call goes to the external (cross-replica)
 /// store it was handed.
@@ -638,6 +654,72 @@ let tests =
                     (VectorIndexLocality.declared (TracingVectorStore(externalVectorStore ()) :> IVectorStore))
                     None
                     "a decorator over an undeclared store passes the absence through"
+            }
+        ]
+
+        // Phase 964 — the keyword half reads the index's DECLARED locality
+        // (`ISparseIndexLocality`), never a type test, as 963 made the
+        // vector half do.
+        testList "InProcessIndexReplicaValidator — the keyword index declares its locality (Phase 964)" [
+            test "a decorator over the in-process keyword index still warns" {
+                let wrapped =
+                    TracingSparseIndex(
+                        new InMemoryBM25Index(
+                            InMemoryBlobStorage() :> BlobStorage.IBlobStorage,
+                            flushIntervalMs = 60000
+                        )
+                    )
+                    :> ISparseIndex
+
+                Expect.isTrue (isInProcessSparseIndex wrapped) "the wrapped postings are still per-process"
+
+                let message =
+                    newApp ()
+                    |> RAGServerApp.withVectorStore (externalVectorStore ())
+                    |> RAGServerApp.withSparseIndex wrapped
+                    |> withReplicas 2
+                    |> replicaVerdict
+                    |> warningText
+
+                Expect.stringContains message "InMemoryBM25Index" "the keyword half of the warning fires"
+            }
+
+            test "the shipped keyword indexes declare their locality" {
+                use bm25 =
+                    new InMemoryBM25Index(InMemoryBlobStorage() :> BlobStorage.IBlobStorage, flushIntervalMs = 60000)
+
+                Expect.equal
+                    (SparseIndexLocality.declared (bm25 :> ISparseIndex))
+                    (Some VectorIndexLocality.InProcess)
+                    "BM25 keeps its postings in the process"
+
+                // The I/O-free constructor: nothing here touches a database.
+                use dataSource = Npgsql.NpgsqlDataSource.Create "Host=localhost;Database=unused"
+
+                use postgresIndex =
+                    new ToolUp.SparseIndices.Postgres.PostgresFullTextIndex.PostgresFullTextIndex(
+                        dataSource,
+                        ToolUp.SparseIndices.Postgres.PostgresFullTextIndex.PostgresFullTextOptions.defaults,
+                        "simple",
+                        false,
+                        None
+                    )
+
+                let postgres = postgresIndex :> ISparseIndex
+
+                Expect.equal
+                    (SparseIndexLocality.declared postgres)
+                    (Some VectorIndexLocality.Shared)
+                    "every replica searches the one full-text table"
+
+                Expect.isFalse (isInProcessSparseIndex postgres) "so it never trips the warning"
+
+                Expect.equal
+                    (SparseIndexLocality.declared (TracingSparseIndex(externalIndex ()) :> ISparseIndex))
+                    None
+                    "a decorator over an undeclared index passes the absence through"
+
+                Expect.isFalse (isInProcessSparseIndex (externalIndex ())) "an undeclared index is not in-process"
             }
         ]
 

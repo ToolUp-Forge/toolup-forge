@@ -87,7 +87,7 @@ let options = {
 }
 ```
 
-`IvfFlatAnnIndex lists` is the alternative; it must be built *after* the table holds representative data, so provision it out of band rather than at first `create` on an empty table.
+`IvfFlatAnnIndex lists` is the alternative; it must be built *after* the table holds representative data. Since Phase 964 `AutoMigrate` honours that: while the table holds fewer rows than `lists`, `create` does not build the IVFFlat index, logs a warning naming the deferral and the `CREATE INDEX` statement, and every search is an exact scan (the health probe reports the configured index as absent). The first `create` after the load, typically the next restart, builds it. To build it without a restart, run the statement out of band once the initial load is in. An IVFFlat index that already exists is left alone, so a table whose index an earlier version built empty keeps it: rebuild it with `REINDEX INDEX <table>_embedding_ivfflat_idx;` after the load.
 
 ## Production posture — what `create` composes, and `PgvectorTuning`
 
@@ -171,7 +171,9 @@ and the distance-only statement is the same index scan without the Incremental S
 |---|---|---|---|
 | 1,000, after the load | 0.08–0.24 · 8–30 of 30 | 0.92–0.97 | 1.000 · 5.3–6.8 |
 | 100, after the load | 0.89–0.98 · 0–9 of 30 | 0.997–1.000 | 1.000 · 4.7–10.8 |
-| 100, on the empty table (as `AutoMigrate` builds it) | 0.42–0.53 · 0–10 of 30 | 0.90–0.997 | 1.000 · 6.2–9.7 |
+| 100, on the empty table (as `AutoMigrate` built it before Phase 964) | 0.42–0.53 · 0–10 of 30 | 0.90–0.997 | 1.000 · 6.2–9.7 |
+
+**Built on the empty table, then deferred (Phase 964).** The live arm pins the empty-table build with the planner steered to the index (`enable_sort = off`): 10,000 rows of 32 dimensions clustered around 100 topics, `lists` 100, `probes` 1, no iterative scan, no fallback. An index built before the load answered recall@10 = 0.017, against 0.837 for the same index built after it, and a restart did not repair it, because `CREATE INDEX IF NOT EXISTS` keeps the empty build. pgvector's own build reports the same ("ivfflat index created with little data"). The two remedies were a deferred build or a documented `REINDEX` with a startup warning. The deferral was chosen: it follows pgvector's advice and this README's, it needs no operator step for a deployment that restarts after its load, and the cost of waiting is an exact scan, which returns the right answer. After the change, the same case answers 1.000 from the first start (exact) and builds the index at the restart over the loaded table (0.880, against 0.897 for the reference build).
 
 The default stays at 100 for both families. At 1,000 lists, 100 probes is a tenth of the lists and the plan still uses the index, at 1.000 recall where the √lists rule of thumb gives 0.92–0.97. Where `lists` is 100 or fewer, 100 probes reaches every list, and the planner stopped using the index: it answered from the `(scope)` index with an exact sort. That is exact, and costs what the fallback's exact statement costs (above), growing with the scope. Iterative scanning alone does not fix recall: at 1 probe it filled every page, but recall stayed at 0.28–0.86 for 1,000 lists. A deployment with many lists and a latency budget tighter than recall can lower the width with `{ PgvectorTuning.recommended with SearchWidth = Some 10 }`.
 

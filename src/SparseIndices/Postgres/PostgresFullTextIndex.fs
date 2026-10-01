@@ -463,6 +463,10 @@ type PostgresFullTextIndex
         return ()
     }
 
+    /// Phase 964 — every replica searches the one table.
+    interface ISparseIndexLocality with
+        member _.IndexLocality = Some ToolUp.Platform.IVectorStore.VectorIndexLocality.Shared
+
     interface ISparseIndex with
 
         member _.Upsert scope chunkId chunk = async {

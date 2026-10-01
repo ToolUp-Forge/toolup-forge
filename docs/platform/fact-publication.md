@@ -123,6 +123,17 @@ token binds the grant's teams, tables and visibility and the consent itself. So 
 fields in the store drops the consent rather than re-pointing it. A withdrawal is persisted with no
 token at all.
 
+A record replayed from an earlier state is dropped on restore too (Phase 964). Its tokens were
+issued by this deployment for this grant and these consents, so they still redeem; what gives it
+away is the audit trail. Every owner act writes `FactPublicationConsented` or
+`FactPublicationRevoked` in the acting team's scope after the record is persisted, so restore reads
+those two event types in both teams' scopes and compares them with the record. A record that lacks
+an act the trail holds, such as a copy put back from before a withdrawal, is older than that act. Its
+consents are dropped, and the audit record in both teams' scopes names the act it predates. The
+check reads the trail by team id, as the audit records are written, so the service still holds one
+scope per grant and the seam stays the only place that holds two. A deleted record is not caught:
+it restores nothing, which leaves the grant out of force.
+
 The composition's `FactsCompose.withFactPublication` builds the durable service whenever the
 platform's carrier is composed. The carrier is composed beside the DataProtection key ring in every
 `ServerApp`. A service built directly with `FactPublication.createWith` still holds grants in
