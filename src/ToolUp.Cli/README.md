@@ -206,4 +206,10 @@ longest-path-prefix dispatch. Subcommands are appended in `Program.fs` and never
 or each other — vendor-specific subcommands isolate their dependencies in their own modules (GP 1),
 and the base CLI carries no paid or cloud dependency (GP 2).
 
+**What is deliberately not a command here.** Migrating a `BlobFactStore` into the PostgreSQL fact
+store needs Npgsql and the fact tier, which this host does not carry, so it is not a `toolup`
+subcommand. It is an entry point in the `ToolUp.FactStores.Postgres` package
+(`FactStoreMigration.migrate`, with `exitCode` for a script); that package's README has the
+procedure (Phase 941).
+
 Licensed under Apache-2.0.
