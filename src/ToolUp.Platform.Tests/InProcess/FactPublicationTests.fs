@@ -1498,6 +1498,70 @@ let private restartTests =
             | other -> failtestf "expected the south grant, got %d" other.Length
         }
 
+        // Phase 964 — the store keeps the record outright, so a party that
+        // can write it can put back a copy from before a withdrawal. Its
+        // tokens were issued by this deployment for this grant and these
+        // consents, so they redeem; only the audit trail says the record is
+        // stale. Pinned red first: the replayed grant came back in force.
+        test "a record replayed from before a withdrawal is dropped on restore, naming the withdrawal" {
+            let w = durableWorld ()
+            commitSource w north [ row "sku-1" 100m 10m ]
+            let grant = grantInForce w north
+            let beforeWithdrawal = grantBlob w grant.GrantId
+
+            asUser "ann" north (w.Publication.Revoke(teamScope north, grant.GrantId))
+            |> Result.defaultWith (fun e -> failtestf "revoke: %s" (PublicationRefusal.describe e))
+            |> ignore
+
+            rewriteGrantBlob w grant.GrantId (fun _ -> beforeWithdrawal)
+
+            let restarted = w.Restart(Some(ringOf w))
+
+            match asUser "ann" north (restarted.Grants(teamScope north)) with
+            | [ restored ] ->
+                Expect.isFalse (PublicationGrant.inForce restored) "the replayed grant is not back in force"
+
+                Expect.equal
+                    (PublicationGrant.missingConsents restored)
+                    [ PublicationSide.Source; PublicationSide.Target ]
+                    "neither replayed consent stands"
+            | other -> failtestf "expected the one grant, got %d" other.Length
+
+            match restarted.Publish(teamScope north, grant.GrantId) |> Async.RunSynchronously with
+            | Ok _ -> failtest "a replayed pre-withdrawal record published"
+            | Error _ -> ()
+
+            for team in [ north; group ] do
+                let reasons =
+                    publicationEvents w team
+                    |> List.filter (fun (e, _) -> e.EventType = FactPublicationEvents.RefusedType)
+                    |> List.choose (fun (_, p) -> p.Reason)
+
+                Expect.exists
+                    reasons
+                    (fun r ->
+                        r.Contains "older than the latest owner act"
+                        && r.Contains FactPublicationEvents.RevokedType)
+                    (sprintf "the %s team's audit trail names the withdrawal the record predates" team)
+        }
+
+        test "a current record restores in force when the trail is checked" {
+            let w = durableWorld ()
+            commitSource w north [ row "sku-1" 100m 10m ]
+            let grant = grantInForce w north
+            let current = grantBlob w grant.GrantId
+
+            // A current record restores untouched: the check costs a
+            // consistent store nothing.
+            let restarted = w.Restart(Some(ringOf w))
+
+            match asUser "ann" north (restarted.Grants(teamScope north)) with
+            | [ restored ] -> Expect.isTrue (PublicationGrant.inForce restored) "a current record is in force"
+            | other -> failtestf "expected the one grant, got %d" other.Length
+
+            Expect.equal (grantBlob w grant.GrantId) current "and the record is not rewritten"
+        }
+
         test "a withdrawal is persisted without any carried scope" {
             let w = durableWorld ()
             commitSource w north [ row "sku-1" 100m 10m ]
