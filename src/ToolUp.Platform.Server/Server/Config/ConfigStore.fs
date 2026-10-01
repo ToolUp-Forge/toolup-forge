@@ -462,18 +462,51 @@ type BlobConfigStore(storage: IBlobStorage, ?logger: ILogger) =
                 else
                     match policy with
                     | ErasurePolicy.HardDelete ->
-                        do!
+                        // Phase 965 — every delete's result is collected.
+                        // `IBlobStorage.Delete` is idempotent on a missing
+                        // blob, so an `Error` is a refusal, never a
+                        // not-found: it fails the erasure, naming the blobs
+                        // that are still in the container. The deletes that
+                        // landed stay gone, so a re-run finishes the job.
+                        let! outcomes =
                             matched
-                            |> List.map (fun (name, _) -> storage.Delete(platformContainer, name))
+                            |> List.map (fun (name, _) -> async {
+                                let! result = storage.Delete(platformContainer, name)
+                                return name, result
+                            })
                             |> Async.Parallel
-                            |> Async.Ignore
 
-                        return
-                            Result.Ok {
-                                HandlerName = "config"
-                                RecordsAffected = matched.Length
-                                Note = Some(sprintf "%d config document(s) removed in scope %s" matched.Length scopeId)
-                            }
+                        let refused =
+                            outcomes
+                            |> Array.choose (fun (name, result) ->
+                                match result with
+                                | Ok _ -> None
+                                | Error e -> Some(sprintf "%s (%s)" name e))
+                            |> List.ofArray
+
+                        let removedCount = outcomes.Length - refused.Length
+
+                        let summary = {
+                            HandlerName = "config"
+                            RecordsAffected = removedCount
+                            Note = Some(sprintf "%d config document(s) removed in scope %s" removedCount scopeId)
+                        }
+
+                        if refused.IsEmpty then
+                            return Result.Ok summary
+                        else
+                            return
+                                Result.Error(
+                                    HandlerPartialFailure(
+                                        "config",
+                                        summary,
+                                        sprintf
+                                            "%d of %d config document(s) were NOT deleted and still name the subject: %s"
+                                            refused.Length
+                                            outcomes.Length
+                                            (String.concat "; " refused)
+                                    )
+                                )
                     | ErasurePolicy.Tombstone
                     | ErasurePolicy.RetainPerCompliance ->
                         // Values are JSON-encoded; the marker as a JSON
