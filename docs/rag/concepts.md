@@ -459,10 +459,10 @@ A slow embedding provider, a slow fact store or a slow audit write degrades a ch
 | Bound | Builder | Default | On overrun or fault |
 |---|---|---|---|
 | Query-embed wall-clock budget | `withQueryEmbedTimeout` | 5 s | The dense branch returns nothing and the sparse branch, when composed, answers alone. Stage mark `DenseDegraded:TimedOut`; the trace's `DenseUsed` is `false`. |
-| Query-embed attempts | `withQueryEmbedAttempts` | 1 | No retry inside a turn. Stage mark `DenseDegraded:Failed`. Any retry the provider performs internally still happens, inside the budget. |
+| Query-embed attempts | `withQueryEmbedAttempts` | 1 | No retry inside a turn. Stage mark `DenseDegraded:Failed`. Each attempt asks the provider for a single request bounded by the budget (`EmbedCallOverride.singleAttemptWithin`), so the OpenAI provider makes exactly this many requests; a provider without `IEmbeddingProviderCallOverride` still retries internally, inside the budget. |
 | Concurrent query embeds | `withQueryEmbedConcurrency` | no ceiling | A call that finds the ceiling reached is refused at once, as a value (`QueryEmbedOutcome.Refused`), and makes no provider call. Stage mark `DenseDegraded:Refused`. |
 | Fact resolution plus disclosure check | `withFactStageTimeout` | 3 s | The turn proceeds without pushed facts. Stage mark `FactsDegraded:TimedOut` or `FactsDegraded:Failed`. |
-| Retrieval-trace queue | `withRetrievalTraceQueueCapacity` | 1,024 | The trace is dropped and counted (`BackgroundRetrievalTracer.Lost`, plus a Warn line at each power-of-two loss count). `0` writes traces inline, which was the behaviour before this phase. |
+| Retrieval-trace queue | `withRetrievalTraceQueueCapacity` | 1,024 | The trace is dropped and counted (`BackgroundRetrievalTracer.Lost`, plus a Warn line at each power-of-two loss count). `0` writes traces inline, which was the behaviour before this phase. The count is reported on `/health/rag` as `RetrievalTraces: { Lost; Written; Capacity }` (absent when traces are written inline). |
 
 `withRetrievalBudgets` replaces the whole `RetrievalBudgets` record in one call.
 
@@ -472,10 +472,10 @@ A slow embedding provider, a slow fact store or a slow audit write degrades a ch
 
 **A pipeline constructed directly is unbounded unless you pass `budgets`.** `RetrievalPipeline(..., budgets = RetrievalBudgets.defaults)` applies the bounds. Omit the argument and the pipeline behaves as before this phase, including a provider failure raising out of `Retrieve`.
 
-**Ingestion capacity is real.** The drain loop acquires a worker slot before it dequeues a document. The queue's depth is therefore exactly what is waiting, and `withIngestionQueueCapacity` bounds what is held in memory. For example, with `withIngestionConcurrency 1` and a capacity of two, one document runs, two wait, and the fourth enqueue is refused.
+**Ingestion capacity is real.** The drain loop waits for work without holding a worker slot (`IIngestionQueue.WaitForWork`), then acquires a slot, then dequeues the document (`TryDequeue`). The queue's depth is therefore exactly what is waiting, and `withIngestionQueueCapacity` bounds what is held in memory. For example, with `withIngestionConcurrency 1` and a capacity of two, one document runs, two wait, and the fourth enqueue is refused.
 
 Before this phase, the loop dequeued eagerly and each document waited for a slot outside the queue's accounting. All ten of ten enqueues were accepted.
 
-An in-process retry gives its slot back for the backoff sleep and takes one again before the next attempt. If no permit is free when it wakes, it takes the drain loop's idle permit, so it cannot starve behind a loop that is waiting for work.
+An in-process retry gives its slot back for the backoff sleep and waits for one again before the next attempt. An idle drain loop holds no permit, so a waking retry cannot starve behind a loop that is waiting for work.
 
 When the vector store implements `IVectorStoreBatch`, the drainer writes a whole document in one `UpsertBatch` round-trip and falls back to per-chunk indexing on any failure.

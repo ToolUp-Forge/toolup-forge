@@ -27,6 +27,7 @@ open ToolUp.Platform.IEmbeddingProvider
 open ToolUp.Platform.IRetrievalPipeline
 open ToolUp.Platform.IRetrievalTracer
 open ToolUp.RAG.RetrievalPipeline
+open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 
 let private run = Async.RunSynchronously
@@ -790,5 +791,338 @@ let private ingestionPath =
 let private phase894 =
     testList "Phase 894 — a chat turn's latency budget and a real ingestion capacity" [ queryPath; ingestionPath ]
 
+// ─── Phase 945 — the follow-ups Phase 894 recorded ─────────────────
+//
+// (a) the query policy governs the embedder's retries, (b) a lost
+// retrieval trace is visible on `/health/rag`, (c) the drain loop waits
+// for work without holding a worker permit. Each was pinned red on the
+// pre-change tree before the change that turns it green.
+
+/// Answers each request from a script indexed by request number (0-based)
+/// and counts the requests that reached the wire.
+type private ScriptedHandler(respond: int -> System.Net.Http.HttpResponseMessage) =
+    inherit System.Net.Http.HttpMessageHandler()
+    let mutable requests = 0
+    member _.Requests = Volatile.Read(&requests)
+
+    override _.SendAsync(_request, _ct) =
+        let n = Interlocked.Increment(&requests) - 1
+        Tasks.Task.FromResult(respond n)
+
+let private embeddingOk () =
+    new System.Net.Http.HttpResponseMessage(
+        Net.HttpStatusCode.OK,
+        Content =
+            new System.Net.Http.StringContent(
+                "{\"data\":[{\"index\":0,\"embedding\":[0.5,0.5,0.5]}]}",
+                Text.Encoding.UTF8,
+                "application/json"
+            )
+    )
+
+let private embeddingUnavailable () =
+    new System.Net.Http.HttpResponseMessage(
+        Net.HttpStatusCode.ServiceUnavailable,
+        Content = new System.Net.Http.StringContent("upstream is down")
+    )
+
+/// Fails twice with a 503, then answers.
+let private failsTwice (n: int) =
+    if n < 2 then embeddingUnavailable () else embeddingOk ()
+
+let private keyStore =
+    { new ToolUp.Platform.Secrets.ISecretStore with
+        member _.GetSecret(_, _) = async { return Some "sk-test" }
+        member _.SetSecret(_, _, _) = async { return Error "read-only" }
+        member _.DeleteSecret(_, _) = async { return Ok() }
+        member _.ListKeys _ = async { return [] }
+    }
+
+/// An OpenAI embedder over `handler` with three attempts and `backoff`
+/// before the second (doubling before the third), no jitter.
+let private openAiOverWith (backoff: TimeSpan) (handler: ScriptedHandler) =
+    let client =
+        new System.Net.Http.HttpClient(handler, BaseAddress = Uri("https://api.openai.invalid"))
+
+    OpenAIEmbeddingProvider.OpenAIEmbeddingOptions.defaults
+    |> OpenAIEmbeddingProvider.withEmbedderModel "test-embedding-model" 3
+    |> OpenAIEmbeddingProvider.withEmbedderRetryPolicy {
+        MaxAttempts = 3
+        InitialBackoff = backoff
+        MaxBackoff = TimeSpan.FromSeconds 30.0
+        JitterFactor = 0.0
+    }
+    |> OpenAIEmbeddingProvider.createWithClient client keyStore
+
+/// The provider's own retry sequence is 400 ms then 800 ms of backoff —
+/// 1.2 s, longer than the query budgets below.
+let private openAiOver = openAiOverWith (TimeSpan.FromMilliseconds 400.0)
+
+/// A provider that retries internally (three attempts by default) over a
+/// transport failing its first two requests, and honours a per-call
+/// override — the shape of an API-backed provider, without the network.
+type private RetryingFake() =
+    let mutable requests = 0
+    member _.Requests = Volatile.Read(&requests)
+
+    member private _.Call(attempts: int) = async {
+        let mutable result = None
+        let mutable attempt = 1
+
+        while result.IsNone do
+            let n = Interlocked.Increment(&requests) - 1
+
+            if n >= 2 then
+                result <- Some unitVec
+            elif attempt >= attempts then
+                raise (TimeoutException "transient")
+            else
+                attempt <- attempt + 1
+
+        return result.Value
+    }
+
+    interface IEmbeddingProvider with
+        member this.GenerateEmbedding _ = this.Call 3
+
+        member this.GenerateEmbeddings texts =
+            batchedFallback (this :> IEmbeddingProvider).GenerateEmbedding texts
+
+        member _.Dimensions = 8
+        member _.ProviderId = "test"
+        member _.ModelId = "retrying-v1"
+
+    interface IEmbeddingProviderCallOverride with
+        member this.GenerateEmbeddingWith(callOverride, _) =
+            this.Call(max 1 callOverride.Retry.MaxAttempts)
+
+let private embedderRetries =
+    testList "(a) the query policy governs the embedder's retries" [
+        testCaseAsync "a query embed makes the attempts its policy names, decides inside its budget, and frees its slot"
+        <| async {
+            let handler = ScriptedHandler failsTwice
+
+            // The composed shape: the provider behind the caching decorator.
+            let embedder =
+                ToolUp.RAG.CachingEmbeddingProvider.create
+                    (openAiOver handler)
+                    (new ToolUp.RAG.InMemoryEmbeddingCache.InMemoryEmbeddingCache())
+
+            let gate =
+                QueryEmbedGate {
+                    MaxAttempts = 1
+                    Timeout = TimeSpan.FromMilliseconds 300.0
+                    MaxConcurrentCalls = Some 1
+                }
+
+            let! first = gate.Embed embedder "first query"
+
+            Expect.equal
+                (QueryEmbedOutcome.label first)
+                "Failed"
+                "the query policy's one attempt failed and said so, rather than the provider retrying until the budget ran out"
+
+            let! second = gate.Embed embedder "second query"
+
+            Expect.notEqual
+                (QueryEmbedOutcome.label second)
+                "Refused"
+                "the first embed's slot was free once it answered — no provider retry was still holding it"
+
+            // Long enough for the provider's own sequence (1.2 s) to have run.
+            do! Async.Sleep 1600
+
+            Expect.equal handler.Requests 2 "one request per query embed: the provider did not retry on the query path"
+        }
+
+        testCaseAsync "ingestion keeps the provider's own retry policy"
+        <| async {
+            let handler = ScriptedHandler failsTwice
+            let! vector = (openAiOver handler).GenerateEmbedding "a chunk"
+            Expect.equal vector.Length 3 "the third attempt answered"
+            Expect.equal handler.Requests 3 "the provider retried twice, as configured"
+        }
+
+        IEmbeddingProviderCallOverrideContract.tests "OpenAIEmbeddingProvider" (fun () ->
+            let handler = ScriptedHandler failsTwice
+
+            {
+                Provider = openAiOverWith (TimeSpan.FromMilliseconds 1.0) handler
+                Requests = fun () -> handler.Requests
+            })
+
+        IEmbeddingProviderCallOverrideContract.tests "CachingEmbeddingProvider" (fun () ->
+            let inner = RetryingFake()
+
+            {
+                Provider =
+                    ToolUp.RAG.CachingEmbeddingProvider.create
+                        inner
+                        (new ToolUp.RAG.InMemoryEmbeddingCache.InMemoryEmbeddingCache())
+                Requests = fun () -> inner.Requests
+            })
+    ]
+
+let private stubAiFactory =
+    { new ToolUp.AI.IAIProviderFactory with
+        member _.Available = []
+        member _.PlatformDescriptors = []
+        member _.PlatformDescriptor = None
+        member _.Resolve _ = async { return Error ToolUp.AI.NoProviderConfigured }
+        member _.TryResolveByLabel(_, _) = async { return Error ToolUp.AI.NoProviderConfigured }
+        member _.BuildPlatform(_, _, _) = None
+    }
+
+let private stubProviderProfile =
+    { new ToolUp.Platform.Providers.IProviderProfile with
+        member _.Get _ = async { return None }
+        member _.Set(_, _) = async { return Ok() }
+        member _.Clear _ = async { return () }
+        member _.ResolveEntry(_, _, _) = async { return None }
+        member _.SetEntryHealth(_, _, _) = async { return Ok() }
+    }
+
+/// GET `/health/rag` against `services` and parse the body.
+let private healthRag (services: IServiceProvider) = async {
+    let ctx = Microsoft.AspNetCore.Http.DefaultHttpContext()
+    ctx.RequestServices <- services
+    let body = new IO.MemoryStream()
+    ctx.Response.Body <- body
+
+    let! _ =
+        ToolUp.RAG.RagHealthHandler.healthHandler (fun c -> Tasks.Task.FromResult(Some c)) ctx
+        |> Async.AwaitTask
+
+    return Text.Json.Nodes.JsonNode.Parse(Text.Encoding.UTF8.GetString(body.ToArray()))
+}
+
+let private lostTraces =
+    testList "(b) lost traces are visible" [
+        testCaseAsync "a full trace queue's losses are reported on /health/rag"
+        <| async {
+            let release = Tasks.TaskCompletionSource<unit>()
+
+            // A trace writer that never finishes until released, so a
+            // queue of one fills at once.
+            let blocking =
+                { new IRetrievalTracer with
+                    member _.Trace _ _ = async { do! release.Task |> Async.AwaitTask }
+                    member _.Miss _ _ = async { do! release.Task |> Async.AwaitTask }
+                }
+
+            let app =
+                ToolUp.RAG.RAGCompose.RAGServerApp.create
+                    stubAiFactory
+                    stubProviderProfile
+                    (DelayedEmbedder TimeSpan.Zero)
+                |> ToolUp.RAG.RAGCompose.RAGServerApp.withStorage (InMemoryBlobStorage() :> IBlobStorage)
+                |> ToolUp.RAG.RAGCompose.RAGServerApp.withRetrievalTraceQueueCapacity 1
+
+            let composed = ToolUp.RAG.RAGCompose.composeRAG app
+
+            let services =
+                Microsoft.Extensions.DependencyInjection.ServiceCollection()
+                :> Microsoft.Extensions.DependencyInjection.IServiceCollection
+
+            Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<IRetrievalTracer>(
+                services,
+                blocking
+            )
+            |> ignore
+
+            let services =
+                match composed.Extensions.ServiceConfig with
+                | Some configure -> configure services
+                | None -> services
+
+            use sp =
+                Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider
+                    services
+
+            try
+                let pipeline = sp.GetService(typeof<IRetrievalPipeline>) :?> IRetrievalPipeline
+
+                for i in 1..5 do
+                    let! _ =
+                        pipeline.Retrieve
+                            (RetrievalRequest.create (sprintf "query %d" i) [ User "u" ] 5 Interleaved)
+                            ctxU
+
+                    ()
+
+                let! health = healthRag sp
+                let traces = health["RetrievalTraces"]
+
+                Expect.isNotNull traces "/health/rag carries the retrieval-trace block"
+
+                // An int64 rides as a JSON string under the Fable converters,
+                // as `IngestionQueueDrops.Cumulative` does.
+                Expect.isGreaterThanOrEqual
+                    (int64 (traces["Lost"].ToString()))
+                    3L
+                    "five traces through a queue of one: at least three were lost, and the count says so"
+
+                Expect.equal (traces["Capacity"].GetValue<int>()) 1 "the configured queue bound"
+            finally
+                release.TrySetResult() |> ignore
+        }
+    ]
+
+let private queueWaits =
+    testList "(c) the ingestion queue can wait for work" [
+        for durable in [ false; true ] do
+            let arm = if durable then "durable" else "in-memory"
+
+            let newQueue () =
+                if durable then
+                    IngestionQueue(
+                        10,
+                        store = InMemoryIngestionQueueStore(),
+                        claimPollInterval = TimeSpan.FromMilliseconds 20.0
+                    )
+                else
+                    IngestionQueue(10)
+
+            testCaseAsync (sprintf "%s: WaitForWork completes when a job arrives and takes nothing" arm)
+            <| async {
+                let q = newQueue ()
+                let iq = q :> IIngestionQueue
+                use cts = new CancellationTokenSource(TimeSpan.FromSeconds 10.0)
+
+                let! empty = iq.TryDequeue()
+                Expect.isNone empty "nothing to take from an empty queue, and no wait"
+
+                let waiting = Async.StartAsTask(iq.WaitForWork cts.Token)
+                do! Async.Sleep 150
+                Expect.isFalse waiting.IsCompleted "an empty queue keeps the waiter waiting"
+
+                Expect.isTrue (q.Enqueue(mkJob "a")) "accepted"
+                let! woke = waiting |> Async.AwaitTask
+                Expect.isTrue woke "the waiter wakes for the job"
+                Expect.equal q.Count 1 "waiting took nothing: the job is still in the queue's accounting"
+
+                let! taken = iq.TryDequeue()
+                Expect.equal (taken |> Option.map _.Job.DocumentId) (Some "a") "the job is taken by TryDequeue"
+                do! iq.Ack taken.Value.LeaseId
+                Expect.equal q.Count 0 "and then it has left the queue"
+            }
+
+            testCaseAsync (sprintf "%s: WaitForWork answers false on cancellation" arm)
+            <| async {
+                let iq = newQueue () :> IIngestionQueue
+                use cts = new CancellationTokenSource(TimeSpan.FromMilliseconds 100.0)
+                let! woke = iq.WaitForWork cts.Token
+                Expect.isFalse woke "cancelled with no work"
+            }
+    ]
+
+let private phase945 =
+    testList "Phase 945 — RAG operations follow-ups" [ embedderRetries; lostTraces; queueWaits ]
+
 let tests =
-    testList "Phase 303 — ingestion-queue backpressure observability" [ queueCounters; dropEmission; phase894 ]
+    testList "Phase 303 — ingestion-queue backpressure observability" [
+        queueCounters
+        dropEmission
+        phase894
+        phase945
+    ]

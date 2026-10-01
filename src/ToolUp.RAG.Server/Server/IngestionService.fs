@@ -374,21 +374,19 @@ module Outcome =
 
 /// Phase 894 — one worker slot, held by exactly one document at a time.
 ///
-/// The drain loop acquires a slot BEFORE it dequeues and hands it to the
-/// document it dequeued; the document releases it when it is done. An
-/// in-process retry releases its slot for the backoff sleep and takes one
-/// again before the next attempt, so a sleeping retry does not hold the
-/// pool. `Release` is idempotent, so a document's final release never
-/// returns a permit a cancelled sleep already gave back.
+/// The drain loop acquires a slot only once the queue has work (Phase 945:
+/// it waits through `IIngestionQueue.WaitForWork` holding nothing) and
+/// hands it to the document it dequeued; the document releases it when it
+/// is done. An in-process retry releases its slot for the backoff sleep and
+/// waits for one again before the next attempt, so a sleeping retry does
+/// not hold the pool. `Release` is idempotent, so a document's final
+/// release never returns a permit a cancelled sleep already gave back.
 ///
-/// **Why re-acquiring can steal.** The drain loop holds a slot while it
-/// waits for the next document; with nothing arriving it would hold that
-/// slot indefinitely, and a waking retry would starve behind an idle
-/// wait. So a retry that finds no free permit takes the loop's idle one
-/// (`stealIdle`); the loop, on dequeuing, notices and waits for a permit
-/// before starting the document. That document is the only one ever held
-/// outside the queue's accounting.
-type internal WorkerSlot(sem: SemaphoreSlim, stealIdle: unit -> bool) =
+/// Phase 945 removed the idle-permit steal Phase 894 needed: the drain loop
+/// no longer holds a permit while it waits for the next document, so a
+/// waking retry waits on the semaphore like any other claimant instead of
+/// polling for the loop's idle permit.
+type internal WorkerSlot(sem: SemaphoreSlim) =
     let mutable held = 1
 
     /// Give the permit back, if this slot still holds it.
@@ -396,18 +394,12 @@ type internal WorkerSlot(sem: SemaphoreSlim, stealIdle: unit -> bool) =
         if Interlocked.Exchange(&held, 0) = 1 then
             sem.Release() |> ignore
 
-    /// Take a permit again: a free one, else the drain loop's idle one.
-    /// Polls at 50 ms — against a backoff measured in seconds that costs
-    /// nothing, and it cannot lose the race to a loop about to park.
+    /// Take a permit again, waiting for one to come free. Cancelled with
+    /// the job (the drain loop starts it under the service's stopping
+    /// token).
     member _.Reacquire() = async {
-        let mutable acquired = false
-
-        while not acquired do
-            if sem.Wait 0 || stealIdle () then
-                acquired <- true
-            else
-                do! Async.Sleep 50
-
+        let! ct = Async.CancellationToken
+        do! sem.WaitAsync(ct) |> Async.AwaitTask
         Interlocked.Exchange(&held, 1) |> ignore
     }
 
@@ -471,14 +463,6 @@ type IngestionBackgroundService
     inherit BackgroundService()
 
     let sem = new SemaphoreSlim(maxConcurrency, maxConcurrency)
-
-    // Phase 894 — `1` while the drain loop holds a permit it has not yet
-    // given to a document (it is waiting in `Dequeue`); a waking retry may
-    // take that permit (see `WorkerSlot`).
-    let mutable idleReservation = 0
-
-    let stealIdle () =
-        Interlocked.Exchange(&idleReservation, 0) = 1
 
     let jsonOptions = FableConverters.create ()
 
@@ -956,41 +940,39 @@ type IngestionBackgroundService
                 stoppingToken
             )
 
-        while not stoppingToken.IsCancellationRequested do
+        let mutable queueClosed = false
+
+        while not stoppingToken.IsCancellationRequested && not queueClosed do
             try
-                // Phase 894 — acquire a worker slot BEFORE dequeuing. A
-                // document leaves the queue only when a worker is free to
-                // take it, so the queue's depth is exactly what is waiting
-                // and its capacity bounds what is held in memory. (Before,
-                // the loop dequeued eagerly and each job waited for a slot
-                // inside itself — every waiting document had already left
-                // the queue's accounting.)
-                do! sem.WaitAsync(stoppingToken)
-                Volatile.Write(&idleReservation, 1)
-                let mutable settled = false
+                // Phase 894 — a document leaves the queue only when a worker
+                // is free to take it, so the queue's depth is exactly what is
+                // waiting and its capacity bounds what is held in memory.
+                // Phase 945 — wait for work FIRST, holding no permit, then take
+                // a permit, then take the job. An idle loop holds nothing, so a
+                // waking retry never starves behind it. A wake whose job another
+                // drainer took first finds `None` and gives the permit back.
+                let! hasWork = Async.StartAsTask(queue.WaitForWork stoppingToken, cancellationToken = stoppingToken)
 
-                try
-                    let! lease = Async.StartAsTask(queue.Dequeue stoppingToken, cancellationToken = stoppingToken)
-                    // Still ours unless a waking retry took it meanwhile.
-                    let owned = Interlocked.Exchange(&idleReservation, 0) = 1
-                    settled <- true
+                if hasWork then
+                    do! sem.WaitAsync(stoppingToken)
+                    let mutable handedOff = false
 
-                    match lease with
-                    | Some claimed ->
-                        if not owned then
-                            do! sem.WaitAsync(stoppingToken)
+                    try
+                        let! lease = Async.StartAsTask(queue.TryDequeue(), cancellationToken = stoppingToken)
 
-                        // Fire the job without awaiting; it owns the slot
-                        // now and releases it when done.
-                        Async.Start(processJob (WorkerSlot(sem, stealIdle)) claimed, stoppingToken)
-                    | None ->
-                        if owned then
+                        match lease with
+                        | Some claimed ->
+                            // Fire the job without awaiting; it owns the slot
+                            // now and releases it when done.
+                            handedOff <- true
+                            Async.Start(processJob (WorkerSlot sem) claimed, stoppingToken)
+                        | None -> ()
+                    finally
+                        if not handedOff then
                             sem.Release() |> ignore
-                finally
-                    // Dequeue raised (cancellation): give back the idle
-                    // permit, unless a retry already took it.
-                    if not settled && Interlocked.Exchange(&idleReservation, 0) = 1 then
-                        sem.Release() |> ignore
+                elif not stoppingToken.IsCancellationRequested then
+                    // The queue will never produce another job.
+                    queueClosed <- true
             with
             | :? OperationCanceledException -> ()
             | ex ->
