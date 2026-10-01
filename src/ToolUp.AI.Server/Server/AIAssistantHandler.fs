@@ -1484,28 +1484,44 @@ let aiAssistantApi
     /// history are all the same `[]`. History is an enhancement to
     /// retrieval; failing the user's turn because we could not read it
     /// would be a far worse outcome than retrieving on the raw query.
-    let loadPromptHistory (scopeIdLocal: string) (conversationId: Guid) : Async<string list> = async {
-        match conversationStore with
-        | None -> return []
-        | Some store ->
-            try
-                let reader = store :> IConversationReader
-                let! result = reader.GetConversation(scopeIdLocal, convId conversationId)
+    ///
+    /// Phase 946 — the conversation id is the REQUEST's, so the history is
+    /// read only when `canSeeStored` (the team's visibility rule,
+    /// `ConversationVisibility.canSee`, over the stored conversation's
+    /// owner and creation time) admits the caller; otherwise it is `[]`,
+    /// exactly as a missing conversation is.
+    let loadPromptHistory
+        (canSeeStored: string -> DateTime -> Async<bool>)
+        (scopeIdLocal: string)
+        (conversationId: Guid)
+        : Async<string list> =
+        async {
+            match conversationStore with
+            | None -> return []
+            | Some store ->
+                try
+                    let reader = store :> IConversationReader
+                    let! result = reader.GetConversation(scopeIdLocal, convId conversationId)
 
-                match result with
-                | Error _ -> return []
-                | Ok(_, turns, _) ->
-                    let texts =
-                        turns
-                        |> List.map (fun t -> t.Content.Content)
-                        |> List.filter (String.IsNullOrWhiteSpace >> not)
+                    match result with
+                    | Error _ -> return []
+                    | Ok(header, turns, _) ->
+                        let! visible = canSeeStored header.CreatedBy header.CreatedAt
 
-                    let drop = max 0 (List.length texts - promptHistoryTurns)
-                    return texts |> List.skip drop
-            with ex ->
-                logger.Warn $"Conversation history read for prompt context failed: {ex.Message}"
-                return []
-    }
+                        if not visible then
+                            return []
+                        else
+                            let texts =
+                                turns
+                                |> List.map (fun t -> t.Content.Content)
+                                |> List.filter (String.IsNullOrWhiteSpace >> not)
+
+                            let drop = max 0 (List.length texts - promptHistoryTurns)
+                            return texts |> List.skip drop
+                with ex ->
+                    logger.Warn $"Conversation history read for prompt context failed: {ex.Message}"
+                    return []
+        }
 
     // Scope and user are pre-resolved asynchronously by
     // `ScopeResolutionMiddleware`. If the middleware did not run or scope
@@ -1561,6 +1577,17 @@ let aiAssistantApi
         match messages with
         | [] -> DateTime.MinValue
         | _ -> messages |> List.map _.Timestamp |> List.min
+
+    /// Phase 946 — whether the caller may see a conversation the opt-in
+    /// substrate holds, by its stored owner and creation time: the rule
+    /// every other read path applies (`ConversationVisibility.canSee`).
+    let canSeeStoredConversation (owner: string) (createdAt: DateTime) : Async<bool> = async {
+        match! visibilityState () with
+        | Some state when not (TeamConversationPolicyStore.ConversationVisibility.isOpen state) ->
+            let! viewer = viewerIn state
+            return TeamConversationPolicyStore.ConversationVisibility.canSee state viewer owner createdAt
+        | _ -> return true
+    }
 
     /// The listing rows the caller may see. A team that never chose a level
     /// under a `TeamVisible` default is not filtered at all (no role
@@ -1715,7 +1742,7 @@ let aiAssistantApi
                 // otherwise, with no I/O on the request path.
                 let! promptHistory =
                     match promptBuilder with
-                    | Some _ -> loadPromptHistory scope.ScopeId conversationId
+                    | Some _ -> loadPromptHistory canSeeStoredConversation scope.ScopeId conversationId
                     | None -> async { return [] }
 
                 let! systemPromptText =
