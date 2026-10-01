@@ -847,22 +847,86 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
 
                     match policy with
                     | ErasurePolicy.HardDelete ->
-                        let versionBlobs = matched |> List.collect (fun (_, metas) -> metas |> List.map fst)
+                        // Phase 965 — every version blob's delete result is
+                        // collected, per object. `IBlobStorage.Delete` is
+                        // idempotent on a missing blob, so an `Error` is a
+                        // refusal, never a not-found: it fails the erasure,
+                        // naming the blobs still in the container. The
+                        // deletes that landed stay gone, so a re-run
+                        // finishes the job.
+                        let! outcomes =
+                            matched
+                            |> List.map (fun (oid, metas) -> async {
+                                let! deletes =
+                                    metas
+                                    |> List.map (fun (name, mo) -> async {
+                                        let! result = blobStorage.Delete(container, name)
+                                        return name, mo, result
+                                    })
+                                    |> Async.Parallel
 
-                        do!
-                            versionBlobs
-                            |> List.map (fun name -> blobStorage.Delete(container, name))
+                                return oid, deletes
+                            })
                             |> Async.Parallel
-                            |> Async.Ignore
 
-                        let! _ = collectOrphanedContent container releasedHashes
+                        let isOk (_, _, result: Result<unit, string>) =
+                            match result with
+                            | Ok _ -> true
+                            | Error _ -> false
 
-                        return
-                            Result.Ok {
-                                HandlerName = "data-objects"
-                                RecordsAffected = matched.Length
-                                Note = Some(sprintf "%d object(s) removed in scope %s" matched.Length scopeId)
-                            }
+                        let refused =
+                            outcomes
+                            |> Array.collect snd
+                            |> Array.choose (fun (name, _, result) ->
+                                match result with
+                                | Ok _ -> None
+                                | Error e -> Some(sprintf "%s (%s)" name e))
+                            |> List.ofArray
+
+                        let removedObjects =
+                            outcomes
+                            |> Array.filter (fun (_, deletes) -> Array.forall isOk deletes)
+                            |> Array.length
+
+                        // The content a blob names is reclaimed only once
+                        // the metadata that names it is gone: a hash a
+                        // refused delete still references is no orphan, and
+                        // the pass would keep it. Only the hashes of the
+                        // version blobs that actually went are released, so
+                        // the bytes of a deleted version are not left at
+                        // rest because a sibling's delete was refused (a
+                        // re-run could not find them again — their metadata
+                        // is gone).
+                        let deletedHashes =
+                            outcomes
+                            |> Array.collect snd
+                            |> Array.filter isOk
+                            |> Array.choose (fun (_, mo, _) -> mo |> Option.map _.ContentHash)
+                            |> Set.ofArray
+
+                        let! _ = collectOrphanedContent container deletedHashes
+
+                        let summary = {
+                            HandlerName = "data-objects"
+                            RecordsAffected = removedObjects
+                            Note = Some(sprintf "%d object(s) removed in scope %s" removedObjects scopeId)
+                        }
+
+                        if refused.IsEmpty then
+                            return Result.Ok summary
+                        else
+                            return
+                                Result.Error(
+                                    HandlerPartialFailure(
+                                        "data-objects",
+                                        summary,
+                                        sprintf
+                                            "%d of %d object(s) were NOT fully deleted; these version blob(s) are still in the container: %s"
+                                            (matched.Length - removedObjects)
+                                            matched.Length
+                                            (String.concat "; " refused)
+                                    )
+                                )
                     | ErasurePolicy.Tombstone
                     | ErasurePolicy.RetainPerCompliance ->
                         let redactContent = policy = ErasurePolicy.Tombstone

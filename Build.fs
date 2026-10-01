@@ -3861,6 +3861,23 @@ let main args =
     // upload's `Result` under another name) is beyond a textual check and is
     // held to the rule by review.
     //
+    // Phase 965 — the same fan-out, over `Delete`. `IBlobStorage.Delete` is
+    // idempotent on a missing blob (`IBlobStorageContract` pins it on every
+    // bound backend), so an `Error` from it is a refusal, and a hard-delete
+    // erasure that fanned its deletes out through `Async.Parallel |>
+    // Async.Ignore` reported a subject's blobs gone while one was still in the
+    // container. A `Delete` is a site only in that shape: the call is the
+    // element's value inside a pipeline that runs through `Async.Parallel`.
+    // A single `Delete` discarded where it is made (`let! _ =`, or its own
+    // `|> Async.Ignore`) stays out of scope — a delete that is cleanup is
+    // recoverable by the next pass; this check is about erasure. The
+    // `Delete` walk is also confined to the `Async.Ignore`-terminated
+    // pipeline (the shape both erasure paths had): a `let! _ =` that binds a
+    // `Delete` fan-out is not reported, because every site that binds one
+    // today is a cleanup pass (orphaned-content reclamation, a derivative
+    // cache, delivery-log pruning) or a per-object `Delete` / `Evict`, which
+    // are not erasure and are held to review.
+    //
     // Scope: production code under `src/`. Test projects (a directory named
     // `*.Tests`) are excluded — a fixture that seeds a blob is not a store,
     // and its failure fails the test that reads it. Comment lines are
@@ -3977,6 +3994,41 @@ let main args =
                 | None -> false
             )
 
+        // Phase 965 — a `Delete` in the fan-out shape. `IBlobStorage.Delete`
+        // is idempotent on a missing blob, so its `Error` is a refusal, and
+        // a fan-out that discards the list of results hides one. Unlike an
+        // upload, a SINGLE `Delete` discard is out of scope (cleanup is
+        // recoverable by the next pass), so a `Delete` counts only when the
+        // call IS the element's value inside a pipeline that runs through
+        // `Async.Parallel`: a call already discarded where it is made
+        // (`let! _ =`, or ended by its own `|> Async.Ignore`) is a visible
+        // single-call discard, not the wholesale one this shape is.
+        let deleteCall = System.Text.RegularExpressions.Regex(@"\.Delete\s*\(")
+        let asyncParallel = System.Text.RegularExpressions.Regex(@"\bAsync\.Parallel\b")
+
+        let discardedHere =
+            System.Text.RegularExpressions.Regex(@"\blet!\s+_\s*=|\|>\s*Async\.Ignore\b")
+
+        let consumedDelete =
+            System.Text.RegularExpressions.Regex(
+                @"\b(let|use)!\s+(?!_\s*=)[^=]*=\s*\S.*\.Delete\s*\(|\bmatch!\s.*\.Delete\s*\("
+            )
+
+        let isDeleteElementValue (lines: string array) (j: int) =
+            deleteCall.IsMatch lines[j]
+            && not (consumedDelete.IsMatch lines[j])
+            && not (discardedHere.IsMatch lines[j])
+            && not (
+                match previousNonBlank lines j with
+                | Some k -> namedBindOnly.IsMatch lines[k]
+                | None -> false
+            )
+
+        // The producer lines of a discarded pipeline: an upload anywhere,
+        // and a `Delete` only when the pipeline is a fan-out.
+        let isProducer (lines: string array) (fanOut: bool) (j: int) =
+            isDiscardedCall lines j || (fanOut && isDeleteElementValue lines j)
+
         let files = walk srcDir |> List.ofSeq
 
         // (relative path, 1-based line, the discarding text, marked?)
@@ -4032,9 +4084,19 @@ let main args =
                                         | None -> false
                                     | [] -> false
 
-                                let callLine = pipeline |> List.tryFind (isDiscardedCall lines)
+                                let fanOut =
+                                    asyncParallel.IsMatch before
+                                    || pipeline |> List.exists (fun j -> asyncParallel.IsMatch lines[j])
 
-                                let sameLine = uploadCall.IsMatch before && not (consumedCall.IsMatch before)
+                                let callLine = pipeline |> List.tryFind (isProducer lines fanOut)
+
+                                let sameLine =
+                                    (uploadCall.IsMatch before && not (consumedCall.IsMatch before))
+                                    // Phase 965 — a one-line `Delete` fan-out.
+                                    || (asyncParallel.IsMatch before
+                                        && deleteCall.IsMatch before
+                                        && not (consumedDelete.IsMatch before)
+                                        && not (discardedHere.IsMatch before))
 
                                 if not boundByDiscard && (sameLine || callLine.IsSome) then
                                     let text =
@@ -4055,7 +4117,7 @@ let main args =
         Trace.tracefn "  source files    : %d (src/**/*.fs, test projects excluded)" files.Length
 
         Trace.tracefn
-            "  discarded uploads: %d — %d marked best-effort, %d unmarked"
+            "  discarded writes : %d — %d marked best-effort, %d unmarked"
             sites.Length
             marked.Length
             unmarked.Length
@@ -4067,13 +4129,13 @@ let main args =
                 Trace.traceError (sprintf "    %s:%d: %s" rel line text)
 
             failwithf
-                "VerifyUploadResults: %d site(s) discard the Result of an `Upload`. A failed write must reach its caller: propagate it (match on the Result; raise where the enclosing signature carries no failure), or — where best-effort is the DESIGN — match the Error and log it at Warn. A discard that must stay a discard says why with `// best-effort-write: <why>` on the line. See docs/platform/storage-write-results.md."
+                "VerifyUploadResults: %d site(s) discard the Result of an `Upload`, or of a fan-out of `Delete`s. A failed write or delete must reach its caller: propagate it (match on the Result; raise where the enclosing signature carries no failure), or — where best-effort is the DESIGN — match the Error and log it at Warn. A discard that must stay a discard says why with `// best-effort-write: <why>` on the line. See docs/platform/storage-write-results.md."
                 unmarked.Length
 
         Trace.tracefn ""
 
         Trace.tracefn
-            "VerifyUploadResults: OK — no unmarked discarded upload result (%d marked best-effort)."
+            "VerifyUploadResults: OK — no unmarked discarded upload or delete-fan-out result (%d marked best-effort)."
             marked.Length)
 
     // App-specific target: Azure deployment

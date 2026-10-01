@@ -58,6 +58,24 @@ let! outcomes =
 let refused = outcomes |> Array.choose (fun (name, r) -> if Result.isOk r then None else Some name)
 ```
 
+**A `Delete` fan-out is held to the same rule (Phase 965).** `IBlobStorage.Delete` is idempotent —
+deleting a blob that does not exist returns `Ok`, and `IBlobStorageContract` pins that on every
+bound backend — so an `Error` from it is a refusal, never a not-found. A hard-delete erasure that
+fanned its deletes out through `Async.Parallel |> Async.Ignore` reported a subject's blobs gone
+while a refused one was still in the container, and the erasure ledger recorded completion. The
+gate reports a `Delete` call in the fan-out shape, under `src/`: the call must be the element's
+value, inside a pipeline that runs through `Async.Parallel` and ends in `Async.Ignore`. Collect the
+results and fail on any `Error`, naming the blobs that did not go; the ones that went stay gone,
+and because the call is idempotent a re-run finishes the job. The same best-effort marker admits a
+fan-out that is cleanup by design.
+
+The `Delete` walk is narrower than the upload walk, on purpose. A single `Delete` whose result is
+discarded (`do! store.Delete(…) |> Async.Ignore`, or `let! _ =`) is **not** a site, and neither is a
+`let! _ =` that binds a `Delete` fan-out: a delete that is cleanup — orphaned content, a derivative
+cache, a pruned delivery log — is recoverable by the next pass, so the gate leaves it to review. The
+line it draws is erasure: where a refused delete means a data-subject's blob is still at rest,
+collect.
+
 The gate is textual. A result dropped some other way — through a helper that returns the
 upload's `Result` under another name, say — is the same defect, and a reviewer holds it to the
 same rule.
@@ -110,6 +128,7 @@ one line, the write is not best-effort.
 | `PersistentEventStore` | `_by-type` / `_by-source` index refs | best-effort by design — canonical is authoritative, drift shows in `IndexConsistencyCheck` and `Rebuild` repairs it |
 | `BlobIdempotencyStore` | memoised response | raises; the dispatcher answers the call, logs it as NOT memoised, and still emits the method's audit event |
 | `BlobConfigStore`, `DataObjectStore` | an erasure's redactions, fanned out | every result collected; a refusal fails the erasure with `HandlerPartialFailure` naming the blobs not redacted (those that landed stay redacted, so a re-run finishes), and the erasure ledger records `ErasureFailed`. The tombstone content is written before any metadata names it |
+| `BlobConfigStore`, `DataObjectStore` | a hard-delete erasure's deletes, fanned out | every result collected; a refusal fails the erasure with `HandlerPartialFailure` naming the blobs not deleted (those that went stay gone, so a re-run finishes), and the erasure ledger records `ErasureFailed`. `DataObjectStore` reclaims orphaned content only for version blobs that went, so no content is reclaimed from under metadata that still names it |
 
 The rest of the tree was swept to the same rule in Phase 863. The patterns, by what the write is:
 
