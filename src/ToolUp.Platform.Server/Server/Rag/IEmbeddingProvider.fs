@@ -305,6 +305,67 @@ module EmbedderResilience =
         CircuitBreaker = None
     }
 
+// ─── Phase 945 — a per-call override of the provider's retry posture ──
+//
+// An API-backed provider's `EmbedderResilience` is fixed at construction
+// and tuned for ingestion: several attempts, backoff capped at tens of
+// seconds. A query embed must not inherit it — the query path's own
+// `QueryEmbedPolicy` decides how many attempts a chat turn can afford.
+// So a provider may accept a per-call override through an OPTIONAL
+// capability interface, probed by type test, rather than a new member on
+// `IEmbeddingProvider`: every in-tree and consumer embedder implements
+// that interface, so a new abstract member would be a breaking sweep, and
+// a provider with no internal retries has nothing to override. A provider
+// without the capability takes the plain `GenerateEmbedding` call,
+// unchanged.
+
+/// What one embedding call overrides of its provider's configured
+/// `EmbedderResilience` (Phase 945).
+type EmbedCallOverride = {
+    /// Retry policy for this call, in place of the provider's configured
+    /// `EmbedderResilience.Retry`.
+    Retry: EmbedderRetryPolicy
+    /// Upper bound on this call's request timeout: the provider uses the
+    /// smaller of this and its configured `RequestTimeout`. `None` keeps
+    /// the configured one.
+    RequestTimeout: TimeSpan option
+}
+
+/// Optional capability of an embedding provider whose resilience can be
+/// overridden per call (Phase 945). Implemented alongside
+/// `IEmbeddingProvider` by the OpenAI provider, and forwarded by the
+/// caching decorator. The circuit breaker, metrics and audit still apply
+/// to an overridden call.
+type IEmbeddingProviderCallOverride =
+    /// `GenerateEmbedding`, under `callOverride` instead of the provider's
+    /// configured retry policy and request timeout.
+    abstract GenerateEmbeddingWith: callOverride: EmbedCallOverride * text: string -> Async<float32 array>
+
+/// Constructors and the probe for the Phase 945 per-call override.
+module EmbedCallOverride =
+    /// One attempt, with the request bounded by `timeout` (a `timeout` of
+    /// zero or less leaves the configured request timeout in force). What
+    /// `QueryEmbedGate` passes for each of its attempts.
+    let singleAttemptWithin (timeout: TimeSpan) : EmbedCallOverride = {
+        Retry = EmbedderRetryPolicy.noRetry
+        RequestTimeout = if timeout > TimeSpan.Zero then Some timeout else None
+    }
+
+    /// `true` when `provider` accepts a per-call override.
+    let isSupported (provider: IEmbeddingProvider) : bool =
+        provider :? IEmbeddingProviderCallOverride
+
+    /// Embed `text` under `callOverride` when `provider` accepts one;
+    /// otherwise the plain `GenerateEmbedding` call, unchanged.
+    let generate
+        (provider: IEmbeddingProvider)
+        (callOverride: EmbedCallOverride)
+        (text: string)
+        : Async<float32 array> =
+        match provider with
+        | :? IEmbeddingProviderCallOverride as overridable -> overridable.GenerateEmbeddingWith(callOverride, text)
+        | _ -> provider.GenerateEmbedding text
+
 /// Classification of a non-success embedding-provider HTTP response.
 /// Mirrors the Phase 14t ingestion-retry taxonomy so the provider and
 /// the ingestion service agree on retryability: 429 / 5xx are
@@ -395,8 +456,12 @@ module EmbedderMetrics =
 type QueryEmbedPolicy = {
     /// Attempts made at the call boundary, inclusive of the first. `1`
     /// (the default) is one attempt: a failed query embed degrades the
-    /// turn rather than retrying inside it. Any retry a provider performs
-    /// internally still happens, inside `Timeout`.
+    /// turn rather than retrying inside it. Each attempt asks the provider
+    /// for a single request bounded by `Timeout` (Phase 945,
+    /// `EmbedCallOverride.singleAttemptWithin`), so a provider that
+    /// accepts the override — the OpenAI provider, through the caching
+    /// decorator — makes exactly `MaxAttempts` requests. A provider that
+    /// does not still retries internally, inside `Timeout`.
     MaxAttempts: int
     /// Wall-clock budget for the whole query embed, every attempt
     /// included. On overrun the caller receives `QueryEmbedOutcome.TimedOut`
@@ -454,6 +519,10 @@ type QueryEmbedGate(policy: QueryEmbedPolicy) =
 
     let ceiling = policy.MaxConcurrentCalls |> Option.map (fun n -> max 1 n)
 
+    // Phase 945 — the query policy, not the provider's ingestion-tuned
+    // retry, decides how many requests a query embed makes.
+    let perAttempt = EmbedCallOverride.singleAttemptWithin policy.Timeout
+
     let slots =
         ceiling |> Option.map (fun n -> new System.Threading.SemaphoreSlim(n, n))
 
@@ -480,7 +549,7 @@ type QueryEmbedGate(policy: QueryEmbedPolicy) =
 
                     while result.IsNone && attempt <= attempts do
                         try
-                            let! vector = provider.GenerateEmbedding text
+                            let! vector = EmbedCallOverride.generate provider perAttempt text
                             result <- Some vector
                         with ex ->
                             lastError <- ex.Message
