@@ -480,22 +480,52 @@ type BlobConfigStore(storage: IBlobStorage, ?logger: ILogger) =
                         // string keeps the persisted map valid.
                         let markerJson = sprintf "\"%s\"" Erasure.TombstoneMarker
 
-                        do!
+                        // Phase 960 — every redaction's result is collected.
+                        // A refused one fails the erasure, naming the blobs
+                        // that still carry the subject; the ones that landed
+                        // stay redacted, so a re-run finishes the job.
+                        let! outcomes =
                             matched
-                            |> List.map (fun (name, m) ->
+                            |> List.map (fun (name, m) -> async {
                                 let redacted =
                                     m |> Map.map (fun _ v -> if v.Contains subjectUserId then markerJson else v)
 
-                                storage.Upload(platformContainer, name, Json.serializeMap redacted))
+                                let! result = storage.Upload(platformContainer, name, Json.serializeMap redacted)
+                                return name, result
+                            })
                             |> Async.Parallel
-                            |> Async.Ignore
 
-                        return
-                            Result.Ok {
-                                HandlerName = "config"
-                                RecordsAffected = matched.Length
-                                Note = Some(sprintf "%d config document(s) redacted in scope %s" matched.Length scopeId)
-                            }
+                        let refused =
+                            outcomes
+                            |> Array.choose (fun (name, result) ->
+                                match result with
+                                | Ok _ -> None
+                                | Error e -> Some(sprintf "%s (%s)" name e))
+                            |> List.ofArray
+
+                        let redactedCount = outcomes.Length - refused.Length
+
+                        let summary = {
+                            HandlerName = "config"
+                            RecordsAffected = redactedCount
+                            Note = Some(sprintf "%d config document(s) redacted in scope %s" redactedCount scopeId)
+                        }
+
+                        if refused.IsEmpty then
+                            return Result.Ok summary
+                        else
+                            return
+                                Result.Error(
+                                    HandlerPartialFailure(
+                                        "config",
+                                        summary,
+                                        sprintf
+                                            "%d of %d config document(s) were NOT redacted and still name the subject: %s"
+                                            refused.Length
+                                            outcomes.Length
+                                            (String.concat "; " refused)
+                                    )
+                                )
         }
 
 /// Convenience factory — construct and upcast. Mirrors the
