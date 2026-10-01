@@ -195,7 +195,7 @@ Revisit only if both change: the JSON follow-on lands and a request-level measur
 |---|---|
 | Tuple and multi-field-union-case combinators | Demand is recorded with counts above. Phase 800 shipped both; the AOT sample's recorded refusal set shrank from ten to seven when they arrived, exactly as this row said it would. |
 | The algebra over the JSON request wire | 785.F's decision stands: a separate phase, over a value model that can carry an `int64`, an exact decimal and a source width. Until it ships the generated argument table is reflection-free only up to the seam it calls, as measured above. |
-| A route of its own for generated methods | Phase 906 made `GeneratedDispatchRegistry` a consumed seam, and deliberately as a stage INSIDE the proxy rather than as the `IGeneratedDispatchTable` route handlers 69k first sketched: a handler that writes its own response would run outside the pre-flight chain. `IGeneratedDispatchTable` stays only because removing a public type is breaking; nothing composes it. |
+| A route of its own for generated methods | Phase 906 made `GeneratedDispatchRegistry` a consumed seam, and deliberately as a stage INSIDE the proxy rather than as the `IGeneratedDispatchTable` route handlers 69k first sketched: a handler that writes its own response would run outside the pre-flight chain. `IGeneratedDispatchTable` was kept only because removing a public type is breaking, and Phase 946 removed it in the 0.24.0 cut; nothing had composed it. |
 
 Closed by Phase 804: the package and the consumer wiring (69k.E), the AOT sample (69k.H), the benchmarks (69k.G), and the pre-flight-chain decision (69k.C).
 

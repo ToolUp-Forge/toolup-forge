@@ -11528,9 +11528,6 @@ ToolUp.Remoting.Server.IAuthContext.IsAnonymous() : System.Boolean
 ToolUp.Remoting.Server.IAuthContext.SubjectId : System.String { get }
 ToolUp.Remoting.Server.IFieldValidator (interface)
 ToolUp.Remoting.Server.IFieldValidator.Validate(System.Object, ToolUp.Remoting.Server.IValidationContext) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
-ToolUp.Remoting.Server.IGeneratedDispatchTable`2 (interface)
-ToolUp.Remoting.Server.IGeneratedDispatchTable`2.ApiType : System.Type { get }
-ToolUp.Remoting.Server.IGeneratedDispatchTable`2.RouteHandlers() : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[TContext, Microsoft.FSharp.Core.FSharpFunc`2[TImpl, System.Threading.Tasks.Task]]]]
 ToolUp.Remoting.Server.IIdempotencyStore (interface)
 ToolUp.Remoting.Server.IIdempotencyStore.Store(System.String, System.String, ToolUp.Remoting.Server.MemoisedResponse, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Remoting.Server.IIdempotencyStore.TryGet(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.MemoisedResponse]]

@@ -368,19 +368,16 @@ let tests =
 
         testCase "GeneratedDispatchRegistry: register + tryGet round-trip"
         <| fun _ ->
-            // Hand-rolled IGeneratedDispatchTable<HttpContext, IJobReportApi>.
-            // In production the source-generator emits this from the API record.
-            let table: IGeneratedDispatchTable<HttpContext, IJobReportApi> =
-                { new IGeneratedDispatchTable<HttpContext, IJobReportApi> with
-                    member _.ApiType = typeof<IJobReportApi>
-                    member _.RouteHandlers() = []
-                }
+            // The registry stores a boxed table; the proxy recovers a
+            // `GeneratedInvocationTable<'impl>` from it (Phase 906). The 69k
+            // v0 `IGeneratedDispatchTable` this test used to hand-roll was
+            // removed in Phase 946, so a sentinel stands in for the table.
+            let table = box "generated table for IJobReportApi"
 
-            GeneratedDispatchRegistry.register<IJobReportApi> (box table)
+            GeneratedDispatchRegistry.register<IJobReportApi> table
             let resolved = GeneratedDispatchRegistry.tryGet<IJobReportApi> ()
             Expect.isTrue resolved.IsSome "Generated table resolves after registration"
-            let cast = resolved.Value :?> IGeneratedDispatchTable<HttpContext, IJobReportApi>
-            Expect.equal cast.ApiType typeof<IJobReportApi> "Table ApiType matches the registered record"
+            Expect.isTrue (obj.ReferenceEquals(resolved.Value, table)) "The registered table is the one resolved"
 
         testCase "GeneratedDispatchRegistry: isRegistered = false for unregistered impls"
         <| fun _ ->
