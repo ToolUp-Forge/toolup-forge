@@ -49,6 +49,10 @@ let buildDevDiagnosticsCapture
             }
             : DevDiagnosticsHandler.ModuleSnapshot))
 
+    // The platform tier's own indexed stores. A companion's store (the
+    // blob fact store, Phase 890) is not reachable from here; it registers
+    // a `DevDiagnosticsHandler.IIndexConsistencyInspector`, which the
+    // handler runs beside these (Phase 946).
     let inspectors = [
         match persistentEventStoreInstance.Value with
         | Some s -> yield (fun (scopeId: string) -> s.IndexConsistencyCheck(scopeId, 20))

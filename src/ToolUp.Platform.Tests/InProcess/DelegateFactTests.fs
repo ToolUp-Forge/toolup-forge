@@ -865,6 +865,57 @@ let private compositionTests =
             Expect.equal r.Stats.FactCount 200 "the composed store answers from it"
             Expect.equal (held w "revenue").Length 3 "minting only the quoted rows"
         }
+
+        // Phase 946 — the two ways a table cannot be delegated surface at
+        // the fact-table preflight, not at the first DI resolution.
+        test "a delegated table no module declares fails the fact-table preflight (Phase 946)" {
+            let app = FactsCompose.withDelegateFacts [ "undeclared-table" ] (enabledApp ())
+            let composition = ServerApp.factTableComposition app
+
+            let undeclared =
+                FactTablePreflight.defects composition
+                |> List.filter (fun d -> d.RuleCode = FactTablePreflight.UndeclaredBindingRule)
+
+            match undeclared with
+            | [ d ] ->
+                Expect.equal d.Severity DefectError "an error: the composition refuses to start"
+                Expect.stringContains d.Message "undeclared-table" "the defect names the table"
+            | other -> failtestf "expected one undeclared-binding defect, got %A" other
+
+            // The validator is registered although the app declares no table:
+            // a binding alone is enough for the preflight to run.
+            let services = ServiceCollection() :> IServiceCollection
+            FactTablePreflight.serviceRegistration composition services |> ignore
+
+            let validators =
+                services
+                |> Seq.filter (fun d -> d.ServiceType = typeof<ConfigValidation.IConfigValidator>)
+                |> Seq.length
+
+            Expect.equal validators 1 "the fact-table preflight runs"
+        }
+
+        test "a delegated table over an unregistered hierarchy fails the fact-table preflight (Phase 946)" {
+            let geo = {
+                skuTable FactTableHistoryMode.Replace with
+                    Id = "geo-sales"
+                    Hierarchy = "geo"
+            }
+
+            let app =
+                enabledApp ()
+                |> ServerApp.addModules [ ServerModule.create "sales" |> ServerModule.declareFactTables [ geo ] ]
+                |> FactsCompose.withDelegateFacts [ "geo-sales" ]
+
+            let codes =
+                FactTablePreflight.defects (ServerApp.factTableComposition app)
+                |> List.map (fun d -> d.RuleCode, d.Severity)
+
+            Expect.contains
+                codes
+                (FactTablePreflight.UnknownSubjectLevelRule, DefectError)
+                "the unregistered hierarchy is named before any resolution"
+        }
     ]
 
 // ─── 8. Imported runs (Phase 938) ────────────────────────────────────

@@ -1061,6 +1061,10 @@ module FactTablePreflight =
     [<Literal>]
     let MetricTwoHomesRule = "fact-table-metric-two-homes"
 
+    /// Phase 946 — a binding naming a table no module declares.
+    [<Literal>]
+    let UndeclaredBindingRule = "fact-table-binding-undeclared"
+
     /// Phase 294 — the introspectable rule manifest, in the descriptor
     /// shape `CompositionValidator.ruleManifest` uses.
     let ruleManifest: CompositionRuleDescriptor list = [
@@ -1098,6 +1102,12 @@ module FactTablePreflight =
             Severity = DefectWarning
             Description =
                 "A metric should have one home per subject level: a fact table, or individual assertions — not both. Two tables carrying one metric at one level, or a table carrying a metric the composition recomputes fact by fact, is flagged."
+        }
+        {
+            Code = UndeclaredBindingRule
+            Severity = DefectError
+            Description =
+                "A binding that names one table (ServerApp.bindFactTables, including a delegate-fact binding) must name a table some module declares; a binding to nothing would serve reads over a table that does not exist."
         }
     ]
 
@@ -1309,6 +1319,29 @@ module FactTablePreflight =
 
         tableVsTable @ tableVsAssertion
 
+    /// Phase 946 — every explicit binding must name a declared table. A
+    /// delegate-fact binding to an undeclared table used to surface only at
+    /// the first DI resolution of the delegating store.
+    let private undeclaredBindings (composition: FactTableComposition) : CompositionDefect list =
+        let declared = composition.Tables |> List.map _.Definition.Id |> Set.ofList
+
+        composition.Bindings
+        |> List.choose (fun b ->
+            match b with
+            | Grounding.BindFactTable(tableId, destination) when not (declared.Contains tableId) ->
+                Some(tableId, destination)
+            | _ -> None)
+        |> List.distinct
+        |> List.map (fun (tableId, destination) ->
+            defect
+                UndeclaredBindingRule
+                DefectError
+                (sprintf
+                    "Fact table '%s' is bound to '%s', but no module declares it, so there is nothing to bind. Declare the table (ServerModule.declareFactTables) or drop the binding. Declared tables: %s."
+                    tableId
+                    destination
+                    (quoted (Set.toList declared))))
+
     /// Every fact-table defect in a composition. Pure.
     let defects (composition: FactTableComposition) : CompositionDefect list =
         List.concat [
@@ -1318,6 +1351,7 @@ module FactTablePreflight =
             unknownSubjectLevels composition
             unboundRequired composition
             twoHomes composition
+            undeclaredBindings composition
         ]
 
     let private renderDefects (defects: CompositionDefect list) : string =
@@ -1350,11 +1384,20 @@ module FactTablePreflight =
 
     /// The opt-in registration, in the closure shape
     /// `CompositionValidator.serviceRegistration` returns. **Nothing is
-    /// registered for a composition that declares no table** (GP 13), so
-    /// such a composition's `services` is byte-for-byte what it was.
+    /// registered for a composition that declares no table and binds none
+    /// by name** (GP 13), so such a composition's `services` is
+    /// byte-for-byte what it was. (Phase 946: a by-name binding alone arms
+    /// the check, so a binding to an undeclared table is refused here.)
     let serviceRegistration (composition: FactTableComposition) : IServiceCollection -> IServiceCollection =
         fun services ->
-            if not (List.isEmpty composition.Tables) then
+            let bindsByName =
+                composition.Bindings
+                |> List.exists (fun b ->
+                    match b with
+                    | Grounding.BindFactTable _ -> true
+                    | Grounding.BindAllFactTables _ -> false)
+
+            if not (List.isEmpty composition.Tables) || bindsByName then
                 services.AddSingleton<IConfigValidator>(FactTableDeclarationValidator(composition) :> IConfigValidator)
                 |> ignore
 

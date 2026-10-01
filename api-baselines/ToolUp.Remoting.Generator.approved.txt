@@ -95,6 +95,7 @@ ToolUp.Remoting.Generator.JsonEmitOptions.JsonModuleName : System.String { get }
 ToolUp.Remoting.Generator.JsonEmitOptions.JsonNamespace : System.String { get }
 ToolUp.Remoting.Generator.JsonEmitOptions.JsonOpens : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Remoting.Generator.Plan (class)
+ToolUp.Remoting.Generator.Plan.NotRemotingApiAttributeName : System.String (literal)
 ToolUp.Remoting.Generator.Plan.apiRecordsIn(System.Reflection.Assembly) : Microsoft.FSharp.Collections.FSharpList`1[System.Type]
 ToolUp.Remoting.Generator.Plan.argumentTypes(System.Type) : Microsoft.FSharp.Collections.FSharpList`1[System.Type]
 ToolUp.Remoting.Generator.Plan.argumentTypesOf(System.Type) : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.Type]]
@@ -109,6 +110,7 @@ ToolUp.Remoting.Generator.Plan.forJsonResponseDecoders(System.Collections.Generi
 ToolUp.Remoting.Generator.Plan.forJsonTypes(System.Collections.Generic.IEnumerable`1[System.Type]) : ToolUp.Remoting.Generator.GenerationPlan
 ToolUp.Remoting.Generator.Plan.forTypes(System.Collections.Generic.IEnumerable`1[System.Type]) : ToolUp.Remoting.Generator.GenerationPlan
 ToolUp.Remoting.Generator.Plan.isApiRecord(System.Type) : System.Boolean
+ToolUp.Remoting.Generator.Plan.isExcludedFromApiCensus(System.Type) : System.Boolean
 ToolUp.Remoting.Generator.Plan.namespacesReachedBy(System.Collections.Generic.IEnumerable`1[System.Type]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Remoting.Generator.Plan.parameterName(System.String) : System.String
 ToolUp.Remoting.Generator.Plan.qualifiedName(System.Type) : System.String

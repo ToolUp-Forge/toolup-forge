@@ -32,7 +32,10 @@ open ToolUp.RAG.SparseAnalysis
 // common term weigh the same here. Reciprocal Rank Fusion reads ranks, not
 // scores, so the scale difference is invisible to fusion — the order
 // difference is not. The companion README records what that does to the
-// fused rank and the retrieval-evaluation numbers side by side.
+// fused rank and the retrieval-evaluation numbers side by side. Phase 943
+// measured a BM25 score computed here in SQL: it closes the evaluation gap
+// but costs three to six times the latency, so ts_rank was kept. The
+// companion README's Phase 943 section has the numbers.
 //
 // **Query semantics match the in-process index: any term matches.** The
 // query is analysed with the same text-search configuration as the rows

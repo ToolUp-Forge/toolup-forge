@@ -134,7 +134,7 @@ row names the CPU load and free memory its run started under.
 (The two 10,000-chunk flat rows are the second of three `load gate` runs of each arm; the three
 azurite runs' round-minimum p95 was 40.03 / 28.35 / 37.81 ms against the memory arm's 41.50 /
 37.42 / 40.49 ms. The 250,000-chunk run used 40 queries x 3 rounds; the pgvector 100,000 run 100 x 3.
-The pgvector seed is one upsert per chunk: 64 s at 10,000 chunks, 1,002 s at 100,000.)
+The pgvector seed was one upsert per chunk: 64 s at 10,000 chunks, 1,002 s at 100,000. Since Phase 946 the harness writes each 512-chunk embedding batch through `IVectorStoreBatch` (`upsertBatch`, one round-trip): measured back to back on one loaded machine (CPU 100%, about 12 GB free), the 10,000-chunk seed fell from 113.9 s to 19.1 s, and the 100,000-chunk seed took 325.4 s. Both seeds include the local embedding and the in-process BM25 index.)
 
 The two pgvector rows were measured before Phase 939, when `create` composed `PgvectorTuning.unchanged`:
 pgvector's own untuned defaults (the server's default `ef_search`, no iterative scan, no exact fallback
@@ -195,7 +195,7 @@ truth is computed correctly, and it reads 1.000 too.
 |---|---|
 | flat, 500,000 chunks (Phase 14k's deferred p95) | **Attempted and stopped; extrapolated.** Phase 929 ran `load retrieval --stores flat --sizes 500000` (CPU 97%, 12.1 GB free at start). 172 s in, still seeding, the process's working set was 7.56 GB and the machine had 2.3 GB free; it was stopped before it could take the memory of the five sessions beside it. The 250,000-chunk run peaked at about 6.5 GB, so 500,000 needs about 13 GB — more than this machine had free on either day. On the slope measured at three sizes (about 5.5 µs per chunk), the p95 at eight callers is **~2.75 s**, the figure 886 extrapolated from two. The largest size measured is 250,000 chunks: **p95 1,371 ms**. |
 | flat, 1,000,000 chunks | **Extrapolated** on the same slope: p95 near 5.5 s at eight callers, over ~26 GB of process memory at the 250,000-chunk run's density. Not run, for the reason above. |
-| pgvector, 500,000 chunks | **Not run.** The harness seeds the pgvector store one upsert at a time, which took 1,002 s for 100,000 chunks, so 500,000 is over an hour of seeding before the first query. At pgvector's untuned defaults (before Phase 939) its p95 rose from 6.50 to 24.77 ms between 10,000 and 100,000 chunks, and its recall fell from 0.810 to 0.670. |
+| pgvector, 500,000 chunks | **Attempted and stopped (Phase 946).** With the batched seed the row was run (`load retrieval --stores pgvector --sizes 500000 --rounds 2 --recall 0`, CPU 100%, 12.5 GB free at start) under a watchdog that stops it at a 6 GB working set, to protect the other sessions on the machine. It was stopped 30.6 minutes in, still seeding, at 6.43 GB: the vectors live in the database, but the in-process BM25 index and the chunk texts the harness holds grow with the corpus. The row needs a machine with the memory to spare, or a database keyword index (`PostgresFullTextIndex`) in place of the in-process one. At pgvector's untuned defaults (before Phase 939) its p95 rose from 6.50 to 24.77 ms between 10,000 and 100,000 chunks, and its recall fell from 0.810 to 0.670. |
 | hnsw, 10,000 and above | **Not measurable** on this machine within a working session: the graph build did not finish (see above). Phase 929 did not retry it: nothing in the store has changed since. |
 
 ## Facts — measured

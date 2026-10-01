@@ -525,6 +525,30 @@ let main args =
                     if List.isEmpty findings then 0 else 1)
             ]
 
+        // Phase 946 — the samples meant to RUN are run, after every build
+        // leg, against the build just made (`--no-build`). A sample whose
+        // exit code is its verdict (HelloWorld-AOT) could otherwise exit 1
+        // under a green build gate, which is what happened. The run list is
+        // checked against the build plan first, so a runnable that is not
+        // built is a named finding rather than a run of a stale binary.
+        let legs =
+            legs
+            @ [
+                Aggregate.leg "runnable samples are all built" (fun () ->
+                    let findings = SampleGate.runFindings plan SampleGate.runnable
+
+                    for f in findings do
+                        Trace.traceError ("VerifySamples: " + f)
+
+                    if List.isEmpty findings then 0 else 1)
+            ]
+            @ (SampleGate.runnable
+               |> List.filter (fun r -> List.contains r.Project plan.ToBuild)
+               |> List.map (fun r ->
+                   Aggregate.leg ("run " + r.Project) (fun () ->
+                       Trace.tracefn "▶ VerifySamples: running %s — %s" r.Project r.Reason
+                       run root "dotnet" (SampleGate.runArguments r))))
+
         Aggregate.runAll "VerifySamples" "sample leg" legs
 
     Target.create "VerifySamples" (fun _ -> runVerifySamples ())

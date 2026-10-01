@@ -186,6 +186,64 @@ type BlobFactStoreScaleValidator
                         )
         }
 
+
+/// Phase 946 — the blob fact store a composition built, once its
+/// `IFactStore` has been resolved, for the `/dev/inspect` index inspector.
+type internal ComposedBlobFactStore() =
+    member val Instance: BlobFactStore option = None with get, set
+
+/// Phase 946 — the registered form of `BlobFactStoreScaleValidator`: an
+/// instance (the compose-time preflight refuses a factory registration)
+/// that builds the guard when it runs, from the instance registrations of
+/// the service collection it was registered into. Last registration wins,
+/// as in a built provider; a deployment whose blob storage is not an
+/// instance registration gets the guard's "could not decide" warning.
+type internal BlobFactStoreScaleGuard(replicaCount: int, services: IServiceCollection) =
+
+    member private _.LastInstance<'T when 'T: not struct>() : 'T option =
+        services
+        |> Seq.filter (fun d -> d.ServiceType = typeof<'T> && not d.IsKeyedService)
+        |> Seq.tryLast
+        |> Option.bind (fun d ->
+            match d.ImplementationInstance with
+            | :? 'T as instance -> Some instance
+            | _ -> None)
+
+    interface ConfigValidation.IConfigValidator with
+        member _.Name = "blob-fact-store-scale"
+        member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
+
+        member this.Validate() = async {
+            let scopes () =
+                match this.LastInstance<IScopeEnumerator>(), this.LastInstance<TeamManagement.ITeamStore>() with
+                | Some enumerator, _ -> enumerator.ListScopes()
+                | None, Some teams -> (ScopeEnumeration.fromTeamStore teams).ListScopes()
+                | None, None -> async { return ScopeEnumeration.wellKnownContainers }
+
+            let isBlob =
+                match this.LastInstance<FactStoreBackend>() with
+                | Some marker -> marker.Backend = "blob"
+                | None -> true
+
+            match this.LastInstance<IBlobStorage>() with
+            | Some storage ->
+                let guard =
+                    BlobFactStoreScaleValidator(replicaCount, storage, scopes, isBlob)
+                    :> ConfigValidation.IConfigValidator
+
+                return! guard.Validate()
+            | None when replicaCount <= 1 || not isBlob -> return ConfigValidation.ValidationResult.Ok
+            | None ->
+                return
+                    ConfigValidation.ValidationResult.Warning(
+                        sprintf
+                            "ReplicaCount = %d with BlobFactStore, and IBlobStorage is not registered as an instance, so the multi-replica scale guard could not count the facts. Above %d facts in one scope, compose %s."
+                            replicaCount
+                            BlobFactStoreScale.WarnAboveFacts
+                            BlobFactStoreScale.Remedy
+                    )
+        }
+
 module FactsCompose =
 
     // ─── Phase 623 — shared optional-substrate lookups ────────────────
@@ -207,6 +265,8 @@ module FactsCompose =
     // Register the fact-store DI singletons (lazy factories over the
     // composed substrate).
     let private registerFactStore (services: IServiceCollection) : IServiceCollection =
+        let composedBlob = ComposedBlobFactStore()
+
         services
             // Phase 703 — the store is composed WITH the metric registry.
             // It was registry-less until now, and that was a wiring gap
@@ -224,10 +284,36 @@ module FactsCompose =
             // (GP 11).
             .AddSingleton<IFactStore>(
                 Func<IServiceProvider, IFactStore>(fun sp ->
-                    BlobFactStore.createWithRegistry
-                        (sp.GetRequiredService<IBlobStorage>())
-                        (sp.GetRequiredService<IEventStore>())
-                        (tryService<Grounding.IMetricRegistry> sp))
+                    let store =
+                        BlobFactStore.createWithRegistry
+                            (sp.GetRequiredService<IBlobStorage>())
+                            (sp.GetRequiredService<IEventStore>())
+                            (tryService<Grounding.IMetricRegistry> sp)
+
+                    // Phase 946 — remember the blob store this composition
+                    // built, for the /dev/inspect index inspector below.
+                    match store with
+                    | :? BlobFactStore as blob -> composedBlob.Instance <- Some blob
+                    | _ -> ()
+
+                    store)
+            )
+            // Phase 946 — the fact store's index check (Phase 890) on
+            // /dev/inspect. Resolving the composed IFactStore first builds
+            // it, so the inspector samples the blob store this composition
+            // built; a replacement (`withFactStoreImplementation`) never
+            // builds one, and the inspector samples nothing.
+            .AddSingleton<DevDiagnosticsHandler.IIndexConsistencyInspector>(
+                Func<IServiceProvider, DevDiagnosticsHandler.IIndexConsistencyInspector>(fun sp ->
+                    { new DevDiagnosticsHandler.IIndexConsistencyInspector with
+                        member _.Inspect(scopeId) = async {
+                            sp.GetService<IFactStore>() |> ignore
+
+                            match composedBlob.Instance with
+                            | Some blob -> return! blob.IndexConsistencyCheck(scopeId, 20)
+                            | None -> return []
+                        }
+                    })
             )
             .AddSingleton<IFactEvidenceSource>(
                 Func<IServiceProvider, IFactEvidenceSource>(fun sp ->
@@ -477,21 +563,15 @@ module FactsCompose =
         else
             services.TryAddSingleton<FactStoreBackend>({ Backend = "blob" })
 
+            // Phase 946 — an INSTANCE, as the preflight requires (it reads
+            // `ImplementationInstance` at compose time and refuses a factory,
+            // which made a multi-replica composition raise). The guard is
+            // built when it runs, from the instance registrations of the
+            // collection it was registered into — the platform registers the
+            // blob storage, the team store and this backend marker as
+            // instances — so it sees the composition as finally assembled.
             services.AddSingleton<ConfigValidation.IConfigValidator>(
-                Func<IServiceProvider, ConfigValidation.IConfigValidator>(fun sp ->
-                    let scopes () =
-                        match tryService<IScopeEnumerator> sp, tryService<TeamManagement.ITeamStore> sp with
-                        | Some enumerator, _ -> enumerator.ListScopes()
-                        | None, Some teams -> (ScopeEnumeration.fromTeamStore teams).ListScopes()
-                        | None, None -> async { return ScopeEnumeration.wellKnownContainers }
-
-                    let isBlob =
-                        match tryService<FactStoreBackend> sp with
-                        | Some marker -> marker.Backend = "blob"
-                        | None -> true
-
-                    BlobFactStoreScaleValidator(replicaCount, sp.GetRequiredService<IBlobStorage>(), scopes, isBlob)
-                    :> ConfigValidation.IConfigValidator)
+                BlobFactStoreScaleGuard(replicaCount, services) :> ConfigValidation.IConfigValidator
             )
 
     let private registerReactiveRecomputation (services: IServiceCollection) : IServiceCollection =

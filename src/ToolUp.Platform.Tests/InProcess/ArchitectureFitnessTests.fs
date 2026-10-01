@@ -758,6 +758,236 @@ let private phase880Tests =
         }
     ]
 
+// ─── Phase 946 — conversation reads cannot bypass `canSee` (Phase 859) ──
+//
+// A team's conversation-visibility level is decided in ONE place,
+// `ConversationVisibility.canSee` (`TeamConversationPolicyStore.fs`). The
+// assistant's own read paths go through it, but the opt-in conversation
+// substrate (`IConversationStore`, Phase 53) is a second store a server
+// path can read a conversation from by id. This case scans every server
+// project's source for a read through that substrate's reader
+// (`GetConversation` / `GetTurn` / `ListByScope` / `ListByUser` / `Query`
+// in a file that names `IConversationReader` or `IConversationStore`) and
+// requires the binding that holds the read to call `canSee`. A read that
+// is not a viewer's read (an existence check that returns nothing, the
+// data-subject export, the substrate itself) is pinned below WITH ITS
+// REASON; a pin naming a read that no longer exists is itself a finding.
+
+/// One conversation-store read: the file, the enclosing `let` / `member`
+/// binding's name, and the line of the read.
+type private ConversationRead = {
+    File: string
+    Binding: string
+    Line: int
+}
+
+let private conversationReadCall =
+    System.Text.RegularExpressions.Regex(@"\.(GetConversation|GetTurn|ListByScope|ListByUser|Query)\s*\(")
+
+let private bindingHead =
+    System.Text.RegularExpressions.Regex(
+        @"^(\s*)(?:let|member)\s+(?:(?:rec|private|inline|internal|override)\s+)*(?:[A-Za-z_][A-Za-z0-9_]*\.)?([A-Za-z_][A-Za-z0-9_']*)"
+    )
+
+let private indentOf (line: string) = line.Length - line.TrimStart().Length
+
+/// Every conversation-store read in one source text, with whether the
+/// binding holding it calls `canSee`. Pure over the text.
+let private conversationReadsIn (file: string) (source: string) : (ConversationRead * bool) list =
+    if not (source.Contains "IConversationReader" || source.Contains "IConversationStore") then
+        []
+    else
+        let lines = source.Replace("\r\n", "\n").Split('\n')
+
+        [
+            for i in 0 .. lines.Length - 1 do
+                let line = lines[i]
+                let trimmed = line.TrimStart()
+
+                // A member DEFINITION (the substrate implementing the
+                // reader) and a comment are not reads.
+                if
+                    conversationReadCall.IsMatch line
+                    && not (trimmed.StartsWith "member ")
+                    && not (trimmed.StartsWith "//")
+                then
+                    // The enclosing binding: the nearest `let` / `member`
+                    // above, indented less than the read.
+                    let callIndent = indentOf line
+
+                    let head =
+                        seq { i - 1 .. -1 .. 0 }
+                        |> Seq.tryPick (fun j ->
+                            let m = bindingHead.Match lines[j]
+
+                            if m.Success && m.Groups[1].Value.Length < callIndent then
+                                Some(j, m.Groups[1].Value.Length, m.Groups[2].Value)
+                            else
+                                None)
+
+                    match head with
+                    | None ->
+                        yield
+                            {
+                                File = file
+                                Binding = "<top level>"
+                                Line = i + 1
+                            },
+                            false
+                    | Some(start, headIndent, name) ->
+                        // The binding's body: up to the next non-blank line
+                        // indented no deeper than its head.
+                        let stop =
+                            seq { start + 1 .. lines.Length - 1 }
+                            |> Seq.tryFind (fun j ->
+                                not (String.IsNullOrWhiteSpace lines[j]) && indentOf lines[j] <= headIndent)
+                            |> Option.defaultValue lines.Length
+
+                        let body = String.Join("\n", lines[start .. stop - 1])
+
+                        yield
+                            {
+                                File = file
+                                Binding = name
+                                Line = i + 1
+                            },
+                            body.Contains "canSee"
+        ]
+
+/// A read that is not a viewer's read, pinned with its reason.
+type private ConversationReadPin = {
+    PinFile: string
+    PinBinding: string
+    Reason: string
+}
+
+let private conversationReadPins: ConversationReadPin list = [
+    {
+        PinFile = "src/ToolUp.AI.Server/Server/AIAssistantHandler.fs"
+        PinBinding = "convBeginIfNeeded"
+        Reason = "an existence check before BeginConversation; it returns unit and hands nothing it read to the caller"
+    }
+    {
+        PinFile = "src/ToolUp.AI.Server/Server/ConversationReplay.fs"
+        PinBinding = "replayWith"
+        Reason =
+            "a library function no platform route calls; a deployment that exposes replay over the network must gate it there"
+    }
+    {
+        PinFile = "src/ToolUp.Platform.Server/Server/ConversationExporter.fs"
+        PinBinding = "Export"
+        Reason =
+            "the data-subject export: it reads the SUBJECT's own conversations (ListByUser of the subject) for an operator-initiated request, not a viewer's read"
+    }
+    {
+        PinFile = "src/ToolUp.Platform.Server/Server/ConversationStore.fs"
+        PinBinding = "Erase"
+        Reason = "the substrate's own erasure enumerating the subject's conversations"
+    }
+]
+
+/// The findings over a set of (repo-relative file, source) pairs: a read
+/// whose binding does not call `canSee` and is not pinned, and a pin that
+/// names no read. Empty is a pass.
+let private conversationReadFindings (sources: (string * string) list) (pins: ConversationReadPin list) : string list = [
+    let reads =
+        sources |> List.collect (fun (file, source) -> conversationReadsIn file source)
+
+    let pinned (r: ConversationRead) =
+        pins |> List.exists (fun p -> p.PinFile = r.File && p.PinBinding = r.Binding)
+
+    for r, checksVisibility in reads do
+        if not checksVisibility && not (pinned r) then
+            yield
+                sprintf
+                    "%s:%d — `%s` reads the conversation substrate without ConversationVisibility.canSee"
+                    r.File
+                    r.Line
+                    r.Binding
+
+    for p in pins do
+        if
+            not (
+                reads
+                |> List.exists (fun (r, _) -> r.File = p.PinFile && r.Binding = p.PinBinding)
+            )
+        then
+            yield sprintf "pin %s / `%s` names no conversation-store read — remove it" p.PinFile p.PinBinding
+]
+
+/// Every `.fs` file of every server project under `src/` (the
+/// `*.Server` folders), repo-relative.
+let private serverSources () : (string * string) list =
+    let root = repoRoot ()
+    let src = Path.Combine(root, "src")
+
+    Directory.GetDirectories src
+    |> Array.filter (fun d -> Path.GetFileName(d).EndsWith ".Server")
+    |> Array.collect (fun d -> Directory.GetFiles(d, "*.fs", SearchOption.AllDirectories))
+    |> Array.map (fun p -> pathUnder root p, p)
+    |> Array.filter (fun (rel, _) -> not (rel.Contains "/bin/" || rel.Contains "/obj/"))
+    |> Array.map (fun (rel, p) -> rel.TrimStart('/'), File.ReadAllText p)
+    |> Array.toList
+
+let private phase946Tests =
+    testList "Phase 946 — conversation reads go through canSee" [
+
+        test "every server read of the conversation substrate calls canSee, or is pinned with its reason" {
+            let sources = serverSources ()
+
+            // Floor: a sweep that found no server source passes vacuously.
+            Expect.isGreaterThan sources.Length 200 "the server sweep found almost nothing — the walk is broken"
+
+            Expect.contains
+                (sources |> List.map fst)
+                "src/ToolUp.AI.Server/Server/AIAssistantHandler.fs"
+                "the assistant handler is in the sweep"
+
+            let findings = conversationReadFindings sources conversationReadPins
+
+            Expect.isEmpty
+                findings
+                (sprintf
+                    "A server path reads a conversation through IConversationStore without the team's visibility rule:\n%s"
+                    (String.concat "\n" findings))
+
+            for p in conversationReadPins do
+                Expect.isNotEmpty p.Reason "a pin carries its reason"
+        }
+
+        test "a planted read that skips the check is a finding (fail-closed)" {
+            let planted =
+                String.concat "\n" [
+                    "module Planted"
+                    "let leak (store: IConversationStore) scopeId id = async {"
+                    "    let reader = store :> IConversationReader"
+                    "    let! result = reader.GetConversation(scopeId, id)"
+                    "    return result"
+                    "}"
+                    "let guarded (store: IConversationStore) scopeId id state viewer = async {"
+                    "    let! result = (store :> IConversationReader).GetConversation(scopeId, id)"
+                    "    return result |> Result.filter (fun c -> ConversationVisibility.canSee state viewer c)"
+                    "}"
+                ]
+
+            let findings =
+                conversationReadFindings [ "src/Planted.Server/Planted.fs", planted ] []
+
+            Expect.equal findings.Length 1 "exactly the unguarded read"
+            Expect.stringContains findings.Head "`leak`" "the finding names the binding that skips the check"
+        }
+
+        test "a pin naming no read is a finding" {
+            let pin = {
+                PinFile = "src/Planted.Server/Planted.fs"
+                PinBinding = "gone"
+                Reason = "r"
+            }
+
+            Expect.isNonEmpty (conversationReadFindings [] [ pin ]) "a stale pin must be removed"
+        }
+    ]
+
 [<Tests>]
 let tests =
     testList "Phase 174 — architecture-fitness gate" [
@@ -767,4 +997,5 @@ let tests =
         fs0025Tests
         phase635Tests
         phase880Tests
+        phase946Tests
     ]

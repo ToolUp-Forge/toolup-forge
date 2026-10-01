@@ -128,3 +128,55 @@ let reconcile (onDisk: string list) (exclusions: Exclusion list) (built: string 
                 excludedOnDisk
                 onDisk.Length
 ]
+// ─── Phase 946 — the samples that are meant to RUN are run ───────────────
+//
+// Building a sample proves it compiles; it does not prove it works. The
+// HelloWorld-AOT sample is a program whose exit code IS its verdict (every
+// pinned remoting fixture through generated code only), and it sat exiting
+// 1 while the build gate stayed green: two corpus fixtures had no echo
+// method in its contract. A sample whose purpose is a run is listed here,
+// and the gate runs it after the build and fails on a non-zero exit.
+
+/// A sample project the gate RUNS after building it, with the reason it
+/// is meant to run. The run is `dotnet run --no-build`, so it is the
+/// build the gate just made that runs.
+type Runnable = {
+    /// Path of the project, relative to the repository root, forward slashes.
+    Project: string
+    /// Arguments passed to the program, after `--`.
+    Arguments: string list
+    /// Why this sample is meant to run under the gate.
+    Reason: string
+}
+
+/// The samples the gate runs. See `Runnable`.
+let runnable: Runnable list = [
+    {
+        Project = "samples/HelloWorld-AOT/HelloWorld.AOT/HelloWorld.AOT.fsproj"
+        Arguments = []
+        Reason =
+            "its exit code is the proof: every pinned remoting-corpus fixture through generated code, and the recorded refusal set exact"
+    }
+]
+
+/// The `dotnet` arguments that run one runnable sample from the repository
+/// root, against the build the gate already made.
+let runArguments (r: Runnable) : string list =
+    [ "run"; "--project"; r.Project; "--no-build"; "-v:q" ]
+    @ (if List.isEmpty r.Arguments then [] else "--" :: r.Arguments)
+
+/// The findings of checking the run list against the build plan: an empty
+/// list is a pass. A runnable the gate does not build (not on disk, or
+/// excluded) could only be run against a stale or absent build, so it is
+/// named rather than run; a runnable with no reason is a silent decision.
+let runFindings (p: Plan) (runnables: Runnable list) : string list = [
+    for r in runnables do
+        if not (List.contains r.Project p.ToBuild) then
+            yield
+                sprintf
+                    "runnable sample `%s` is not built by the gate (not on disk, or excluded) — remove it from `SampleGate.runnable` or build it."
+                    r.Project
+
+        if String.IsNullOrWhiteSpace r.Reason then
+            yield sprintf "runnable sample `%s` carries no reason." r.Project
+]

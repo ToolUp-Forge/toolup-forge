@@ -641,11 +641,16 @@ let private makeEndpoint<'impl, 'ctx>
         // short-circuiting "before any pre-flight work
         // that assumed a decoded value (69e validation,
         // 69f idempotency hashing of the parsed args)".
-        // Neither pre-flight assumes one:
-        // `Validation.parseFirstArgFromBody` wraps its
-        // parse in `try … with _ -> None` and defers to
-        // this proxy by design, and 69f hashes the RAW
-        // request body, not parsed arguments. Reordering
+        // Neither pre-flight assumes one: 69e validation
+        // reads the value `ApiProxy.ParseFirst` decoded
+        // (Phase 856.B) — this proxy's own parse, run
+        // early — so a value it cannot decode reaches no
+        // validator and the refusal stays this arm's to
+        // make; and 69f hashes the RAW request body, not
+        // parsed arguments. (`Validation.parseFirstArgFromBody`,
+        // which this note used to cite as the validation
+        // pre-flight, is off the adapter's request path
+        // since Phase 905.) Reordering
         // would also have been a regression — it would put
         // argument decoding ahead of auth and rate-limit,
         // handing an unauthenticated caller field-level

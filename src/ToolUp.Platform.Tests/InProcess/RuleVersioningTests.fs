@@ -171,7 +171,7 @@ let tests =
             let document =
                 CompositionRuleVersions.toWireDocument CompositionRuleVersions.allRules
 
-            Expect.equal document.ManifestVersion "1.2.0" "the manifest version is published"
+            Expect.equal document.ManifestVersion "1.3.0" "the manifest version is published"
 
             Expect.all document.Rules (fun r -> r.Version = "1.0.0") "every published rule carries its version string"
 

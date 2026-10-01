@@ -16,6 +16,9 @@ open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.RAG.InMemoryVectorStore
 open ToolUp.RAG.InMemoryBM25Index
 open ToolUp.RAG.InMemoryEmbeddingCache
+open Npgsql
+open ToolUp.RAG.SparseAnalysis
+open ToolUp.SparseIndices.Postgres.PostgresFullTextIndex
 
 // ─── Phase 204 — cross-index erasure conformance (property) ───────────
 //
@@ -47,6 +50,13 @@ open ToolUp.RAG.InMemoryEmbeddingCache
 // every sweep also asserts that every live chunk IS still retrievable from
 // every leg. A fan-out that over-deletes fails here just as loudly as one
 // that under-deletes.
+//
+// **Any keyword index (Phase 946).** The two randomised properties boot
+// their keyword index through a factory (`propertyTests`), and run over
+// the in-process `InMemoryBM25Index` always and over the database
+// full-text index (Phase 893) on its live arm, gated on
+// `TOOLUP_PG_FULLTEXT_CONNECTION_STRING`. Probed: with that index's
+// `Erase` turned into a dry run, both Postgres properties go red.
 
 type private SilentLogger() =
     interface ILogger with
@@ -219,21 +229,33 @@ type private Harness = {
     Shutdown: unit -> unit
 }
 
-/// Boot a full hybrid deployment over `storage`. "Restart" is
-/// `Shutdown()` (each in-memory store's `IDisposable` performs a final
-/// synchronous flush of its dirty set) followed by another `boot` over the
-/// SAME storage — the idiom `IndexLifecycleTests` established.
+/// Phase 946 — the keyword index a harness boots, over the run's blob
+/// storage: the index, and how to shut it down. A factory is called once
+/// per boot, so a restart re-opens the SAME backing (the blob snapshots of
+/// `InMemoryBM25Index`, a database table for a database-backed index).
+type private SparseFactory = IBlobStorage -> ISparseIndex * (unit -> unit)
+
+/// The in-process keyword index, persisted to the run's blob storage.
 /// `flushIntervalMs = 60000` keeps the background flush loop out of the
 /// way so persistence is driven deterministically by disposal.
-let private boot (storage: IBlobStorage) (cache: IEmbeddingCache) : Harness =
+let private bm25Factory: SparseFactory =
+    fun storage ->
+        let bm25 =
+            new InMemoryBM25Index(storage, logger = SilentLogger(), flushIntervalMs = 60000)
+
+        bm25 :> ISparseIndex, (fun () -> (bm25 :> IDisposable).Dispose())
+
+/// Boot a full hybrid deployment over `storage`, with the keyword index
+/// `sparseFactory` opens. "Restart" is `Shutdown()` (each in-memory
+/// store's `IDisposable` performs a final synchronous flush of its dirty
+/// set) followed by another boot over the SAME storage — the idiom
+/// `IndexLifecycleTests` established.
+let private bootWith (sparseFactory: SparseFactory) (storage: IBlobStorage) (cache: IEmbeddingCache) : Harness =
     let vectorStore =
         new InMemoryVectorStore(storage, logger = SilentLogger(), flushIntervalMs = 60000)
 
-    let bm25 =
-        new InMemoryBM25Index(storage, logger = SilentLogger(), flushIntervalMs = 60000)
-
     let vs = vectorStore :> IVectorStore
-    let sparse = bm25 :> ISparseIndex
+    let sparse, closeSparse = sparseFactory storage
 
     {
         VectorStore = vs
@@ -244,8 +266,11 @@ let private boot (storage: IBlobStorage) (cache: IEmbeddingCache) : Harness =
         Shutdown =
             fun () ->
                 (vectorStore :> IDisposable).Dispose()
-                (bm25 :> IDisposable).Dispose()
+                closeSparse ()
     }
+
+/// The pack's default boot: the in-process keyword index.
+let private boot (storage: IBlobStorage) (cache: IEmbeddingCache) : Harness = bootWith bm25Factory storage cache
 
 /// A `TeamMember` subject, so `authorisedScopes` admits all three scopes in
 /// `scopePool`: `Deployment` unconditionally, `Team "t1"` via `TeamId`,
@@ -355,20 +380,25 @@ let private runSequence (label: string) (h: Harness) (start: Model) (commands: C
 }
 
 [<Tests>]
-let tests =
-    testList "Phase 204 — cross-index erasure conformance" [
-
+/// Phase 946 — the two randomised properties, over the keyword index a
+/// factory source opens. `makeFactory` is called once per sequence and
+/// returns the factory every boot of that sequence uses (so a restart
+/// re-opens the same backing) and the teardown that removes the backing.
+let private propertyTests (name: string) (makeFactory: unit -> SparseFactory * (unit -> unit)) =
+    testList name [
         testAsync "property: no deleted or erased chunk is retrievable from any leg, over randomised sequences" {
             for seed in 1..12 do
                 let storage = InMemoryBlobStorage() :> IBlobStorage
                 let cache = InMemoryEmbeddingCache() :> IEmbeddingCache
-                let h = boot storage cache
+                let factory, teardown = makeFactory ()
+                let h = bootWith factory storage cache
 
                 try
                     let! _ = runSequence (sprintf "seed %d" seed) h Model.empty (generate seed 16)
                     ()
                 finally
                     h.Shutdown()
+                    teardown ()
         }
 
         testAsync "property: the invariant survives a mid-sequence restart that re-hydrates from blob storage" {
@@ -380,8 +410,9 @@ let tests =
                 // by the two reproducers at the bottom of this file.
                 let commands = generate seed 20
                 let half = commands.Length / 2
+                let factory, teardown = makeFactory ()
 
-                let first = boot storage cache
+                let first = bootWith factory storage cache
 
                 let! model = async {
                     try
@@ -395,7 +426,7 @@ let tests =
                 }
 
                 // ── Restart: fresh indexes over the SAME blob storage ──
-                let second = boot storage cache
+                let second = bootWith factory storage cache
 
                 try
                     // The invariant must hold against the RE-LOADED state before
@@ -410,7 +441,7 @@ let tests =
                     second.Shutdown()
 
                 // ── Second restart: the post-sequence state also survives ──
-                let third = boot storage cache
+                let third = bootWith factory storage cache
 
                 try
                     let! afterAll = async {
@@ -425,7 +456,56 @@ let tests =
                     do! assertInvariant (sprintf "seed %d after second restart" seed) afterAll third
                 finally
                     third.Shutdown()
+                    teardown ()
         }
+    ]
+
+/// The database full-text index's live arm, gated on the same variable as
+/// its own pack (`PostgresFullTextIndexTests`).
+[<Literal>]
+let private PostgresConnectionEnvVar = "TOOLUP_PG_FULLTEXT_CONNECTION_STRING"
+
+let private postgresConnectionString =
+    match Environment.GetEnvironmentVariable PostgresConnectionEnvVar with
+    | null
+    | "" -> None
+    | s -> Some s
+
+/// One fresh table per sequence, every boot of the sequence re-opening it,
+/// dropped by the teardown.
+let private postgresFactory (connectionString: string) () : SparseFactory * (unit -> unit) =
+    let dataSource = NpgsqlDataSource.Create connectionString
+
+    let options = {
+        PostgresFullTextOptions.defaults with
+            Table = sprintf "fte_%s" (Guid.NewGuid().ToString("N").Substring(0, 16))
+    }
+
+    let factory: SparseFactory =
+        fun _ ->
+            let index = createWithDataSource dataSource options identity None
+            index, (fun () -> (index :?> IDisposable).Dispose())
+
+    let teardown () =
+        use cmd = dataSource.CreateCommand(sprintf "DROP TABLE IF EXISTS %s;" options.Table)
+        cmd.ExecuteNonQuery() |> ignore
+        dataSource.Dispose()
+
+    factory, teardown
+
+let tests =
+    testList "Phase 204 — cross-index erasure conformance" [
+
+        propertyTests "InMemoryBM25Index" (fun () -> bm25Factory, ignore)
+
+        // Phase 946 — the same two properties over the database full-text
+        // index (Phase 893), on its live arm.
+        match postgresConnectionString with
+        | Some connectionString -> propertyTests "PostgresFullTextIndex" (postgresFactory connectionString)
+        | None ->
+            testList "PostgresFullTextIndex" [
+                ptestCase $"skipped — {PostgresConnectionEnvVar} not set" <| fun _ -> ()
+            ]
 
         testAsync "Erase dryRun = true reports without mutating any index, the cache, or the snapshots at rest" {
             let storage = InMemoryBlobStorage() :> IBlobStorage

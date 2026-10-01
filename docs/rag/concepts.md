@@ -151,7 +151,11 @@ scope in every predicate. It maps the identity analyzer to the `simple` text-sea
 Snowball English analyzer to `english`, and refuses anything else at composition. It ranks with PostgreSQL's
 `ts_rank`, not BM25. That function has no IDF term, so the keyword leg's order (the part fusion reads) can
 differ from the in-process index's. The companion README records the retrieval-evaluation numbers for both
-indexes side by side.
+indexes side by side. Over every shipped fixture, a relevant chunk moved in 2 of 44 query runs, both on the
+same query. Phase 943 measured a BM25 score computed in SQL: it closes that gap, but costs three to six times
+the keyword leg's latency at 100,000 chunks, so `ts_rank` stays. The keyword index's raw score scale (roughly
+[0, 1] here, [0, ~20] in process) does not reach a hybrid retrieval's score, which is in the fused space,
+normalised onto [0, 1] (Phase 866), whichever keyword index is composed.
 
 The `ISparseIndexContract` pack pins scope isolation, deletes that stay deleted across a restart, and the
 ordering of equal scores (`(Scope, ChunkId)`). It is bound to both implementations.

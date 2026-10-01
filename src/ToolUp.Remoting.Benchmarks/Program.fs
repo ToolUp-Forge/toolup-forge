@@ -220,6 +220,8 @@ let private impl: ICorpusApi = {
     Customer = echo
     Envelope = echo
     Tree = echo
+    MapUnionKey = echo
+    TemplatedMessage = echo
 }
 
 /// The options the adapter would build: the default STJ backend with the
