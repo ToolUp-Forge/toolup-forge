@@ -44,8 +44,11 @@ Anthropic serves `claude-*`, Gemini `gemini-*`/`gemma-*`, OpenAI and Copilot any
 neither prefix) and serves the call through a sibling instance bound to that model. A provider that
 **cannot** serve the named id falls back to its configured model and says so in the response —
 the call is never failed for an unservable id. The shipped decorators (`MeteringProvider`,
-`QuotaEnforcingProvider`, `AIFailoverProvider`, `QuotaGatedAIProvider`) forward the override path with
-their own rule applied; metering bills the model that **served**.
+`QuotaEnforcingProvider`, `BudgetEnforcingProvider`, `SpendEnforcingProvider`, `AIFailoverProvider`,
+`QuotaGatedAIProvider`) forward the override path with their own rule applied; metering bills the
+model that **served**. Since Phase 865 the first four share one private `GatedProvider` base that
+forwards the override through a single gate, so a decorator cannot enforce on one interface and skip
+the other.
 
 `FastPathTriageResolver` now honours `Capabilities.TriageModelId` by itself. Precedence:
 
