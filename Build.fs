@@ -3838,6 +3838,29 @@ let main args =
     // The rule, and how a store author chooses between propagating and
     // declaring best-effort: docs/platform/storage-write-results.md.
     //
+    // Phase 960 — the fan-out shape. A list of uploads run through
+    // `Async.Parallel` and then discarded drops every result at once, and no
+    // line of it binds `_` to an upload:
+    //
+    //   do!
+    //       names
+    //       |> List.map (fun name -> storage.Upload(container, name, bytes))
+    //       |> Async.Parallel
+    //       |> Async.Ignore
+    //
+    // Two erasure paths shipped exactly this until Phase 960, so a refused
+    // redaction read as a completed erasure. The check therefore also walks
+    // the EXPRESSION a discard applies to: the pipeline an `Async.Ignore`
+    // ends (its head and every stage, lambda bodies included), and the whole
+    // expression a `let! _ =` binds when it spans several lines. An `Upload`
+    // or `UploadWithETag` call inside whose result is the element's value is
+    // the same discard, reported at the discarding line; the marker is read
+    // there or on the line that makes the call. A call whose result is bound
+    // to a name or matched on inside the element is handled where it is made,
+    // and is not a site. A helper that wraps the call (a function returning the
+    // upload's `Result` under another name) is beyond a textual check and is
+    // held to the rule by review.
+    //
     // Scope: production code under `src/`. Test projects (a directory named
     // `*.Tests`) are excluded — a fixture that seeds a blob is not a store,
     // and its failure fails the test that reads it. Comment lines are
@@ -3887,6 +3910,73 @@ let main args =
             let t = line.TrimStart()
             t.StartsWith "//" || t.StartsWith "(*"
 
+        let asyncIgnore = System.Text.RegularExpressions.Regex(@"\bAsync\.Ignore\b")
+        let indentOf (line: string) = line.Length - line.TrimStart().Length
+        let isBlank (line: string) = line.Trim() = ""
+
+        // The lines of the expression a `let! _ =` on line `i` binds when
+        // the call is not on that line: every following non-blank line
+        // indented deeper than the binding (Phase 960).
+        let boundBelow (lines: string array) (i: int) =
+            let bindIndent = indentOf lines[i]
+
+            seq { i + 1 .. lines.Length - 1 }
+            |> Seq.filter (fun j -> not (isBlank lines[j]))
+            |> Seq.takeWhile (fun j -> indentOf lines[j] > bindIndent)
+            |> Seq.filter (fun j -> not (isComment lines[j]))
+            |> List.ofSeq
+
+        // The lines of the pipeline whose last stage is the `|> …` on line
+        // `i`: up through its `|>` stages and the deeper-indented lines
+        // between them (lambda bodies) to the pipeline's head, head first
+        // (Phase 960).
+        let pipelineAbove (lines: string array) (i: int) =
+            let stageIndent = indentOf lines[i]
+
+            let rec up j acc =
+                if j < 0 then
+                    acc
+                elif isBlank lines[j] || isComment lines[j] then
+                    up (j - 1) acc
+                else
+                    let indent = indentOf lines[j]
+
+                    if
+                        indent > stageIndent
+                        || (indent = stageIndent && lines[j].TrimStart().StartsWith "|>")
+                    then
+                        up (j - 1) (j :: acc)
+                    else
+                        j :: acc
+
+            up (i - 1) []
+
+        let previousNonBlank (lines: string array) (i: int) =
+            seq { i - 1 .. -1 .. 0 } |> Seq.tryFind (fun j -> not (isBlank lines[j]))
+
+        // Inside a discarded expression, a call whose result is bound to a
+        // NAME or matched on is consumed where it is made — the per-element
+        // handling a fan-out should do — so discarding the fan-out's results
+        // drops nothing. Only a call that IS the element's value is a discard
+        // (Phase 960; the seeding fan-out in the RAG load benchmark is the
+        // shape this keeps out).
+        let consumedCall =
+            System.Text.RegularExpressions.Regex(
+                @"\b(let|use)!\s+(?!_\s*=)[^=]*=\s*\S.*\.Upload(WithETag)?\s*\(|\bmatch!\s.*\.Upload(WithETag)?\s*\("
+            )
+
+        let namedBindOnly =
+            System.Text.RegularExpressions.Regex(@"^\s*(let|use)!\s+(?!_\s*=)[^=]*=\s*$")
+
+        let isDiscardedCall (lines: string array) (j: int) =
+            uploadCall.IsMatch lines[j]
+            && not (consumedCall.IsMatch lines[j])
+            && not (
+                match previousNonBlank lines j with
+                | Some k -> namedBindOnly.IsMatch lines[k]
+                | None -> false
+            )
+
         let files = walk srcDir |> List.ofSeq
 
         // (relative path, 1-based line, the discarding text, marked?)
@@ -3904,20 +3994,57 @@ let main args =
                             if oneLine.IsMatch line then
                                 yield rel, i + 1, line.Trim(), marker.IsMatch line
                             elif bindOnly.IsMatch line then
-                                // The two-line layout: the call is the next
-                                // non-blank line.
-                                let next =
-                                    seq { i + 1 .. lines.Length - 1 }
-                                    |> Seq.tryFind (fun j -> lines[j].Trim() <> "")
+                                // The bound expression is on the following
+                                // lines: the call itself (the two-line
+                                // layout), or a fan-out with the call inside
+                                // it (Phase 960).
+                                let bound = boundBelow lines i
 
-                                match next with
-                                | Some j when uploadCall.IsMatch lines[j] && not (isComment lines[j]) ->
+                                match bound |> List.tryFind (isDiscardedCall lines) with
+                                | Some j ->
+                                    let elided = if bound.Head = j then " " else " … "
+
                                     yield
                                         rel,
                                         i + 1,
-                                        line.Trim() + " " + lines[j].Trim(),
+                                        line.Trim() + elided + lines[j].Trim(),
                                         marker.IsMatch line || marker.IsMatch lines[j]
-                                | _ -> ()
+                                | None -> ()
+                            elif asyncIgnore.IsMatch line then
+                                // Phase 960 — `… |> Async.Ignore` over an
+                                // upload, on one line or as the last stage of
+                                // a pipeline (the fan-out shape).
+                                let before = line.Substring(0, asyncIgnore.Match(line).Index)
+
+                                let pipeline =
+                                    if line.TrimStart().StartsWith "|>" then
+                                        pipelineAbove lines i
+                                    else
+                                        []
+
+                                // A pipeline a `let! _ =` binds is reported
+                                // at the binding, by the branch above.
+                                let boundByDiscard =
+                                    match pipeline with
+                                    | head :: _ ->
+                                        match previousNonBlank lines head with
+                                        | Some j -> bindOnly.IsMatch lines[j]
+                                        | None -> false
+                                    | [] -> false
+
+                                let callLine = pipeline |> List.tryFind (isDiscardedCall lines)
+
+                                let sameLine = uploadCall.IsMatch before && not (consumedCall.IsMatch before)
+
+                                if not boundByDiscard && (sameLine || callLine.IsSome) then
+                                    let text =
+                                        match pipeline with
+                                        | head :: _ -> lines[head].Trim() + " … " + line.Trim()
+                                        | [] -> line.Trim()
+
+                                    let markedOnCall = callLine |> Option.exists (fun j -> marker.IsMatch lines[j])
+
+                                    yield rel, i + 1, text, marker.IsMatch line || markedOnCall
                 ])
 
         let marked = sites |> List.filter (fun (_, _, _, m) -> m)
