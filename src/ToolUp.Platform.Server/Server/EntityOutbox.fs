@@ -238,9 +238,20 @@ type OutboxEntityStore
                         let quarantineName =
                             "entity-outbox-poison/" + blobName.Substring(intentPrefix.Length)
 
-                        let! _ = blobStorage.Upload(IntentContainer, quarantineName, bytes)
-                        let! _ = blobStorage.Delete(IntentContainer, blobName)
-                        ()
+                        // Phase 863 — delete only once the copy has landed: a
+                        // refused copy followed by the delete would destroy
+                        // the only record of the poison intent.
+                        match! blobStorage.Upload(IntentContainer, quarantineName, bytes) with
+                        | Ok _ ->
+                            let! _ = blobStorage.Delete(IntentContainer, blobName)
+                            ()
+                        | Error storageError ->
+                            logger.Error(
+                                $"[EntityOutbox] event=intent_quarantine_failed blob={blobName}: {storageError} — left in place; the next pass retries",
+                                None
+                            )
+
+                            halted <- true
                     | Error _ ->
                         // Could not even read the bytes — leave in place;
                         // a transient storage failure clears next pass.

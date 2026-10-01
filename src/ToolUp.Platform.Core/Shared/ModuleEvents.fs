@@ -43,6 +43,13 @@ type IEventStore =
     /// it. Write ordering across concurrent callers is serialised by the
     /// implementation (per-store FIFO); `Id` and `OccurredAt` are the
     /// authoritative timestamps for downstream consumers.
+    ///
+    /// **A write that did not persist RAISES (Phase 863).** The return
+    /// type carries no failure, so an implementation whose backing store
+    /// reports one as data (an `Error` result) must raise it rather than
+    /// complete: callers — the audit log's failure policy first among
+    /// them — detect a lost write by the exception, and one that
+    /// completes normally is read as persisted.
     abstract Write: ModuleEvent -> Async<unit>
     /// Read all events for a given scope, reverse-chronological by
     /// `OccurredAt`. No guarantee across partitions in distributed

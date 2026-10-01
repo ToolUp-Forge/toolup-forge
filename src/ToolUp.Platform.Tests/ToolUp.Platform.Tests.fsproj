@@ -2053,6 +2053,9 @@
              deferral as the 69l pack. -->
         <Compile Include="InProcess\DispatcherBodyAndArgFastpathTests.fs" />
         <Compile Include="InProcess\ServerRemotingTailTests.fs" />
+        <!-- Phase 869 - a graceful stop flushes the retrieval stores, drains or hands
+             back in-flight ingestion, and cancels then drains job dispatches. -->
+        <Compile Include="InProcess\ShutdownDrainTests.fs" />
         <!-- Phase 69n — fromContextAsync build-once dispatcher table.
              Textual checks pin the buildDispatcherTable carve-out + the
              `let dispatch = ...` compose-time bind in the FromContextAsync

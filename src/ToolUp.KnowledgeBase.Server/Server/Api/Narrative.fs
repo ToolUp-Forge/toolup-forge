@@ -180,136 +180,141 @@ let ingestNarrative
                     Tags = []
                 }
 
-                // Vector-chunk cleanup on overwrite. When the regenerated
-                // narrative has fewer sections than the prior version,
-                // trailing chunks (indices chunks.Length..oldN-1) would
-                // orphan in the vector store — the re-ingestion's
-                // Upsert paths cover 0..N-1 but leave the tail untouched,
-                // so RAG retrieval keeps surfacing stale section content
-                // under the live document id. Delete the tail now while
-                // we still know the old chunk count from the prior
-                // KnowledgeDocument; falls through silently when no
-                // vector store is wired (test harnesses) or when the
-                // new section count meets or exceeds the old.
-                //
-                // 0.4.3 — per-chunk DeleteChunk failures are caught,
-                // counted, and surfaced as a single summary log line.
-                // Previously they were swallowed silently; a partial
-                // failure left orphans in the store and RAG kept
-                // surfacing them under the live document id with no
-                // operator signal.
-                //
-                // Phase 115 — the tail delete routes through the unified
-                // lifecycle seam so the sparse index sheds the stale
-                // sections too (pre-115 the `vs.DeleteChunk` loop left
-                // them retrievable through the hybrid sparse leg). The
-                // seam carries the per-chunk failure isolation + survivor
-                // reporting this block used to hand-roll.
-                match duplicate, deps.IndexLifecycle with
-                | Some existingDoc, Some lifecycle when chunks.Length < existingDoc.ChunkCount ->
-                    let mutable orphanIds: string list = []
+                // Persist rendered markdown so the document can be re-read
+                // even if the embedding/store is rebuilt. Phase 863 — FIRST,
+                // ahead of the tail cleanup, the index entry and the enqueue, so a
+                // refused write fails the commit with nothing else moved.
+                let rawBlobName = sprintf "knowledge/%s/%s" docId fileName
 
-                    for i in chunks.Length .. existingDoc.ChunkCount - 1 do
-                        let chunkId = sprintf "%s:chunk:%d" docId i
-                        let! report = lifecycle.DeleteChunk deps.VectorScope chunkId
+                match! deps.Storage.Upload(deps.Scope.Container, rawBlobName, Encoding.UTF8.GetBytes fullMarkdown) with
+                | Error storageError ->
+                    return Error(IngestFailed(sprintf "The narrative could not be stored: %s" storageError))
+                | Ok _ ->
+                    // Vector-chunk cleanup on overwrite. When the regenerated
+                    // narrative has fewer sections than the prior version,
+                    // trailing chunks (indices chunks.Length..oldN-1) would
+                    // orphan in the vector store — the re-ingestion's
+                    // Upsert paths cover 0..N-1 but leave the tail untouched,
+                    // so RAG retrieval keeps surfacing stale section content
+                    // under the live document id. Delete the tail now while
+                    // we still know the old chunk count from the prior
+                    // KnowledgeDocument; falls through silently when no
+                    // vector store is wired (test harnesses) or when the
+                    // new section count meets or exceeds the old.
+                    //
+                    // 0.4.3 — per-chunk DeleteChunk failures are caught,
+                    // counted, and surfaced as a single summary log line.
+                    // Previously they were swallowed silently; a partial
+                    // failure left orphans in the store and RAG kept
+                    // surfacing them under the live document id with no
+                    // operator signal.
+                    //
+                    // Phase 115 — the tail delete routes through the unified
+                    // lifecycle seam so the sparse index sheds the stale
+                    // sections too (pre-115 the `vs.DeleteChunk` loop left
+                    // them retrievable through the hybrid sparse leg). The
+                    // seam carries the per-chunk failure isolation + survivor
+                    // reporting this block used to hand-roll.
+                    match duplicate, deps.IndexLifecycle with
+                    | Some existingDoc, Some lifecycle when chunks.Length < existingDoc.ChunkCount ->
+                        let mutable orphanIds: string list = []
 
-                        if not (ToolUp.Platform.IIndexLifecycle.IndexLifecycleReport.isClean report) then
-                            orphanIds <- chunkId :: orphanIds
+                        for i in chunks.Length .. existingDoc.ChunkCount - 1 do
+                            let chunkId = sprintf "%s:chunk:%d" docId i
+                            let! report = lifecycle.DeleteChunk deps.VectorScope chunkId
 
+                            if not (ToolUp.Platform.IIndexLifecycle.IndexLifecycleReport.isClean report) then
+                                orphanIds <- chunkId :: orphanIds
+
+                                deps.Logger.Warn(
+                                    sprintf
+                                        "[KnowledgeBase] Orphan-chunk delete failed for %s (docId=%s scope=%s): %s"
+                                        chunkId
+                                        docId
+                                        deps.Scope.ScopeId
+                                        (ToolUp.Platform.IIndexLifecycle.IndexLifecycleReport.summarise report)
+                                )
+
+                        if not (List.isEmpty orphanIds) then
                             deps.Logger.Warn(
                                 sprintf
-                                    "[KnowledgeBase] Orphan-chunk delete failed for %s (docId=%s scope=%s): %s"
-                                    chunkId
+                                    "[KnowledgeBase] %d orphan chunk(s) remain in the retrieval indexes for docId=%s after narrative overwrite; RAG may surface stale section content. Surviving chunk ids: %s"
+                                    orphanIds.Length
                                     docId
-                                    deps.Scope.ScopeId
-                                    (ToolUp.Platform.IIndexLifecycle.IndexLifecycleReport.summarise report)
+                                    (orphanIds |> List.rev |> String.concat "; ")
                             )
+                    | _ -> ()
 
-                    if not (List.isEmpty orphanIds) then
-                        deps.Logger.Warn(
-                            sprintf
-                                "[KnowledgeBase] %d orphan chunk(s) remain in the retrieval indexes for docId=%s after narrative overwrite; RAG may surface stale section content. Surviving chunk ids: %s"
-                                orphanIds.Length
-                                docId
-                                (orphanIds |> List.rev |> String.concat "; ")
-                        )
-                | _ -> ()
+                    // Phase 116 — atomic index RMW (see `upsertIndexEntry`).
+                    // Released before the enqueue block below (which can route
+                    // through `MarkIngestionFailed` → `updateIndexStatus`). The
+                    // provenance duplicate-check above still reads outside the
+                    // lock; concurrent same-provenance commits remain a
+                    // last-writer race (residual, addressed by the deferred
+                    // ETag CAS), but neither write is lost from the index.
+                    do! upsertIndexEntry deps.Storage deps.Scope.Container doc
 
-                // Persist rendered markdown so the document can be re-read
-                // even if the embedding/store is rebuilt.
-                let rawBlobName = sprintf "knowledge/%s/%s" docId fileName
-                let! _ = deps.Storage.Upload(deps.Scope.Container, rawBlobName, Encoding.UTF8.GetBytes fullMarkdown)
+                    let mutable returnedDoc = doc
 
-                // Phase 116 — atomic index RMW (see `upsertIndexEntry`).
-                // Released before the enqueue block below (which can route
-                // through `MarkIngestionFailed` → `updateIndexStatus`). The
-                // provenance duplicate-check above still reads outside the
-                // lock; concurrent same-provenance commits remain a
-                // last-writer race (residual, addressed by the deferred
-                // ETag CAS), but neither write is lost from the index.
-                do! upsertIndexEntry deps.Storage deps.Scope.Container doc
+                    if box deps.Queue <> null && not chunks.IsEmpty then
+                        // Seed before enqueue so an early observer firing isn't
+                        // overwritten. Same pattern as the upload path above.
+                        let initialStatus = Embedding(0, chunks.Length)
 
-                let mutable returnedDoc = doc
+                        updateStatus docId initialStatus (fun existing ->
+                            match existing with
+                            | Queued -> initialStatus
+                            | other -> other)
 
-                if box deps.Queue <> null && not chunks.IsEmpty then
-                    // Seed before enqueue so an early observer firing isn't
-                    // overwritten. Same pattern as the upload path above.
-                    let initialStatus = Embedding(0, chunks.Length)
+                        let chunkPairs =
+                            chunks |> List.mapi (fun i chunk -> sprintf "%s:chunk:%d" docId i, chunk)
 
-                    updateStatus docId initialStatus (fun existing ->
-                        match existing with
-                        | Queued -> initialStatus
-                        | other -> other)
+                        // Phase 867 — record the attempt before the enqueue.
+                        let! attempt =
+                            beginIngestionAttempt deps.Storage deps.Logger deps.Scope.Container docId chunkPairs.Length
 
-                    let chunkPairs =
-                        chunks |> List.mapi (fun i chunk -> sprintf "%s:chunk:%d" docId i, chunk)
-
-                    // Phase 867 — record the attempt before the enqueue.
-                    let! attempt =
-                        beginIngestionAttempt deps.Storage deps.Logger deps.Scope.Container docId chunkPairs.Length
-
-                    let job: DocumentIngestionJob = {
-                        DocumentId = docId
-                        DocumentName = fileName
-                        Chunks = chunkPairs
-                        Scope = deps.VectorScope
-                        ScopeId = deps.Scope.ScopeId
-                        Container = deps.Scope.Container
-                        OriginatingUserId = Some deps.UserId
-                        Attempt = Some attempt
-                    }
-
-                    // Phase 723 — async enqueue: the sync form is a
-                    // blocking store round-trip on the request thread
-                    // once a deployment composes a durable queue.
-                    let! accepted = deps.Queue.EnqueueAsync(job)
-                    deps.RecordEnqueue accepted
-
-                    if not accepted then
-                        let reason =
-                            sprintf
-                                "Knowledge-base ingestion queue is full (%d/%d). Try again in a few seconds."
-                                deps.Queue.Count
-                                deps.Queue.Capacity
-
-                        do! deps.MarkIngestionFailed docId fileName reason
-
-                        returnedDoc <- {
-                            doc with
-                                Status = IngestionStatus.Failed reason
+                        let job: DocumentIngestionJob = {
+                            DocumentId = docId
+                            DocumentName = fileName
+                            Chunks = chunkPairs
+                            Scope = deps.VectorScope
+                            ScopeId = deps.Scope.ScopeId
+                            Container = deps.Scope.Container
+                            OriginatingUserId = Some deps.UserId
+                            Attempt = Some attempt
                         }
-                elif chunks.IsEmpty then
-                    setStatus docId (Complete 0)
 
-                // Nudge the KB client to reload its document list.
-                // The notification scope is the user id (matches the
-                // SSE subscription filter); the payload's `scopeId`
-                // carries the storage scope for downstream consumers
-                // that need it.
-                do! deps.Notifications.Publish(deps.UserId, DataRefreshed("KnowledgeBase", deps.Scope.ScopeId))
-                do! deps.PublishInventory()
+                        // Phase 723 — async enqueue: the sync form is a
+                        // blocking store round-trip on the request thread
+                        // once a deployment composes a durable queue.
+                        let! accepted = deps.Queue.EnqueueAsync(job)
+                        deps.RecordEnqueue accepted
 
-                return Ok returnedDoc
+                        if not accepted then
+                            let reason =
+                                sprintf
+                                    "Knowledge-base ingestion queue is full (%d/%d). Try again in a few seconds."
+                                    deps.Queue.Count
+                                    deps.Queue.Capacity
+
+                            do! deps.MarkIngestionFailed docId fileName reason
+
+                            returnedDoc <- {
+                                doc with
+                                    Status = IngestionStatus.Failed reason
+                            }
+                    elif chunks.IsEmpty then
+                        setStatus docId (Complete 0)
+
+                    // Nudge the KB client to reload its document list.
+                    // The notification scope is the user id (matches the
+                    // SSE subscription filter); the payload's `scopeId`
+                    // carries the storage scope for downstream consumers
+                    // that need it.
+                    do! deps.Notifications.Publish(deps.UserId, DataRefreshed("KnowledgeBase", deps.Scope.ScopeId))
+                    do! deps.PublishInventory()
+
+                    return Ok returnedDoc
     }
 
 /// Wipe body for `resetIndex`. Authorization (owner/admin in Team /

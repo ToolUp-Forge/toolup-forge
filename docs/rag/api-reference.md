@@ -226,7 +226,7 @@ Mirrored `AIServerApp` builders (all `withConfig`, `withAuth`, `withStorage`, ..
 
 RAG-specific builders:
 - `withTopK: int -> RAGServerApp -> RAGServerApp` (default 5)
-- `withMinScore: float option -> RAGServerApp -> RAGServerApp` (default 0.3)
+- `withMinScore: float option -> RAGServerApp -> RAGServerApp` (default `None` — no score gate; since Phase 866 the threshold reads the pipeline's score space: under the hybrid default the fused scores are min-max normalised per query onto `[0, 1]` so the best match scores `1.0`, and under dense-only (`withoutSparseIndex`) it reads raw cosine similarity)
 - `withMergeStrategy: MergeStrategy -> RAGServerApp -> RAGServerApp` (default `Interleaved`)
 - `withSnippetCharLimit: int -> RAGServerApp -> RAGServerApp` (default 1500)
 - `withOriginFilter: Set<ChunkOrigin> option -> RAGServerApp -> RAGServerApp` (default `None`)

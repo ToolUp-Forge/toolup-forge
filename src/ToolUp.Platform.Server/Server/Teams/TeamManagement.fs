@@ -568,9 +568,13 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
         let! memberships = this.LoadMemberships(userId)
 
         if memberships |> List.exists (fun m -> m.TeamId = teamId) then
-            let! _ = storage.Upload(platformContainer, activeTeamBlobName userId, Encoding.UTF8.GetBytes(teamId))
-            do! publishChange teamId userId MembershipChangeKind.ActiveTeamSet
-            return Ok()
+            // Phase 863 — a refused write is the caller's failure, and
+            // nothing is published for a change that did not happen.
+            match! storage.Upload(platformContainer, activeTeamBlobName userId, Encoding.UTF8.GetBytes(teamId)) with
+            | Ok _ ->
+                do! publishChange teamId userId MembershipChangeKind.ActiveTeamSet
+                return Ok()
+            | Error storageError -> return Error(sprintf "The active team could not be saved: %s" storageError)
         else
             return Error "User is not a member of this team"
     }

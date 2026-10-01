@@ -36,6 +36,67 @@ type private FaultingEventStore() =
             return Ok(Unchecked.defaultof<ErasureSummary>)
         }
 
+// ─── Phase 863 — the DEFAULT store reports a failed write ────────────
+//
+// Every case above drives the policy with an `IEventStore` that THROWS.
+// The default store never did: `PersistentEventStore.Write` discarded
+// the `Result` of `IBlobStorage.Upload`, and every shipped blob store
+// reports failure as `Error`, so under the default composition a lost
+// audit row was counted as a success — no counter, no refusal, no spill.
+// These cases drive the policy through the real store over a blob
+// double whose `Upload` returns `Error`.
+
+/// Returns `Error` from `Upload` for blob names matching `shouldFail`,
+/// passing every other operation through to `inner`.
+type private WriteFailingBlobStorage(inner: BlobStorage.IBlobStorage, shouldFail: string -> bool) =
+    interface BlobStorage.IBlobStorage with
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            BlobStorage.composeNotSupported "test double"
+
+        member _.Upload(container, blobName, content) =
+            if shouldFail blobName then
+                async { return Error "simulated storage write failure" }
+            else
+                inner.Upload(container, blobName, content)
+
+        member _.Download(container, blobName) = inner.Download(container, blobName)
+        member _.Delete(container, blobName) = inner.Delete(container, blobName)
+        member _.List(container, prefix) = inner.List(container, prefix)
+        member _.Exists(container, blobName) = inner.Exists(container, blobName)
+        member _.GetMetadata(container, blobName) = inner.GetMetadata(container, blobName)
+
+        member _.DownloadRange(container, blobName, offset, length) =
+            inner.DownloadRange(container, blobName, offset, length)
+
+        member _.Erase(container, prefix, policy, dryRun) =
+            inner.Erase(container, prefix, policy, dryRun)
+
+/// Records every counter increment, so a case can assert the failure
+/// was COUNTED as well as acted on.
+type private CountingMetricsSink() =
+    let increments = System.Collections.Concurrent.ConcurrentBag<string>()
+
+    member _.Count(name: string) =
+        increments |> Seq.filter ((=) name) |> Seq.length
+
+    interface Metrics.IMetricsSink with
+        member _.Record(_name, _value, _tags) = ()
+        member _.Increment(name, _tags) = increments.Add name
+        member _.SetGauge(_name, _value, _tags) = ()
+
+/// The default event store over a blob whose writes fail for `shouldFail`.
+let private defaultStoreFailing (shouldFail: string -> bool) =
+    let blob =
+        WriteFailingBlobStorage(ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.InMemoryBlobStorage(), shouldFail)
+
+    PersistentEventStore.PersistentEventStore(blob, EventRetentionPolicy.unlimited) :> IEventStore
+
+/// True for the secondary-index refs, false for the canonical event blob.
+let private isIndexRef (blobName: string) =
+    blobName.Contains "/_by-type/" || blobName.Contains "/_by-source/"
+
 let private freshFallbackRoot () =
     let root =
         Path.Combine(Path.GetTempPath(), "toolup-audit-fallback-tests-" + Guid.NewGuid().ToString("N"))
@@ -164,5 +225,76 @@ let tests =
                 |> List.ofSeq
 
             Expect.equal quarantined.Length 1 "poison file quarantined, not deleted"
+        }
+
+        test "Phase 863 — RefuseAction over the DEFAULT store refuses a failed blob write and counts it" {
+            let sink = CountingMetricsSink()
+
+            let auditLog =
+                AuditLog.EventStoreAuditLog(
+                    defaultStoreFailing (fun _ -> true),
+                    silentLogger,
+                    (fun () -> sink :> Metrics.IMetricsSink),
+                    failurePolicy = RefuseAction
+                )
+                :> IAuditLog
+
+            Expect.throwsT<AuditLog.AuditWriteRefusedException>
+                (fun () -> auditLog.Record("team-acme", sampleAudit "alice") |> Async.RunSynchronously)
+                "an Upload that returned Error must refuse the action, exactly as a throwing store does"
+
+            Expect.equal
+                (sink.Count AuditLog.AuditMetrics.WriteFailuresTotal)
+                1
+                "the lost write is counted, not recorded as a success"
+        }
+
+        test "Phase 863 — LogAndContinue over the DEFAULT store counts a failed blob write without failing" {
+            let sink = CountingMetricsSink()
+
+            let auditLog =
+                AuditLog.EventStoreAuditLog(
+                    defaultStoreFailing (fun _ -> true),
+                    silentLogger,
+                    (fun () -> sink :> Metrics.IMetricsSink),
+                    failurePolicy = LogAndContinue
+                )
+                :> IAuditLog
+
+            auditLog.Record("team-acme", sampleAudit "alice") |> Async.RunSynchronously
+
+            Expect.equal
+                (sink.Count AuditLog.AuditMetrics.WriteFailuresTotal)
+                1
+                "the lost write is counted under the default policy too"
+        }
+
+        test "Phase 863 — the default store's Write raises a typed EventStoreWriteException on a failed upload" {
+            let store = defaultStoreFailing (fun name -> not (isIndexRef name))
+
+            let raised =
+                match
+                    Async.Catch(store.Write(Events.create "team-acme" "_platform.audit" "UserLoggedIn" "{}"))
+                    |> Async.RunSynchronously
+                with
+                | Choice1Of2() -> None
+                | Choice2Of2 ex -> Some ex
+
+            match raised with
+            | Some(:? PersistentEventStore.EventStoreWriteException as ex) ->
+                Expect.stringContains ex.Message "simulated storage write failure" "the storage error is carried"
+            | Some other -> failtestf "expected EventStoreWriteException, got %s" (other.GetType().FullName)
+            | None -> failtest "a failed canonical upload must not complete the write"
+        }
+
+        test "Phase 863 — a failed INDEX write stays best-effort: the canonical event is written and readable" {
+            let store = defaultStoreFailing isIndexRef
+            let evt = Events.create "team-acme" "_platform.audit" "UserLoggedIn" "{}"
+
+            // Must not throw — the canonical blob is authoritative.
+            store.Write evt |> Async.RunSynchronously
+
+            let all = store.ReadAll "team-acme" |> Async.RunSynchronously
+            Expect.equal (all |> List.map _.Id) [ evt.Id ] "the canonical event persisted despite the index failure"
         }
     ]

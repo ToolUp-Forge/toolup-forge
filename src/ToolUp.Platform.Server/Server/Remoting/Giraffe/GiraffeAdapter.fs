@@ -1835,14 +1835,36 @@ module internal GiraffeUtil =
                                                 RequestBodyHash = bodyHash
                                             }
 
-                                            do!
+                                            let! stored =
                                                 options.IdempotencyStore.Value.Store(
                                                     idempotencyKey.Value,
                                                     scope,
                                                     response,
                                                     options.IdempotencyTtl
                                                 )
+                                                |> Async.Catch
                                                 |> Async.StartAsTask
+
+                                            // Phase 863 — a store that could not
+                                            // write RAISES, and the call is then NOT
+                                            // memoised: a retry with this key runs the
+                                            // handler again. The answer has already
+                                            // been written to the caller and the
+                                            // handler's effect has happened, so the
+                                            // call is not failed — it is reported, and
+                                            // the audit emission below still runs.
+                                            match stored with
+                                            | Choice1Of2() -> ()
+                                            | Choice2Of2 storeFailure ->
+                                                let line =
+                                                    sprintf
+                                                        "[remoting] idempotency store write FAILED in %s — the call was answered but is NOT memoised; a retry with the same X-Idempotency-Key re-executes the handler: %s: %s"
+                                                        methodName
+                                                        (storeFailure.GetType().FullName)
+                                                        storeFailure.Message
+
+                                                eprintfn "%s" line
+                                                options.DiagnosticsLogger |> Option.iter (fun log -> log line)
 
                                         // Phase 69h — audit emission after successful invocation.
                                         // Looks up the method's audit kind (if any) and emits an

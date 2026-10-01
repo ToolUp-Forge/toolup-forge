@@ -3809,6 +3809,146 @@ let main args =
             pointersChecked
             citationsResolved)
 
+    // Phase 863 — a discarded upload result is a build failure.
+    //
+    // `IBlobStorage.Upload` returns `Async<Result<string, string>>` and every
+    // shipped blob store reports a failed write as `Error`, never as an
+    // exception. So `let! _ = storage.Upload(...)` is a write that cannot
+    // fail as far as its caller knows: before this phase the default event
+    // store did it, which made a lost audit row count as a success under
+    // every audit failure policy, and the blob idempotency store did it,
+    // which let a retry re-execute a call it claimed to have memoised.
+    //
+    // The check is textual and deliberately narrow — the shape that has
+    // actually shipped, in the two layouts Fantomas produces for it:
+    //
+    //   let! _ = storage.Upload(container, name, bytes)
+    //   let! _ =
+    //       storage.Upload(container, name, bytes)
+    //
+    // `UploadWithETag` (the conditional write) is the same call for this
+    // purpose and is matched too: its `Result` says whether the write — or
+    // the precondition — held, and discarding it discards both.
+    //
+    // Where best-effort IS the design the site matches the `Error` and logs
+    // it at Warn, which is not this shape. A discard that must stay a
+    // discard carries the marker `// best-effort-write: <why>` on the
+    // discarding line (either line of the two-line form) — one line that
+    // says so, where a reader meets it.
+    // The rule, and how a store author chooses between propagating and
+    // declaring best-effort: docs/platform/storage-write-results.md.
+    //
+    // Scope: production code under `src/`. Test projects (a directory named
+    // `*.Tests`) are excluded — a fixture that seeds a blob is not a store,
+    // and its failure fails the test that reads it. Comment lines are
+    // skipped, so prose quoting the pattern is not a finding.
+    //
+    // Usage: `dotnet run --project Build.fsproj -- VerifyUploadResults`
+    //        `… -- VerifyUploadResults --root <dir>` scans `<dir>/src` instead
+    //        of this repository's (how the check is shown red on a planted
+    //        discard without touching the tree).
+    Target.create "VerifyUploadResults" (fun _ ->
+        let root =
+            match args |> Array.tryFindIndex ((=) "--root") with
+            | Some i when i + 1 < args.Length -> Path.GetFullPath args[i + 1]
+            | _ -> __SOURCE_DIRECTORY__
+
+        let srcDir = Path.Combine(root, "src")
+
+        if not (Directory.Exists srcDir) then
+            failwithf "VerifyUploadResults: no `src` directory under %s — nothing to scan is not a pass." root
+
+        let toSlash (s: string) = s.Replace('\\', '/')
+
+        let rec walk (dir: string) = seq {
+            for d in Directory.EnumerateDirectories dir do
+                let name = Path.GetFileName d
+
+                if
+                    name <> "bin"
+                    && name <> "obj"
+                    && name <> "output"
+                    && name <> "node_modules"
+                    && not (name.EndsWith ".Tests")
+                then
+                    yield! walk d
+
+            yield! Directory.EnumerateFiles(dir, "*.fs")
+        }
+
+        let oneLine =
+            System.Text.RegularExpressions.Regex(@"^\s*let!\s+_\s*=\s*\S.*\.Upload(WithETag)?\s*\(")
+
+        let bindOnly = System.Text.RegularExpressions.Regex(@"^\s*let!\s+_\s*=\s*$")
+        let uploadCall = System.Text.RegularExpressions.Regex(@"\.Upload(WithETag)?\s*\(")
+        let marker = System.Text.RegularExpressions.Regex(@"//\s*best-effort-write:\s*\S")
+
+        let isComment (line: string) =
+            let t = line.TrimStart()
+            t.StartsWith "//" || t.StartsWith "(*"
+
+        let files = walk srcDir |> List.ofSeq
+
+        // (relative path, 1-based line, the discarding text, marked?)
+        let sites =
+            files
+            |> List.collect (fun file ->
+                let rel = toSlash (Path.GetRelativePath(root, file))
+                let lines = File.ReadAllLines file
+
+                [
+                    for i in 0 .. lines.Length - 1 do
+                        let line = lines[i]
+
+                        if not (isComment line) then
+                            if oneLine.IsMatch line then
+                                yield rel, i + 1, line.Trim(), marker.IsMatch line
+                            elif bindOnly.IsMatch line then
+                                // The two-line layout: the call is the next
+                                // non-blank line.
+                                let next =
+                                    seq { i + 1 .. lines.Length - 1 }
+                                    |> Seq.tryFind (fun j -> lines[j].Trim() <> "")
+
+                                match next with
+                                | Some j when uploadCall.IsMatch lines[j] && not (isComment lines[j]) ->
+                                    yield
+                                        rel,
+                                        i + 1,
+                                        line.Trim() + " " + lines[j].Trim(),
+                                        marker.IsMatch line || marker.IsMatch lines[j]
+                                | _ -> ()
+                ])
+
+        let marked = sites |> List.filter (fun (_, _, _, m) -> m)
+        let unmarked = sites |> List.filter (fun (_, _, _, m) -> not m)
+
+        Trace.tracefn ""
+        Trace.tracefn "VerifyUploadResults summary:"
+        Trace.tracefn "  source files    : %d (src/**/*.fs, test projects excluded)" files.Length
+
+        Trace.tracefn
+            "  discarded uploads: %d — %d marked best-effort, %d unmarked"
+            sites.Length
+            marked.Length
+            unmarked.Length
+
+        if not unmarked.IsEmpty then
+            Trace.tracefn ""
+
+            for (rel, line, text, _) in unmarked do
+                Trace.traceError (sprintf "    %s:%d: %s" rel line text)
+
+            failwithf
+                "VerifyUploadResults: %d site(s) discard the Result of an `Upload`. A failed write must reach its caller: propagate it (match on the Result; raise where the enclosing signature carries no failure), or — where best-effort is the DESIGN — match the Error and log it at Warn. A discard that must stay a discard says why with `// best-effort-write: <why>` on the line. See docs/platform/storage-write-results.md."
+                unmarked.Length
+
+        Trace.tracefn ""
+
+        Trace.tracefn
+            "VerifyUploadResults: OK — no unmarked discarded upload result (%d marked best-effort)."
+            marked.Length)
+
     // App-specific target: Azure deployment
     Target.create "Deploy-CD" (fun _ ->
         let dotnet args dir =

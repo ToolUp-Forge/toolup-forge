@@ -146,8 +146,20 @@ type BlobBackedLifecycleLedger(blobs: IBlobStorage) =
                     arr.Add(JsonValue.Create name)
 
                 let bytes = Encoding.UTF8.GetBytes(arr.ToJsonString())
-                let! _ = blobs.Upload(ledgerContainer, blobName scopeId phase, bytes)
-                return ()
+
+                // Phase 863 — the ledger is what a resumed sweep trusts, so a
+                // refused write raises rather than reading as recorded; the
+                // lifecycle job turns it into a transient failure and the
+                // retry resumes from the last hook that WAS recorded.
+                match! blobs.Upload(ledgerContainer, blobName scopeId phase, bytes) with
+                | Ok _ -> return ()
+                | Error storageError ->
+                    return
+                        failwithf
+                            "BlobBackedLifecycleLedger: recording hook %s for %s could not be written: %s"
+                            hookName
+                            scopeId
+                            storageError
             }
 
         member _.Clear(scopeId: string, phase: TenantLifecyclePhase) : Async<unit> = async {

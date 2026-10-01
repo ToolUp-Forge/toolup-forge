@@ -55,6 +55,24 @@ type private CountingEmitter() =
     interface IAuditEmitter with
         member _.Emit event = async { lock events (fun () -> events.Add event) }
 
+/// Phase 863 — a blob store whose every `Upload` returns `Error` (and
+/// which holds nothing), for the memoisation-write failure cases.
+type private WriteFailingBlobStorage() =
+    interface ToolUp.Platform.BlobStorage.IBlobStorage with
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            ToolUp.Platform.BlobStorage.composeNotSupported "test double"
+
+        member _.Upload(_, _, _) = async { return Error "simulated storage write failure" }
+        member _.Download(_, _) = async { return Error "not found" }
+        member _.DownloadRange(_, _, _, _) = async { return Error "not found" }
+        member _.Delete(_, _) = async { return Ok() }
+        member _.List(_, _) = async { return [] }
+        member _.Exists(_, _) = async { return false }
+        member _.GetMetadata(_, _) = async { return Error "not found" }
+        member _.Erase(_, _, _, _) = async { return failwith "not exercised" }
+
 let private dummyResolver (_: HttpContext) : Async<IAuthContext> = async {
     return
         { new IAuthContext with
@@ -155,5 +173,57 @@ let tests =
                 (replayEvt.Payload |> Map.tryFind "idempotencyKey")
                 (Some key)
                 "the IdempotencyReplay event cites the original via the shared idempotency key"
+        }
+
+        // ── Phase 863 — a failed memoisation write is never reported as memoised ──
+        testAsync "Phase 863 — BlobIdempotencyStore.Store over a failing blob write raises instead of reporting success" {
+            let store = BlobIdempotencyStore(WriteFailingBlobStorage()) :> IIdempotencyStore
+
+            let response: MemoisedResponse = {
+                Body = [| 1uy |]
+                StatusCode = 200
+                ContentType = "application/json"
+                RequestBodyHash = ""
+            }
+
+            let! stored = Async.Catch(store.Store("k", "s", response, System.TimeSpan.FromHours 1.0))
+
+            match stored with
+            | Choice1Of2() -> failtest "a Store whose Upload returned Error reported the call as memoised"
+            | Choice2Of2 ex ->
+                Expect.stringContains ex.Message "simulated storage write failure" "the storage error is carried"
+
+            let! hit = store.TryGet("k", "s")
+            Expect.isNone hit "nothing was memoised"
+        }
+
+        testAsync "Phase 863 — the dispatcher answers, audits, and does NOT memoise when the store write fails" {
+            let emitter = CountingEmitter()
+            let store = BlobIdempotencyStore(WriteFailingBlobStorage()) :> IIdempotencyStore
+            let invocations = ref 0
+            use host = buildHost (buildHandler emitter store invocations)
+            do! host.StartAsync() |> Async.AwaitTask
+            use client = host.GetTestClient()
+
+            let key = "idem-key-failing-store"
+            let body = """[{"WidgetId":"w-1"}]"""
+
+            let! (status1, replay1, _) = post client key body
+            let! (status2, replay2, _) = post client key body
+
+            do! host.StopAsync() |> Async.AwaitTask
+
+            Expect.equal status1 HttpStatusCode.OK "the handler ran and its answer reaches the caller"
+            Expect.equal status2 HttpStatusCode.OK "the retry is answered too"
+            Expect.isFalse replay1 "the first call is a fresh invocation"
+            Expect.isFalse replay2 "the retry is NOT a replay — nothing was memoised"
+            Expect.equal invocations.Value 2 "the retry re-executes, because the memoisation write failed"
+
+            Expect.equal
+                (emitter.Events
+                 |> List.filter (fun e -> e.Kind = AuditKind.PolicyChanged)
+                 |> List.length)
+                2
+                "a failed memoisation write does not skip the method's own audit event"
         }
     ]

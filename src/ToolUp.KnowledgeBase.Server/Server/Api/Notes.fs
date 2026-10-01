@@ -68,68 +68,71 @@ let addNote (deps: KnowledgeApiDeps) (req: AddNoteRequest) : Async<Result<Knowle
             }
 
             // Persist raw body so the note round-trips even if the
-            // vector store is rebuilt — same shape as narrative-commit.
+            // vector store is rebuilt — same shape as narrative-commit. Phase
+            // 863 — a refused write fails the add before the index entry.
             let rawBlobName = sprintf "knowledge/%s/note.md" docId
-            let! _ = deps.Storage.Upload(deps.Scope.Container, rawBlobName, Encoding.UTF8.GetBytes body)
 
-            // Phase 116 — atomic index RMW (see `upsertIndexEntry`).
-            // Released before the enqueue block below, which can route
-            // through `MarkIngestionFailed` → `updateIndexStatus` and
-            // re-acquire the same container lock.
-            do! upsertIndexEntry deps.Storage deps.Scope.Container doc
+            match! deps.Storage.Upload(deps.Scope.Container, rawBlobName, Encoding.UTF8.GetBytes body) with
+            | Error storageError -> return Error(sprintf "The note could not be saved: %s" storageError)
+            | Ok _ ->
+                // Phase 116 — atomic index RMW (see `upsertIndexEntry`).
+                // Released before the enqueue block below, which can route
+                // through `MarkIngestionFailed` → `updateIndexStatus` and
+                // re-acquire the same container lock.
+                do! upsertIndexEntry deps.Storage deps.Scope.Container doc
 
-            let mutable returnedDoc = doc
+                let mutable returnedDoc = doc
 
-            if box deps.Queue <> null && not chunks.IsEmpty then
-                let initialStatus = Embedding(0, chunks.Length)
+                if box deps.Queue <> null && not chunks.IsEmpty then
+                    let initialStatus = Embedding(0, chunks.Length)
 
-                updateStatus docId initialStatus (fun existing ->
-                    match existing with
-                    | Queued -> initialStatus
-                    | other -> other)
+                    updateStatus docId initialStatus (fun existing ->
+                        match existing with
+                        | Queued -> initialStatus
+                        | other -> other)
 
-                let chunkPairs =
-                    chunks |> List.mapi (fun i chunk -> sprintf "%s:chunk:%d" docId i, chunk)
+                    let chunkPairs =
+                        chunks |> List.mapi (fun i chunk -> sprintf "%s:chunk:%d" docId i, chunk)
 
-                // Phase 867 — record the attempt before the enqueue.
-                let! attempt =
-                    beginIngestionAttempt deps.Storage deps.Logger deps.Scope.Container docId chunkPairs.Length
+                    // Phase 867 — record the attempt before the enqueue.
+                    let! attempt =
+                        beginIngestionAttempt deps.Storage deps.Logger deps.Scope.Container docId chunkPairs.Length
 
-                let job: DocumentIngestionJob = {
-                    DocumentId = docId
-                    DocumentName = fileName
-                    Chunks = chunkPairs
-                    Scope = deps.VectorScope
-                    ScopeId = deps.Scope.ScopeId
-                    Container = deps.Scope.Container
-                    OriginatingUserId = Some deps.UserId
-                    Attempt = Some attempt
-                }
-
-                // Phase 723 — async enqueue: the sync form is a blocking
-                // store round-trip on the request thread once a
-                // deployment composes a durable queue.
-                let! accepted = deps.Queue.EnqueueAsync(job)
-                deps.RecordEnqueue accepted
-
-                if not accepted then
-                    let reason =
-                        sprintf
-                            "Knowledge-base ingestion queue is full (%d/%d). Try again in a few seconds."
-                            deps.Queue.Count
-                            deps.Queue.Capacity
-
-                    do! deps.MarkIngestionFailed docId fileName reason
-
-                    returnedDoc <- {
-                        doc with
-                            Status = IngestionStatus.Failed reason
+                    let job: DocumentIngestionJob = {
+                        DocumentId = docId
+                        DocumentName = fileName
+                        Chunks = chunkPairs
+                        Scope = deps.VectorScope
+                        ScopeId = deps.Scope.ScopeId
+                        Container = deps.Scope.Container
+                        OriginatingUserId = Some deps.UserId
+                        Attempt = Some attempt
                     }
 
-            do! deps.Notifications.Publish(deps.UserId, DataRefreshed("KnowledgeBase", deps.Scope.ScopeId))
-            do! deps.PublishInventory()
+                    // Phase 723 — async enqueue: the sync form is a blocking
+                    // store round-trip on the request thread once a
+                    // deployment composes a durable queue.
+                    let! accepted = deps.Queue.EnqueueAsync(job)
+                    deps.RecordEnqueue accepted
 
-            return Ok returnedDoc
+                    if not accepted then
+                        let reason =
+                            sprintf
+                                "Knowledge-base ingestion queue is full (%d/%d). Try again in a few seconds."
+                                deps.Queue.Count
+                                deps.Queue.Capacity
+
+                        do! deps.MarkIngestionFailed docId fileName reason
+
+                        returnedDoc <- {
+                            doc with
+                                Status = IngestionStatus.Failed reason
+                        }
+
+                do! deps.Notifications.Publish(deps.UserId, DataRefreshed("KnowledgeBase", deps.Scope.ScopeId))
+                do! deps.PublishInventory()
+
+                return Ok returnedDoc
 }
 
 let updateNote (deps: KnowledgeApiDeps) (req: UpdateNoteRequest) : Async<Result<KnowledgeDocument, string>> = async {
@@ -151,110 +154,115 @@ let updateNote (deps: KnowledgeApiDeps) (req: UpdateNoteRequest) : Async<Result<
             | Some prior ->
                 match prior.Source with
                 | Note priorNote ->
-                    // Phase 115 — drop the old chunks through the unified
-                    // lifecycle seam so the sparse index sheds them too
-                    // (pre-115 the `vs.DeleteChunk` loop left the prior
-                    // note text retrievable through the hybrid sparse
-                    // leg). Best-effort here: the re-ingestion below
-                    // overwrites the same chunk ids, so survivors are
-                    // logged by the seam rather than failing the update.
-                    match deps.IndexLifecycle with
-                    | Some lifecycle ->
-                        let! _ = lifecycle.DeleteDocument deps.VectorScope req.DocId prior.ChunkCount
-                        ()
-                    | None -> ()
-
-                    let safeTitle = sanitiseTitle title
-                    let fileName = sprintf "%s.md" safeTitle
-
-                    let chunks =
-                        paragraphs
-                        |> List.mapi (fun i p ->
-                            let chunk, _ = buildNoteChunk req.DocId fileName title paragraphs.Length i p
-
-                            chunk)
-
-                    let updatedNote: NoteSource = {
-                        priorNote with
-                            Title = title
-                            LastEditedAt = Some DateTimeOffset.UtcNow
-                    }
-
-                    let sizeBytes = int64 (Encoding.UTF8.GetByteCount body)
-
-                    let updatedDoc: KnowledgeDocument = {
-                        prior with
-                            FileName = fileName
-                            Status = Queued
-                            SizeBytes = sizeBytes
-                            ChunkCount = chunks.Length
-                            Source = Note updatedNote
-                    }
-
+                    // Phase 863 — persist the raw body FIRST, ahead of the chunk drop,
+                    // the index entry and the enqueue, so a refused write fails the
+                    // update with nothing else moved.
                     let rawBlobName = sprintf "knowledge/%s/note.md" req.DocId
-                    let! _ = deps.Storage.Upload(deps.Scope.Container, rawBlobName, Encoding.UTF8.GetBytes body)
 
-                    // Phase 116 — atomic index RMW (see `upsertIndexEntry`).
-                    // `updatedDoc.Id = req.DocId`, so the helper's
-                    // filter-by-id replaces the prior entry in place. The
-                    // existence check above still reads outside the lock —
-                    // that only governs last-writer-wins on *this* doc, not
-                    // the cross-document loss the lock prevents.
-                    do! upsertIndexEntry deps.Storage deps.Scope.Container updatedDoc
+                    match! deps.Storage.Upload(deps.Scope.Container, rawBlobName, Encoding.UTF8.GetBytes body) with
+                    | Error storageError -> return Error(sprintf "The note could not be saved: %s" storageError)
+                    | Ok _ ->
+                        // Phase 115 — drop the old chunks through the unified
+                        // lifecycle seam so the sparse index sheds them too
+                        // (pre-115 the `vs.DeleteChunk` loop left the prior
+                        // note text retrievable through the hybrid sparse
+                        // leg). Best-effort here: the re-ingestion below
+                        // overwrites the same chunk ids, so survivors are
+                        // logged by the seam rather than failing the update.
+                        match deps.IndexLifecycle with
+                        | Some lifecycle ->
+                            let! _ = lifecycle.DeleteDocument deps.VectorScope req.DocId prior.ChunkCount
+                            ()
+                        | None -> ()
 
-                    let mutable returnedDoc = updatedDoc
+                        let safeTitle = sanitiseTitle title
+                        let fileName = sprintf "%s.md" safeTitle
 
-                    if box deps.Queue <> null && not chunks.IsEmpty then
-                        let initialStatus = Embedding(0, chunks.Length)
+                        let chunks =
+                            paragraphs
+                            |> List.mapi (fun i p ->
+                                let chunk, _ = buildNoteChunk req.DocId fileName title paragraphs.Length i p
 
-                        setStatus req.DocId initialStatus
+                                chunk)
 
-                        let chunkPairs =
-                            chunks |> List.mapi (fun i chunk -> sprintf "%s:chunk:%d" req.DocId i, chunk)
-
-                        // Phase 867 — a re-save is a new attempt: it
-                        // re-seeds the persisted status and retires the
-                        // previous save's late callbacks.
-                        let! attempt =
-                            beginIngestionAttempt
-                                deps.Storage
-                                deps.Logger
-                                deps.Scope.Container
-                                req.DocId
-                                chunkPairs.Length
-
-                        let job: DocumentIngestionJob = {
-                            DocumentId = req.DocId
-                            DocumentName = fileName
-                            Chunks = chunkPairs
-                            Scope = deps.VectorScope
-                            ScopeId = deps.Scope.ScopeId
-                            Container = deps.Scope.Container
-                            OriginatingUserId = Some deps.UserId
-                            Attempt = Some attempt
+                        let updatedNote: NoteSource = {
+                            priorNote with
+                                Title = title
+                                LastEditedAt = Some DateTimeOffset.UtcNow
                         }
 
-                        // Phase 723 — async enqueue; see `addNote`.
-                        let! accepted = deps.Queue.EnqueueAsync(job)
-                        deps.RecordEnqueue accepted
+                        let sizeBytes = int64 (Encoding.UTF8.GetByteCount body)
 
-                        if not accepted then
-                            let reason =
-                                sprintf
-                                    "Knowledge-base ingestion queue is full (%d/%d). Try again in a few seconds."
-                                    deps.Queue.Count
-                                    deps.Queue.Capacity
+                        let updatedDoc: KnowledgeDocument = {
+                            prior with
+                                FileName = fileName
+                                Status = Queued
+                                SizeBytes = sizeBytes
+                                ChunkCount = chunks.Length
+                                Source = Note updatedNote
+                        }
 
-                            do! deps.MarkIngestionFailed req.DocId fileName reason
+                        // Phase 116 — atomic index RMW (see `upsertIndexEntry`).
+                        // `updatedDoc.Id = req.DocId`, so the helper's
+                        // filter-by-id replaces the prior entry in place. The
+                        // existence check above still reads outside the lock —
+                        // that only governs last-writer-wins on *this* doc, not
+                        // the cross-document loss the lock prevents.
+                        do! upsertIndexEntry deps.Storage deps.Scope.Container updatedDoc
 
-                            returnedDoc <- {
-                                updatedDoc with
-                                    Status = IngestionStatus.Failed reason
+                        let mutable returnedDoc = updatedDoc
+
+                        if box deps.Queue <> null && not chunks.IsEmpty then
+                            let initialStatus = Embedding(0, chunks.Length)
+
+                            setStatus req.DocId initialStatus
+
+                            let chunkPairs =
+                                chunks |> List.mapi (fun i chunk -> sprintf "%s:chunk:%d" req.DocId i, chunk)
+
+                            // Phase 867 — a re-save is a new attempt: it
+                            // re-seeds the persisted status and retires the
+                            // previous save's late callbacks.
+                            let! attempt =
+                                beginIngestionAttempt
+                                    deps.Storage
+                                    deps.Logger
+                                    deps.Scope.Container
+                                    req.DocId
+                                    chunkPairs.Length
+
+                            let job: DocumentIngestionJob = {
+                                DocumentId = req.DocId
+                                DocumentName = fileName
+                                Chunks = chunkPairs
+                                Scope = deps.VectorScope
+                                ScopeId = deps.Scope.ScopeId
+                                Container = deps.Scope.Container
+                                OriginatingUserId = Some deps.UserId
+                                Attempt = Some attempt
                             }
 
-                    do! deps.Notifications.Publish(deps.UserId, DataRefreshed("KnowledgeBase", deps.Scope.ScopeId))
-                    do! deps.PublishInventory()
+                            // Phase 723 — async enqueue; see `addNote`.
+                            let! accepted = deps.Queue.EnqueueAsync(job)
+                            deps.RecordEnqueue accepted
 
-                    return Ok returnedDoc
+                            if not accepted then
+                                let reason =
+                                    sprintf
+                                        "Knowledge-base ingestion queue is full (%d/%d). Try again in a few seconds."
+                                        deps.Queue.Count
+                                        deps.Queue.Capacity
+
+                                do! deps.MarkIngestionFailed req.DocId fileName reason
+
+                                returnedDoc <- {
+                                    updatedDoc with
+                                        Status = IngestionStatus.Failed reason
+                                }
+
+                        do! deps.Notifications.Publish(deps.UserId, DataRefreshed("KnowledgeBase", deps.Scope.ScopeId))
+                        do! deps.PublishInventory()
+
+                        return Ok returnedDoc
                 | _ -> return Error "Document is not a note."
 }

@@ -262,6 +262,19 @@ module BlobIdempotencyLayout =
 
 // -----------------------------------------------------------------------------
 
+/// Phase 863 — raised by `BlobIdempotencyStore.Store` when the memoised
+/// envelope was not written. `IIdempotencyStore.Store` returns
+/// `Async<unit>`, so an exception is the one channel a failed write has.
+/// Internal: the dispatcher handles any exception from `Store` the same
+/// way, and the public surface does not move.
+type internal IdempotencyStoreWriteException(container: string, blobName: string, storageError: string) =
+    inherit
+        Exception(
+            $"idempotency store write failed: the memoised response `{container}/{blobName}` was not written: {storageError}"
+        )
+
+    member _.StorageError = storageError
+
 /// Phase 69f.C — distributed `IIdempotencyStore` over `IBlobStorage`.
 /// Memoised entries are JSON blobs under the `_platform` container (the
 /// reserved SDK-level scope), named by a SHA-256 of `{scope}|{key}` so
@@ -340,8 +353,16 @@ type BlobIdempotencyStore(blobStorage: ToolUp.Platform.BlobStorage.IBlobStorage,
 
         member _.Store(key, scope, response, ttl) = async {
             let expiryTicks = (DateTimeOffset.UtcNow + ttl).UtcTicks
-            let! _ = blobStorage.Upload(container, blobName scope key, serialise response expiryTicks)
-            return ()
+            let name = blobName scope key
+
+            // Phase 863 — a failed write RAISES: `Store` returning normally
+            // is the claim "this call is memoised", and a retry that finds
+            // nothing re-executes the handler — the one thing this store
+            // exists to prevent. The dispatcher catches it and answers the
+            // call un-memoised, loudly.
+            match! blobStorage.Upload(container, name, serialise response expiryTicks) with
+            | Ok _ -> return ()
+            | Error storageError -> return raise (IdempotencyStoreWriteException(container, name, storageError))
         }
 
 // -----------------------------------------------------------------------------

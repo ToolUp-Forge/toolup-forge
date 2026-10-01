@@ -664,6 +664,14 @@ ToolUp.Platform.AuthorizationSurfaceWireEntry.Requirements : Microsoft.FSharp.Co
 ToolUp.Platform.AutoBootstrapDevAdminModeValidator (class)
 ToolUp.Platform.AutoBootstrapDevAdminModeValidator+AutoBootstrapDevAdminModeValidator (class)
 ToolUp.Platform.AutoBootstrapDevAdminModeValidator+AutoBootstrapDevAdminModeValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.Background (class)
+ToolUp.Platform.Background.start(ToolUp.Platform.Background+DrainSet, ToolUp.Platform.ILogger, System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]) : System.Void
+ToolUp.Platform.Background+DrainSet (class)
+ToolUp.Platform.Background+DrainSet..ctor()
+ToolUp.Platform.Background+DrainSet.Cancel() : System.Void
+ToolUp.Platform.Background+DrainSet.Count : System.Int32 { get }
+ToolUp.Platform.Background+DrainSet.Token : System.Threading.CancellationToken { get }
+ToolUp.Platform.Background+DrainSet.WaitAsync(System.Threading.CancellationToken) : System.Threading.Tasks.Task`1[System.Boolean]
 ToolUp.Platform.BackgroundSubsystem (class)
 ToolUp.Platform.BackgroundSubsystem.AlertRuleEngineSubsystem : ToolUp.Platform.BackgroundSubsystem { get }
 ToolUp.Platform.BackgroundSubsystem.AuditFallbackReplaySubsystem : ToolUp.Platform.BackgroundSubsystem { get }
@@ -6570,6 +6578,7 @@ ToolUp.Platform.JobScheduler+InProcessJobScheduler.ProgressSink : Microsoft.FSha
 ToolUp.Platform.JobScheduler+InProcessJobScheduler.ReconcileAwaitingExternal() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.JobScheduler+InProcessJobScheduler.RunCatchUpScan(System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.JobScheduler+InProcessJobScheduler.RunTick(System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.JobScheduler+InProcessJobScheduler.StopAsync(System.Threading.CancellationToken) : System.Threading.Tasks.Task
 ToolUp.Platform.JobScheduler+JobCompletedPayload (class)
 ToolUp.Platform.JobScheduler+JobCompletedPayload..ctor(System.Guid, System.String, System.String, System.Guid, System.Int32, System.Int64)
 ToolUp.Platform.JobScheduler+JobCompletedPayload.Attempt : System.Int32 { get }

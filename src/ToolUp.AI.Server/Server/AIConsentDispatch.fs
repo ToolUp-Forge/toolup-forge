@@ -197,7 +197,7 @@ let loadState (storage: IBlobStorage) (container: string) (conversationId: Guid)
 let saveState (storage: IBlobStorage) (container: string) (conversationId: Guid) (state: AIConsentState) : Async<unit> = async {
     let bytes = JsonSerializer.Serialize(state, jsonOptions) |> Encoding.UTF8.GetBytes
 
-    let! _ = storage.Upload(container, consentBlobName conversationId, bytes)
+    let! _ = storage.Upload(container, consentBlobName conversationId, bytes) // best-effort-write: a lost decision re-prompts and never allows — an absent record always prompts (see recordDecision)
     return ()
 }
 

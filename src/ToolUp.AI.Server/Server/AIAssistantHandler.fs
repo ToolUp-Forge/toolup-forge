@@ -207,8 +207,14 @@ let private saveConversationMeta
     =
     async {
         let bytes = toJson meta |> Encoding.UTF8.GetBytes
-        let! _ = storage.Upload(container, conversationMetaBlobName conversationId, bytes)
-        return ()
+
+        // Phase 863 — a refused write raises. Both callers catch it: the
+        // override setter returns it as the call's `Error`, and titling (a
+        // best-effort step by design) logs it at Warn.
+        match! storage.Upload(container, conversationMetaBlobName conversationId, bytes) with
+        | Ok _ -> return ()
+        | Error storageError ->
+            return failwithf "conversation %O metadata could not be written: %s" conversationId storageError
     }
 
 let private loadConversationMeta (logger: ILogger) (storage: IBlobStorage) (container: string) (conversationId: Guid) = async {

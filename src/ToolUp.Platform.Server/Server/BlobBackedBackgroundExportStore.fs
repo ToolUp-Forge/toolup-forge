@@ -73,6 +73,18 @@ type BlobBackedBackgroundExportStore(blobs: IBlobStorage, ttl: TimeSpan) =
     let envelopeBlob (scopeId: string) (guid: string) =
         $"data-subject-requests/{scopeId}/{guid}.envelope"
 
+    /// Phase 863 — every write here IS the export's record (its status or
+    /// its envelope), and the interface carries no failure channel, so a
+    /// refused write raises. The export job handler catches it and records
+    /// the ticket `Failed`, rather than announcing `Ready` over an envelope
+    /// that was never stored.
+    let uploadOrRaise (blobName: string) (bytes: byte[]) = async {
+        match! blobs.Upload(Container, blobName, bytes) with
+        | Ok _ -> return ()
+        | Error storageError ->
+            return failwithf "BlobBackedBackgroundExportStore: write of %s failed: %s" blobName storageError
+    }
+
     // ── status sidecar (de)serialisation ───────────────────────────────
 
     let writeStatus
@@ -97,8 +109,7 @@ type BlobBackedBackgroundExportStore(blobs: IBlobStorage, ttl: TimeSpan) =
             o["createdAt"] <- JsonValue.Create(createdAt.ToString("O"))
             o["expiresAt"] <- JsonValue.Create((createdAt + ttl).ToString("O"))
             let bytes = Encoding.UTF8.GetBytes(o.ToJsonString())
-            let! _ = blobs.Upload(Container, statusBlob scopeId guid, bytes)
-            return ()
+            do! uploadOrRaise (statusBlob scopeId guid) bytes
         }
 
     /// Read the persisted status, mapping a lapsed TTL to `Expired`.
@@ -178,7 +189,7 @@ type BlobBackedBackgroundExportStore(blobs: IBlobStorage, ttl: TimeSpan) =
             match parseTicket ticket with
             | None -> return ()
             | Some(scopeId, guid) ->
-                let! _ = blobs.Upload(Container, envelopeBlob scopeId guid, envelope)
+                do! uploadOrRaise (envelopeBlob scopeId guid) envelope
                 do! transition scopeId guid (ExportStatus.Ready(int64 envelope.Length))
         }
 

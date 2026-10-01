@@ -126,9 +126,12 @@ let internal rethrow (ex: exn) : 'a =
 /// bulk ingestion — a 10,000-chunk load triggers O(1) persistence passes
 /// instead of O(10,000).
 ///
-/// The store implements `IDisposable`. ASP.NET Core's DI container disposes
-/// it during shutdown, which cancels the flush loop and performs one final
-/// synchronous flush so no acknowledged writes are lost across restart.
+/// The store implements `IDisposable`: disposing it cancels the flush loop
+/// and performs one final synchronous flush so no acknowledged writes are
+/// lost across restart. `composeRAG` registers the store it constructs as an
+/// instance, which the DI container never disposes, so its
+/// `RetrievalStoreFlushService` disposes it once the host has stopped
+/// (Phase 869). A store you construct and supply yourself is yours to dispose.
 ///
 /// Suitable for deployments with up to ~50,000 chunks; for larger corpora
 /// replace with a distributed vector-database companion (Qdrant, pgvector, etc.)
