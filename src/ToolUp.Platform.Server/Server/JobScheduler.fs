@@ -337,6 +337,11 @@ type InProcessJobScheduler
 
     let handlers = ConcurrentDictionary<string, IJobHandler>()
 
+    /// Phase 869 — every dispatch in flight. `StopAsync` cancels the set
+    /// (each handler observes it through its async context) and then waits
+    /// for it within the host's shutdown window.
+    let dispatches = Background.DrainSet()
+
     /// Phase 935 — the carrier a typed `Schedule` stamps a job's scope with
     /// and a dispatch redeems it through. Composition binds the
     /// deployment's (over its key ring, so a restart re-mints); until then
@@ -1059,18 +1064,17 @@ type InProcessJobScheduler
     /// and swallowing is right here: the run's own outcome is already
     /// recorded (or unrecordable, which is what threw), and the scheduler
     /// must survive one job's store failure to serve the rest of the tick.
+    ///
+    /// Phase 869 — through `Background.start`, so the dispatch also runs
+    /// under `dispatches`' token (cancellation reaches `handler.Execute`
+    /// through its async context, `IJobHandler`'s signature unchanged) and
+    /// is tracked until it ends, so `StopAsync` can wait for it.
     let startDispatch (job: JobDefinition) (source: TriggerSource) (work: Async<unit>) =
-        Async.Start(
-            async {
-                try
-                    do! work
-                with ex ->
-                    logger.Error(
-                        $"[JobScheduler] event=dispatch_unhandled jobId=%O{job.JobId} handler=%s{job.Handler} source=%A{source}",
-                        Some ex
-                    )
-            }
-        )
+        Background.start
+            dispatches
+            logger
+            $"[JobScheduler] event=dispatch_unhandled jobId=%O{job.JobId} handler=%s{job.Handler} source=%A{source}"
+            work
 
     // ─── Status transitions ──────────────────────────────────────
 
@@ -2122,6 +2126,33 @@ type InProcessJobScheduler
                     do! flushTriggerCursors () |> Async.StartAsTask :> Task
                 with ex ->
                     logger.Warn $"[JobScheduler] event=shutdown_cursor_flush_failed: {ex.Message}"
+        }
+        :> Task
+
+    member private _.StopBase(cancellationToken: CancellationToken) = base.StopAsync cancellationToken
+
+    /// Phase 869 — cancel, then drain. Every dispatch in flight observes
+    /// cancellation through its async context (a handler awaiting a
+    /// cancellable async ends at its next bind), the tick loop stops, and
+    /// the stop then waits for the dispatches to end within the host's
+    /// shutdown window — so none is still writing run history after the host
+    /// has torn down what it writes through. A dispatch that outlives the
+    /// window is reported, never waited on past it, and its run row stays
+    /// where a crash would have left it. A dispatch cancelled inside the
+    /// window does too: cancellation ends the dispatch async at the bind it
+    /// lands on, so no terminal row is written for the abandoned attempt.
+    override this.StopAsync(cancellationToken: CancellationToken) =
+        task {
+            dispatches.Cancel()
+            do! this.StopBase cancellationToken
+            let! drained = dispatches.WaitAsync cancellationToken
+
+            if not drained then
+                logger.Warn(
+                    sprintf
+                        "[JobScheduler] event=dispatches_undrained_at_shutdown count=%d — the host's shutdown window closed before these cancelled dispatches ended"
+                        dispatches.Count
+                )
         }
         :> Task
 

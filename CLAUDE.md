@@ -454,7 +454,7 @@ Written down here so the next reader does not have to re-derive it from `.github
 | **`fable-tier`** | the **client-tier `node:test` harness** (131 cases, every Sidebar pack) via `VerifyFable` | **yes** |
 | **`verify-all`** | `dotnet build ToolUp.Forge.sln` then **every `BuildConfig.TestPacks` pack** via `VerifyAll`, plus its registered legs — since Phase 803 the Fable-tier harness again, as the last leg | **yes** |
 | `doc-snippets` | every in-scope `fsharp` block under `docs/**` compiles, via `VerifyDocSnippets` | yes |
-| `source-citations` | every backticked API name in a comment resolves, via `VerifySourceCitations` | yes |
+| `source-citations` | every backticked API name in a comment resolves, via `VerifySourceCitations`; and (Phase 863) no production line under `src/` discards the `Result` of a blob `Upload` / `UploadWithETag` unless it carries a `// best-effort-write: <why>` marker, via `VerifyUploadResults` | yes |
 | `cloud-parity` | the `ToolUp.Cloud.Parity.Tests` pack with the Azurite emulator leg armed | yes |
 | **`templates`** | the **`dotnet new` scaffolds under `templates/`** compile, via `VerifyTemplates`; and the packaged-module template scaffolds, builds, passes both conformance layers and packs, via `VerifyPackagedModuleTemplate` | **yes** |
 | **`browser-smoke`** | eight real-browser scenarios via `VerifyBrowserSmoke` — and, as the compile that gets them there, **the only CI transpilation of `ToolUp.Offline.Client`** | **yes** |

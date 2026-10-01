@@ -1081,6 +1081,69 @@ let private minScoreSpaceValidator
         }
     }
 
+// ─── Phase 869 — flush the composition's own stores at a graceful stop ──
+//
+// `composeRAG` registers its vector store and keyword index as INSTANCES (so
+// resolution order is what it always was), and the container never disposes
+// an instance it was handed. The final flush each in-process store performs
+// in `Dispose` therefore never ran: writes acknowledged inside their persist
+// debounce (two seconds, or a hundred chunks) were lost on every graceful
+// shutdown. This service ends their lifetime at stop instead.
+//
+// It flushes from `StoppedAsync`, not `StopAsync`. Hosted services stop in
+// reverse registration order, and the job scheduler — registered by the base
+// composition BEFORE this extension's services — stops AFTER every RAG
+// service: while it drains, an ingestion retry or a vacuum job can still
+// write through the store. `StoppedAsync` runs once every hosted service's
+// `StopAsync` has returned, and ignores the window's token on purpose: the
+// window may already be spent, and acknowledged writes are flushed anyway.
+// `Dispose` (the provider disposes this factory-registered service) is the
+// fallback for a host that never calls the lifecycle hooks; the flush runs
+// once either way.
+//
+// Only the stores this composition CONSTRUCTED are flushed. A store supplied
+// through `withVectorStore` / `withSparseIndex` is the caller's, who may
+// dispose it themselves — disposing it here as well would make their own
+// `Dispose` the second one.
+//
+// Deliberately NOT gated by `ProcessProfileGate`, for `registerLogStore`'s
+// reason: the stores hold THIS process's acknowledged writes, so a silo that
+// skipped the flush would lose its own writes rather than let a peer cover
+// for it — and the service runs no loop, only a stop hook.
+type internal RetrievalStoreFlushService(owned: (string * System.IDisposable) list, logger: ILogger) =
+    let mutable flushed = 0
+
+    let flushOnce () =
+        if System.Threading.Interlocked.Exchange(&flushed, 1) = 0 then
+            for name, store in owned do
+                try
+                    store.Dispose()
+                with ex ->
+                    logger.Error(sprintf "[RAGCompose] event=store_flush_at_stop_failed store=%s" name, Some ex)
+
+    interface IHostedService with
+        member _.StartAsync _ =
+            System.Threading.Tasks.Task.CompletedTask
+
+        member _.StopAsync _ =
+            System.Threading.Tasks.Task.CompletedTask
+
+    interface IHostedLifecycleService with
+        member _.StartingAsync _ =
+            System.Threading.Tasks.Task.CompletedTask
+
+        member _.StartedAsync _ =
+            System.Threading.Tasks.Task.CompletedTask
+
+        member _.StoppingAsync _ =
+            System.Threading.Tasks.Task.CompletedTask
+
+        member _.StoppedAsync _ =
+            System.Threading.Tasks.Task.Run(fun () -> flushOnce ())
+
+    interface System.IDisposable with
+        member _.Dispose() = flushOnce ()
+
 // ─── composeRAG ───────────────────────────────────────────────────
 //
 // Phase 1h seam (RAG half). `composeRAG : RAGServerApp -> ServerApp`
@@ -1734,6 +1797,28 @@ let composeRAG (app: RAGServerApp) : ServerApp =
             match sparseIndex with
             | Some index -> s.AddSingleton<ISparseIndex>(index)
             | None -> s
+
+        // Phase 869 — the stores registered above are flushed at a graceful
+        // stop by `RetrievalStoreFlushService`, which owns exactly the ones
+        // this composition constructed. Nothing constructed, nothing
+        // registered (GP 13).
+        let s =
+            let owned = [
+                match app.VectorStore, box vectorStore with
+                | None, (:? System.IDisposable as store) -> "vector-store", store
+                | _ -> ()
+
+                match app.SparseIndex, sparseIndex |> Option.map box with
+                | SparseIndexComposition.InProcessSparseIndex, Some(:? System.IDisposable as index) ->
+                    "sparse-index", index
+                | _ -> ()
+            ]
+
+            match owned with
+            | [] -> s
+            | _ ->
+                s.AddSingleton<IHostedService>(fun (_: System.IServiceProvider) ->
+                    new RetrievalStoreFlushService(owned, ragLogger) :> IHostedService)
 
         // Phase 945 — the off-path trace queue, registered so `/health/rag`
         // can report its lost-trace count. Absent when traces are written
@@ -2490,6 +2575,10 @@ module RAGServerApp =
     /// `src/VectorStores/<Name>/` (e.g. `Hnsw/` for HNSW.Net) provide
     /// implementations. Without one, RAG uses the in-memory flat-scan
     /// `InMemoryVectorStore` — fine up to ~50k chunks per scope.
+    ///
+    /// Phase 869 — a supplied store stays the caller's: the composition
+    /// flushes and disposes at stop only the store it constructed, so dispose
+    /// a supplied one yourself once the host has stopped.
     let withVectorStore (store: IVectorStore) (app: RAGServerApp) : RAGServerApp = { app with VectorStore = Some store }
 
     /// Phase 633 — substitute the `IEmbeddingCache` the composition wraps
@@ -3063,6 +3152,9 @@ module RAGServerApp =
     /// together with `withSparseAnalyzer` is refused at composition; use
     /// `withAnalyzedSparseIndex` to have the index built for the analyzer.
     /// Ignored when `withRetrievalPipeline` replaces the whole pipeline.
+    ///
+    /// Phase 869 — as with `withVectorStore`, a supplied index stays the
+    /// caller's to dispose; the composition flushes only what it constructed.
     let withSparseIndex (index: ISparseIndex) (app: RAGServerApp) : RAGServerApp = {
         app with
             SparseIndex = SparseIndexComposition.SuppliedSparseIndex index
