@@ -549,6 +549,13 @@ let offlineTests =
 
         // The differential pack, self-bound: the enumerating blob path held
         // to the indexed-and-surfaced one. Proves the pack on every run.
+        //
+        // Phase 946 — timed against Phase 762's slow-lane rule (a list
+        // costing >= 10 s whose slowest case is >= 2 s) and LEFT in every
+        // lane: five runs (Debug, a loaded shared machine, 2026-10-01) cost
+        // 10.6 s cold, then 7.1, 7.6, 7.4 and 6.8 s over its 4 cases,
+        // slowest case 3.5-6.7 s. It meets the per-case clause and misses
+        // the list clause (median 7.4 s). Re-time before moving it.
         IFactStoreContract.differentialTests "BlobFactStore (index + surface)" blobReference blobIndexed
 
         // Phase 941 — the migration's option, statement, export and
