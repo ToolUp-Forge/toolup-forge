@@ -318,6 +318,9 @@ let private validateBeacon (b: FastPathBeacon) : Result<unit, string> =
 // The gate itself — its four cases and why — is defined once, in
 // `ConversationBlobs.checkOwnership` (Phase 862), and `SubmitMessage`
 // applies the same definition. This binding keeps the published name.
+// Both handlers call it through `ConversationBlobs.checkAppend` (Phase
+// 961), which adds the team policy for an ownerless legacy conversation;
+// this pure binding is the owner-only half.
 
 // `Ok` when `callerUserId` may append to a conversation whose persisted
 // messages are `existing`; `Error owner` when it belongs to someone else.
@@ -720,7 +723,26 @@ let beaconHandler: HttpHandler =
                             ctx.Response.StatusCode <- 409
                             return! next ctx
                         | Ok existing ->
-                            match checkOwnership existing callerUserId with
+                            // Phase 961 — the gate with the team policy:
+                            // owner-only, and for an ownerless legacy
+                            // conversation under a narrowed level, the
+                            // caller must pass `canModify`.
+                            let! admission =
+                                ConversationBlobs.checkAppend
+                                    (fun () ->
+                                        TeamConversationPolicyStore.ConversationVisibility.resolveState
+                                            ctx
+                                            storage
+                                            scope.Container)
+                                    (fun state ->
+                                        TeamConversationPolicyStore.ConversationVisibility.resolveViewer
+                                            ctx
+                                            callerUserId
+                                            state.TeamId)
+                                    existing
+                                    callerUserId
+
+                            match admission with
                             | Error ownerOfRecord ->
                                 // Phase 6j.D — cross-user write attempt.
                                 // The conversation belongs to someone else

@@ -136,8 +136,14 @@ let private chatServices (storage: IBlobStorage) : ServiceCollection =
 
     services
 
-/// A request by `userId` in `teamId`'s scope.
-let private contextFor (world: World) (teamId: string) (userId: string) : HttpContext =
+/// A request by `userId` in `teamId`'s scope, with `extra` registered last
+/// (a later registration wins `GetService`).
+let private contextForWith
+    (extra: ServiceCollection -> unit)
+    (world: World)
+    (teamId: string)
+    (userId: string)
+    : HttpContext =
     let services = chatServices world.Storage
     services.AddSingleton<ITeamStore>(world.Teams) |> ignore
     services.AddSingleton<IAuditLog>(world.Audit) |> ignore
@@ -155,6 +161,7 @@ let private contextFor (world: World) (teamId: string) (userId: string) : HttpCo
     }
 
     services.AddSingleton<AccessContext>(access) |> ignore
+    extra services
 
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- services.BuildServiceProvider()
@@ -168,6 +175,10 @@ let private contextFor (world: World) (teamId: string) (userId: string) : HttpCo
 
     ctx.Items["ToolUp.UserId"] <- box userId
     ctx :> HttpContext
+
+/// A request by `userId` in `teamId`'s scope.
+let private contextFor (world: World) (teamId: string) (userId: string) : HttpContext =
+    contextForWith ignore world teamId userId
 
 let private assistant (world: World) (teamId: string) (userId: string) : AIAssistantApi =
     let manager = new SSEConnectionManager()
@@ -998,6 +1009,437 @@ let private promptHistoryTests =
         }
     ]
 
+// ─── Phase 961 — a refused turn stops ────────────────────────────
+//
+// `SubmitMessage`'s background turn applies the Phase 6j.D owner gate
+// (`ConversationBlobs.checkOwnership`) before it reads anything else of the
+// addressed conversation. Until Phase 961 the refusal was a `return ()` in
+// one branch of a `match` inside an `async` block, which does not end the
+// block, so the turn ran on past its own refusal. These cases drive the
+// real handler: member bob submits to alice's conversation under
+// `TeamAdmins`, and each reads what the provider was sent, the bytes of
+// every blob alice's conversation has, and the caller's terminal status.
+//
+// This is the control-flow guard. The architecture-fitness scan checks that
+// a guard is PRESENT beside every by-id read; only a run can show that the
+// guard's answer is obeyed.
+
+/// A provider that records every message list it is sent.
+type private RecordingProvider() =
+    let calls = ResizeArray<AIProviderMessage list>()
+
+    member _.Calls = lock calls (fun () -> List.ofSeq calls)
+
+    interface IAIProvider with
+        member _.Capabilities = {
+            Streaming = false
+            ToolUse = true
+            Vision = false
+            SupportsPromptCaching = false
+            SupportsTriage = false
+            TriageModelId = None
+            ProviderName = "recording"
+            Model = "recording-model"
+        }
+
+        member _.SendMessage(messages, _tools, _systemPrompt, _onStream, _retryPolicy) = async {
+            lock calls (fun () -> calls.Add messages)
+
+            return
+                Ok {
+                    Content = "a reply"
+                    ToolCalls = []
+                    StopReason = "end_turn"
+                    Usage = None
+                }
+        }
+
+        member this.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) =
+            IAIProviderDefaults.sendStructuredViaFallback
+                (this :> IAIProvider)
+                messages
+                tools
+                systemPrompt
+                schema
+                retryPolicy
+
+type private RecordingFactory(provider: IAIProvider) =
+    interface IAIProviderFactory with
+        member _.Available = []
+        member _.PlatformDescriptors = []
+        member _.PlatformDescriptor = None
+        member _.Resolve _ = async { return Ok provider }
+        member _.TryResolveByLabel(_, _) = async { return Ok provider }
+        member _.BuildPlatform(_, _, _) = None
+
+/// Storage that records the name of every blob downloaded through it, so
+/// a case can say what a refused turn READ, not only what it wrote.
+type private ReadRecordingStorage(inner: IBlobStorage) =
+    let reads = ResizeArray<string>()
+
+    member _.Reads = lock reads (fun () -> List.ofSeq reads)
+
+    interface IBlobStorage with
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            ToolUp.Platform.BlobStorage.composeNotSupported "test double"
+
+        member _.Upload(container, blobName, content) =
+            inner.Upload(container, blobName, content)
+
+        member _.Download(container, blobName) = async {
+            lock reads (fun () -> reads.Add blobName)
+            return! inner.Download(container, blobName)
+        }
+
+        member _.Delete(container, blobName) = inner.Delete(container, blobName)
+        member _.List(container, prefix) = inner.List(container, prefix)
+        member _.Exists(container, blobName) = inner.Exists(container, blobName)
+        member _.GetMetadata(container, blobName) = inner.GetMetadata(container, blobName)
+
+        member _.DownloadRange(container, blobName, offset, length) =
+            inner.DownloadRange(container, blobName, offset, length)
+
+        member _.Erase(container, prefix, policy, dryRun) =
+            inner.Erase(container, prefix, policy, dryRun)
+
+/// The pinned refusal text (`AIStreamFramingPinTests` pins its bytes).
+let private refusalText =
+    "Conversation does not belong to the current user — refusing to append."
+
+/// The known turn on the seeded provider-history blob.
+let private historySecret = "the author's provider-side history"
+
+let private historyBlob (id: Guid) = $"ai-conversations/{id}.history.json"
+
+/// Seed a conversation by `author` in `teamId`, on both its UI blob and its
+/// provider-history blob.
+let private seedWithHistory (world: World) (teamId: string) (author: string) = async {
+    let! id = seed world teamId author "the author's private plan" t0
+
+    let history: AIProviderMessage list = [
+        {
+            Role = "user"
+            Content = historySecret
+            ToolCalls = []
+            ToolResults = []
+            Parts = []
+        }
+        {
+            Role = "assistant"
+            Content = "noted"
+            ToolCalls = []
+            ToolResults = []
+            Parts = []
+        }
+    ]
+
+    let! _ =
+        world.Storage.Upload(
+            containerOf teamId,
+            historyBlob id,
+            Encoding.UTF8.GetBytes(JsonSerializer.Serialize(history, jsonOptions))
+        )
+
+    return id
+}
+
+/// Every blob a conversation has, as base64 (`<absent>` when missing).
+let private snapshot (world: World) (teamId: string) (id: Guid) = async {
+    let names = [
+        $"ai-conversations/{id}.json"
+        historyBlob id
+        $"ai-conversations/{id}.meta.json"
+    ]
+
+    let! bytes =
+        names
+        |> List.map (fun name -> async {
+            match! world.Storage.Download(containerOf teamId, name) with
+            | Ok b -> return name, Convert.ToBase64String b
+            | Error _ -> return name, "<absent>"
+        })
+        |> Async.Sequential
+
+    return List.ofArray bytes
+}
+
+/// Wait, bounded, for a turn that should have stopped to show that it did
+/// not: a provider call AND a changed blob. A turn that runs on does both
+/// in milliseconds; one that stopped does neither, and the wait runs out.
+let private settle (world: World) (teamId: string) (id: Guid) before (provider: RecordingProvider) = async {
+    let mutable after = before
+    let mutable waited = 0
+
+    while waited < 1500 && (provider.Calls.IsEmpty || after = before) do
+        do! Async.Sleep 50
+        waited <- waited + 50
+        let! now = snapshot world teamId id
+        after <- now
+
+    return after
+}
+
+let private requestTo (id: Guid) : AIMessageRequest = {
+    ConversationId = id
+    Content = "summarise this for me"
+    ActiveModule = None
+    ActivePage = None
+    ActivePageNarrative = None
+    OverrideProviderLabel = None
+    Surface = FullPage
+    RetrievalFilters = None
+}
+
+/// Both surfaces, for `userId` in `teamId`, over `provider`, reading
+/// through `storage`.
+let private surfacesWith
+    (world: World)
+    (teamId: string)
+    (userId: string)
+    (provider: IAIProvider)
+    (storage: ReadRecordingStorage)
+    =
+    let ctx =
+        contextForWith
+            (fun services ->
+                services.AddSingleton<IAIProviderFactory>(RecordingFactory provider) |> ignore
+
+                services.AddSingleton<IBlobStorage>(storage) |> ignore)
+            world
+            teamId
+            userId
+
+    aiAssistantApi None Map.empty (new SSEConnectionManager()) ctx
+
+/// Every event of a typed stream, bounded.
+let private collect (stream: Collections.Generic.IAsyncEnumerable<AIStreamEvent>) = async {
+    use cts = new Threading.CancellationTokenSource(TimeSpan.FromSeconds 10.0)
+    let e = stream.GetAsyncEnumerator cts.Token
+    let events = ResizeArray<AIStreamEvent>()
+    let mutable more = true
+
+    while more do
+        let! next = e.MoveNextAsync().AsTask() |> Async.AwaitTask
+
+        if next then events.Add e.Current else more <- false
+
+    do! e.DisposeAsync().AsTask() |> Async.AwaitTask
+    return List.ofSeq events
+}
+
+let private statusesOf (events: AIStreamEvent list) =
+    events
+    |> List.choose (function
+        | TaskStatusChanged(_, status) -> Some status
+        | _ -> None)
+
+/// What a refused turn must leave as it was: the provider uncalled, every
+/// blob byte-identical, and nothing of the conversation read but the UI
+/// blob the gate itself reads to learn the owner.
+let private expectStopped
+    (provider: RecordingProvider)
+    (storage: ReadRecordingStorage)
+    (id: Guid)
+    before
+    after
+    (surface: string)
+    =
+    let sawHistory =
+        provider.Calls |> List.exists (List.exists (fun m -> m.Content = historySecret))
+
+    Expect.isFalse sawHistory $"{surface}: the model is not run over the teammate's history"
+    Expect.isEmpty provider.Calls $"{surface}: no provider call at all"
+    Expect.equal after before $"{surface}: every blob of the teammate's conversation is byte-identical"
+
+    let conversationReads =
+        storage.Reads
+        |> List.filter (fun name -> name.Contains(string id, StringComparison.Ordinal))
+
+    Expect.equal
+        conversationReads
+        [ $"ai-conversations/{id}.json" ]
+        $"{surface}: only the gate's own read of the conversation happens"
+
+/// Submit as `userId` through `SubmitMessage`; what the provider was sent,
+/// the blobs before and after, and the terminal status.
+let private submitAs (world: World) (userId: string) (id: Guid) = async {
+    let! before = snapshot world "alpha" id
+    let provider = RecordingProvider()
+    let storage = ReadRecordingStorage world.Storage
+    let assistant, _ = surfacesWith world "alpha" userId provider storage
+
+    let! task = assistant.SubmitMessage(requestTo id)
+    let! after = settle world "alpha" id before provider
+    let! status = assistant.GetTaskStatus task.TaskId
+    return provider, storage, before, after, status |> Option.map _.Status
+}
+
+let private refusedTurnTests =
+    testList "Phase 961 — a refused turn stops at the gate" [
+        testCaseAsync "SubmitMessage: a member's turn into a teammate's conversation reads and writes nothing"
+        <| async {
+            let! world = newWorld None
+            do! setRecord world "alpha" [ TeamAdmins, t0.AddDays -1.0 ]
+            let! id = seedWithHistory world "alpha" "alice"
+
+            let! provider, storage, before, after, status = submitAs world "bob" id
+
+            expectStopped provider storage id before after "SubmitMessage"
+
+            Expect.equal
+                status
+                (Some(AITaskFailed refusalText))
+                "SubmitMessage: the task ends refused, and stays refused"
+        }
+
+        testCaseAsync "StreamChatV2: the stream ends refused, with no InProgress, and nothing is read or written"
+        <| async {
+            let! world = newWorld None
+            do! setRecord world "alpha" [ TeamAdmins, t0.AddDays -1.0 ]
+            let! id = seedWithHistory world "alpha" "alice"
+            let! before = snapshot world "alpha" id
+            let provider = RecordingProvider()
+            let storage = ReadRecordingStorage world.Storage
+            let _, streaming = surfacesWith world "alpha" "bob" provider storage
+
+            let! events = collect (streaming.StreamChatV2(requestTo id))
+            let! after = settle world "alpha" id before provider
+
+            let statuses = statusesOf events
+            Expect.equal (List.tryLast statuses) (Some(AITaskFailed refusalText)) "StreamChatV2: the terminal event"
+
+            Expect.isFalse
+                (statuses |> List.contains InProgress)
+                "StreamChatV2: a refused turn never reports InProgress"
+
+            expectStopped provider storage id before after "StreamChatV2"
+        }
+
+        testCaseAsync "the author's own turn still runs over their history and is written back"
+        <| async {
+            let! world = newWorld None
+            do! setRecord world "alpha" [ TeamAdmins, t0.AddDays -1.0 ]
+            let! id = seedWithHistory world "alpha" "alice"
+
+            let! provider, _, before, after, status = submitAs world "alice" id
+
+            Expect.isTrue
+                (provider.Calls |> List.exists (List.exists (fun m -> m.Content = historySecret)))
+                "the author's turn is run over their history"
+
+            Expect.notEqual after before "the author's turn is written back"
+            Expect.equal status (Some AITaskCompleted) "the author's turn completes"
+        }
+    ]
+
+// ─── Phase 961 — an ownerless legacy conversation under a level ──
+//
+// A conversation whose first message records no author (pre-6j.D) used to
+// accept an append from anyone in the container. Under a level narrower
+// than `TeamVisible` the append now needs `canModify`; under an open level
+// it behaves exactly as before (GP 11). Both append paths apply it.
+
+/// POST one fast-path beacon to conversation `id` as `userId` in `teamId`
+/// through the real handler; returns the status code.
+let private postBeaconAs (world: World) (teamId: string) (userId: string) (id: Guid) = async {
+    let ctx = contextForWith ignore world teamId userId
+
+    let beacon: FastPathBeaconHandler.FastPathBeacon = {
+        ConversationId = id
+        Tier = 1
+        ModuleId = "sales"
+        FieldName = "country"
+        Instruction = "set country to UK"
+        SyntheticReply = "Set country to UK."
+        PatternMatched = "set {field} to {value}"
+        LatencyMs = 3.5
+        JsonFragment = "\"UK\""
+        BeaconId = Guid.NewGuid().ToString("N")
+    }
+
+    ctx.Request.Body <- new IO.MemoryStream(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(beacon, jsonOptions)))
+    ctx.Response.Body <- new IO.MemoryStream()
+
+    let! _ =
+        FastPathBeaconHandler.beaconHandler (fun c -> Threading.Tasks.Task.FromResult(Some c)) ctx
+        |> Async.AwaitTask
+
+    return ctx.Response.StatusCode
+}
+
+let private ownerlessTests =
+    testList "Phase 961 — an ownerless legacy conversation under a narrowed level" [
+        testCaseAsync "TeamAdmins: a member's turn is refused and nothing is read or written"
+        <| async {
+            let! world = newWorld None
+            do! setRecord world "alpha" [ TeamAdmins, t0.AddDays -1.0 ]
+            let! id = seedWithHistory world "alpha" ""
+
+            let! provider, storage, before, after, status = submitAs world "bob" id
+
+            expectStopped provider storage id before after "ownerless, TeamAdmins, member"
+            Expect.equal status (Some(AITaskFailed refusalText)) "the member's turn is refused"
+        }
+
+        testCaseAsync "TeamAdmins: a team admin, whom canModify admits, may append"
+        <| async {
+            let! world = newWorld None
+            do! setRecord world "alpha" [ TeamAdmins, t0.AddDays -1.0 ]
+            let! id = seedWithHistory world "alpha" ""
+
+            let! provider, _, before, after, status = submitAs world "ada" id
+
+            Expect.isNonEmpty provider.Calls "the admin's turn runs"
+            Expect.notEqual after before "the admin's turn is written"
+            Expect.equal status (Some AITaskCompleted) "the admin's turn completes"
+        }
+
+        testCaseAsync "a team that never chose a level: any member may append, as before"
+        <| async {
+            let! world = newWorld None
+            let! id = seedWithHistory world "alpha" ""
+
+            let! provider, _, before, after, status = submitAs world "bob" id
+
+            Expect.isNonEmpty provider.Calls "the member's turn runs"
+            Expect.notEqual after before "the member's turn is written"
+            Expect.equal status (Some AITaskCompleted) "the member's turn completes"
+        }
+
+        testCaseAsync "TeamVisible chosen explicitly: any member may append, as before"
+        <| async {
+            let! world = newWorld None
+            do! setRecord world "alpha" [ TeamVisible, t0.AddDays -1.0 ]
+            let! id = seedWithHistory world "alpha" ""
+
+            let! provider, _, _, _, status = submitAs world "bob" id
+
+            Expect.isNonEmpty provider.Calls "the member's turn runs"
+            Expect.equal status (Some AITaskCompleted) "the member's turn completes"
+        }
+
+        testCaseAsync "the beacon applies the same rule: 403 under TeamAdmins, 202 under an open level"
+        <| async {
+            let! world = newWorld None
+            let! openId = seedWithHistory world "alpha" ""
+            let! openStatus = postBeaconAs world "alpha" "bob" openId
+            Expect.equal openStatus 202 "an open level: the member's beacon is applied"
+
+            do! setRecord world "alpha" [ TeamAdmins, t0.AddDays -1.0 ]
+            let! narrowedId = seedWithHistory world "alpha" ""
+            let! before = snapshot world "alpha" narrowedId
+            let! narrowedStatus = postBeaconAs world "alpha" "bob" narrowedId
+            let! after = snapshot world "alpha" narrowedId
+            Expect.equal narrowedStatus 403 "TeamAdmins: the member's beacon is refused"
+            Expect.equal after before "TeamAdmins: neither blob is touched"
+
+            let! adminStatus = postBeaconAs world "alpha" "ada" narrowedId
+            Expect.equal adminStatus 202 "TeamAdmins: a team admin's beacon is applied"
+        }
+    ]
+
 let tests =
     testList "Phase 859 — team conversation visibility" [
         pureRuleTests
@@ -1008,4 +1450,6 @@ let tests =
         auditTests
         changeTests
         promptHistoryTests
+        refusedTurnTests
+        ownerlessTests
     ]

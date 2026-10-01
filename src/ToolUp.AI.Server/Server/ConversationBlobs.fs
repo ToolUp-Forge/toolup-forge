@@ -198,10 +198,25 @@ let saveProviderHistory
 //   2. `existing[0].CreatedBy = ""` — legacy (pre-6j.D) blob with no
 //      recorded owner; accepted, since the field was added without a
 //      backfill and locking these out would break them on the upgrade.
+//      Phase 961 narrows this case in a team scope — see `checkAppend`.
 //   3. `existing[0].CreatedBy = caller` — same user; accepted.
 //   4. otherwise — cross-user; refused with the owner of record, which the
 //      `BeaconRejected` audit row records.
 // Pure: the handler resolves the inputs and applies the result.
+//
+// Phase 961 — the decision about the team policy (Phase 859). Appending a
+// turn is AUTHORSHIP, and the owner gate stays owner-only at every level:
+// case 4 is refused even where `ConversationVisibility.canModify` would
+// admit the caller, because 859 grants a level's elevated role delete and
+// the provider override, never the right to write turns into another
+// member's conversation. What the policy does change is case 2: under a
+// level narrower than `TeamVisible` (at the conversation's creation or
+// now, or when the team's record cannot be read) an ownerless legacy
+// conversation is no longer open to every member, so the append is
+// admitted only for a caller `canModify` admits. Under `TeamVisible` at
+// both instants, and outside a team scope, case 2 is accepted exactly as
+// before (GP 11). `checkAppend` applies both halves, and both append paths
+// call it.
 
 let checkOwnership (existing: ConversationMessage list) (callerUserId: string) : Result<unit, string> =
     match existing with
@@ -212,3 +227,46 @@ let checkOwnership (existing: ConversationMessage list) (callerUserId: string) :
         if String.IsNullOrEmpty owner then Ok()
         elif owner = callerUserId then Ok()
         else Error owner
+
+/// Phase 961 — whether an append to an OWNERLESS legacy conversation needs
+/// `canModify`: a level narrower than `TeamVisible` governed it at creation
+/// or governs it now, or the team's record cannot be read (fail closed, as
+/// every other check over an unreadable record does).
+let private ownerlessAppendNeedsModify (state: TeamConversationPolicyStore.TeamVisibilityState) (createdAt: DateTime) =
+    match TeamConversationPolicyStore.ConversationVisibility.levels state createdAt with
+    | Some(TeamVisible, TeamVisible) -> false
+    | _ -> true
+
+/// Phase 961 — the append gate with the team policy applied: `checkOwnership`
+/// (owner-only), and for an ownerless legacy conversation under a narrowed
+/// level, `canModify`. `Error owner` refuses with the owner of record (`""`
+/// for an ownerless conversation). The team state and the caller's role are
+/// read only when case 2 meets a team scope, so every other append costs
+/// what it cost before.
+let checkAppend
+    (resolveState: unit -> Async<TeamConversationPolicyStore.TeamVisibilityState option>)
+    (resolveViewer:
+        TeamConversationPolicyStore.TeamVisibilityState -> Async<TeamConversationPolicyStore.ConversationViewer>)
+    (existing: ConversationMessage list)
+    (callerUserId: string)
+    : Async<Result<unit, string>> =
+    async {
+        match checkOwnership existing callerUserId, existing with
+        | Error owner, _ -> return Error owner
+        | Ok(), first :: _ when String.IsNullOrEmpty first.CreatedBy ->
+            match! resolveState () with
+            | None -> return Ok()
+            | Some state ->
+                let createdAt = existing |> List.map _.Timestamp |> List.min
+
+                if not (ownerlessAppendNeedsModify state createdAt) then
+                    return Ok()
+                else
+                    let! viewer = resolveViewer state
+
+                    if TeamConversationPolicyStore.ConversationVisibility.canModify state viewer "" createdAt then
+                        return Ok()
+                    else
+                        return Error ""
+        | Ok(), _ -> return Ok()
+    }

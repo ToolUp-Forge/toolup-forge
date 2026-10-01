@@ -71,8 +71,45 @@ hold the level's **elevated role**:
 This covers `DeleteConversation` and `SetConversationOverride` (the per-conversation provider
 override — the other write a caller can aim at a conversation; a rename does not exist). Under
 `TeamVisible` a plain member can still read a colleague's conversation but can no longer delete it or
-redirect it to another provider. Appending to another member's conversation was already refused by the
-ownership gate, at every level.
+redirect it to another provider.
+
+## Appending a turn
+
+Appending a turn — a chat message through `SubmitMessage` or `StreamChatV2`, or a fast-path beacon — is
+**authorship**, and it stays the author's alone at every level. The ownership gate
+(`ConversationBlobs.checkOwnership`, Phase 6j.D) refuses a turn aimed at a conversation whose first
+message records a different author, **even where `canModify` would admit the caller**: the elevated
+role a level grants covers delete and the provider override, never writing turns into another
+member's conversation.
+
+The level does change one case. A conversation persisted before authors were recorded (its first
+message has an empty `CreatedBy`) used to accept an append from any member of the container. Under a
+level narrower than `TeamVisible` — at the conversation's creation or now, or when the team's record
+cannot be read — such a conversation now accepts an append only from a caller `canModify` admits.
+Under `TeamVisible` at both instants, and outside a team scope, it accepts every member exactly as
+before (GP 11). Both append paths apply the same gate (`ConversationBlobs.checkAppend`).
+
+A refused chat turn **stops**. `SubmitMessage` still returns the queued task, then the turn reports
+`AITaskFailed` ("Conversation does not belong to the current user — refusing to append.") and writes a
+`BeaconRejected` audit row with `Surface = "submit"`; the beacon answers `403`. Nothing of the
+conversation is read except the gate's own read of its first message, nothing is written, and no
+provider is called. (Before Phase 961 the refusal did not end the turn: it went on to report
+`InProgress` and read the conversation's metadata and provider history before it failed.)
+
+## Every conversation-addressed entry point
+
+| Entry point | Rule |
+|---|---|
+| `GetConversation` | `canSee`; an elevated open is audited |
+| `ListConversations`, `ListConversationsPage` | every row filtered through `canSee` (`visibleRows`) |
+| `DeleteConversation`, `SetConversationOverride` | `authoriseWrite`: invisible is a no-op, otherwise the author or `canModify` |
+| `GetTaskStatus` | keyed by the submitter: another member's task is `None` at every level |
+| `SubmitMessage`, `StreamChatV2` | the ownership gate above (`checkAppend`); the opt-in substrate's prompt history is read only when `canSee` admits the caller (Phase 946) |
+| Fast-path beacon | the ownership gate above (`checkAppend`); `403` on refusal |
+| Sequenced fast-path beacons (clause, outcome, sequence) | telemetry only: they record events tagged with the conversation id and read or write no conversation |
+| `ConversationExporter.Export` | the data-subject export: an operator-initiated read of the subject's own conversations, not a viewer's read |
+
+There is no rename endpoint on `AIAssistantApi`.
 
 ## Changing the level
 
