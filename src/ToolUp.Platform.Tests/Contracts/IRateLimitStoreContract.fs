@@ -62,6 +62,24 @@ let tests (name: string) (factory: unit -> IRateLimitStore) =
             do! Async.Sleep(1000 - msIntoSecond + 20)
     }
 
+    /// Wait until we are comfortably early inside a calendar MINUTE.
+    ///
+    /// Every `PerMinute` case below makes several calls and then reads
+    /// the count back, and `GetCurrent` reports only the CURRENT window.
+    /// A case that starts in the last seconds of a minute straddles the
+    /// boundary: on 2026-10-01 the concurrent case fired at 11:30:00.005Z
+    /// and saw 16 of its 20 increments, the other four having landed in
+    /// 11:29 — a red that said nothing about the store. Same race as
+    /// `alignToFreshSecond`, one window up: start with at least five
+    /// seconds of headroom and the counts stay exact.
+    let alignToFreshMinute () = async {
+        let now = DateTimeOffset.UtcNow
+        let secondsIntoMinute = float now.Second + float now.Millisecond / 1000.0
+
+        if secondsIntoMinute > 55.0 then
+            do! Async.Sleep(int ((60.0 - secondsIntoMinute) * 1000.0) + 20)
+    }
+
     testList $"{name} — IRateLimitStore contract" [
         testCaseAsync "GetCurrent on a fresh key returns 0"
         <| async {
@@ -85,6 +103,7 @@ let tests (name: string) (factory: unit -> IRateLimitStore) =
 
         testCaseAsync "Calls beyond threshold deny with positive RetryAfter"
         <| async {
+            do! alignToFreshMinute ()
             let store = factory ()
             let k = key ()
 
@@ -107,6 +126,7 @@ let tests (name: string) (factory: unit -> IRateLimitStore) =
 
         testCaseAsync "Key isolation — one IP's count doesn't leak into another's"
         <| async {
+            do! alignToFreshMinute ()
             let store = factory ()
             let kA = IpAddressKey "1.1.1.1"
             let kB = IpAddressKey "2.2.2.2"
@@ -123,6 +143,7 @@ let tests (name: string) (factory: unit -> IRateLimitStore) =
 
         testCaseAsync "Concurrent IncrementAndCheck calls produce no double-counts"
         <| async {
+            do! alignToFreshMinute ()
             let store = factory ()
             let k = key ()
             let n = 20
@@ -144,6 +165,7 @@ let tests (name: string) (factory: unit -> IRateLimitStore) =
 
         testCaseAsync "Concurrent callers against one remaining slot — exactly one is admitted"
         <| async {
+            do! alignToFreshMinute ()
             // Phase 870. The case above counts increments; this one counts
             // ADMISSIONS, which is what a burst against an auth-adjacent
             // budget is about. With `threshold - 1` already spent, N
@@ -201,6 +223,7 @@ let tests (name: string) (factory: unit -> IRateLimitStore) =
 
         testCaseAsync "GetRecentDecisions captures denies, ignores allows"
         <| async {
+            do! alignToFreshMinute ()
             let store = factory ()
             let k = key ()
 
@@ -223,6 +246,7 @@ let tests (name: string) (factory: unit -> IRateLimitStore) =
 
         testCaseAsync "GetRecentDecisions filters by key"
         <| async {
+            do! alignToFreshMinute ()
             let store = factory ()
             let kA = IpAddressKey "10.0.0.1"
             let kB = IpAddressKey "10.0.0.2"
