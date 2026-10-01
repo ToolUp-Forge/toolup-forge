@@ -32,8 +32,16 @@ dotnet src/ToolUp.RAG.Benchmarks/bin/Release/net10.0/ToolUp.RAG.Benchmarks.dll l
 dotnet src/ToolUp.RAG.Benchmarks/bin/Release/net10.0/ToolUp.RAG.Benchmarks.dll load facts `
     --store postgres --subjects 25000 --metrics 3 --weeks 4 --concurrency 4
 
-# one storage arm's gate configuration (Phase 929): azurite or postgres
+# one storage arm's gate configuration (Phase 929): azurite or postgres;
+# Phase 962's postgres-history is the database arm's population read over 52 weeks
 dotnet src/ToolUp.RAG.Benchmarks/bin/Release/net10.0/ToolUp.RAG.Benchmarks.dll load gate --arm postgres
+
+# Phase 962: seed once and keep the table, then measure the same rows again
+# (for example after building an index by hand) without re-seeding
+dotnet src/ToolUp.RAG.Benchmarks/bin/Release/net10.0/ToolUp.RAG.Benchmarks.dll load facts `
+    --store postgres --subjects 25000 --metrics 3 --weeks 52 --keep yes
+dotnet src/ToolUp.RAG.Benchmarks/bin/Release/net10.0/ToolUp.RAG.Benchmarks.dll load facts `
+    --store postgres --subjects 25000 --metrics 3 --weeks 52 --table <kept table> --scope <its scope>
 ```
 
 The budget gate runs the gate configurations and decides them against the `load` block of
@@ -49,8 +57,8 @@ pwsh ./dev-scripts/perf-budget-gate.ps1 -SkipServer -SkipClient -LoadArms azurit
 
 The storage arms are **not** run by CI: the perf-budget job starts neither the emulator nor a
 database, so they are off unless `-LoadArms` names them, and each is decided against a block of its
-own (`loadAzurite`, `loadPostgres`) so the memory arm's ceilings never have to accommodate a network
-hop. The documented local invocation above is how they are held to their budgets.
+own (`loadAzurite`, `loadPostgres`, and since Phase 962 `loadPostgresHistory` for the `postgres-history`
+arm) so the memory arm's ceilings never have to accommodate a network hop. The documented local invocation above is how they are held to their budgets.
 
 ### The arms
 
@@ -63,7 +71,7 @@ hop. The documented local invocation above is how they are held to their budgets
 | store `hnsw` | the HNSW companion | always available |
 | store `pgvector` | the pgvector companion, HNSW index (m=16, ef_construction=64), built with plain `create`, a table of its own per run, dropped afterwards. Since Phase 939 `create` composes `PgvectorTuning.recommended`, so this arm now measures the tuned posture; the Phase 929 rows below predate that | `TOOLUP_PGVECTOR_CONNECTION_STRING` |
 | fact store `blob` | `BlobFactStore`, the default `IFactStore`, over whichever blob arm is named | always available |
-| fact store `postgres` | the database-backed fact store (`ToolUp.FactStores.Postgres`, Phase 888), a table of its own per run, dropped afterwards; its rows print `blob=none` | `TOOLUP_PGVECTOR_CONNECTION_STRING` |
+| fact store `postgres` | the database-backed fact store (`ToolUp.FactStores.Postgres`, Phase 888), a table of its own per run, settled with `VACUUM (ANALYZE)` after the seed and dropped afterwards unless `--keep yes` (Phase 962); its rows print `blob=none`, and a row more gives the rows the population read's summary touched, from its executed plan | `TOOLUP_PGVECTOR_CONNECTION_STRING` |
 
 The emulator arms are free and local. Azurite comes up with the cloud-parity lane
 (`docker compose -f compose.parity.yml up -d --wait`, then
@@ -76,7 +84,9 @@ harness exists to prevent.
 
 The `postgres` fact store is seeded through `AssertBatch`, not by writing rows in its format: on that
 store a batch assert is an indexed write, linear in the seed, where on the blob store it would be
-quadratic. The blob store is still seeded by writing its blobs directly, for the reason below.
+quadratic. A seed batch of 1,000 drafts touches more than 64 lineages, so it takes the scope's
+exclusive lock and the batches run one at a time: about 4,000 facts a second on the machine below,
+which is what bounds the sizes this arm can reach (Phase 962). The blob store is still seeded by writing its blobs directly, for the reason below.
 
 ### What every row says
 
@@ -355,6 +365,145 @@ per (scope, metric, period), and it was not built, for three reasons:
   deliberately keeps parallel.
 
 That is a durable schema decision, and it is recorded as an open question rather than taken here.
+Phase 962 measured both options at the stated depth; see the next section.
+
+### A covering index against a maintained aggregate (Phase 962)
+
+**Verdict: the covering index, keyed by the period's END.** It makes the population read cost what
+the asked period's population costs, however much history each subject carries. At 100,000
+subjects x 3 metrics x 52 weeks (15,600,000 facts) the read's median went from 16.3 s to 124 ms.
+The write-maintained aggregate was measured too and not built: it answers no shipped caller's
+question alone, and it serialises concurrent writers on one row.
+
+Phase 940 measured one metric over 4 weeks, so its latest-week population was a quarter of the
+table. At the stated scale (3 metrics x 52 weeks) one metric's latest week is 1/156 of the rows,
+and the read did not use that. Its only index was `pop_idx (scope, metric, is_head)`, so every
+statement scanned the table.
+
+Measured on 2026-10-01 by `load facts --store postgres --metrics 3 --weeks 52 --concurrency 4`
+(20 operations x 5 rounds). The database was one local PostgreSQL 17 (`pgvector/pgvector:pg17`,
+default configuration) in Docker with a hard 6 GB memory limit, on the machine the gate section
+names, with other sessions' builds beside it (CPU 11-93%, 5-13 GB free). Each seed was settled with
+`VACUUM (ANALYZE)`, the state autovacuum reaches on a live table. "Before" is the Phase 940 schema.
+"After" is the same table with the covering index built and `pop_idx` dropped, measured with
+`--table` / `--scope` over the kept seed. Population read p50 / p95 in ms:
+
+| Subjects (facts) | Table + indexes | Before | After | Speed-up (p50) | Rows the summary touched, after |
+|---:|---:|---|---|---:|---:|
+| 10,000 (1,560,000) | 2.4 GB | 577.12 / 776.76 | 19.70 / 22.93 | 29x | 10,000 |
+| 25,000 (3,900,000) | 6.1 GB | 1,286.42 / 1,959.17 | 32.98 / 39.00 | 39x | 25,000 |
+| 50,000 (7,800,000) | 12 GB | 9,533.79 / 10,536.70 | 77.06 / 83.67 | 124x | 50,000 |
+| 100,000 (15,600,000) | 24 GB | 16,268.31 / 16,721.22 | 124.40 / 141.21 | 131x | 100,000 |
+| 300,000 x 3 x **4** (3,600,000) | — | — | 386.65 / 520.37 | — | 300,000 |
+
+**Before, the read grew with the TABLE; after, with the asked population.** Before, every summary
+and top-k statement was a parallel sequential scan of the whole table: 174,552 buffers at 10,000
+subjects, 867,876 at 50,000 and 1,732,289 at 100,000 (one caller, `EXPLAIN (ANALYZE, BUFFERS)`).
+Past 50,000 subjects the table no longer fits the container's memory, so the scan reads from disk
+and the curve bends upward: 9.5 s at 50,000 subjects against 1.3 s at 25,000. After, each statement
+is an `Index Only Scan` of the asked week's heads with no heap fetch: 331, 800, 1,603 and 3,193
+buffers at the four sizes, and exactly one row touched per subject. One caller's summary took 8, 20,
+46 and 83 ms.
+
+The last row isolates history depth. Its table has 300,000 subjects but only 4 weeks, so the
+latest-week population is 300,000 in a table a quarter the size of the 100,000-subject cell. It was
+seeded fresh on the final schema.
+
+**The index the shard proposed, keyed by period START, does not help.** The period overlap is
+`period_from < @to AND @from < period_to`. For the latest week the first conjunct holds for every
+week, so an index led by `period_from_ticks` turns the predicate into a range over the metric's
+whole history. Measured at 25,000 subjects: 40,668 buffers per statement against 432,326 for the
+table scan, and 280 ms against 267 ms for one caller (the slice does not fit the database's buffer
+cache any better than the table). In the harness the p50 was 1,318.90 ms against 1,286.42 ms, no
+better than no index. Keyed by period END, the latest week is the narrow range `period_to > @from`.
+The cost of that choice is symmetric: a question about an EARLY period ranges over every later
+period. Every shipped caller asks either the latest period or no period at all (no period ranges
+over the metric's heads with either key).
+
+**What the index costs a write.** The index is about 247 bytes a row (385 MB at 1,560,000 rows,
+3,855 MB at 15,600,000). It built in 3.9 s, 5.7 s, 21 s and 52 s at the four sizes. Each assert pays
+one more index insert, and the measurements cannot separate that from noise:
+
+| Subjects | Single assert p50 / p95, before → after | Batch assert (50) p50 / p95, before → after |
+|---:|---|---|
+| 25,000 | 48.90 / 54.76 → 49.69 / 53.00 | 76.27 / 94.45 → 92.33 / 103.65 |
+| 50,000 | 51.90 / 59.97 → 51.18 / 56.80 | 123.09 / 154.59 → 119.44 / 156.00 |
+| 100,000 | 51.68 / 56.78 → 51.55 / 53.83 | 124.92 / 144.43 → 112.49 / 130.00 |
+
+A single assert is about 48 ms on this database whatever the indexes, because its commit flush
+dominates it. The bulk figure is the seed: 10,000 subjects seeded in 307.8 s on the old schema and
+332.9 s on the new one, 8% slower. `pop_idx` is redundant once the covering index exists. Every
+statement that read it now plans on the new index, so the migration drops it.
+
+**The aggregate, prototyped and measured.** A table of per-(scope, metric, hierarchy, period)
+counts and sums of the current heads, maintained by statement-level triggers (one grouped upsert
+per touched group per statement, the cheapest shape the design has). It holds no minimum or
+maximum, which cannot be decremented under supersession without a re-read.
+
+- **Its read:** one primary-key row, 0.05 ms and 5 buffers, at every size: flat, as 940 predicted.
+- **Its write, one writer:** free. At 10,000 subjects with one caller, the single assert was
+  48.67 ms against 48.54 ms without it, and the batch 61.19 against 62.76.
+- **Its write, four writers on one metric's latest week:** the row is a lock held to each commit,
+  so the writers queue. The single assert went from 51.18 / 56.80 to 148.84 / 324.06 at 50,000
+  subjects, and from 48.90 / 54.76 to 153.76 / 291.19 at 25,000. The batch went from
+  119.44 / 156.00 to 218.67 / 429.90. One (metric, period) then takes about one write per commit
+  time (about 20 a second here), however many writers there are.
+- **What it answers:** 940's list stands. It cannot answer an `AsOf` replay, a threshold, a subject
+  prefix or depth, the extremes, or the freshness histogram (freshness is derived at the read's
+  instant). It holds no members, so it cannot rank them either. No shipped caller can be answered by
+  it alone:
+  - `AnswerPlanner` and the `query_metric_population` tool rank the top k under thresholds,
+    prefixes, depths and periods, and the tool also replays `AsOf`.
+  - The fact browser pages a ranking (top k up to 1,000) at a depth and prefix.
+  - The coverage tool and narrative are the nearest fit (no period, threshold or `AsOf`). But they
+    read the method mix across competing methods and the freshness histogram, and they probe the
+    top 10 for the disclosure gate.
+
+  Every caller would therefore still run the per-query read, and the aggregate would add a
+  hot-row write cost to buy nothing.
+
+**Why the index, in numbers.** At 100,000 subjects the index takes the read from 16,268 ms to
+124 ms at the median, costs about 8% of seed throughput, and leaves the per-assert cost
+unchanged. The aggregate would take a stats-only read from 124 ms to 0.05 ms, but no shipped
+caller makes a stats-only read. It would also triple the median cost of concurrent asserts to one
+metric's latest period, and cap them at the commit rate. **The read is still linear in the
+population** (about 1.2 µs per subject at the median with four callers, from 10,000 to 100,000), as
+940 established. A flat read across subject counts is not on offer for any question the shipped
+callers ask. What the index makes flat is the cost across **history**: the read is the same
+whether each subject carries 4 weeks or 52.
+
+**Two defects found on the way, both in the `AsOf` branch of the visible-set statement.** The branch
+finds the predecessors of successors written after `t`. As an `IN` semi-join it was planned on the
+table's statistics, and statistics taken before a table's supersessions turned it into a walk:
+
+- a nested loop re-scanning every successor in the scope for each superseded row (91 ms of a 94 ms
+  summary at 12,000 facts, and a 3.4 s p95 population read at four callers);
+- or a walk of every successor in the scope;
+- or a walk of every superseded row of the metric.
+
+A fresh `ANALYZE` hid all three, which is why no settled benchmark had shown them. The branch is now
+driven by construction. The successor ids are read once from the transaction-time range, and each
+is fetched by primary key in a lateral sub-select the planner may not flatten. A read "as of now"
+costs one empty index range: 3 buffers and 0.05 ms at 3,900,000 facts. Over a reused table with
+stale statistics, the same 12,000-fact population read's p95 went from 3,478 ms to 117 ms. A live
+test pins it: it seeds 400 subjects x 52 weeks, takes the statistics, revises 100 heads, and holds
+the read to the asked week's 400 rows and an index-only scan. Against the old branch the same test
+touched 500 rows and failed.
+
+**Largest size reached, and why it stopped there.** The largest is 100,000 subjects x 3 x 52 =
+15,600,000 facts, a 24 GB table. Memory did not stop it. A watchdog stopped the harness at a 6 GB
+working set (it peaked at 0.41 GB), and the database container had a hard 6 GB limit it stayed
+within. The limit was seed time. The batch seed takes the scope's exclusive lock (a batch of 1,000
+touches more than 64 lineages), so it runs at about 4,000 facts a second, and the 100,000-subject
+seed took 67 minutes. The stated 300,000 x 3 x 52 = 46,800,000 facts would take over three hours
+and about 72 GB. On the measured slope the index's median there is about 360 ms. The 300,000 x 3 x 4
+row measures that population directly: 386.65 ms at the median and 520.37 at p95, where Phase 940's
+same population read 659.28 / 858.41 over a table a third the size. Before the change, every statement would scan a 72 GB
+table from disk; on the measured curve that is about 50 s a read (extrapolated, not run).
+
+The large cell is budgeted. `perf-budgets.json`'s `loadPostgresHistory` block gates the population
+read over 2,500 subjects x 3 x 52 (390,000 facts), both as a clock and as the rows the summary
+touches; see the gate section.
 
 No budget was added to `perf-budgets.json`. The phase's condition for one was a flat result, and
 the gate's 12,000-fact database cell already carries a population-read ceiling (`loadPostgres`).
@@ -386,7 +535,10 @@ On the database-backed store the stated scale was not seeded either: 46.8 M rows
 gigabytes of table. What its measured rows say about that scale: the point read, the read by id and
 the asserts were flat between 12,000 and 1,200,000 facts, so nothing measured suggests they move; the
 population read grew about 9x for 12x the subjects, so at 300,000 subjects its ~2.8 s median is the
-figure to plan with, whatever the history behind each subject.
+figure to plan with, whatever the history behind each subject. **Superseded by Phase 962:** without
+an index the read did grow with the history (16.3 s at 100,000 subjects x 3 x 52). With the covering
+index it does not: 386.65 ms at the median for a 300,000-subject population, measured, and about
+360 ms on the measured slope at 52 weeks.
 
 ## The gate
 
@@ -413,7 +565,21 @@ ceilinged at 0: that arm reads no blob, and one that starts to has changed shape
 re-baselined the `load` block's four fact figures that Phase 890 had moved, so their ceilings again
 sit about fourteen times above what the path costs rather than fifty.
 
-All three blocks were decided green by
+**The database arm's large cell (Phase 962)** is budgeted in a fourth block, `loadPostgresHistory`:
+the `postgres-history` arm runs the fact store alone over 2,500 subjects x 3 metrics x 52 weeks
+(390,000 facts), so one metric's latest week is 1/156 of the table. Its population read is gated
+twice: as a clock (baseline 6.95 ms, ceiling 97, about 14x) and as a COUNT, the table rows the read's
+summary touches, taken from its executed plan (`PostgresFactStore.ExplainPopulation`; baseline 2,500,
+the population; ceiling 1.5x). On the schema before Phase 962 the same cell read 134-147 ms. That
+clears the clock ceiling by only about 1.4x, so the count is the decisive guard: the old table scan
+touches 390,000 rows, 156x the population, and an index keyed by period start would touch 130,000.
+Both asserts are budgeted there too, because they pay the index. Shown to fail by deciding a
+measurement whose row count was planted at 390,000: the clock stayed inside its ceiling and the count
+breached. Decided green by `pwsh ./dev-scripts/perf-budget-gate.ps1 -SkipServer -SkipClient -LoadArms
+postgres-history` on 2026-10-01 (CPU 8-12%, 12-13 GB free), and the `postgres` arm stayed green
+beside it.
+
+All three of the earlier blocks were decided green by
 `pwsh ./dev-scripts/perf-budget-gate.ps1 -SkipServer -SkipClient -LoadArms azurite,postgres` on
 2026-09-29 (CPU 91%, 12.7 GB free at start).
 

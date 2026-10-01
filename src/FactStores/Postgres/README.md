@@ -143,7 +143,8 @@ and the test pack asserts each one binds it.
   storage failure rolls the whole batch back.
 - **AsOf reads (law L4)** come from the same table: the current heads written
   by `t`, plus the predecessors of successors written after `t` (driven from
-  the transaction-time index). No separate read model, so a head dated ahead
+  the transaction-time index by the statement's shape, not by the planner's
+  statistics, since Phase 962). No separate read model, so a head dated ahead
   of the reading clock is simply not yet visible.
 - **Population reads** push down the subject set, the metric, the period,
   visibility, a single named method and — when no canonical selection can
@@ -179,7 +180,10 @@ and the test pack asserts each one binds it.
 (`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`) of a point read's visible-heads
 statement — which index answered, and how many rows it touched. At 300,000
 subjects in one scope a subject-and-metric point read touched 5 rows, with
-no sequential scan.
+no sequential scan. `ExplainPopulation(scope, query)` does the same for a
+population read's summary statement (Phase 962): on a correctly indexed table
+it is an `Index Only Scan` on `toolup_facts_population_idx` touching one row per
+subject of the asked period.
 
 **The population read is linear in the population, not flat (Phase 940,
 measured).** Measured on one local PostgreSQL 17 with four concurrent callers,
@@ -200,6 +204,24 @@ instant, a period, a subject prefix and a threshold the caller chooses. No
 per-query read can therefore touch fewer rows than the population. A flat read
 needs an aggregate maintained on every write, and this companion does not build
 one. `docs/rag/performance.md` has the breakdown and the reasoning.
+
+**History no longer costs the read anything (Phase 962, measured).** Phase 940's
+cell had 4 weeks of history. At 3 metrics x 52 weeks, one metric's latest week is
+1/156 of the table, and before the population index every statement scanned the
+whole table. Population read p50 / p95 in ms, four concurrent callers:
+
+| Subjects (facts) | Before | After |
+|---:|---|---|
+| 25,000 (3,900,000) | 1,286.42 / 1,959.17 | 32.98 / 39.00 |
+| 100,000 (15,600,000) | 16,268.31 / 16,721.22 | 124.40 / 141.21 |
+
+A 300,000-subject population read 386.65 / 520.37. The read still grows with the
+population, at about 1.2 µs per subject. A write-maintained aggregate was
+prototyped and measured. Its read was flat (0.05 ms), but no shipped caller's
+question can be answered by it alone, and four concurrent writers to one metric's
+period queued on its row, tripling their median assert. So it was not built. The
+index costs about 247 bytes a row and about 8% of bulk-seed throughput, with no
+measurable change per assert. The performance document has the full tables.
 
 ## Migrating from `BlobFactStore` (Phase 941)
 
