@@ -1587,15 +1587,22 @@ What the columns found:
   model — give those values a parameter — and so moves a byte-held extraction. Reported upstream
   (2026-09-30) as [FStarLang/FStar#4623](https://github.com/FStarLang/FStar/issues/4623): these
   values have a function type, and the backend already emits one eta-expanded when it is *applied*;
-  it refuses only when the value is *passed* as an argument, which is how the decoders use them. If
-  upstream takes that, the remedy moves out of the model.
+  it refuses only when the value is *passed* as an argument, which is how the decoders use them.
+  Upstream took it the same day: [FStarLang/FStar#4627](https://github.com/FStarLang/FStar/pull/4627)
+  (merged 2026-09-30) eta-expands such definitions on the F# backend before printing, so the remedy
+  is out of the model. On `nightly-2026-10-01` the reproduction builds and `RemotingDecode` emits all
+  72 definitions under a module root; the fix reaches this directory with the first release that
+  carries it (Phase 957).
 * **What does not build.** `ModelInput`'s generated module is refused by the F# compiler: in
   `render`, a `match` that is the value of a record field is printed with its arms to the left of
   the expression it belongs to (`ModelInput.fs(126,6)`: FS0058, then FS0010). That is a defect in
   the new backend's layout, the thing it was written to get right, and it is in the release this
   directory pins. Reported upstream (2026-09-30) as
   [FStarLang/FStar#4622](https://github.com/FStarLang/FStar/issues/4622), with a nine-line
-  reproduction; the nightly of that date prints the same layout.
+  reproduction; the nightly of that date prints the same layout. Fixed upstream by
+  [FStarLang/FStar#4626](https://github.com/FStarLang/FStar/pull/4626) (merged 2026-10-01): a field's
+  value is printed at the column after its label. On `nightly-2026-10-01` the reproduction builds and
+  `ModelInput`'s generated project builds as generated, all 28 definitions (Phase 957).
 * **The names.** `ElmishRing.succ` becomes `elmishRing_succ`: every value and type carries its
   module as a lower-cased prefix, constructors as an upper-cased one (`ModelInput_ONone`), and an
   inductive with one constructor and named fields becomes an F# record. Every differential host's
@@ -1615,7 +1622,9 @@ byte-stable across the pin move, and the normaliser that keeps it compiling refu
 recognise. What upstream says about that route is now on this ladder: it is unmaintained, so a
 future release may drop it, and the normaliser is this repository's to carry until then. What would
 reopen the decision is a release in which `ModelInput`'s project builds as generated; the table is
-the measurement to repeat, and the two upstream issues above are what to watch. The clock on it is
+the measurement to repeat. Both upstream issues are now closed by merged fixes (#4626, #4627; both
+on `nightly-2026-10-01`), so the trigger is the first weekly release that carries them, and Phase 957
+is the phase that repeats the table on it and migrates on green. The clock on it is
 upstream's: in closing [FStarLang/FStar#4523](https://github.com/FStarLang/FStar/issues/4523)
 (2026-09-18) a maintainer wrote that the legacy `--codegen FSharp` will be deprecated soon in favour
 of the new backend.
@@ -1940,8 +1949,10 @@ measurement:
    it would make the extraction's indices `uint32`, which Fable carries as numbers; the probe above
    says that recovers the shipped ring's steady-state speed and keeps the array ring's lead
    everywhere else. The ask belongs upstream, and was made on 2026-09-30 as
-   [FStarLang/FStar#4624](https://github.com/FStarLang/FStar/issues/4624); that issue is what to
-   watch for this route.
+   [FStarLang/FStar#4624](https://github.com/FStarLang/FStar/issues/4624), and
+   [FStarLang/FStar#4628](https://github.com/FStarLang/FStar/pull/4628) implements it (open at the time
+   of writing: `SizeT` as `uint32` under the flag, default unchanged). Phase 958 retries this
+   measurement, and the replacement behind it, once a release carries that change.
 
 **Left for whoever makes the replacement.** The three premises the driver set for it — what public
 surface the generated `module ElmishRingArray` and `open FStarCustard` would add to
