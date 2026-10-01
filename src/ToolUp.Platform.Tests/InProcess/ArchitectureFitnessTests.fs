@@ -988,6 +988,239 @@ let private phase946Tests =
         }
     ]
 
+// ─── Phase 961 — by-id blob reads of a conversation sit beside a gate ──
+//
+// Phase 946's case above scans reads through the opt-in substrate's reader
+// only. A server handler reads a conversation BY ID far more often through
+// its blobs: `ConversationBlobs.load*` and the assistant handler's
+// `loadConversationOrFail` / `loadProviderHistoryOrFail` /
+// `loadConversationMeta`. This case scans every server project's source
+// for those reads and requires the binding that holds each one to call a
+// gate — `canSee`, `checkOwnership` / `checkAppend` (the owner gate, Phase
+// 6j.D / 961) or `authoriseWrite` (Phase 859) — or to be pinned below WITH
+// ITS REASON. A pin naming a read that no longer exists is itself a
+// finding.
+//
+// It checks PRESENCE, not control flow: a binding that calls the gate and
+// then ignores its answer passes here. That is exactly the shape Phase 961
+// found in `SubmitMessage` (a refusal in one branch of an `async` `match`
+// that did not end the block), and a text scan cannot see it. The
+// control-flow guard is the behaviour test "Phase 961 — a refused turn
+// stops at the gate" in `ConversationVisibilityTests.fs`, which drives the
+// real handler and reads what a refused turn read and wrote.
+//
+// The enclosing binding is the nearest `let` / `member` / record-field head
+// (`GetConversation =`) above the read whose body CONTAINS the read — a
+// sibling binding that ended earlier is not it.
+
+let private conversationBlobReadCall =
+    System.Text.RegularExpressions.Regex(
+        @"(?<![A-Za-z0-9_.])(ConversationBlobs\.load[A-Za-z]*|loadConversationOrFail|loadProviderHistoryOrFail|loadConversationMeta)\s+[A-Za-z_(]"
+    )
+
+let private fieldHead =
+    System.Text.RegularExpressions.Regex(@"^(\s*)([A-Z][A-Za-z0-9_']*)\s*=\s*(?:fun\b.*)?$")
+
+let private conversationBlobGuards = [ "canSee"; "checkOwnership"; "checkAppend"; "authoriseWrite" ]
+
+/// Every by-id conversation blob read in one source text, with whether the
+/// binding holding it calls a gate. Pure over the text.
+let private conversationBlobReadsIn (file: string) (source: string) : (ConversationRead * bool) list =
+    let lines = source.Replace("\r\n", "\n").Split('\n')
+
+    let headAt (j: int) =
+        let m = bindingHead.Match lines[j]
+
+        if m.Success then
+            Some(m.Groups[1].Value.Length, m.Groups[2].Value)
+        else
+            let f = fieldHead.Match lines[j]
+
+            if f.Success then
+                Some(f.Groups[1].Value.Length, f.Groups[2].Value)
+            else
+                None
+
+    let bodyEnd (start: int) (headIndent: int) =
+        seq { start + 1 .. lines.Length - 1 }
+        |> Seq.tryFind (fun j -> not (String.IsNullOrWhiteSpace lines[j]) && indentOf lines[j] <= headIndent)
+        |> Option.defaultValue lines.Length
+
+    [
+        for i in 0 .. lines.Length - 1 do
+            let line = lines[i]
+            let trimmed = line.TrimStart()
+            let call = conversationBlobReadCall.Match line
+
+            // A comment is not a read, and neither is the definition of one
+            // of the wrappers (`let private loadConversationMeta (...)`).
+            let isDefinition =
+                call.Success
+                && (match headAt i with
+                    | Some(_, name) -> call.Groups[1].Value.EndsWith name
+                    | None -> false)
+
+            if call.Success && not (trimmed.StartsWith "//") && not isDefinition then
+                let callIndent = indentOf line
+
+                let head =
+                    seq { i - 1 .. -1 .. 0 }
+                    |> Seq.tryPick (fun j ->
+                        match headAt j with
+                        | Some(headIndent, name) when headIndent < callIndent && i < bodyEnd j headIndent ->
+                            Some(j, headIndent, name)
+                        | _ -> None)
+
+                match head with
+                | None ->
+                    yield
+                        {
+                            File = file
+                            Binding = "<top level>"
+                            Line = i + 1
+                        },
+                        false
+                | Some(start, headIndent, name) ->
+                    let body = String.Join("\n", lines[start .. bodyEnd start headIndent - 1])
+
+                    yield
+                        {
+                            File = file
+                            Binding = name
+                            Line = i + 1
+                        },
+                        conversationBlobGuards |> List.exists body.Contains
+    ]
+
+let private conversationBlobReadPins: ConversationReadPin list = [
+    {
+        PinFile = "src/ToolUp.AI.Server/Server/AIAssistantHandler.fs"
+        PinBinding = "loadConversationOrFail"
+        Reason = "the raising wrapper over ConversationBlobs.loadConversation; every call of it is scanned here"
+    }
+    {
+        PinFile = "src/ToolUp.AI.Server/Server/AIAssistantHandler.fs"
+        PinBinding = "loadProviderHistoryOrFail"
+        Reason = "the raising wrapper over ConversationBlobs.loadProviderHistory; every call of it is scanned here"
+    }
+    {
+        PinFile = "src/ToolUp.AI.Server/Server/AIAssistantHandler.fs"
+        PinBinding = "readOwnedRow"
+        Reason =
+            "one listing row; ListConversations and ListConversationsPage filter every row through visibleRows (canSee) before returning it"
+    }
+    {
+        PinFile = "src/ToolUp.AI.Server/Server/AIAssistantHandler.fs"
+        PinBinding = "titleConversation"
+        Reason =
+            "called only from the tail of a SubmitMessage turn the gate has admitted; no route reaches it otherwise"
+    }
+]
+
+/// The findings over a set of (repo-relative file, source) pairs: a read
+/// whose binding calls no gate and is not pinned, and a pin that names no
+/// read. Empty is a pass.
+let private conversationBlobReadFindings (sources: (string * string) list) (pins: ConversationReadPin list) = [
+    let reads =
+        sources
+        |> List.collect (fun (file, source) -> conversationBlobReadsIn file source)
+
+    let pinned (r: ConversationRead) =
+        pins |> List.exists (fun p -> p.PinFile = r.File && p.PinBinding = r.Binding)
+
+    for r, guarded in reads do
+        if not guarded && not (pinned r) then
+            yield
+                sprintf
+                    "%s:%d — `%s` reads a conversation's blobs by id without canSee, the owner gate or authoriseWrite"
+                    r.File
+                    r.Line
+                    r.Binding
+
+    for p in pins do
+        if
+            not (
+                reads
+                |> List.exists (fun (r, _) -> r.File = p.PinFile && r.Binding = p.PinBinding)
+            )
+        then
+            yield sprintf "pin %s / `%s` names no conversation blob read — remove it" p.PinFile p.PinBinding
+]
+
+let private phase961Tests =
+    testList "Phase 961 — by-id conversation blob reads sit beside a gate" [
+
+        test "every server by-id read of a conversation's blobs is gated, or pinned with its reason" {
+            let sources = serverSources ()
+
+            Expect.isGreaterThan sources.Length 200 "the server sweep found almost nothing — the walk is broken"
+
+            let reads =
+                sources
+                |> List.collect (fun (file, source) -> conversationBlobReadsIn file source)
+
+            // Floor: the reads this phase names are found, so a regex that
+            // stopped matching cannot pass vacuously.
+            Expect.isGreaterThanOrEqual reads.Length 12 "the scan found the handler's by-id reads"
+
+            for binding in [ "bgWork"; "GetConversation"; "authoriseWrite"; "SetConversationOverride" ] do
+                Expect.isTrue
+                    (reads |> List.exists (fun (r, _) -> r.Binding = binding))
+                    $"the scan attributes a read to `{binding}`"
+
+            let findings = conversationBlobReadFindings sources conversationBlobReadPins
+
+            Expect.isEmpty
+                findings
+                (sprintf
+                    "A server path reads a conversation's blobs by id with no gate beside it:\n%s"
+                    (String.concat "\n" findings))
+
+            for p in conversationBlobReadPins do
+                Expect.isNotEmpty p.Reason "a pin carries its reason"
+        }
+
+        test "a planted unguarded read is a finding, and a sibling binding does not hide it" {
+            let planted =
+                String.concat "\n" [
+                    "module Planted"
+                    "let api storage container = {"
+                    "    Peek ="
+                    "        fun conversationId -> async {"
+                    "            let guard = ConversationBlobs.checkOwnership [] \"x\""
+                    "            ()"
+                    "        }"
+                    "    Leak ="
+                    "        fun conversationId -> async {"
+                    "            let! history = ConversationBlobs.loadProviderHistory storage container conversationId"
+                    "            return history"
+                    "        }"
+                    "    Open ="
+                    "        fun conversationId -> async {"
+                    "            let! messages = loadConversationOrFail logger storage container conversationId"
+                    "            return messages |> List.filter (fun m -> ConversationVisibility.canSee s v m.CreatedBy t)"
+                    "        }"
+                    "}"
+                ]
+
+            let findings =
+                conversationBlobReadFindings [ "src/Planted.Server/Planted.fs", planted ] []
+
+            Expect.equal findings.Length 1 "exactly the unguarded read"
+            Expect.stringContains findings.Head "`Leak`" "the finding names the binding that skips the gate"
+        }
+
+        test "a pin naming no read is a finding" {
+            let pin = {
+                PinFile = "src/Planted.Server/Planted.fs"
+                PinBinding = "gone"
+                Reason = "r"
+            }
+
+            Expect.isNonEmpty (conversationBlobReadFindings [] [ pin ]) "a stale pin must be removed"
+        }
+    ]
+
 [<Tests>]
 let tests =
     testList "Phase 174 — architecture-fitness gate" [
@@ -998,4 +1231,5 @@ let tests =
         phase635Tests
         phase880Tests
         phase946Tests
+        phase961Tests
     ]
