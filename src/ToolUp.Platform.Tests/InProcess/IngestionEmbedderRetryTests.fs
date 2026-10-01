@@ -19,6 +19,10 @@ open System.Net
 open System.Net.Http
 open System.Threading.Tasks
 open Expecto
+open ToolUp.Platform
+open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.Platform.IEmbeddingProvider
+open ToolUp.Platform.IRetrievalPipeline
 open ToolUp.RAG.IngestionTypes
 open ToolUp.RAG.IngestionService
 
@@ -130,5 +134,145 @@ let private alerts =
         }
     ]
 
+// ─── Phase 867 — a revoked key is not a transient fault ──────────────
+//
+// The OpenAI companion (and any API-backed provider following the 14u
+// contract) does NOT surface a 401 / 403 as an `HttpRequestException`: it
+// emits its own platform-scoped audit and raises the typed
+// `EmbeddingProviderUnavailableException`. A classifier that only knew
+// the HTTP exception therefore filed a revoked key as `Transient`: five
+// attempts over thirty minutes, a dead-letter recorded as transient, and
+// the "provider rejected credentials" Owner/Admin alert never raised from
+// ingestion. These pin the typed arm, through whatever wrapping the
+// async machinery adds, and the alert end to end through the retry
+// handler — the path a chunk's second and later attempts take.
+
+type private CapturingChannel() =
+    let published = ResizeArray<string * Notification>()
+    let gate = obj ()
+
+    member _.Published = lock gate (fun () -> published |> List.ofSeq)
+
+    interface INotificationChannel with
+        member _.Publish(scopeId, notification) = async { lock gate (fun () -> published.Add(scopeId, notification)) }
+
+        member _.Subscribe(_, _) =
+            async.Return Unchecked.defaultof<NotificationSubscriptionId>
+
+        member _.Unsubscribe _ = async.Return()
+
+let private silentLogger =
+    { new ILogger with
+        member _.Debug _ = ()
+        member _.Info _ = ()
+        member _.Warn _ = ()
+        member _.Error(_, _) = ()
+    }
+
+let private credentialRejection =
+    let rejected () =
+        EmbeddingProviderUnavailableException(401, "invalid api key") :> exn
+
+    testList "Phase 867 — a typed credentials rejection is permanent" [
+        test "the typed EmbeddingProviderUnavailableException classifies Permanent" {
+            match classifyIndexFailure (rejected ()) with
+            | Permanent reason -> Expect.stringContains reason "401" "the reason names the status"
+            | Transient _ -> failtest "a revoked key was classified Transient — it would be retried for thirty minutes"
+        }
+
+        test "the typed exception is found through the wrapping the async machinery adds" {
+            let wrapped: exn list = [
+                AggregateException(rejected ())
+                AggregateException(AggregateException(rejected ()))
+                InvalidOperationException("outer", rejected ())
+                AggregateException(TimeoutException "a sibling", rejected ())
+            ]
+
+            for ex in wrapped do
+                Expect.isTrue
+                    (isPermanent ex)
+                    (sprintf "%s wrapping the typed rejection ⇒ permanent" (ex.GetType().Name))
+        }
+
+        testCaseAsync "a chunk whose provider rejects credentials raises the Owner/Admin alert and is not retried"
+        <| async {
+            let channel = CapturingChannel()
+
+            let pipeline =
+                { new IRetrievalPipeline with
+                    member _.Retrieve _ _ = async.Return []
+                    member _.Index _ _ _ = async { return raise (rejected ()) }
+                    member _.DeleteByScope _ = async.Return()
+                }
+
+            let deps: IngestionRetryDeps = {
+                Pipeline = pipeline
+                EventStore = ToolUp.Platform.InMemoryEventStore.InMemoryEventStore()
+                Observers = []
+                NotificationChannel = Some(channel :> INotificationChannel)
+                Telemetry = ToolUp.RAG.RagTelemetry.NoOpRagTelemetry()
+                Logger = silentLogger
+                // Zero backoff: the handler owns the delay, and this pin is
+                // about the classification, not the wait.
+                Policy = {
+                    IngestionRetryPolicy.defaults with
+                        InitialBackoff = TimeSpan.Zero
+                        MaxBackoff = TimeSpan.Zero
+                        JitterFactor = 0.0
+                }
+                AlertState = IngestionAlertState()
+            }
+
+            let payload: IngestionRetryPayload = {
+                DocumentId = "doc-867"
+                DocumentName = "doc.pdf"
+                ChunkId = "doc-867:chunk:0"
+                ChunkIndex = 0
+                Chunk = { Content = "x"; Metadata = Map.empty }
+                Scope = Deployment
+                ScopeId = "team-867"
+                Container = "team-867"
+                OriginatingUserId = None
+                Attempt = None
+            }
+
+            let ctx: JobContext = {
+                JobId = Guid.NewGuid()
+                ScopeId = "team-867"
+                AccessContext = AccessContext.unrestricted (AuthenticatedUser "system")
+                // Scheduler attempt 1 = ingestion attempt 2: retries remain,
+                // so a Transient verdict would re-dispatch rather than stop.
+                Attempt = 1
+                Trigger = Manual
+                Scope = ResolvedScope.anonymous
+                TriggerSource = ScheduledManually "system"
+                ScheduledAt = DateTime.UtcNow
+                RunningAt = DateTime.UtcNow
+                Payload = Outcome.toJson payload
+                DeadLetterDestination = None
+            }
+
+            let handler = ToolUp.RAG.IngestionRetryJobHandler.create deps
+            let! result = handler.Execute ctx
+
+            match result with
+            | JobResult.PermanentFailure _ -> ()
+            | other -> failtestf "a revoked key must stop retrying at once; the handler returned %A" other
+
+            let alerts =
+                channel.Published
+                |> List.choose (fun (scope, n) ->
+                    match n with
+                    | SystemMessage(SystemMessageLevel.Error, text) -> Some(scope, text)
+                    | _ -> None)
+
+            match alerts with
+            | [ scope, text ] ->
+                Expect.equal scope "team-867" "the alert goes to the tenant scope that uploaded"
+                Expect.stringContains text "rejected" "the alert says the provider rejected ingestion"
+            | other -> failtestf "expected exactly one Owner/Admin error alert, got %A" other
+        }
+    ]
+
 let tests =
-    testList "Phase 14t — embedder retry + dead-letter" [ classification; backoff; alerts ]
+    testList "Phase 14t — embedder retry + dead-letter" [ classification; backoff; alerts; credentialRejection ]

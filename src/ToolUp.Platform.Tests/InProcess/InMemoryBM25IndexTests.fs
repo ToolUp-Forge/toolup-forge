@@ -187,4 +187,14 @@ let tests =
             }
 
             harness)
+
+        // Phase 861 — the restart laws of the vector-store pack's sparse
+        // half: every mutation hydrates a lazily loaded scope first, and an
+        // unreadable snapshot refuses it.
+        IVectorStoreContract.sparseIndexTests
+            "InMemoryBM25Index"
+            (function
+            | :? ToolUp.RAG.InMemoryVectorStore.RagScopeSnapshotUnreadableException -> true
+            | _ -> false)
+            (fun storage -> new InMemoryBM25Index(storage, flushIntervalMs = 60000) :> ISparseIndex)
     ]

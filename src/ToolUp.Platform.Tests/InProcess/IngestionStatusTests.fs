@@ -92,6 +92,7 @@ let private chunkJob (container: string) (documentId: string) (chunkIndex: int) 
     ScopeId = "scope-1"
     Container = container
     OriginatingUserId = None
+    Attempt = None
 }
 
 let private observerTests =

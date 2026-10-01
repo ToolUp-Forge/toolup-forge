@@ -86,12 +86,35 @@ let private withTimeout (label: string) (timeoutMs: int) (work: Async<'T>) : Asy
 //   - Pre-existing conversations migrate gracefully: if the history blob
 //     is missing we start from an empty provider history, which is the
 //     same behaviour as today (just without broken round-tripping).
+//
+// Phase 862 — the two blobs' names, load, save and the ownership gate live
+// in `ConversationBlobs`, shared with the fast-path beacon handler (the
+// other writer). A blob that is present but cannot be read is a typed
+// error there, never an empty history: this handler refuses the turn
+// rather than write over what it could not read.
 
-let private conversationBlobName (conversationId: Guid) =
-    $"ai-conversations/{conversationId}.json"
+/// Phase 862 — the user-facing refusal when a conversation blob cannot be
+/// read. The operator detail (blob, reason) goes to the log; the chat
+/// shows this, and the stored history is left exactly as it was.
+let private unreadableConversation
+    (logger: ILogger)
+    (conversationId: Guid)
+    (err: ConversationBlobs.ConversationBlobError)
+    =
+    logger.Warn $"AI conversation {conversationId}: {ConversationBlobs.ConversationBlobError.describe err}."
 
-let private providerHistoryBlobName (conversationId: Guid) =
-    $"ai-conversations/{conversationId}.history.json"
+    $"The stored history of conversation {conversationId} could not be read, so it was left untouched rather than overwritten."
+
+/// Phase 862 — the user-facing failure when a conversation blob could not
+/// be written; a failed save is never reported as a completed turn.
+let private unwrittenConversation
+    (logger: ILogger)
+    (conversationId: Guid)
+    (err: ConversationBlobs.ConversationBlobError)
+    =
+    logger.Error($"AI conversation {conversationId}: {ConversationBlobs.ConversationBlobError.describe err}.", None)
+
+    $"The reply for conversation {conversationId} could not be saved."
 
 // Per-conversation metadata sibling. Carries server-only fields the
 // UI doesn't render directly (currently the BYOK provider override).
@@ -118,63 +141,63 @@ module private ConversationMeta =
         Title = None
     }
 
-let private saveConversation
+// ─── Phase 862 — the chat path's adapters over `ConversationBlobs` ─
+//
+// Every caller below goes on to WRITE, or gates a write, so an unreadable
+// blob and a failed save both RAISE: inside `bgWork` the exception is the
+// turn's `AITaskFailed`, and the stored history is never replaced by what
+// could not be read. The message raised is the user-facing one; the
+// operator detail is logged.
+
+let private loadConversationOrFail
+    (logger: ILogger)
+    (storage: IBlobStorage)
+    (container: string)
+    (conversationId: Guid)
+    : Async<ConversationMessage list> =
+    async {
+        match! ConversationBlobs.loadConversation storage container conversationId with
+        | Ok messages -> return messages
+        | Error err -> return failwith (unreadableConversation logger conversationId err)
+    }
+
+let private loadProviderHistoryOrFail
+    (logger: ILogger)
+    (storage: IBlobStorage)
+    (container: string)
+    (conversationId: Guid)
+    : Async<AIProviderMessage list> =
+    async {
+        match! ConversationBlobs.loadProviderHistory storage container conversationId with
+        | Ok messages -> return messages
+        | Error err -> return failwith (unreadableConversation logger conversationId err)
+    }
+
+let private saveConversationOrFail
+    (logger: ILogger)
     (storage: IBlobStorage)
     (container: string)
     (conversationId: Guid)
     (messages: ConversationMessage list)
-    =
+    : Async<unit> =
     async {
-        let bytes = toJson messages |> Encoding.UTF8.GetBytes
-        let! _ = storage.Upload(container, conversationBlobName conversationId, bytes)
-        return ()
+        match! ConversationBlobs.saveConversation storage container conversationId messages with
+        | Ok() -> return ()
+        | Error err -> return failwith (unwrittenConversation logger conversationId err)
     }
 
-let private loadConversation (logger: ILogger) (storage: IBlobStorage) (container: string) (conversationId: Guid) = async {
-    let! result = storage.Download(container, conversationBlobName conversationId)
-
-    match result with
-    | Ok bytes ->
-        try
-            return fromJson<ConversationMessage list> bytes
-        with ex ->
-            // Present-but-corrupt ≠ absent. Silently returning []
-            // makes the conversation appear to "forget" everything
-            // with no signal — log so the operator can tell a
-            // corrupt blob from a genuinely new conversation.
-            logger.Warn
-                $"AI conversation {conversationId} blob is present but unparseable ({ex.Message}); treating as empty for this read."
-
-            return []
-    | Error _ -> return []
-}
-
-let private saveProviderHistory
+let private saveProviderHistoryOrFail
+    (logger: ILogger)
     (storage: IBlobStorage)
     (container: string)
     (conversationId: Guid)
     (messages: AIProviderMessage list)
-    =
+    : Async<unit> =
     async {
-        let bytes = toJson messages |> Encoding.UTF8.GetBytes
-        let! _ = storage.Upload(container, providerHistoryBlobName conversationId, bytes)
-        return ()
+        match! ConversationBlobs.saveProviderHistory storage container conversationId messages with
+        | Ok() -> return ()
+        | Error err -> return failwith (unwrittenConversation logger conversationId err)
     }
-
-let private loadProviderHistory (logger: ILogger) (storage: IBlobStorage) (container: string) (conversationId: Guid) = async {
-    let! result = storage.Download(container, providerHistoryBlobName conversationId)
-
-    match result with
-    | Ok bytes ->
-        try
-            return fromJson<AIProviderMessage list> bytes
-        with ex ->
-            logger.Warn
-                $"AI provider-history blob for conversation {conversationId} is present but unparseable ({ex.Message}); the next turn loses prior tool context."
-
-            return []
-    | Error _ -> return []
-}
 
 let private saveConversationMeta
     (storage: IBlobStorage)
@@ -375,8 +398,8 @@ module ConversationRetention =
     /// sibling too: a per-conversation record of what the user agreed
     /// to is that user's data and goes with the conversation.
     let siblingBlobNames (conversationId: Guid) : string list = [
-        conversationBlobName conversationId
-        providerHistoryBlobName conversationId
+        ConversationBlobs.conversationBlobName conversationId
+        ConversationBlobs.providerHistoryBlobName conversationId
         conversationMetaBlobName conversationId
         AIConsentDispatch.consentBlobName conversationId
     ]
@@ -459,7 +482,7 @@ module ConversationRetention =
         (conversationId: Guid)
         : Async<DateTime option> =
         async {
-            let blobName = conversationBlobName conversationId
+            let blobName = ConversationBlobs.conversationBlobName conversationId
 
             let fromMetadata () = async {
                 match! storage.GetMetadata(container, blobName) with
@@ -470,11 +493,11 @@ module ConversationRetention =
             match! storage.Download(container, blobName) with
             | Ok bytes ->
                 let parsed =
-                    try
-                        Some(fromJson<ConversationMessage list> bytes)
-                    with ex ->
+                    match ConversationBlobs.decodeConversation blobName bytes with
+                    | Ok messages -> Some messages
+                    | Error err ->
                         logger.Warn
-                            $"AI conversation {conversationId} blob is unparseable ({ex.Message}); dating it by its write time for retention."
+                            $"AI conversation {conversationId}: {ConversationBlobs.ConversationBlobError.describe err}; dating it by its write time for retention."
 
                         None
 
@@ -786,17 +809,20 @@ module ConversationListing =
         (conversationId: Guid)
         : Async<(ConversationListingRow * string) option> =
         async {
-            let blobName = conversationBlobName conversationId
+            let blobName = ConversationBlobs.conversationBlobName conversationId
 
             match! storage.Download(container, blobName) with
             | Error _ -> return None
             | Ok bytes ->
+                // Read-only: an undecodable conversation is still LISTED
+                // (with no messages) so it stays visible to its owner; the
+                // listing writes nothing, so nothing is overwritten.
                 let messages =
-                    try
-                        fromJson<ConversationMessage list> bytes
-                    with ex ->
+                    match ConversationBlobs.decodeConversation blobName bytes with
+                    | Ok messages -> messages
+                    | Error err ->
                         logger.Warn
-                            $"AI conversation {conversationId} blob is unparseable ({ex.Message}); listing it with no messages."
+                            $"AI conversation {conversationId}: {ConversationBlobs.ConversationBlobError.describe err}; listing it with no messages."
 
                         []
 
@@ -1564,29 +1590,36 @@ let aiAssistantApi
         match! visibilityState () with
         | None -> return Ok true
         | Some state ->
-            let! messages = loadConversation logger storage scope.Container conversationId
-            let owner = ConversationListing.ownerOf messages
+            match! ConversationBlobs.loadConversation storage scope.Container conversationId with
+            | Error err ->
+                // Phase 862 — a conversation whose blob cannot be read has
+                // no readable owner, so nobody's authority over it can be
+                // established; refuse rather than read it as the empty
+                // (ownerless, writable-by-anyone) conversation.
+                return Error(unreadableConversation logger conversationId err)
+            | Ok messages ->
+                let owner = ConversationListing.ownerOf messages
 
-            match messages with
-            | [] -> return Ok true
-            | _ when owner = userId -> return Ok true
-            | _ ->
-                let! viewer = viewerIn state
-                let createdAt = createdAtOf messages
+                match messages with
+                | [] -> return Ok true
+                | _ when owner = userId -> return Ok true
+                | _ ->
+                    let! viewer = viewerIn state
+                    let createdAt = createdAtOf messages
 
-                if not (TeamConversationPolicyStore.ConversationVisibility.canSee state viewer owner createdAt) then
-                    return Ok false
-                elif TeamConversationPolicyStore.ConversationVisibility.canModify state viewer owner createdAt then
-                    return Ok true
-                else
-                    let elevated =
-                        match TeamConversationPolicyStore.ConversationVisibility.levels state createdAt with
-                        | Some(_, PlatformAdmins) -> "a platform admin"
-                        | _ -> "a team owner or admin"
+                    if not (TeamConversationPolicyStore.ConversationVisibility.canSee state viewer owner createdAt) then
+                        return Ok false
+                    elif TeamConversationPolicyStore.ConversationVisibility.canModify state viewer owner createdAt then
+                        return Ok true
+                    else
+                        let elevated =
+                            match TeamConversationPolicyStore.ConversationVisibility.levels state createdAt with
+                            | Some(_, PlatformAdmins) -> "a platform admin"
+                            | _ -> "a team owner or admin"
 
-                    return
-                        Error
-                            $"Only the conversation's author or {elevated} can delete or change another member's conversation."
+                        return
+                            Error
+                                $"Only the conversation's author or {elevated} can delete or change another member's conversation."
     }
 
     // Phase 69c.F — ONE turn implementation, the event sink injected at
@@ -1804,24 +1837,16 @@ let aiAssistantApi
                         // Load happens BEFORE the InProgress SSE so a
                         // refused turn doesn't briefly flash as in-flight
                         // on the client; the agent loop never starts.
+                        // Phase 862 — an unreadable conversation blob
+                        // raises here, failing the turn before the agent
+                        // loop starts and before anything is written.
                         let! gateExisting =
-                            loadConversation logger storage scope.Container conversationId
+                            loadConversationOrFail logger storage scope.Container conversationId
                             |> withTimeout "Conversation load (ownership gate)" ChatPathIoTimeoutMs
 
-                        // Inline copy of `FastPathBeaconHandler.checkOwnership`
-                        // — that module compiles AFTER this one in
-                        // `ToolUp.AI.Server.fsproj`, so the symbol isn't
-                        // reachable here. Both copies must move together
-                        // when the gate semantics change.
-                        let ownershipResult =
-                            match gateExisting with
-                            | [] -> Ok()
-                            | first :: _ ->
-                                let owner = first.CreatedBy
-
-                                if System.String.IsNullOrEmpty owner then Ok()
-                                elif owner = userId then Ok()
-                                else Error owner
+                        // The one definition of the gate, shared with the
+                        // beacon handler (Phase 862).
+                        let ownershipResult = ConversationBlobs.checkOwnership gateExisting userId
 
                         match ownershipResult with
                         | Error ownerOfRecord ->
@@ -1935,14 +1960,14 @@ let aiAssistantApi
                         // but degraded for one turn until the new history
                         // blob is written.
                         let! providerHistory =
-                            loadProviderHistory logger storage scope.Container conversationId
+                            loadProviderHistoryOrFail logger storage scope.Container conversationId
                             |> withTimeout "Conversation history load" ChatPathIoTimeoutMs
 
                         let! providerMessages =
                             if List.isEmpty providerHistory then
                                 async {
                                     let! existing =
-                                        loadConversation logger storage scope.Container conversationId
+                                        loadConversationOrFail logger storage scope.Container conversationId
                                         |> withTimeout "Conversation load" ChatPathIoTimeoutMs
 
                                     return existing |> List.map toProviderMessage
@@ -2087,14 +2112,14 @@ let aiAssistantApi
                         // Persist the full round-trippable history first —
                         // this is what the next turn will load to maintain
                         // tool_use / tool_result pairing with the provider.
-                        do! saveProviderHistory storage scope.Container conversationId finalMessages
+                        do! saveProviderHistoryOrFail logger storage scope.Container conversationId finalMessages
 
                         // Persist the UI-facing conversation blob: user
                         // prompt + final assistant text (intermediate
                         // tool_use / tool_result steps are not rendered in
                         // the chat history, though they remain inspectable
                         // via the history blob for audit or future UI).
-                        let! existingUiMessages = loadConversation logger storage scope.Container conversationId
+                        let! existingUiMessages = loadConversationOrFail logger storage scope.Container conversationId
 
                         let userConvMsg =
                             toConversationMessage conversationId User content [] [] [] userId None
@@ -2271,7 +2296,7 @@ let aiAssistantApi
 
                         let updatedConversation = existingUiMessages @ [ userConvMsg; assistantConvMsg ]
 
-                        do! saveConversation storage scope.Container conversationId updatedConversation
+                        do! saveConversationOrFail logger storage scope.Container conversationId updatedConversation
 
                         // Phase 53 substrate hook — append the
                         // assistant turn + mark the conversation
@@ -2411,9 +2436,11 @@ let aiAssistantApi
         // Phase 859.B/E — a conversation the caller may not see reads as
         // empty, exactly as a missing id does; opening another member's
         // conversation under a narrower level than `TeamVisible` is audited.
+        // Phase 862 — a blob that is present but cannot be read raises
+        // rather than reading as an empty conversation.
         GetConversation =
             fun conversationId -> async {
-                let! messages = loadConversation logger storage scope.Container conversationId
+                let! messages = loadConversationOrFail logger storage scope.Container conversationId
 
                 match messages with
                 | [] -> return []

@@ -774,6 +774,10 @@
         <Compile Include="Server\IPlatformRuntimeConfigStore.fs" />
         <Compile Include="Server\Infra\PlatformRuntimeConfigStore.fs" />
         <Compile Include="Server\PlatformAdminDevDiagnostics.fs" />
+        <!-- Phase 864 - the guarded read-modify-write helper over IBlobStorage /
+             IConditionalBlobStorage (BlobMapStore). Before its adopters:
+             ShareTokenStore.fs below, Teams/TeamManagement.fs, and the KB index. -->
+        <Compile Include="Server\BlobMapStore.fs" />
         <Compile Include="Server\IShareTokenStore.fs" />
         <Compile Include="Server\ShareTokenStore.fs" />
         <!-- Phase 527 — service accounts. Interface then blob-backed default,

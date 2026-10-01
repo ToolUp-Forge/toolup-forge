@@ -125,6 +125,62 @@ let private scopeToKey (scope: VectorScope) =
 let private blobName (scope: VectorScope) =
     $"_rag/{scopeToKey scope}/hnsw-index.json"
 
+/// Phase 861 — raised by a mutating member of `HnswVectorStore` when the
+/// scope's persisted snapshot EXISTS but could not be read (the storage
+/// returned an error for a blob it still reports as present). The store
+/// persists a scope by writing back everything it holds for it in memory,
+/// so mutating a scope it could not load would replace the snapshot at the
+/// next flush with only what arrived since. Nothing is written; the scope
+/// stays unloaded and the next access retries the load. An ABSENT snapshot
+/// is not this error: that scope is loaded-and-empty.
+[<Sealed>]
+type HnswScopeSnapshotUnreadableException
+    /// Refuse a mutation of `scopeKey`, whose snapshot at `blobLocation`
+    /// could not be read for `reason` (the storage's own error text).
+    (scopeKey: string, blobLocation: string, reason: string) =
+    inherit
+        Exception(
+            $"The persisted HNSW snapshot '{blobLocation}' for scope '{scopeKey}' exists but could not be read ({reason}); the mutation was refused so the scope's corpus is not replaced by an empty one. Retry once the storage can read the blob."
+        )
+
+    /// The scope whose mutation was refused (`team:<id>`, `user:<id>`, …).
+    member _.ScopeKey = scopeKey
+
+    /// The blob name of the snapshot that could not be read.
+    member _.BlobLocation = blobLocation
+
+    /// The storage's own reason the read failed.
+    member _.Reason = reason
+
+/// Re-raise an exception caught through `Async.Catch` with its original
+/// stack trace, where `reraise ()` is not available.
+let private rethrow (ex: exn) : 'a =
+    System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex).Throw()
+    Unchecked.defaultof<'a>
+
+/// Phase 861 — the scope key a persisted HNSW snapshot belongs to, for
+/// `ListScopes`: `_rag/{scopeKey}/hnsw-index.json`, and only a key this
+/// store writes.
+let private scopeKeyOfBlob (name: string) =
+    let prefix = "_rag/"
+    let suffix = "/hnsw-index.json"
+
+    if name.StartsWith prefix && name.EndsWith suffix then
+        let key = name.Substring(prefix.Length, name.Length - prefix.Length - suffix.Length)
+
+        if
+            not (key.Contains "/")
+            && (key = "platform"
+                || key = "deployment"
+                || key.StartsWith "team:"
+                || key.StartsWith "user:")
+        then
+            Some key
+        else
+            None
+    else
+        None
+
 let private scopeFromKey (sk: string) =
     if sk = "platform" then
         Platform
@@ -347,6 +403,15 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
 
     let scopes = Dictionary<string, ScopeState>()
     let scopesLock = obj ()
+
+    // Scope keys whose persisted snapshot has been read into memory (guarded
+    // by `scopesLock`). Phase 861 — tracked EXPLICITLY, never inferred from
+    // `scopes.ContainsKey`: `Upsert` creates a scope's state, so reading
+    // "has state" as "was loaded" let an upload that was the first act of a
+    // restarted process skip hydration, and the next flush replaced the
+    // persisted corpus with just the new chunks (the Phase 726 mistake,
+    // made here too).
+    let loadedScopes = HashSet<string>()
     let dirty = HashSet<string>()
     let dirtyLock = obj ()
     let cts = new CancellationTokenSource()
@@ -474,24 +539,68 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
                     state.MarkStale())
             with ex ->
                 log.Warn $"[HnswVectorStore] Corrupt index for {scopeKey}: {ex.Message} — starting empty."
-        | Error _ -> ()
+        | Error reason ->
+            // Phase 861 — a failed download is ABSENT only when the blob is
+            // not there. A snapshot that is there but could not be read must
+            // not be taken for an empty scope: the next mutation's flush
+            // would replace the whole persisted corpus. Refuse, and leave the
+            // scope unloaded so the next access retries.
+            let! present = storage.Exists("_rag", blobName scope)
+
+            if present then
+                raise (HnswScopeSnapshotUnreadableException(scopeKey, blobName scope, reason))
+
+        // Mark loaded only after a COMPLETED attempt: parsed, corrupt (which
+        // starts empty, as it always has) or absent (loaded-and-empty). An
+        // unreadable snapshot raised above and is never marked.
+        lock scopesLock (fun () -> loadedScopes.Add scopeKey |> ignore)
     }
 
+    // Phase 861 — cold loads are single-flight, so a mutation cannot land
+    // between a concurrent load's download and its replay (`loadScope`
+    // clears the scope's state before replaying the snapshot).
+    let loadGate = new SemaphoreSlim(1, 1)
+
+    let isLoaded (scopeKey: string) =
+        lock scopesLock (fun () -> loadedScopes.Contains scopeKey)
+
+    /// Guarantee this scope's persisted snapshot has been read into memory.
+    /// Phase 861 — EVERY mutating member calls this first, so a mutation
+    /// never lands on an un-hydrated scope. Raises
+    /// `HnswScopeSnapshotUnreadableException` when the snapshot exists but
+    /// cannot be read.
     let ensureScopeLoaded (scope: VectorScope) = async {
         let scopeKey = scopeToKey scope
 
-        let alreadyLoaded = lock scopesLock (fun () -> scopes.ContainsKey scopeKey)
+        if not (isLoaded scopeKey) then
+            do! loadGate.WaitAsync() |> Async.AwaitTask
 
-        if not alreadyLoaded then
-            do! loadScope scope
+            try
+                if not (isLoaded scopeKey) then
+                    do! loadScope scope
+            finally
+                loadGate.Release() |> ignore
+    }
+
+    /// The retrieval path's load: an unreadable snapshot degrades the scope
+    /// to no results for this call (with a warning) instead of failing the
+    /// whole search; the scope stays unloaded, so mutations still refuse.
+    let ensureScopeLoadedForSearch (scope: VectorScope) = async {
+        match! ensureScopeLoaded scope |> Async.Catch with
+        | Choice1Of2() -> ()
+        | Choice2Of2(:? HnswScopeSnapshotUnreadableException as refused) ->
+            log.Warn
+                $"[HnswVectorStore] Snapshot '{refused.BlobLocation}' for {refused.ScopeKey} exists but could not be read ({refused.Reason}) — searching without it; mutations of the scope are refused until it reads."
+        | Choice2Of2 ex -> rethrow ex
     }
 
     // Eagerly load Platform / Deployment at construction; team and user
     // scopes hydrate lazily on first access (team/user ids unknown at
-    // construction).
+    // construction). Phase 861 — an unreadable eager snapshot does not fail
+    // construction: the scope stays unloaded and the first access retries.
     do
-        loadScope Platform |> Async.RunSynchronously
-        loadScope Deployment |> Async.RunSynchronously
+        ensureScopeLoadedForSearch Platform |> Async.RunSynchronously
+        ensureScopeLoadedForSearch Deployment |> Async.RunSynchronously
 
     let flushLoop = async {
         while not cts.IsCancellationRequested do
@@ -510,6 +619,11 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
     interface IVectorStore with
 
         member _.Upsert scope chunkId vector chunk = async {
+            // Phase 861 — hydrate first. An upload that is the first thing a
+            // restarted process does to a lazily-loaded scope would otherwise
+            // land on fresh, empty state, and the next flush would replace
+            // the persisted corpus with just the new document's chunks.
+            do! ensureScopeLoaded scope
             let scopeKey = scopeToKey scope
             let state = getOrCreateScope scopeKey
 
@@ -533,7 +647,7 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
             // Hydrate any team scopes from blob; Platform / Deployment
             // are eager-loaded at construction.
             for scope in scopes' do
-                do! ensureScopeLoaded scope
+                do! ensureScopeLoadedForSearch scope
 
             let queryUnit = toDoubleArray (normalise query)
 
@@ -618,6 +732,10 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
         }
 
         member _.DeleteByScope scope = async {
+            // Phase 861 — hydrate first (the Phase 726 fix, which this store
+            // never had): a wipe of an un-hydrated scope found no state,
+            // persisted nothing, and the next read brought the corpus back.
+            do! ensureScopeLoaded scope
             let scopeKey = scopeToKey scope
 
             match scopes.TryGetValue scopeKey with
@@ -628,6 +746,9 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
         }
 
         member _.DeleteChunk scope chunkId = async {
+            // Phase 861 — hydrate first: a tombstone for an un-hydrated scope
+            // found no entry to stamp and left the chunk live at rest.
+            do! ensureScopeLoaded scope
             let scopeKey = scopeToKey scope
 
             match scopes.TryGetValue scopeKey with
@@ -650,6 +771,9 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
         }
 
         member _.RestoreChunk scope chunkId = async {
+            // Phase 861 — hydrate first: a restore for an un-hydrated scope
+            // found no tombstone to lift and silently no-opped.
+            do! ensureScopeLoaded scope
             let scopeKey = scopeToKey scope
 
             match scopes.TryGetValue scopeKey with
@@ -670,6 +794,9 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
         }
 
         member _.Vacuum scope olderThan = async {
+            // Phase 861 — hydrate first: an un-hydrated scope purged nothing
+            // and reported zero while its tombstones stayed at rest.
+            do! ensureScopeLoaded scope
             let scopeKey = scopeToKey scope
 
             match scopes.TryGetValue scopeKey with
@@ -703,12 +830,36 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
         }
 
         member _.ListScopes() = async {
-            let keys = lock scopesLock (fun () -> scopes.Keys |> Seq.toList)
+            // Phase 861 — persisted scopes too, not only the ones this process
+            // has loaded: after a restart a cold scope has no state yet, and a
+            // re-embed sweep driven from this list would skip it.
+            let! persisted = storage.List("_rag", "_rag/")
+
+            let keys =
+                lock scopesLock (fun () ->
+                    let cold =
+                        persisted
+                        |> List.choose scopeKeyOfBlob
+                        |> List.filter (fun sk -> not (loadedScopes.Contains sk))
+
+                    Seq.append scopes.Keys cold |> Seq.distinct |> Seq.toList)
+
             return keys |> List.map scopeFromKey
         }
 
-        member this.Erase(scope, subjectUserId, policy, dryRun) =
-            ToolUp.Platform.IVectorStore.eraseSubject (this :> IVectorStore) scope subjectUserId policy dryRun
+        member this.Erase(scope, subjectUserId, policy, dryRun) = async {
+            // Phase 861 — an unreadable snapshot surfaces as the interface's
+            // own typed failure rather than an exception out of the erasure
+            // fan-out; the orchestrator retries `StoreUnreachable`.
+            match!
+                ToolUp.Platform.IVectorStore.eraseSubject (this :> IVectorStore) scope subjectUserId policy dryRun
+                |> Async.Catch
+            with
+            | Choice1Of2 result -> return result
+            | Choice2Of2(:? HnswScopeSnapshotUnreadableException as ex) ->
+                return Result.Error(ErasureError.StoreUnreachable("vector-store", ex.Message))
+            | Choice2Of2 ex -> return rethrow ex
+        }
 
     interface IDisposable with
         member _.Dispose() =

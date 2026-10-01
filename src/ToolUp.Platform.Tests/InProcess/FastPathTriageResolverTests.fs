@@ -1378,6 +1378,116 @@ let private routeTests =
             Expect.stringContains payload "\"ServedModel\":\"test-triage-model\"" "so the configured model served"
         }
 
+        testCaseAsync
+            "Phase 865 — a budget-gated turn provider still names the cheap model, and the row records the route it was handed"
+        <| async {
+            // The deployment chain `wrapFactoryForDI` builds when both a
+            // per-user token hour and a monetary ceiling are configured:
+            // the token budget inside, the spend gate outermost. Before
+            // Phase 865 neither decorator forwarded the override, so the
+            // triage call reached the provider's PLAIN structured send on
+            // the configured model and the row read `override-fallback`.
+            let turn =
+                OverridingTriageProvider(hitReply, (fun _ -> true), Some "test-cheap-model")
+
+            let budgetConfig =
+                Map.ofList [
+                    AIBudgetConfigKey.maxTokensPerUserPerHour, "10000000"
+                    AIBudgetConfigKey.maxSpendPerUser, "1000"
+                    AIBudgetConfigKey.spendPerUserPeriod, "daily"
+                ]
+
+            let configStore =
+                { new IConfigStore with
+                    member _.GetRaw(_scope, moduleKey) = async {
+                        return
+                            if moduleKey = AIBudgetConfigKey.value then
+                                budgetConfig
+                            else
+                                Map.empty
+                    }
+
+                    member _.Get<'T>(_scope, _moduleKey) : Async<'T option> = failwith "not used by the budget path"
+
+                    member _.GetEffective<'T>(_scope, _moduleKey, _schema) : Async<'T> =
+                        failwith "not used by the budget path"
+
+                    member _.Set<'T>(_scope, _moduleKey, _value: 'T, _schema) = failwith "not used by the budget path"
+                    member _.SetRaw(_scope, _moduleKey, _values, _schema) = failwith "not used by the budget path"
+                    member _.Clear(_scope, _moduleKey) = failwith "not used by the budget path"
+
+                    member _.Erase(_scopeId, _subjectUserId, _policy, _dryRun) = failwith "not used by the budget path"
+                }
+
+            let budgetStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+
+            let rateCard =
+                ModelPriceTable.ofList "USD" [
+                    "test-triage", "test-triage-model", ModelPrice.simple 3.00M 15.00M
+                    "test-triage", "test-cheap-model", ModelPrice.simple 0.10M 0.50M
+                ]
+
+            let tokenBudget =
+                AIBudgetEnforcer.AIBudgetEnforcer(
+                    configStore,
+                    budgetStore,
+                    AIBudgetEnforcer.AIBudgetWindowCache(30),
+                    AIBudgetEnforcer.eventStoreAccount budgetStore (fun () -> DateTime.UtcNow),
+                    fun () -> DateTime.UtcNow
+                )
+
+            let spendBudget =
+                AIBudgetEnforcer.AISpendEnforcer(
+                    configStore,
+                    budgetStore,
+                    rateCard,
+                    AIBudgetEnforcer.AISpendWindowCache(30),
+                    AIBudgetEnforcer.spendEventStoreAccount budgetStore rateCard.Currency (fun () -> DateTime.UtcNow),
+                    ignore,
+                    fun () -> DateTime.UtcNow
+                )
+
+            let rawFactory =
+                { new IAIProviderFactory with
+                    member _.Available = []
+                    member _.PlatformDescriptors = []
+                    member _.PlatformDescriptor = None
+                    member _.Resolve _ctx = async { return Ok(turn :> IAIProvider) }
+                    member _.TryResolveByLabel(_ctx, _label) = async { return Ok(turn :> IAIProvider) }
+                    member _.BuildPlatform(_providerId, _apiKey, _model) = Some(turn :> IAIProvider)
+                }
+
+            let chain =
+                AIProviderUsageMiddleware.SpendEnforcingProviderFactory(
+                    AIProviderUsageMiddleware.BudgetEnforcingProviderFactory(rawFactory, tokenBudget),
+                    spendBudget
+                )
+                :> IAIProviderFactory
+
+            let! resolved = chain.Resolve(AccessContext.unrestricted (TeamMember(HarnessUserId, "team-1")))
+
+            let gated =
+                match resolved with
+                | Ok p -> p
+                | Error e -> failwithf "provider resolution failed: %A" e
+
+            let! r = runLoop (Some config) gated "set country to UK"
+
+            Expect.equal turn.OverrideCalls 1 "the override path of the innermost provider served the triage call"
+            Expect.equal turn.StructuredCalls 1 "…delegating its transport to the structured send, as a connector does"
+
+            Expect.equal
+                turn.LastOptions
+                (Some(AIProviderCallOptions.forModel "test-cheap-model"))
+                "the cheap model was named on the call the innermost provider was handed"
+
+            Expect.equal turn.SendCalls 0 "a hit — the full loop did not run"
+            let payload = r.TriageRows.Head.Payload
+            Expect.stringContains payload OutcomeHit "recorded as a hit"
+            Expect.stringContains payload "\"Route\":\"override\"" "the row records the route the provider was handed"
+            Expect.stringContains payload "\"ServedModel\":\"test-cheap-model\"" "and the model that served it"
+        }
+
         testCaseAsync "no TriageModelId declared — the plain path, byte-identical to before"
         <| async {
             let turn = OverridingTriageProvider(hitReply, (fun _ -> true), None)

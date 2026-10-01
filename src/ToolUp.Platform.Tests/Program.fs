@@ -1312,6 +1312,9 @@ let private registeredTests =
         KbQuotaRetentionTests.tests
         // Phase 510 — KB document versioning + incremental re-index.
         KbVersioningTests.tests
+        // Phase 867 — KB ingestion status completes, never un-fails, and
+        // drops a superseded attempt's late callbacks.
+        KbVersioningTests.ingestionStatusTruth
         // Phase 105 — KB original retention on IDataObjectStore: dedup at
         // rest, the convention-path read fallback, and data-subject
         // erasure coverage a raw blob never had.

@@ -19,6 +19,14 @@ type IngestionJob = {
     Scope: VectorScope
     Chunk: TextChunk
     OriginatingUserId: string option
+    // Which ingestion attempt the chunk belongs to, and how many chunks
+    // that attempt enqueued. `None` when the producer mints no attempt.
+    Attempt: IngestionAttempt option
+}
+
+type IngestionAttempt = {
+    AttemptId: string
+    EnqueuedChunks: int
 }
 
 type IngestionQueue =

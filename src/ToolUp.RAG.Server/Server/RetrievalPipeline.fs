@@ -108,6 +108,10 @@ let private rrfK = 60.0
 /// incomparable, so RRF treats them rank-wise — robust to either retriever
 /// dominating the absolute score range.
 ///
+/// The raw fused score tops out at `2 / (k + 1)`; the pipeline normalises
+/// the pool onto `[0, 1]` before anything reads it (Phase 866,
+/// `RetrievalScoreSpace.Fused`).
+///
 /// Identity is `(scope, chunkId)`: the same chunk in different scopes is
 /// kept separate (they cannot be the same document by construction —
 /// per-scope namespaces in `IVectorStore` / `ISparseIndex`).
@@ -140,6 +144,133 @@ let private fuseRRF (dense: VectorMatch list) (sparse: VectorMatch list) : Vecto
             { match' with Score = rrf }
     ]
     |> List.sortBy (fun m -> -m.Score, m.Scope, m.ChunkId)
+
+// ─── Score space (Phase 866) ──────────────────────────────────────
+
+/// Phase 866 — which scale a retrieved match's `Score` is in.
+///
+/// A score is only meaningful against the stage that produced it, and the
+/// stages disagree by orders of magnitude: a cosine similarity sits in
+/// `[-1, 1]`, while a raw reciprocal-rank-fusion score tops out at
+/// `2 / (60 + 1) ≈ 0.033`. Before this type existed the pipeline returned
+/// whichever it had produced with nothing to say which, so a `MinScore`
+/// documented as a cosine gate dropped every fused chunk and the additive
+/// boosts (`0.05`–`0.15`) each exceeded the whole fused range. The pipeline
+/// now carries the space from the producing stage to the stages that read
+/// a score, normalises the fused space onto `[0, 1]`, and states the space
+/// on the trace as a `ScoreSpace:<space>` stage mark.
+[<RequireQualifiedAccess>]
+type RetrievalScoreSpace =
+    /// Dense cosine similarity exactly as the vector store scored it — the
+    /// dense-only composition (`RAGServerApp.withoutSparseIndex`). Absolute:
+    /// a threshold is a similarity floor, and a pool of weak matches can
+    /// fall below it entirely.
+    | Cosine
+    /// Reciprocal rank fusion of the dense and keyword rankings, min-max
+    /// normalised onto `[0, 1]` within the candidate pool (after the scoping
+    /// filters, before the boosts) — the default composition, which always
+    /// builds a keyword index. Relative: the pool's best candidate scores
+    /// `1.0` and its weakest `0.0`, so a threshold trims the weak tail
+    /// relative to the best match rather than refusing a pool outright.
+    | Fused
+    /// A cross-encoder reranker's own scale (`RAGServerApp.withReranker`).
+    /// `IReranker` promises an ordering, not a calibrated scale, so the SDK
+    /// cannot say what range these scores occupy.
+    | Reranked
+
+module RetrievalScoreSpace =
+    /// The stage mark recorded on the trace when the fused pool is
+    /// normalised — the trace states the normalisation it applied.
+    [<Literal>]
+    let NormaliseStage = "Normalise:MinMax"
+
+    /// Stable name of the space, as it appears in the trace stage mark.
+    let label (space: RetrievalScoreSpace) : string =
+        match space with
+        | RetrievalScoreSpace.Cosine -> "Cosine"
+        | RetrievalScoreSpace.Fused -> "Fused"
+        | RetrievalScoreSpace.Reranked -> "Reranked"
+
+    /// The `ScoreSpace:<space>` stage mark the pipeline appends to
+    /// `RetrievalTrace.Stages`, naming the space of the returned scores.
+    let stageMark (space: RetrievalScoreSpace) : string = "ScoreSpace:" + label space
+
+    /// The space a composition's scores reach a reader in: a reranker
+    /// rescores whatever it is given, otherwise a keyword index means fusion.
+    let ofComposition (keywordIndex: bool) (reranker: bool) : RetrievalScoreSpace =
+        if reranker then RetrievalScoreSpace.Reranked
+        elif keywordIndex then RetrievalScoreSpace.Fused
+        else RetrievalScoreSpace.Cosine
+
+    /// The highest unboosted score the space can produce, when the SDK
+    /// knows it. `Cosine` and `Fused` both top out at `1.0` (the fused
+    /// pool's best candidate is exactly `1.0`); `Reranked` is uncalibrated.
+    let upperBound (space: RetrievalScoreSpace) : float option =
+        match space with
+        | RetrievalScoreSpace.Cosine
+        | RetrievalScoreSpace.Fused -> Some 1.0
+        | RetrievalScoreSpace.Reranked -> None
+
+    /// Whether a `MinScore` threshold can be met in `space`, as the message
+    /// a startup validator should warn with — `None` when it can. `space`
+    /// is `None` when a supplied `IRetrievalPipeline` owns retrieval and
+    /// its space is not the SDK's to see. The gate keeps only scores
+    /// strictly ABOVE the threshold, so a threshold at the space's upper
+    /// bound drops every unboosted match.
+    let thresholdFinding (space: RetrievalScoreSpace option) (threshold: float option) : string option =
+        match threshold with
+        | None -> None
+        | Some t ->
+            match space with
+            | None ->
+                Some(
+                    sprintf
+                        "MinScore = %g is applied to the scores of a supplied IRetrievalPipeline (RAGServerApp.withRetrievalPipeline), whose score space the SDK cannot see. Confirm that pipeline's scores can exceed %g; if they cannot, the gate drops every chunk and the assistant answers with no retrieved context."
+                        t
+                        t
+                )
+            | Some space ->
+                match upperBound space with
+                | None ->
+                    Some(
+                        sprintf
+                            "MinScore = %g is applied in the %s score space: the composed reranker's own scores (RAGServerApp.withReranker). IReranker promises an ordering, not a calibrated scale, so the SDK cannot confirm %g is reachable. Check it against that reranker's documented score range; a threshold above it drops every chunk and the assistant answers with no retrieved context."
+                            t
+                            (label space)
+                            t
+                    )
+                | Some bound when t >= bound ->
+                    Some(
+                        sprintf
+                            "MinScore = %g cannot be met in the %s score space, which tops out at %g: the gate keeps only scores strictly above the threshold, so it drops every unboosted chunk and the assistant answers with no retrieved context. Lower it (RAGServerApp.withMinScore)."
+                            t
+                            (label space)
+                            bound
+                    )
+                | Some _ -> None
+
+/// Phase 866 — min-max normalisation of a pool's scores onto `[0, 1]`: the
+/// best candidate maps to `1.0`, the weakest to `0.0`, and a pool whose
+/// scores are all equal (a single candidate included) maps every score to
+/// `1.0`. Affine and increasing, so it never changes the pool's order.
+/// Shared by the fused-pool normalisation and MMR's relevance term.
+let private minMaxNormaliser (scores: float list) : float -> float =
+    match scores with
+    | [] -> id
+    | _ ->
+        let minS = List.min scores
+        let range = List.max scores - minS
+
+        if range = 0.0 then
+            (fun _ -> 1.0)
+        else
+            (fun s -> (s - minS) / range)
+
+/// Phase 866 — normalise a fused pool onto `[0, 1]` (see `Fused`).
+let private normaliseWithinPool (pool: VectorMatch list) : VectorMatch list =
+    let normalise = minMaxNormaliser (pool |> List.map _.Score)
+
+    pool |> List.map (fun m -> { m with Score = normalise m.Score })
 
 // ─── Tokenisation for MMR similarity ──────────────────────────────
 
@@ -193,15 +324,9 @@ let private applyMmr (lambda: float) (candidates: VectorMatch list) : VectorMatc
 
         // Normalise relevance scores to [0, 1] within the pool so the
         // λ * relevance term and the (1 - λ) * diversity term are on the
-        // same scale. Scores from RRF or rerank are otherwise on incomparable
-        // ranges.
-        let rawScores = candidates |> List.map _.Score
-        let minS = List.min rawScores
-        let maxS = List.max rawScores
-        let range = maxS - minS
-
-        let normalised (s: float) =
-            if range = 0.0 then 1.0 else (s - minS) / range
+        // same scale. A reranker's scores are otherwise on an uncalibrated
+        // range, and a boosted pool can exceed 1.0.
+        let normalised = minMaxNormaliser (candidates |> List.map _.Score)
 
         while remaining.Count > 0 do
             let mutable bestIdx = 0
@@ -311,6 +436,15 @@ type RetrievalPipelineOptions = {
     /// enough that strongly-relevant content from another module still
     /// outranks a weak module-match, large enough to break ties when
     /// multiple chunks score similarly. Set to `0.0` to disable.
+    ///
+    /// Phase 866 — every boost is an additive NUDGE within the pool's
+    /// score space (`RetrievalScoreSpace`), applied after the fused pool is
+    /// normalised onto `[0, 1]`: a boost of `b` lifts a match over one at
+    /// most `b` better and never over one further ahead. The three defaults
+    /// were re-derived against that unit range (5 %, 10 % and 15 % of it)
+    /// and against cosine similarity on the dense-only path, where the same
+    /// magnitudes are the same kind of nudge. Before 866 each exceeded the
+    /// whole raw fused range (`≈ 0.033`) and sorted matches into tiers.
     ActiveModuleBoost: float
     /// Score boost applied to chunks marked with `_isSummary = "true"`
     /// (WS4.1). Defaults to `+0.10` — larger than `ActiveModuleBoost`
@@ -1106,6 +1240,29 @@ type RetrievalPipeline
                                 true
                             | Some value -> allowed.Contains(ChunkOrigin.fromMetadataValue value))
 
+                // Phase 866 — the space the pool's scores are in, carried
+                // from the stage that produced them (Dense → cosine, RRF →
+                // fused) to every stage below that reads a score: the
+                // boosts, adaptive-K's score gaps, and — through the
+                // returned scores — the `MinScore` gate downstream. A raw
+                // fused score tops out at 2/61, so the fused pool is
+                // normalised onto [0, 1] here, after the scoping filters
+                // (the pool the caller may see) and before the boosts (so
+                // they act as nudges within it). Min-max is affine and
+                // increasing: the pool's order is unchanged (GP 11). The
+                // cosine-only path is left exactly as the store scored it.
+                let producedSpace =
+                    match sparse with
+                    | None -> RetrievalScoreSpace.Cosine
+                    | Some _ -> RetrievalScoreSpace.Fused
+
+                let filtered =
+                    match producedSpace with
+                    | RetrievalScoreSpace.Fused when not filtered.IsEmpty ->
+                        stages.Add RetrievalScoreSpace.NormaliseStage
+                        normaliseWithinPool filtered
+                    | _ -> filtered
+
                 // Optional `ActiveModule` boost: nudge chunks whose
                 // `_originModule` matches the caller's active module up
                 // the ranking. Re-sorts after applying the boost so
@@ -1235,6 +1392,15 @@ type RetrievalPipeline
                 timings.Add("Merge", mergeSw.Elapsed.TotalMilliseconds)
 
                 let rerankerName = opts.Reranker |> Option.map _.Name
+
+                // Phase 866 — a reranker replaces every score it is handed
+                // with its own, so its space is the one the caller reads.
+                let returnedSpace =
+                    match opts.Reranker with
+                    | Some _ -> RetrievalScoreSpace.Reranked
+                    | None -> producedSpace
+
+                stages.Add(RetrievalScoreSpace.stageMark returnedSpace)
 
                 match telemetry with
                 | Some t -> t.RecordRetrievalStages(timings |> List.ofSeq)

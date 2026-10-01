@@ -47,6 +47,7 @@ let private mkJob (docId: string) : DocumentIngestionJob = {
     ScopeId = "scope-1"
     Container = "deployment"
     OriginatingUserId = None
+    Attempt = None
 }
 
 /// Thread-safe capturing IAuditLog double.

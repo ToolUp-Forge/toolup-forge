@@ -10,6 +10,7 @@ open ToolUp.RAG.IngestionTypes
 open SharedTypes
 open KnowledgeBase.ServerExtractors
 open KnowledgeBase.ServerIndexStorage
+open KnowledgeBase.ServerIngestionObserver
 open KnowledgeBase.ServerApiDeps
 
 /// Phase 525.D — the narrative-commit egress door. When the fact
@@ -263,6 +264,10 @@ let ingestNarrative
                     let chunkPairs =
                         chunks |> List.mapi (fun i chunk -> sprintf "%s:chunk:%d" docId i, chunk)
 
+                    // Phase 867 — record the attempt before the enqueue.
+                    let! attempt =
+                        beginIngestionAttempt deps.Storage deps.Logger deps.Scope.Container docId chunkPairs.Length
+
                     let job: DocumentIngestionJob = {
                         DocumentId = docId
                         DocumentName = fileName
@@ -271,6 +276,7 @@ let ingestNarrative
                         ScopeId = deps.Scope.ScopeId
                         Container = deps.Scope.Container
                         OriginatingUserId = Some deps.UserId
+                        Attempt = Some attempt
                     }
 
                     // Phase 723 — async enqueue: the sync form is a
@@ -414,7 +420,6 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
 
         for doc in priorDocs do
             clearStatus doc.Id
-            progressCache.TryRemove(doc.Id) |> ignore
 
         // Cross-store coherence: wipe persisted narrative-store entries
         // for this scope alongside KB blobs and vector chunks. Without

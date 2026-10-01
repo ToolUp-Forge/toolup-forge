@@ -1,6 +1,7 @@
 module ToolUp.Platform.Tests.Contracts.IRateLimitStoreContract
 
 open System
+open System.Threading
 open System.Threading.Tasks
 open Expecto
 open ToolUp.Platform
@@ -11,7 +12,8 @@ open ToolUp.Platform
 ///
 /// 1. **Atomic increment-and-check.** Under concurrent calls, the
 ///    total count matches the number of calls; no double-counts, no
-///    drops.
+///    drops. And a simultaneous burst against one remaining slot
+///    admits exactly one caller (Phase 870).
 /// 2. **Key isolation.** Counts partition cleanly per
 ///    `InboundRateLimitKey`; one IP's count does not leak into
 ///    another's.
@@ -138,6 +140,63 @@ let tests (name: string) (factory: unit -> IRateLimitStore) =
             let! _ = tasks |> Async.Parallel
             let! count = store.GetCurrent(k, PerMinute)
             Expect.equal count n (sprintf "Concurrent calls under threshold must total exactly %d" n)
+        }
+
+        testCaseAsync "Concurrent callers against one remaining slot — exactly one is admitted"
+        <| async {
+            // Phase 870. The case above counts increments; this one counts
+            // ADMISSIONS, which is what a burst against an auth-adjacent
+            // budget is about. With `threshold - 1` already spent, N
+            // callers released together must see exactly one
+            // `AllowWithRemaining` — a store that reads the count and
+            // writes it back as two steps lets several through. PerHour
+            // so no round can straddle a window reset; five rounds of 32
+            // on fresh keys so an implementation that is atomic only by
+            // luck of scheduling is unlikely to pass.
+            let threshold = 5
+            let callers = 32
+            let rounds = 5
+
+            for round in 1..rounds do
+                let store = factory ()
+                let k = key ()
+
+                for _ in 1 .. threshold - 1 do
+                    let! _ = store.IncrementAndCheck(k, PerHour, threshold)
+                    ()
+
+                use gate = new Barrier(callers)
+
+                let caller () =
+                    Task.Factory.StartNew(
+                        (fun () ->
+                            gate.SignalAndWait()
+
+                            store.IncrementAndCheck(k, PerHour, threshold) |> Async.RunSynchronously),
+                        TaskCreationOptions.LongRunning
+                    )
+
+                let! results = [| for _ in 1..callers -> caller () |] |> Task.WhenAll |> Async.AwaitTask
+
+                let admitted =
+                    results
+                    |> Array.filter (function
+                        | Ok(AllowWithRemaining _) -> true
+                        | _ -> false)
+                    |> Array.length
+
+                let failed =
+                    results
+                    |> Array.filter (function
+                        | Error _ -> true
+                        | _ -> false)
+
+                Expect.isEmpty failed (sprintf "Round %d: no call may fail at the store" round)
+
+                Expect.equal
+                    admitted
+                    1
+                    (sprintf "Round %d: %d callers against one remaining slot must admit exactly one" round callers)
         }
 
         testCaseAsync "GetRecentDecisions captures denies, ignores allows"

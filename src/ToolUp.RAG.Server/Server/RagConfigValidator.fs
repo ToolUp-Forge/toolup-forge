@@ -627,7 +627,7 @@ type RAGConfigBoundsValidator(bounds: RagConfigBounds, ?timeout: TimeSpan) =
             | Some score when score < 0.0 || score > 1.0 ->
                 errors.Add(
                     sprintf
-                        "MinScore = %g is outside [0.0, 1.0] (RAGServerApp.withMinScore). It gates cosine similarity, which is bounded by that range: a negative threshold is a no-op gate and a threshold above 1.0 filters out EVERY match, so the assistant goes silent with no diagnostic."
+                        "MinScore = %g is outside [0.0, 1.0] (RAGServerApp.withMinScore). It gates the pipeline's score space (cosine similarity, or the fused score normalised onto [0, 1]; see RetrievalScoreSpace), which is bounded by that range: a negative threshold is a no-op gate and a threshold above 1.0 filters out EVERY match, so the assistant goes silent with no diagnostic."
                         score
                 )
             | _ -> ()
