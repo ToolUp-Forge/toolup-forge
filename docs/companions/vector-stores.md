@@ -16,6 +16,35 @@ The first two rungs are about corpus size. The third is about something else, an
 
 With Pgvector the index *is* the database. Every replica reads and writes the same rows, so retrieval is consistent across replicas with no per-process index state to reconcile, and a rolling restart loses nothing.
 
+## Index locality — what each store declares (Phase 963)
+
+The replica warning (`rag-in-process-index-replicas`) asks the composed store where its index lives, through the optional `IVectorStoreLocality` interface beside `IVectorStore`. It never looks at the store's type name.
+
+| Store | Declares | Why |
+|---|---|---|
+| `InMemoryVectorStore` | `InProcess` | the index is the process's in-memory map, flushed to blob storage but searched from memory |
+| `ToolUp.VectorStores.Hnsw` | `InProcess` | the graph persists to blob storage, but each replica builds and searches its own copy |
+| `ToolUp.VectorStores.Pgvector` | `Shared` | every replica searches the one table |
+
+Locality is a separate axis from `CompanionCapability.Readiness`. Readiness is a package-level posture joined across a composition. Locality is a fact about one composed instance. HNSW shows the difference: its data survives a restart, yet two replicas still answer from two graphs.
+
+**A custom store** implements `IVectorStoreLocality` beside `IVectorStore` and returns `Some VectorIndexLocality.InProcess` or `Some VectorIndexLocality.Shared`. A store that declares nothing is read as not in-process, so the warning stays silent for it, as it did for any unrecognised store before (GP 11). An in-memory store that wants the warning has to declare it.
+
+**A decorator** (telemetry, caching, a disclosure gate) does not move the index, so it forwards the declaration of the store it wraps:
+
+```fsharp skip=fragment
+type TracingVectorStore(inner: IVectorStore) =
+    interface IVectorStoreLocality with
+        member _.IndexLocality = VectorIndexLocality.declared inner
+
+    interface IVectorStore with
+        // ... forward each member to inner
+```
+
+The member returns an option because F# implements interfaces statically. A decorator answers the probe whatever it wraps, and `None` passes an undeclared inner store through as undeclared. A decorator that does not implement the interface reads as undeclared, whatever it wraps. The warning names the composed type, which is the decorator.
+
+The keyword-index half of the same warning still recognises `InMemoryBM25Index` by a type test, so a decorator around that index is not seen as in-process.
+
 ## Picking a store
 
 ### `InMemoryVectorStore` — the default
