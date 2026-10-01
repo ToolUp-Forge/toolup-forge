@@ -194,6 +194,19 @@ type IIngestionQueue =
     /// Await the next job. `None` only when `ct` is cancelled.
     abstract Dequeue: ct: CancellationToken -> Async<IngestionLease option>
 
+    /// Phase 945 — wait until a job MAY be available, without taking it.
+    /// `true` when work may be there; `false` when `ct` is cancelled (or
+    /// the queue will never produce another job). A `true` is a hint, not
+    /// a reservation: another drainer can take the job first, so the
+    /// caller follows with `TryDequeue` and loops on `None`. This is what
+    /// lets a drainer wait for work before it takes a worker permit,
+    /// rather than holding the permit through an idle wait.
+    abstract WaitForWork: ct: CancellationToken -> Async<bool>
+
+    /// Phase 945 — take the head job if there is one, without waiting.
+    /// `None` when the queue is empty.
+    abstract TryDequeue: unit -> Async<IngestionLease option>
+
     /// Report the lease's job as handled — it is removed permanently.
     abstract Ack: leaseId: string -> Async<unit>
 
@@ -390,6 +403,11 @@ type IngestionQueue
 
     let mutable depth = 0
 
+    // Phase 945 — `1` when the durable arm's last claim found a job, so
+    // `WaitForWork` answers at once while work is flowing and paces its
+    // probe at `claimPollInterval` once the store has come up empty.
+    let mutable lastClaimFound = 0
+
     // Phase 509 — the enqueue paths, let-bound so the class members and
     // the `IIngestionQueue` implementation below are the SAME code rather
     // than two members that could drift.
@@ -552,6 +570,75 @@ type IngestionQueue
                         Job = job
                         Attempt = 1
                     }
+        }
+
+        // Phase 945 — the in-memory arm waits on the channel itself, so a
+        // waiter wakes the moment a job is written and takes nothing. The
+        // durable arm has no blocking wait or peek in the store seam, so it
+        // probes the store's depth gauge at `claimPollInterval` — the same
+        // cadence `Dequeue` claims at. The gauge counts in-flight jobs too,
+        // so a `true` there can meet an empty `TryDequeue`; the pacing (a
+        // probe only after a full interval once a claim has come up empty)
+        // keeps that from spinning.
+        member _.WaitForWork(ct: CancellationToken) = async {
+            match store with
+            | Some s ->
+                if Volatile.Read(&lastClaimFound) = 1 then
+                    return not ct.IsCancellationRequested
+                else
+                    let mutable answer = None
+
+                    while answer.IsNone do
+                        let! slept =
+                            task {
+                                try
+                                    do! System.Threading.Tasks.Task.Delay(claimPollInterval, ct)
+                                    return true
+                                with :? OperationCanceledException ->
+                                    return false
+                            }
+                            |> Async.AwaitTask
+
+                        if not slept then
+                            answer <- Some false
+                        else
+                            let! pending = s.Depth()
+
+                            if pending > 0 then
+                                answer <- Some true
+
+                    return answer.Value
+            | None ->
+                return!
+                    task {
+                        try
+                            return! channel.Reader.WaitToReadAsync(ct)
+                        with :? OperationCanceledException ->
+                            return false
+                    }
+                    |> Async.AwaitTask
+        }
+
+        member _.TryDequeue() = async {
+            match store with
+            | Some s ->
+                let! lease = s.Claim leaseDuration
+                Volatile.Write(&lastClaimFound, (if lease.IsSome then 1 else 0))
+                return lease
+            | None ->
+                let read, job = channel.Reader.TryRead()
+
+                if read then
+                    System.Threading.Interlocked.Decrement(&depth) |> ignore
+
+                    return
+                        Some {
+                            LeaseId = Guid.NewGuid().ToString("N")
+                            Job = job
+                            Attempt = 1
+                        }
+                else
+                    return None
         }
 
         member _.Ack(leaseId) = async {

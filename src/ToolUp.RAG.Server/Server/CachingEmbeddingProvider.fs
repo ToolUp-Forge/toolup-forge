@@ -44,66 +44,81 @@ type CachingEmbeddingProvider(inner: IEmbeddingProvider, cache: IEmbeddingCache)
     // An entry lives exactly as long as its call: the call removes it on
     // completion, success or failure, so the map never outgrows the
     // concurrency of the moment.
+    //
+    // Phase 945 — keyed by the call's override too, so a query embed under
+    // its single-attempt override coalesces with other query embeds and
+    // never waits on an ingestion call that is working through the
+    // provider's own retries.
     let inFlight =
         System.Collections.Concurrent.ConcurrentDictionary<
-            EmbeddingCacheKey,
+            struct (EmbeddingCacheKey * EmbedCallOverride option),
             Lazy<System.Threading.Tasks.Task<Choice<float32 array, exn>>>
          >()
+
+    /// One cached, coalesced single-text embed. `callOverride` is passed
+    /// to the inner provider when it accepts one (Phase 945).
+    let embedOne (callOverride: EmbedCallOverride option) (text: string) = async {
+        let key = {
+            Version = version
+            TextHash = sha256Hex text
+        }
+
+        match! cache.TryGet key with
+        | Some hit -> return hit
+        | None ->
+            // Phase 894 — coalesce concurrent misses for one key onto a
+            // single provider call. The first miss registers the call;
+            // every miss that arrives while it is in flight awaits the
+            // same task. The call re-probes the cache before reaching the
+            // provider, so a miss that raced the previous call's
+            // completion (it probed before `Set`, registered after the
+            // entry was removed) is served from the cache rather than
+            // paying for a second call.
+            let flightKey = struct (key, callOverride)
+
+            let call =
+                inFlight.GetOrAdd(
+                    flightKey,
+                    fun _ ->
+                        lazy
+                            (Async.StartAsTask(
+                                async {
+                                    try
+                                        try
+                                            match! cache.TryGet key with
+                                            | Some hit -> return Choice1Of2 hit
+                                            | None ->
+                                                let! embedding =
+                                                    match callOverride with
+                                                    | Some o -> EmbedCallOverride.generate inner o text
+                                                    | None -> inner.GenerateEmbedding text
+
+                                                do! cache.Set key embedding
+                                                return Choice1Of2 embedding
+                                        with ex ->
+                                            return Choice2Of2 ex
+                                    finally
+                                        inFlight.TryRemove flightKey |> ignore
+                                }
+                            ))
+                )
+
+            match! Async.AwaitTask call.Value with
+            | Choice1Of2 embedding -> return embedding
+            | Choice2Of2 ex ->
+                // Re-raise the provider's own exception, unwrapped and with
+                // its original stack — the ingestion path classifies
+                // failures by exception type.
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex).Throw()
+                return Unchecked.defaultof<_>
+    }
 
     interface IEmbeddingProvider with
         member _.Dimensions = inner.Dimensions
         member _.ProviderId = inner.ProviderId
         member _.ModelId = inner.ModelId
 
-        member _.GenerateEmbedding(text: string) = async {
-            let key = {
-                Version = version
-                TextHash = sha256Hex text
-            }
-
-            match! cache.TryGet key with
-            | Some hit -> return hit
-            | None ->
-                // Phase 894 — coalesce concurrent misses for one key onto a
-                // single provider call. The first miss registers the call;
-                // every miss that arrives while it is in flight awaits the
-                // same task. The call re-probes the cache before reaching the
-                // provider, so a miss that raced the previous call's
-                // completion (it probed before `Set`, registered after the
-                // entry was removed) is served from the cache rather than
-                // paying for a second call.
-                let call =
-                    inFlight.GetOrAdd(
-                        key,
-                        fun _ ->
-                            lazy
-                                (Async.StartAsTask(
-                                    async {
-                                        try
-                                            try
-                                                match! cache.TryGet key with
-                                                | Some hit -> return Choice1Of2 hit
-                                                | None ->
-                                                    let! embedding = inner.GenerateEmbedding text
-                                                    do! cache.Set key embedding
-                                                    return Choice1Of2 embedding
-                                            with ex ->
-                                                return Choice2Of2 ex
-                                        finally
-                                            inFlight.TryRemove key |> ignore
-                                    }
-                                ))
-                    )
-
-                match! Async.AwaitTask call.Value with
-                | Choice1Of2 embedding -> return embedding
-                | Choice2Of2 ex ->
-                    // Re-raise the provider's own exception, unwrapped and with
-                    // its original stack — the ingestion path classifies
-                    // failures by exception type.
-                    System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex).Throw()
-                    return Unchecked.defaultof<_>
-        }
+        member _.GenerateEmbedding(text: string) = embedOne None text
 
         // Cache-aware batch path: probe every key, then issue one batched
         // call to the inner provider for the misses only — preserving the
@@ -164,6 +179,16 @@ type CachingEmbeddingProvider(inner: IEmbeddingProvider, cache: IEmbeddingCache)
                 return results
         }
 
+    // Phase 945 — forwards the per-call override, so the query path's
+    // single-attempt request reaches the provider through the cache. F#
+    // implements interfaces statically, so this answers the probe even
+    // over a provider without the capability; `EmbedCallOverride.generate`
+    // then takes the inner provider's plain call, which is harmless — a
+    // provider with no override has no internal retry to suppress.
+    interface IEmbeddingProviderCallOverride with
+        member _.GenerateEmbeddingWith(callOverride: EmbedCallOverride, text: string) =
+            embedOne (Some callOverride) text
+
 /// Phase 14z — the caching decorator over a SCOPE-KEYED provider.
 ///
 /// `CachingEmbeddingProvider` above is opaque: wrapping a scope-keyed
@@ -199,6 +224,11 @@ type ScopedCachingEmbeddingProvider(inner: IEmbeddingProvider, cache: IEmbedding
         member _.ModelId = unscoped.ModelId
         member _.GenerateEmbedding text = unscoped.GenerateEmbedding text
         member _.GenerateEmbeddings texts = unscoped.GenerateEmbeddings texts
+
+    // Phase 945 — forwarded like the unscoped decorator's.
+    interface IEmbeddingProviderCallOverride with
+        member _.GenerateEmbeddingWith(callOverride, text) =
+            EmbedCallOverride.generate unscoped callOverride text
 
     interface IScopedEmbeddingProviderFactory with
         member _.For(scope: VectorScope) =
