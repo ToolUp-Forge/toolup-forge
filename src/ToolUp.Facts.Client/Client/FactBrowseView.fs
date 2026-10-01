@@ -251,7 +251,18 @@ let TablesPage (model: Model) (dispatch: Msg -> unit) =
 
         FsReact.createDisposable (fun () -> dispose ()))
 
-    tablesView model dispatch
+    Html.div [
+        prop.children [
+            // Phase 942 — who in the team sees restricted output, for every
+            // member who browses it (nothing until the deployment composes
+            // team output visibility).
+            Html.div [
+                prop.className "px-6 pt-4"
+                prop.children [ TeamConfigUI.TeamOutputVisibilityNotice() ]
+            ]
+            tablesView model dispatch
+        ]
+    ]
 
 // ─── Population summary ──────────────────────────────────────────────
 
