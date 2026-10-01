@@ -520,9 +520,14 @@ module CompositionRuleVersions =
     /// **1.2.0** adds [Phase 887]'s `FactTablePreflight` family: the
     /// declared-fact-table checks, enforced at preflight whenever a module
     /// declares a table. A minor bump for the same reason as 1.1.0.
+    ///
+    /// **1.3.0** adds [Phase 946]'s `fact-table-binding-undeclared` to that
+    /// family: a by-name binding (a delegate-fact binding among them) must
+    /// name a declared table. A minor bump — the rule set grew, so a
+    /// composition that passed 1.2.0 may fail 1.3.0.
     let ManifestVersion: RuleVersion = {
         RuleMajor = 1
-        RuleMinor = 2
+        RuleMinor = 3
         RulePatch = 0
     }
 

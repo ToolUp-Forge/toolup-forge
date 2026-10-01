@@ -377,6 +377,9 @@
              record, held to it by this pack, and every registration verified against the
              reflection reader here (the recorded run the browser's registerAll relies on). -->
         <Compile Include="Remoting\PlatformDecodersGenerationTests.fs" />
+        <!-- Phase 946 — the generator's API-record census excludes a record marked
+             NotRemotingApiAttribute, and only a marked one. -->
+        <Compile Include="Remoting\ApiRecordCensusTests.fs" />
         <!-- Phase 787 — the F* model of the Phase 785 algebra, extracted to
              F# and run as a differential oracle beside production over the
              same corpus. AFTER DecoderAlgebraTests.fs: it reuses the corpus

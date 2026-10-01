@@ -149,7 +149,7 @@ Canonical state is authoritative. The two failure modes:
 1. **Canonical write succeeds, index `Add` fails.** Reader `Lookup` misses the entry until `Rebuild` runs. The store treats index writes as best-effort (try/with that swallows) and never propagates the failure.
 2. **Canonical record is deleted while an index ref still points at it.** The caller's resolver downloads the canonical, gets `Error`, and silently drops the entry from the result (a "soft miss"). Stale refs accumulate but reads stay correct.
 
-Both surface in `IndexConsistencyCheck` (Phase 9f Step 5 — `/dev/inspect` exposes drift counts per indexed store / per index for the caller's scope). Drift > 0 is a recoverable bug class, not an alerting condition. The recovery is `Rebuild`, exposed Owner-only via `IMaintenanceApi`.
+Both surface in `IndexConsistencyCheck` (Phase 9f Step 5 — `/dev/inspect` exposes drift counts per indexed store / per index for the caller's scope). Drift > 0 is a recoverable bug class, not an alerting condition. The recovery is `Rebuild`: the Owner-only `MaintenanceApi` record (`MaintenanceApi.fs`) exposes `RebuildEventIndexes` and `RebuildJobIndexes`. It has **no fact-store rebuild** — the blob fact store's index (Phase 890) is repaired by `BlobFactStore.RebuildIndex(scopeId)` in the facts companion, which no remote API exposes. The fact store's check reaches `/dev/inspect` through `DevDiagnosticsHandler.IIndexConsistencyInspector`, which the facts companion registers (Phase 946), because the platform tier cannot reference the companion.
 
 ### Concurrency
 

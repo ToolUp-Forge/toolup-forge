@@ -1,5 +1,5 @@
 {
-  "ManifestVersion": "1.2.0",
+  "ManifestVersion": "1.3.0",
   "Rules": [
     {
       "Family": "composition-well-formedness",
@@ -147,6 +147,13 @@
       "Version": "1.0.0",
       "Severity": "warning",
       "RuleDescription": "A metric should have one home per subject level: a fact table, or individual assertions — not both. Two tables carrying one metric at one level, or a table carrying a metric the composition recomputes fact by fact, is flagged."
+    },
+    {
+      "Family": "fact-table-declarations",
+      "Rule": "fact-table-binding-undeclared",
+      "Version": "1.0.0",
+      "Severity": "error",
+      "RuleDescription": "A binding that names one table (ServerApp.bindFactTables, including a delegate-fact binding) must name a table some module declares; a binding to nothing would serve reads over a table that does not exist."
     }
   ]
 }

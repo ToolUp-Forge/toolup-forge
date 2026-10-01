@@ -3254,6 +3254,7 @@ ToolUp.Platform.DescriptorMigrationError+UnknownDescriptorVersion.found : System
 ToolUp.Platform.DevDiagnosticsHandler (class)
 ToolUp.Platform.DevDiagnosticsHandler.buildReport(ToolUp.Platform.ServerConfig, ToolUp.Platform.DevDiagnosticsHandler+DevDiagnosticsCapture, Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DevDiagnosticsHandler+DevDiagnosticsReport]
 ToolUp.Platform.DevDiagnosticsHandler.buildVersionReport(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.DevDiagnosticsHandler+VersionReport
+ToolUp.Platform.DevDiagnosticsHandler.indexInspectors(Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SecondaryIndex+IndexConsistencyEntry]]]], System.IServiceProvider) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SecondaryIndex+IndexConsistencyEntry]]]]
 ToolUp.Platform.DevDiagnosticsHandler.routes(ToolUp.Platform.ServerConfig, ToolUp.Platform.DevDiagnosticsHandler+DevDiagnosticsCapture) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]]
 ToolUp.Platform.DevDiagnosticsHandler.snapshotServices(Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DevDiagnosticsHandler+ServiceDescriptorSnapshot]
 ToolUp.Platform.DevDiagnosticsHandler+CallerSummary (class)
@@ -3310,6 +3311,8 @@ ToolUp.Platform.DevDiagnosticsHandler+HealthCheckSummary.Message : System.String
 ToolUp.Platform.DevDiagnosticsHandler+HealthCheckSummary.Name : System.String { get }
 ToolUp.Platform.DevDiagnosticsHandler+HealthCheckSummary.Status : System.String { get }
 ToolUp.Platform.DevDiagnosticsHandler+HealthCheckSummary.TimeoutMs : System.Int32 { get }
+ToolUp.Platform.DevDiagnosticsHandler+IIndexConsistencyInspector (interface)
+ToolUp.Platform.DevDiagnosticsHandler+IIndexConsistencyInspector.Inspect(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SecondaryIndex+IndexConsistencyEntry]]
 ToolUp.Platform.DevDiagnosticsHandler+LightweightFeatureEntry (class)
 ToolUp.Platform.DevDiagnosticsHandler+LightweightFeatureEntry..ctor(System.String, System.String, System.Boolean, System.String)
 ToolUp.Platform.DevDiagnosticsHandler+LightweightFeatureEntry.Active : System.Boolean { get }
@@ -4549,6 +4552,7 @@ ToolUp.Platform.FactTablePreflight.DuplicateTableRule : System.String (literal)
 ToolUp.Platform.FactTablePreflight.MalformedTableRule : System.String (literal)
 ToolUp.Platform.FactTablePreflight.MetricTwoHomesRule : System.String (literal)
 ToolUp.Platform.FactTablePreflight.UnboundRequiredRule : System.String (literal)
+ToolUp.Platform.FactTablePreflight.UndeclaredBindingRule : System.String (literal)
 ToolUp.Platform.FactTablePreflight.UnknownSubjectLevelRule : System.String (literal)
 ToolUp.Platform.FactTablePreflight.UnregisteredMetricRule : System.String (literal)
 ToolUp.Platform.FactTablePreflight.ValidatorName : System.String (literal)
@@ -11537,9 +11541,6 @@ ToolUp.Remoting.Server.IAuthContext.IsAnonymous() : System.Boolean
 ToolUp.Remoting.Server.IAuthContext.SubjectId : System.String { get }
 ToolUp.Remoting.Server.IFieldValidator (interface)
 ToolUp.Remoting.Server.IFieldValidator.Validate(System.Object, ToolUp.Remoting.Server.IValidationContext) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
-ToolUp.Remoting.Server.IGeneratedDispatchTable`2 (interface)
-ToolUp.Remoting.Server.IGeneratedDispatchTable`2.ApiType : System.Type { get }
-ToolUp.Remoting.Server.IGeneratedDispatchTable`2.RouteHandlers() : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[TContext, Microsoft.FSharp.Core.FSharpFunc`2[TImpl, System.Threading.Tasks.Task]]]]
 ToolUp.Remoting.Server.IIdempotencyStore (interface)
 ToolUp.Remoting.Server.IIdempotencyStore.Store(System.String, System.String, ToolUp.Remoting.Server.MemoisedResponse, System.TimeSpan) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Remoting.Server.IIdempotencyStore.TryGet(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Remoting.Server.MemoisedResponse]]

@@ -1203,11 +1203,36 @@ module Plan =
 
     // ─── API records ─────────────────────────────────────────────────
 
+    /// Phase 946 — the name of the attribute that takes a record out of the
+    /// API-record census. A record whose every field is a function is
+    /// counted as a remoting API by shape alone; one that is not (a table
+    /// of callbacks, a capability record) is marked with an attribute of
+    /// this name. Matched BY NAME, in any namespace, as `StringEnumAttribute`
+    /// is, so a contract assembly that references nothing but FSharp.Core
+    /// declares its own:
+    ///
+    /// ```fsharp skip=fragment
+    /// type NotRemotingApiAttribute() = inherit System.Attribute()
+    ///
+    /// [<NotRemotingApi>]
+    /// type Callbacks = { OnSaved: string -> unit }
+    /// ```
+    [<Literal>]
+    let NotRemotingApiAttributeName = "NotRemotingApiAttribute"
+
+    /// Phase 946 — true when `t` carries the census exclusion
+    /// (`NotRemotingApiAttributeName`).
+    let isExcludedFromApiCensus (t: Type) : bool =
+        hasAttributeNamed NotRemotingApiAttributeName t
+
     /// A Remoting API contract: a record with ≥1 field, every field a
     /// function type. The same shape test the analyzer applies to the
-    /// syntax tree, applied here to metadata.
+    /// syntax tree, applied here to metadata. A record marked with
+    /// `NotRemotingApiAttributeName` is not one, whatever its shape
+    /// (Phase 946).
     let isApiRecord (t: Type) : bool =
         isRecord t
+        && not (isExcludedFromApiCensus t)
         && let fields = FSharpType.GetRecordFields(t, true) in
 
            fields.Length > 0

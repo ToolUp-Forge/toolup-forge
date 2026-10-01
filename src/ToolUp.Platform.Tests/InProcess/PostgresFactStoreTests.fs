@@ -465,6 +465,71 @@ let offlineTests =
             let _, many = composed 3 FactsCompose.withFactStore
             Expect.hasLength (scaleValidators many) 1 "three replicas compose the guard"
 
+        // Phase 946 — the blob fact store's index check (Phase 890) reaches
+        // /dev/inspect through the DI-registered inspector seam.
+        testCaseAsync "the fact store's index check is one of /dev/inspect's inspectors (Phase 946)"
+        <| async {
+            let _, sp = composed 1 FactsCompose.withFactStore
+            let inspectors = DevDiagnosticsHandler.indexInspectors [] sp
+
+            Expect.hasLength inspectors 1 "the facts companion registers one inspector"
+
+            let! entries = inspectors.Head "team-scale"
+
+            Expect.equal
+                (entries |> List.map _.StoreName |> List.distinct)
+                [ "facts" ]
+                "it samples the fact store's index"
+
+            // A replaced store is not the blob store: nothing to sample.
+            let replacement, _ = blobIndexed None (fun () -> DateTime.UtcNow)
+
+            let _, replaced =
+                composed
+                    1
+                    (FactsCompose.withFactStore
+                     >> FactsCompose.withFactStoreImplementation "test" (fun _ -> replacement))
+
+            match DevDiagnosticsHandler.indexInspectors [] replaced with
+            | [ inspector ] ->
+                let! none = inspector "team-scale"
+                Expect.isEmpty none "the replacement's index is not this inspector's"
+            | other -> failtestf "expected the one registered inspector, got %d" other.Length
+        }
+
+        // Phase 946 — the compose-time preflight reads every validator as
+        // an INSTANCE registration and refuses a factory, so a guard
+        // registered through a factory made a multi-replica composition
+        // raise at preflight instead of validating.
+        testCaseAsync "a multi-replica composition's preflight runs the guard instead of raising (Phase 946)"
+        <| async {
+            let services, sp = composed 3 FactsCompose.withFactStore
+
+            let outcomes =
+                try
+                    Ok(ConfigValidatorAggregator.validate services None false)
+                with ex ->
+                    Error ex.Message
+
+            match outcomes with
+            | Error message -> failtestf "the preflight raised instead of validating: %s" message
+            | Ok outcomes ->
+                Expect.contains (outcomes |> List.map _.Name) "blob-fact-store-scale" "the guard ran at preflight"
+
+            // The guard reads the composition it was registered into: past
+            // the warning threshold it warns, at preflight, with no provider.
+            do! seedCensus (sp.GetRequiredService<IBlobStorage>()) "team-scale" (BlobFactStoreScale.WarnAboveFacts + 1)
+
+            match
+                ConfigValidatorAggregator.validate services None false
+                |> List.tryFind (fun o -> o.Name = "blob-fact-store-scale")
+            with
+            | Some {
+                       Result = ConfigValidation.ValidationResult.Warning message
+                   } -> Expect.stringContains message "team-scale" "the warning names the scope"
+            | other -> failtestf "expected the guard to warn, got %A" other
+        }
+
         testCaseAsync "withFactStoreImplementation replaces the store every fact registration resolves"
         <| async {
             let replacement, _ = blobIndexed None (fun () -> DateTime.UtcNow)
@@ -516,6 +581,13 @@ let offlineTests =
 
         // The differential pack, self-bound: the enumerating blob path held
         // to the indexed-and-surfaced one. Proves the pack on every run.
+        //
+        // Phase 946 — timed against Phase 762's slow-lane rule (a list
+        // costing >= 10 s whose slowest case is >= 2 s) and LEFT in every
+        // lane: five runs (Debug, a loaded shared machine, 2026-10-01) cost
+        // 10.6 s cold, then 7.1, 7.6, 7.4 and 6.8 s over its 4 cases,
+        // slowest case 3.5-6.7 s. It meets the per-case clause and misses
+        // the list clause (median 7.4 s). Re-time before moving it.
         IFactStoreContract.differentialTests "BlobFactStore (index + surface)" blobReference blobIndexed
 
         // Phase 941 — the migration's option, statement, export and

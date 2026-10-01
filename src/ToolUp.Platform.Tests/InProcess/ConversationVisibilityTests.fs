@@ -855,6 +855,149 @@ let private changeTests =
             Expect.equal (TeamConversationPolicyRecord.current TeamVisible record) PlatformAdmins "now"
     ]
 
+// ─── Phase 946 — the opt-in substrate's prompt history obeys the level ─
+//
+// `SubmitMessage` takes the conversation id from the REQUEST and, when the
+// opt-in `IConversationStore` is composed, reads that conversation's
+// trailing turns into the prompt builder's `ConversationHistory`. Until
+// Phase 946 that read skipped `ConversationVisibility.canSee`, so a member
+// could aim a turn at a teammate's conversation and have its history fed
+// to the query-rewrite stage under a level that hides it from them.
+
+/// A request by `userId` in `teamId`'s scope, with the opt-in
+/// conversation substrate composed.
+let private contextWithStore (world: World) (teamId: string) (userId: string) (store: IConversationStore) =
+    let services = chatServices world.Storage
+    services.AddSingleton<ITeamStore>(world.Teams) |> ignore
+    services.AddSingleton<IAuditLog>(world.Audit) |> ignore
+    services.AddSingleton<IConversationStore>(store) |> ignore
+
+    services.AddSingleton<AccessContext>(AccessContext.unrestricted (TeamMember(userId, teamId)))
+    |> ignore
+
+    let ctx = DefaultHttpContext()
+    ctx.RequestServices <- services.BuildServiceProvider()
+
+    ctx.Items["ToolUp.StorageScope"] <-
+        box {
+            ScopeId = teamId
+            Container = containerOf teamId
+            Persist = true
+        }
+
+    ctx.Items["ToolUp.UserId"] <- box userId
+    ctx :> HttpContext
+
+/// The history the prompt builder is handed when `userId` submits a turn
+/// to conversation `id`.
+let private historySeenBy (world: World) (store: IConversationStore) (userId: string) (id: Guid) = async {
+    let seen: string list option ref = ref None
+
+    let config: SystemPromptBuilder.AIAssistantServerConfig = {
+        Branding = {
+            Name = "Assistant"
+            Icon = ""
+            ShowSidePanel = false
+        }
+        SystemPrompt =
+            Some(fun context -> async {
+                seen.Value <- Some context.ConversationHistory
+                return ""
+            })
+        MaxHistoryMessages = None
+        AISurfaceDerivation = TrustClient
+    }
+
+    let api =
+        fst (
+            aiAssistantApi
+                (Some config)
+                Map.empty
+                (new SSEConnectionManager())
+                (contextWithStore world "alpha" userId store)
+        )
+
+    let! _ =
+        api.SubmitMessage {
+            ConversationId = id
+            Content = "and the totals?"
+            ActiveModule = None
+            ActivePage = None
+            ActivePageNarrative = None
+            OverrideProviderLabel = None
+            Surface = FullPage
+            RetrievalFilters = None
+        }
+
+    return seen.Value
+}
+
+let private promptHistoryTests =
+    testList "Phase 946 — prompt history from the opt-in substrate" [
+        testCaseAsync "a member's turn aimed at a conversation the level hides reads no history"
+        <| async {
+            let! world = newWorld None
+            do! setRecord world "alpha" [ TeamAdmins, t0.AddDays -1.0 ]
+
+            let store = ConversationStore.InMemoryConversationStore() :> IConversationStore
+            let id = Guid.NewGuid()
+            let conversationId = id.ToString("N")
+
+            let! begun =
+                store.BeginConversation(
+                    "alpha",
+                    {
+                        ConversationId = conversationId
+                        SchemaVersion = 1
+                        CreatedAt = t0
+                        CreatedBy = "alice"
+                        ScopeId = "alpha"
+                        Provider = "test"
+                        ModelName = "test"
+                        SystemPromptDigest = ""
+                        SdkVersion = "test"
+                    }
+                )
+
+            Expect.isOk begun "seeded"
+
+            let! appended =
+                store.AppendTurn(
+                    "alpha",
+                    conversationId,
+                    {
+                        TurnId = "t1"
+                        ConversationId = conversationId
+                        SchemaVersion = 1
+                        Role = "user"
+                        Content = {
+                            Role = "user"
+                            Content = "alice's private budget"
+                            ToolCalls = []
+                            ToolResults = []
+                            Parts = []
+                        }
+                        Timestamp = t0
+                        TokensIn = None
+                        TokensOut = None
+                        ContentDigest = ""
+                    }
+                )
+
+            Expect.isOk appended "seeded"
+
+            let! asMember = historySeenBy world store "bob" id
+            Expect.equal asMember (Some []) "a member the level hides it from is handed no history"
+
+            let! asAdmin = historySeenBy world store "ada" id
+
+            Expect.equal
+                asAdmin
+                (Some [ "alice's private budget" ])
+                "an admin the level admits is handed the history, as before"
+        }
+    ]
+
 let tests =
     testList "Phase 859 — team conversation visibility" [
         pureRuleTests
@@ -864,4 +1007,5 @@ let tests =
         perTeamTests
         auditTests
         changeTests
+        promptHistoryTests
     ]

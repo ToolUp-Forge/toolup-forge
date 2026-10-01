@@ -10,8 +10,10 @@ open System.Threading.Tasks
 // =============================================================================
 //
 // This file ships the RUNTIME-side substrate of Phase 69k:
-//   * `IGeneratedDispatchTable<'impl>` — the 69k v0 contract. NO adapter
-//     composes it, and none will: see "Phase 906" below.
+//   * (Phase 946) the 69k v0 contract, `IGeneratedDispatchTable`, is
+//     REMOVED: a route handler of that shape writes its own response and
+//     so would run outside the pre-flight chain (see "Phase 906" below).
+//     No adapter composed it, and none would.
 //   * `GeneratedDispatchRegistry` — the runtime registry where a generator's
 //     emitted `register ()` places its table.
 //   * `[<DispatcherTarget>]` marker attribute the source-generator would
@@ -54,44 +56,16 @@ open System.Threading.Tasks
 // the record after generation) is served by the reflective proxy, built
 // lazily on its first request.
 
-/// Phase 69k — marker attribute on an API record type. The source-
-/// generator (when it ships) scans for this attribute and emits an
-/// `IGeneratedDispatchTable<'TImpl>` implementation per attributed record.
-/// Without the attribute, no table is emitted and the runtime falls back
-/// to reflection.
+/// Phase 69k — marker attribute on an API record type. The 69k sketch had
+/// a source-generator scan for this attribute and emit a dispatch table
+/// per attributed record; the generator that shipped (Phase 906) is driven
+/// by its build items instead and emits a `GeneratedInvocationTable<'impl>`.
+/// Without a registered table the runtime uses reflection.
 [<AttributeUsage(AttributeTargets.Interface
                  ||| AttributeTargets.Class
                  ||| AttributeTargets.Struct)>]
 type DispatcherTargetAttribute() =
     inherit Attribute()
-
-/// Phase 69k — the v0 contract a source-generated table was to satisfy.
-///
-/// Phase 906 — no adapter composes this shape and none will: a
-/// `'TContext -> 'TImpl -> Task` route handler writes its own response and
-/// so would run outside the pre-flight chain. A generated table is a
-/// `GeneratedInvocationTable<'impl>` instead, which the proxy composes
-/// inside the chain. This type is retained only because removing a public
-/// type is a breaking change.
-///
-/// `ApiType` is the API record type the table dispatches for;
-/// `RouteHandlers` returns an entry per method on that record, each
-/// pre-bound to the typed handler invocation.
-///
-/// v0 shape is intentionally minimal — the generator's job is to emit
-/// the `RouteHandlers` map without reflection, so startup cost drops
-/// to the cost of evaluating a static initializer. The handler function
-/// itself can still use the per-method shape recognised by Phase 69d /
-/// 69e / 69f / 69g / 69h / 69j (the generator is wire-compatible by
-/// construction — it produces the same JSON the reflection path produces).
-/// Phase 69k — `'TContext` is the per-adapter request context type
-/// (`HttpContext` for Giraffe / AspNetCore, `HttpContext` for Suave's
-/// own type, etc.). Keeping it generic preserves the substrate's
-/// HTTP-agnostic shape and lets adapters compose without dragging
-/// ASP.NET Core into `ToolUp.Remoting.Server`.
-type IGeneratedDispatchTable<'TContext, 'TImpl> =
-    abstract ApiType: Type
-    abstract RouteHandlers: unit -> (string * ('TContext -> 'TImpl -> Task)) list
 
 /// Phase 69k — process-wide registry of generated dispatch tables.
 /// A generated module's `register ()` (Phase 906) calls `register` once

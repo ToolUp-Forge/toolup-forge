@@ -152,4 +152,102 @@ let tests =
             for e in SampleGate.excluded do
                 Expect.isNotEmpty e.Reason "an exclusion carries its reason"
         }
+
+        // ─── Phase 946 — the run leg ─────────────────────────────────
+        test "a runnable the gate builds raises no run finding" {
+            let p = SampleGate.plan onDisk []
+
+            let r: SampleGate.Runnable = {
+                Project = "samples/A/A.fsproj"
+                Arguments = []
+                Reason = "its exit is its proof"
+            }
+
+            Expect.isEmpty (SampleGate.runFindings p [ r ]) "built, and carries a reason"
+        }
+
+        test "a runnable the gate does not build is a finding (go-red: excluded, or not on disk)" {
+            let p = SampleGate.plan onDisk [ ex "samples/B/B.fsproj" "why" ]
+
+            let excludedRun: SampleGate.Runnable = {
+                Project = "samples/B/B.fsproj"
+                Arguments = []
+                Reason = "r"
+            }
+
+            let goneRun: SampleGate.Runnable = {
+                Project = "samples/Gone/Gone.fsproj"
+                Arguments = []
+                Reason = "r"
+            }
+
+            let findings = SampleGate.runFindings p [ excludedRun; goneRun ]
+
+            Expect.isTrue
+                (findings |> List.exists (fun f -> f.Contains "samples/B/B.fsproj"))
+                "an excluded runnable is named"
+
+            Expect.isTrue
+                (findings |> List.exists (fun f -> f.Contains "samples/Gone/Gone.fsproj"))
+                "a missing runnable is named"
+        }
+
+        test "a runnable without a reason is a finding" {
+            let p = SampleGate.plan onDisk []
+
+            let r: SampleGate.Runnable = {
+                Project = "samples/A/A.fsproj"
+                Arguments = []
+                Reason = " "
+            }
+
+            Expect.isNonEmpty (SampleGate.runFindings p [ r ]) "a silent decision is named"
+        }
+
+        test "runArguments runs the existing build, passing program arguments after --" {
+            let bare: SampleGate.Runnable = {
+                Project = "samples/A/A.fsproj"
+                Arguments = []
+                Reason = "r"
+            }
+
+            let withArgs = {
+                bare with
+                    Arguments = [ "--corpus"; "x" ]
+            }
+
+            Expect.equal
+                (SampleGate.runArguments bare)
+                [ "run"; "--project"; "samples/A/A.fsproj"; "--no-build"; "-v:q" ]
+                "no separator when there are no program arguments"
+
+            Expect.equal
+                (SampleGate.runArguments withArgs)
+                [
+                    "run"
+                    "--project"
+                    "samples/A/A.fsproj"
+                    "--no-build"
+                    "-v:q"
+                    "--"
+                    "--corpus"
+                    "x"
+                ]
+                "program arguments follow --"
+        }
+
+        test "the shipped run list names HelloWorld-AOT and every runnable is built by the gate" {
+            let root = repoRoot ()
+            let found = SampleGate.discover root (Path.Combine(root, "samples"))
+            let p = SampleGate.plan found SampleGate.excluded
+
+            Expect.isTrue
+                (SampleGate.runnable
+                 |> List.exists (fun r -> r.Project = "samples/HelloWorld-AOT/HelloWorld.AOT/HelloWorld.AOT.fsproj"))
+                "the sample whose exit is its proof is run"
+
+            Expect.isEmpty
+                (SampleGate.runFindings p SampleGate.runnable)
+                "every committed runnable is built and reasoned"
+        }
     ]

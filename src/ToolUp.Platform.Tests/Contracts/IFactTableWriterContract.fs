@@ -1350,6 +1350,7 @@ let preflightTests =
                     FactTablePreflight.UnknownSubjectLevelRule
                     FactTablePreflight.UnboundRequiredRule
                     FactTablePreflight.MetricTwoHomesRule
+                    FactTablePreflight.UndeclaredBindingRule
                 ])
                 "the published codes"
 

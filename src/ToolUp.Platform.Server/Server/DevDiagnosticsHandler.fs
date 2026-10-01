@@ -288,6 +288,16 @@ type ServiceDescriptorSnapshot = {
     ImplementationTypeName: string option
 }
 
+/// Phase 946 — an indexed store's consistency inspector, registered
+/// through DI by a companion whose store this tier cannot reference (the
+/// fact store lives in the facts companion). `/dev/inspect` runs every
+/// registered inspector beside the compose-time ones in
+/// `DevDiagnosticsCapture.IndexInspectors`, against the caller's scope
+/// only.
+type IIndexConsistencyInspector =
+    /// Sample the store's secondary index for `scopeId` and report drift.
+    abstract Inspect: scopeId: string -> Async<SecondaryIndex.IndexConsistencyEntry list>
+
 /// Compose-time inputs the dev handler needs at request time. Captured
 /// once and closed over by the route handler.
 type DevDiagnosticsCapture = {
@@ -351,6 +361,20 @@ let snapshotServices (services: IServiceCollection) : ServiceDescriptorSnapshot 
     |> List.ofSeq
 
 // ─── Per-request builders ────────────────────────────────────────────
+
+/// Phase 946 — every index inspector `/dev/inspect` runs: the compose-time
+/// ones (`DevDiagnosticsCapture.IndexInspectors`), then every
+/// `IIndexConsistencyInspector` the request's services resolve.
+let indexInspectors
+    (composeTime: (string -> Async<SecondaryIndex.IndexConsistencyEntry list>) list)
+    (services: IServiceProvider)
+    : (string -> Async<SecondaryIndex.IndexConsistencyEntry list>) list =
+    let registered =
+        services.GetServices<IIndexConsistencyInspector>()
+        |> Seq.map (fun inspector -> fun (scopeId: string) -> inspector.Inspect scopeId)
+        |> List.ofSeq
+
+    composeTime @ registered
 
 let private permissionName (perm: ModulePermission) =
     match perm with
@@ -686,11 +710,13 @@ let buildReport
         // only (GP4 — never enumerate across teams). When the caller
         // has no resolved scope we skip — the report can still be
         // useful without it.
+        let inspectors = indexInspectors capture.IndexInspectors ctx.RequestServices
+
         let! indexConsistency =
             match caller.StorageScope with
-            | Some s when capture.IndexInspectors.Length > 0 -> async {
+            | Some s when inspectors.Length > 0 -> async {
                 let! perInspector =
-                    capture.IndexInspectors
+                    inspectors
                     |> List.map (fun inspect -> async {
                         try
                             return! inspect s.ScopeId
@@ -1041,7 +1067,7 @@ let private renderHtml (report: DevDiagnosticsReport) : string =
         |> ignore
     else
         sb.AppendLine
-            """<p class="muted">Sampled for the caller's scope only. Drift > 0 in Orphans or Unindexed columns flags a recoverable bug class — see <code>IMaintenanceApi.Rebuild*</code>.</p>"""
+            """<p class="muted">Sampled for the caller's scope only. Drift > 0 in Orphans or Unindexed columns flags a recoverable bug class: the Owner-only <code>MaintenanceApi</code> rebuilds the event and job indexes (<code>RebuildEventIndexes</code> / <code>RebuildJobIndexes</code>); it has no fact-store rebuild, which is <code>BlobFactStore.RebuildIndex</code> in the facts companion.</p>"""
         |> ignore
 
         sb.AppendLine
