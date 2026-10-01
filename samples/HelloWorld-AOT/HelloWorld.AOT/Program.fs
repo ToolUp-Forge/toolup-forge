@@ -98,6 +98,8 @@ let private argumentArms: (Type * (JsonSerializerOptions -> JsonElement list -> 
     typeof<Customer>, (fun o a -> ICorpusApiDispatch.decodeCustomerArgs o a |> Result.map box)
     typeof<ApiEnvelope>, (fun o a -> ICorpusApiDispatch.decodeEnvelopeArgs o a |> Result.map box)
     typeof<Tree>, (fun o a -> ICorpusApiDispatch.decodeTreeArgs o a |> Result.map box)
+    typeof<Map<Outcome, Address>>, (fun o a -> ICorpusApiDispatch.decodeMapUnionKeyArgs o a |> Result.map box)
+    typeof<TemplatedMessage>, (fun o a -> ICorpusApiDispatch.decodeTemplatedMessageArgs o a |> Result.map box)
 ]
 
 // ─── The fixtures the generator REFUSES a decoder for, by name ───────────
@@ -132,12 +134,18 @@ type private Verdict =
     | Passed
     | Refused
     | Failed of string
+    /// The contract declares no echo method at the case's type. A gap in
+    /// the CONTRACT, never a reflection boundary, so it is fatal under
+    /// every host (Phase 946: two corpus cases sat here unnoticed while
+    /// the native-host tally absorbed them as reflection-bound).
+    | Undeclared
 
 let private describe =
     function
     | Verdict.Passed -> "passed"
     | Verdict.Refused -> "refused"
     | Verdict.Failed why -> "FAILED: " + why
+    | Verdict.Undeclared -> "FAILED: the contract declares no echo method at this type"
 
 let private judge (c: WireCase) (decoded: Result<obj, DecodeError>) : Verdict =
     match decoded with
@@ -160,7 +168,7 @@ let private decodeResponse (c: WireCase) (bytes: byte[]) : Verdict =
 /// generated dispatch table would hand a one-argument call its argument.
 let private decodeArgument (options: JsonSerializerOptions) (c: WireCase) (text: string) : Verdict =
     match argumentArms |> List.tryFind (fun (t, _) -> t = c.ClrType) with
-    | None -> Verdict.Failed "the contract declares no echo method at this type"
+    | None -> Verdict.Undeclared
     | Some(_, parse) ->
         use document = JsonDocument.Parse text
         parse options [ document.RootElement.Clone() ] |> judge c
@@ -229,8 +237,14 @@ let main argv =
         // algebra's JSON extension is a separate phase. So under the native
         // host an argument-side failure is tallied as REFLECTION-BOUND and
         // reported, never hidden and never fatal — this program must not
-        // widen the algebra to make it pass. Under the JIT the same failure
-        // IS fatal: there the seam is expected to work, and 68 of 68 do.
+        // widen the algebra to make it pass. Where dynamic code IS supported
+        // the same failure is fatal: there the seam is expected to work.
+        // MEASURED (Phase 946): `PublishAot` writes the dynamic-code feature
+        // switch OFF into the runtimeconfig, so even `dotnet run` under the
+        // JIT reports `dynamic code supported: False` and takes the tolerant
+        // arm. A missing echo method is therefore its own verdict
+        // (`Undeclared`), fatal under every host, rather than a parse
+        // failure this arm would absorb.
         let dynamicCode =
             System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported
 
@@ -249,7 +263,8 @@ let main argv =
             match response with
             | Verdict.Passed -> responsePassed <- responsePassed + 1
             | Verdict.Refused -> refused.Add c.Name
-            | Verdict.Failed _ -> failures <- failures + 1
+            | Verdict.Failed _
+            | Verdict.Undeclared -> failures <- failures + 1
 
             let argumentShown =
                 match argument with
@@ -260,6 +275,7 @@ let main argv =
                     reflectionBound <- reflectionBound + 1
                     "reflection-bound: " + why
                 | Verdict.Refused
+                | Verdict.Undeclared
                 | Verdict.Failed _ ->
                     failures <- failures + 1
                     describe argument

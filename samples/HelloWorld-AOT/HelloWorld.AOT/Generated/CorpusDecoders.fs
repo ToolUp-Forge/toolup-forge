@@ -93,6 +93,32 @@ module CorpusDecoders =
                  | _ -> None))
                 value
 
+    /// Generated decoder for `WireCorpus.Addressee` — one combinator per field or case, read off the type's own shape.
+    let addressee: Decoder<WireCorpus.Addressee> =
+        Decode.union "WireCorpus.Addressee" (function
+            | 0 -> Some(Decode.payload (Decode.asString |> Decode.map WireCorpus.Addressee.PlatformMember))
+            | 1 -> Some(Decode.payload (Decode.asString |> Decode.map WireCorpus.Addressee.ExternalAddressee))
+            | _ -> None)
+
+    /// Generated decoder for `WireCorpus.TemplatedMessage` — one combinator per field or case, read off the type's own shape.
+    let templatedMessage: Decoder<WireCorpus.TemplatedMessage> =
+        Decode.succeed (fun recipients templateName templateLanguage templateParameters body metadata correlationId -> ({
+            Recipients = recipients
+            TemplateName = templateName
+            TemplateLanguage = templateLanguage
+            TemplateParameters = templateParameters
+            Body = body
+            Metadata = metadata
+            CorrelationId = correlationId
+        }: WireCorpus.TemplatedMessage))
+        |> Decode.apply (Decode.field "Recipients" 0 (Decode.list addressee))
+        |> Decode.apply (Decode.field "TemplateName" 1 (Decode.option Decode.asString))
+        |> Decode.apply (Decode.field "TemplateLanguage" 2 (Decode.option Decode.asString))
+        |> Decode.apply (Decode.field "TemplateParameters" 3 (Decode.list Decode.asString))
+        |> Decode.apply (Decode.field "Body" 4 (Decode.option Decode.asString))
+        |> Decode.apply (Decode.field "Metadata" 5 (Decode.asMap Decode.asString Decode.asString))
+        |> Decode.apply (Decode.field "CorrelationId" 6 (Decode.option Decode.asString))
+
     /// The wire types this module covers, in registration order.
     let covered: string list = [
         typeof<WireCorpus.Address>.FullName
@@ -100,6 +126,8 @@ module CorpusDecoders =
         typeof<WireCorpus.Outcome>.FullName
         typeof<WireCorpus.Consignment>.FullName
         typeof<WireCorpus.Tree>.FullName
+        typeof<WireCorpus.Addressee>.FullName
+        typeof<WireCorpus.TemplatedMessage>.FullName
         typeof<bool>.FullName
         typeof<int>.FullName
         typeof<string>.FullName
@@ -131,6 +159,7 @@ module CorpusDecoders =
         typeof<Set<int>>.FullName
         typeof<int * string>.FullName
         typeof<int * string * bool>.FullName
+        typeof<Map<WireCorpus.Outcome, WireCorpus.Address>>.FullName
     ]
 
     /// Register every decoder above. Idempotent, and explicit —
@@ -142,6 +171,8 @@ module CorpusDecoders =
         RemotingDecoders.register<WireCorpus.Outcome> outcome
         RemotingDecoders.register<WireCorpus.Consignment> consignment
         RemotingDecoders.register<WireCorpus.Tree> tree
+        RemotingDecoders.register<WireCorpus.Addressee> addressee
+        RemotingDecoders.register<WireCorpus.TemplatedMessage> templatedMessage
         RemotingDecoders.register<bool> Decode.asBool
         RemotingDecoders.register<int> Decode.asInt32
         RemotingDecoders.register<string> Decode.asString
@@ -173,6 +204,7 @@ module CorpusDecoders =
         RemotingDecoders.register<Set<int>> (Decode.asSet Decode.asInt32)
         RemotingDecoders.register<int * string> (Decode.tuple2 Decode.asInt32 Decode.asString)
         RemotingDecoders.register<int * string * bool> (Decode.tuple3 Decode.asInt32 Decode.asString Decode.asBool)
+        RemotingDecoders.register<Map<WireCorpus.Outcome, WireCorpus.Address>> (Decode.asMap outcome address)
 
     /// Phase 801 — every decoder above beside the reflection reader,
     /// over `draws` draws of its own type from `seed`, through `gate`
@@ -185,6 +217,8 @@ module CorpusDecoders =
         RemotingDecoders.verifyThrough<WireCorpus.Outcome> gate draws seed outcome
         RemotingDecoders.verifyThrough<WireCorpus.Consignment> gate draws seed consignment
         RemotingDecoders.verifyThrough<WireCorpus.Tree> gate draws seed tree
+        RemotingDecoders.verifyThrough<WireCorpus.Addressee> gate draws seed addressee
+        RemotingDecoders.verifyThrough<WireCorpus.TemplatedMessage> gate draws seed templatedMessage
         RemotingDecoders.verifyThrough<bool> gate draws seed Decode.asBool
         RemotingDecoders.verifyThrough<int> gate draws seed Decode.asInt32
         RemotingDecoders.verifyThrough<string> gate draws seed Decode.asString
@@ -216,6 +250,7 @@ module CorpusDecoders =
         RemotingDecoders.verifyThrough<Set<int>> gate draws seed (Decode.asSet Decode.asInt32)
         RemotingDecoders.verifyThrough<int * string> gate draws seed (Decode.tuple2 Decode.asInt32 Decode.asString)
         RemotingDecoders.verifyThrough<int * string * bool> gate draws seed (Decode.tuple3 Decode.asInt32 Decode.asString Decode.asBool)
+        RemotingDecoders.verifyThrough<Map<WireCorpus.Outcome, WireCorpus.Address>> gate draws seed (Decode.asMap outcome address)
     ]
 
     /// Phase 801 — `registerAll`, gated: registers every decoder above

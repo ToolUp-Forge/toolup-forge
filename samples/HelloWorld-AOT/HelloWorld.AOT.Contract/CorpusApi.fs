@@ -65,4 +65,8 @@ type ICorpusApi = {
     Envelope: ApiEnvelope -> Async<ApiEnvelope>
     /// Phase 816 — the recursive union; its generated decoder is a `let rec`.
     Tree: Tree -> Async<Tree>
+    /// Phase 6f.A's map keyed by a payload-bearing union (`map-union-key`).
+    MapUnionKey: Map<Outcome, Address> -> Async<Map<Outcome, Address>>
+    /// Phase 827's templated-message record (`record-templated-message`).
+    TemplatedMessage: TemplatedMessage -> Async<TemplatedMessage>
 }

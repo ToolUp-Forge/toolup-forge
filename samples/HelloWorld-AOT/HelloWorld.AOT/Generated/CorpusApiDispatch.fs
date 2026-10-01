@@ -65,6 +65,8 @@ module ICorpusApiDispatch =
         "Customer", 1
         "Envelope", 1
         "Tree", 1
+        "MapUnionKey", 1
+        "TemplatedMessage", 1
     ]
 
     /// Typed argument parse for `ICorpusApi.Bool`.
@@ -507,6 +509,28 @@ module ICorpusApiDispatch =
         | _ ->
             Error(DecodeError.at [ "Tree(args)" ] "1 argument(s)" (sprintf "%d" (List.length args)))
 
+    /// Typed argument parse for `ICorpusApi.MapUnionKey`.
+    let decodeMapUnionKeyArgs (options: JsonSerializerOptions) (args: JsonElement list) =
+        match args with
+        | [ a0 ] ->
+            match FableConverters.tryDeserialise<Map<WireCorpus.Outcome, WireCorpus.Address>> a0 options with
+            | Error e -> Error(DecodeError.under "MapUnionKey(args)[0]" e)
+            | Ok v0 ->
+            Ok(v0)
+        | _ ->
+            Error(DecodeError.at [ "MapUnionKey(args)" ] "1 argument(s)" (sprintf "%d" (List.length args)))
+
+    /// Typed argument parse for `ICorpusApi.TemplatedMessage`.
+    let decodeTemplatedMessageArgs (options: JsonSerializerOptions) (args: JsonElement list) =
+        match args with
+        | [ a0 ] ->
+            match FableConverters.tryDeserialise<WireCorpus.TemplatedMessage> a0 options with
+            | Error e -> Error(DecodeError.under "TemplatedMessage(args)[0]" e)
+            | Ok v0 ->
+            Ok(v0)
+        | _ ->
+            Error(DecodeError.at [ "TemplatedMessage(args)" ] "1 argument(s)" (sprintf "%d" (List.length args)))
+
     /// Phase 906 — every method's generated invocation. The server's
     /// remoting proxy composes it as the INNERMOST stage of the adapter's
     /// pre-flight chain (auth, rate limit, validation, idempotency and
@@ -754,6 +778,18 @@ module ICorpusApiDispatch =
                 (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
                     let a0 = args.Next<WireCorpus.Tree>()
                     args.Complete(api.Tree a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, Map<WireCorpus.Outcome, WireCorpus.Address>>
+                "MapUnionKey"
+                [| typeof<Map<WireCorpus.Outcome, WireCorpus.Address>>; typeof<Async<Map<WireCorpus.Outcome, WireCorpus.Address>>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<Map<WireCorpus.Outcome, WireCorpus.Address>>()
+                    args.Complete(api.MapUnionKey a0))
+            ToolUp.Remoting.Server.GeneratedInvocation.forMethodWithFirst<HelloWorld.AOT.Contract.ICorpusApi, WireCorpus.TemplatedMessage>
+                "TemplatedMessage"
+                [| typeof<WireCorpus.TemplatedMessage>; typeof<Async<WireCorpus.TemplatedMessage>> |]
+                (fun (args: ToolUp.Remoting.Server.GeneratedArguments) (api: HelloWorld.AOT.Contract.ICorpusApi) ->
+                    let a0 = args.Next<WireCorpus.TemplatedMessage>()
+                    args.Complete(api.TemplatedMessage a0))
         ]
 
     /// Register `invocations` with the server's remoting proxy. Call
