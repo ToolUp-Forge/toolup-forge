@@ -465,6 +465,39 @@ let offlineTests =
             let _, many = composed 3 FactsCompose.withFactStore
             Expect.hasLength (scaleValidators many) 1 "three replicas compose the guard"
 
+        // Phase 946 — the compose-time preflight reads every validator as
+        // an INSTANCE registration and refuses a factory, so a guard
+        // registered through a factory made a multi-replica composition
+        // raise at preflight instead of validating.
+        testCaseAsync "a multi-replica composition's preflight runs the guard instead of raising (Phase 946)"
+        <| async {
+            let services, sp = composed 3 FactsCompose.withFactStore
+
+            let outcomes =
+                try
+                    Ok(ConfigValidatorAggregator.validate services None false)
+                with ex ->
+                    Error ex.Message
+
+            match outcomes with
+            | Error message -> failtestf "the preflight raised instead of validating: %s" message
+            | Ok outcomes ->
+                Expect.contains (outcomes |> List.map _.Name) "blob-fact-store-scale" "the guard ran at preflight"
+
+            // The guard reads the composition it was registered into: past
+            // the warning threshold it warns, at preflight, with no provider.
+            do! seedCensus (sp.GetRequiredService<IBlobStorage>()) "team-scale" (BlobFactStoreScale.WarnAboveFacts + 1)
+
+            match
+                ConfigValidatorAggregator.validate services None false
+                |> List.tryFind (fun o -> o.Name = "blob-fact-store-scale")
+            with
+            | Some {
+                       Result = ConfigValidation.ValidationResult.Warning message
+                   } -> Expect.stringContains message "team-scale" "the warning names the scope"
+            | other -> failtestf "expected the guard to warn, got %A" other
+        }
+
         testCaseAsync "withFactStoreImplementation replaces the store every fact registration resolves"
         <| async {
             let replacement, _ = blobIndexed None (fun () -> DateTime.UtcNow)
