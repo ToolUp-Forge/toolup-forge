@@ -85,6 +85,45 @@ because someone documented three members would tax precisely the act the gate ex
 and the tax would be paid by every unrelated PR that happened to touch a documented file. So
 improvements land silently and are locked in deliberately — see the ratchet step below.
 
+### Reading a rise: the members a union brings that nobody can document (Phase 964)
+
+Some of the surface the walk tracks is written by the compiler, not the author, and no `///`
+comment can reach it. A public F# union is the case that moves the count in practice. For a union of
+`n` cases the walk tracks, beside the type and its cases:
+
+| Member | Count | Documentable? |
+|---|---|---|
+| `Tag` | 1 | no — compiler-generated |
+| the nested `Tags` class | 1 | no |
+| one `Tags.<Case>` literal per case | `n` | no |
+| one `Is<Case>` property per case | `n` | no |
+| the union type, and each case | `1 + n` | yes — a `///` on the type and on each case |
+| each named field of a case with fields | one per field | yes — a `///` on the field, inside the case |
+
+The `New<Case>` constructor methods the compiler also emits do not appear in the tracked surface, so
+they cost nothing. So a new public union adds `2 + 2n` undocumented subjects even when everything its
+author wrote is documented. The fields are NOT in that set: a doc comment on a case field reaches the XML file (the
+compiler keys it `P:<Union>.<Case>.<field>`), so an undocumented field is an ordinary gap.
+
+```fsharp skip=fragment
+/// Where a run's facts come from.
+type Provenance =
+    /// Computed by the producing operation.
+    | Computed
+    /// Imported from an origin.
+    | Imported of
+        /// The origins the run imported.
+        origins: Origin list
+```
+
+How a reviewer reads a rise in the undocumented count: subtract `2 + 2n` for each public union the
+change adds (and `2` for each case it adds to an existing one). What is left is the change's own
+undocumented surface, and that must be zero. A change whose whole rise is accounted for by new
+unions is complete, and its baseline line is accepted as it stands. Phase 938's `+9` in
+`ToolUp.Facts.Server` (717/1088 to 737/1117) reads this way: six came from its one new two-case
+union, `FactTableRunProvenance`, and the other three were ordinary gaps, among them the
+`ImportedRun` case's `origins` field, which carries no doc comment.
+
 ### Accepting a new level
 
 Same switch as the api-baselines beside it, scoped the same way:
