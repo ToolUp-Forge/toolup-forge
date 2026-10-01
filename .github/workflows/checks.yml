@@ -1259,6 +1259,20 @@ jobs:
   # and still NOT a required check (see docs/migrations/849-browser-
   # runtime-benchmark.md): Node is not a browser, and the numbers are a
   # before/after instrument for the client-runtime phases first.
+  #
+  # ── The client bundles (Phase 909) ─────────────────────────────────
+  #
+  # Before the client harness, the same script also sizes the client
+  # bundles, which costs this job three more steps: `npm ci` in
+  # samples/MinimalClient (its own lockfile, which the setup-node cache
+  # below is not keyed on), a second Fable compile (samples/MinimalClient,
+  # ~1.5 min on a runner), and two Vite production builds — the minimal
+  # sample's own entry and the SDK shell's module graph with every export
+  # kept (vite.shell.config.mts) — into artifacts/perf-budget/bundles/.
+  # Measured on a developer machine (2026-10-01): `npm ci` ~90 s cold, the
+  # Vite builds ~3 s and ~11 s. ClientBench measures the JavaScript each
+  # build wrote against the `client` block's bundle ceilings, with a
+  # bundle-only teeth check of its own.
   perf-budget:
     runs-on: ubuntu-latest
     timeout-minutes: 40
