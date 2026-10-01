@@ -41,6 +41,9 @@ module Extraction =
 
     type ExtractedRecord = {
         Name: string
+        /// Names of the attributes on the record type itself (Phase 964),
+        /// as written — source or CLR form, possibly dotted.
+        AttributeNames: string list
         Fields: ExtractedField list
         Range: range
     }
@@ -99,7 +102,7 @@ module Extraction =
         }
 
     let private recordFromTypeDefn (typeDefn: SynTypeDefn) : ExtractedRecord option =
-        let (SynTypeDefn(SynComponentInfo(longId = longId), repr, _, _, range, _)) =
+        let (SynTypeDefn(SynComponentInfo(attributes = attrs; longId = longId), repr, _, _, range, _)) =
             typeDefn
 
         match repr with
@@ -108,6 +111,7 @@ module Extraction =
 
             Some {
                 Name = name
+                AttributeNames = attributeNames attrs
                 Fields = fields |> List.map fieldFromSyn
                 Range = range
             }
@@ -129,10 +133,21 @@ module Extraction =
             |> List.collect (fun (SynModuleOrNamespace(decls = decls)) -> fromModuleDecls decls)
         | ParsedInput.SigFile _ -> []
 
-    /// A record is an API-contract candidate when it has ≥1 field and every
-    /// field is a function type.
+    /// Phase 964 — true when the record carries the census exclusion the
+    /// generator honours (`Plan.isExcludedFromApiCensus`): an attribute named
+    /// `NotRemotingApiAttribute`, matched by name in any namespace, in either
+    /// the source form (`NotRemotingApi`) or the CLR form.
+    let isExcludedFromApiCensus (r: ExtractedRecord) : bool =
+        r.AttributeNames
+        |> List.exists (fun n -> Recognition.simpleName n = "NotRemotingApi")
+
+    /// A record is an API-contract candidate when it has ≥1 field, every
+    /// field is a function type, and it is not marked `NotRemotingApi`
+    /// (Phase 964 — the same rule as the generator's `Plan.isApiRecord`).
     let isApiRecordCandidate (r: ExtractedRecord) : bool =
-        not (List.isEmpty r.Fields) && r.Fields |> List.forall _.IsFunction
+        not (isExcludedFromApiCensus r)
+        && not (List.isEmpty r.Fields)
+        && r.Fields |> List.forall _.IsFunction
 
     /// True when a record declares ≥1 field carrying `[<PiiSafe>]`.
     let hasPiiSafeField (r: ExtractedRecord) : bool =
