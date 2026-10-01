@@ -493,8 +493,262 @@ let private postgresFactory (connectionString: string) () : SparseFactory * (uni
 
     factory, teardown
 
+// ─── Phase 960 — an erasure that could not redact says so ─────────────
+//
+// The config store and the data-object store redact by rewriting every
+// matched blob, and both used to fan those rewrites out through
+// `List.map (… Upload …) |> Async.Parallel |> Async.Ignore`. Every shipped
+// blob store reports a refused write as `Error`, so a refused redaction was
+// discarded with the rest of the list's results, the store returned `Ok`,
+// and the DSR ledger recorded `ErasureCompleted` over a blob that still
+// named the subject. These cases drive both stores over a blob double that
+// refuses some writes, and assert the erasure fails, names the blob that
+// did not redact, leaves the ones that did redacted, and re-runs clean.
+
+/// `Upload` returns `Error` for every blob name `refused` selects; every
+/// other operation passes through to `inner`.
+type private UploadRefusingBlobStorage(inner: IBlobStorage, refused: string -> bool) =
+    interface IBlobStorage with
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            BlobStorage.composeNotSupported "test double"
+
+        member _.Upload(container, blobName, content) =
+            if refused blobName then
+                async { return Error "simulated storage write refusal" }
+            else
+                inner.Upload(container, blobName, content)
+
+        member _.Download(container, blobName) = inner.Download(container, blobName)
+        member _.Delete(container, blobName) = inner.Delete(container, blobName)
+        member _.List(container, prefix) = inner.List(container, prefix)
+        member _.Exists(container, blobName) = inner.Exists(container, blobName)
+        member _.GetMetadata(container, blobName) = inner.GetMetadata(container, blobName)
+
+        member _.DownloadRange(container, blobName, offset, length) =
+            inner.DownloadRange(container, blobName, offset, length)
+
+        member _.Erase(container, prefix, policy, dryRun) =
+            inner.Erase(container, prefix, policy, dryRun)
+
+let private utf8 (s: string) = Encoding.UTF8.GetBytes s
+
+/// The run's outcome as the DSR ledger records it: preview, confirm, and
+/// the audit kinds the orchestrator emitted for the request.
+let private ledgerKinds (handler: ToolUp.Platform.IDataExporter.IErasureHandler) (scopeId: string) = async {
+    let events = ResizeArray<DataSubjectRequestApiHandler.DsrAuditEvent>()
+
+    let admin: AccessContext = {
+        AccessContext.unrestricted (AuthenticatedUser "admin-actor") with
+            PlatformRole = Some PlatformRole.PlatformAdmin
+    }
+
+    let api =
+        DataSubjectRequestApiHandler.create
+            []
+            [ handler ]
+            ErasurePolicy.Tombstone
+            scopeId
+            "admin-actor"
+            admin
+            (fun e -> async { lock events (fun () -> events.Add e) })
+            None
+
+    let! preview =
+        api.PreviewErasure {
+            SubjectUserId = "u1"
+            TeamId = None
+            Reason = "Phase 960"
+            OverridePolicy = None
+        }
+
+    match preview with
+    | Error e -> return failtestf "preview failed: %s" e
+    | Ok p ->
+        let! _ = api.ConfirmErasure p.Request.Id
+        return events |> Seq.map _.Kind |> List.ofSeq
+}
+
+let private expectPartialFailure (handlerName: string) (result: Result<ErasureSummary, ErasureError>) =
+    match result with
+    | Error(HandlerPartialFailure(name, partial, detail)) ->
+        Expect.equal name handlerName "the failure names its handler"
+        partial, detail
+    | other -> failtestf "a refused redaction must fail the erasure with HandlerPartialFailure; got %A" other
+
+let private configDoc (scopeId: string) (moduleKey: string) = $"config/{scopeId}/{moduleKey}.json"
+
+let private phase960Tests =
+    testList "Phase 960 — a refused redaction fails the erasure" [
+
+        testAsync "config: one refused redaction of two fails the erasure and names the blob" {
+            let inner = InMemoryBlobStorage() :> IBlobStorage
+            let modA = configDoc "team-1" "modA"
+            let modB = configDoc "team-1" "modB"
+            let! _ = inner.Upload("_platform", modA, utf8 """{"owner":"\"u1@x\"","keep":"\"safe\""}""")
+            let! _ = inner.Upload("_platform", modB, utf8 """{"owner":"\"u1@x\""}""")
+
+            let refusing = UploadRefusingBlobStorage(inner, (=) modB) :> IBlobStorage
+            let store = ToolUp.Platform.ConfigStore.create refusing
+            let! result = store.Erase("team-1", "u1", ErasurePolicy.Tombstone, false)
+
+            let partial, detail = expectPartialFailure "config" result
+            Expect.stringContains detail modB "the failure names the blob that did not redact"
+            Expect.isFalse (detail.Contains modA) "a blob that redacted is not named as a failure"
+            Expect.equal partial.RecordsAffected 1 "the partial summary counts only what redacted"
+
+            let! a = inner.Download("_platform", modA)
+            let! b = inner.Download("_platform", modB)
+
+            match a, b with
+            | Ok a, Ok b ->
+                let a = Encoding.UTF8.GetString a
+                Expect.isFalse (a.Contains "u1@x") "the redaction that landed stays landed"
+                Expect.stringContains a "safe" "a non-matching value is retained"
+                Expect.stringContains (Encoding.UTF8.GetString b) "u1@x" "the refused blob still names the subject"
+            | a, b -> failtestf "both documents must still exist: %A / %A" a b
+
+            // Idempotent and re-runnable: a healthy store finishes the job.
+            let! rerun =
+                (ToolUp.Platform.ConfigStore.create inner).Erase("team-1", "u1", ErasurePolicy.Tombstone, false)
+
+            match rerun with
+            | Ok s -> Expect.equal s.RecordsAffected 1 "the re-run redacts exactly the one that was left"
+            | Error e -> failtestf "the re-run over a healthy store must succeed: %A" e
+
+            match! inner.Download("_platform", modB) with
+            | Ok b -> Expect.isFalse ((Encoding.UTF8.GetString b).Contains "u1@x") "the re-run redacted it"
+            | Error e -> failtestf "modB must exist: %s" e
+        }
+
+        testAsync "config: the DSR ledger records the failure, never completion" {
+            let inner = InMemoryBlobStorage() :> IBlobStorage
+            let! _ = inner.Upload("_platform", configDoc "team-l" "modA", utf8 """{"owner":"\"u1@x\""}""")
+            let! _ = inner.Upload("_platform", configDoc "team-l" "modB", utf8 """{"owner":"\"u1@x\""}""")
+
+            let refusing =
+                UploadRefusingBlobStorage(inner, (=) (configDoc "team-l" "modB")) :> IBlobStorage
+
+            let handler =
+                ToolUp.Platform.ConfigStoreErasureHandler.erasureHandler (ToolUp.Platform.ConfigStore.create refusing)
+
+            let! kinds = ledgerKinds handler "team-l"
+            Expect.contains kinds DataSubjectRequestApiHandler.ErasureFailed "the ledger records the failure"
+
+            Expect.isFalse
+                (List.contains DataSubjectRequestApiHandler.ErasureCompleted kinds)
+                "the ledger never records completion over an unredacted blob"
+        }
+
+        for policy in [ ErasurePolicy.Tombstone; ErasurePolicy.RetainPerCompliance ] do
+            testAsync $"data objects ({policy}): one refused metadata redaction fails the erasure and names the blob" {
+                let inner = InMemoryBlobStorage() :> IBlobStorage
+
+                let healthy =
+                    ToolUp.Platform.DataObjectStore.DataObjectStore(inner) :> IDataObjectStore
+
+                let! _ = healthy.Save("team-1", "o1", utf8 "secret-1", "dt", "u1", Map [ "k", "u1-ref" ], Versioned)
+                let! _ = healthy.Save("team-1", "o2", utf8 "secret-2", "dt", "u1", Map.empty, Versioned)
+                let refusedName = "objects/o2/v1.json"
+
+                let failing =
+                    ToolUp.Platform.DataObjectStore.DataObjectStore(UploadRefusingBlobStorage(inner, (=) refusedName))
+                    :> IDataObjectStore
+
+                let! result = failing.Erase("team-1", "u1", policy, false)
+
+                let partial, detail = expectPartialFailure "data-objects" result
+                Expect.stringContains detail refusedName "the failure names the blob that did not redact"
+                Expect.isFalse (detail.Contains "objects/o1/") "a blob that redacted is not named as a failure"
+                Expect.equal partial.RecordsAffected 1 "the partial summary counts only the object that redacted"
+
+                match! healthy.Get("team-1", "o1") with
+                | Ok(o1, _) ->
+                    Expect.equal o1.CreatedBy Erasure.TombstoneMarker "the redaction that landed stays landed"
+                | Error e -> failtestf "o1 must still exist: %A" e
+
+                // The refused object still names the subject — and its
+                // content is still READABLE: the metadata that names it
+                // was not rewritten, so the bytes must not be reclaimed.
+                match! healthy.Get("team-1", "o2") with
+                | Ok(o2, content) ->
+                    Expect.equal o2.CreatedBy "u1" "the refused blob still names the subject"
+
+                    Expect.equal
+                        (Encoding.UTF8.GetString content)
+                        "secret-2"
+                        "its content was not reclaimed from under it"
+                | Error e -> failtestf "o2 must still be readable: %A" e
+
+                let! rerun = healthy.Erase("team-1", "u1", policy, false)
+
+                match rerun with
+                | Ok s -> Expect.equal s.RecordsAffected 1 "the re-run redacts exactly the one that was left"
+                | Error e -> failtestf "the re-run over a healthy store must succeed: %A" e
+
+                match! healthy.Get("team-1", "o2") with
+                | Ok(o2, _) -> Expect.equal o2.CreatedBy Erasure.TombstoneMarker "the re-run redacted it"
+                | Error e -> failtestf "o2 must still exist: %A" e
+            }
+
+        testAsync "data objects: a refused tombstone content write fails the erasure before any metadata moves" {
+            let inner = InMemoryBlobStorage() :> IBlobStorage
+
+            let healthy =
+                ToolUp.Platform.DataObjectStore.DataObjectStore(inner) :> IDataObjectStore
+
+            let! _ = healthy.Save("team-1", "o1", utf8 "secret-1", "dt", "u1", Map.empty, Versioned)
+
+            let failing =
+                ToolUp.Platform.DataObjectStore.DataObjectStore(
+                    UploadRefusingBlobStorage(inner, _.StartsWith("objects/_content/"))
+                )
+                :> IDataObjectStore
+
+            let! result = failing.Erase("team-1", "u1", ErasurePolicy.Tombstone, false)
+
+            let partial, detail = expectPartialFailure "data-objects" result
+            Expect.stringContains detail "objects/_content/" "the failure names the tombstone content blob"
+            Expect.equal partial.RecordsAffected 0 "nothing was redacted"
+
+            // Metadata naming a tombstone that was never written would make
+            // the object unreadable; the erasure stops before that.
+            match! healthy.Get("team-1", "o1") with
+            | Ok(o1, content) ->
+                Expect.equal o1.CreatedBy "u1" "no metadata was rewritten"
+                Expect.equal (Encoding.UTF8.GetString content) "secret-1" "the object is still whole"
+            | Error e -> failtestf "o1 must still be readable: %A" e
+        }
+
+        testAsync "data objects: the DSR ledger records the failure, never completion" {
+            let inner = InMemoryBlobStorage() :> IBlobStorage
+
+            let healthy =
+                ToolUp.Platform.DataObjectStore.DataObjectStore(inner) :> IDataObjectStore
+
+            let! _ = healthy.Save("team-l", "o1", utf8 "secret-1", "dt", "u1", Map.empty, Versioned)
+            let! _ = healthy.Save("team-l", "o2", utf8 "secret-2", "dt", "u1", Map.empty, Versioned)
+
+            let failing =
+                ToolUp.Platform.DataObjectStore.DataObjectStore(
+                    UploadRefusingBlobStorage(inner, (=) "objects/o2/v1.json")
+                )
+                :> IDataObjectStore
+
+            let! kinds = ledgerKinds (ToolUp.Platform.DataObjectStoreErasureHandler.erasureHandler failing) "team-l"
+            Expect.contains kinds DataSubjectRequestApiHandler.ErasureFailed "the ledger records the failure"
+
+            Expect.isFalse
+                (List.contains DataSubjectRequestApiHandler.ErasureCompleted kinds)
+                "the ledger never records completion over an unredacted blob"
+        }
+    ]
+
 let tests =
     testList "Phase 204 — cross-index erasure conformance" [
+
+        phase960Tests
 
         propertyTests "InMemoryBM25Index" (fun () -> bm25Factory, ignore)
 
