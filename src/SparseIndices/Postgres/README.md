@@ -71,8 +71,9 @@ inverse-document-frequency term.** The in-process index is BM25, which weighs a 
 Two things follow:
 
 - **The scale differs.** Scores sit roughly in [0, 1], not [0, ~20]. Reciprocal Rank Fusion reads ranks, not
-  scores, so the scale does not reach the fused result. It does reach anything that reads a sparse score
-  directly.
+  scores, so the scale does not reach the fused result: a hybrid retrieval's score is in the fused space,
+  min-max normalised onto [0, 1] (Phase 866), whichever keyword index is composed. The raw scale does reach
+  anything that calls `ISparseIndex.Search` and reads the score directly.
 - **The order can differ, and fusion does see order.** In a multi-term query, a chunk that repeats a common
   term can outrank one that contains the rare, discriminating term. That chunk then enters fusion at a higher
   sparse rank than BM25 would give it. The dense leg is unchanged, so the effect is bounded to the keyword
@@ -86,10 +87,11 @@ index alike.
 ## Measured: the retrieval evaluation, side by side
 
 The `ToolUp.RAG.Evaluation` harness (hybrid: the local dense embedder, plus the keyword leg under test) over
-its shipped fixtures. It was run on PostgreSQL 17 on 2026-09-29.
+every shipped retrieval fixture, with both analyzers. It was first run on PostgreSQL 17 on 2026-09-29 and
+re-run on PostgreSQL 17.11 on 2026-10-01 (Phase 943), with identical figures.
 
 ```
-dotnet run --project src/ToolUp.RAG.Evaluation -- --sparse-index postgres --analyzer snowball-en <fixture>
+dotnet run --project src/ToolUp.RAG.Evaluation -- --sparse-index postgres --analyzer snowball-en --out <report.json> <fixture>
 ```
 
 | Fixture | Analyzer | Keyword index | Recall@1 | Recall@5 | Recall@10 | nDCG@10 | MRR |
@@ -107,11 +109,50 @@ dotnet run --project src/ToolUp.RAG.Evaluation -- --sparse-index postgres --anal
 | | snowball-en | in-process BM25 | 1.000 | 1.000 | 1.000 | 0.987 | 1.000 |
 | | | PostgreSQL (`english`) | 1.000 | 1.000 | 1.000 | 0.987 | 1.000 |
 
-Figures in bold differ from the in-process index. The morphology and filtered fixtures are identical under
-both indexes. The `english` configuration reproduces the Snowball analyzer's lift on the morphology fixture
-exactly (Recall@1 0.500 → 0.875). The README fixture, whose queries mix common and rare terms, loses one
-relevant chunk at one cut-off in each arm: the missing IDF term, as described above. There were no filter
-leaks in any arm. The fixtures are small, so read the differences as a direction, not a rate.
+Figures in bold differ from the in-process index. The `english` configuration reproduces the Snowball
+analyzer's lift on the morphology fixture exactly (Recall@1 0.500 → 0.875). There were no filter leaks in any
+arm. (`eval-mixed-dim` is a vector-store fixture with no query text, and BEIR runs only after a download, so
+neither is in the table.)
+
+**What the fused results show.** Comparing each query's fused top 10 across the two indexes (the `Found` list
+in the `--out` reports), 11 of the 44 query runs differ in order and 5 differ in membership. In only 2 of the 44
+did a relevant chunk move, and both are the same query, `q-knowledge-base-formats` on the README fixture: rank
+10 → absent under the identity analyzer, rank 5 → 6 under Snowball. That one query accounts for every bold
+figure in the table. The fixture mixes common and rare terms, which is where the missing IDF term shows.
+
+## Why the ranking stays `ts_rank` (Phase 943)
+
+Phase 943 asked whether a BM25 score computed in SQL should replace `ts_rank`. It measured the question both
+ways and kept `ts_rank`.
+
+**A SQL BM25 does close the gap.** As a probe, the search was rewritten to compute BM25 in SQL, with the
+in-process index's constants (k1 = 1.2, b = 0.75, Lucene IDF), per-scope document frequencies, and the
+average document length. Over the same 44 query runs, every metric in the table above matched the in-process
+index, no fused top 10 differed in membership, and 3 differed in order only. So the gap is the missing IDF term,
+and the fix is known.
+
+**It costs three to six times the keyword leg's latency.** Measured on PostgreSQL 17.11 over a synthetic
+corpus of 40–160 words per chunk with a skewed vocabulary, at the 10,000- and 100,000-chunk sizes of the
+Phase 929 load harness. Median of 7 runs. The cheapest BM25 form tested reads document frequencies from the
+candidate rows and needs a stored per-row document length (a schema change).
+
+| Chunks in scope | Query | `ts_rank` | SQL BM25 |
+|---|---|---|---|
+| 10,000 | two rare terms | 0.6 ms | 3.5 ms |
+| | common + mid + rare term | 20.8 ms | 68.6 ms |
+| | three common terms (every chunk matches) | 15.8 ms | 83.3 ms |
+| 100,000 | two rare terms | 4.7 ms | 28.2 ms |
+| | common + mid + rare term | 143.0 ms | 396.6 ms |
+| | three common terms (every chunk matches) | 316.4 ms | 1,468.9 ms |
+
+The extra cost is reading each candidate's term frequencies out of its `tsvector` and the per-scope
+average-length scan, which `ts_rank` does not need. Computing the stored document length on write added about
+0.1 ms per row. Keeping document frequencies in a table on write would not remove the term-frequency cost, and
+would make every write to a scope update shared rows.
+
+**The decision.** One query in 22 per analyzer moved a relevant chunk, at the edge of a cut-off, while BM25 in
+SQL costs up to 1.2 s per query at 100,000 chunks. That difference is not worth this cost. Re-open the
+question if a larger labelled evaluation shows a material gap: the probe above is the design to start from.
 
 ## Schema
 
