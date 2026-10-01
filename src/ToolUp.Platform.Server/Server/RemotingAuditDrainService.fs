@@ -74,10 +74,27 @@ type internal RemotingAuditDrainService
     /// Close the queue (a late emission then writes inline), let the drain
     /// finish within the host's shutdown timeout, and say so loudly if it
     /// could not.
+    ///
+    /// Phase 869 — and write what the loop left. On .NET 10
+    /// `BackgroundService.StartAsync` queues `ExecuteAsync` through
+    /// `Task.Run(…, stoppingToken)`, so a stop that cancels the token before
+    /// the pool runs that work item cancels the loop before it ever starts,
+    /// leaving every accepted record in the queue (the 856.C case's
+    /// intermittent 0 of 50 on a cold, loaded run). When the base stop
+    /// returned inside the window the loop is not running — it finished, or
+    /// it never ran — so this is the only reader left.
     override this.StopAsync(cancellationToken: CancellationToken) =
         task {
             queue.Complete()
             do! this.StopBase cancellationToken
+
+            if not cancellationToken.IsCancellationRequested then
+                let reader = queue.Reader
+                let mutable work = Unchecked.defaultof<RemotingAuditWork>
+
+                while not cancellationToken.IsCancellationRequested && reader.TryRead(&work) do
+                    do! writeOne logger metrics work
+
             let left = queue.Count
 
             if left > 0 then
