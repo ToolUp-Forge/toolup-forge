@@ -790,6 +790,58 @@ let private armTests =
         armLaws PerfBudgetGate.LoadAzuriteBlockProperty PerfBudgetGate.parseLoadAzuriteBudget PerfMetric.load
         armLaws PerfBudgetGate.LoadPostgresBlockProperty PerfBudgetGate.parseLoadPostgresBudget PerfMetric.load
 
+        // Phase 962 — the database arm's deep-history population cell.
+        armLaws
+            PerfBudgetGate.LoadPostgresHistoryBlockProperty
+            PerfBudgetGate.parseLoadPostgresHistoryBudget
+            PerfMetric.loadPostgresHistory
+
+        test
+            "a population read that stops using its index breaches on the row count even when the clock does not (Phase 962)" {
+            let budget =
+                match PerfBudgetGate.parseLoadPostgresHistoryBudget "shipped-budget.json" (shippedBudgetJson ()) with
+                | Ok b -> b
+                | Error errors -> failtestf "the shipped history block did not parse: %s" (String.concat "; " errors)
+
+            let ceilingOf metric =
+                budget.Ceilings |> List.find (fun (m, _) -> m = metric) |> snd
+
+            let baselineOf metric =
+                budget.Baselines |> List.find (fun (m, _) -> m = metric) |> snd
+
+            // The read touches the metric's whole history (52 weeks) instead
+            // of the asked week, and the clock happens to stay at baseline.
+            let rows = baselineOf FactPopulationRowsPerRead * 52.0
+
+            let sample metric (value: float) =
+                let v = value.ToString(Globalization.CultureInfo.InvariantCulture)
+
+                $"""{{ "metric": "{PerfMetric.key metric}", "statistic": "min", "value": {v}, "samples": 5, "observed": true, "evidence": "fixture" }}"""
+
+            let samples =
+                String.Join(
+                    ", ",
+                    [
+                        sample FactPopulationReadMs (baselineOf FactPopulationReadMs)
+                        sample FactPopulationRowsPerRead rows
+                        sample FactAssertMs (baselineOf FactAssertMs)
+                        sample FactBatchAssertMs (baselineOf FactBatchAssertMs)
+                    ]
+                )
+
+            let run =
+                runOrFail
+                    "history-run.json"
+                    $"""{{ "schema": "toolup.perf-measurements/v1", "appDirectory": "bench", "samples": [ {samples} ] }}"""
+
+            Expect.equal
+                (PerfBudgetGate.breaches (PerfBudgetGate.check budget run))
+                [
+                    CeilingBreached(FactPopulationRowsPerRead, rows, ceilingOf FactPopulationRowsPerRead)
+                ]
+                "the count is gated on its own"
+        }
+
         test "the load parser and the arm parsers each read only their own block" {
             let azurite = loadBlock.Replace("\"load\"", "\"loadAzurite\"").Replace("100", "900")
 

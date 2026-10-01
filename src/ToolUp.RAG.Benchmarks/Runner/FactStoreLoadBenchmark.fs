@@ -82,6 +82,10 @@ type FactResult = {
     Facts: int
     SeedSeconds: float
     Operations: FactOpResult list
+    /// Phase 962 — the table rows one population read's summary statement
+    /// touched, from its executed plan; `None` for a store with no plan to
+    /// read (the blob store).
+    PopulationRowsPerRead: float option
 }
 
 /// Phase 962 — where a `postgres` cell's rows live. By default each run
@@ -237,6 +241,9 @@ type private FactBackend = {
     /// Phase 962 — the scope of an already-seeded table, when the run
     /// reuses one (`Seed` is then skipped).
     Reused: string option
+    /// Phase 962 — the executed plan of a population read's summary, for a
+    /// store that has one (`PostgresFactStore.ExplainPopulation`).
+    ExplainPopulation: (string -> PopulationQuery -> Async<string>) option
     Cleanup: unit -> unit
 }
 
@@ -306,6 +313,7 @@ let private resolveFactBackend (target: PostgresTable) (cell: FactCell) : Result
                 Counting = counting
                 Seed = seedBlobs storage
                 Reused = None
+                ExplainPopulation = None
                 Cleanup = arm.Cleanup
             })
     | "postgres" ->
@@ -350,6 +358,7 @@ let private resolveFactBackend (target: PostgresTable) (cell: FactCell) : Result
                         settleTable connectionString options.Table
                     }
                 Reused = reused |> Option.map snd
+                ExplainPopulation = Some(fun scope query -> store.ExplainPopulation(scope, query))
                 Cleanup =
                     fun () ->
                         (store :> IDisposable).Dispose()
@@ -368,6 +377,44 @@ let private resolveFactBackend (target: PostgresTable) (cell: FactCell) : Result
                                 eprintfn "[load] could not drop %s: %s" options.Table ex.Message
             }
     | other -> Error $"unknown fact store '{other}' (expected blob|postgres)"
+
+/// Phase 962 — the table rows an executed plan (`EXPLAIN (ANALYZE, FORMAT
+/// JSON)`) touched: per scan node that reads a table, its rows returned plus
+/// the rows its filter or recheck discarded, times its loops. A scan of a
+/// sub-select's, a function's or a CTE's output reads no table row.
+let private touchedRows (planJson: string) : float =
+    use doc = JsonDocument.Parse planJson
+    let mutable touched = 0.0
+
+    let number (node: JsonElement) (name: string) =
+        match node.TryGetProperty name with
+        | true, v -> v.GetDouble()
+        | _ -> 0.0
+
+    let rec walk (node: JsonElement) =
+        let nodeType = node.GetProperty("Node Type").GetString()
+
+        if
+            nodeType.Contains "Scan"
+            && not (List.contains nodeType [ "Subquery Scan"; "Function Scan"; "CTE Scan" ])
+        then
+            touched <-
+                touched
+                + max 1.0 (number node "Actual Loops")
+                  * (number node "Actual Rows"
+                     + number node "Rows Removed by Filter"
+                     + number node "Rows Removed by Index Recheck")
+
+        match node.TryGetProperty "Plans" with
+        | true, plans ->
+            for child in plans.EnumerateArray() do
+                walk child
+        | _ -> ()
+
+    for entry in doc.RootElement.EnumerateArray() do
+        walk (entry.GetProperty "Plan")
+
+    touched
 
 /// Run one fact cell: seed, prove the seed readable, then measure the four
 /// operations in turn — reads first, so the writes do not change what the
@@ -447,14 +494,16 @@ let runFactCellOn (target: PostgresTable) (cell: FactCell) : Async<Result<FactRe
                         failwithf "fact %s is missing" fact.FactId
                 })
 
+            let populationQuery (metric: int) = {
+                PopulationQuery.create (metricOf metric) hierarchy with
+                    PeriodOverlaps = Some(week latest)
+                    Ordering = Descending
+                    TopK = 10
+            }
+
             let population =
                 measureOperation "population read (one metric, latest week, top 10)" counting cell (fun _ i -> async {
-                    let query = {
-                        PopulationQuery.create (metricOf (i % cell.Metrics)) hierarchy with
-                            PeriodOverlaps = Some(week latest)
-                            Ordering = Descending
-                            TopK = 10
-                    }
+                    let query = populationQuery (i % cell.Metrics)
 
                     match! store.QueryPopulation(scope, query) with
                     | Ok result when result.Stats.SubjectCount = cell.Subjects -> ()
@@ -465,6 +514,17 @@ let runFactCellOn (target: PostgresTable) (cell: FactCell) : Async<Result<FactRe
                             cell.Subjects
                     | Error e -> failwithf "population read refused: %s" e
                 })
+
+            // Phase 962 — the rows that read touches, from its executed
+            // plan, once and after the clocked rounds (so it is warm, as
+            // they were): a count that survives a change of machine.
+            let! populationRows =
+                match backend.ExplainPopulation with
+                | Some explain -> async {
+                    let! plan = explain scope (populationQuery 0)
+                    return Some(touchedRows plan)
+                  }
+                | None -> async { return None }
 
             // Writes: each assert revises the latest week of a distinct
             // subject (new inputs, so it SUPERSEDES rather than being an
@@ -505,6 +565,7 @@ let runFactCellOn (target: PostgresTable) (cell: FactCell) : Async<Result<FactRe
                     Facts = total
                     SeedSeconds = seedClock.Elapsed.TotalSeconds
                     Operations = [ pointRead; byId; population; single; batch ]
+                    PopulationRowsPerRead = populationRows
                 }
         with ex ->
             backend.Cleanup()
@@ -547,6 +608,18 @@ let renderFacts (r: FactResult) : string list = [
             op.BlobReadsPerOp
             op.BlobListsPerOp
             r.SeedSeconds
+    match r.PopulationRowsPerRead with
+    | Some rows ->
+        sprintf
+            "facts | store=%s blob=%s | subjects=%d metrics=%d weeks=%d (%d facts) | population read summary touched %.0f rows (executed plan)"
+            r.StoreLabel
+            r.BlobLabel
+            r.Cell.Subjects
+            r.Cell.Metrics
+            r.Cell.Weeks
+            r.Facts
+            rows
+    | None -> ()
 ]
 
 /// The fact gate's configuration — what `perf-budget-gate.ps1` runs on
@@ -603,6 +676,18 @@ let factGateSamples (r: FactResult) : GateSample list =
             Median = pointRead.BlobReadsPerOp
             Max = pointRead.BlobReadsPerOp
         }
+        match r.PopulationRowsPerRead with
+        | Some rows -> {
+            Metric = "factPopulationRowsPerRead"
+            Value = rows
+            Rounds = r.Cell.Rounds
+            Observed = rows > 0.0
+            Evidence =
+                $"table rows the population read's summary touched, from its executed plan (one metric, latest week) — {where}"
+            Median = rows
+            Max = rows
+          }
+        | None -> ()
     ]
 
 /// Phase 929 — the fact gate's configuration over the object-storage
@@ -619,6 +704,17 @@ let azuriteGateFactCell: FactCell = {
 /// Phase 929 — the fact gate's configuration over the database-backed
 /// store (Phase 888): the memory arm's population, so the two rows compare.
 let postgresGateFactCell: FactCell = { gateFactCell with Store = "postgres" }
+
+/// Phase 962 — the database arm's deep-history cell: a year of weekly facts
+/// per subject, so one metric's latest week is one 156th of the table and a
+/// population read that stops using the population index touches the
+/// table (or the metric's history) instead of the week. Sized to seed in
+/// about a minute and a half through `AssertBatch`.
+let postgresHistoryGateFactCell: FactCell = {
+    postgresGateFactCell with
+        Subjects = 2_500
+        Weeks = 52
+}
 
 /// The gate configuration each arm runs: its measurement label, the
 /// retrieval cell (optional, so an arm may budget facts alone) and the fact
@@ -649,7 +745,9 @@ let gateArm (arm: string) : Result<string * RetrievalCell option * FactCell, str
             },
             postgresGateFactCell
         )
-    | other -> Error $"unknown gate arm '{other}' (expected memory|azurite|postgres)"
+    | "postgres-history" ->
+        Ok("Phase 962 load harness - gate configuration, postgres arm, deep history", None, postgresHistoryGateFactCell)
+    | other -> Error $"unknown gate arm '{other}' (expected memory|azurite|postgres|postgres-history)"
 
 // ─── The `load` command ─────────────────────────────────────────────
 
@@ -664,7 +762,7 @@ module LoadCommand =
             "Usage: dotnet run --project src/ToolUp.RAG.Benchmarks -c Release -- load <gate|retrieval|facts> [options]"
 
         eprintfn ""
-        eprintfn "  load gate      [--arm memory|azurite|postgres] [--measurements <path>]"
+        eprintfn "  load gate      [--arm memory|azurite|postgres|postgres-history] [--measurements <path>]"
         eprintfn "                 the gate configuration of one arm; writes the measurement file"
 
         eprintfn
