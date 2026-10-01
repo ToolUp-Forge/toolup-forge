@@ -210,6 +210,8 @@ and the base CLI carries no paid or cloud dependency (GP 2).
 store needs Npgsql and the fact tier, which this host does not carry, so it is not a `toolup`
 subcommand. It is an entry point in the `ToolUp.FactStores.Postgres` package
 (`FactStoreMigration.migrate`, with `exitCode` for a script); that package's README has the
-procedure (Phase 941).
+procedure (Phase 941). It reads each scope whole, so it refuses a scope above
+`FactStoreMigrationOptions.MaxScopeFacts` (300,000 fact blobs by default) by name before reading it
+(Phase 964).
 
 Licensed under Apache-2.0.

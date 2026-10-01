@@ -54,6 +54,17 @@ open ToolUp.Facts
 // already lives in `IEventStore` and is not the fact store's to copy, so
 // no per-fact event is re-emitted.
 //
+// **Bounded (Phase 964).** Reading a scope whole is what makes the source
+// check and the differential possible — both need every fact of a lineage,
+// and the differential also reads the scope's target rows whole — so the
+// migration holds a scope's facts in memory twice over, with no bound of
+// the blob store's own to lean on (it has none). A scope with more fact
+// blobs than `MaxScopeFacts` (300,000 by default) is therefore refused
+// before any fact is read, naming its count and the bound, rather than
+// paged: a paged export alone would bound the copy and leave the check
+// unbounded. An operator with the memory for a larger scope raises the
+// bound for that run.
+//
 // Writers must be stopped while a scope migrates: the check is a snapshot
 // comparison. Each page also takes the scope's exclusive write lock, so a
 // Postgres-side writer that was not stopped waits rather than interleaves.
@@ -75,18 +86,25 @@ type FactStoreMigrationOptions = {
     AllowUnreadableSource: bool
     /// The source's name in progress rows and audit records.
     SourceName: string
+    /// Phase 964 — the most fact blobs a scope may hold to be migrated or
+    /// verified. A scope is read whole, and verified against its target
+    /// rows read whole, so this bounds what one scope holds in memory; a
+    /// larger scope is refused before any fact is read, naming its count.
+    MaxScopeFacts: int
 }
 
 /// Defaults and validation for `FactStoreMigrationOptions`.
 module FactStoreMigrationOptions =
 
     /// Pages of 1,000 facts, 16 sampled transaction times, unreadable
-    /// source blobs refused, source named `BlobFactStore`.
+    /// source blobs refused, source named `BlobFactStore`, scopes of at
+    /// most 300,000 facts.
     let defaults: FactStoreMigrationOptions = {
         PageSize = 1000
         AsOfSamples = 16
         AllowUnreadableSource = false
         SourceName = "BlobFactStore"
+        MaxScopeFacts = 300_000
     }
 
     /// Every problem with `options`, empty when they are usable.
@@ -97,6 +115,8 @@ module FactStoreMigrationOptions =
             sprintf "AsOfSamples must not be negative (got %d)." options.AsOfSamples
         if String.IsNullOrWhiteSpace options.SourceName then
             "SourceName must not be empty."
+        if options.MaxScopeFacts < 1 then
+            sprintf "MaxScopeFacts must be at least 1 (got %d)." options.MaxScopeFacts
     ]
 
 /// One way a migrated scope disagrees with its source, or the source with
@@ -123,6 +143,13 @@ type MigrationDifference =
     | InvalidSource of factId: string * reason: string
     /// A source blob that did not read, parse, or sit under its own id.
     | UnreadableSource of blobName: string * reason: string
+    /// Phase 964 — the scope holds more fact blobs than
+    /// `FactStoreMigrationOptions.MaxScopeFacts`; nothing was read.
+    | ScopeExceedsBound of
+        /// The fact blobs the scope holds.
+        factBlobs: int *
+        /// The `MaxScopeFacts` the run was given.
+        bound: int
 
 /// Rendering for `MigrationDifference`.
 module MigrationDifference =
@@ -148,6 +175,11 @@ module MigrationDifference =
                 (if visibleOnSource then "source" else "target")
         | InvalidSource(id, reason) -> sprintf "fact %s: invalid source: %s" id reason
         | UnreadableSource(blob, reason) -> sprintf "blob %s: unreadable source: %s" blob reason
+        | ScopeExceedsBound(factBlobs, bound) ->
+            sprintf
+                "scope holds %d fact blobs, above the migration's bound of %d (MaxScopeFacts): a scope is read and verified whole, so it is refused before any fact is read; raise MaxScopeFacts for this run if the host has the memory"
+                factBlobs
+                bound
 
 /// What happened to one scope.
 type ScopeMigrationOutcome =
@@ -761,6 +793,22 @@ module FactStoreMigration =
         Differences = []
     }
 
+    /// Phase 964 — the refusal a scope of `factBlobs` fact blobs meets
+    /// under `options`, if any.
+    let scopeBound (options: FactStoreMigrationOptions) (factBlobs: int) : MigrationDifference option =
+        if factBlobs > options.MaxScopeFacts then
+            Some(ScopeExceedsBound(factBlobs, options.MaxScopeFacts))
+        else
+            None
+
+    // A scope over the bound, refused before its facts are read.
+    let private oversized (scope: string) (factBlobs: int) (refused: MigrationDifference) : ScopeMigrationReport = {
+        baseReport scope [] with
+            Outcome = SourceRefused
+            SourceFacts = factBlobs
+            Differences = [ refused ]
+    }
+
     let private refusals (options: FactStoreMigrationOptions) (export: FactScopeExport) =
         let unreadable =
             if options.AllowUnreadableSource then
@@ -778,116 +826,127 @@ module FactStoreMigration =
         (scope: string)
         : Async<ScopeMigrationReport> =
         async {
-            let! export = source.ExportScope scope
-            let facts = export.Facts
-            let digest = digestOf facts
-            let report = baseReport scope facts
-            let! progress = readProgress target scope
+            let! factBlobs = source.CountScope scope
 
-            match progress, refusals options export with
-            | Some(recorded, copied, "verified"), [] when recorded = digest ->
-                return {
-                    report with
-                        Outcome = AlreadyVerified
-                        TargetFacts = facts.Length
-                        ResumedFrom = copied
-                }
-            | _, (_ :: _ as refused) ->
-                let refusedReport = {
-                    report with
-                        Outcome = SourceRefused
-                        Differences = refused
-                }
+            match scopeBound options factBlobs with
+            | Some refused ->
+                let report = oversized scope factBlobs refused
+                let detail = summarise [ refused ]
+                do! saveProgress target options scope "" factBlobs 0 "source-refused" detail
+                do! audit events target options report detail
+                return report
+            | None ->
 
-                let detail = summarise refused
-                do! saveProgress target options scope digest facts.Length 0 "source-refused" detail
-                do! audit events target options refusedReport detail
-                return refusedReport
-            | _, [] ->
-                let resumeFrom =
-                    match progress with
-                    | Some(recorded, copied, _) when recorded = digest -> min copied facts.Length
-                    | _ -> 0
+                let! export = source.ExportScope scope
+                let facts = export.Facts
+                let digest = digestOf facts
+                let report = baseReport scope facts
+                let! progress = readProgress target scope
 
-                let sourceHeads = heads facts
-
-                let pages =
-                    facts
-                    |> List.sortWith (fun a b ->
-                        match compare a.AsOf.Ticks b.AsOf.Ticks with
-                        | 0 -> String.CompareOrdinal(a.FactId, b.FactId)
-                        | c -> c)
-                    |> List.skip resumeFrom
-                    |> List.map (fun f -> f, sourceHeads.Contains f.FactId)
-                    |> List.chunkBySize options.PageSize
-
-                let copied = ref resumeFrom
-                let inserted = ref 0
-                let failure = ref None
-
-                for page in pages do
-                    if failure.Value.IsNone then
-                        let! outcome =
-                            writePage target options scope digest facts.Length (copied.Value + page.Length) page
-                            |> Async.Catch
-
-                        match outcome with
-                        | Choice1Of2 n ->
-                            copied.Value <- copied.Value + page.Length
-                            inserted.Value <- inserted.Value + n
-                        | Choice2Of2 ex ->
-                            let message =
-                                match ex with
-                                | :? AggregateException as a when a.InnerExceptions.Count = 1 ->
-                                    a.InnerExceptions[0].Message
-                                | _ -> ex.Message
-
-                            failure.Value <- Some message
-
-                let written = {
-                    report with
-                        Inserted = inserted.Value
-                        ResumedFrom = resumeFrom
-                }
-
-                match failure.Value with
-                | Some message ->
-                    let! rowsNow = readTargetRows target scope
-
-                    let failed = {
-                        written with
-                            Outcome = CopyFailed message
-                            TargetFacts = rowsNow.Length
+                match progress, refusals options export with
+                | Some(recorded, copied, "verified"), [] when recorded = digest ->
+                    return {
+                        report with
+                            Outcome = AlreadyVerified
+                            TargetFacts = facts.Length
+                            ResumedFrom = copied
+                    }
+                | _, (_ :: _ as refused) ->
+                    let refusedReport = {
+                        report with
+                            Outcome = SourceRefused
+                            Differences = refused
                     }
 
-                    let detail =
-                        sprintf "page failed after %d of %d facts: %s" copied.Value facts.Length message
+                    let detail = summarise refused
+                    do! saveProgress target options scope digest facts.Length 0 "source-refused" detail
+                    do! audit events target options refusedReport detail
+                    return refusedReport
+                | _, [] ->
+                    let resumeFrom =
+                        match progress with
+                        | Some(recorded, copied, _) when recorded = digest -> min copied facts.Length
+                        | _ -> 0
 
-                    do! audit events target options failed detail
-                    return failed
-                | None ->
-                    let! differences, targetFacts = differential source target options scope facts
+                    let sourceHeads = heads facts
 
-                    let verified = {
-                        written with
-                            Outcome =
-                                if List.isEmpty differences then
-                                    Verified
-                                else
-                                    VerificationFailed
-                            TargetFacts = targetFacts
-                            Differences = differences
+                    let pages =
+                        facts
+                        |> List.sortWith (fun a b ->
+                            match compare a.AsOf.Ticks b.AsOf.Ticks with
+                            | 0 -> String.CompareOrdinal(a.FactId, b.FactId)
+                            | c -> c)
+                        |> List.skip resumeFrom
+                        |> List.map (fun f -> f, sourceHeads.Contains f.FactId)
+                        |> List.chunkBySize options.PageSize
+
+                    let copied = ref resumeFrom
+                    let inserted = ref 0
+                    let failure = ref None
+
+                    for page in pages do
+                        if failure.Value.IsNone then
+                            let! outcome =
+                                writePage target options scope digest facts.Length (copied.Value + page.Length) page
+                                |> Async.Catch
+
+                            match outcome with
+                            | Choice1Of2 n ->
+                                copied.Value <- copied.Value + page.Length
+                                inserted.Value <- inserted.Value + n
+                            | Choice2Of2 ex ->
+                                let message =
+                                    match ex with
+                                    | :? AggregateException as a when a.InnerExceptions.Count = 1 ->
+                                        a.InnerExceptions[0].Message
+                                    | _ -> ex.Message
+
+                                failure.Value <- Some message
+
+                    let written = {
+                        report with
+                            Inserted = inserted.Value
+                            ResumedFrom = resumeFrom
                     }
 
-                    let state, detail =
-                        if List.isEmpty differences then
-                            "verified", ""
-                        else
-                            "verification-failed", summarise differences
+                    match failure.Value with
+                    | Some message ->
+                        let! rowsNow = readTargetRows target scope
 
-                    do! saveProgress target options scope digest facts.Length copied.Value state detail
-                    do! audit events target options verified detail
-                    return verified
+                        let failed = {
+                            written with
+                                Outcome = CopyFailed message
+                                TargetFacts = rowsNow.Length
+                        }
+
+                        let detail =
+                            sprintf "page failed after %d of %d facts: %s" copied.Value facts.Length message
+
+                        do! audit events target options failed detail
+                        return failed
+                    | None ->
+                        let! differences, targetFacts = differential source target options scope facts
+
+                        let verified = {
+                            written with
+                                Outcome =
+                                    if List.isEmpty differences then
+                                        Verified
+                                    else
+                                        VerificationFailed
+                                TargetFacts = targetFacts
+                                Differences = differences
+                        }
+
+                        let state, detail =
+                            if List.isEmpty differences then
+                                "verified", ""
+                            else
+                                "verification-failed", summarise differences
+
+                        do! saveProgress target options scope digest facts.Length copied.Value state detail
+                        do! audit events target options verified detail
+                        return verified
         }
 
     /// Migrate each scope from `source` into `target`, then verify it:
@@ -936,29 +995,35 @@ module FactStoreMigration =
             let results = ResizeArray<ScopeMigrationReport>()
 
             for scope in scopes do
-                let! export = source.ExportScope scope
-                let report = baseReport scope export.Facts
+                let! factBlobs = source.CountScope scope
 
-                match refusals options export with
-                | _ :: _ as refused ->
-                    results.Add {
-                        report with
-                            Outcome = SourceRefused
-                            Differences = refused
-                    }
-                | [] ->
-                    let! differences, targetFacts = differential source target options scope export.Facts
+                match scopeBound options factBlobs with
+                | Some refused -> results.Add(oversized scope factBlobs refused)
+                | None ->
 
-                    results.Add {
-                        report with
-                            Outcome =
-                                if List.isEmpty differences then
-                                    Verified
-                                else
-                                    VerificationFailed
-                            TargetFacts = targetFacts
-                            Differences = differences
-                    }
+                    let! export = source.ExportScope scope
+                    let report = baseReport scope export.Facts
+
+                    match refusals options export with
+                    | _ :: _ as refused ->
+                        results.Add {
+                            report with
+                                Outcome = SourceRefused
+                                Differences = refused
+                        }
+                    | [] ->
+                        let! differences, targetFacts = differential source target options scope export.Facts
+
+                        results.Add {
+                            report with
+                                Outcome =
+                                    if List.isEmpty differences then
+                                        Verified
+                                    else
+                                        VerificationFailed
+                                TargetFacts = targetFacts
+                                Differences = differences
+                        }
 
             return { Scopes = List.ofSeq results }
         }

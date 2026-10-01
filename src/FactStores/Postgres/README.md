@@ -235,7 +235,10 @@ we know at `t`" differently from the source. The migration writes each row
 raw instead, through the same row projection the store's own writes use:
 original content address, transaction time, supersession link and head flag.
 
-**What it does, per scope.**
+**What it does, per scope.** First it counts the scope's fact blobs (one
+listing, no download) and refuses a scope that holds more than
+`MaxScopeFacts` (default 300,000), naming the count and the bound (Phase
+964; see "Memory" below). Then:
 
 1. Reads every fact blob (`BlobFactStore.ExportScope`). A blob that does not
    read, parse, or sit under its own content address refuses the scope and is
@@ -265,6 +268,17 @@ progress row; the next run continues after the last committed page. A page
 replayed from the start writes nothing, because the content address is the
 primary key. A scope an earlier run verified over the same source facts (a
 digest of their content addresses) is skipped.
+
+**Memory (Phase 964).** A scope is read whole, and so is the target's copy
+of it during the verification: the source check and the differential both
+need every fact of a lineage at once. One scope therefore costs roughly twice
+its facts in memory, and the blob store has no bound of its own to lean on.
+`MaxScopeFacts` is that bound, checked before any fact is read, and
+`migrate` and `verify` both refuse a larger scope with a named difference
+(`scope holds N fact blobs, above the migration's bound of M`) and a
+non-zero exit. A host with the memory for a larger scope raises
+`MaxScopeFacts` for that run. Paging the read would bound the copy alone and
+leave the verification unbounded, so the bound is the honest form.
 
 **Where to run it.** It is a compose-time / operator entry point, not a
 `toolup` CLI command: the CLI is a dependency-free host (pure BCL +
