@@ -1494,6 +1494,160 @@ let private phase939LiveTests (connectionString: string) =
         }
     ]
 
+
+// ─── Phase 964 — an IVFFlat index is not built on an empty table ─────
+
+/// 32-dimension vectors clustered around `topics` shared centres, as Phase
+/// 939's IVFFlat measurement built them: IVFFlat's k-means needs structure
+/// to find, and uniform noise has none.
+let private clusteredVectors (seed: int) (count: int) (topics: int) : float32 array list =
+    let rng = Random seed
+
+    let centres =
+        Array.init topics (fun _ -> Array.init 32 (fun _ -> rng.NextDouble() * 2.0 - 1.0))
+
+    List.init count (fun i ->
+        let c = centres[i % topics]
+        Array.init 32 (fun d -> float32 (c[d] + (rng.NextDouble() - 0.5) * 0.2)))
+
+/// IVFFlat at pgvector's default width (`probes` 1), no iterative scan and
+/// no exact fallback, so recall measures the index alone.
+let private probesOne: PgvectorTuning = {
+    PgvectorTuning.unchanged with
+        SearchWidth = Some 1
+}
+
+let private ivfIndexExists (connectionString: string) (table: string) : bool =
+    use dataSource = NpgsqlDataSource.Create connectionString
+
+    use cmd =
+        dataSource.CreateCommand
+            "SELECT count(*) FROM pg_indexes WHERE tablename = @t AND indexdef LIKE '%USING ivfflat%';"
+
+    cmd.Parameters.AddWithValue("t", table) |> ignore
+    Convert.ToInt64(cmd.ExecuteScalar()) > 0L
+
+let private recallOf (store: IVectorStore) (corpus: (string * float32 array) list) (queries: float32 array list) = async {
+    let k = 10
+    let mutable hits = 0
+
+    for q in queries do
+        let truth =
+            corpus
+            |> List.sortBy (fun (id, v) -> -(cosine q v), id)
+            |> List.truncate k
+            |> List.map fst
+            |> Set.ofList
+
+        let! got = store.Search [ Team "T" ] q k
+        hits <- hits + (got |> List.filter (fun m -> truth.Contains m.ChunkId) |> List.length)
+
+    return float hits / float (k * queries.Length)
+}
+
+let private phase964LiveTests (connectionString: string) =
+    testList "Phase 964 (live)" [
+        testCaseAsync
+            "create does not build an IVFFlat index on an empty table, and builds it once the table holds data"
+        <| async {
+            let lists = 100
+
+            let corpus =
+                clusteredVectors 964 10_000 lists
+                |> List.mapi (fun i v -> sprintf "c-%05d" i, v)
+
+            let queries = clusteredVectors 965 30 lists
+
+            // A one-scope table this size is answered by an exact sort unless
+            // the planner is steered, and an exact sort measures no index;
+            // enable_sort = off routes the page to the IVFFlat index, as the
+            // fallback case above does for HNSW.
+            let connectionString =
+                let b = NpgsqlConnectionStringBuilder connectionString
+                b.Options <- "-c enable_sort=off"
+                b.ConnectionString
+
+            // The reference: the index built after the load, as the README
+            // advises and as 939 measured it.
+            let reference, disposeReference, referenceTable =
+                makeTunedStore connectionString 32 NoAnnIndex probesOne
+
+            // The store under test: AutoMigrate with IVFFlat, at first start,
+            // on an empty table — the shape that used to build the index empty.
+            let store, dispose, table =
+                makeTunedStore connectionString 32 (IvfFlatAnnIndex lists) probesOne
+
+            try
+                let builtEmpty = ivfIndexExists connectionString table
+
+                let rows = corpus |> List.map (fun (id, v) -> id, v, chunk "c" "x")
+                do! upsertBatch reference (Team "T") rows
+                do! upsertBatch store (Team "T") rows
+
+                do! async {
+                    use dataSource = NpgsqlDataSource.Create connectionString
+
+                    use cmd =
+                        dataSource.CreateCommand(
+                            sprintf
+                                "CREATE INDEX ON %s USING ivfflat (embedding vector_cosine_ops) WITH (lists = %d);"
+                                referenceTable
+                                lists
+                        )
+
+                    let! _ = cmd.ExecuteNonQueryAsync() |> Async.AwaitTask
+                    ()
+                }
+
+                let! afterLoad = recallOf reference corpus queries
+                let! atFirstStart = recallOf store corpus queries
+
+                // A second `create` — a restart — over the loaded table.
+                let restarted =
+                    createTuned
+                        connectionString
+                        {
+                            PgvectorOptions.forDimensions 32 with
+                                Table = table
+                                AnnIndex = IvfFlatAnnIndex lists
+                        }
+                        probesOne
+                        (Some(SilentLogger() :> ILogger))
+
+                try
+                    Expect.isTrue (ivfIndexExists connectionString table) "a restart over the loaded table builds it"
+                    let! afterRestart = recallOf restarted corpus queries
+
+                    printfn
+                        "[Phase 964 IVFFlat] 10,000 x 32-dim, %d topics, lists = %d, probes = 1: recall@10 index built after the load = %.3f; store from a first start on the empty table = %.3f; after a restart over the loaded table = %.3f (built at first start: %b)"
+                        lists
+                        lists
+                        afterLoad
+                        atFirstStart
+                        afterRestart
+                        builtEmpty
+
+                    Expect.isFalse
+                        builtEmpty
+                        "create on an empty table defers the IVFFlat build (pinned red: it was built)"
+
+                    Expect.isGreaterThanOrEqual
+                        atFirstStart
+                        (afterLoad - 0.05)
+                        "a store created on an empty table answers at least as well as an index built after the load (pinned red: an index built empty did not)"
+
+                    Expect.isGreaterThanOrEqual
+                        afterRestart
+                        (afterLoad - 0.05)
+                        "the index a restart builds is the after-load index"
+                finally
+                    (restarted :?> IDisposable).Dispose()
+            finally
+                dispose.Dispose()
+                disposeReference.Dispose()
+        }
+    ]
+
 let private liveTests (connectionString: string) =
     let makeStore = makeStoreWith connectionString 8
 
@@ -1766,6 +1920,7 @@ let private liveTests (connectionString: string) =
 
         phase892LiveTests connectionString
         phase939LiveTests connectionString
+        phase964LiveTests connectionString
     ]
 
 // ─── Registration ────────────────────────────────────────────────────

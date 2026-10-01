@@ -156,7 +156,7 @@ let options = {
 }
 ```
 
-`IvfFlatAnnIndex lists` is the alternative. It must be built *after* the table holds representative data, so provision it out of band rather than at first `create` against an empty table.
+`IvfFlatAnnIndex lists` is the alternative. It must be built *after* the table holds representative data. Since Phase 964, `AutoMigrate` defers the IVFFlat build while the table holds fewer rows than `lists`, with a warning, and searches exactly until the first `create` after the load builds it; the companion README has the measurement.
 
 ## Production posture — `PgvectorTuning.recommended`, the default since Phase 939
 
