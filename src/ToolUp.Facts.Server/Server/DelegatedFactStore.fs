@@ -580,6 +580,37 @@ type internal DelegateTableStore(storage: IBlobStorage) =
 /// under. Every walk that retires quoted facts walks all of them.
 module internal DelegateLineages =
 
+    /// Phase 964 — the path prefix a ranked read for the lineage
+    /// `Imported certificateRef` pushes down over a run opened with
+    /// `provenance`: the caller's prefix narrowed to the root member of the
+    /// run's origin for that certificate. `Ok None` when the run holds no
+    /// row in that lineage (no such origin, or a prefix outside its root);
+    /// `Error roots` when several origins share the certificate, since one
+    /// ranked read answers from one subtree.
+    let importedPrefix
+        (provenance: FactTableRunProvenance)
+        (certificateRef: string)
+        (requested: string list option)
+        : Result<string list option option, string list> =
+        let roots =
+            match provenance with
+            | ComputedRun -> []
+            | ImportedRun origins ->
+                origins
+                |> List.filter (fun o -> o.CertificateRef = certificateRef)
+                |> List.map _.RootMember
+                |> List.distinct
+
+        match roots with
+        | [] -> Ok None
+        | [ root ] ->
+            match requested with
+            | None
+            | Some [] -> Ok(Some(Some [ root ]))
+            | Some(first :: _) when first = root -> Ok(Some requested)
+            | Some _ -> Ok None
+        | several -> Error several
+
     /// Whether `fact`, in the lineage `method`, was minted by `delegateFact`
     /// from a run of its table other than `currentToken`.
     let isStale (delegateFact: DelegateFact) (currentToken: string) (method: MethodRef) (fact: Fact) : bool =
@@ -639,7 +670,9 @@ type private InnerScope = {
 /// `QueryWithCompetition`) naming a delegated metric and a subject at the
 /// table's level; a population read (`QueryPopulation`) naming a delegated
 /// metric and its hierarchy, at the table's level or at no level, for the
-/// delegate's method or no particular one. A read with no subject — "every
+/// delegate's method or no particular one — or (Phase 964) for `Imported c`
+/// where `c` is a certificate the table's runs recorded importing under.
+/// A read with no subject — "every
 /// fact for this metric" — is NOT a point read: it reaches the inner store,
 /// which holds what was quoted, because answering it from the table would
 /// materialise the population.
@@ -682,22 +715,62 @@ type DelegatedFactStore
     let delegateOf (metric: MetricRef) =
         delegates |> List.tryFind (fun d -> d.Metric = metric)
 
-    let pointDelegate (query: FactQuery) : DelegateFact option =
+    // Phase 964 — a read naming `Imported c` is delegated when `c` is one of
+    // the certificates the table's runs recorded importing under
+    // (`DelegateTableStore.ImportedLineages`): the table holds that lineage's
+    // rows, so asking only the inner store answered only what was already
+    // quoted. `Some c` is the certificate a selection was made through.
+    let recordsImport (ops: InnerScope) (d: DelegateFact) (certificateRef: string) : Async<bool> = async {
+        match! tables.Current(ops.ScopeId, d.TableId) with
+        | Ok(Some commit) ->
+            match! tables.ImportedLineages(ops.ScopeId, commit.Run) with
+            | Ok lineages -> return List.contains certificateRef lineages
+            | Error _ -> return false
+        | _ -> return false
+    }
+
+    let selectByMethod (ops: InnerScope) (d: DelegateFact) (m: MethodRef option) = async {
+        if methodMatches d m then
+            return Some(d, None)
+        else
+            match m with
+            | Some(Imported certificateRef) ->
+                let! recorded = recordsImport ops d certificateRef
+                return if recorded then Some(d, Some certificateRef) else None
+            | _ -> return None
+    }
+
+    let pointDelegate (ops: InnerScope) (query: FactQuery) : Async<(DelegateFact * string option) option> = async {
         match query.Subject, query.Metric with
         | Some subject, Some metric ->
-            delegateOf metric
-            |> Option.filter (fun d -> DelegateFact.covers d subject && methodMatches d query.Method)
-        | _ -> None
+            match delegateOf metric |> Option.filter (fun d -> DelegateFact.covers d subject) with
+            | Some d -> return! selectByMethod ops d query.Method
+            | None -> return None
+        | _ -> return None
+    }
 
-    let populationDelegate (query: PopulationQuery) : DelegateFact option =
-        delegateOf query.Metric
-        |> Option.filter (fun d ->
-            d.Query.Hierarchy = query.Hierarchy
-            && (query.Level |> Option.forall (fun level -> level = d.Query.Level))
-            && (match query.Methods with
-                | CanonicalMethodOnly
-                | AllCompetingMethods -> true
-                | OneMethod m -> Fact.methodIdentity m = Fact.methodIdentity d.Method))
+    let populationDelegate (ops: InnerScope) (query: PopulationQuery) : Async<(DelegateFact * string option) option> = async {
+        let shaped =
+            delegateOf query.Metric
+            |> Option.filter (fun d ->
+                d.Query.Hierarchy = query.Hierarchy
+                && (query.Level |> Option.forall (fun level -> level = d.Query.Level)))
+
+        match shaped, query.Methods with
+        | None, _ -> return None
+        | Some d, CanonicalMethodOnly
+        | Some d, AllCompetingMethods -> return Some(d, None)
+        | Some d, OneMethod m -> return! selectByMethod ops d (Some m)
+    }
+
+    /// Only the facts in the lineage a read named, when it was selected
+    /// through an imported certificate.
+    let inLineage (imported: string option) (facts: Fact list) =
+        match imported with
+        | None -> facts
+        | Some certificateRef ->
+            let lineage = Fact.methodIdentity (Imported certificateRef)
+            facts |> List.filter (fun f -> Fact.methodIdentity f.Method = lineage)
 
     let policyOf (metric: MetricRef) =
         registry
@@ -846,9 +919,9 @@ type DelegatedFactStore
     /// The point read, delegated. `Ok None` means "not delegated — ask the
     /// inner store"; `Ok (Some facts)` is the answer.
     let pointRead (ops: InnerScope) (query: FactQuery) : Async<Result<Fact list option, DelegateRefusal>> = async {
-        match pointDelegate query with
+        match! pointDelegate ops query with
         | None -> return Ok None
-        | Some d ->
+        | Some(d, imported) ->
             let subject = query.Subject.Value
 
             let rowsOf (commit: DelegateTableCommit) at = async {
@@ -902,11 +975,11 @@ type DelegatedFactStore
                                 if isCurrent then
                                     match! mint ops d commit.Run rows with
                                     | Error e -> return Error(refusal d e)
-                                    | Ok facts -> return Ok(Some facts)
+                                    | Ok facts -> return Ok(Some(inLineage imported facts))
                                 else
                                     match! quoteHistorical ops d commit.Run rows with
                                     | Error e -> return Error(refusal d e)
-                                    | Ok facts -> return Ok(Some facts)
+                                    | Ok facts -> return Ok(Some(inLineage imported facts))
     }
 
     let query (ops: InnerScope) (q: FactQuery) : Async<Fact list> = async {
@@ -917,8 +990,8 @@ type DelegatedFactStore
         // door has no error channel, so the refusal travels as the typed
         // `Absent` the fact model reserves for "no value, and here is why".
         | Error refused ->
-            match pointDelegate q with
-            | Some d -> return! refusedPoint ops d q refused (q.AsOf |> Option.defaultValue (now ()))
+            match! pointDelegate ops q with
+            | Some(d, _) -> return! refusedPoint ops d q refused (q.AsOf |> Option.defaultValue (now ()))
             | None -> return []
     }
 
@@ -932,9 +1005,9 @@ type DelegatedFactStore
     }
 
     let population (ops: InnerScope) (q: PopulationQuery) : Async<Result<PopulationResult, string>> = async {
-        match populationDelegate q with
+        match! populationDelegate ops q with
         | None -> return! ops.Population q
-        | Some d ->
+        | Some(d, imported) ->
             let declared =
                 registry
                 |> Option.bind (fun r -> r.TryGetMetric q.Metric.Value)
@@ -986,30 +1059,57 @@ type DelegatedFactStore
                 | Ok(Some commit, isCurrent) ->
                     let at = q.AsOf |> Option.defaultValue (now ())
 
-                    let pushed =
-                        DelegateTableRead.Ranked(q.PathPrefix, q.PeriodOverlaps, q.Threshold, direction, k)
+                    // Phase 964 — a read for one imported lineage ranks the
+                    // rows that lineage holds: those under the root member of
+                    // the run's origin for that certificate, so the prefix is
+                    // narrowed to it. A run with no origin for it holds no row
+                    // in that lineage.
+                    let! prefix =
+                        match imported with
+                        | None -> async.Return(Ok(Some q.PathPrefix))
+                        | Some certificateRef -> async {
+                            match! tables.Provenance(ops.ScopeId, commit.Run) with
+                            | Error e -> return Error e
+                            | Ok provenance ->
+                                return
+                                    DelegateLineages.importedPrefix provenance certificateRef q.PathPrefix
+                                    |> Result.mapError (fun roots ->
+                                        sprintf
+                                            "the population read for Imported %s on delegated table '%s' is refused: its run imports that certificate under %d root members (%s), and a ranked read over one imported lineage is answered from one root"
+                                            certificateRef
+                                            d.TableId
+                                            (List.length roots)
+                                            (String.concat ", " roots))
+                          }
 
-                    match! read ops d commit.Run pushed at with
-                    | Error e -> return Error(DelegateRefusal.describe (refusal d e))
-                    | Ok(DelegateTableAnswer.Ranked(rows, stats, truncated)) ->
-                        let! quoted =
-                            if isCurrent then
-                                mint ops d commit.Run rows
-                            else
-                                quoteHistorical ops d commit.Run rows
+                    match prefix with
+                    | Error refused -> return Error refused
+                    | Ok None -> return Ok empty
+                    | Ok(Some pathPrefix) ->
+                        let pushed =
+                            DelegateTableRead.Ranked(pathPrefix, q.PeriodOverlaps, q.Threshold, direction, k)
 
-                        match quoted with
-                        | Error e -> return Error e
-                        | Ok facts ->
-                            return
-                                Ok {
-                                    Ranked = facts
-                                    Direction = direction
-                                    EffectiveTopK = k
-                                    Truncated = truncated
-                                    Stats = stats
-                                }
-                    | Ok _ -> return Ok empty
+                        match! read ops d commit.Run pushed at with
+                        | Error e -> return Error(DelegateRefusal.describe (refusal d e))
+                        | Ok(DelegateTableAnswer.Ranked(rows, stats, truncated)) ->
+                            let! quoted =
+                                if isCurrent then
+                                    mint ops d commit.Run rows
+                                else
+                                    quoteHistorical ops d commit.Run rows
+
+                            match quoted with
+                            | Error e -> return Error e
+                            | Ok facts ->
+                                return
+                                    Ok {
+                                        Ranked = facts
+                                        Direction = direction
+                                        EffectiveTopK = k
+                                        Truncated = truncated
+                                        Stats = stats
+                                    }
+                        | Ok _ -> return Ok empty
     }
 
     let get (ops: InnerScope) (factId: string) : Async<Fact option> = async {
