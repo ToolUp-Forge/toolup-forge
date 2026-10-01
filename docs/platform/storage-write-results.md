@@ -64,17 +64,44 @@ bound backend — so an `Error` from it is a refusal, never a not-found. A hard-
 fanned its deletes out through `Async.Parallel |> Async.Ignore` reported a subject's blobs gone
 while a refused one was still in the container, and the erasure ledger recorded completion. The
 gate reports a `Delete` call in the fan-out shape, under `src/`: the call must be the element's
-value, inside a pipeline that runs through `Async.Parallel` and ends in `Async.Ignore`. Collect the
-results and fail on any `Error`, naming the blobs that did not go; the ones that went stay gone,
-and because the call is idempotent a re-run finishes the job. The same best-effort marker admits a
-fan-out that is cleanup by design.
+value, inside a pipeline that runs through `Async.Parallel` and is then discarded — ended by
+`Async.Ignore` or bound by `let! _ =` (Phase 966 added the second). Collect the results and fail on
+any `Error`, naming the blobs that did not go; the ones that went stay gone, and because the call is
+idempotent a re-run finishes the job. The same best-effort marker admits a fan-out that is cleanup
+by design.
 
-The `Delete` walk is narrower than the upload walk, on purpose. A single `Delete` whose result is
-discarded (`do! store.Delete(…) |> Async.Ignore`, or `let! _ =`) is **not** a site, and neither is a
-`let! _ =` that binds a `Delete` fan-out: a delete that is cleanup — orphaned content, a derivative
-cache, a pruned delivery log — is recoverable by the next pass, so the gate leaves it to review. The
-line it draws is erasure: where a refused delete means a data-subject's blob is still at rest,
-collect.
+**An operation's own delete is propagated; cleanup is best-effort (Phase 966).** The `let! _ =`
+shape hid six `Delete` fan-outs on the tree, and they are not all one kind of thing:
+
+```fsharp skip=fragment
+// The operation's own delete — `IDataObjectStore.Delete`, `Evict` and `DeleteIfVersion` remove an
+// object's version blobs. A refusal is the answer: collected, returned as `StorageFailure` naming
+// the version blobs still in the container, and the object left addressable so a re-run finishes.
+let! removal = removeVersionBlobs container versions
+return removal |> Result.mapError StorageFailure
+
+// Cleanup — a blob no record names, re-found by the next pass. Said once, on the line.
+let! _ = // best-effort-write: orphan reclamation — an orphan left behind is re-collected by the next pass
+    toDelete
+    |> List.map (fun name -> blobStorage.Delete(container, name))
+    |> Async.Parallel
+```
+
+The line the gate cannot draw for you is whether the delete IS the operation. Where a refused delete
+means the caller was told something is gone that is still at rest — a data-subject's blob, an
+object the caller just deleted — it is the operation: collect. Where the blob it leaves is by
+construction recoverable by a pass that already exists, it is cleanup, and the marker states which
+pass. The three cleanup sites the tree has are the worked example:
+
+| Site | What the leftover is | Why it is recoverable |
+|---|---|---|
+| `DataObjectStore` orphaned-content reclamation | a content blob no metadata names | the next in-band pass and the scheduled orphan sweep both collect it |
+| `DefaultAssetStore` derivative cleanup after an asset delete | a render-cache entry keyed by content hash | never served for a deleted record, and still valid if the same bytes return; the record's own delete is propagated before it runs |
+| `WebhookRegistry` delivery-log `Prune` | a delivery row past retention | the next `Prune` matches the same age predicate |
+
+A single `Delete` whose result is discarded where it is made (`do! store.Delete(…) |> Async.Ignore`,
+or `let! _ = store.Delete(…)`) is still **not** a site: it is one call, visible where it is made,
+and the gate leaves it to review. A fan-out is different because it drops every result at once.
 
 The gate is textual. A result dropped some other way — through a helper that returns the
 upload's `Result` under another name, say — is the same defect, and a reviewer holds it to the
@@ -129,6 +156,8 @@ one line, the write is not best-effort.
 | `BlobIdempotencyStore` | memoised response | raises; the dispatcher answers the call, logs it as NOT memoised, and still emits the method's audit event |
 | `BlobConfigStore`, `DataObjectStore` | an erasure's redactions, fanned out | every result collected; a refusal fails the erasure with `HandlerPartialFailure` naming the blobs not redacted (those that landed stay redacted, so a re-run finishes), and the erasure ledger records `ErasureFailed`. The tombstone content is written before any metadata names it |
 | `BlobConfigStore`, `DataObjectStore` | a hard-delete erasure's deletes, fanned out | every result collected; a refusal fails the erasure with `HandlerPartialFailure` naming the blobs not deleted (those that went stay gone, so a re-run finishes), and the erasure ledger records `ErasureFailed`. `DataObjectStore` reclaims orphaned content only for version blobs that went, so no content is reclaimed from under metadata that still names it |
+| `DataObjectStore` | `Delete`, `Evict` and `DeleteIfVersion`'s version-blob removal (Phase 966) | every result collected; a refusal returns `StorageFailure` (`DeleteFailed(StorageFailure …)` from `DeleteIfVersion`) naming the version blobs still in the container. v1 is removed last and only once the rest went, so the object stays addressable for a re-run; the blobs that went stay gone and only their content is reclaimed. A `DeleteIfVersion` re-run states the head the store now reports |
+| `DataObjectStore` orphan reclamation, `DefaultAssetStore` derivative cleanup, `WebhookRegistry` delivery-log `Prune` | cleanup deletes, fanned out | best-effort by design, each carrying `// best-effort-write:` naming the pass that recovers a leftover — the next sweep, a cache that is never served stale, the next `Prune` |
 
 The rest of the tree was swept to the same rule in Phase 863. The patterns, by what the write is:
 

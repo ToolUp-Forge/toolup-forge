@@ -464,7 +464,12 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
         // over a populous scope is the case that reaches this path, and
         // an uncapped fan-out there saturates the thread pool and stalls
         // unrelated requests. This delete leg was the one exception.
-        let! _ =
+        //
+        // Phase 966 — reclamation, not an operation's own delete: every
+        // candidate is by construction a blob no metadata names, so one a
+        // refused delete leaves is found again by the next in-band pass and
+        // by the scheduled orphan sweep.
+        let! _ = // best-effort-write: orphan reclamation — an orphan left behind is re-collected by the next pass and the scheduled sweep
             toDelete
             |> List.map (fun name -> blobStorage.Delete(container, name))
             |> fun xs -> Async.Parallel(xs, metadataReadParallelism)
@@ -472,16 +477,104 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
         return toDelete.Length
     }
 
-    /// Content hashes named by a set of version-metadata blobs. Read
-    /// BEFORE those blobs are deleted — it is what tells the Phase 634
+    /// The content hash each of a set of version-metadata blobs names,
+    /// keyed by blob name (a blob whose metadata is unreadable is absent).
+    /// Read BEFORE those blobs are deleted — it is what tells the Phase 634
     /// in-band GC which of its candidates the operation itself released.
-    let releasedContentHashes (container: string) (blobNames: string list) : Async<Set<string>> = async {
+    let contentHashesByBlob (container: string) (blobNames: string list) : Async<Map<string, string>> = async {
         let! metas =
             blobNames
-            |> List.map (downloadMetadata blobStorage container)
+            |> List.map (fun name -> async {
+                let! meta = downloadMetadata blobStorage container name
+                return name, meta |> Option.map _.ContentHash
+            })
             |> fun xs -> Async.Parallel(xs, metadataReadParallelism)
 
-        return metas |> Array.choose id |> Array.map _.ContentHash |> Set.ofArray
+        return
+            metas
+            |> Array.choose (fun (name, hash) -> hash |> Option.map (fun h -> name, h))
+            |> Map.ofArray
+    }
+
+    /// Phase 966 — remove an object's version blobs and say so when one
+    /// could not be. `IBlobStorage.Delete` is idempotent on a missing
+    /// blob, so an `Error` from it is a refusal, never a not-found: it is
+    /// returned, naming every version blob still in the container, rather
+    /// than read as success. The shape is Phase 965's, over the store's
+    /// own delete operations (`Delete`, `Evict`, `DeleteIfVersion`):
+    ///
+    /// - every delete result is collected;
+    /// - the blobs that went stay gone, and the content only THEY named is
+    ///   reclaimed (the Phase 634 read runs before the removal, and only
+    ///   over the ones that went): a version whose delete was refused still
+    ///   names its content, and a re-run could not find the bytes of a
+    ///   version whose metadata is already gone;
+    /// - v1 goes LAST, and only once every other version has gone. `Delete`
+    ///   finds an object by its v1 (the sticky-policy gate, and "no v1 means
+    ///   already deleted"), so a partial removal that took v1 first would
+    ///   read as complete to the very re-run meant to finish it. With v1
+    ///   held back, the object stays addressable until nothing else is left.
+    ///
+    /// A partial removal moves the head back to the highest surviving
+    /// version, so a `DeleteIfVersion` re-run states the head the store now
+    /// reports.
+    let removeVersionBlobs (container: string) (versions: (int * string) list) : Async<Result<unit, string>> = async {
+        let! hashes = contentHashesByBlob container (versions |> List.map snd)
+
+        let deleteAll (toRemove: (int * string) list) =
+            toRemove
+            |> List.map (fun (_, name) -> async {
+                let! result = blobStorage.Delete(container, name)
+                return name, result
+            })
+            |> Async.Parallel
+
+        let first, rest = versions |> List.partition (fun (n, _) -> n = 1)
+
+        let! restResults = deleteAll rest
+        let restRefused = restResults |> Array.filter (snd >> Result.isError)
+
+        // v1 is attempted only when everything else went.
+        let! firstResults =
+            if restRefused.Length = 0 then
+                deleteAll first
+            else
+                async { return [||] }
+
+        let results = Array.append restResults firstResults
+
+        let removed =
+            results
+            |> Array.choose (fun (name, result) ->
+                match result with
+                | Ok _ -> Some name
+                | Error _ -> None)
+
+        let released = removed |> Array.choose hashes.TryFind |> Set.ofArray
+        let! _orphaned = collectOrphanedContent container released
+
+        let refused = [
+            for name, result in results do
+                match result with
+                | Error e -> yield sprintf "%s (%s)" name e
+                | Ok _ -> ()
+            // v1 held back behind a refused sibling: still in the container too.
+            if restRefused.Length > 0 then
+                for _, name in first do
+                    yield sprintf "%s (kept so a re-run can find the object)" name
+        ]
+
+        if refused.IsEmpty then
+            return Ok()
+        else
+            return
+                Error(
+                    sprintf
+                        "%d of %d version blob(s) were NOT removed and are still in the container: %s"
+                        refused.Length
+                        versions.Length
+                        (String.concat "; " refused)
+                )
     }
 
     // Phase 448.D follow-on — bounded ranged reads over the content-
@@ -712,20 +805,14 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
             | Some _ ->
                 let! versions = listVersionBlobs blobStorage container objectId
 
-                // Phase 634 — read what these versions reference BEFORE
-                // removing them, so the in-band GC can tell the content
-                // this delete released (reclaim now, Phase 105's
-                // bytes-gone-at-rest contract) from an unrelated orphan
-                // that might be a concurrent `Save` mid-flight.
-                let! released = releasedContentHashes container (versions |> List.map snd)
-
-                let! _ =
-                    versions
-                    |> List.map (fun (_, name) -> blobStorage.Delete(container, name))
-                    |> Async.Parallel
-
-                let! _orphaned = collectOrphanedContent container released
-                return Ok()
+                // Phase 634 / 966 — `removeVersionBlobs` reads what these
+                // versions reference BEFORE removing them, so the in-band GC
+                // can tell the content this delete released (reclaim now,
+                // Phase 105's bytes-gone-at-rest contract) from an unrelated
+                // orphan that might be a concurrent `Save` mid-flight, and
+                // reports a version blob the store refused to remove.
+                let! removal = removeVersionBlobs container versions
+                return removal |> Result.mapError StorageFailure
         }
 
         member _.Evict(scopeId, objectId) = async {
@@ -740,16 +827,9 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
             match versions with
             | [] -> return Ok()
             | _ ->
-                // Phase 634 — same released-set read as `Delete`.
-                let! released = releasedContentHashes container (versions |> List.map snd)
-
-                let! _ =
-                    versions
-                    |> List.map (fun (_, name) -> blobStorage.Delete(container, name))
-                    |> Async.Parallel
-
-                let! _orphaned = collectOrphanedContent container released
-                return Ok()
+                // Phase 634 / 966 — same removal as `Delete`.
+                let! removal = removeVersionBlobs container versions
+                return removal |> Result.mapError StorageFailure
         }
 
         member _.Purge(scopeId) = async {
@@ -1232,22 +1312,12 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
                     match policy with
                     | Some StrictlyVersioned -> return Error(DeleteFailed DeleteForbidden)
                     | _ ->
-                        let names = versions |> List.map snd
-
-                        let removeListed () = async {
-                            // Phase 634 — read what these versions reference
-                            // BEFORE removing them, so the in-band GC reclaims
-                            // exactly the content this delete released.
-                            let! released = releasedContentHashes container names
-
-                            let! _ =
-                                names
-                                |> List.map (fun name -> blobStorage.Delete(container, name))
-                                |> Async.Parallel
-
-                            let! _orphaned = collectOrphanedContent container released
-                            return ()
-                        }
+                        // Phase 634 / 966 — `removeVersionBlobs` reads what
+                        // these versions reference BEFORE removing them, so
+                        // the in-band GC reclaims exactly the content this
+                        // delete released, and returns an `Error` naming
+                        // any version blob the store refused to remove.
+                        let removeListed () = removeVersionBlobs container versions
 
                         match blobStorage with
                         | :? IConditionalBlobStorage as cas ->
@@ -1270,12 +1340,14 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
                                 let! _ = blobStorage.Delete(container, claimName)
 
                                 match removal with
-                                | Choice1Of2() -> return Ok()
+                                | Choice1Of2(Ok()) -> return Ok()
+                                | Choice1Of2(Error msg) -> return Error(DeleteFailed(StorageFailure msg))
                                 | Choice2Of2 ex -> return Error(DeleteFailed(StorageFailure ex.Message))
                         | _ ->
                             let! removal = removeListed () |> Async.Catch
 
                             match removal with
-                            | Choice1Of2() -> return Ok()
+                            | Choice1Of2(Ok()) -> return Ok()
+                            | Choice1Of2(Error msg) -> return Error(DeleteFailed(StorageFailure msg))
                             | Choice2Of2 ex -> return Error(DeleteFailed(StorageFailure ex.Message))
         }
