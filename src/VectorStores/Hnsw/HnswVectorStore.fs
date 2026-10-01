@@ -616,6 +616,12 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
 
     do Async.Start(flushLoop, cts.Token)
 
+    /// Phase 963 — the HNSW graph is built and searched in this process's
+    /// memory. It persists to blob storage, but each replica searches its
+    /// own graph, so the index is per-process for the replica warning.
+    interface IVectorStoreLocality with
+        member _.IndexLocality = Some VectorIndexLocality.InProcess
+
     interface IVectorStore with
 
         member _.Upsert scope chunkId vector chunk = async {

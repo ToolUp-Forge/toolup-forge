@@ -1029,15 +1029,18 @@ let hasCrossReplicaEmbeddingCache (app: RAGServerApp) : bool =
 let hasScopeKeyedEmbeddingProvider (app: RAGServerApp) : bool =
     ScopedEmbedding.isScopeKeyed app.EmbeddingProvider
 
-/// Phase 893 — is `store` one of the in-process vector stores, whose index
-/// lives in one process's memory (and so differs between replicas)? True
-/// for the in-tree `InMemoryVectorStore` and for the HNSW companion's
-/// `HnswVectorStore`, which this assembly cannot reference and so
-/// recognises by type name. Keyed on the composed instance, like
-/// `hasCrossReplicaEmbeddingCache`: what lifts the replica warning is the
-/// store that removes its premise, not a builder having been called.
-let isInProcessVectorStore (store: IVectorStore) : bool =
-    store :? InMemoryVectorStore || store.GetType().Name = "HnswVectorStore"
+/// Phase 893 — is `store` an in-process vector store, whose index lives in
+/// one process's memory (and so differs between replicas)? Keyed on the
+/// composed instance, like `hasCrossReplicaEmbeddingCache`: what lifts the
+/// replica warning is the store that removes its premise, not a builder
+/// having been called.
+///
+/// Phase 963 — read from the store's own `IVectorStoreLocality`
+/// declaration, never its type name, so a decorator that forwards the
+/// declaration keeps the warning and a type that merely shares a
+/// companion's name does not trip it. An undeclared store reads as not
+/// in-process (GP 11), as an unrecognised store did before.
+let isInProcessVectorStore (store: IVectorStore) : bool = VectorIndexLocality.isInProcess store
 
 /// Phase 893 — is `index` the in-process keyword index (`InMemoryBM25Index`),
 /// whose postings live in one process's memory?

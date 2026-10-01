@@ -211,3 +211,68 @@ let upsertBatch
         for chunkId, vector, chunk in chunks do
             do! store.Upsert scope chunkId vector chunk
       }
+
+/// Phase 963 — where a vector store's searchable index lives, as the store
+/// itself declares it through `IVectorStoreLocality`.
+///
+/// A new axis, NOT `CompanionCapability.Readiness`. Readiness answers
+/// "may a distributed deployment host this companion?", is declared per
+/// PACKAGE, and is joined componentwise across a composition. Locality
+/// answers a narrower question about one composed INSTANCE: do two
+/// replicas search the same index? The two come apart in practice — the
+/// HNSW companion persists every scope to blob storage (so its data
+/// survives a restart and could fairly be called durable) while its graph
+/// is still built and searched in one process's memory, so two replicas
+/// answer the same query from two different graphs. The replica warning
+/// needs the second answer, read off the instance a deployment composed
+/// (which may be a decorator), not a package-level posture.
+[<RequireQualifiedAccess>]
+type VectorIndexLocality =
+    /// The searchable index lives in this process's memory: each replica
+    /// holds its own copy, and a chunk written on one is invisible to
+    /// another's search until a flush-and-reload.
+    | InProcess
+    /// Every replica searches one index held outside the process (a
+    /// database, a vector service), so a write on one replica is visible
+    /// to every replica's next search.
+    | Shared
+
+/// Phase 963 — optional locality declaration, SEPARATE from `IVectorStore`
+/// (the Phase 892 `IVectorStoreBatch` precedent) so the core interface
+/// gains no member and no existing implementation, in-tree or downstream,
+/// breaks. A store implements it beside `IVectorStore`; readers reach it
+/// through `VectorIndexLocality.declared`.
+///
+/// **A decorator forwards its inner store's declaration.** A store that
+/// wraps another (telemetry, caching, a disclosure gate) does not move the
+/// index, so it implements this interface as
+/// `member _.IndexLocality = VectorIndexLocality.declared inner`. The member
+/// is an option for exactly this reason: F# implements interfaces
+/// statically, so a decorator answers the probe whatever it wraps, and
+/// `None` lets it pass an undeclared inner store through as undeclared
+/// rather than inventing a locality. A decorator that does not implement
+/// the interface reads as undeclared, whatever it wraps.
+///
+/// **Undeclared reads as not in-process** (GP 11): the replica warning
+/// fires only for a store that declares `InProcess`, exactly as it was
+/// silent for an unrecognised store before this phase. A third-party store
+/// that keeps its index in memory opts in to the warning by declaring so.
+type IVectorStoreLocality =
+    /// Where this store's searchable index lives: `Some` for a store that
+    /// knows, `None` for a decorator over a store that declares nothing.
+    abstract IndexLocality: VectorIndexLocality option
+
+/// The probe for the Phase 963 locality declaration.
+[<RequireQualifiedAccess>]
+module VectorIndexLocality =
+    /// The locality `store` declares, or `None` when it implements no
+    /// `IVectorStoreLocality`.
+    let declared (store: IVectorStore) : VectorIndexLocality option =
+        match box store with
+        | :? IVectorStoreLocality as declaring -> declaring.IndexLocality
+        | _ -> None
+
+    /// `true` only when `store` declares its index `InProcess`. An
+    /// undeclared store is `false` (see `IVectorStoreLocality`).
+    let isInProcess (store: IVectorStore) : bool =
+        declared store = Some VectorIndexLocality.InProcess
