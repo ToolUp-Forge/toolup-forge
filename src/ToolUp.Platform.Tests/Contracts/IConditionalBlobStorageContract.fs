@@ -5,6 +5,7 @@ open System.Collections.Concurrent
 open System.Text
 open System.Threading
 open Expecto
+open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.NotificationChannel
@@ -54,6 +55,32 @@ type ScriptedStorage(inner: IBlobStorage) =
     let failNext = ConcurrentDictionary<string * string, int>()
     let rendezvous = ConcurrentDictionary<string * string, CountdownEvent>()
 
+    let readSeen =
+        ConcurrentDictionary<string * string, Tasks.TaskCompletionSource<unit>>()
+
+    let casWritten =
+        ConcurrentDictionary<string * string, Tasks.TaskCompletionSource<unit>>()
+
+    let freshSignal () =
+        Tasks.TaskCompletionSource<unit>(Tasks.TaskCreationOptions.RunContinuationsAsynchronously)
+
+    /// Phase 959 — completes when the next read of one blob has returned.
+    /// Lets a case start a second writer only once the first has read, so
+    /// the ordering it asserts about is the ordering that ran.
+    member _.NextReadOf(container: string, blobName: string) : Tasks.Task =
+        let signal = freshSignal ()
+        readSeen[(container, blobName)] <- signal
+        signal.Task :> Tasks.Task
+
+    /// Phase 959 — hold every unconditional `Upload` of one blob until a
+    /// conditional write of it has succeeded (bounded). A writer that does
+    /// its own read-then-overwrite is thereby made to write LAST, over a
+    /// conditional writer that read the same state — the interleaving that
+    /// loses the conditional writer's change. A store that writes only
+    /// through the conditional seam never meets the hold.
+    member _.HoldPlainWritesUntilConditionalWrite(container: string, blobName: string) =
+        casWritten[(container, blobName)] <- freshSignal ()
+
     /// Fail the next `count` reads (`Download` or `DownloadWithETag`) of
     /// one blob with an infrastructure error. `Exists` is not faulted:
     /// the blob is there, the read of it failed.
@@ -92,6 +119,10 @@ type ScriptedStorage(inner: IBlobStorage) =
     }
 
     member private _.AfterRead(container: string, blobName: string) : Async<unit> = async {
+        match readSeen.TryGetValue((container, blobName)) with
+        | true, signal -> signal.TrySetResult() |> ignore
+        | _ -> ()
+
         match rendezvous.TryGetValue((container, blobName)) with
         | true, gate when not gate.IsSet ->
             let signalled =
@@ -118,8 +149,15 @@ type ScriptedStorage(inner: IBlobStorage) =
                 return result
         }
 
-        member _.UploadWithETag(container, blobName, content, condition) =
-            cas.UploadWithETag(container, blobName, content, condition)
+        member _.UploadWithETag(container, blobName, content, condition) = async {
+            let! result = cas.UploadWithETag(container, blobName, content, condition)
+
+            match result, casWritten.TryGetValue((container, blobName)) with
+            | Ok _, (true, signal) -> signal.TrySetResult() |> ignore
+            | _ -> ()
+
+            return result
+        }
 
     interface IBlobStorage with
         member _.CanComposeFrom = inner.CanComposeFrom
@@ -127,8 +165,16 @@ type ScriptedStorage(inner: IBlobStorage) =
         member _.ComposeFrom(container, targetBlobName, sourceBlobNames) =
             inner.ComposeFrom(container, targetBlobName, sourceBlobNames)
 
-        member _.Upload(container, blobName, content) =
-            inner.Upload(container, blobName, content)
+        member _.Upload(container, blobName, content) = async {
+            match casWritten.TryGetValue((container, blobName)) with
+            | true, signal ->
+                // Bounded, like the rendezvous: a case whose conditional
+                // writer never writes fails on its own assertions.
+                signal.Task.Wait(TimeSpan.FromSeconds 10.0) |> ignore
+            | _ -> ()
+
+            return! inner.Upload(container, blobName, content)
+        }
 
         member this.Download(container, blobName) = async {
             match! this.BeforeRead(container, blobName) with
@@ -169,6 +215,88 @@ let private freshChannel () =
 
 let private freshId (prefix: string) =
     prefix + "-" + Guid.NewGuid().ToString("N").Substring(0, 12)
+
+// ── Phase 959 — knowledge-base index fixtures ──────────────────────
+
+let private kbDoc (docId: string) : SharedTypes.KnowledgeDocument = {
+    Id = docId
+    FileName = docId + ".pdf"
+    FileType = "pdf"
+    UploadedAt = DateTimeOffset.UtcNow
+    UploadedBy = "user-1"
+    Status = SharedTypes.IngestionStatus.Queued
+    SizeBytes = 0L
+    ChunkCount = 0
+    Source = SharedTypes.UploadedFile
+    ContentHash = None
+    Version = 1
+    Tags = []
+}
+
+/// The knowledge-base request dependencies over one storage instance — one
+/// replica's view of the shared backend. Built by the production resolver,
+/// so `MarkIngestionFailed` is the closure the upload path calls.
+let private kbDeps (storage: IBlobStorage) (container: string) =
+    let services = ServiceCollection()
+    services.AddSingleton<IBlobStorage>(storage) |> ignore
+    services.AddSingleton<INotificationChannel>(freshChannel ()) |> ignore
+    services.AddSingleton<ILogger>(silentLogger) |> ignore
+
+    services.AddSingleton<ToolUp.RAG.IngestionTypes.IngestionQueue>(ToolUp.RAG.IngestionTypes.IngestionQueue())
+    |> ignore
+
+    let services = services.BuildServiceProvider()
+
+    let scope: StorageScope = {
+        ScopeId = container
+        Container = container
+        Persist = true
+    }
+
+    KnowledgeBase.ServerApiDeps.KnowledgeApiDeps.resolveFrom services (Some scope) "user-1"
+
+/// A forwarding decorator that exposes ONLY `IBlobStorage` — the same
+/// backend with its conditional seam hidden, as a store without conditional
+/// writes presents itself.
+type private PlainForwardingStorage(inner: IBlobStorage) =
+    interface IBlobStorage with
+        member _.CanComposeFrom = inner.CanComposeFrom
+
+        member _.ComposeFrom(container, targetBlobName, sourceBlobNames) =
+            inner.ComposeFrom(container, targetBlobName, sourceBlobNames)
+
+        member _.Upload(container, blobName, content) =
+            inner.Upload(container, blobName, content)
+
+        member _.Download(container, blobName) = inner.Download(container, blobName)
+
+        member _.DownloadRange(container, blobName, offset, length) =
+            inner.DownloadRange(container, blobName, offset, length)
+
+        member _.Delete(container, blobName) = inner.Delete(container, blobName)
+        member _.List(container, prefix) = inner.List(container, prefix)
+        member _.Exists(container, blobName) = inner.Exists(container, blobName)
+        member _.GetMetadata(container, blobName) = inner.GetMetadata(container, blobName)
+
+        member _.Erase(container, prefix, policy, dryRun) =
+            inner.Erase(container, prefix, policy, dryRun)
+
+/// The `knowledge-base:index-instance` startup validator over one composed
+/// storage, as preflight runs it.
+let private validateIndexInstance (replicaCount: int) (storage: IBlobStorage) =
+    let services = ServiceCollection()
+    services.AddSingleton<IBlobStorage>(storage) |> ignore
+
+    let config = {
+        ServerConfig.defaults with
+            ReplicaCount = replicaCount
+    }
+
+    let validator =
+        ToolUp.KnowledgeBase.Server.AICompose.KnowledgeBaseIndexInstanceValidator(config, services)
+        :> ConfigValidation.IConfigValidator
+
+    validator.Validate()
 
 /// The contract pack. `factory` returns a FRESH backend implementing both
 /// `IBlobStorage` and `IConditionalBlobStorage`.
@@ -543,5 +671,121 @@ let tests (name: string) (factory: unit -> IBlobStorage) =
                 (Expect.wantOk after "read back" |> Option.map Set.ofList)
                 (Some(Set.ofList [ "seed"; "from-a"; "from-b" ]))
                 "neither update was lost"
+        }
+
+        // ── The knowledge-base index writers (Phase 959) ────────────
+
+        testCaseAsync "KB index: a concurrent MarkIngestionFailed and upsertIndexEntry both land"
+        <| async {
+            let storage = ScriptedStorage(factory ())
+            let raw = storage :> IBlobStorage
+            let kbContainer = freshId "team-kb"
+            let failing = kbDoc (freshId "doc-failing")
+            let added = kbDoc (freshId "doc-added")
+            do! KnowledgeBase.ServerIndexStorage.upsertIndexEntry raw kbContainer failing
+            let deps = kbDeps raw kbContainer
+
+            // MarkIngestionFailed reads first; upsertIndexEntry then reads the
+            // same index and writes; MarkIngestionFailed writes last.
+            storage.HoldPlainWritesUntilConditionalWrite(kbContainer, KnowledgeBase.ServerIndexStorage.indexBlobName)
+
+            let markRead =
+                storage.NextReadOf(kbContainer, KnowledgeBase.ServerIndexStorage.indexBlobName)
+
+            let! marking = Async.StartChild(deps.MarkIngestionFailed failing.Id failing.FileName "scripted failure")
+            do! Async.AwaitTask markRead
+            do! KnowledgeBase.ServerIndexStorage.upsertIndexEntry raw kbContainer added
+            do! marking
+
+            let! index = KnowledgeBase.ServerIndexStorage.loadIndex raw kbContainer
+            let byId = index |> List.map (fun d -> d.Id, d.Status) |> Map.ofList
+
+            Expect.equal
+                (Map.tryFind added.Id byId)
+                (Some SharedTypes.IngestionStatus.Queued)
+                "the upserted document survived the concurrent status write"
+
+            Expect.equal
+                (Map.tryFind failing.Id byId)
+                (Some(SharedTypes.IngestionStatus.Failed "scripted failure"))
+                "the failure status survived the concurrent upsert"
+        }
+
+        testCaseAsync "KB index: N concurrent updates from different callers all land"
+        <| async {
+            // Every index writer's transform, run concurrently through the one
+            // guarded helper with no in-process lock between them — as writers
+            // on different replicas run — and all reading the same index first.
+            let storage = ScriptedStorage(factory ())
+            let raw = storage :> IBlobStorage
+            let kbContainer = freshId "team-kb"
+            let failing = kbDoc (freshId "doc-failing")
+            let counted = kbDoc (freshId "doc-counted")
+            let deleted = kbDoc (freshId "doc-deleted")
+            // Four callers: every round of the retry loop admits at least one
+            // writer, and the helper's default budget is four attempts, so four
+            // is the most that can be guaranteed to land with no backoff jitter.
+            let added = [ kbDoc (freshId "doc-added") ]
+
+            for doc in [ failing; counted; deleted ] do
+                do! KnowledgeBase.ServerIndexStorage.upsertIndexEntry raw kbContainer doc
+
+            let update change =
+                KnowledgeBase.ServerIndexStorage.updateIndexEntries raw kbContainer (fun docs ->
+                    BlobUpdate.Write(change docs, ()))
+
+            let mapDoc (docId: string) (f: SharedTypes.KnowledgeDocument -> SharedTypes.KnowledgeDocument) =
+                update (List.map (fun d -> if d.Id = docId then f d else d))
+
+            let callers = [
+                yield
+                    mapDoc failing.Id (fun d -> {
+                        d with
+                            Status = SharedTypes.IngestionStatus.Failed "scripted"
+                    })
+                yield mapDoc counted.Id (fun d -> { d with ChunkCount = 7 })
+                yield update (List.filter (fun d -> d.Id <> deleted.Id))
+                for doc in added -> update (fun docs -> docs @ [ doc ])
+            ]
+
+            storage.Rendezvous(kbContainer, KnowledgeBase.ServerIndexStorage.indexBlobName, callers.Length)
+            let! _ = callers |> Async.Parallel
+
+            let! index = KnowledgeBase.ServerIndexStorage.loadIndex raw kbContainer
+            let byId = index |> List.map (fun d -> d.Id, d) |> Map.ofList
+
+            Expect.equal
+                (Set.ofSeq byId.Keys)
+                (Set.ofList (failing.Id :: counted.Id :: (added |> List.map _.Id)))
+                "every addition landed and the removal held"
+
+            Expect.equal
+                byId[failing.Id].Status
+                (SharedTypes.IngestionStatus.Failed "scripted")
+                "the status write landed"
+
+            Expect.equal byId[counted.Id].ChunkCount 7 "the chunk-count write landed"
+        }
+
+        testCaseAsync "KB index-instance validator: silent at ReplicaCount = 2 on this conditional backend"
+        <| async {
+            let! result = validateIndexInstance 2 (factory ())
+            Expect.equal result ConfigValidation.ValidationResult.Ok "a conditional backend loses no index update"
+        }
+
+        testCaseAsync "KB index-instance validator: warns, naming the backend, when conditional writes are hidden"
+        <| async {
+            let! result = validateIndexInstance 2 (PlainForwardingStorage(factory ()))
+
+            match result with
+            | ConfigValidation.ValidationResult.Warning message ->
+                Expect.stringContains message "PlainForwardingStorage" "the warning names the backend"
+                Expect.stringContains message "ReplicaCount = 2" "the warning names the replica count"
+                Expect.stringContains message "BlobMapStore" "the warning names the helper"
+                Expect.isFalse (message.Contains "lock only") "the warning no longer cites the in-process lock"
+            | other -> failtestf "expected a warning over a store without conditional writes, got %A" other
+
+            let! single = validateIndexInstance 1 (PlainForwardingStorage(factory ()))
+            Expect.equal single ConfigValidation.ValidationResult.Ok "one replica is serialised by its own lock"
         }
     ]

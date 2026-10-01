@@ -78,13 +78,8 @@ let private platformDeps (baseDeps: KnowledgeApiDeps) : KnowledgeApiDeps =
 
         setStatus docId status
 
-        let! existing = loadIndex storage platformContainer
-
-        let updated =
-            existing
-            |> List.map (fun d -> if d.Id = docId then { d with Status = status } else d)
-
-        do! saveIndex storage platformContainer updated
+        // Phase 959 — the guarded index writer (see `Api/Deps.fs`).
+        do! updateIndexStatus storage platformContainer docId status
 
         if not (isNull (box notifications)) then
             try

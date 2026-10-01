@@ -385,6 +385,18 @@ type BlobMapStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: ILogg
     member _.Read(container: string, blobName: string) : Async<Result<'T option, BlobMapStoreError>> =
         readPlain container blobName
 
+    /// Whether `Update` on this blob runs as a conditional write: the
+    /// backend implements `IConditionalBlobStorage` AND answers the
+    /// side-effect-free capability probe (see the file header) the way a
+    /// conditional backend must. `false` means `Update` falls back to an
+    /// unconditional write, so writers on other nodes can lose an update.
+    /// Asks the same probe, with the same cached positive answer, that the
+    /// first `Update` asks.
+    member _.SupportsConditionalWrites(container: string, blobName: string) : Async<bool> =
+        match cas with
+        | Some c -> confirmConditional c container blobName
+        | None -> async.Return false
+
     /// Guarded read-modify-write. `transform` is pure over the decoded
     /// value (`None` = absent) and may run more than once: on a lost
     /// precondition it is replayed over the fresh read. Nothing is written

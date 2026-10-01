@@ -167,15 +167,18 @@ KnowledgeBase.ServerIndexStorage.appendVersion(ToolUp.Platform.BlobStorage+IBlob
 KnowledgeBase.ServerIndexStorage.chunkHashesBlobName(System.String) : System.String
 KnowledgeBase.ServerIndexStorage.clearStatus(System.String) : System.Void
 KnowledgeBase.ServerIndexStorage.indexBlobName : System.String { get }
+KnowledgeBase.ServerIndexStorage.indexWritesAreConditional(ToolUp.Platform.BlobStorage+IBlobStorage, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
 KnowledgeBase.ServerIndexStorage.loadChunkHashes(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]
 KnowledgeBase.ServerIndexStorage.loadIndex(ToolUp.Platform.BlobStorage+IBlobStorage, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument]]
 KnowledgeBase.ServerIndexStorage.loadVersions(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocumentVersion]]
 KnowledgeBase.ServerIndexStorage.noteBodyBlobName(System.String) : System.String
+KnowledgeBase.ServerIndexStorage.removeIndexEntries(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 KnowledgeBase.ServerIndexStorage.saveChunkHashes(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 KnowledgeBase.ServerIndexStorage.saveIndex(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 KnowledgeBase.ServerIndexStorage.setStatus(System.String, SharedTypes+IngestionStatus) : System.Void
 KnowledgeBase.ServerIndexStorage.statusCache : System.Collections.Concurrent.ConcurrentDictionary`2[System.String, SharedTypes+IngestionStatus] { get }
 KnowledgeBase.ServerIndexStorage.updateIndexChunkCount(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+KnowledgeBase.ServerIndexStorage.updateIndexEntries`1(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument], ToolUp.Platform.BlobUpdate`2[Microsoft.FSharp.Collections.FSharpList`1[SharedTypes+KnowledgeDocument], R]]) : Microsoft.FSharp.Control.FSharpAsync`1[R]
 KnowledgeBase.ServerIndexStorage.updateIndexStatus(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, SharedTypes+IngestionStatus) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 KnowledgeBase.ServerIndexStorage.updateStatus(System.String, SharedTypes+IngestionStatus, Microsoft.FSharp.Core.FSharpFunc`2[SharedTypes+IngestionStatus, SharedTypes+IngestionStatus]) : System.Void
 KnowledgeBase.ServerIndexStorage.upsertIndexEntry(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, SharedTypes+KnowledgeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]

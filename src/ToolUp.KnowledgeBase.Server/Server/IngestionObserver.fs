@@ -259,24 +259,34 @@ let makeIngestionStatusObserver
 
                 return None
             else
-                let! index = loadIndex storage job.Container
+                // Phase 959 — through the guarded index writer. `next` is pure,
+                // so on a lost precondition it is replayed over the document as
+                // another replica left it (a chunk that replica counted is
+                // counted once, not overwritten). `None` = the document is gone;
+                // `Some(doc, None)` = the callback changes nothing.
+                let! settled =
+                    updateIndexEntries storage job.Container (fun index ->
+                        match index |> List.tryFind (fun d -> d.Id = job.DocumentId) with
+                        | None -> BlobUpdate.Keep None
+                        | Some doc ->
+                            match next doc job outcome with
+                            | None -> BlobUpdate.Keep(Some(doc, None))
+                            | Some status ->
+                                let updated =
+                                    index
+                                    |> List.map (fun d -> if d.Id = doc.Id then { d with Status = status } else d)
 
-                match index |> List.tryFind (fun d -> d.Id = job.DocumentId) with
+                                BlobUpdate.Write(updated, Some(doc, Some status)))
+
+                match settled with
                 | None ->
                     // Document was deleted between enqueue and ingestion — drop.
                     clearStatus job.DocumentId
                     return None
-                | Some doc ->
-                    match next doc job outcome with
-                    | None -> return None
-                    | Some status ->
-                        let updated =
-                            index
-                            |> List.map (fun d -> if d.Id = doc.Id then { d with Status = status } else d)
-
-                        do! saveIndex storage job.Container updated
-                        setStatus doc.Id status
-                        return Some(doc, status)
+                | Some(_, None) -> return None
+                | Some(doc, Some status) ->
+                    setStatus doc.Id status
+                    return Some(doc, status)
         finally
             lock.Release() |> ignore
     }
