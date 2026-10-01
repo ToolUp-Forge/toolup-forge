@@ -24,7 +24,8 @@ open ToolUp.Facts
 //
 //   point read       (scope, hierarchy, path, metric, period_from)  index
 //   lineage head     (scope, lineage_hash) WHERE is_head             unique index
-//   population read  (scope, metric, is_head)                        index
+//   population read  (scope, metric, hierarchy, period_to) WHERE is_head
+//                    INCLUDE the read's columns (Phase 962)       covering index
 //   supersession     (scope, supersedes)                             index
 //   transaction time (scope, as_of_ticks)                            index
 //
@@ -242,7 +243,15 @@ module Sql =
         $"CREATE INDEX IF NOT EXISTS {table}_point_idx ON {table} (scope, hierarchy, path, metric, period_from_ticks)"
         $"CREATE INDEX IF NOT EXISTS {table}_lineage_idx ON {table} (scope, lineage_hash)"
         $"CREATE UNIQUE INDEX IF NOT EXISTS {table}_head_idx ON {table} (scope, lineage_hash) WHERE is_head"
-        $"CREATE INDEX IF NOT EXISTS {table}_pop_idx ON {table} (scope, metric, is_head)"
+        // Phase 962 — the population read's covering index: the current
+        // heads of one metric, keyed by period END so the latest period is a
+        // narrow range, carrying every column the summary, the method mix and
+        // the top k read, so the read is index-only. It replaces Phase 888's
+        // `pop_idx` (scope, metric, is_head), which every one of those
+        // statements now plans past, so that index is dropped once this one
+        // exists.
+        $"CREATE INDEX IF NOT EXISTS {table}_population_idx ON {table} (scope, metric, hierarchy, period_to_ticks) INCLUDE (period_from_ticks, as_of_ticks, magnitude, method_identity, path, fact_id) WHERE is_head"
+        $"DROP INDEX IF EXISTS {table}_pop_idx"
         $"CREATE INDEX IF NOT EXISTS {table}_succ_idx ON {table} (scope, supersedes) WHERE supersedes IS NOT NULL"
         $"CREATE INDEX IF NOT EXISTS {table}_txtime_idx ON {table} (scope, as_of_ticks)"
     ]
@@ -291,15 +300,32 @@ module Sql =
     /// two is the predecessors of successors written after `@t`, driven
     /// from the transaction-time index. The two are disjoint (a branch-two
     /// row has a successor, so it is not a head).
+    ///
+    /// Phase 962 — branch two is DRIVEN from the successors written after
+    /// `@t`: their `supersedes` ids are read once from the transaction-time
+    /// range (the sub-select names no `supersedes IS NOT NULL` predicate, so
+    /// the partial supersession index cannot answer it), and each id is
+    /// fetched by primary key in a lateral sub-select the planner may not
+    /// flatten (`OFFSET 0`), so the join order is fixed: the ids drive, and
+    /// no index on the metric can turn the read into a walk of its
+    /// superseded rows. A read "as of now" therefore costs
+    /// one empty index range, and a replay what changed since `@t`, by
+    /// construction rather than by the planner's estimate. The `IN` form it
+    /// replaces was planned on statistics older than the table's
+    /// supersessions three ways, each one linear in the scope's history: a
+    /// nested loop re-scanning every successor per superseded row (91 ms of
+    /// a 94 ms summary at 12,000 facts; a 3.4 s population read at four
+    /// callers), a walk of every successor, and a walk of every superseded
+    /// row of the metric. A fresh `ANALYZE` hid all three.
     let internal visibleAt (table: string) (columns: string) (filter: RowFilter) : string =
         let clauses = filterClauses "f" filter
 
         $"""SELECT {columns} FROM {table} f
 WHERE f.scope = @scope AND f.is_head AND f.as_of_ticks <= @t{clauses}
 UNION ALL
-SELECT {columns} FROM {table} f
-WHERE f.scope = @scope AND NOT f.is_head AND f.as_of_ticks <= @t{clauses}
-  AND f.fact_id IN (SELECT s.supersedes FROM {table} s WHERE s.scope = @scope AND s.as_of_ticks > @t AND s.supersedes IS NOT NULL)
+SELECT {columns} FROM unnest(array_remove(ARRAY(SELECT DISTINCT s.supersedes FROM {table} s WHERE s.scope = @scope AND s.as_of_ticks > @t), NULL)) AS p(id)
+CROSS JOIN LATERAL (SELECT * FROM {table} x WHERE x.scope = @scope AND x.fact_id = p.id OFFSET 0) f
+WHERE NOT f.is_head AND f.as_of_ticks <= @t{clauses}
   AND NOT EXISTS (SELECT 1 FROM {table} s2 WHERE s2.scope = @scope AND s2.supersedes = f.fact_id AND s2.as_of_ticks <= @t)"""
 
     // ─── Population aggregates (Phase 940) ───────────────────────────
@@ -1388,6 +1414,29 @@ type PostgresFactStore
                     null
 
             bindVisible scopeId t filter cmd
+            let! plan = cmd.ExecuteScalarAsync() |> Async.AwaitTask
+            return string plan
+        })
+
+    /// Phase 962 — the query plan PostgreSQL chose for `query`'s population
+    /// summary (the statement that visits the whole selected population),
+    /// executed (`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`), as JSON text.
+    /// The operator's check that the covering population index is in place
+    /// and answers the read: an `Index Only Scan` on `<table>_population_idx`,
+    /// touching the selected population rather than the table. A
+    /// `VerifyOnly` deployment, which provisions its indexes out of band,
+    /// confirms the index this way.
+    member _.ExplainPopulation(scopeId: string, query: PopulationQuery) : Async<string> =
+        let t = query.AsOf |> Option.defaultValue (clock().ToUniversalTime())
+        let filter = populationFilter query true
+
+        withConnection (fun conn -> async {
+            use cmd =
+                command ("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) " + Sql.populationSummary table filter) conn null
+
+            bindVisible scopeId t filter cmd
+            // The freshness floor changes a count, never the plan.
+            addBigint cmd "fresh_from" 0L
             let! plan = cmd.ExecuteScalarAsync() |> Async.AwaitTask
             return string plan
         })

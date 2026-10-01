@@ -81,10 +81,41 @@ CREATE TABLE IF NOT EXISTS toolup_facts (
 CREATE INDEX IF NOT EXISTS toolup_facts_point_idx ON toolup_facts (scope, hierarchy, path, metric, period_from_ticks);
 CREATE INDEX IF NOT EXISTS toolup_facts_lineage_idx ON toolup_facts (scope, lineage_hash);
 CREATE UNIQUE INDEX IF NOT EXISTS toolup_facts_head_idx ON toolup_facts (scope, lineage_hash) WHERE is_head;
-CREATE INDEX IF NOT EXISTS toolup_facts_pop_idx ON toolup_facts (scope, metric, is_head);
+CREATE INDEX IF NOT EXISTS toolup_facts_population_idx ON toolup_facts (scope, metric, hierarchy, period_to_ticks)
+    INCLUDE (period_from_ticks, as_of_ticks, magnitude, method_identity, path, fact_id) WHERE is_head;
+DROP INDEX IF EXISTS toolup_facts_pop_idx;
 CREATE INDEX IF NOT EXISTS toolup_facts_succ_idx ON toolup_facts (scope, supersedes) WHERE supersedes IS NOT NULL;
 CREATE INDEX IF NOT EXISTS toolup_facts_txtime_idx ON toolup_facts (scope, as_of_ticks);
 ```
+
+**The population index (Phase 962).** `toolup_facts_population_idx` covers the
+population read: the current heads of one metric, keyed by the period's END so
+the latest period is a narrow range, and carrying every column the summary, the
+method mix and the top k read, so the read is an index-only scan of the asked
+period's heads. It replaces Phase 888's `toolup_facts_pop_idx`
+`(scope, metric, is_head)`, which `AutoMigrate` drops once the new index exists.
+
+- **`VerifyOnly` checks only that the table exists**, not its indexes. A
+  `VerifyOnly` deployment adds the population index out of band, then drops
+  `toolup_facts_pop_idx`. Without it every population read scans the table.
+  `ExplainPopulation(scope, query)` returns the executed plan of a population
+  read's summary: an `Index Only Scan` on the population index is the check.
+- **On a populated table, build it `CONCURRENTLY` first.** `AutoMigrate`'s plain
+  `CREATE INDEX` holds a lock that blocks writes while it builds: 6 s for
+  3,900,000 rows on the machine `docs/rag/performance.md` names, so about
+  75 s at 46,800,000. `CREATE INDEX CONCURRENTLY` does not block writes. Run it
+  under the same name before upgrading, and the migration's `IF NOT EXISTS`
+  then finds it in place:
+
+  ```sql
+  CREATE INDEX CONCURRENTLY IF NOT EXISTS toolup_facts_population_idx ON toolup_facts (scope, metric, hierarchy, period_to_ticks)
+      INCLUDE (period_from_ticks, as_of_ticks, magnitude, method_identity, path, fact_id) WHERE is_head;
+  DROP INDEX CONCURRENTLY IF EXISTS toolup_facts_pop_idx;
+  ```
+
+  A `CONCURRENTLY` build that fails leaves an INVALID index of that name, and
+  `IF NOT EXISTS` then skips it. Drop it and build again; `pg_index.indisvalid`
+  says which state it is in.
 
 `payload` is the fact exactly as `BlobFactStore` serialises it; every other
 column is a projection of that payload, written in the same row. Valid and

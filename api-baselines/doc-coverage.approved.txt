@@ -90,7 +90,7 @@ ToolUp.EntityStores.Postgres 11/17
 ToolUp.Experiments.Core 9/41
 ToolUp.Experiments.Server 5/10
 ToolUp.ExternalCompute.Http 100/144
-ToolUp.FactStores.Postgres 103/167
+ToolUp.FactStores.Postgres 104/168
 ToolUp.Facts.Client 41/109
 ToolUp.Facts.Core 436/763
 ToolUp.Facts.Server 741/1122
