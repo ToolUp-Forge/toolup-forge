@@ -2456,6 +2456,9 @@ let private registeredTests =
         // deterministic draws (the recorded run the browser's registerAll
         // relies on), with a swapped-field go-red decoder refused by name.
         PlatformDecodersGenerationTests.tests
+        // Phase 946 - the generator's API-record census excludes a record marked
+        // NotRemotingApiAttribute, and counts the same shape unmarked.
+        ApiRecordCensusTests.tests
         // Phase 787 — the F* model of that algebra, extracted and run as a
         // differential oracle beside production over the same corpus, with
         // a committed go-red bridge that forgets the source width class so
