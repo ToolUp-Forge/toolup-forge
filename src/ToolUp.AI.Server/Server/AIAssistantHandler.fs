@@ -18,6 +18,35 @@ open ToolUp.AI.AIToolRegistry
 open ToolUp.AI.AIAgentEngine
 open ToolUp.AI.SSEHandler
 
+// ─── Phase 961 — every conversation-addressed entry point, and its rule ──
+//
+// Checked against the code below; `docs/ai/conversation-visibility.md`
+// carries the same table for readers of the docs.
+//
+//   GetConversation            `canSee` (Phase 859); an elevated open is
+//                              audited (`ConversationVisibilityAudit.elevatedRead`).
+//   ListConversations,         every row through `canSee` (`visibleRows`).
+//   ListConversationsPage
+//   DeleteConversation,        `authoriseWrite`: invisible is a no-op,
+//   SetConversationOverride    otherwise the author or `canModify`.
+//   GetTaskStatus              keyed by the submitter; another member's
+//                              task is `None` at every level.
+//   SubmitMessage,             the ownership gate (`checkAppend`):
+//   StreamChatV2               owner-only, and an ownerless
+//                              legacy conversation under a narrowed level
+//                              needs `canModify`. A refusal ends the turn —
+//                              nothing of the conversation is read but the
+//                              gate's own read, nothing is written. The
+//                              opt-in substrate's prompt history is read
+//                              only when `canSee` admits (Phase 946).
+//   fast-path beacon           the same gate, `403` on refusal
+//                              (`FastPathBeaconHandler`).
+//
+// There is no rename endpoint on `AIAssistantApi`. The data-subject export
+// is `ConversationExporter.Export`, an operator-initiated read of the
+// subject's own conversations, pinned with that reason in the Phase 946
+// fitness case.
+
 // ─── JSON helpers ────────────────────────────────────────────────
 // Uses FableConverters (from ToolUp.Remoting.Json.SystemTextJson) so
 // that persisted conversations with F# DUs serialize in Fable-
@@ -1833,6 +1862,60 @@ let aiAssistantApi
                 // a safe default until the real token is registered.
                 let mutable userCancelToken = System.Threading.CancellationToken.None
 
+                // Phase 961 — the refusal, as its own function so the turn
+                // cannot fall through it: the gate in `bgWork` calls this on
+                // `Error` and does nothing else. The shape is the one
+                // `AIStreamFramingPinTests` pins — the queued task already
+                // returned, then `AITaskFailed` with the fixed text — plus a
+                // `BeaconRejected` row with `Surface = "submit"`. The DI
+                // scope is disposed once, by the worker, as on every other
+                // exit. (Refusing in the foreground, before the task is
+                // registered, would change `SubmitMessage`'s result type;
+                // not taken.)
+                let refuseTurn (ownerOfRecord: string) = async {
+                    logger.Warn
+                        $"AI SubmitMessage rejected: caller '{userId}' is not the owner of conversation {conversationId} (owner '{ownerOfRecord}', scope '{scope.ScopeId}')."
+
+                    // Emit BeaconRejected via IAuditLog when available. The
+                    // audit-trail row exists independent of which surface
+                    // fired the gate — operators query the trail by
+                    // `BeaconRejected` regardless of whether the rejection
+                    // came from the beacon POST or the SubmitMessage path;
+                    // `Surface` disambiguates.
+                    match auditLogOpt with
+                    | Some auditLog ->
+                        let payload: BeaconRejectedPayload = {
+                            ConversationId = conversationId
+                            Caller = userId
+                            Owner = ownerOfRecord
+                            Surface = "submit"
+                        }
+
+                        try
+                            do! auditLog.Record(scope.ScopeId, BeaconRejected payload)
+                        with ex ->
+                            logger.Warn
+                                $"BeaconRejected audit write failed (submit; conversation {conversationId}): {ex.Message}"
+                    | None -> ()
+
+                    // Surface the refusal through the existing SSE failure
+                    // channel — same shape as a provider resolution failure
+                    // or an agent-loop exception. The ToolUp.Remoting
+                    // SubmitMessage call already returned the queued task;
+                    // the failure event flips it to AITaskFailed client-side.
+                    emit (
+                        TaskStatusChanged(
+                            taskId,
+                            AITaskFailed "Conversation does not belong to the current user — refusing to append."
+                        )
+                    )
+                }
+
+                // Phase 961 — the request's access context, captured now: the
+                // gate runs on the background scope, after the request's own
+                // services are gone.
+                let gateAccess = TeamConversationPolicyStore.ConversationVisibility.accessOf ctx
+
                 let bgWork (shutdownToken: System.Threading.CancellationToken) = async {
                     try
                         // Phase 896 — the turn runs on the chat worker, where the
@@ -1864,8 +1947,10 @@ let aiAssistantApi
                         // refuses cross-user appends to a conversation
                         // whose first persisted message recorded a
                         // different owner. Mirrors the gate the beacon
-                        // handler applies for fast-path resolutions; same
-                        // legacy semantics (empty `CreatedBy` ⇒ accept).
+                        // handler applies for fast-path resolutions.
+                        // Phase 961 — an ownerless legacy conversation
+                        // under a narrowed team level is admitted only for
+                        // a caller `canModify` admits (`checkAppend`).
                         //
                         // Load happens BEFORE the InProgress SSE so a
                         // refused turn doesn't briefly flash as in-flight
@@ -1873,511 +1958,499 @@ let aiAssistantApi
                         // Phase 862 — an unreadable conversation blob
                         // raises here, failing the turn before the agent
                         // loop starts and before anything is written.
+                        //
+                        // This is the ONLY read of the addressed
+                        // conversation before the gate admits the caller:
+                        // its metadata, its provider history and its UI
+                        // blob are all read inside the `Ok()` branch below.
                         let! gateExisting =
                             loadConversationOrFail logger storage scope.Container conversationId
                             |> withTimeout "Conversation load (ownership gate)" ChatPathIoTimeoutMs
 
                         // The one definition of the gate, shared with the
-                        // beacon handler (Phase 862).
-                        let ownershipResult = ConversationBlobs.checkOwnership gateExisting userId
-
-                        match ownershipResult with
-                        | Error ownerOfRecord ->
-                            logger.Warn
-                                $"AI SubmitMessage rejected: caller '{userId}' is not the owner of conversation {conversationId} (owner '{ownerOfRecord}', scope '{scope.ScopeId}')."
-
-                            // Emit BeaconRejected via IAuditLog when
-                            // available. The audit-trail row exists
-                            // independent of which surface fired the
-                            // gate — operators query the trail by
-                            // `BeaconRejected` regardless of whether
-                            // the rejection came from the beacon POST
-                            // or the SubmitMessage path; `Surface`
-                            // disambiguates.
-                            match auditLogOpt with
-                            | Some auditLog ->
-                                let payload: BeaconRejectedPayload = {
-                                    ConversationId = conversationId
-                                    Caller = userId
-                                    Owner = ownerOfRecord
-                                    Surface = "submit"
-                                }
-
-                                try
-                                    do! auditLog.Record(scope.ScopeId, BeaconRejected payload)
-                                with ex ->
-                                    logger.Warn
-                                        $"BeaconRejected audit write failed (submit; conversation {conversationId}): {ex.Message}"
-                            | None -> ()
-
-                            // Surface the refusal through the existing
-                            // SSE failure channel — same shape as a
-                            // provider resolution failure or an
-                            // agent-loop exception. The ToolUp.Remoting
-                            // SubmitMessage call already returned the
-                            // queued task; the failure event flips it
-                            // to AITaskFailed client-side.
-                            emit (
-                                TaskStatusChanged(
-                                    taskId,
-                                    AITaskFailed
-                                        "Conversation does not belong to the current user — refusing to append."
-                                )
-                            )
-
-                            bgScope.Dispose()
-                            return ()
-                        | Ok() -> ()
-
-                        emit (TaskStatusChanged(taskId, InProgress))
-
-                        // Resolve the provider once per user message. The
-                        // agent loop may make several SendMessage calls
-                        // across tool-use turns; all share this provider
-                        // so the user's active configuration can't shift
-                        // mid-loop. A user switching providers takes effect
-                        // on their next message.
-                        //
-                        // Per-conversation default: stored override
-                        // recorded by the module-page picker. The UI
-                        // also sends it as `request.OverrideProviderLabel`
-                        // on each submit, but reading the persisted
-                        // value here is the defensive fallback for
-                        // tabs that haven't loaded the dropdown yet
-                        // and is the source of truth on reload.
-                        //
-                        // Resolution priority: request override (one-off,
-                        // explicit per-message), then conversation
-                        // override (per-conversation default), then the
-                        // factory's active-label policy.
-                        let! storedMeta =
-                            loadConversationMeta logger storage scope.Container conversationId
-                            |> withTimeout "Conversation metadata load" ChatPathIoTimeoutMs
-
-                        let resolvedOverrideLabel =
-                            match request.OverrideProviderLabel with
-                            | Some _ -> request.OverrideProviderLabel
-                            | None -> storedMeta.OverrideProviderLabel
-
-                        let! providerResult =
-                            match resolvedOverrideLabel with
-                            | Some label -> providerFactory.TryResolveByLabel(accessContext, label)
-                            | None -> providerFactory.Resolve accessContext
-                            |> withTimeout "AI provider resolution" ChatPathIoTimeoutMs
-
-                        let provider =
-                            match providerResult with
-                            | Ok p ->
-                                // Log provider/model for ops traceability.
-                                // No key material is ever included.
-                                logger.Debug
-                                    $"AI provider resolved for user {accessContext.UserId} (conversation={conversationId}, override={resolvedOverrideLabel}): {p.Capabilities.ProviderName}/{p.Capabilities.Model}"
-
-                                p
-                            | Error err ->
-                                logger.Warn
-                                    $"AI provider resolution failed for user {accessContext.UserId} (conversation={conversationId}, override={resolvedOverrideLabel}): {ProviderResolutionError.toMessage err}"
-                                // Catastrophic configuration failure.
-                                // Surfaces via the outer try/with below
-                                // as AITaskFailed; keeps a single error
-                                // routing path for the handler.
-                                failwith (ProviderResolutionError.toMessage err)
-
-                        // Round-trippable provider history — includes every
-                        // tool_use / tool_result from prior turns. Falls back
-                        // to rebuilding from the UI-facing conversation
-                        // blob when the history sibling is absent (e.g.
-                        // conversations created before this feature
-                        // landed). The rebuild path carries no tool context
-                        // forward, which is the pre-fix behaviour — safe
-                        // but degraded for one turn until the new history
-                        // blob is written.
-                        let! providerHistory =
-                            loadProviderHistoryOrFail logger storage scope.Container conversationId
-                            |> withTimeout "Conversation history load" ChatPathIoTimeoutMs
-
-                        let! providerMessages =
-                            if List.isEmpty providerHistory then
-                                async {
-                                    let! existing =
-                                        loadConversationOrFail logger storage scope.Container conversationId
-                                        |> withTimeout "Conversation load" ChatPathIoTimeoutMs
-
-                                    return existing |> List.map toProviderMessage
-                                }
-                            else
-                                async.Return providerHistory
-
-                        let userMsg: AIProviderMessage = {
-                            Role = "user"
-                            Content = content
-                            ToolCalls = []
-                            ToolResults = []
-                            Parts = []
-                        }
-
-                        // Phase 53 substrate hook — begin the
-                        // conversation record on first turn
-                        // (idempotent) and append the user turn.
-                        // Both no-op when ConversationStore =
-                        // NoConversationStore (the default).
-                        do!
-                            convBeginIfNeeded
-                                conversationId
+                        // beacon handler (Phase 862 / 961). The team state
+                        // and the caller's role are read on the background
+                        // scope (the request's own is gone by now), and
+                        // only for an ownerless conversation.
+                        let! admission =
+                            ConversationBlobs.checkAppend
+                                (fun () ->
+                                    TeamConversationPolicyStore.ConversationVisibility.resolveState
+                                        bgCtx
+                                        storage
+                                        scope.Container)
+                                (fun state ->
+                                    ToolUp.Platform.TeamPolicyStore.TeamPolicyViewer.resolve
+                                        bgCtx.RequestServices
+                                        gateAccess
+                                        userId
+                                        state.TeamId)
+                                gateExisting
                                 userId
-                                scope.ScopeId
-                                provider.Capabilities.ProviderName
-                                provider.Capabilities.Model
-                                systemPrompt
 
-                        do!
-                            convAppendTurn
-                                scope.ScopeId
-                                conversationId
-                                "user"
-                                {
-                                    Role = "user"
-                                    Content = content
-                                    ToolCalls = []
-                                    ToolResults = []
-                                    Parts = []
-                                }
-                                None
-                                None
+                        // Phase 961 — the refusal ENDS the turn by
+                        // construction: everything the turn does sits in
+                        // the `Ok()` branch, and this `match` is the last
+                        // expression of the `try`. (Before 961 the refusal
+                        // was a `return ()` in one branch followed by the
+                        // rest of the turn; in an `async` block that does
+                        // not end the block, so a refused turn emitted
+                        // `InProgress` and read the teammate's metadata and
+                        // provider history before the disposed background
+                        // scope happened to stop it.)
+                        match admission with
+                        | Error ownerOfRecord -> do! refuseTurn ownerOfRecord
+                        | Ok() ->
+                            emit (TaskStatusChanged(taskId, InProgress))
 
-                        // Bound the replayed history. Sending the entire
-                        // prior message list verbatim grows per-turn cost
-                        // without limit and eventually hard-fails with an
-                        // opaque provider context-overflow error. Keep the
-                        // most recent N; log when older turns are dropped.
-                        let maxHistory =
-                            SystemPromptBuilder.AIAssistantServerConfig.effectiveMaxHistory config
+                            // Resolve the provider once per user message. The
+                            // agent loop may make several SendMessage calls
+                            // across tool-use turns; all share this provider
+                            // so the user's active configuration can't shift
+                            // mid-loop. A user switching providers takes effect
+                            // on their next message.
+                            //
+                            // Per-conversation default: stored override
+                            // recorded by the module-page picker. The UI
+                            // also sends it as `request.OverrideProviderLabel`
+                            // on each submit, but reading the persisted
+                            // value here is the defensive fallback for
+                            // tabs that haven't loaded the dropdown yet
+                            // and is the source of truth on reload.
+                            //
+                            // Resolution priority: request override (one-off,
+                            // explicit per-message), then conversation
+                            // override (per-conversation default), then the
+                            // factory's active-label policy.
+                            let! storedMeta =
+                                loadConversationMeta logger storage scope.Container conversationId
+                                |> withTimeout "Conversation metadata load" ChatPathIoTimeoutMs
 
-                        let trimmedHistory =
-                            let total = List.length providerMessages
+                            let resolvedOverrideLabel =
+                                match request.OverrideProviderLabel with
+                                | Some _ -> request.OverrideProviderLabel
+                                | None -> storedMeta.OverrideProviderLabel
 
-                            if total > maxHistory then
-                                let dropped = total - maxHistory
+                            let! providerResult =
+                                match resolvedOverrideLabel with
+                                | Some label -> providerFactory.TryResolveByLabel(accessContext, label)
+                                | None -> providerFactory.Resolve accessContext
+                                |> withTimeout "AI provider resolution" ChatPathIoTimeoutMs
 
-                                logger.Warn(
-                                    sprintf
-                                        "AI conversation %O: provider history is %d messages; replaying only the most recent %d (dropping %d oldest). Tune via AIAssistantServerConfig.MaxHistoryMessages."
-                                        conversationId
-                                        total
-                                        maxHistory
-                                        dropped
+                            let provider =
+                                match providerResult with
+                                | Ok p ->
+                                    // Log provider/model for ops traceability.
+                                    // No key material is ever included.
+                                    logger.Debug
+                                        $"AI provider resolved for user {accessContext.UserId} (conversation={conversationId}, override={resolvedOverrideLabel}): {p.Capabilities.ProviderName}/{p.Capabilities.Model}"
+
+                                    p
+                                | Error err ->
+                                    logger.Warn
+                                        $"AI provider resolution failed for user {accessContext.UserId} (conversation={conversationId}, override={resolvedOverrideLabel}): {ProviderResolutionError.toMessage err}"
+                                    // Catastrophic configuration failure.
+                                    // Surfaces via the outer try/with below
+                                    // as AITaskFailed; keeps a single error
+                                    // routing path for the handler.
+                                    failwith (ProviderResolutionError.toMessage err)
+
+                            // Round-trippable provider history — includes every
+                            // tool_use / tool_result from prior turns. Falls back
+                            // to rebuilding from the UI-facing conversation
+                            // blob when the history sibling is absent (e.g.
+                            // conversations created before this feature
+                            // landed). The rebuild path carries no tool context
+                            // forward, which is the pre-fix behaviour — safe
+                            // but degraded for one turn until the new history
+                            // blob is written.
+                            let! providerHistory =
+                                loadProviderHistoryOrFail logger storage scope.Container conversationId
+                                |> withTimeout "Conversation history load" ChatPathIoTimeoutMs
+
+                            let! providerMessages =
+                                if List.isEmpty providerHistory then
+                                    async {
+                                        let! existing =
+                                            loadConversationOrFail logger storage scope.Container conversationId
+                                            |> withTimeout "Conversation load" ChatPathIoTimeoutMs
+
+                                        return existing |> List.map toProviderMessage
+                                    }
+                                else
+                                    async.Return providerHistory
+
+                            let userMsg: AIProviderMessage = {
+                                Role = "user"
+                                Content = content
+                                ToolCalls = []
+                                ToolResults = []
+                                Parts = []
+                            }
+
+                            // Phase 53 substrate hook — begin the
+                            // conversation record on first turn
+                            // (idempotent) and append the user turn.
+                            // Both no-op when ConversationStore =
+                            // NoConversationStore (the default).
+                            do!
+                                convBeginIfNeeded
+                                    conversationId
+                                    userId
+                                    scope.ScopeId
+                                    provider.Capabilities.ProviderName
+                                    provider.Capabilities.Model
+                                    systemPrompt
+
+                            do!
+                                convAppendTurn
+                                    scope.ScopeId
+                                    conversationId
+                                    "user"
+                                    {
+                                        Role = "user"
+                                        Content = content
+                                        ToolCalls = []
+                                        ToolResults = []
+                                        Parts = []
+                                    }
+                                    None
+                                    None
+
+                            // Bound the replayed history. Sending the entire
+                            // prior message list verbatim grows per-turn cost
+                            // without limit and eventually hard-fails with an
+                            // opaque provider context-overflow error. Keep the
+                            // most recent N; log when older turns are dropped.
+                            let maxHistory =
+                                SystemPromptBuilder.AIAssistantServerConfig.effectiveMaxHistory config
+
+                            let trimmedHistory =
+                                let total = List.length providerMessages
+
+                                if total > maxHistory then
+                                    let dropped = total - maxHistory
+
+                                    logger.Warn(
+                                        sprintf
+                                            "AI conversation %O: provider history is %d messages; replaying only the most recent %d (dropping %d oldest). Tune via AIAssistantServerConfig.MaxHistoryMessages."
+                                            conversationId
+                                            total
+                                            maxHistory
+                                            dropped
+                                    )
+
+                                    providerMessages |> List.skip dropped
+                                else
+                                    providerMessages
+
+                            let allProviderMessages = trimmedHistory @ [ userMsg ]
+
+                            // Phase 6h: register a CancellationTokenSource for
+                            // this task. The cancel POST handler flips it; the
+                            // agent loop checks at turn boundaries and bails
+                            // cleanly via OperationCanceledException. We always
+                            // unregister in the surrounding finally to free
+                            // the entry whether cancellation fired or not.
+                            let registeredToken = cancellationRegistry.Register(taskId)
+                            userCancelToken <- registeredToken
+
+                            // Phase 6k — the worker's shutdown token joins the
+                            // per-task cancel token, so a host shutdown reaches
+                            // `runAgentLoop`'s turn-boundary checks instead of
+                            // abandoning the computation with the client still
+                            // waiting on an open stream.
+                            //
+                            // `userCancelToken` deliberately stays the REGISTERED
+                            // token. The `with` clauses below discriminate a user
+                            // cancel from every other cancellation source, and a
+                            // shutdown is not a user cancel — conflating them
+                            // would report a killed turn as a completed one.
+                            use linkedCancel =
+                                System.Threading.CancellationTokenSource.CreateLinkedTokenSource(
+                                    registeredToken,
+                                    shutdownToken
                                 )
 
-                                providerMessages |> List.skip dropped
-                            else
-                                providerMessages
+                            let cancelToken = linkedCancel.Token
 
-                        let allProviderMessages = trimmedHistory @ [ userMsg ]
-
-                        // Phase 6h: register a CancellationTokenSource for
-                        // this task. The cancel POST handler flips it; the
-                        // agent loop checks at turn boundaries and bails
-                        // cleanly via OperationCanceledException. We always
-                        // unregister in the surrounding finally to free
-                        // the entry whether cancellation fired or not.
-                        let registeredToken = cancellationRegistry.Register(taskId)
-                        userCancelToken <- registeredToken
-
-                        // Phase 6k — the worker's shutdown token joins the
-                        // per-task cancel token, so a host shutdown reaches
-                        // `runAgentLoop`'s turn-boundary checks instead of
-                        // abandoning the computation with the client still
-                        // waiting on an open stream.
-                        //
-                        // `userCancelToken` deliberately stays the REGISTERED
-                        // token. The `with` clauses below discriminate a user
-                        // cancel from every other cancellation source, and a
-                        // shutdown is not a user cancel — conflating them
-                        // would report a killed turn as a completed one.
-                        use linkedCancel =
-                            System.Threading.CancellationTokenSource.CreateLinkedTokenSource(
-                                registeredToken,
-                                shutdownToken
-                            )
-
-                        let cancelToken = linkedCancel.Token
-
-                        let! finalMessages =
-                            match shortCircuitCell.Value with
-                            | Some refusal ->
-                                // Server-side grounding guard: a prompt
-                                // builder (RAG `StrictlyGrounded` on a
-                                // retrieval miss) demanded refusal
-                                // WITHOUT a provider call. Synthesize the
-                                // assistant turn so the existing
-                                // persistence / SSE / history path runs
-                                // verbatim — no model call, no duplicated
-                                // finalisation.
-                                async {
-                                    return
+                            let! finalMessages =
+                                match shortCircuitCell.Value with
+                                | Some refusal ->
+                                    // Server-side grounding guard: a prompt
+                                    // builder (RAG `StrictlyGrounded` on a
+                                    // retrieval miss) demanded refusal
+                                    // WITHOUT a provider call. Synthesize the
+                                    // assistant turn so the existing
+                                    // persistence / SSE / history path runs
+                                    // verbatim — no model call, no duplicated
+                                    // finalisation.
+                                    async {
+                                        return
+                                            allProviderMessages
+                                            @ [
+                                                {
+                                                    Role = "assistant"
+                                                    Content = refusal
+                                                    ToolCalls = []
+                                                    ToolResults = []
+                                                    Parts = []
+                                                }
+                                            ]
+                                    }
+                                | None ->
+                                    runAgentLoopWithInput
+                                        provider
+                                        registry
+                                        dispatchRegistry
+                                        bgCtx
+                                        taskId
+                                        conversationId
+                                        effectiveSurface
+                                        request.ActiveModule
+                                        request.ActivePage
+                                        cancelToken
                                         allProviderMessages
-                                        @ [
-                                            {
-                                                Role = "assistant"
-                                                Content = refusal
-                                                ToolCalls = []
-                                                ToolResults = []
-                                                Parts = []
-                                            }
-                                        ]
-                                }
-                            | None ->
-                                runAgentLoopWithInput
-                                    provider
-                                    registry
-                                    dispatchRegistry
-                                    bgCtx
+                                        modelInput
+                                        (fun evt -> emit evt)
+
+                            // Persist the full round-trippable history first —
+                            // this is what the next turn will load to maintain
+                            // tool_use / tool_result pairing with the provider.
+                            do! saveProviderHistoryOrFail logger storage scope.Container conversationId finalMessages
+
+                            // Persist the UI-facing conversation blob: user
+                            // prompt + final assistant text (intermediate
+                            // tool_use / tool_result steps are not rendered in
+                            // the chat history, though they remain inspectable
+                            // via the history blob for audit or future UI).
+                            let! existingUiMessages =
+                                loadConversationOrFail logger storage scope.Container conversationId
+
+                            let userConvMsg =
+                                toConversationMessage conversationId User content [] [] [] userId None
+
+                            let modelEmittedContent =
+                                finalMessages
+                                |> List.tryFindBack (fun m -> m.Role = "assistant")
+                                |> Option.map _.Content
+                                |> Option.defaultValue ""
+
+                            // Phase 6q follow-up A — post-stream citation
+                            // normalisation. Resolves `ICitationNormaliser`
+                            // from DI; when registered (RAG composed with
+                            // a non-Off policy) and the turn produced both
+                            // retrieved sources AND assistant text, run the
+                            // normaliser, emit one audit event per
+                            // `CitationEvent`, and persist the rewritten
+                            // text. Non-RAG deployments resolve `null` →
+                            // byte-for-byte pre-Phase-6q behaviour.
+                            let citationNormaliserOpt =
+                                match bgCtx.RequestServices.GetService(typeof<ICitationNormaliser>) with
+                                | :? ICitationNormaliser as n -> Some n
+                                | _ -> None
+
+                            let providerName = provider.Capabilities.ProviderName
+                            let providerModel = provider.Capabilities.Model
+
+                            let citationEventStore =
+                                match bgCtx.RequestServices.GetService(typeof<IEventStore>) with
+                                | :? IEventStore as store -> Some store
+                                | _ -> None
+
+                            let! finalContent =
+                                match citationNormaliserOpt with
+                                | Some normaliser when
+                                    not (List.isEmpty retrievedSourcesCell.Value)
+                                    && not (System.String.IsNullOrEmpty modelEmittedContent)
+                                      ->
+                                      async {
+                                          let result =
+                                              normaliser.Normalise(
+                                                  retrievedSourcesCell.Value,
+                                                  modelEmittedContent,
+                                                  providerName,
+                                                  providerModel
+                                              )
+
+                                          // Emit one audit event per recognised
+                                          // citation event so operators can correlate
+                                          // model drift with prompt changes. Best-
+                                          // effort: a wedged event store must never
+                                          // crash the conversation. Same shape as the
+                                          // denial-audit emission in AIAgentEngine.fs.
+                                          match citationEventStore with
+                                          | Some store ->
+                                              for evt in result.Events do
+                                                  let sourceModule, eventType, sourceIndexJson =
+                                                      match evt.Action with
+                                                      | NormalisedToCanonical idx ->
+                                                          "_platform.ai.citation.normalised", "Normalised", Some idx
+                                                      | StrippedPhantom ->
+                                                          "_platform.ai.citation.stripped", "Stripped", None
+                                                      | UnverifiedTagged ->
+                                                          "_platform.ai.citation.stripped", "UnverifiedTagged", None
+
+                                                  let payload = {|
+                                                      TaskId = taskId
+                                                      ConversationId = conversationId
+                                                      ProviderName = providerName
+                                                      ProviderModel = providerModel
+                                                      Variant = evt.Variant
+                                                      Digit = evt.Digit
+                                                      Action = eventType
+                                                      SourceIndex = sourceIndexJson
+                                                  |}
+
+                                                  let evtRecord: ModuleEvent = {
+                                                      Id = Guid.NewGuid()
+                                                      OccurredAt = DateTime.UtcNow
+                                                      ScopeId = scope.ScopeId
+                                                      SourceModule = sourceModule
+                                                      EventType = eventType
+                                                      Payload = toJson payload
+                                                  }
+
+                                                  try
+                                                      do! store.Write evtRecord
+                                                  with ex ->
+                                                      logger.Warn
+                                                          $"AI citation-audit write failed (taskId={taskId}, action={eventType}): {ex.Message}. Record dropped; conversation unaffected."
+                                          | None -> ()
+
+                                          return result.Text
+                                      }
+                                | _ -> async.Return modelEmittedContent
+
+                            // Phase 523 — numeric-fidelity answer gate. Resolves
+                            // the opt-in `AnswerGate` + metric registry + metrics
+                            // sink from the background DI scope; when the gate is
+                            // absent (the default) `runVerificationStage`
+                            // short-circuits to `finalContent` verbatim with no
+                            // verdict, no SSE event, no audit, no metric — the
+                            // pre-523 path byte-for-byte (GP 11 / GP 13). In
+                            // `Annotate` / `Strict` mode it verifies every numeric
+                            // token against the turn's retrieved facts, appends a
+                            // footnote (or withholds unverified sentences behind an
+                            // inline flag), and returns the verdict to ride the
+                            // persisted `ConversationMessage` and the SSE stream.
+                            let answerGateOpt =
+                                match bgCtx.RequestServices.GetService(typeof<AnswerVerifier.AnswerGate>) with
+                                | :? AnswerVerifier.AnswerGate as g -> Some g
+                                | _ -> None
+
+                            let metricRegistryOpt =
+                                match bgCtx.RequestServices.GetService(typeof<Grounding.IMetricRegistry>) with
+                                | :? Grounding.IMetricRegistry as r -> Some r
+                                | _ -> None
+
+                            let answerMetricsSinkOpt =
+                                match bgCtx.RequestServices.GetService(typeof<Metrics.IMetricsSink>) with
+                                | :? Metrics.IMetricsSink as s -> Some s
+                                | _ -> None
+
+                            // Phase 680 — the provenance join. `IAuditLog` is
+                            // composed by the platform, so a gate-on deployment
+                            // gets the typed row (and, through it, whichever
+                            // sinks it composed) without opting into anything
+                            // further; `IAnswerProvenanceAnchors` is opt-in
+                            // (`withAnswerProvenanceAnchors`) and absent leaves
+                            // the row's join fields honestly `None`.
+                            let answerAuditJoin: AnswerVerifier.AnswerAuditJoin = {
+                                AuditLog =
+                                    match bgCtx.RequestServices.GetService(typeof<IAuditLog>) with
+                                    | :? IAuditLog as a -> Some a
+                                    | _ -> None
+                                Anchors =
+                                    match bgCtx.RequestServices.GetService(typeof<IAnswerProvenanceAnchors>) with
+                                    | :? IAnswerProvenanceAnchors as a -> Some a
+                                    | _ -> None
+                            }
+
+                            let! (verifiedContent, verificationOpt) =
+                                AnswerVerifier.runVerificationStageWithJoin
+                                    answerGateOpt
+                                    metricRegistryOpt
+                                    retrievedSourcesCell.Value
+                                    finalContent
+                                    answerMetricsSinkOpt
+                                    citationEventStore
+                                    answerAuditJoin
+                                    scope.ScopeId
                                     taskId
                                     conversationId
-                                    effectiveSurface
-                                    request.ActiveModule
-                                    request.ActivePage
-                                    cancelToken
-                                    allProviderMessages
-                                    modelInput
-                                    (fun evt -> emit evt)
-
-                        // Persist the full round-trippable history first —
-                        // this is what the next turn will load to maintain
-                        // tool_use / tool_result pairing with the provider.
-                        do! saveProviderHistoryOrFail logger storage scope.Container conversationId finalMessages
-
-                        // Persist the UI-facing conversation blob: user
-                        // prompt + final assistant text (intermediate
-                        // tool_use / tool_result steps are not rendered in
-                        // the chat history, though they remain inspectable
-                        // via the history blob for audit or future UI).
-                        let! existingUiMessages = loadConversationOrFail logger storage scope.Container conversationId
-
-                        let userConvMsg =
-                            toConversationMessage conversationId User content [] [] [] userId None
-
-                        let modelEmittedContent =
-                            finalMessages
-                            |> List.tryFindBack (fun m -> m.Role = "assistant")
-                            |> Option.map _.Content
-                            |> Option.defaultValue ""
-
-                        // Phase 6q follow-up A — post-stream citation
-                        // normalisation. Resolves `ICitationNormaliser`
-                        // from DI; when registered (RAG composed with
-                        // a non-Off policy) and the turn produced both
-                        // retrieved sources AND assistant text, run the
-                        // normaliser, emit one audit event per
-                        // `CitationEvent`, and persist the rewritten
-                        // text. Non-RAG deployments resolve `null` →
-                        // byte-for-byte pre-Phase-6q behaviour.
-                        let citationNormaliserOpt =
-                            match bgCtx.RequestServices.GetService(typeof<ICitationNormaliser>) with
-                            | :? ICitationNormaliser as n -> Some n
-                            | _ -> None
-
-                        let providerName = provider.Capabilities.ProviderName
-                        let providerModel = provider.Capabilities.Model
-
-                        let citationEventStore =
-                            match bgCtx.RequestServices.GetService(typeof<IEventStore>) with
-                            | :? IEventStore as store -> Some store
-                            | _ -> None
-
-                        let! finalContent =
-                            match citationNormaliserOpt with
-                            | Some normaliser when
-                                not (List.isEmpty retrievedSourcesCell.Value)
-                                && not (System.String.IsNullOrEmpty modelEmittedContent)
-                                  ->
-                                  async {
-                                      let result =
-                                          normaliser.Normalise(
-                                              retrievedSourcesCell.Value,
-                                              modelEmittedContent,
-                                              providerName,
-                                              providerModel
-                                          )
-
-                                      // Emit one audit event per recognised
-                                      // citation event so operators can correlate
-                                      // model drift with prompt changes. Best-
-                                      // effort: a wedged event store must never
-                                      // crash the conversation. Same shape as the
-                                      // denial-audit emission in AIAgentEngine.fs.
-                                      match citationEventStore with
-                                      | Some store ->
-                                          for evt in result.Events do
-                                              let sourceModule, eventType, sourceIndexJson =
-                                                  match evt.Action with
-                                                  | NormalisedToCanonical idx ->
-                                                      "_platform.ai.citation.normalised", "Normalised", Some idx
-                                                  | StrippedPhantom ->
-                                                      "_platform.ai.citation.stripped", "Stripped", None
-                                                  | UnverifiedTagged ->
-                                                      "_platform.ai.citation.stripped", "UnverifiedTagged", None
-
-                                              let payload = {|
-                                                  TaskId = taskId
-                                                  ConversationId = conversationId
-                                                  ProviderName = providerName
-                                                  ProviderModel = providerModel
-                                                  Variant = evt.Variant
-                                                  Digit = evt.Digit
-                                                  Action = eventType
-                                                  SourceIndex = sourceIndexJson
-                                              |}
-
-                                              let evtRecord: ModuleEvent = {
-                                                  Id = Guid.NewGuid()
-                                                  OccurredAt = DateTime.UtcNow
-                                                  ScopeId = scope.ScopeId
-                                                  SourceModule = sourceModule
-                                                  EventType = eventType
-                                                  Payload = toJson payload
-                                              }
-
-                                              try
-                                                  do! store.Write evtRecord
-                                              with ex ->
-                                                  logger.Warn
-                                                      $"AI citation-audit write failed (taskId={taskId}, action={eventType}): {ex.Message}. Record dropped; conversation unaffected."
-                                      | None -> ()
-
-                                      return result.Text
-                                  }
-                            | _ -> async.Return modelEmittedContent
-
-                        // Phase 523 — numeric-fidelity answer gate. Resolves
-                        // the opt-in `AnswerGate` + metric registry + metrics
-                        // sink from the background DI scope; when the gate is
-                        // absent (the default) `runVerificationStage`
-                        // short-circuits to `finalContent` verbatim with no
-                        // verdict, no SSE event, no audit, no metric — the
-                        // pre-523 path byte-for-byte (GP 11 / GP 13). In
-                        // `Annotate` / `Strict` mode it verifies every numeric
-                        // token against the turn's retrieved facts, appends a
-                        // footnote (or withholds unverified sentences behind an
-                        // inline flag), and returns the verdict to ride the
-                        // persisted `ConversationMessage` and the SSE stream.
-                        let answerGateOpt =
-                            match bgCtx.RequestServices.GetService(typeof<AnswerVerifier.AnswerGate>) with
-                            | :? AnswerVerifier.AnswerGate as g -> Some g
-                            | _ -> None
-
-                        let metricRegistryOpt =
-                            match bgCtx.RequestServices.GetService(typeof<Grounding.IMetricRegistry>) with
-                            | :? Grounding.IMetricRegistry as r -> Some r
-                            | _ -> None
-
-                        let answerMetricsSinkOpt =
-                            match bgCtx.RequestServices.GetService(typeof<Metrics.IMetricsSink>) with
-                            | :? Metrics.IMetricsSink as s -> Some s
-                            | _ -> None
-
-                        // Phase 680 — the provenance join. `IAuditLog` is
-                        // composed by the platform, so a gate-on deployment
-                        // gets the typed row (and, through it, whichever
-                        // sinks it composed) without opting into anything
-                        // further; `IAnswerProvenanceAnchors` is opt-in
-                        // (`withAnswerProvenanceAnchors`) and absent leaves
-                        // the row's join fields honestly `None`.
-                        let answerAuditJoin: AnswerVerifier.AnswerAuditJoin = {
-                            AuditLog =
-                                match bgCtx.RequestServices.GetService(typeof<IAuditLog>) with
-                                | :? IAuditLog as a -> Some a
-                                | _ -> None
-                            Anchors =
-                                match bgCtx.RequestServices.GetService(typeof<IAnswerProvenanceAnchors>) with
-                                | :? IAnswerProvenanceAnchors as a -> Some a
-                                | _ -> None
-                        }
-
-                        let! (verifiedContent, verificationOpt) =
-                            AnswerVerifier.runVerificationStageWithJoin
-                                answerGateOpt
-                                metricRegistryOpt
-                                retrievedSourcesCell.Value
-                                finalContent
-                                answerMetricsSinkOpt
-                                citationEventStore
-                                answerAuditJoin
-                                scope.ScopeId
-                                taskId
-                                conversationId
-                                providerName
-                                providerModel
-                                logger
-
-                        // Surface the per-message verdict on the SSE stream
-                        // (`Annotate` / `Strict` only; `Off` returns `None`).
-                        match verificationOpt with
-                        | Some verification -> emit (AnswerVerified(conversationId, verification))
-                        | None -> ()
-
-                        let assistantConvMsg =
-                            toConversationMessage
-                                conversationId
-                                AIAssistant
-                                verifiedContent
-                                []
-                                retrievedSourcesCell.Value
-                                []
-                                ""
-                                verificationOpt
-
-                        let updatedConversation = existingUiMessages @ [ userConvMsg; assistantConvMsg ]
-
-                        do! saveConversationOrFail logger storage scope.Container conversationId updatedConversation
-
-                        // Phase 53 substrate hook — append the
-                        // assistant turn + mark the conversation
-                        // Completed. No-op when ConversationStore =
-                        // NoConversationStore.
-                        do!
-                            convAppendTurn
-                                scope.ScopeId
-                                conversationId
-                                "assistant"
-                                {
-                                    Role = "assistant"
-                                    Content = verifiedContent
-                                    ToolCalls =
-                                        finalMessages
-                                        |> List.tryFindBack (fun m -> m.Role = "assistant")
-                                        |> Option.map _.ToolCalls
-                                        |> Option.defaultValue []
-                                    ToolResults = []
-                                    Parts = []
-                                }
-                                None
-                                None
-
-                        do! convMarkStatus scope.ScopeId conversationId ConversationStatus.Completed
-
-                        emit (TaskStatusChanged(taskId, AITaskCompleted))
-
-                        // Phase 6h: free the cancellation entry on
-                        // natural completion. The cancel POST handler
-                        // already removes the entry on cancellation,
-                        // so this is the no-cancel path.
-                        cancellationRegistry.Unregister(taskId)
-
-                        // Phase 516.B — title a new conversation after its
-                        // first turn, AFTER the terminal event so the reply
-                        // is never kept waiting on it. A no-op unless a
-                        // generating policy is composed; never throws.
-                        if existingUiMessages.IsEmpty then
-                            do!
-                                ConversationTitling.titleConversation
+                                    providerName
+                                    providerModel
                                     logger
-                                    storage
-                                    scope.Container
+
+                            // Surface the per-message verdict on the SSE stream
+                            // (`Annotate` / `Strict` only; `Off` returns `None`).
+                            match verificationOpt with
+                            | Some verification -> emit (AnswerVerified(conversationId, verification))
+                            | None -> ()
+
+                            let assistantConvMsg =
+                                toConversationMessage
                                     conversationId
-                                    titlingPolicy
-                                    provider
-                                    content
+                                    AIAssistant
+                                    verifiedContent
+                                    []
+                                    retrievedSourcesCell.Value
+                                    []
+                                    ""
+                                    verificationOpt
+
+                            let updatedConversation = existingUiMessages @ [ userConvMsg; assistantConvMsg ]
+
+                            do! saveConversationOrFail logger storage scope.Container conversationId updatedConversation
+
+                            // Phase 53 substrate hook — append the
+                            // assistant turn + mark the conversation
+                            // Completed. No-op when ConversationStore =
+                            // NoConversationStore.
+                            do!
+                                convAppendTurn
+                                    scope.ScopeId
+                                    conversationId
+                                    "assistant"
+                                    {
+                                        Role = "assistant"
+                                        Content = verifiedContent
+                                        ToolCalls =
+                                            finalMessages
+                                            |> List.tryFindBack (fun m -> m.Role = "assistant")
+                                            |> Option.map _.ToolCalls
+                                            |> Option.defaultValue []
+                                        ToolResults = []
+                                        Parts = []
+                                    }
+                                    None
+                                    None
+
+                            do! convMarkStatus scope.ScopeId conversationId ConversationStatus.Completed
+
+                            emit (TaskStatusChanged(taskId, AITaskCompleted))
+
+                            // Phase 6h: free the cancellation entry on
+                            // natural completion. The cancel POST handler
+                            // already removes the entry on cancellation,
+                            // so this is the no-cancel path.
+                            cancellationRegistry.Unregister(taskId)
+
+                            // Phase 516.B — title a new conversation after its
+                            // first turn, AFTER the terminal event so the reply
+                            // is never kept waiting on it. A no-op unless a
+                            // generating policy is composed; never throws.
+                            if existingUiMessages.IsEmpty then
+                                do!
+                                    ConversationTitling.titleConversation
+                                        logger
+                                        storage
+                                        scope.Container
+                                        conversationId
+                                        titlingPolicy
+                                        provider
+                                        content
                     with
                     | :? System.OperationCanceledException when userCancelToken.IsCancellationRequested ->
                         // Phase 6h: user-initiated cancel. The agent
