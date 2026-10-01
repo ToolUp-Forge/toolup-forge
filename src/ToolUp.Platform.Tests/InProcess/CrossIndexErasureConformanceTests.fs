@@ -536,46 +536,54 @@ let private utf8 (s: string) = Encoding.UTF8.GetBytes s
 
 /// The run's outcome as the DSR ledger records it: preview, confirm, and
 /// the audit kinds the orchestrator emitted for the request.
-let private ledgerKinds (handler: ToolUp.Platform.IDataExporter.IErasureHandler) (scopeId: string) = async {
-    let events = ResizeArray<DataSubjectRequestApiHandler.DsrAuditEvent>()
+let private ledgerKindsWith
+    (policy: ErasurePolicy)
+    (handler: ToolUp.Platform.IDataExporter.IErasureHandler)
+    (scopeId: string)
+    =
+    async {
+        let events = ResizeArray<DataSubjectRequestApiHandler.DsrAuditEvent>()
 
-    let admin: AccessContext = {
-        AccessContext.unrestricted (AuthenticatedUser "admin-actor") with
-            PlatformRole = Some PlatformRole.PlatformAdmin
-    }
-
-    let api =
-        DataSubjectRequestApiHandler.create
-            []
-            [ handler ]
-            ErasurePolicy.Tombstone
-            scopeId
-            "admin-actor"
-            admin
-            (fun e -> async { lock events (fun () -> events.Add e) })
-            None
-
-    let! preview =
-        api.PreviewErasure {
-            SubjectUserId = "u1"
-            TeamId = None
-            Reason = "Phase 960"
-            OverridePolicy = None
+        let admin: AccessContext = {
+            AccessContext.unrestricted (AuthenticatedUser "admin-actor") with
+                PlatformRole = Some PlatformRole.PlatformAdmin
         }
 
-    match preview with
-    | Error e -> return failtestf "preview failed: %s" e
-    | Ok p ->
-        let! _ = api.ConfirmErasure p.Request.Id
-        return events |> Seq.map _.Kind |> List.ofSeq
-}
+        let api =
+            DataSubjectRequestApiHandler.create
+                []
+                [ handler ]
+                policy
+                scopeId
+                "admin-actor"
+                admin
+                (fun e -> async { lock events (fun () -> events.Add e) })
+                None
+
+        let! preview =
+            api.PreviewErasure {
+                SubjectUserId = "u1"
+                TeamId = None
+                Reason = "Phase 960 / 965"
+                OverridePolicy = None
+            }
+
+        match preview with
+        | Error e -> return failtestf "preview failed: %s" e
+        | Ok p ->
+            let! _ = api.ConfirmErasure p.Request.Id
+            return events |> Seq.map _.Kind |> List.ofSeq
+    }
+
+let private ledgerKinds handler scopeId =
+    ledgerKindsWith ErasurePolicy.Tombstone handler scopeId
 
 let private expectPartialFailure (handlerName: string) (result: Result<ErasureSummary, ErasureError>) =
     match result with
     | Error(HandlerPartialFailure(name, partial, detail)) ->
         Expect.equal name handlerName "the failure names its handler"
         partial, detail
-    | other -> failtestf "a refused redaction must fail the erasure with HandlerPartialFailure; got %A" other
+    | other -> failtestf "a refused write or delete must fail the erasure with HandlerPartialFailure; got %A" other
 
 let private configDoc (scopeId: string) (moduleKey: string) = $"config/{scopeId}/{moduleKey}.json"
 
@@ -745,10 +753,241 @@ let private phase960Tests =
         }
     ]
 
+// ─── Phase 965 — a hard-delete erasure that could not delete says so ───
+//
+// The `HardDelete` arms of the same two functions fanned their `Delete`
+// calls out through `Async.Parallel |> Async.Ignore`. `IBlobStorage.Delete`
+// is idempotent on a missing blob (`IBlobStorageContract` pins it on every
+// bound backend), so an `Error` from it is a refusal, never a not-found —
+// and it was discarded: the erasure returned `Ok` with every matched record
+// counted, and the DSR ledger recorded `ErasureCompleted` over a blob that
+// still named the subject.
+
+/// `Delete` returns `Error` for every blob name `refused` selects; every
+/// other operation passes through to `inner`.
+type private DeleteRefusingBlobStorage(inner: IBlobStorage, refused: string -> bool) =
+    interface IBlobStorage with
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            BlobStorage.composeNotSupported "test double"
+
+        member _.Upload(container, blobName, content) =
+            inner.Upload(container, blobName, content)
+
+        member _.Download(container, blobName) = inner.Download(container, blobName)
+
+        member _.Delete(container, blobName) =
+            if refused blobName then
+                async { return Error "simulated storage delete refusal" }
+            else
+                inner.Delete(container, blobName)
+
+        member _.List(container, prefix) = inner.List(container, prefix)
+        member _.Exists(container, blobName) = inner.Exists(container, blobName)
+        member _.GetMetadata(container, blobName) = inner.GetMetadata(container, blobName)
+
+        member _.DownloadRange(container, blobName, offset, length) =
+            inner.DownloadRange(container, blobName, offset, length)
+
+        member _.Erase(container, prefix, policy, dryRun) =
+            inner.Erase(container, prefix, policy, dryRun)
+
+let private blobExists (inner: IBlobStorage) (container: string) (name: string) = async {
+    match! inner.Download(container, name) with
+    | Ok _ -> return true
+    | Error _ -> return false
+}
+
+let private phase965Tests =
+    testList "Phase 965 — a refused delete fails the erasure" [
+
+        testAsync "config: one refused delete of two fails the erasure and names the blob" {
+            let inner = InMemoryBlobStorage() :> IBlobStorage
+            let modA = configDoc "team-1" "modA"
+            let modB = configDoc "team-1" "modB"
+            let! _ = inner.Upload("_platform", modA, utf8 """{"owner":"\"u1@x\""}""")
+            let! _ = inner.Upload("_platform", modB, utf8 """{"owner":"\"u1@x\""}""")
+
+            let refusing = DeleteRefusingBlobStorage(inner, (=) modB) :> IBlobStorage
+            let store = ToolUp.Platform.ConfigStore.create refusing
+            let! result = store.Erase("team-1", "u1", ErasurePolicy.HardDelete, false)
+
+            let partial, detail = expectPartialFailure "config" result
+            Expect.stringContains detail modB "the failure names the blob that was not deleted"
+            Expect.isFalse (detail.Contains modA) "a blob that was deleted is not named as a failure"
+            Expect.equal partial.RecordsAffected 1 "the partial summary counts only what was deleted"
+
+            let! aThere = blobExists inner "_platform" modA
+            let! bThere = blobExists inner "_platform" modB
+            Expect.isFalse aThere "the delete that landed stays landed"
+            Expect.isTrue bThere "the refused blob is still in the container"
+
+            // Idempotent and re-runnable: a healthy store finishes the job.
+            let! rerun =
+                (ToolUp.Platform.ConfigStore.create inner).Erase("team-1", "u1", ErasurePolicy.HardDelete, false)
+
+            match rerun with
+            | Ok s -> Expect.equal s.RecordsAffected 1 "the re-run deletes exactly the one that was left"
+            | Error e -> failtestf "the re-run over a healthy store must succeed: %A" e
+
+            let! bAfter = blobExists inner "_platform" modB
+            Expect.isFalse bAfter "the re-run deleted it"
+        }
+
+        testAsync "config: every refused delete is named, and a fully-refused erasure counts nothing" {
+            let inner = InMemoryBlobStorage() :> IBlobStorage
+            let modA = configDoc "team-2" "modA"
+            let modB = configDoc "team-2" "modB"
+            let! _ = inner.Upload("_platform", modA, utf8 """{"owner":"\"u1@x\""}""")
+            let! _ = inner.Upload("_platform", modB, utf8 """{"owner":"\"u1@x\""}""")
+
+            let refusing = DeleteRefusingBlobStorage(inner, (fun _ -> true)) :> IBlobStorage
+
+            let! result =
+                (ToolUp.Platform.ConfigStore.create refusing).Erase("team-2", "u1", ErasurePolicy.HardDelete, false)
+
+            let partial, detail = expectPartialFailure "config" result
+            Expect.stringContains detail modA "the first refused blob is named"
+            Expect.stringContains detail modB "the second refused blob is named"
+            Expect.equal partial.RecordsAffected 0 "nothing was deleted"
+        }
+
+        testAsync "config: the DSR ledger records the failure, never completion" {
+            let inner = InMemoryBlobStorage() :> IBlobStorage
+            let! _ = inner.Upload("_platform", configDoc "team-l" "modA", utf8 """{"owner":"\"u1@x\""}""")
+            let! _ = inner.Upload("_platform", configDoc "team-l" "modB", utf8 """{"owner":"\"u1@x\""}""")
+
+            let refusing =
+                DeleteRefusingBlobStorage(inner, (=) (configDoc "team-l" "modB")) :> IBlobStorage
+
+            let handler =
+                ToolUp.Platform.ConfigStoreErasureHandler.erasureHandler (ToolUp.Platform.ConfigStore.create refusing)
+
+            let! kinds = ledgerKindsWith ErasurePolicy.HardDelete handler "team-l"
+            Expect.contains kinds DataSubjectRequestApiHandler.ErasureFailed "the ledger records the failure"
+
+            Expect.isFalse
+                (List.contains DataSubjectRequestApiHandler.ErasureCompleted kinds)
+                "the ledger never records completion over an undeleted blob"
+        }
+
+        testAsync "data objects: one refused version delete fails the erasure and names the blob" {
+            let inner = InMemoryBlobStorage() :> IBlobStorage
+
+            let healthy =
+                ToolUp.Platform.DataObjectStore.DataObjectStore(inner) :> IDataObjectStore
+
+            let! _ = healthy.Save("team-1", "o1", utf8 "secret-1", "dt", "u1", Map.empty, Versioned)
+            let! _ = healthy.Save("team-1", "o2", utf8 "secret-2", "dt", "u1", Map.empty, Versioned)
+            let refusedName = "objects/o2/v1.json"
+
+            let failing =
+                ToolUp.Platform.DataObjectStore.DataObjectStore(DeleteRefusingBlobStorage(inner, (=) refusedName))
+                :> IDataObjectStore
+
+            let! result = failing.Erase("team-1", "u1", ErasurePolicy.HardDelete, false)
+
+            let partial, detail = expectPartialFailure "data-objects" result
+            Expect.stringContains detail refusedName "the failure names the blob that was not deleted"
+            Expect.isFalse (detail.Contains "objects/o1/") "a blob that was deleted is not named as a failure"
+            Expect.equal partial.RecordsAffected 1 "the partial summary counts only the object that was deleted"
+
+            let! o1Meta = blobExists inner "team-1" "objects/o1/v1.json"
+            let! o2Meta = blobExists inner "team-1" refusedName
+            Expect.isFalse o1Meta "the delete that landed stays landed"
+            Expect.isTrue o2Meta "the refused version blob is still in the container"
+
+            // The refused object is still READABLE: the metadata that names
+            // its content survives, so the bytes must not be reclaimed.
+            match! healthy.Get("team-1", "o2") with
+            | Ok(_, content) ->
+                Expect.equal (Encoding.UTF8.GetString content) "secret-2" "its content was not reclaimed from under it"
+            | Error e -> failtestf "o2 must still be readable: %A" e
+
+            let! rerun = healthy.Erase("team-1", "u1", ErasurePolicy.HardDelete, false)
+
+            match rerun with
+            | Ok s -> Expect.equal s.RecordsAffected 1 "the re-run deletes exactly the one that was left"
+            | Error e -> failtestf "the re-run over a healthy store must succeed: %A" e
+
+            let! o2After = blobExists inner "team-1" refusedName
+            Expect.isFalse o2After "the re-run deleted it"
+        }
+
+        testAsync
+            "data objects: a refused delete leaves a deleted object's content reclaimed and the refused one's intact" {
+            let inner = InMemoryBlobStorage() :> IBlobStorage
+
+            let healthy =
+                ToolUp.Platform.DataObjectStore.DataObjectStore(inner) :> IDataObjectStore
+
+            let! _ = healthy.Save("team-c", "o1", utf8 "secret-1", "dt", "u1", Map.empty, Versioned)
+            let! _ = healthy.Save("team-c", "o2", utf8 "secret-2", "dt", "u1", Map.empty, Versioned)
+
+            let contentCount () = async {
+                let! names = inner.List("team-c", "objects/_content/")
+                return names |> List.filter _.EndsWith(".data") |> List.length
+            }
+
+            let! before = contentCount ()
+            Expect.equal before 2 "two content blobs before the erasure"
+
+            let failing =
+                ToolUp.Platform.DataObjectStore.DataObjectStore(
+                    DeleteRefusingBlobStorage(inner, (=) "objects/o2/v1.json")
+                )
+                :> IDataObjectStore
+
+            let! result = failing.Erase("team-c", "u1", ErasurePolicy.HardDelete, false)
+            expectPartialFailure "data-objects" result |> ignore
+
+            // o1's metadata went, so its bytes are reclaimed — a re-run
+            // could not find them again. o2's metadata survives, so its
+            // bytes do too.
+            let! after = contentCount ()
+            Expect.equal after 1 "only the refused object's content remains"
+
+            match! healthy.Get("team-c", "o2") with
+            | Ok(_, content) -> Expect.equal (Encoding.UTF8.GetString content) "secret-2" "o2 is still whole"
+            | Error e -> failtestf "o2 must still be readable: %A" e
+        }
+
+        testAsync "data objects: the DSR ledger records the failure, never completion" {
+            let inner = InMemoryBlobStorage() :> IBlobStorage
+
+            let healthy =
+                ToolUp.Platform.DataObjectStore.DataObjectStore(inner) :> IDataObjectStore
+
+            let! _ = healthy.Save("team-l", "o1", utf8 "secret-1", "dt", "u1", Map.empty, Versioned)
+            let! _ = healthy.Save("team-l", "o2", utf8 "secret-2", "dt", "u1", Map.empty, Versioned)
+
+            let failing =
+                ToolUp.Platform.DataObjectStore.DataObjectStore(
+                    DeleteRefusingBlobStorage(inner, (=) "objects/o2/v1.json")
+                )
+                :> IDataObjectStore
+
+            let! kinds =
+                ledgerKindsWith
+                    ErasurePolicy.HardDelete
+                    (ToolUp.Platform.DataObjectStoreErasureHandler.erasureHandler failing)
+                    "team-l"
+
+            Expect.contains kinds DataSubjectRequestApiHandler.ErasureFailed "the ledger records the failure"
+
+            Expect.isFalse
+                (List.contains DataSubjectRequestApiHandler.ErasureCompleted kinds)
+                "the ledger never records completion over an undeleted blob"
+        }
+    ]
+
 let tests =
     testList "Phase 204 — cross-index erasure conformance" [
 
         phase960Tests
+
+        phase965Tests
 
         propertyTests "InMemoryBM25Index" (fun () -> bm25Factory, ignore)
 
