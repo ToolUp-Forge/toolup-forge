@@ -1273,7 +1273,8 @@ jobs:
   # Before the client harness, the same script also sizes the client
   # bundles, which costs this job three more steps: `npm ci` in
   # samples/MinimalClient (its own lockfile, which the setup-node cache
-  # below is not keyed on), a second Fable compile (samples/MinimalClient,
+  # below is keyed on beside the harness's since Phase 964, so a warm
+  # run restores it), a second Fable compile (samples/MinimalClient,
   # ~1.5 min on a runner), and two Vite production builds — the minimal
   # sample's own entry and the SDK shell's module graph with every export
   # kept (vite.shell.config.mts) — into artifacts/perf-budget/bundles/.
@@ -1297,7 +1298,11 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: src/ToolUp.AI.Client.Tests/package-lock.json
+          # Both lockfiles this job installs from: the client harness and
+          # samples/MinimalClient (Phase 964 — the second was uncached).
+          cache-dependency-path: |
+            src/ToolUp.AI.Client.Tests/package-lock.json
+            samples/MinimalClient/package-lock.json
 
       - name: Cache NuGet packages
         uses: actions/cache@v4
