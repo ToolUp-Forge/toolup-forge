@@ -342,6 +342,9 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
     // scope's document count and any chunks the fan-out left retrievable.
     let mutable documentCount = 0
     let mutable orphanChunkCount = 0
+    // Phase 971 — the blobs the wipe could not remove (each with its
+    // refusal); non-empty fails the reset.
+    let mutable wipeRefusals: string list = []
 
     let lock = acquireContainerLock deps.Scope.Container
     do! lock.WaitAsync() |> Async.AwaitTask
@@ -357,13 +360,41 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
 
         documentCount <- priorDocs.Length
 
-        try
-            let! blobs = deps.Storage.List(deps.Scope.Container, "knowledge/")
+        // Phase 971 — every delete is attempted and every refusal
+        // collected. The index blob is what lists the scope's documents,
+        // so it goes LAST and only once every other blob went: deleting
+        // it while a refused upload stays at rest would leave bytes no
+        // listing can reach. A refusal fails the reset with the
+        // survivors named, the index intact, so a re-run re-finds them.
+        let! listing = async {
+            try
+                let! blobs = deps.Storage.List(deps.Scope.Container, "knowledge/")
+                return Ok blobs
+            with ex ->
+                return Error ex
+        }
 
-            for blobName in blobs do
-                let! _ = deps.Storage.Delete(deps.Scope.Container, blobName)
-                ()
-        with ex ->
+        let deleteCollecting (names: string list) = async {
+            let refused = ResizeArray<string>()
+
+            for blobName in names do
+                match! deps.Storage.Delete(deps.Scope.Container, blobName) with
+                | Ok() -> ()
+                | Error e -> refused.Add(sprintf "%s (%s)" blobName e)
+
+            return List.ofSeq refused
+        }
+
+        match listing with
+        | Ok blobs ->
+            let! refused = deleteCollecting (blobs |> List.filter (fun b -> b <> indexBlobName))
+
+            if refused.IsEmpty then
+                let! indexRefused = deleteCollecting [ indexBlobName ]
+                wipeRefusals <- indexRefused
+            else
+                wipeRefusals <- refused
+        | Error ex ->
             deps.Logger.Warn(
                 sprintf
                     "[KnowledgeBase] ResetIndex: blob list failed for %s; falling back to index-only delete (%s)"
@@ -371,8 +402,8 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
                     ex.Message
             )
 
-            let! _ = deps.Storage.Delete(deps.Scope.Container, indexBlobName)
-            ()
+            let! indexRefused = deleteCollecting [ indexBlobName ]
+            wipeRefusals <- indexRefused
 
         // Drop each prior doc's index chunks so retrieval doesn't keep
         // surfacing them. Falls through if no index seam is wired
@@ -490,31 +521,49 @@ let private performReset (deps: KnowledgeApiDeps) : Async<Result<unit, string>> 
 
     KnowledgeBase.ServerInventory.invalidateInventoryCache deps.Scope.Container
 
-    // Phase 115 — structured erasure-outcome audit for the scope wipe.
-    // Complements the dispatcher's generic `Custom:KnowledgeIndexReset`
-    // action row: that records who reset; this records what the fan-out
-    // across the retrieval indexes actually did, and whether it left
-    // anything retrievable (GP 6 + GP 9). `IAuditLog.Record` is
-    // contractually best-effort and swallows its own failures, so an
-    // audit gap never fails the reset. No-op when no `IAuditLog` is
-    // composed (test harness / `NoAuditLog` deployment).
-    match deps.AuditLog with
-    | Some auditLog ->
-        do!
-            auditLog.Record(
-                deps.Scope.ScopeId,
-                KnowledgeScopeErased {
-                    UserId = deps.UserId
-                    ScopeId = deps.Scope.ScopeId
-                    DocumentCount = documentCount
-                    OrphanChunkCount = orphanChunkCount
-                }
-            )
-    | None -> ()
+    if not wipeRefusals.IsEmpty then
+        let survivors = String.concat "; " wipeRefusals
 
-    do! deps.Notifications.Publish(deps.UserId, DataRefreshed("KnowledgeBase", deps.Scope.ScopeId))
-    do! deps.PublishInventory()
-    return Ok()
+        deps.Logger.Warn(
+            sprintf
+                "[KnowledgeBase] ResetIndex for %s left blobs at rest — %s. The index is kept so the reset can be retried."
+                deps.Scope.ScopeId
+                survivors
+        )
+
+        // Some blobs did go, so the scope's views still refresh; the
+        // erasure audit row is left to the re-run that completes it.
+        do! deps.Notifications.Publish(deps.UserId, DataRefreshed("KnowledgeBase", deps.Scope.ScopeId))
+        do! deps.PublishInventory()
+
+        return
+            Error(sprintf "Some of the knowledge base's stored files could not be deleted (%s). Try again." survivors)
+    else
+        // Phase 115 — structured erasure-outcome audit for the scope wipe.
+        // Complements the dispatcher's generic `Custom:KnowledgeIndexReset`
+        // action row: that records who reset; this records what the fan-out
+        // across the retrieval indexes actually did, and whether it left
+        // anything retrievable (GP 6 + GP 9). `IAuditLog.Record` is
+        // contractually best-effort and swallows its own failures, so an
+        // audit gap never fails the reset. No-op when no `IAuditLog` is
+        // composed (test harness / `NoAuditLog` deployment).
+        match deps.AuditLog with
+        | Some auditLog ->
+            do!
+                auditLog.Record(
+                    deps.Scope.ScopeId,
+                    KnowledgeScopeErased {
+                        UserId = deps.UserId
+                        ScopeId = deps.Scope.ScopeId
+                        DocumentCount = documentCount
+                        OrphanChunkCount = orphanChunkCount
+                    }
+                )
+        | None -> ()
+
+        do! deps.Notifications.Publish(deps.UserId, DataRefreshed("KnowledgeBase", deps.Scope.ScopeId))
+        do! deps.PublishInventory()
+        return Ok()
 }
 
 /// Wipe the caller's KB scope. Gated before any destructive work runs:

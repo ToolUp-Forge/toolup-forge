@@ -171,8 +171,9 @@ let sweepScope
 
                 // Remove ONE expired document. `Ok doc` when its retrieval
                 // entries, raw blob and hash ref all went; `Error (orphans,
-                // reason)` when the Phase 115 fan-out was not clean — the
-                // caller then leaves it listed so the next sweep retries it.
+                // reason)` when the Phase 115 fan-out was not clean or
+                // (Phase 971) a blob delete was refused — the caller then
+                // leaves it listed so the next sweep retries it.
                 let purgeOne (doc: KnowledgeDocument) : Async<Result<KnowledgeDocument, int * string>> = async {
                     let! report =
                         match lifecycle with
@@ -181,26 +182,50 @@ let sweepScope
 
                     if IIndexLifecycle.IndexLifecycleReport.isClean report then
                         let rawBlobName = sprintf "knowledge/%s/%s" doc.Id doc.FileName
-                        let! _ = storage.Delete(container, rawBlobName)
 
                         // Phase 504.C — a note's body is not at the
                         // convention path (see `noteBodyBlobName`); the
                         // same branch `deleteDocument` takes, so an
                         // expired note leaves no residual blob either.
-                        match doc.Source with
-                        | Note _ ->
-                            let! _ = storage.Delete(container, noteBodyBlobName doc.Id)
-                            ()
-                        | UploadedFile
-                        | FromNarrative _ -> ()
+                        let blobs = [
+                            rawBlobName
+                            match doc.Source with
+                            | Note _ -> noteBodyBlobName doc.Id
+                            | UploadedFile
+                            | FromNarrative _ -> ()
+                        ]
 
-                        match doc.ContentHash with
-                        | Some hash -> do! hashIndex.Remove hash doc.Id
-                        | None -> ()
+                        // Phase 971 — a refused delete leaves the bytes at
+                        // rest, so the document is NOT purged: it stays
+                        // listed (with its hash ref) and the next sweep
+                        // retries it, exactly as for an unclean fan-out.
+                        let refused = ResizeArray<string>()
 
-                        clearStatus doc.Id
-                        do! forgetIngestionAttempt storage container doc.Id
-                        return Ok doc
+                        for blob in List.distinct blobs do
+                            match! storage.Delete(container, blob) with
+                            | Ok() -> ()
+                            | Error e -> refused.Add(sprintf "%s (%s)" blob e)
+
+                        if refused.Count > 0 then
+                            let stillAtRest = String.concat "; " refused
+
+                            logger.Warn(
+                                sprintf
+                                    "[KnowledgeBase] Retention sweep left %s in scope %s — blobs at rest: %s. The document stays listed and the next sweep retries it."
+                                    doc.Id
+                                    scopeId
+                                    stillAtRest
+                            )
+
+                            return Error(0, sprintf "%s (%s) — blobs at rest: %s" doc.Id doc.FileName stillAtRest)
+                        else
+                            match doc.ContentHash with
+                            | Some hash -> do! hashIndex.Remove hash doc.Id
+                            | None -> ()
+
+                            clearStatus doc.Id
+                            do! forgetIngestionAttempt storage container doc.Id
+                            return Ok doc
                     else
                         let survivors = IIndexLifecycle.IndexLifecycleReport.summarise report
 

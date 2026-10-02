@@ -83,7 +83,7 @@ let beginIngestionAttempt
 /// Forget `docId`'s ingestion attempt — the document was deleted or swept.
 /// Idempotent: a document with no recorded attempt deletes nothing.
 let forgetIngestionAttempt (storage: IBlobStorage) (container: string) (docId: string) = async {
-    let! _ = storage.Delete(container, ingestionAttemptBlobName docId)
+    let! _ = storage.Delete(container, ingestionAttemptBlobName docId) // best-effort-write: ingestion-attempt sentinel; a leftover reads as None and the next beginIngestionAttempt for this doc overwrites it
     ()
 }
 

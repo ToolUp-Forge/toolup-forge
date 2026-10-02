@@ -2551,6 +2551,8 @@ let private registeredTests =
         Phase971InterPlatformTests.tests
         // Phase 971 - Media: a refused delete that is the operation propagates.
         MediaLibraryTests.phase971Tests
+        // Phase 971 - KnowledgeBase: a refused delete that is the operation propagates.
+        Phase971KnowledgeBaseTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each
