@@ -2567,6 +2567,8 @@ let private registeredTests =
         Phase971AITests.tests
         // Phase 971 - PublicRendering: a refused delete that is the operation propagates.
         Phase971PublicRenderingTests.tests
+        // Phase 971 - PlatformTenant: provisioning clears the offboard ledger first.
+        Phase971PlatformTenantTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

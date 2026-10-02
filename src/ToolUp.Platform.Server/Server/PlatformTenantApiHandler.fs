@@ -165,7 +165,8 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
 
     // Phase 54b — completed-step offboard ledger. A fresh provision of a
     // scope supersedes any prior offboard ledger (re-onboarding resets
-    // it), so the inline provision path clears the Deprovisioning ledger.
+    // it), so the inline provision path clears the Deprovisioning ledger
+    // — FIRST, before any provisioning hook runs (Phase 971).
     // `None` in minimal/test wiring — then the clear is a no-op.
     let ledger =
         match services.GetService(typeof<ILifecycleLedger>) with
@@ -182,14 +183,25 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
         | :? ILifecycleLock as l -> l
         | _ -> InProcessLifecycleLock.shared
 
-    let clearOffboardLedger (scopeId: string) = async {
+    // Phase 971 — NOT best-effort. A kept Deprovisioning done-set makes a
+    // later re-offboard of the re-provisioned scope SKIP every hook it
+    // names, leaving tenant data un-erased. `ILifecycleLedger.Clear` raises
+    // when storage refuses the delete; that becomes an `Error` naming the
+    // scope, which the provision path answers before running any hook.
+    let clearOffboardLedger (scopeId: string) : Async<Result<unit, string>> = async {
         match ledger with
         | Some l ->
-            try
-                do! l.Clear(scopeId, Deprovisioning)
-            with _ ->
-                () // best-effort — a stale ledger only costs a redundant skip
-        | None -> ()
+            match! Async.Catch(l.Clear(scopeId, Deprovisioning)) with
+            | Choice1Of2() -> return Ok()
+            | Choice2Of2 ex ->
+                return
+                    Error(
+                        sprintf
+                            "the prior offboard ledger for %s could not be cleared, so nothing was provisioned (a later offboard would skip the hooks it names); retry the provision: %s"
+                            scopeId
+                            ex.Message
+                    )
+        | None -> return Ok()
     }
 
     // Server-authoritative actor — the authenticated caller, never the
@@ -317,26 +329,32 @@ let platformTenantApi (ctx: HttpContext) : IPlatformTenantApi =
                 if not isAdmin then
                     return Error adminError
                 else
-                    // Phase 305 — thread the deploy-plane ProvisioningRequest
-                    // through to the hooks so request-aware hooks
-                    // (ConfigSeed / OwnerTeamBootstrap) seed per-deployment
-                    // values + the explicit owner rather than schema defaults
-                    // / the acting admin. Hooks that don't opt into
-                    // ITenantLifecycleProvisionContext are unaffected.
-                    let! summary =
-                        TenantLifecycleAggregator.runGuardedRequest
-                            emitAudit
-                            (Some request)
-                            (resolveHooks ())
-                            Provisioning
-                            scopeId
-                            actor
-
-                    do! persist scopeId summary
                     // Phase 54b — re-onboarding supersedes a prior offboard
                     // ledger so a future offboard of this scope starts fresh.
-                    do! clearOffboardLedger scopeId
-                    return Ok summary
+                    // Phase 971 — cleared FIRST: a refusal provisions nothing,
+                    // so a re-run retries cleanly. Clearing first is safe — a
+                    // cleared offboard ledger only means a later offboard runs
+                    // every hook.
+                    match! clearOffboardLedger scopeId with
+                    | Error message -> return Error message
+                    | Ok() ->
+                        // Phase 305 — thread the deploy-plane ProvisioningRequest
+                        // through to the hooks so request-aware hooks
+                        // (ConfigSeed / OwnerTeamBootstrap) seed per-deployment
+                        // values + the explicit owner rather than schema defaults
+                        // / the acting admin. Hooks that don't opt into
+                        // ITenantLifecycleProvisionContext are unaffected.
+                        let! summary =
+                            TenantLifecycleAggregator.runGuardedRequest
+                                emitAudit
+                                (Some request)
+                                (resolveHooks ())
+                                Provisioning
+                                scopeId
+                                actor
+
+                        do! persist scopeId summary
+                        return Ok summary
             }
 
         DeprovisionTenant =

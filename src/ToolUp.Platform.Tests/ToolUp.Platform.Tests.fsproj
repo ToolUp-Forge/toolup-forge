@@ -2807,6 +2807,8 @@
         <Compile Include="InProcess\Phase971AITests.fs" />
         <!-- Phase 971 — PublicRendering: a refused delete that is the operation propagates. -->
         <Compile Include="InProcess\Phase971PublicRenderingTests.fs" />
+        <!-- Phase 971 — PlatformTenant: provisioning clears the offboard ledger first. -->
+        <Compile Include="InProcess\Phase971PlatformTenantTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />
