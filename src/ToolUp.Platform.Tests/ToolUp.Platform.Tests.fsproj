@@ -2791,6 +2791,8 @@
              and its two consents, the source's gate at the publication door, the
              narrowing rule, withdrawal, both sides' audit, signing, and the seam's callers. -->
         <Compile Include="InProcess\FactPublicationTests.fs" />
+        <!-- Phase 971 — InterPlatform: a refused delete that is the operation propagates. -->
+        <Compile Include="InProcess\Phase971InterPlatformTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />

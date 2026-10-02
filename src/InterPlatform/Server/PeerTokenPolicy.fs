@@ -247,7 +247,7 @@ type BlobPeerReplayGuard(blobs: IBlobStorage, now: unit -> DateTimeOffset) =
                         | i -> String.CompareOrdinal(rest.Substring(0, i), horizon) < 0)
 
             for name in stale do
-                let! _ = blobs.Delete(container, name)
+                let! _ = blobs.Delete(container, name) // best-effort-write: stale replay claim (expired tokens are refused before the guard); the next sweepStale re-lists and re-deletes it
                 ()
         with _ ->
             // Housekeeping only — see the type doc. A claim must not fail

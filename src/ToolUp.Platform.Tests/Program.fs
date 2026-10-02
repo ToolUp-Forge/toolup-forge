@@ -2547,6 +2547,8 @@ let private registeredTests =
         // publishing, the grant and its two consents, the source's gate at the
         // publication door, withdrawal, both sides' audit, and the one seam.
         FactPublicationTests.tests
+        // Phase 971 - InterPlatform: a refused delete that is the operation propagates.
+        Phase971InterPlatformTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each
