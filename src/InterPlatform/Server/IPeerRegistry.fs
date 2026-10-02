@@ -42,5 +42,7 @@ type IPeerRegistry =
     abstract Register: target: TargetPeer -> Async<Result<unit, PeerError>>
 
     /// Remove a peer's directory entry. Idempotent — removing an
-    /// unknown peer is a no-op.
+    /// unknown peer is a no-op. A store that REFUSES the delete raises
+    /// (Phase 967): the signature has no failure channel, and returning
+    /// normally would claim a peer removed that is still registered.
     abstract Remove: peerId: string -> Async<unit>

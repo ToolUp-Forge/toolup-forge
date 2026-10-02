@@ -1356,6 +1356,7 @@ let private registeredTests =
         FelizLayoutAdapterTests.tests
         AssetStoreTests.tests
         AssetStoreTests.rendererContract
+        AssetStoreTests.phase967Tests
         MediaLibraryTests.tests
         // Phase 472 — the CDN / edge-cache seam + the reference
         // sub-companion that proves it from outside the SDK.
@@ -2019,6 +2020,7 @@ let private registeredTests =
         PeerTransportTlsTests.transportTests
         PeerTransportTlsTests.handshakeFetchTests
         PeerTransportTlsTests.registryTests
+        PeerTransportTlsTests.registryRemoveTests
         PeerTransportTlsTests.composeTests
         // Phase 334 — federated-identity sanitisation parity: one hostile
         // corpus driven through the Entra claim mapping, the peer `iss`

@@ -526,6 +526,66 @@ let registryTests =
         }
     ]
 
+// ─── (4b) Phase 967 — a registration that could not be removed ────────
+
+let registryRemoveTests =
+    testList "Phase 967 — the peer directory does not report a registration removed that it could not remove" [
+
+        testCaseAsync "Remove raises when the store refuses the delete, and the peer is still registered"
+        <| async {
+            let inner = InMemoryBlobStorage.InMemoryBlobStorage()
+            let healthy = BlobPeerRegistry(inner) :> IPeerRegistry
+
+            let! registered =
+                healthy.Register {
+                    Peer = peer "refused-peer"
+                    BaseUrl = "https://peer.example.com"
+                }
+
+            Expect.isTrue (Result.isOk registered) "the peer registers"
+
+            let refusing =
+                BlobPeerRegistry(
+                    ToolUp.Platform.Tests.InProcess.DataObjectStoreTests.DeleteRefusingBlobStorage(
+                        inner,
+                        (fun n -> n.StartsWith "peers/")
+                    )
+                )
+                :> IPeerRegistry
+
+            // `Remove` is `Async<unit>`: raising is the one channel it has.
+            let! outcome = refusing.Remove "refused-peer" |> Async.Catch
+
+            match outcome with
+            | Choice1Of2() -> failtest "a registration the store refused to remove must not read as removed"
+            | Choice2Of2 ex ->
+                Expect.stringContains ex.Message "peers/refused-peer.json" "the failure names the surviving blob"
+
+            let! resolved = healthy.Resolve "refused-peer"
+            Expect.isSome resolved "the peer is still registered — and must read that way"
+        }
+
+        testCaseAsync
+            "CONTROL — Remove over a store that refuses nothing removes the peer, and an unknown peer is a no-op"
+        <| async {
+            let inner = InMemoryBlobStorage.InMemoryBlobStorage()
+            let registry = BlobPeerRegistry(inner) :> IPeerRegistry
+
+            let! _ =
+                registry.Register {
+                    Peer = peer "going-peer"
+                    BaseUrl = "https://peer.example.com"
+                }
+
+            do! registry.Remove "going-peer"
+            let! resolved = registry.Resolve "going-peer"
+            Expect.isNone resolved "the registration is gone"
+
+            do! registry.Remove "never-registered"
+            do! registry.Remove "../escape"
+        }
+    ]
+
 // ─── (5) The composition seam ─────────────────────────────────────────
 
 let composeTests =

@@ -82,14 +82,15 @@ type DefaultAssetStore
 
     let derivativePrefix (hash: string) = sprintf "%s%s/" derivativesPrefix hash
 
-    let recordExistsForHash (container: string) (hash: string) : Async<bool> = async {
+    let otherRecordExistsForHash (container: string) (self: AssetId) (hash: string) : Async<bool> = async {
         let! recordNames = blobStorage.List(container, recordsPrefix)
-        // If any other record references this hash, the original
+        // If any OTHER record (not `self`, whose delete is under way) references this hash, the original
         // is still referenced. Cheap-enough sweep — a scope with
         // thousands of records issues one List per delete, not
         // per upload.
         let! anyMatch =
             recordNames
+            |> List.filter ((<>) (recordKey self))
             |> List.map (fun name -> async {
                 let! result = blobStorage.Download(container, name)
 
@@ -349,44 +350,61 @@ type DefaultAssetStore
                 // emission (no state change).
                 return Ok()
             | Some record ->
-                let! deleteRecord = blobStorage.Delete(scopeContainer, recordKey id)
+                // Phase 967 — the shared original is the asset's own bytes
+                // at rest, so its delete is part of the operation, not
+                // cleanup: a refusal fails the delete, naming the blob. It
+                // goes BEFORE the record, which is what a re-run finds the
+                // asset by — a record deleted first would leave a refused
+                // original orphaned, since the re-run would find no asset.
+                // Original is shared across records on content-hash: only
+                // delete it if no OTHER record still references this hash.
+                let! stillReferenced = otherRecordExistsForHash scopeContainer id record.ContentHash
 
-                match deleteRecord with
-                | Error msg -> return Error(AssetDeleteError.StorageError msg)
+                let! deleteOriginal =
+                    if stillReferenced then
+                        async.Return(Ok())
+                    else
+                        blobStorage.Delete(scopeContainer, originalKey record.ContentHash)
+
+                match deleteOriginal with
+                | Error msg ->
+                    return
+                        Error(
+                            AssetDeleteError.StorageError(
+                                sprintf
+                                    "original blob %s could not be deleted (%s); the record is kept so a re-run finds the asset"
+                                    (originalKey record.ContentHash)
+                                    msg
+                            )
+                        )
                 | Ok() ->
-                    // Cascade derivative cache for this hash.
-                    let! derivativeNames = blobStorage.List(scopeContainer, derivativePrefix record.ContentHash)
+                    let! deleteRecord = blobStorage.Delete(scopeContainer, recordKey id)
 
-                    // Phase 966 — the record is already gone (its delete is the operation, and
-                    // is propagated above). A derivative left behind is a render-cache entry
-                    // keyed by content hash: never served for a deleted record, valid again if
-                    // the same bytes return.
-                    let! _ = // best-effort-write: derivative cache cleanup — a leftover entry is never served and is valid if the bytes return
-                        derivativeNames
-                        |> List.map (fun name -> blobStorage.Delete(scopeContainer, name))
-                        |> Async.Parallel
+                    match deleteRecord with
+                    | Error msg -> return Error(AssetDeleteError.StorageError msg)
+                    | Ok() ->
+                        // Cascade derivative cache for this hash.
+                        let! derivativeNames = blobStorage.List(scopeContainer, derivativePrefix record.ContentHash)
 
-                    // Original is shared across records on
-                    // content-hash. Only delete it if no other
-                    // record still references this hash.
-                    let! stillReferenced = recordExistsForHash scopeContainer record.ContentHash
+                        // Phase 966 — the record is already gone (its delete is the operation, and
+                        // is propagated above). A derivative left behind is a render-cache entry
+                        // keyed by content hash: never served for a deleted record, valid again if
+                        // the same bytes return.
+                        let! _ = // best-effort-write: derivative cache cleanup — a leftover entry is never served and is valid if the bytes return
+                            derivativeNames
+                            |> List.map (fun name -> blobStorage.Delete(scopeContainer, name))
+                            |> Async.Parallel
 
-                    let! _ =
-                        if stillReferenced then
-                            async.Return(Ok())
-                        else
-                            blobStorage.Delete(scopeContainer, originalKey record.ContentHash)
+                        do!
+                            emitAudit
+                                scopeContainer
+                                (AuditEvent.AssetDeleted {
+                                    UserId = record.UploadedBy
+                                    AssetId = AssetId.value id
+                                    ContentHash = record.ContentHash
+                                })
 
-                    do!
-                        emitAudit
-                            scopeContainer
-                            (AuditEvent.AssetDeleted {
-                                UserId = record.UploadedBy
-                                AssetId = AssetId.value id
-                                ContentHash = record.ContentHash
-                            })
-
-                    return Ok()
+                        return Ok()
         }
 
         member _.List(scopeContainer, prefix, page) = async {
