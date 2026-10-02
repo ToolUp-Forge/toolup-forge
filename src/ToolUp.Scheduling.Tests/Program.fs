@@ -24,6 +24,8 @@ let private registeredTests =
         // Phase 831 — the Microsoft Graph bridge: the pack's fourth binding,
         // plus tokens, delta paging and the subscription route.
         MicrosoftGraphCalendarBridgeTests.tests
+        // Phase 971 - a refused calendar-link delete is reported.
+        Phase971SchedulingTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an
