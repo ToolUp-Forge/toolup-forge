@@ -99,9 +99,47 @@ pass. The three cleanup sites the tree has are the worked example:
 | `DefaultAssetStore` derivative cleanup after an asset delete | a render-cache entry keyed by content hash | never served for a deleted record, and still valid if the same bytes return; the record's own delete is propagated before it runs |
 | `WebhookRegistry` delivery-log `Prune` | a delivery row past retention | the next `Prune` matches the same age predicate |
 
-A single `Delete` whose result is discarded where it is made (`do! store.Delete(…) |> Async.Ignore`,
-or `let! _ = store.Delete(…)`) is still **not** a site: it is one call, visible where it is made,
-and the gate leaves it to review. A fan-out is different because it drops every result at once.
+**A single-call `Delete` is held to the same line (Phase 967).** `let! _ = store.Delete(…)` and
+`do! store.Delete(…) |> Async.Ignore` drop one result instead of N, and that is the whole difference
+— it is the same decision, made once per call. The rule is stated once: **a delete that is the
+operation's own effect propagates; a delete that is cleanup is marked, and the pass that re-sweeps it
+is named.** Four single calls under `src/` were the operation's own effect, and each reported
+success (or a clean conflict) over a blob still in the container. They are the worked example, and
+each has a different answer to "what is the caller told?":
+
+| Site | The delete is | A refusal is reported as |
+|---|---|---|
+| `DataObjectStore.SaveIfVersion` — undo of the just-written `v{N+1}` when the head compare fails | the save's own effect: the write must not stand while the caller reads a clean conflict | `SaveFailed(StorageFailure …)` naming the blob still in the container, instead of `VersionConflict` |
+| `DataObjectStore.DeleteIfVersion` — release of the claim slot | the delete's own debris: the object is gone, the claim is not | on the success path `DeleteFailed(StorageFailure …)` naming the claim blob; on a path that already failed, that failure stays the answer and the stuck claim is logged at `Warn` |
+| `DefaultAssetStore.Delete` — the shared original, when no other record references the hash | the asset's own bytes at rest | `AssetDeleteError.StorageError` naming the original blob, **with the record kept**: the original is removed before the record, which is what a re-run finds the asset by |
+| `BlobPeerRegistry.Remove` — a peer's registration blob | the removal itself | a raise: `IPeerRegistry.Remove` is `Async<unit>` and has no failure channel, so returning normally would claim a registered, callable peer is gone |
+
+Two of those are not the answer the sites' first reading suggests, and both are the rule above
+meeting the signature or the order of the code rather than the other way round. The asset store
+deleted the record first and checked for other references afterwards, so "propagate and keep the
+record" needed the original to go first (and the reference check to leave the record under delete
+out of the count) — otherwise the re-run finds no asset and the original is orphaned for good. And a
+void-returning interface raises, exactly as `IEventStore.Write` does below.
+
+```fsharp skip=fragment
+// The undo is the operation: a refusal is not a conflict.
+let! undo = blobStorage.Delete(container, blobName)
+
+match undo with
+| Ok _ -> return Error(ConditionalSaveError.VersionConflict(expectedVersion, 0))
+| Error e -> return Error(SaveFailed(StorageFailure $"… {blobName} could not be removed ({e}) …"))
+```
+
+**Enforcement is opt-in, and why.** `VerifyUploadResults --single-delete` reports a single-call
+`Delete` discarded where it is made (one-line `let! _ =`, the call on the next lines, or its own
+`|> Async.Ignore`), red on a planted instance of each shape and green for a call whose result is
+matched on. It is not the default scan: with the four sites above fixed, it still reports **69
+unmarked sites across 43 files** under `src/` — probe and sentinel deletes in config validators,
+cache and retention sweeps, membership and subscription records, outbox intents — that nobody has
+yet judged as the operation's own effect or as cleanup. A default scan that is red on the tree gates
+nothing, so the flag becomes the default once those are triaged: each either propagates, or carries
+`// best-effort-write: <why>` naming the pass that recovers a leftover. Until then a single call is
+the reviewer's, and the four above are the precedent a reviewer holds it to.
 
 The gate is textual. A result dropped some other way — through a helper that returns the
 upload's `Result` under another name, say — is the same defect, and a reviewer holds it to the
