@@ -3883,12 +3883,37 @@ let main args =
     // a derivative cleanup after an asset delete, delivery-log pruning —
     // each say so with the marker, which is the claim a reviewer reads.
     //
+    // Phase 967 — the SINGLE-call `Delete`. Phase 965's note that one "stays out of
+    // scope" was a claim about the tree, not a rule: the sites that
+    // discarded a single `Delete` were not all cleanup. Four were the
+    // operation's own effect — `SaveIfVersion`'s undo of its own write,
+    // `DeleteIfVersion`'s claim release, the asset store's delete of the
+    // asset's original bytes, and the peer registry's `Remove` — and each
+    // reported success (or a clean `VersionConflict`) over a blob still in
+    // the container. They propagate now (storage-write-results.md carries
+    // the rule and the four answers).
+    //
+    // `--single-delete` extends the walk to a `Delete` whose result is
+    // discarded where it is made: `let! _ = x.Delete(…)` on one line or the
+    // call on the next lines, or `do! x.Delete(…) |> Async.Ignore`. It is
+    // OPT-IN, and the default scan is unchanged, because the same
+    // measurement refuted the other half of the claim: with the four fixed
+    // the flag still reports 69 unmarked sites across 43 files (the
+    // phase had assumed the four, plus one known retired-job reclaim, were
+    // the only ones). Each of the 69 is a separate judgement — an operation's
+    // own delete to propagate, or cleanup to mark with the pass that
+    // re-sweeps it — in a module this phase does not own. Making the flag
+    // the default is the step that follows that triage, and not before:
+    // a default scan that is red on the tree gates nothing.
+    //
     // Scope: production code under `src/`. Test projects (a directory named
     // `*.Tests`) are excluded — a fixture that seeds a blob is not a store,
     // and its failure fails the test that reads it. Comment lines are
     // skipped, so prose quoting the pattern is not a finding.
     //
     // Usage: `dotnet run --project Build.fsproj -- VerifyUploadResults`
+    //        `… -- VerifyUploadResults --single-delete` also reports a single-call
+    //        `Delete` discarded where it is made (Phase 967, opt-in).
     //        `… -- VerifyUploadResults --root <dir>` scans `<dir>/src` instead
     //        of this repository's (how the check is shown red on a planted
     //        discard without touching the tree).
@@ -3899,6 +3924,9 @@ let main args =
             | _ -> __SOURCE_DIRECTORY__
 
         let srcDir = Path.Combine(root, "src")
+
+        // Phase 967 - opt-in: count a SINGLE-call `Delete` discarded where it is made.
+        let includeSingleDelete = args |> Array.contains "--single-delete"
 
         if not (Directory.Exists srcDir) then
             failwithf "VerifyUploadResults: no `src` directory under %s — nothing to scan is not a pass." root
@@ -4068,7 +4096,7 @@ let main args =
                                 // fan-out, as in the `Async.Ignore` pipeline.
                                 let fanOut = bound |> List.exists (fun j -> asyncParallel.IsMatch lines[j])
 
-                                match bound |> List.tryFind (isProducer lines fanOut) with
+                                match bound |> List.tryFind (isProducer lines (fanOut || includeSingleDelete)) with
                                 | Some j ->
                                     let elided = if bound.Head = j then " " else " … "
 
@@ -4083,6 +4111,14 @@ let main args =
                                 // `Delete` fan-out.
                                 letDiscardsValue.IsMatch line
                                 && asyncParallel.IsMatch line
+                                && deleteCall.IsMatch line
+                                && not (consumedDelete.IsMatch line)
+                            then
+                                yield rel, i + 1, line.Trim(), marker.IsMatch line
+                            elif
+                                // Phase 967 - a one-line `let! _ =` over a single-call `Delete`.
+                                includeSingleDelete
+                                && letDiscardsValue.IsMatch line
                                 && deleteCall.IsMatch line
                                 && not (consumedDelete.IsMatch line)
                             then
@@ -4113,12 +4149,18 @@ let main args =
                                     asyncParallel.IsMatch before
                                     || pipeline |> List.exists (fun j -> asyncParallel.IsMatch lines[j])
 
-                                let callLine = pipeline |> List.tryFind (isProducer lines fanOut)
+                                let callLine =
+                                    pipeline |> List.tryFind (isProducer lines (fanOut || includeSingleDelete))
 
                                 let sameLine =
                                     (uploadCall.IsMatch before && not (consumedCall.IsMatch before))
                                     // Phase 965 — a one-line `Delete` fan-out.
                                     || (asyncParallel.IsMatch before
+                                        && deleteCall.IsMatch before
+                                        && not (consumedDelete.IsMatch before)
+                                        && not (discardedHere.IsMatch before))
+                                    // Phase 967 - a one-line single-call `Delete` ended by its own `Async.Ignore`.
+                                    || (includeSingleDelete
                                         && deleteCall.IsMatch before
                                         && not (consumedDelete.IsMatch before)
                                         && not (discardedHere.IsMatch before))

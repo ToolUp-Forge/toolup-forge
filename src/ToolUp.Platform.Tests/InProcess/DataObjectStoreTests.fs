@@ -41,7 +41,7 @@ let private contractTests =
 /// `Delete` returns `Error` for every blob name `refused` selects; every
 /// other operation passes through to `inner`. Carries no conditional-write
 /// capability, so `DeleteIfVersion` over it takes the compare-only path.
-type private DeleteRefusingBlobStorage(inner: IBlobStorage, refused: string -> bool) =
+type DeleteRefusingBlobStorage(inner: IBlobStorage, refused: string -> bool) =
     interface IBlobStorage with
         member _.CanComposeFrom = false
 
@@ -71,7 +71,7 @@ type private DeleteRefusingBlobStorage(inner: IBlobStorage, refused: string -> b
 
 /// The same double with the ETag seam forwarded, so `DeleteIfVersion`
 /// takes the claim-then-remove path.
-type private ConditionalDeleteRefusingBlobStorage(inner: InMemoryBlobStorage, refused: string -> bool) =
+type ConditionalDeleteRefusingBlobStorage(inner: InMemoryBlobStorage, refused: string -> bool) =
     inherit DeleteRefusingBlobStorage(inner, refused)
 
     interface IConditionalBlobStorage with
@@ -257,4 +257,168 @@ let private phase966Tests =
         }
     ]
 
-let tests = testList "DataObjectStore" [ contractTests; phase966Tests ]
+// ─── Phase 967 — a single-call delete that could not delete says so ───
+//
+// Two single `Delete` calls in `DataObjectStore` discarded their result
+// (`let! _ = blobStorage.Delete(…)`): `SaveIfVersion`'s undo of its own
+// just-written `v{N+1}` blob, and `DeleteIfVersion`'s release of the claim
+// slot. A refused undo left the write in place while the caller was told
+// `VersionConflict`; a refused release left a standing claim while the
+// delete answered `Ok`.
+
+/// Answers `Exists` false for every blob `hidden` selects, as the store
+/// would after a concurrent `DeleteIfVersion` removed it between the
+/// head read and the existence check; everything else, the conditional
+/// seam included, passes through to `inner`.
+type ExistsHidingBlobStorage(inner: IBlobStorage, hidden: string -> bool) =
+    interface IBlobStorage with
+        member _.CanComposeFrom = inner.CanComposeFrom
+        member _.ComposeFrom(a, b, c) = inner.ComposeFrom(a, b, c)
+
+        member _.Upload(container, blobName, content) =
+            inner.Upload(container, blobName, content)
+
+        member _.Download(container, blobName) = inner.Download(container, blobName)
+        member _.Delete(container, blobName) = inner.Delete(container, blobName)
+        member _.List(container, prefix) = inner.List(container, prefix)
+
+        member _.Exists(container, blobName) =
+            if hidden blobName then
+                async { return false }
+            else
+                inner.Exists(container, blobName)
+
+        member _.GetMetadata(container, blobName) = inner.GetMetadata(container, blobName)
+
+        member _.DownloadRange(container, blobName, offset, length) =
+            inner.DownloadRange(container, blobName, offset, length)
+
+        member _.Erase(container, prefix, policy, dryRun) =
+            inner.Erase(container, prefix, policy, dryRun)
+
+    interface IConditionalBlobStorage with
+        member _.DownloadWithETag(container, blobName) =
+            (inner :?> IConditionalBlobStorage).DownloadWithETag(container, blobName)
+
+        member _.UploadWithETag(container, blobName, content, condition) =
+            (inner :?> IConditionalBlobStorage).UploadWithETag(container, blobName, content, condition)
+
+type private WarnRecordingLogger() =
+    let warnings = ResizeArray<string>()
+    member _.Warnings = lock warnings (fun () -> List.ofSeq warnings)
+
+    interface ILogger with
+        member _.Debug(_: string) = ()
+        member _.Info(_: string) = ()
+
+        member _.Warn(message: string) =
+            lock warnings (fun () -> warnings.Add message)
+
+        member _.Error(_: string, _: exn option) = ()
+
+let private v4 = "objects/o1/v4.json"
+
+let private phase967Tests =
+    testList "Phase 967 — a refused single-call delete is reported" [
+
+        testAsync "SaveIfVersion: a refused undo of the claimed slot is not reported as a clean conflict" {
+            let inner = InMemoryBlobStorage()
+            let healthy = DataObjectStore(inner) :> IDataObjectStore
+
+            match! healthy.Save(scope, objectId, utf8 "content-1", "dt", "u1", Map.empty, Versioned) with
+            | Ok _ -> ()
+            | Error e -> failtestf "seeding failed: %A" e
+
+            // v1 reads as gone after the slot is claimed, so the save must
+            // undo its own v2 — and the store refuses that undo.
+            let racing =
+                ExistsHidingBlobStorage(ConditionalDeleteRefusingBlobStorage(inner, (=) v2), (=) v1)
+
+            let store = DataObjectStore(racing) :> IConditionalDataObjectStore
+
+            let! result = store.SaveIfVersion(scope, objectId, utf8 "content-2", "dt", "u1", Map.empty, Versioned, 1)
+
+            match result with
+            | Error(ConditionalSaveError.VersionConflict _) ->
+                failtest "a conflict over a write that is still in the container must not read as a clean conflict"
+            | Error(SaveFailed(StorageFailure msg)) ->
+                Expect.stringContains msg v2 "the failure names the version blob the undo could not remove"
+            | other -> failtestf "expected SaveFailed(StorageFailure), got %A" other
+
+            let! remaining = versionBlobsOf inner
+            Expect.equal remaining [ v1; v2 ] "the write really is still in the container"
+        }
+
+        testAsync "SaveIfVersion: an undo that succeeds is still a clean VersionConflict (control)" {
+            let inner = InMemoryBlobStorage()
+            let healthy = DataObjectStore(inner) :> IDataObjectStore
+
+            match! healthy.Save(scope, objectId, utf8 "content-1", "dt", "u1", Map.empty, Versioned) with
+            | Ok _ -> ()
+            | Error e -> failtestf "seeding failed: %A" e
+
+            let store =
+                DataObjectStore(ExistsHidingBlobStorage(inner, (=) v1)) :> IConditionalDataObjectStore
+
+            match! store.SaveIfVersion(scope, objectId, utf8 "content-2", "dt", "u1", Map.empty, Versioned, 1) with
+            | Error(ConditionalSaveError.VersionConflict(1, 0)) -> ()
+            | other -> failtestf "expected VersionConflict(1, 0), got %A" other
+
+            let! remaining = versionBlobsOf inner
+            Expect.equal remaining [ v1 ] "the claimed slot was released"
+        }
+
+        testAsync "DeleteIfVersion: a delete whose claim could not be released does not answer Ok" {
+            let! inner, _ = seeded ()
+
+            // The claim slot for a delete at head 3 is v4.
+            let store = DataObjectStore(ConditionalDeleteRefusingBlobStorage(inner, (=) v4))
+
+            match! (store :> IConditionalDataObjectStore).DeleteIfVersion(scope, objectId, 3) with
+            | Ok() -> failtest "a delete that left its claim standing must not read as Ok"
+            | Error(DeleteFailed(StorageFailure msg)) ->
+                Expect.stringContains msg v4 "the failure names the claim blob that was not released"
+            | other -> failtestf "expected DeleteFailed(StorageFailure), got %A" other
+
+            let! remaining = versionBlobsOf inner
+            Expect.equal remaining [ v4 ] "the object is gone and the claim is the debris"
+        }
+
+        testAsync "DeleteIfVersion: a delete that already failed keeps its own error and logs the stuck claim" {
+            let! inner, _ = seeded ()
+            let logger = WarnRecordingLogger()
+
+            let store =
+                DataObjectStore(
+                    ConditionalDeleteRefusingBlobStorage(inner, (fun n -> n = v2 || n = v4)),
+                    logger :> ILogger
+                )
+
+            match! (store :> IConditionalDataObjectStore).DeleteIfVersion(scope, objectId, 3) with
+            | Ok() -> failtest "a refused version-blob delete must not read as Ok"
+            | Error(DeleteFailed(StorageFailure msg)) ->
+                Expect.stringContains msg v2 "the delete's own failure is the one returned"
+                Expect.isFalse (msg.Contains v4) "the claim is not folded into the delete's own error"
+            | other -> failtestf "expected DeleteFailed(StorageFailure), got %A" other
+
+            let stuck = logger.Warnings |> List.filter (fun w -> w.Contains v4)
+            Expect.equal stuck.Length 1 "the stuck claim is logged once, at Warn, naming the blob"
+        }
+
+        testAsync "DeleteIfVersion: a claim that is released leaves nothing behind (control)" {
+            let! inner, _ = seeded ()
+
+            let store =
+                DataObjectStore(ConditionalDeleteRefusingBlobStorage(inner, (fun _ -> false)))
+
+            match! (store :> IConditionalDataObjectStore).DeleteIfVersion(scope, objectId, 3) with
+            | Ok() -> ()
+            | other -> failtestf "expected Ok, got %A" other
+
+            let! remaining = versionBlobsOf inner
+            Expect.isEmpty remaining "every version and the claim are gone"
+        }
+    ]
+
+let tests =
+    testList "DataObjectStore" [ contractTests; phase966Tests; phase967Tests ]

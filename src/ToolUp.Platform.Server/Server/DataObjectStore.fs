@@ -1230,8 +1230,28 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
                                     if expectedExists then
                                         return Ok dataObject
                                     else
-                                        let! _ = blobStorage.Delete(container, blobName)
-                                        return Error(ConditionalSaveError.VersionConflict(expectedVersion, 0))
+                                        // Phase 967 — the undo IS the operation's
+                                        // own effect here: a refused one leaves
+                                        // the write in place, and the caller
+                                        // must not be told it was a clean
+                                        // conflict.
+                                        let! undo = blobStorage.Delete(container, blobName)
+
+                                        match undo with
+                                        | Ok _ -> return Error(ConditionalSaveError.VersionConflict(expectedVersion, 0))
+                                        | Error e ->
+                                            return
+                                                Error(
+                                                    SaveFailed(
+                                                        StorageFailure(
+                                                            sprintf
+                                                                "SaveIfVersion: version %d no longer exists, and the version blob this save wrote, %s, could not be removed (%s) — it is still in the container"
+                                                                expectedVersion
+                                                                blobName
+                                                                e
+                                                        )
+                                                    )
+                                                )
                                 | Ok _ -> return Ok dataObject
                                 | Error(ETagMismatch _) ->
                                     // A racer claimed the slot between our
@@ -1337,12 +1357,41 @@ type DataObjectStore(blobStorage: IBlobStorage, ?logger: ILogger) =
                                 let! removal = removeListed () |> Async.Catch
                                 // Release the claim on every path — see the
                                 // header for why it goes last.
-                                let! _ = blobStorage.Delete(container, claimName)
+                                let! release = blobStorage.Delete(container, claimName)
+
+                                // Phase 967 — a refused release leaves a
+                                // standing claim that refuses a later
+                                // `SaveIfVersion 0`. On the success path the
+                                // object is gone and the claim is the debris:
+                                // the delete says so. On a path that already
+                                // failed, its own error stays the answer and
+                                // the stuck claim is logged.
+                                let stuckClaim =
+                                    match release with
+                                    | Ok _ -> None
+                                    | Error e -> Some(sprintf "claim blob %s could not be released (%s)" claimName e)
 
                                 match removal with
-                                | Choice1Of2(Ok()) -> return Ok()
-                                | Choice1Of2(Error msg) -> return Error(DeleteFailed(StorageFailure msg))
-                                | Choice2Of2 ex -> return Error(DeleteFailed(StorageFailure ex.Message))
+                                | Choice1Of2(Ok()) ->
+                                    match stuckClaim with
+                                    | None -> return Ok()
+                                    | Some stuck ->
+                                        return
+                                            Error(
+                                                DeleteFailed(
+                                                    StorageFailure(
+                                                        sprintf
+                                                            "DeleteIfVersion: the object was removed, but its %s — it is still in the container and holds the slot until it is removed"
+                                                            stuck
+                                                    )
+                                                )
+                                            )
+                                | Choice1Of2(Error msg) ->
+                                    stuckClaim |> Option.iter (sprintf "DeleteIfVersion: %s" >> logWarn)
+                                    return Error(DeleteFailed(StorageFailure msg))
+                                | Choice2Of2 ex ->
+                                    stuckClaim |> Option.iter (sprintf "DeleteIfVersion: %s" >> logWarn)
+                                    return Error(DeleteFailed(StorageFailure ex.Message))
                         | _ ->
                             let! removal = removeListed () |> Async.Catch
 

@@ -148,6 +148,18 @@ type BlobPeerRegistry(blobs: IBlobStorage, policy: PeerTransportPolicy) =
             match blobNameFor peerId with
             | None -> return ()
             | Some name ->
-                let! _ = blobs.Delete(container, name)
-                return ()
+                // Phase 967 — the delete IS the operation. `Remove` is
+                // `Async<unit>`, so a refusal can only be raised: returning
+                // normally would claim a peer is removed that is still a
+                // registered, callable peer. `Delete` is idempotent on a
+                // missing blob, so an `Error` here is always a refusal.
+                match! blobs.Delete(container, name) with
+                | Ok _ -> return ()
+                | Error storageError ->
+                    return
+                        failwithf
+                            "BlobPeerRegistry: peer registration %s/%s could not be removed and is still in the directory: %s"
+                            container
+                            name
+                            storageError
         }
