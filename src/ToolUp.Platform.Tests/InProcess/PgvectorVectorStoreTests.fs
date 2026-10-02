@@ -1648,6 +1648,52 @@ let private phase964LiveTests (connectionString: string) =
         }
     ]
 
+/// Phase 968 (c) — `SchemaMode = VerifyOnly`, live, with the table present
+/// and absent. The probe reads `to_regclass(@table)` back, and a `regclass`
+/// value is not one every reader maps, so the present case is the one that
+/// can throw; the absent case must still refuse by name.
+let private phase968LiveTests (connectionString: string) =
+    testList "Phase 968 (live)" [
+        testCaseAsync "VerifyOnly accepts a table that is present, and the store answers"
+        <| async {
+            let table = freshTableName ()
+
+            let options = {
+                PgvectorOptions.forDimensions 8 with
+                    Table = table
+            }
+
+            let logger = Some(SilentLogger() :> ILogger)
+            // AutoMigrate provisions the table, as an out-of-band migration would.
+            (create connectionString options logger :?> IDisposable).Dispose()
+
+            try
+                let verified =
+                    create connectionString { options with SchemaMode = VerifyOnly } logger
+
+                try
+                    let! scopes = verified.ListScopes()
+                    Expect.isEmpty scopes "the verified store reads the provisioned table"
+                finally
+                    (verified :?> IDisposable).Dispose()
+            finally
+                dropTable connectionString table
+        }
+
+        testCase "VerifyOnly refuses a table that is absent, by name"
+        <| fun _ ->
+            let table = freshTableName ()
+
+            let options = {
+                PgvectorOptions.forDimensions 8 with
+                    Table = table
+                    SchemaMode = VerifyOnly
+            }
+
+            expectRaisesNaming table "a missing table is refused at create, naming it" (fun () ->
+                create connectionString options (Some(SilentLogger() :> ILogger)) |> ignore)
+    ]
+
 let private liveTests (connectionString: string) =
     let makeStore = makeStoreWith connectionString 8
 
@@ -1921,6 +1967,7 @@ let private liveTests (connectionString: string) =
         phase892LiveTests connectionString
         phase939LiveTests connectionString
         phase964LiveTests connectionString
+        phase968LiveTests connectionString
     ]
 
 // ─── Registration ────────────────────────────────────────────────────
