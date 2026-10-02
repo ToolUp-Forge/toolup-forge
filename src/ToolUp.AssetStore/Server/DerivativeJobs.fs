@@ -223,10 +223,13 @@ module DerivativeJobs =
         | Error storageError -> return Error storageError
     }
 
-    let internal clearStatus (blob: IBlobStorage) (container: string) (hash: string) (name: string) = async {
-        let! _ = blob.Delete(container, statusKey hash name)
-        return ()
-    }
+    /// Phase 971 — returns the delete's result. A kept status is not
+    /// harmless: `EnsureQueued` answers any existing status without
+    /// queueing, so once the cache entry is gone a stale Pending/Failed
+    /// masks the derivative. `Delete` answers `Ok` on a missing blob, so an
+    /// `Error` is a refusal; the worker turns it into a retryable failure.
+    let internal clearStatus (blob: IBlobStorage) (container: string) (hash: string) (name: string) =
+        blob.Delete(container, statusKey hash name)
 
     /// Phase 207 — persist a dead-letter record. Called only on the
     /// opted-in path.
@@ -575,6 +578,23 @@ type DerivativeJobHandler
                     return TransientFailure message
                 }
 
+                /// The derivative is cached: clear its status, then
+                /// announce it. Phase 971 — a refused clear is a
+                /// retryable failure, not a Success: the kept status
+                /// would mask the derivative once its cache entry goes.
+                /// The retry finds the cache written and re-clears
+                /// through the cache-hit branch; ready is published only
+                /// by the run whose clear landed.
+                let completed () = async {
+                    match! DerivativeJobs.clearStatus blobStorage container hash name with
+                    | Ok() ->
+                        do! notify container (ready ())
+                        return Success
+                    | Error storageError ->
+                        return!
+                            transient (sprintf "%s written, but its status could not be cleared: %s" name storageError)
+                }
+
                 // Resolve the profile entry fresh on every attempt —
                 // no state survives between invocations (rule 4).
                 match DerivativeProfileRegistry.resolveEntry (DerivativeProfileId payload.ProfileId) name profiles with
@@ -595,10 +615,7 @@ type DerivativeJobHandler
                     let! cached = blobStorage.Download(container, cacheKey)
 
                     match cached with
-                    | Ok _ ->
-                        do! DerivativeJobs.clearStatus blobStorage container hash name
-                        do! notify container (ready ())
-                        return Success
+                    | Ok _ -> return! completed ()
                     | Error _ ->
                         let! original = blobStorage.Download(container, sprintf "assets/originals/%s" hash)
 
@@ -622,8 +639,5 @@ type DerivativeJobHandler
 
                                     match cacheWrite with
                                     | Error message -> return! transient (sprintf "cache write failed: %s" message)
-                                    | Ok _ ->
-                                        do! DerivativeJobs.clearStatus blobStorage container hash name
-                                        do! notify container (ready ())
-                                        return Success
+                                    | Ok _ -> return! completed ()
         }
