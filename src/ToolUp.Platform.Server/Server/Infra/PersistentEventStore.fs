@@ -334,7 +334,7 @@ type PersistentEventStore(blobStorage: IBlobStorage, retentionPolicy: EventReten
                     yield!
                         toDelete
                         |> List.map (fun name -> async {
-                            let! _ = blobStorage.Delete(platformContainer, name)
+                            let! _ = blobStorage.Delete(platformContainer, name) // best-effort-write: retention prune; the next PruneScope re-lists and re-deletes what the same age/count predicate still selects
                             return ()
                         })
                     yield! prunedEvents |> List.map removeIndexEntries

@@ -2557,6 +2557,8 @@ let private registeredTests =
         FactPublicationTests.phase971Tests
         // Phase 971 - PlatformTeams: a refused delete that is the operation propagates.
         Phase971PlatformTeamsTests.tests
+        // Phase 971 - PlatformStores: a refused delete that is the operation propagates.
+        Phase971PlatformStoresTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

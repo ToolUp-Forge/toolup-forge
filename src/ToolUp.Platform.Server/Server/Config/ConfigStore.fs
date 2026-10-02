@@ -406,8 +406,13 @@ type BlobConfigStore(storage: IBlobStorage, ?logger: ILogger) =
         }
 
         member _.Clear(scope, moduleKey) = async {
-            let! _ = storage.Delete(platformContainer, blobName scope moduleKey)
-            return ()
+            // Phase 971 — `Delete` answers Ok on a missing blob (which keeps
+            // Clear idempotent), so an Error is a refusal: the document is
+            // still there, and `Clear` has no failure channel, so it raises.
+            match! storage.Delete(platformContainer, blobName scope moduleKey) with
+            | Ok() -> return ()
+            | Error storageError ->
+                return failwithf "config document %s could not be cleared: %s" (blobName scope moduleKey) storageError
         }
 
         member _.Erase(scopeId, subjectUserId, policy, dryRun) = async {

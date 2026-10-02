@@ -65,10 +65,16 @@ let create (storage: IBlobStorage) : IProviderProfile =
         member _.Set(scope, profile) = write scope profile
 
         member _.Clear scope = async {
-            let! _ = storage.Delete(scope.Container, blobName)
-            // Delete errors (blob absent, etc.) are swallowed — Clear
-            // is idempotent by contract.
-            return ()
+            // Clear is idempotent by contract, and `Delete` already answers
+            // Ok on an absent blob — so an Error is a REFUSAL, not "not
+            // found": the profile is still there. Phase 971 — `Clear` has no
+            // failure channel, so a refusal raises rather than reading as
+            // cleared.
+            match! storage.Delete(scope.Container, blobName) with
+            | Ok() -> return ()
+            | Error storageError ->
+                return
+                    failwithf "provider profile %s in %s could not be cleared: %s" blobName scope.Container storageError
         }
 
         member _.ResolveEntry(scope, surface, context) = async {
