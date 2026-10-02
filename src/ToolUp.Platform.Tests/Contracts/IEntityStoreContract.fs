@@ -444,7 +444,7 @@ let tests (name: string) (factory: unit -> IEntityStore * EntityStore.EntityRegi
                 Expect.equal
                     conflicts.Length
                     (racers - 1)
-                    (sprintf "round %d: every loser got a typed VersionConflict" round)
+                    (sprintf "round %d: every loser got a typed VersionConflict; outcomes were %A" round outcomes)
 
                 for e, a in conflicts do
                     Expect.equal e expected (sprintf "round %d: a loser's refusal names its own expectation" round)

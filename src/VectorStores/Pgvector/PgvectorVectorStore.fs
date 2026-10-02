@@ -538,8 +538,13 @@ module Sql =
     [<Literal>]
     let ExtensionPresent = "SELECT 1 FROM pg_extension WHERE extname = 'vector';"
 
-    /// Table-presence probe for `VerifyOnly`.
-    let tableRegclass = "SELECT to_regclass(@table);"
+    /// Table-presence probe for `VerifyOnly`. Cast to `text` (Phase 968):
+    /// Npgsql cannot read a `regclass` value as `obj`, so the bare
+    /// `to_regclass(@table)` threw `InvalidCastException` whether the table
+    /// was present or absent, and `VerifyOnly` refused every table with that
+    /// message instead of naming a missing one. `PostgresFactStore`'s probe
+    /// already had the cast; `NULL::text` still reads as `DBNull`.
+    let tableRegclass = "SELECT to_regclass(@table)::text;"
 
     /// Upsert on the composite key. Re-upserting clears any tombstone —
     /// the new content supersedes the old (the `IVectorStore` contract).
