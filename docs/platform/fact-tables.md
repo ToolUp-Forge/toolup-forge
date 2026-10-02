@@ -208,6 +208,17 @@ idempotent re-assertion. The summary statistics describe the whole matched popul
 subject that nobody asked about has no fact. A read that names no subject ("every fact for this
 metric") is not a point read. It reaches the underlying store, which holds what was quoted.
 
+**Reads by an imported method (Phase 964).** A run opened with imported provenance mints the rows
+under each origin's root member as `Imported <certificate>`, and the table records each certificate
+it imported under. A read naming that method is delegated like one naming the delegate's own
+method: a point read mints the subject's rows and answers from its imported lineage, and a
+population read with `OneMethod (Imported c)` ranks only the rows under the root member of the
+run's origin for `c`, narrowing any path prefix the caller gave to it. A certificate the table never
+recorded is not delegated, and a run with no origin for a recorded certificate answers empty. One
+read is still refused, by name, on the population error channel: a run that imports one certificate
+under several root members, because a single ranked read answers from one subtree and merging
+rankings would also have to merge their statistics.
+
 **No free-form query.** The query spec is a column mapping declared at composition: the subject is
 the row's path at the table's level, the period is the row's period, and the value is the column's
 cell. A caller supplies only what the tool parameters already carry (metric, subject, period,

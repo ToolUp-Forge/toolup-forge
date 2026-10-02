@@ -40,6 +40,26 @@ let private DeadLetterRateThreshold = 10
 /// runs at all on the in-memory default.
 let LeaseReclaimInterval = TimeSpan.FromSeconds 30.0
 
+/// Phase 964 — the drain loop's backoff after an exception from the
+/// queue itself (`WaitForWork` / `TryDequeue`). A durable store that
+/// fails on every call used to be called again at once, spinning a core
+/// and writing one error per call. The wait doubles from
+/// `DrainBackoffInitial` per consecutive failure up to `DrainBackoffCap`,
+/// resets on the first call that succeeds, and is cut short by the
+/// stopping token.
+let private DrainBackoffInitial = TimeSpan.FromMilliseconds 100.0
+
+/// The ceiling `DrainBackoffInitial` doubles towards (Phase 964).
+let private DrainBackoffCap = TimeSpan.FromSeconds 10.0
+
+/// The wait after the `failures`-th consecutive drain-loop failure
+/// (1-based): `DrainBackoffInitial` doubled per earlier failure, capped
+/// at `DrainBackoffCap` (Phase 964).
+let private drainBackoffAfter (failures: int) : TimeSpan =
+    let doublings = min (max (failures - 1) 0) 30
+    let ms = DrainBackoffInitial.TotalMilliseconds * Math.Pow(2.0, float doublings)
+    TimeSpan.FromMilliseconds(min ms DrainBackoffCap.TotalMilliseconds)
+
 /// Minimum spacing between repeat provider-unavailable alerts for one
 /// scope — dedups a provider outage that fails N chunks down to a
 /// single notification.
@@ -990,49 +1010,94 @@ type IngestionBackgroundService
 
         let mutable queueClosed = false
 
+        // Phase 964 — consecutive queue failures, and the wait the next
+        // pass takes before it calls the queue again. Logged once per
+        // change of state (entering backoff, reaching the cap, recovering),
+        // never once per failure.
+        let mutable consecutiveFailures = 0
+        let mutable backoff = TimeSpan.Zero
+
         while not stoppingToken.IsCancellationRequested && not queueClosed do
-            try
-                // Phase 894 — a document leaves the queue only when a worker
-                // is free to take it, so the queue's depth is exactly what is
-                // waiting and its capacity bounds what is held in memory.
-                // Phase 945 — wait for work FIRST, holding no permit, then take
-                // a permit, then take the job. An idle loop holds nothing, so a
-                // waking retry never starves behind it. A wake whose job another
-                // drainer took first finds `None` and gives the permit back.
-                let! hasWork = Async.StartAsTask(queue.WaitForWork stoppingToken, cancellationToken = stoppingToken)
+            if backoff > TimeSpan.Zero then
+                try
+                    do! Task.Delay(backoff, stoppingToken)
+                with :? OperationCanceledException ->
+                    ()
 
-                if hasWork then
-                    do! sem.WaitAsync(stoppingToken)
-                    let mutable handedOff = false
+            if not stoppingToken.IsCancellationRequested then
+                try
+                    // Phase 894 — a document leaves the queue only when a worker
+                    // is free to take it, so the queue's depth is exactly what is
+                    // waiting and its capacity bounds what is held in memory.
+                    // Phase 945 — wait for work FIRST, holding no permit, then take
+                    // a permit, then take the job. An idle loop holds nothing, so a
+                    // waking retry never starves behind it. A wake whose job another
+                    // drainer took first finds `None` and gives the permit back.
+                    let! hasWork = Async.StartAsTask(queue.WaitForWork stoppingToken, cancellationToken = stoppingToken)
 
-                    try
-                        // Phase 869 — NOT under the stopping token. The claim
-                        // is one store call that never waits; cancelled at the
-                        // bind after it, a lease it had already taken was
-                        // dropped and sat out its expiry. A claim that returns
-                        // is started, and the stop waits for it like any other.
-                        let! lease = Async.StartAsTask(queue.TryDequeue())
+                    if hasWork then
+                        do! sem.WaitAsync(stoppingToken)
+                        let mutable handedOff = false
 
-                        match lease with
-                        | Some claimed ->
-                            // Fire the job without awaiting; it owns the slot
-                            // now and releases it when done.
-                            handedOff <- true
-                            startJob (WorkerSlot sem) claimed
-                        | None -> ()
-                    finally
-                        if not handedOff then
-                            sem.Release() |> ignore
-                elif not stoppingToken.IsCancellationRequested then
-                    // The queue will never produce another job.
-                    queueClosed <- true
-            with
-            | :? OperationCanceledException -> ()
-            | ex ->
-                logger.Error(
-                    $"[IngestionBackgroundService] event=dequeue_loop_error provider={embedder.ProviderId}/{embedder.ModelId}: unexpected error",
-                    Some ex
-                )
+                        try
+                            // Phase 869 — NOT under the stopping token. The claim
+                            // is one store call that never waits; cancelled at the
+                            // bind after it, a lease it had already taken was
+                            // dropped and sat out its expiry. A claim that returns
+                            // is started, and the stop waits for it like any other.
+                            let! lease = Async.StartAsTask(queue.TryDequeue())
+
+                            match lease with
+                            | Some claimed ->
+                                // Fire the job without awaiting; it owns the slot
+                                // now and releases it when done.
+                                handedOff <- true
+                                startJob (WorkerSlot sem) claimed
+                            | None -> ()
+                        finally
+                            if not handedOff then
+                                sem.Release() |> ignore
+                    elif not stoppingToken.IsCancellationRequested then
+                        // The queue will never produce another job.
+                        queueClosed <- true
+
+                    // The queue answered: a failure streak, if there was one,
+                    // is over.
+                    if consecutiveFailures > 0 then
+                        logger.Info(
+                            sprintf
+                                "[IngestionBackgroundService] event=dequeue_loop_recovered provider=%s failures=%d: the queue answered again; the drain loop's backoff is reset."
+                                providerLabel
+                                consecutiveFailures
+                        )
+
+                        consecutiveFailures <- 0
+                        backoff <- TimeSpan.Zero
+                with
+                | :? OperationCanceledException -> ()
+                | ex ->
+                    consecutiveFailures <- consecutiveFailures + 1
+                    let previous = backoff
+                    backoff <- drainBackoffAfter consecutiveFailures
+
+                    if consecutiveFailures = 1 then
+                        logger.Error(
+                            sprintf
+                                "[IngestionBackgroundService] event=dequeue_loop_error provider=%s backoff_ms=%.0f: unexpected error from the ingestion queue; the drain loop backs off, doubling to %.0f ms, until a call succeeds. Repeat failures are not logged one by one."
+                                providerLabel
+                                backoff.TotalMilliseconds
+                                DrainBackoffCap.TotalMilliseconds,
+                            Some ex
+                        )
+                    elif backoff = DrainBackoffCap && previous <> DrainBackoffCap then
+                        logger.Error(
+                            sprintf
+                                "[IngestionBackgroundService] event=dequeue_loop_backoff_capped provider=%s failures=%d backoff_ms=%.0f: the ingestion queue is still failing; the drain loop now retries at the cap."
+                                providerLabel
+                                consecutiveFailures
+                                backoff.TotalMilliseconds,
+                            Some ex
+                        )
     }
 
     member private _.StopBase(cancellationToken: CancellationToken) = base.StopAsync cancellationToken

@@ -1042,9 +1042,14 @@ let hasScopeKeyedEmbeddingProvider (app: RAGServerApp) : bool =
 /// in-process (GP 11), as an unrecognised store did before.
 let isInProcessVectorStore (store: IVectorStore) : bool = VectorIndexLocality.isInProcess store
 
-/// Phase 893 — is `index` the in-process keyword index (`InMemoryBM25Index`),
-/// whose postings live in one process's memory?
-let isInProcessSparseIndex (index: ISparseIndex) : bool = index :? InMemoryBM25Index
+/// Phase 893 — is `index` an in-process keyword index, whose postings live
+/// in one process's memory?
+///
+/// Phase 964 — read from the index's own `ISparseIndexLocality`
+/// declaration, never a type test, so a decorator that forwards the
+/// declaration keeps the warning. An undeclared index reads as not
+/// in-process (GP 11).
+let isInProcessSparseIndex (index: ISparseIndex) : bool = SparseIndexLocality.isInProcess index
 
 /// Phase 866 — the score space the composed pipeline's scores reach the
 /// `MinScore` gate in, or `None` when a supplied pipeline owns retrieval

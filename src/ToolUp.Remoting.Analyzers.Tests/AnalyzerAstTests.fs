@@ -106,6 +106,40 @@ type MyApi = {
 }
 """
 
+// Phase 964 (h) — an all-function record marked `NotRemotingApi` is not an
+// API contract, whatever its shape: the generator's census skips it by
+// attribute NAME in any namespace (`Plan.isExcludedFromApiCensus`), and the
+// analyzer must agree. Both the source form and the CLR form, bare and
+// qualified, are recognised.
+let private markedCallbacks =
+    """module Demo
+type NotRemotingApiAttribute() =
+    inherit System.Attribute()
+
+[<NotRemotingApi>]
+type Callbacks = {
+    OnSaved: string -> unit
+    OnClosed: unit -> Async<unit>
+}
+"""
+
+let private markedCallbacksQualified =
+    """module Demo
+[<Contracts.Markers.NotRemotingApiAttribute>]
+type Callbacks = {
+    OnSaved: string -> unit
+}
+"""
+
+// A different attribute on an all-function record does not exclude it.
+let private otherAttributeApi =
+    """module Demo
+[<RequireQualifiedAccess>]
+type MyApi = {
+    GetThings: unit -> Async<int>
+}
+"""
+
 // ── Tests ────────────────────────────────────────────────────────────
 
 let private astTests =
@@ -136,6 +170,20 @@ let private astTests =
 
         test "a plain data record is ignored (not an API contract)" {
             Expect.isEmpty (analyze false dataRecord) "non-function-record is never flagged"
+        }
+
+        test "an all-function record marked NotRemotingApi is not an API contract (Phase 964)" {
+            Expect.isEmpty
+                (analyze false markedCallbacks)
+                "marked record is skipped, as the generator's census skips it"
+
+            Expect.isEmpty
+                (analyze false markedCallbacksQualified)
+                "matched by name in any namespace, CLR form included"
+        }
+
+        test "another attribute on an all-function record does not exclude it (Phase 964)" {
+            Expect.equal (codes (analyze false otherAttributeApi)) [ "TUR0001" ] "only NotRemotingApi excludes"
         }
     ]
 

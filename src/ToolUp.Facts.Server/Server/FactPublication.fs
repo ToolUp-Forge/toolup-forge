@@ -653,8 +653,18 @@ module internal FactPublicationSeam =
 // consent's, so an edit of those in the store drops the consent rather than
 // re-pointing it. What the store keeps outright is the rest of the record: a
 // party that can write it can delete a grant, or replay an earlier state of
-// one — including one from before a withdrawal, which the audit trail still
-// records. None of that writes under a scope the platform did not resolve.
+// one — including one from before a withdrawal. None of that writes under a
+// scope the platform did not resolve.
+//
+// Phase 964 — a replayed record is caught on restore against the audit
+// trail. Every owner act writes `FactPublicationConsented` /
+// `FactPublicationRevoked` in the acting team's scope after the record is
+// persisted, so a record that lacks an act the trail holds for its grant is
+// older than that act. Its consents are dropped as an unredeemable one is,
+// with an audit record naming the act it predates. The trail is read by
+// team id, as the drop's audit records are written; no scope is resolved.
+// What remains is deletion: a deleted record restores nothing, which is the
+// grant not in force.
 //
 // Nothing here runs unless the service was composed with a carrier
 // (`FactPublication.createDurable`); `createWith` holds grants in process
@@ -834,10 +844,128 @@ module internal GrantPersistence =
             Dropped = dropped
         }
 
+    /// Phase 964 — one owner act the audit trail records for a grant.
+    type RecordedAct = {
+        EventType: string
+        Side: string
+        At: DateTime
+    }
+
+    /// Phase 964 — the owner acts the audit trail records for `grant`, read
+    /// from both teams' scopes through `trail` (event type and team id to
+    /// the events of that type).
+    let recordedActs
+        (trail: string -> string -> Async<ModuleEvent list>)
+        (grant: PublicationGrant)
+        : Async<RecordedAct list> =
+        async {
+            let! found =
+                [
+                    for team in [ grant.SourceTeam; grant.TargetTeam ] |> List.distinct do
+                        for eventType in [ FactPublicationEvents.ConsentedType; FactPublicationEvents.RevokedType ] do
+                            trail eventType team
+                ]
+                |> Async.Sequential
+
+            return
+                found
+                |> List.concat
+                |> List.distinctBy _.Id
+                |> List.choose (fun e ->
+                    let payload =
+                        try
+                            System.Text.Json.JsonSerializer.Deserialize<FactPublicationEvent>(
+                                e.Payload,
+                                ToolUp.Remoting.Json.SystemTextJson.FableConverters.shared
+                            )
+                            |> Some
+                        with _ ->
+                            None
+
+                    match payload with
+                    | Some p when not (isNull (box p)) && p.GrantId = grant.GrantId ->
+                        Some {
+                            EventType = e.EventType
+                            Side = p.Side
+                            At = e.OccurredAt
+                        }
+                    | _ -> None)
+        }
+
+    /// Phase 964 — the latest act the trail holds that `grant`, as persisted,
+    /// does not carry: a consent by a side whose consent the record lacks, or
+    /// a withdrawal the record lacks. `None` when the record carries every
+    /// act, which is a record no older than the trail.
+    let latestActNotCarried (grant: PublicationGrant) (acts: RecordedAct list) : RecordedAct option =
+        acts
+        |> List.filter (fun act ->
+            if act.EventType = FactPublicationEvents.RevokedType then
+                grant.Revocation.IsNone
+            elif act.Side = PublicationSide.name PublicationSide.Source then
+                grant.SourceConsent.IsNone
+            elif act.Side = PublicationSide.name PublicationSide.Target then
+                grant.TargetConsent.IsNone
+            else
+                false)
+        |> List.sortBy _.At
+        |> List.tryLast
+
+    /// Phase 964 — a restored grant whose record predates `act`: no consent
+    /// stands, and each consent it carried is dropped naming the act.
+    let predating (act: RecordedAct) (restored: Restored) (record: PersistedGrant) : Restored =
+        let why =
+            sprintf
+                "the persisted record is older than the latest owner act for its grant (%s by the %s team at %s), so it is a replayed earlier state"
+                act.EventType
+                act.Side
+                (act.At.ToUniversalTime().ToString "o")
+
+        let carried = [
+            if record.Grant.SourceConsent.IsSome then
+                PublicationSide.Source, why
+            if record.Grant.TargetConsent.IsSome then
+                PublicationSide.Target, why
+        ]
+
+        {
+            Entry = {
+                Grant = {
+                    restored.Entry.Grant with
+                        SourceConsent = None
+                        TargetConsent = None
+                }
+                ConsentedTarget = None
+            }
+            Tokens = noTokens
+            Dropped = carried
+        }
+
     /// Every persisted grant, restored, with one audit record per dropped
     /// consent in each team's scope. An unreadable record restores nothing.
+    /// A record older than the latest owner act its audit trail records is
+    /// dropped (Phase 964).
     let restore (deps: FactPublicationDeps) (carrier: ScopeCarrier) : Async<Restored list> = async {
         let! names = deps.Storage.List(Container, Prefix)
+
+        // One read per team and event type, however many grants name it.
+        let trailCache = ConcurrentDictionary<string * string, ModuleEvent list>()
+
+        let trail (eventType: string) (team: string) = async {
+            match trailCache.TryGetValue((team, eventType)) with
+            | true, events -> return events
+            | _ ->
+                // An unreadable trail checks nothing: the record restores as
+                // it did before Phase 964, its tokens still checked.
+                let! events = async {
+                    try
+                        return! deps.Events.ReadByType(team, eventType)
+                    with _ ->
+                        return []
+                }
+
+                trailCache[(team, eventType)] <- events
+                return events
+        }
 
         let! loaded =
             names
@@ -845,7 +973,13 @@ module internal GrantPersistence =
             |> List.sort
             |> List.map (fun blob -> async {
                 match! FactTableBlobIo.tryGet<PersistedGrant> deps.Storage Container blob with
-                | Ok(Some record) when not (isNull (box record.Grant)) -> return Some(restoreOne carrier record)
+                | Ok(Some record) when not (isNull (box record.Grant)) ->
+                    let restored = restoreOne carrier record
+                    let! acts = recordedActs trail record.Grant
+
+                    match latestActNotCarried record.Grant acts with
+                    | None -> return Some restored
+                    | Some act -> return Some(predating act restored record)
                 | _ -> return None
             })
             |> Async.Sequential

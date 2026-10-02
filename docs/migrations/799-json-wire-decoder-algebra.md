@@ -76,9 +76,9 @@ rebuild a value from `high` and `low` — as they did in v0.23.0. They no longer
 than a JSON number or the writer's string is refused, naming the type and both accepted forms in
 the words `asInt64` / `asUInt64` use (`expected Int64 as a JSON number or a signed string ("+42",
 "-7"), got object`). The refusal is a `validation`-category 400 before the handler runs, like every
-other argument refusal on this seam; on this path it is reported at the argument, because the record
-converter reads each member through a nested deserialise and STJ's path does not reach the member.
-Unlike the algebra path, **this narrows against v0.23.0**: a hand-built request body that sent the
+other argument refusal on this seam, and it names the member it was raised at (`Count`,
+`Inner.Count`, `Items[1].Count`): since Phase 964 the record, union, tuple, collection and map
+converters carry the member path out of each nested read. Unlike the algebra path, **this narrows against v0.23.0**: a hand-built request body that sent the
 object form to an argument type with no registered decoder decoded there and is refused now. The
 caller search below found no such body.
 

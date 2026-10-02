@@ -66,3 +66,34 @@ type ISparseIndex =
     abstract Erase:
         scope: VectorScope * subjectUserId: string * policy: ToolUp.Platform.ErasurePolicy * dryRun: bool ->
             Async<Result<ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError>>
+
+/// Phase 964 — the keyword index's twin of `IVectorStoreLocality`: where
+/// this index's postings live, as the index itself declares it. It reuses
+/// `VectorIndexLocality` (the question and its two answers are the same for
+/// a lexical index as for a vector index) and is a SEPARATE interface from
+/// `ISparseIndex` for the same reason the vector one is separate from
+/// `IVectorStore`: the core interface gains no member, and no existing
+/// implementation breaks.
+///
+/// A decorator forwards the declaration of the index it wraps
+/// (`member _.IndexLocality = SparseIndexLocality.declared inner`). An index
+/// that declares nothing reads as not in-process (GP 11).
+type ISparseIndexLocality =
+    /// Where this index's postings live: `Some` for an index that knows,
+    /// `None` for a decorator over an index that declares nothing.
+    abstract IndexLocality: ToolUp.Platform.IVectorStore.VectorIndexLocality option
+
+/// The probe for the Phase 964 keyword-index locality declaration.
+[<RequireQualifiedAccess>]
+module SparseIndexLocality =
+    /// The locality `index` declares, or `None` when it implements no
+    /// `ISparseIndexLocality`.
+    let declared (index: ISparseIndex) : ToolUp.Platform.IVectorStore.VectorIndexLocality option =
+        match box index with
+        | :? ISparseIndexLocality as declaring -> declaring.IndexLocality
+        | _ -> None
+
+    /// `true` only when `index` declares its postings `InProcess`. An
+    /// undeclared index is `false` (see `ISparseIndexLocality`).
+    let isInProcess (index: ISparseIndex) : bool =
+        declared index = Some ToolUp.Platform.IVectorStore.VectorIndexLocality.InProcess

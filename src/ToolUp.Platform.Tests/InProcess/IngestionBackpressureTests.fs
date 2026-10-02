@@ -1119,10 +1119,146 @@ let private queueWaits =
 let private phase945 =
     testList "Phase 945 — RAG operations follow-ups" [ embedderRetries; lostTraces; queueWaits ]
 
+// ─── Phase 964 (f) — the drain loop backs off on repeated failure ───
+
+/// A logger that counts every line by level, keeping the messages.
+type private CountingLogger() =
+    let lines = Collections.Concurrent.ConcurrentQueue<string * string>()
+    member _.Lines = List.ofSeq lines
+
+    member _.Count(level: string, fragment: string) =
+        lines
+        |> Seq.filter (fun (l, m) -> l = level && m.Contains fragment)
+        |> Seq.length
+
+    interface ILogger with
+        member _.Debug m = lines.Enqueue("debug", m)
+        member _.Info m = lines.Enqueue("info", m)
+        member _.Warn m = lines.Enqueue("warn", m)
+        member _.Error(m, _) = lines.Enqueue("error", m)
+
+/// An ingestion queue whose `WaitForWork` raises for the first
+/// `failFor` calls (all of them when `None`), then answers once that
+/// there is work (which `TryDequeue` finds already taken), then waits for
+/// the stopping token and reports no work. Counts every call.
+type private FailingQueue(failFor: int option) =
+    let mutable calls = 0
+    member _.Calls = calls
+
+    interface IIngestionQueue with
+        member _.IsDurable = false
+        member _.Capacity = 10
+        member _.Policy = DropWrite
+        member _.EnqueueAsync _ = async.Return false
+        member _.EnqueueBlockingAsync _ = async.Return()
+        member _.Dequeue _ = async.Return None
+
+        member _.WaitForWork ct = async {
+            let n = Interlocked.Increment(&calls)
+
+            match failFor with
+            | Some k when n = k + 1 -> return true
+            | Some k when n > k ->
+                try
+                    do! Tasks.Task.Delay(Timeout.Infinite, ct) |> Async.AwaitTask
+                with _ ->
+                    ()
+
+                return false
+            | _ -> return raise (InvalidOperationException "the queue store is down")
+        }
+
+        member _.TryDequeue() = async.Return None
+        member _.Ack _ = async.Return()
+        member _.Abandon(_, _) = async.Return()
+        member _.RecoverStranded() = async.Return 0
+
+let private startOnQueue (q: IIngestionQueue) (logger: ILogger) =
+    ToolUp.RAG.IngestionService.create
+        q
+        { new IRetrievalPipeline with
+            member _.Retrieve _ _ = async.Return []
+            member _.Index _ _ _ = async.Return()
+            member _.DeleteByScope _ = async.Return()
+        }
+        (DelayedEmbedder TimeSpan.Zero)
+        (noopEventStore ())
+        []
+        1
+        logger
+        (ToolUp.RAG.RagTelemetry.createNoOp ())
+        (ToolUp.Platform.Usage.NoOpUsageLog())
+        (ToolUp.Platform.Usage.NoOpTeamQuotaPolicy())
+        IngestionRetryPolicy.defaults
+        None
+        (ToolUp.RAG.IngestionService.IngestionAlertState())
+        (fun () -> None)
+        ignore
+
+let private drainBackoff =
+    testList "Phase 964 — (f) the ingestion drain loop backs off on repeated failure" [
+        testCaseAsync "a queue that raises on every call is not called in a hot loop, and is not logged per failure"
+        <| async {
+            let q = FailingQueue None
+            let log = CountingLogger()
+            use svc = startOnQueue q log
+            use cts = new CancellationTokenSource()
+            let hosted = svc :> Microsoft.Extensions.Hosting.IHostedService
+            do! hosted.StartAsync cts.Token |> Async.AwaitTask
+            do! Async.Sleep 1600
+            let calls = q.Calls
+
+            // 100 + 200 + 400 + 800 ms of backoff fit in the window: about
+            // five calls. Without a backoff the loop calls again at once,
+            // which is tens of thousands of calls in the same window.
+            Expect.isGreaterThanOrEqual calls 3 "the loop keeps trying"
+            Expect.isLessThanOrEqual calls 8 "and backs off between tries"
+
+            Expect.equal
+                (log.Count("error", "event=dequeue_loop_error"))
+                1
+                "the failure streak is logged once, when it starts"
+
+            // A stop issued while the loop sleeps (now 1.6 s) is honoured at
+            // once, not after the sleep.
+            let sw = Diagnostics.Stopwatch.StartNew()
+            cts.Cancel()
+            do! hosted.StopAsync CancellationToken.None |> Async.AwaitTask
+            Expect.isLessThan sw.ElapsedMilliseconds 1000L "the stopping token cuts the backoff short"
+        }
+
+        testCaseAsync "the backoff resets when the queue answers again, and the recovery is logged once"
+        <| async {
+            let q = FailingQueue(Some 3)
+            let log = CountingLogger()
+            use svc = startOnQueue q log
+            use cts = new CancellationTokenSource()
+            let hosted = svc :> Microsoft.Extensions.Hosting.IHostedService
+            do! hosted.StartAsync cts.Token |> Async.AwaitTask
+
+            let! recovered = waitUntil 5000 (fun () -> log.Count("info", "event=dequeue_loop_recovered") > 0)
+
+            cts.Cancel()
+            do! hosted.StopAsync CancellationToken.None |> Async.AwaitTask
+
+            Expect.isTrue recovered "the loop reached the call that succeeds"
+            Expect.equal (log.Count("error", "event=dequeue_loop_error")) 1 "one line when the streak started"
+            Expect.equal (log.Count("info", "event=dequeue_loop_recovered")) 1 "one line when it ended"
+
+            Expect.stringContains
+                (log.Lines
+                 |> List.find (fun (_, m) -> m.Contains "dequeue_loop_recovered")
+                 |> snd)
+                "failures=3"
+                "the recovery names the streak's length"
+        }
+    ]
+
 let tests =
     testList "Phase 303 — ingestion-queue backpressure observability" [
         queueCounters
         dropEmission
         phase894
         phase945
+        drainBackoff
     ]

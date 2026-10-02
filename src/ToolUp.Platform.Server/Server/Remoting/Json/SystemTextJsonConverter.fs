@@ -157,6 +157,65 @@ module private TupleReflection =
         )
 
 // =============================================================================
+// Nested member reads (Phase 964)
+// =============================================================================
+//
+// The record, union, tuple, collection and map converters below read each
+// member through a NESTED `JsonElement.Deserialize`, which starts a fresh
+// System.Text.Json read with its own path. A refusal raised inside a member
+// therefore carried the member's own root (`$`) and no member name, and the
+// argument seam (`FableConverters.tryDeserialiseElement`) reported it at the
+// argument. Each nested read now goes through `NestedRead`, which re-raises
+// a `JsonException` with the member's segment prefixed onto the inner path:
+// `$.Inner.Count`, `$.Items[1].Count`, `$.Holds.Count`. STJ fills a
+// converter's path only while it is still null, so the prefixed path reaches
+// the seam intact, and a converter nested in another composes.
+
+module private NestedRead =
+
+    /// The path segment STJ writes for a property name: `.Name`, or the
+    /// bracketed form for a name that would not read back as one segment.
+    let property (name: string) : string =
+        if
+            name.Length > 0
+            && name |> Seq.forall (fun c -> Char.IsLetterOrDigit c || c = '_' || c = '-')
+        then
+            "." + name
+        else
+            "['" + name + "']"
+
+    /// The path segment for an array position.
+    let index (i: int) : string = sprintf "[%d]" i
+
+    /// `segment` joined onto the path a nested read reported (`$`-rooted, or
+    /// null when it reported none).
+    let prefixed (segment: string) (innerPath: string) : string =
+        match innerPath with
+        | null
+        | ""
+        | "$" -> "$" + segment
+        | p when p.StartsWith "$" -> "$" + segment + p.Substring 1
+        | p -> "$" + segment + "." + p
+
+    let private rethrow (segment: string) (ex: JsonException) : 'a =
+        raise (JsonException(ex.Message, prefixed segment ex.Path, ex.LineNumber, ex.BytePositionInLine, ex))
+
+    /// `element.Deserialize(t, options)`, a refusal inside it carrying
+    /// `segment` on its path.
+    let read (segment: string) (element: JsonElement) (t: Type) (options: JsonSerializerOptions) : obj =
+        try
+            element.Deserialize(t, options)
+        with :? JsonException as ex ->
+            rethrow segment ex
+
+    /// The generic twin of `read`.
+    let readAs<'V> (segment: string) (element: JsonElement) (options: JsonSerializerOptions) : 'V =
+        try
+            element.Deserialize<'V>(options)
+        with :? JsonException as ex ->
+            rethrow segment ex
+
+// =============================================================================
 // F# Union converter (Kind.Union)
 // =============================================================================
 //
@@ -252,14 +311,14 @@ type FSharpUnionConverter<'T>() =
                 elif case.FieldTypes.Length = 1 then
                     // Per Newtonsoft path: single-field case reads fields.[0].
                     let element = fieldsArr.[0]
-                    let v = element.Deserialize(case.FieldTypes.[0], options)
+                    let v = NestedRead.read ".fields[0]" element case.FieldTypes.[0] options
                     case.Constructor [| v |] :?> 'T
                 else
                     let elements = fieldsArr.EnumerateArray() |> Seq.toArray
 
                     let values =
                         Array.init case.FieldTypes.Length (fun i ->
-                            elements.[i].Deserialize(case.FieldTypes.[i], options))
+                            NestedRead.read (sprintf ".fields[%d]" i) elements.[i] case.FieldTypes.[i] options)
 
                     case.Constructor values :?> 'T
 
@@ -290,7 +349,9 @@ type FSharpUnionConverter<'T>() =
                         if case.FieldTypes.Length = 0 then
                             [||]
                         elif case.FieldTypes.Length = 1 then
-                            [| prop.Value.Deserialize(case.FieldTypes.[0], options) |]
+                            [|
+                                NestedRead.read (NestedRead.property caseName) prop.Value case.FieldTypes.[0] options
+                            |]
                         else
                             if prop.Value.ValueKind <> JsonValueKind.Array then
                                 failwithf
@@ -311,7 +372,11 @@ type FSharpUnionConverter<'T>() =
                                     elements.Length
 
                             Array.init case.FieldTypes.Length (fun i ->
-                                elements.[i].Deserialize(case.FieldTypes.[i], options))
+                                NestedRead.read
+                                    (NestedRead.property caseName + NestedRead.index i)
+                                    elements.[i]
+                                    case.FieldTypes.[i]
+                                    options)
 
                     case.Constructor values :?> 'T
                 | false, _ -> failwithf "Unknown case '%s' for union type %s" caseName typeof<'T>.FullName
@@ -336,7 +401,7 @@ type FSharpUnionConverter<'T>() =
             else
                 let values =
                     Array.init case.FieldTypes.Length (fun i ->
-                        elements.[i + 1].Deserialize(case.FieldTypes.[i], options))
+                        NestedRead.read (NestedRead.index (i + 1)) elements.[i + 1] case.FieldTypes.[i] options)
 
                 case.Constructor values :?> 'T
 
@@ -430,7 +495,8 @@ type FSharpPojoDUConverter<'T>() =
                     case.Uci.GetFields()
                     |> Array.mapi (fun i fi ->
                         match root.TryGetProperty(fi.Name) with
-                        | true, fieldEl -> fieldEl.Deserialize(case.FieldTypes.[i], options)
+                        | true, fieldEl ->
+                            NestedRead.read (NestedRead.property fi.Name) fieldEl case.FieldTypes.[i] options
                         | false, _ ->
                             let t = case.FieldTypes.[i]
                             if t.IsValueType then Activator.CreateInstance(t) else null)
@@ -561,7 +627,8 @@ type FSharpTupleConverter<'T>() =
             let elements = doc.RootElement.EnumerateArray() |> Seq.toArray
 
             let values =
-                Array.init info.ElementTypes.Length (fun i -> elements.[i].Deserialize(info.ElementTypes.[i], options))
+                Array.init info.ElementTypes.Length (fun i ->
+                    NestedRead.read (NestedRead.index i) elements.[i] info.ElementTypes.[i] options)
 
             info.Constructor values :?> 'T
         | other -> failwithf "Unexpected token %A when reading tuple %s" other typeof<'T>.FullName
@@ -632,7 +699,9 @@ type FSharpRecordConverter<'T>() =
 
             for prop in doc.RootElement.EnumerateObject() do
                 match lookup.TryGetValue(prop.Name) with
-                | true, idx -> values.[idx] <- prop.Value.Deserialize(info.FieldTypes.[idx], options)
+                | true, idx ->
+                    values.[idx] <-
+                        NestedRead.read (NestedRead.property prop.Name) prop.Value info.FieldTypes.[idx] options
                 | false, _ -> () // ignore extra fields
 
             info.Constructor values :?> 'T
@@ -710,7 +779,7 @@ type FSharpCliMutableRecordConverter<'T>() =
                 properties
                 |> Array.map (fun prop ->
                     match root.TryGetProperty(prop.Name) with
-                    | true, el -> el.Deserialize(prop.PropertyType, options)
+                    | true, el -> NestedRead.read (NestedRead.property prop.Name) el prop.PropertyType options
                     | false, _ ->
                         if prop.PropertyType.IsValueType then
                             Activator.CreateInstance(prop.PropertyType)
@@ -771,8 +840,8 @@ type FSharpSetConverter<'T when 'T: comparison>() =
             use doc = JsonDocument.ParseValue(&reader)
             let mutable result = Set.empty
 
-            for el in doc.RootElement.EnumerateArray() do
-                let item = el.Deserialize<'T>(options)
+            for i, el in doc.RootElement.EnumerateArray() |> Seq.indexed do
+                let item = NestedRead.readAs<'T> (NestedRead.index i) el options
                 result <- Set.add item result
 
             result
@@ -817,7 +886,7 @@ type FSharpListConverter<'T>() =
             use doc = JsonDocument.ParseValue(&reader)
 
             doc.RootElement.EnumerateArray()
-            |> Seq.map _.Deserialize<'T>(options)
+            |> Seq.mapi (fun i el -> NestedRead.readAs<'T> (NestedRead.index i) el options)
             |> List.ofSeq
         | other -> failwithf "Unexpected token %A when reading %s list" other typeof<'T>.FullName
 
@@ -858,7 +927,7 @@ type FSharpMapStringKeyConverter<'V>() =
             let mutable result = Map.empty
 
             for prop in doc.RootElement.EnumerateObject() do
-                let v = prop.Value.Deserialize<'V>(options)
+                let v = NestedRead.readAs<'V> (NestedRead.property prop.Name) prop.Value options
                 result <- Map.add prop.Name v result
 
             result
@@ -867,10 +936,13 @@ type FSharpMapStringKeyConverter<'V>() =
             use doc = JsonDocument.ParseValue(&reader)
             let mutable result = Map.empty
 
-            for pair in doc.RootElement.EnumerateArray() do
+            for i, pair in doc.RootElement.EnumerateArray() |> Seq.indexed do
                 let elements = pair.EnumerateArray() |> Seq.toArray
                 let k = elements.[0].GetString()
-                let v = elements.[1].Deserialize<'V>(options)
+
+                let v =
+                    NestedRead.readAs<'V> (NestedRead.index i + NestedRead.index 1) elements.[1] options
+
                 result <- Map.add k v result
 
             result
@@ -1026,7 +1098,7 @@ type FSharpMapNonStringKeyConverter<'K, 'V when 'K: comparison>() =
 
                         JsonSerializer.Deserialize<'K>(quotedKey, options)
 
-                let value = prop.Value.Deserialize<'V>(options)
+                let value = NestedRead.readAs<'V> (NestedRead.property prop.Name) prop.Value options
                 result <- Map.add key value result
 
             result
@@ -1035,10 +1107,15 @@ type FSharpMapNonStringKeyConverter<'K, 'V when 'K: comparison>() =
             use doc = JsonDocument.ParseValue(&reader)
             let mutable result = Map.empty
 
-            for pair in doc.RootElement.EnumerateArray() do
+            for i, pair in doc.RootElement.EnumerateArray() |> Seq.indexed do
                 let elements = pair.EnumerateArray() |> Seq.toArray
-                let k = elements.[0].Deserialize<'K>(options)
-                let v = elements.[1].Deserialize<'V>(options)
+
+                let k =
+                    NestedRead.readAs<'K> (NestedRead.index i + NestedRead.index 0) elements.[0] options
+
+                let v =
+                    NestedRead.readAs<'V> (NestedRead.index i + NestedRead.index 1) elements.[1] options
+
                 result <- Map.add k v result
 
             result
@@ -1546,8 +1623,15 @@ module FableConverters =
         match ex.Path with
         | null -> []
         | p ->
+            // Phase 964 — a path rooted at an index (`$[1].Count`) keeps the
+            // index as its first segment (`[1]`), as the algebra writes one.
             p.Split('.')
-            |> Array.filter (fun segment -> segment <> "$" && segment <> "")
+            |> Array.map (fun segment ->
+                if segment.StartsWith "$" then
+                    segment.Substring 1
+                else
+                    segment)
+            |> Array.filter (fun segment -> segment <> "")
             |> Array.toList
 
     /// Phase 783 — THE decode seam. Deserialise one `JsonElement` into

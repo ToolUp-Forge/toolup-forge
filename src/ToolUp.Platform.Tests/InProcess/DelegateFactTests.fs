@@ -994,6 +994,147 @@ let private importedTests =
         }
     ]
 
+// ─── 9. Imported-method reads (Phase 964) ────────────────────────────
+
+/// Commit one run of `rows` imported under `origins`.
+let private commitImported (w: World) (origins: FactTableImportOrigin list) (rows: FactTableRow list) =
+    let opened =
+        match
+            w.Writer.OpenRun(w.Scope.ScopeId, "sku-sales", ImportedRun origins)
+            |> Async.RunSynchronously
+        with
+        | Ok run -> run
+        | Error e -> failtestf "open: %s" (FactTableWriteError.describe e)
+
+    w.Writer.WriteRows(w.Scope.ScopeId, opened.RunId, rows)
+    |> Async.RunSynchronously
+    |> Result.defaultWith (fun e -> failtestf "write: %s" (FactTableWriteError.describe e))
+    |> ignore
+
+    w.Writer.Commit(w.Scope.ScopeId, opened.RunId)
+    |> Async.RunSynchronously
+    |> Result.defaultWith (fun e -> failtestf "commit: %s" (FactTableWriteError.describe e))
+    |> ignore
+
+let private origin (root: string) : FactTableImportOrigin = {
+    RootMember = root
+    CertificateRef = "cert:" + root
+    TriggerRef = "import:" + root
+    Withdrawal = None
+    Cells = []
+}
+
+let private pointBy (w: World) (path: string list) (method: MethodRef) : Fact list =
+    w.Store.Query(
+        w.Scope,
+        {
+            FactQuery.forSubjectMetric { Hierarchy = "products"; Path = path } (MetricRef "revenue") with
+                Method = Some method
+        }
+    )
+    |> Async.RunSynchronously
+
+let private importedMethodTests =
+    testList "reads by an imported method (Phase 964)" [
+
+        test "a point read naming a recorded import is delegated, before anything is quoted" {
+            let w = delegatedWorld FactTableHistoryMode.AppendByRun
+            commitImported w [ origin "brand-01" ] (population 20)
+
+            match pointBy w [ "brand-01"; "sku-000001" ] (Imported "cert:brand-01") with
+            | [ fact ] ->
+                Expect.equal fact.Method (Imported "cert:brand-01") "the row is minted in its imported lineage"
+                Expect.equal (valueOf fact) 37m "with the table's value"
+            | other -> failtestf "expected the imported row, got %d fact(s)" other.Length
+
+            Expect.isEmpty
+                (pointBy w [ "brand-02"; "sku-000002" ] (Imported "cert:brand-01"))
+                "a row under no origin is not in that lineage"
+        }
+
+        test "a point read naming an import the table never recorded is not delegated" {
+            let w = delegatedWorld FactTableHistoryMode.AppendByRun
+            commitImported w [ origin "brand-01" ] (population 20)
+
+            Expect.isEmpty
+                (pointBy w [ "brand-01"; "sku-000001" ] (Imported "cert:elsewhere"))
+                "an unknown certificate reaches the inner store, which holds nothing"
+
+            Expect.isEmpty (held w "revenue") "and nothing was minted by asking"
+        }
+
+        test "a population read for one recorded import ranks that origin's rows from the table" {
+            let w = delegatedWorld FactTableHistoryMode.AppendByRun
+            commitImported w [ origin "brand-01" ] (population 200)
+
+            let byMethod =
+                top w 5 (fun q -> {
+                    q with
+                        Methods = OneMethod(Imported "cert:brand-01")
+                })
+
+            let byPrefix =
+                top w 5 (fun q -> {
+                    q with
+                        PathPrefix = Some [ "brand-01" ]
+                })
+
+            Expect.hasLength byMethod.Ranked 5 "the top five of the origin's twenty rows"
+
+            Expect.allEqual
+                (byMethod.Ranked |> List.map _.Method)
+                (Imported "cert:brand-01")
+                "every ranked fact is in the imported lineage"
+
+            Expect.equal
+                (byMethod.Ranked |> List.map (fun f -> f.Subject.Path, valueOf f))
+                (byPrefix.Ranked |> List.map (fun f -> f.Subject.Path, valueOf f))
+                "the same rows, in the same order, as the origin's subtree"
+
+            Expect.equal byMethod.Stats byPrefix.Stats "and the statistics are over that lineage alone"
+        }
+
+        test "a population read for a recorded import the run does not carry is empty" {
+            let w = delegatedWorld FactTableHistoryMode.AppendByRun
+            commitImported w [ origin "brand-01" ] (population 50)
+            // The next run is computed: the table still records the lineage,
+            // but the current run mints nothing into it.
+            commit w (population 50) |> ignore
+
+            let r =
+                top w 5 (fun q -> {
+                    q with
+                        Methods = OneMethod(Imported "cert:brand-01")
+                })
+
+            Expect.isEmpty r.Ranked "the current run carries no row in that lineage"
+        }
+
+        test "a population read for a certificate imported under several roots is refused by name" {
+            let w = delegatedWorld FactTableHistoryMode.AppendByRun
+
+            let shared (root: string) = {
+                origin root with
+                    CertificateRef = "cert:shared"
+            }
+
+            commitImported w [ shared "brand-01"; shared "brand-02" ] (population 50)
+
+            let q = {
+                PopulationQuery.create (MetricRef "revenue") "products" with
+                    TopK = 5
+                    Ordering = Descending
+                    Methods = OneMethod(Imported "cert:shared")
+            }
+
+            match w.Store.QueryPopulation(w.Scope, q) |> Async.RunSynchronously with
+            | Error reason ->
+                Expect.stringContains reason "cert:shared" "names the certificate"
+                Expect.stringContains reason "brand-01, brand-02" "and the roots it spans"
+            | Ok r -> failtestf "expected a named refusal, got %d ranked facts" r.Ranked.Length
+        }
+    ]
+
 /// Every Phase 889 case.
 let tests =
     testList "Phase 889 — delegate facts" [
@@ -1005,4 +1146,5 @@ let tests =
         walkTests
         compositionTests
         importedTests
+        importedMethodTests
     ]

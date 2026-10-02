@@ -1515,6 +1515,14 @@ type BlobFactStore
         return! writeLeaves scopeId all
     }
 
+    /// How many fact blobs the scope holds (Phase 964) — one listing, no
+    /// download, so a caller can refuse a scope too large to read whole
+    /// before reading any of it.
+    member _.CountScope(scopeId: string) : Async<int> = async {
+        let! names = storage.List(scopeId, factsPrefix)
+        return names.Length
+    }
+
     /// Every fact blob in the scope, read whole (Phase 941): the facts
     /// exactly as stored — content address, transaction time, supersession
     /// link — and, unlike every query path, a named entry for each blob

@@ -524,6 +524,12 @@ type InMemoryBM25Index(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs
     /// stamped into every persisted snapshot.
     member _.AnalyzerId = analyzer.Id
 
+    /// Phase 964 — the postings are this process's in-memory maps, flushed
+    /// to blob storage but searched from memory: each replica holds its own.
+    interface ISparseIndexLocality with
+        member _.IndexLocality =
+            Some ToolUp.Platform.IVectorStore.VectorIndexLocality.InProcess
+
     interface ISparseIndex with
 
         member _.Upsert scope chunkId chunk = async {
