@@ -489,6 +489,9 @@
              control that must observe the double-run. After
              WebhookFailureStateLeaseTests.fs, whose shape it follows. -->
         <Compile Include="InProcess\CronTickElectionTests.fs" />
+        <!-- Phase 968 — the webhook dispatcher's dequeue loop: backoff on a
+             read that keeps failing, and an end when the queue is closed. -->
+        <Compile Include="InProcess\WebhookDispatcherTests.fs" />
         <!-- Phase 241 — presence substrate. -->
         <Compile Include="InProcess\PresenceChannelTests.fs" />
         <!-- Phase 622 — presence + lock platform API: scope isolation

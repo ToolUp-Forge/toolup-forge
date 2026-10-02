@@ -119,6 +119,19 @@ module private Sql =
         | Or(a, b) -> sprintf "(%s OR %s)" (translate addParam a) (translate addParam b)
         | Not p -> sprintf "(NOT %s)" (translate addParam p)
 
+/// Phase 968 — whether `ex` is, or wraps, a unique-key violation.
+/// `Async.AwaitTask` raises a faulted task's `AggregateException` rather
+/// than the `PostgresException` inside it, so a pattern on
+/// `PostgresException` alone never matched: a racer that lost the
+/// compare-and-set was reported as a `StorageFailure` instead of a
+/// `VersionConflict`. The unwrap matches `PostgresFactStore`'s.
+module private Errors =
+    let rec isUniqueViolation (ex: exn) : bool =
+        match ex with
+        | :? PostgresException as p -> p.SqlState = PostgresErrorCodes.UniqueViolation
+        | :? AggregateException as a -> a.InnerExceptions |> Seq.exists isUniqueViolation
+        | _ -> false
+
 /// PostgreSQL-backed `IEntityStore`. `dataSource` is built by the deployment
 /// (via `NpgsqlDataSource.Create connString`, the connection string resolved
 /// from `ISecretStore` at compose — see `PostgresEntityStore.create`);
@@ -354,8 +367,7 @@ type PostgresEntityStore
                                     try
                                         let! _ = insCmd.ExecuteNonQueryAsync() |> Async.AwaitTask
                                         return Ok()
-                                    with :? PostgresException as ex when
-                                        ex.SqlState = PostgresErrorCodes.UniqueViolation ->
+                                    with ex when Errors.isUniqueViolation ex ->
                                         // A racer took v(N+1) between the head
                                         // read and this insert.
                                         return

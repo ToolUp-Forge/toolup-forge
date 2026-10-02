@@ -57,6 +57,106 @@ let private TestEventType = "WebhookTest"
 
 let private deliveryTimeout = TimeSpan.FromSeconds 30.0
 
+/// Phase 968 — the dequeue loop's wait after a failed read. The loop used
+/// to read again at once, so a read that failed on every call spun a core
+/// and wrote one error line per call (pinned at 824,719 lines in 1.6 s).
+/// The wait doubles from `DequeueBackoffInitial` per consecutive failure
+/// up to `DequeueBackoffCap`, resets on the first read that answers, and
+/// is cut short by the stopping token — the shape the ingestion drain loop
+/// took in Phase 964.
+let private DequeueBackoffInitial = TimeSpan.FromMilliseconds 100.0
+
+/// The ceiling `DequeueBackoffInitial` doubles towards (Phase 968).
+let private DequeueBackoffCap = TimeSpan.FromSeconds 10.0
+
+/// The wait after the `failures`-th consecutive failed read (1-based):
+/// `DequeueBackoffInitial` doubled per earlier failure, capped at
+/// `DequeueBackoffCap` (Phase 968).
+let private dequeueBackoffAfter (failures: int) : TimeSpan =
+    let doublings = min (max (failures - 1) 0) 30
+    let ms = DequeueBackoffInitial.TotalMilliseconds * Math.Pow(2.0, float doublings)
+    TimeSpan.FromMilliseconds(min ms DequeueBackoffCap.TotalMilliseconds)
+
+/// The dispatcher's dequeue loop: read one item, hand it to `handle`,
+/// repeat until the stopping token fires or the queue is closed for good.
+///
+/// Phase 968 — two failure shapes, told apart by the reader's
+/// `Completion`. A COMPLETED channel raises on every read and will never
+/// yield again, so the loop ends, logging the close once (as an error when
+/// the channel was completed with one). Any other failed read is treated
+/// as transient: the loop backs off (see `dequeueBackoffAfter`) and logs
+/// once when a streak starts, once when it reaches the cap, and once when
+/// it ends — never once per failure.
+let internal runDequeueLoop
+    (logger: ILogger)
+    (reader: ChannelReader<'T>)
+    (handle: 'T -> unit)
+    (stoppingToken: CancellationToken)
+    =
+    task {
+        let mutable closed = false
+        let mutable consecutiveFailures = 0
+        let mutable backoff = TimeSpan.Zero
+
+        while not stoppingToken.IsCancellationRequested && not closed do
+            if backoff > TimeSpan.Zero then
+                try
+                    do! Tasks.Task.Delay(backoff, stoppingToken)
+                with :? OperationCanceledException ->
+                    ()
+
+            if not stoppingToken.IsCancellationRequested then
+                try
+                    let! item = reader.ReadAsync(stoppingToken).AsTask()
+
+                    if consecutiveFailures > 0 then
+                        logger.Info(
+                            sprintf
+                                "[WebhookDispatcher] event=dequeue_loop_recovered failures=%d: the queue answered again; the dequeue loop's backoff is reset."
+                                consecutiveFailures
+                        )
+
+                        consecutiveFailures <- 0
+                        backoff <- TimeSpan.Zero
+
+                    handle item
+                with
+                | :? OperationCanceledException when stoppingToken.IsCancellationRequested -> ()
+                | ex when reader.Completion.IsCompleted ->
+                    closed <- true
+
+                    if reader.Completion.IsFaulted || reader.Completion.IsCanceled then
+                        logger.Error(
+                            "[WebhookDispatcher] event=dequeue_loop_closed: the queue was closed with an error; the dequeue loop has ended and no further events will be delivered.",
+                            Some ex
+                        )
+                    else
+                        logger.Info(
+                            "[WebhookDispatcher] event=dequeue_loop_closed: the queue was closed; the dequeue loop has ended."
+                        )
+                | ex ->
+                    consecutiveFailures <- consecutiveFailures + 1
+                    let previous = backoff
+                    backoff <- dequeueBackoffAfter consecutiveFailures
+
+                    if consecutiveFailures = 1 then
+                        logger.Error(
+                            sprintf
+                                "[WebhookDispatcher] event=dequeue_loop_error backoff_ms=%.0f: unexpected error reading the dispatch queue; the dequeue loop backs off, doubling to %.0f ms, until a read succeeds. Repeat failures are not logged one by one."
+                                backoff.TotalMilliseconds
+                                DequeueBackoffCap.TotalMilliseconds,
+                            Some ex
+                        )
+                    elif backoff = DequeueBackoffCap && previous <> DequeueBackoffCap then
+                        logger.Error(
+                            sprintf
+                                "[WebhookDispatcher] event=dequeue_loop_backoff_capped failures=%d backoff_ms=%.0f: the dispatch queue is still failing; the dequeue loop now retries at the cap."
+                                consecutiveFailures
+                                backoff.TotalMilliseconds,
+                            Some ex
+                        )
+    }
+
 // ─── HMAC ────────────────────────────────────────────────────────
 
 /// Webhook signature emission + verification. The header value uses
@@ -892,19 +992,15 @@ type WebhookDispatcherService
                 return Ok result
         }
 
-    override _.ExecuteAsync(stoppingToken: CancellationToken) = task {
-        while not stoppingToken.IsCancellationRequested do
-            try
-                let! task = queue.Reader.ReadAsync(stoppingToken).AsTask()
-                // Fire each task without awaiting; deliveries to
-                // independent subscriptions shouldn't head-of-line-block
-                // each other. The retry loop's own Async.Sleep handles
-                // pacing.
-                Async.Start(dispatchToScope task.Event, stoppingToken)
-            with
-            | :? OperationCanceledException -> ()
-            | ex -> logger.Error("[WebhookDispatcher] event=dequeue_loop_error: unexpected error", Some ex)
-    }
+    override _.ExecuteAsync(stoppingToken: CancellationToken) =
+        // Fire each task without awaiting; deliveries to independent
+        // subscriptions shouldn't head-of-line-block each other. The retry
+        // loop's own Async.Sleep handles pacing.
+        runDequeueLoop
+            logger
+            queue.Reader
+            (fun (task: DispatchTask) -> Async.Start(dispatchToScope task.Event, stoppingToken))
+            stoppingToken
 
 // ─── Convenience constructor ─────────────────────────────────────
 

@@ -1525,6 +1525,31 @@ let private liveTests (conn: string) =
 
                 Expect.stringContains message "toolup_facts_absent" "the missing table is named"
 
+            // Phase 968 (c) — the VerifyOnly probe reads `to_regclass` back as
+            // text, so a table that IS present is accepted. Run live with the
+            // table present: the absent case above alone cannot tell a
+            // working probe from one that refuses everything.
+            testCase "VerifyOnly accepts a table that is present (Phase 968)"
+            <| fun _ ->
+                // AutoMigrate first, so the table exists whatever ran before.
+                (PostgresFactStore.createWithDataSource dataSource liveOptions (events ()) None (fun () ->
+                    DateTime.UtcNow)
+                :> IDisposable)
+                    .Dispose()
+
+                let verified =
+                    PostgresFactStore.createWithDataSource
+                        dataSource
+                        {
+                            liveOptions with
+                                SchemaMode = VerifyOnly
+                        }
+                        (events ())
+                        None
+                        (fun () -> DateTime.UtcNow)
+
+                (verified :> IDisposable).Dispose()
+
             testCaseAsync "a point read at 300,000 subjects touches a bounded number of rows (recorded)"
             <| async {
                 let scope = "scale-" + Guid.NewGuid().ToString("N").Substring(0, 12)
