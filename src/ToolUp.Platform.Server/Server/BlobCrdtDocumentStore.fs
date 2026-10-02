@@ -443,7 +443,7 @@ type BlobCrdtDocumentStore(blobStorage: IBlobStorage, policy: CrdtSnapshotPolicy
 
             do!
                 superseded
-                |> List.map (fun name -> blobStorage.Delete(BlobCrdtLayout.PlatformContainer, name) |> Async.Ignore)
+                |> List.map (fun name -> blobStorage.Delete(BlobCrdtLayout.PlatformContainer, name) |> Async.Ignore) // best-effort-write: fold prune; readDocument drops loose blobs <= upTo and the next writeSnapshot re-lists and re-deletes them
                 |> Async.Parallel
                 |> Async.Ignore
 

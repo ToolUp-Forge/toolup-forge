@@ -574,8 +574,21 @@ type MemoizedComputeDispatcher
 
         match blobs with
         | Some store ->
-            let! _ = store.Delete(container, ComputeMemoLayout.entryBlob key.ScopeId (ComputeMemoKey.digest key))
-            return ()
+            let name = ComputeMemoLayout.entryBlob key.ScopeId (ComputeMemoKey.digest key)
+
+            match! store.Delete(container, name) with
+            | Ok() -> return ()
+            | Error storageError ->
+                match logger with
+                | Some log ->
+                    log.Warn(
+                        sprintf
+                            "MemoizedComputeDispatcher: expired memo entry %s/%s could not be deleted (%s) — the next tryLoad of this key re-reads it, sees it expired and re-discards it"
+                            container
+                            name
+                            storageError
+                    )
+                | None -> ()
         | None -> return ()
     }
 

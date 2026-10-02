@@ -113,7 +113,15 @@ type OutboxEntityStore
             for evt in intent.Events do
                 do! eventStore.Write evt
 
-            let! _ = blobStorage.Delete(IntentContainer, blobName)
+            // The events are published, so a refused intent delete is
+            // cleanup, not a failed publish: it must not read as
+            // publish_deferred, nor halt the relay.
+            match! blobStorage.Delete(IntentContainer, blobName) with
+            | Ok() -> ()
+            | Error err ->
+                logger.Warn
+                    $"[EntityOutbox] event=intent_clear_failed blob={blobName}: {err} — its events ARE published; RelayOnce re-finds the intent, re-publishes (consumers dedupe by event Id) and re-deletes it"
+
             return Ok()
         with ex ->
             return Error ex.Message
@@ -168,10 +176,16 @@ type OutboxEntityStore
                     match! entityStore.Save<'T>(scopeId, actor, entity) with
                     | Error err ->
                         // Save failed — withdraw the intent so nothing
-                        // publishes. Best-effort: if the delete fails,
-                        // the relay's version witness discards it after
-                        // the abandon window anyway.
-                        let! _ = blobStorage.Delete(IntentContainer, blobName)
+                        // publishes. Best-effort: the save's error stays
+                        // the answer, and a leftover intent is discarded
+                        // by RelayOnce's abandon branch after the abandon
+                        // window.
+                        match! blobStorage.Delete(IntentContainer, blobName) with
+                        | Ok() -> ()
+                        | Error deleteErr ->
+                            logger.Warn
+                                $"[EntityOutbox] event=intent_withdraw_failed blob={blobName}: {deleteErr} — the save failed, so its intent is left staged; RelayOnce's abandon branch discards it after the abandon window (unless a later save of this entity reaches its version witness first)"
+
                         return Error err
                     | Ok entityRef ->
                         // 4. Publish + clear, best-effort.
@@ -243,8 +257,17 @@ type OutboxEntityStore
                         // the only record of the poison intent.
                         match! blobStorage.Upload(IntentContainer, quarantineName, bytes) with
                         | Ok _ ->
-                            let! _ = blobStorage.Delete(IntentContainer, blobName)
-                            ()
+                            // The bytes are safe in quarantine, so a refused
+                            // delete does not halt the pass (healthy intents
+                            // behind it still drain); the next pass re-reads
+                            // the poison, re-copies it and retries the delete.
+                            match! blobStorage.Delete(IntentContainer, blobName) with
+                            | Ok() -> ()
+                            | Error storageError ->
+                                logger.Error(
+                                    $"[EntityOutbox] event=intent_quarantine_delete_failed blob={blobName}: {storageError} — the bytes are in quarantine at {quarantineName}; the poison intent is left in place and the next pass re-copies it and retries the delete",
+                                    None
+                                )
                         | Error storageError ->
                             logger.Error(
                                 $"[EntityOutbox] event=intent_quarantine_failed blob={blobName}: {storageError} — left in place; the next pass retries",
@@ -279,10 +302,13 @@ type OutboxEntityStore
                         elif age > abandon then
                             // The save never committed — discard without
                             // publishing so the log carries no ghosts.
-                            let! _ = blobStorage.Delete(IntentContainer, blobName)
-
-                            logger.Warn
-                                $"[EntityOutbox] event=intent_abandoned scope=%s{intent.ScopeId} entityType={intent.EntityType} entityId={intent.EntityId} — save never reached version {intent.MinVersionAfterSave}; events discarded, not published"
+                            match! blobStorage.Delete(IntentContainer, blobName) with
+                            | Ok() ->
+                                logger.Warn
+                                    $"[EntityOutbox] event=intent_abandoned scope=%s{intent.ScopeId} entityType={intent.EntityType} entityId={intent.EntityId} — save never reached version {intent.MinVersionAfterSave}; events discarded, not published"
+                            | Error storageError ->
+                                logger.Warn
+                                    $"[EntityOutbox] event=intent_abandon_failed blob={blobName}: {storageError} — the abandoned intent could not be deleted; this pass publishes none of its events, and the next RelayOnce re-reads it and re-deletes it"
 
         return published
     }
