@@ -419,27 +419,54 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
                 if isLastOwner then
                     return Error "Cannot remove the last Owner from a team"
                 else
-                    let! outcome =
-                        updateMemberships userId (fun existing ->
-                            let updated = existing |> List.filter (fun m -> m.TeamId <> teamId)
+                    // Phase 971 — the pointer goes BEFORE the row. The row is
+                    // what a retry finds the member by: removed first, a
+                    // refused pointer delete would leave a retry answering
+                    // "not a member" and never reaching the pointer. So a
+                    // refusal answers Error with the row untouched, and a
+                    // plain retry re-runs both. Only a member's pointer is
+                    // cleared; a non-member keeps the "not a member" answer.
+                    let! read = membershipDocs.Read(platformContainer, membershipBlobName userId)
 
-                            if existing.Length = updated.Length then
-                                BlobUpdate.Keep(Error "User is not a member of this team")
-                            else
-                                BlobUpdate.Write(updated, Ok()))
+                    let! pointerCleared = async {
+                        match read |> Result.map (Option.defaultValue []) with
+                        | Error e -> return Error(BlobMapStoreError.describe e)
+                        | Ok existing when not (existing |> List.exists (fun m -> m.TeamId = teamId)) ->
+                            return Error "User is not a member of this team"
+                        | Ok _ ->
+                            let! activeTeam = this.GetActiveTeam(userId)
 
-                    match outcome with
-                    | Error storageFailure -> return Error storageFailure
-                    | Ok(Error refusal) -> return Error refusal
-                    | Ok(Ok()) ->
-                        let! activeTeam = this.GetActiveTeam(userId)
+                            match activeTeam with
+                            | Some active when active = teamId ->
+                                match! storage.Delete(platformContainer, activeTeamBlobName userId) with
+                                | Ok() -> return Ok()
+                                | Error storageError ->
+                                    return
+                                        Error(
+                                            sprintf
+                                                "The member was not removed: their active-team pointer %s could not be cleared: %s"
+                                                (activeTeamBlobName userId)
+                                                storageError
+                                        )
+                            | _ -> return Ok()
+                    }
 
-                        match activeTeam with
-                        | Some active when active = teamId ->
-                            let! _ = storage.Delete(platformContainer, activeTeamBlobName userId)
-                            do! publishChange teamId userId MembershipChangeKind.Removed
-                            return Ok()
-                        | _ ->
+                    match pointerCleared with
+                    | Error e -> return Error e
+                    | Ok() ->
+                        let! outcome =
+                            updateMemberships userId (fun existing ->
+                                let updated = existing |> List.filter (fun m -> m.TeamId <> teamId)
+
+                                if existing.Length = updated.Length then
+                                    BlobUpdate.Keep(Error "User is not a member of this team")
+                                else
+                                    BlobUpdate.Write(updated, Ok()))
+
+                        match outcome with
+                        | Error storageFailure -> return Error storageFailure
+                        | Ok(Error refusal) -> return Error refusal
+                        | Ok(Ok()) ->
                             do! publishChange teamId userId MembershipChangeKind.Removed
                             return Ok()
             })
@@ -585,14 +612,28 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
     /// `teamId`, then publish `MembershipChanged` so the resolver caches
     /// evict and the member drops to the no-active-team state. Shared by
     /// `SetArchived` (archive bump) and `PurgeTeam` (hard delete).
-    member private _.ClearActiveTeamIfMatches(userId: string, teamId: string) = async {
+    /// Phase 971 — a refused delete answers `Error` naming the pointer
+    /// still at rest (both callers have a `Result` to carry it), and
+    /// nothing is published for a clear that did not happen.
+    member private _.ClearActiveTeamIfMatches(userId: string, teamId: string) : Async<Result<unit, string>> = async {
         let! result = storage.Download(platformContainer, activeTeamBlobName userId)
 
         match result with
         | Ok bytes when Encoding.UTF8.GetString(bytes).Trim() = teamId ->
-            let! _ = storage.Delete(platformContainer, activeTeamBlobName userId)
-            do! publishChange teamId userId MembershipChangeKind.ActiveTeamSet
-        | _ -> ()
+            match! storage.Delete(platformContainer, activeTeamBlobName userId) with
+            | Ok() ->
+                do! publishChange teamId userId MembershipChangeKind.ActiveTeamSet
+                return Ok()
+            | Error storageError ->
+                return
+                    Error(
+                        sprintf
+                            "user '%s': active-team pointer %s could not be cleared: %s"
+                            userId
+                            (activeTeamBlobName userId)
+                            storageError
+                    )
+        | _ -> return Ok()
     }
 
     member this.SetArchived(teamId: string, archived: bool) = async {
@@ -611,16 +652,41 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
                 // one — an archived team must not remain a member's active
                 // scope. Restore (archived = false) leaves pointers alone;
                 // the team is simply un-hidden and members re-select it.
+                //
+                // Phase 971 — every member is attempted and every refused
+                // pointer clear collected; any refusal answers Error naming
+                // the pointers still at rest. The team stays archived, and a
+                // re-run of SetArchived(teamId, true) re-reads the members and
+                // retries exactly those pointers (an idempotent re-upload of
+                // the same record, then a no-op for every cleared pointer).
                 if archived then
                     let! members = this.GetTeamMembers(teamId)
 
-                    do!
+                    let! cleared =
                         members
                         |> List.map (fun m -> this.ClearActiveTeamIfMatches(m.UserId, teamId))
                         |> Async.Sequential
-                        |> Async.Ignore
 
-                return Ok()
+                    let failures =
+                        cleared
+                        |> Array.choose (function
+                            | Ok() -> None
+                            | Error e -> Some e)
+                        |> Array.toList
+
+                    match failures with
+                    | [] -> return Ok()
+                    | failures ->
+                        return
+                            Error(
+                                sprintf
+                                    "Team '%s' was archived, but %d member(s) still have it as their active team — %s"
+                                    teamId
+                                    failures.Length
+                                    (String.concat "; " failures)
+                            )
+                else
+                    return Ok()
     }
 
     member this.PurgeTeam(teamId: string) = async {
@@ -642,21 +708,27 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
                     withUserLock
                         m.UserId
                         (async {
-                            let! outcome =
-                                updateMemberships m.UserId (fun current ->
-                                    let remaining = current |> List.filter (fun x -> x.TeamId <> teamId)
-
-                                    if remaining.Length <> current.Length then
-                                        BlobUpdate.Write(remaining, ())
-                                    else
-                                        BlobUpdate.Keep())
-
-                            match outcome with
-                            | Error e -> return Error $"user '{m.UserId}': {e}"
+                            // Phase 971 — the pointer goes BEFORE the row: the
+                            // row is what lists this user as a member, so a
+                            // refused pointer delete keeps it and the re-run
+                            // (which re-reads the members) revisits the pointer.
+                            match! this.ClearActiveTeamIfMatches(m.UserId, teamId) with
+                            | Error e -> return Error e
                             | Ok() ->
-                                do! this.ClearActiveTeamIfMatches(m.UserId, teamId)
-                                do! publishChange teamId m.UserId MembershipChangeKind.Removed
-                                return Ok()
+                                let! outcome =
+                                    updateMemberships m.UserId (fun current ->
+                                        let remaining = current |> List.filter (fun x -> x.TeamId <> teamId)
+
+                                        if remaining.Length <> current.Length then
+                                            BlobUpdate.Write(remaining, ())
+                                        else
+                                            BlobUpdate.Keep())
+
+                                match outcome with
+                                | Error e -> return Error $"user '{m.UserId}': {e}"
+                                | Ok() ->
+                                    do! publishChange teamId m.UserId MembershipChangeKind.Removed
+                                    return Ok()
                         }))
                 |> Async.Sequential
 
@@ -674,11 +746,12 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
                 return! storage.Delete(platformContainer, teamBlobName teamId)
             | failures ->
                 // Fail closed: the team record stays, so the purge can be
-                // re-run and finish once the membership blobs are readable.
+                // re-run and finish once the membership blobs are readable and
+                // every member's pointer could be cleared.
                 return
                     Error(
                         sprintf
-                            "Team '%s' was not purged: %d membership row(s) could not be stripped — %s"
+                            "Team '%s' was not purged: %d member(s) could not be detached — %s"
                             teamId
                             failures.Length
                             (String.concat "; " failures)
@@ -723,19 +796,48 @@ type TeamStore(storage: IBlobStorage, notifications: INotificationChannel, logge
                         // write for this user can't be lost by the purge.
                         let! current = this.LoadMemberships(userId)
 
-                        if not current.IsEmpty then
-                            let! _ = storage.Delete(platformContainer, membershipBlobName userId)
-                            ()
-
+                        // Phase 971 — a refused delete answers Error naming
+                        // what is still at rest, and the membership record
+                        // goes LAST: it is what a re-run (and the offboard
+                        // hook's pre-purge team snapshot) finds the user's
+                        // teams by, so it stays until the pointer went.
+                        //
                         // Unconditional pointer delete — `IBlobStorage.Delete`
                         // is idempotent (Ok on a missing blob), which is what
                         // makes a re-purge of an already-purged user succeed.
-                        let! _ = storage.Delete(platformContainer, activeTeamBlobName userId)
+                        match! storage.Delete(platformContainer, activeTeamBlobName userId) with
+                        | Error storageError ->
+                            return
+                                Error(
+                                    sprintf
+                                        "User '%s' was not purged: the active-team pointer %s could not be deleted (%s); the membership record %s was left in place so a re-run re-finds it"
+                                        userId
+                                        (activeTeamBlobName userId)
+                                        storageError
+                                        (membershipBlobName userId)
+                                )
+                        | Ok() ->
+                            let! membershipDeleted =
+                                if current.IsEmpty then
+                                    async { return Ok() }
+                                else
+                                    storage.Delete(platformContainer, membershipBlobName userId)
 
-                        for m in current do
-                            do! publishChange m.TeamId userId MembershipChangeKind.Removed
+                            match membershipDeleted with
+                            | Error storageError ->
+                                return
+                                    Error(
+                                        sprintf
+                                            "User '%s' was not purged: the membership record %s could not be deleted (%s)"
+                                            userId
+                                            (membershipBlobName userId)
+                                            storageError
+                                    )
+                            | Ok() ->
+                                for m in current do
+                                    do! publishChange m.TeamId userId MembershipChangeKind.Removed
 
-                        return Ok()
+                                return Ok()
                     })
     }
 

@@ -2795,6 +2795,8 @@
         <Compile Include="InProcess\Phase971InterPlatformTests.fs" />
         <!-- Phase 971 — KnowledgeBase: a refused delete that is the operation propagates. -->
         <Compile Include="InProcess\Phase971KnowledgeBaseTests.fs" />
+        <!-- Phase 971 — PlatformTeams: a refused delete that is the operation propagates. -->
+        <Compile Include="InProcess\Phase971PlatformTeamsTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />

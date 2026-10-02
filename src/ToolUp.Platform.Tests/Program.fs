@@ -2555,6 +2555,8 @@ let private registeredTests =
         Phase971KnowledgeBaseTests.tests
         // Phase 971 - Facts: a refused ledger delete fails the consolidation.
         FactPublicationTests.phase971Tests
+        // Phase 971 - PlatformTeams: a refused delete that is the operation propagates.
+        Phase971PlatformTeamsTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each
