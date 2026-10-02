@@ -2553,6 +2553,8 @@ let private registeredTests =
         MediaLibraryTests.phase971Tests
         // Phase 971 - KnowledgeBase: a refused delete that is the operation propagates.
         Phase971KnowledgeBaseTests.tests
+        // Phase 971 - Facts: a refused ledger delete fails the consolidation.
+        FactPublicationTests.phase971Tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

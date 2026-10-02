@@ -487,7 +487,7 @@ module FactSurface =
         let! names = storage.List(scopeId, Prefix)
 
         for name in names do
-            let! _ = storage.Delete(scopeId, name)
+            let! _ = storage.Delete(scopeId, name) // best-effort-write: fact-surface cache flush; a surviving snapshot is never trusted as it stands - every population read reconciles it against the fact log's census and folds in or rebuilds (BlobFactSurface.Rebuild) on any difference
             ()
     }
 
@@ -1047,7 +1047,7 @@ type internal BlobFactSurface(storage: IBlobStorage, censusWidth: int) =
             }
 
         member _.Drop(scopeId: string, metric: string) : Async<unit> = async {
-            let! _ = storage.Delete(scopeId, FactSurface.blobName metric)
+            let! _ = storage.Delete(scopeId, FactSurface.blobName metric) // best-effort-write: one metric's fact-surface flush; maintainSurface re-reads after it and MarkStales a survivor, and every population read reconciles a surviving snapshot against the fact log's census, rebuilding (Rebuild) on any difference
             return ()
         }
 

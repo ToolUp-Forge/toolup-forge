@@ -272,6 +272,9 @@ type private WorldOptions = {
     /// and compose the delegated store over the fact store, so a
     /// consolidation lands in a table no default writer holds.
     DelegateTarget: bool
+    /// Phase 971 - wraps the storage the publication service is handed (and
+    /// only that), so a pin can refuse the service's own deletes.
+    PublicationStorage: BlobStorage.IBlobStorage -> BlobStorage.IBlobStorage
 }
 
 let private defaults = {
@@ -282,6 +285,7 @@ let private defaults = {
     Decorate = id
     Durable = false
     DelegateTarget = false
+    PublicationStorage = id
 }
 
 let private worldWith (options: WorldOptions) : World =
@@ -385,7 +389,19 @@ let private worldWith (options: WorldOptions) : World =
             | Some carrier -> FactPublication.createDurable carrier
             | None -> FactPublication.createWith
 
-        create config store storage events gate tables (Some registry) (Some writer) teamRole signer verifier clock
+        create
+            config
+            store
+            (options.PublicationStorage(storage :> BlobStorage.IBlobStorage))
+            events
+            gate
+            tables
+            (Some registry)
+            (Some writer)
+            teamRole
+            signer
+            verifier
+            clock
 
     {
         Publication =
@@ -1674,4 +1690,92 @@ let tests =
         composedWriterTests
         restartTests
         delegateTargetTests
+    ]
+
+// ─── Phase 971 - a refused ledger delete is the consolidation's failure ──
+//
+// A withdrawn origin's ledger entry goes after the target table commits.
+// A refused delete used to be discarded, so the refresh reported the origin
+// removed while its entry stayed at rest. It now answers
+// `PublicationStorageFailure` naming the entry still present; the entry is
+// what the next consolidation re-derives the withdrawal from, so a re-run
+// retries the delete.
+
+/// A world whose publication service refuses deletes of `refused` blob
+/// names while `refusing` holds.
+let private refusingWorld (refusing: unit -> bool) (refused: string -> bool) : World =
+    worldWith {
+        defaults with
+            PublicationStorage =
+                fun inner ->
+                    DataObjectStoreTests.DeleteRefusingBlobStorage(inner, fun name -> refusing () && refused name)
+                    :> BlobStorage.IBlobStorage
+    }
+
+let private refresh (w: World) =
+    w.Publication.Refresh(teamScope group, groupSales.Id) |> Async.RunSynchronously
+
+let phase971Tests =
+    testList "Phase 971 - Facts" [
+
+        test "a refused ledger delete fails the refresh, keeps the entry, and the re-run removes it" {
+            let mutable refusing = true
+            let northEntry = PublicationLedger.originName groupSales.Id north
+            let w = refusingWorld (fun () -> refusing) (fun name -> name = northEntry)
+            commitSource w north [ row "sku-1" 100m 10m ]
+            commitSource w south [ row "sku-1" 200m 20m ]
+            let fromNorth = grantInForce w north
+            let fromSouth = grantInForce w south
+            published w north fromNorth.GrantId |> ignore
+            published w south fromSouth.GrantId |> ignore
+
+            asUser "ann" north (w.Publication.Revoke(teamScope north, fromNorth.GrantId))
+            |> Result.defaultWith (fun e -> failtestf "revoke: %s" (PublicationRefusal.describe e))
+            |> ignore
+
+            match refresh w with
+            | Error(PublicationStorageFailure detail) ->
+                Expect.stringContains detail northEntry "the refusal names the ledger entry still present"
+            | other -> failtestf "a refused ledger delete must fail the refresh, got %A" other
+
+            Expect.contains (ledgerBlobs w group) northEntry "the entry stays, so a re-run re-finds the withdrawal"
+
+            refusing <- false
+
+            match refresh w with
+            | Ok _ -> ()
+            | Error e -> failtestf "the re-run: %s" (PublicationRefusal.describe e)
+
+            Expect.isFalse (List.contains northEntry (ledgerBlobs w group)) "the re-run removed the entry"
+            Expect.equal (population w (Some [ north ])).Ranked.Length 0 "no row from the withdrawn origin"
+            Expect.equal (population w (Some [ south ])).Ranked.Length 1 "the origin in force is untouched"
+        }
+
+        test "every withdrawn origin's delete is attempted; only the refused entry is named and kept" {
+            let northEntry = PublicationLedger.originName groupSales.Id north
+            let southEntry = PublicationLedger.originName groupSales.Id south
+            let w = refusingWorld (fun () -> true) (fun name -> name = northEntry)
+            commitSource w north [ row "sku-1" 100m 10m ]
+            commitSource w south [ row "sku-1" 200m 20m ]
+            let fromNorth = grantInForce w north
+            let fromSouth = grantInForce w south
+            published w north fromNorth.GrantId |> ignore
+            published w south fromSouth.GrantId |> ignore
+
+            for source, grant in [ north, fromNorth; south, fromSouth ] do
+                asUser owners[source] source (w.Publication.Revoke(teamScope source, grant.GrantId))
+                |> Result.defaultWith (fun e -> failtestf "revoke: %s" (PublicationRefusal.describe e))
+                |> ignore
+
+            match refresh w with
+            | Error(PublicationStorageFailure detail) ->
+                Expect.stringContains detail northEntry "the refused entry is named"
+
+                Expect.isFalse (detail.Contains southEntry) "an entry that went is not reported as still present"
+            | other -> failtestf "a refused ledger delete must fail the refresh, got %A" other
+
+            let ledger = ledgerBlobs w group
+            Expect.contains ledger northEntry "the refused entry stays"
+            Expect.isFalse (List.contains southEntry ledger) "the other withdrawn origin's delete was attempted"
+        }
     ]

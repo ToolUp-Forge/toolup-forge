@@ -450,14 +450,33 @@ module internal Consolidation =
                         | Error e -> return Error(storageFailure e)
                         | Ok commit ->
                             // The withdrawn origins' rows are now absences;
-                            // their ledger entries go with them.
+                            // their ledger entries go with them (Phase 971).
+                            // Every delete is attempted and every refusal
+                            // collected: a refused entry stays at rest, so the
+                            // next consolidation re-derives the withdrawal from
+                            // it and retries the delete — re-committing the
+                            // same in-force rows, which is an ordinary refresh.
+                            let kept = ResizeArray<string>()
+
                             for originTeam in withdrawals |> Map.keys do
-                                let! _ =
-                                    deps.Storage.Delete(targetScopeId, PublicationLedger.originName table.Id originTeam)
+                                let name = PublicationLedger.originName table.Id originTeam
 
-                                ()
+                                match! deps.Storage.Delete(targetScopeId, name) with
+                                | Ok() -> ()
+                                | Error e -> kept.Add(sprintf "%s (%s)" name e)
 
-                            return Ok(commit, withdrawals |> Map.keys |> List.ofSeq)
+                            match List.ofSeq kept with
+                            | [] -> return Ok(commit, withdrawals |> Map.keys |> List.ofSeq)
+                            | survivors ->
+                                return
+                                    Error(
+                                        PublicationStorageFailure(
+                                            sprintf
+                                                "table %s committed, but the ledger entries of withdrawn origins are still present: %s; the next consolidation re-derives the withdrawal from them and retries the delete"
+                                                table.Id
+                                                (String.concat ", " survivors)
+                                        )
+                                    )
         }
 
     /// Write one audit record under the `_facts` source module.
