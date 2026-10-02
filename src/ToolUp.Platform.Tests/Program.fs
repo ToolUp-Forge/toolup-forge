@@ -2563,6 +2563,8 @@ let private registeredTests =
         Phase971PlatformRecordsTests.tests
         // Phase 971 - Embedding: a refused delete that is the operation propagates.
         Phase971EmbeddingTests.tests
+        // Phase 971 - AI: a refused delete that is the operation propagates.
+        Phase971AITests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each
