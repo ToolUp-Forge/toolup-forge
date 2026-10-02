@@ -163,8 +163,19 @@ type BlobBackedLifecycleLedger(blobs: IBlobStorage) =
             }
 
         member _.Clear(scopeId: string, phase: TenantLifecyclePhase) : Async<unit> = async {
-            let! _ = blobs.Delete(ledgerContainer, blobName scopeId phase)
-            return ()
+            // Phase 971 — a kept done-set makes a later run of this phase
+            // skip every hook it names, so a refused clear raises (as a
+            // refused `Record` does) rather than reading as cleared. A
+            // missing ledger still answers Ok: Clear stays idempotent.
+            match! blobs.Delete(ledgerContainer, blobName scopeId phase) with
+            | Ok() -> return ()
+            | Error storageError ->
+                return
+                    failwithf
+                        "BlobBackedLifecycleLedger: clearing the %s ledger for %s was refused, so its recorded hooks would be skipped by the next run: %s"
+                        (TenantLifecyclePhase.name phase)
+                        scopeId
+                        storageError
         }
 
 module BlobBackedLifecycleLedger =

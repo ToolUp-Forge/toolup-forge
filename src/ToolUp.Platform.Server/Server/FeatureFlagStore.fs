@@ -141,12 +141,11 @@ type BlobFeatureFlagStore(storage: IBlobStorage) =
 
                     // Phase 863 — an erasure that did not land is not
                     // reported as one: a refused rewrite fails the handler.
+                    // Phase 971 — so is a refused delete of a document every
+                    // flag of which named the subject.
                     let! written =
                         if Map.isEmpty updated then
-                            async {
-                                let! _ = storage.Delete(platformContainer, docBlob)
-                                return Ok()
-                            }
+                            storage.Delete(platformContainer, docBlob)
                         else
                             async {
                                 match! storage.Upload(platformContainer, docBlob, Json.serialize updated) with
@@ -160,7 +159,10 @@ type BlobFeatureFlagStore(storage: IBlobStorage) =
                             Result.Error(
                                 ErasureError.StoreUnreachable(
                                     "feature-flags",
-                                    sprintf "flag document %s could not be rewritten: %s" docBlob storageError
+                                    sprintf
+                                        "flag document %s could not be rewritten or removed: %s"
+                                        docBlob
+                                        storageError
                                 )
                             )
                     | Ok() ->

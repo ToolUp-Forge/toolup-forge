@@ -369,8 +369,13 @@ type BlobWebhookRegistry(storage: IBlobStorage, logger: ILogger option) =
         }
 
         member _.DeleteSubscription(scopeId, subscriptionId) = async {
-            let! _ = storage.Delete(platformContainer, subscriptionBlob scopeId subscriptionId)
-            return Ok()
+            // Phase 971 — `IBlobStorage.Delete` answers Ok on a missing
+            // blob (so this stays idempotent); an Error is a refusal and is
+            // returned, so a caller does not tear down the subscription's
+            // signing secret while the subscription is still live.
+            match! storage.Delete(platformContainer, subscriptionBlob scopeId subscriptionId) with
+            | Ok() -> return Ok()
+            | Error e -> return Error $"Webhook subscription {subscriptionId:N} could not be deleted: {e}"
         }
 
         member _.ListAllActive() = async {

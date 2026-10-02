@@ -2799,6 +2799,8 @@
         <Compile Include="InProcess\Phase971PlatformTeamsTests.fs" />
         <!-- Phase 971 — PlatformStores: a refused delete that is the operation propagates. -->
         <Compile Include="InProcess\Phase971PlatformStoresTests.fs" />
+        <!-- Phase 971 — PlatformRecords: a refused delete that is the operation propagates. -->
+        <Compile Include="InProcess\Phase971PlatformRecordsTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />

@@ -857,23 +857,66 @@ type PersistentConversationStore(objectStore: IDataObjectStore, ?eventStore: IEv
         }
 
         member _.DeleteConversation(scopeId, conversationId) = async {
-            // Best-effort delete. The manifest carries the
-            // turn-ids; we walk them to delete each turn blob
-            // before deleting the manifest itself.
+            // The manifest carries the turn-ids, so it is how a re-run
+            // finds the turns: every turn goes first, and the manifest
+            // goes LAST and only once every turn went.
+            //
+            // Phase 971 — turns are written `StrictlyVersioned`, which
+            // `IDataObjectStore.Delete` refuses (`DeleteForbidden`), so the
+            // turns are removed with `Evict`: the per-object lifecycle
+            // operation for a caller that owns the object's retention, as
+            // this store owns its turns. A refused removal is reported,
+            // naming the objects still there, never read as a delete.
             let! manifestResult = readManifest scopeId conversationId
 
             match manifestResult with
             | Error(ConversationError.NotFound _) -> return Ok() // already gone — idempotent
             | Error e -> return Error e
             | Ok manifest ->
-                let turnNums = [ 1 .. manifest.TurnIds.Length ]
+                let turnObjectIds =
+                    [ 1 .. manifest.TurnIds.Length ] |> List.map (turnObjectId conversationId)
 
-                for n in turnNums do
-                    let! _ = objectStore.Delete(scopeId, turnObjectId conversationId n)
-                    ()
+                let! turnRemovals =
+                    turnObjectIds
+                    |> List.map (fun objectId -> async {
+                        let! removal = objectStore.Evict(scopeId, objectId)
+                        return objectId, removal
+                    })
+                    |> Async.Sequential
 
-                let! _ = objectStore.Delete(scopeId, manifestObjectId conversationId)
-                return Ok()
+                let refusedTurns =
+                    turnRemovals
+                    |> Array.choose (fun (objectId, removal) ->
+                        match removal with
+                        | Ok() -> None
+                        | Error err -> Some(sprintf "%s (%A)" objectId err))
+                    |> Array.toList
+
+                match refusedTurns with
+                | _ :: _ ->
+                    return
+                        Error(
+                            ConversationError.StoreUnreachable(
+                                sprintf
+                                    "conversation %s not deleted: turn object(s) could not be removed: %s; the manifest is kept so a re-run finds them"
+                                    conversationId
+                                    (String.concat ", " refusedTurns)
+                            )
+                        )
+                | [] ->
+                    match! objectStore.Delete(scopeId, manifestObjectId conversationId) with
+                    | Ok() -> return Ok()
+                    | Error err ->
+                        return
+                            Error(
+                                ConversationError.StoreUnreachable(
+                                    sprintf
+                                        "conversation %s not deleted: manifest object %s could not be removed: %A"
+                                        conversationId
+                                        (manifestObjectId conversationId)
+                                        err
+                                )
+                            )
         }
 
         // Eraser
@@ -900,6 +943,11 @@ type PersistentConversationStore(objectStore: IDataObjectStore, ?eventStore: IEv
                             Note = Some(sprintf "%d conversation(s) would be affected by %A" count policy)
                         }
                 else
+                    // Phase 971 — the conversations a HardDelete could not
+                    // remove. A refused delete is a partial failure, never
+                    // a reported erasure.
+                    let notDeleted = ResizeArray<string>()
+
                     match policy with
                     | ErasurePolicy.HardDelete ->
                         // Delete each conversation's manifest +
@@ -907,8 +955,9 @@ type PersistentConversationStore(objectStore: IDataObjectStore, ?eventStore: IEv
                         // idempotent so concurrent erasure
                         // doesn't double-count.
                         for c in allConversations do
-                            let! _ = writer.DeleteConversation(scopeId, c.ConversationId)
-                            ()
+                            match! writer.DeleteConversation(scopeId, c.ConversationId) with
+                            | Ok() -> ()
+                            | Error err -> notDeleted.Add(sprintf "%s (%A)" c.ConversationId err)
                     | ErasurePolicy.Tombstone ->
                         // Walk each conversation's turns;
                         // overwrite each turn blob with a
@@ -995,12 +1044,38 @@ type PersistentConversationStore(objectStore: IDataObjectStore, ?eventStore: IEv
                                 let! _ = writeManifest scopeId tombstone redacted
                                 ()
 
-                    Events.erased eventStore scopeId subjectUserId policy count |> Async.Start
+                    if notDeleted.Count > 0 then
+                        let deleted = count - notDeleted.Count
 
-                    return
-                        Ok {
-                            HandlerName = "conversations"
-                            RecordsAffected = count
-                            Note = Some(sprintf "%d conversation(s) %A under user %s" count policy subjectUserId)
-                        }
+                        return
+                            Error(
+                                ErasureError.HandlerPartialFailure(
+                                    "conversations",
+                                    {
+                                        HandlerName = "conversations"
+                                        RecordsAffected = deleted
+                                        Note =
+                                            Some(
+                                                sprintf
+                                                    "%d of %d conversation(s) deleted under user %s"
+                                                    deleted
+                                                    count
+                                                    subjectUserId
+                                            )
+                                    },
+                                    sprintf
+                                        "%d conversation(s) not deleted: %s"
+                                        notDeleted.Count
+                                        (String.concat "; " notDeleted)
+                                )
+                            )
+                    else
+                        Events.erased eventStore scopeId subjectUserId policy count |> Async.Start
+
+                        return
+                            Ok {
+                                HandlerName = "conversations"
+                                RecordsAffected = count
+                                Note = Some(sprintf "%d conversation(s) %A under user %s" count policy subjectUserId)
+                            }
         }
