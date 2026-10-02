@@ -3090,6 +3090,220 @@ let private mediaKeyGrantAuditTests =
             Expect.equal body.Length 16 "and it is the whole key"
     ]
 
+// ─── Phase 971 — a refused delete that is the operation says so ──────
+//
+// `IBlobStorage.Delete` is idempotent on a missing blob, so an `Error`
+// is a refusal. `IMediaLibrary.Delete` and `AbortUpload` are each the
+// removal of the item's / session's blobs, so a refusal is the answer
+// rather than a silent `Ok` — and the blob a re-run finds the thing by
+// (the record; the session manifest) is kept, so the re-run can finish.
+
+let private refusingDelete (refused: string -> bool) : IBlobStorage =
+    DataObjectStoreTests.DeleteRefusingBlobStorage(makeStore (), refused) :> IBlobStorage
+
+let private phase971Container = "team-971"
+
+/// A compose-capable store whose `Delete` refuses the composed original,
+/// and which can misreport the composed length or refuse the record
+/// write — the two already-failing paths of `IngestComposed` whose
+/// rollback delete is then refused too.
+type private ComposeRollbackRefusingBlobStorage(inner: IBlobStorage, misreportLength: bool, refuseRecord: bool) =
+    interface IBlobStorage with
+        member _.CanComposeFrom = inner.CanComposeFrom
+
+        member _.ComposeFrom(container, target, sources) = async {
+            match! inner.ComposeFrom(container, target, sources) with
+            | Ok written when misreportLength -> return Ok(written + 1L)
+            | other -> return other
+        }
+
+        member _.Upload(container, blobName, content) =
+            if refuseRecord && blobName.StartsWith("media/records/", StringComparison.Ordinal) then
+                async { return Error "simulated record write refusal" }
+            else
+                inner.Upload(container, blobName, content)
+
+        member _.Download(container, blobName) = inner.Download(container, blobName)
+
+        member _.Delete(container, blobName) =
+            if blobName.StartsWith("media/originals/", StringComparison.Ordinal) then
+                async { return Error "simulated storage delete refusal" }
+            else
+                inner.Delete(container, blobName)
+
+        member _.List(container, prefix) = inner.List(container, prefix)
+        member _.Exists(container, blobName) = inner.Exists(container, blobName)
+        member _.GetMetadata(container, blobName) = inner.GetMetadata(container, blobName)
+
+        member _.DownloadRange(container, blobName, offset, length) =
+            inner.DownloadRange(container, blobName, offset, length)
+
+        member _.Erase(container, prefix, policy, dryRun) =
+            inner.Erase(container, prefix, policy, dryRun)
+
+let private composedCommitFailure (misreportLength: bool) (refuseRecord: bool) = async {
+    let inner = makeStore ()
+
+    let sessions, _ =
+        makeSessionsOver
+            None
+            MediaLibraryOptions.defaults
+            (fun () -> DateTimeOffset.UtcNow)
+            (ComposeRollbackRefusingBlobStorage(inner, misreportLength, refuseRecord) :> IBlobStorage)
+
+    let! opened = sessions.BeginUpload(phase971Container, sessionDeclaration MediaLibraryOptions.defaults 3000L)
+    let sessionId = Expect.wantOk opened "begin"
+    let! _ = sessions.AppendChunk(phase971Container, sessionId, 0L, sessionPayload)
+    let! commit = sessions.CommitUpload(phase971Container, sessionId)
+    let! originals = inner.List(phase971Container, "media/originals/")
+    return commit, originals
+}
+
+let phase971Tests =
+    testList "Phase 971 - Media" [
+        testCaseAsync "a refused original delete fails IMediaLibrary.Delete, naming it, and keeps the record"
+        <| async {
+            let lib =
+                makeLibraryOver
+                    (NoopMediaTranscoder.create ())
+                    MediaLibraryOptions.defaults
+                    (refusingDelete (fun n -> n.StartsWith("media/originals/", StringComparison.Ordinal)))
+
+            let! upload = lib.Upload(phase971Container, derivedUpload ())
+            let record = Expect.wantOk upload "upload"
+            let! deleted = lib.Delete(phase971Container, record.Id)
+
+            match deleted with
+            | Error(MediaDeleteError.StorageError message) ->
+                Expect.stringContains
+                    message
+                    ("media/originals/" + MediaId.value record.Id)
+                    "the error names the original still at rest"
+            | other -> failtestf "a refused original delete must fail the delete, got %A" other
+
+            let! still = lib.Get(phase971Container, record.Id)
+            Expect.isSome still "the record is kept, so a re-run of Delete finds the item"
+        }
+
+        testCaseAsync "a refused derived delete fails IMediaLibrary.Delete and keeps the record"
+        <| async {
+            let lib =
+                makeLibraryOver
+                    fakeHlsTranscoder
+                    MediaLibraryOptions.defaults
+                    (refusingDelete (fun n -> n.StartsWith("media/derived/", StringComparison.Ordinal)))
+
+            let! upload = lib.Upload(phase971Container, derivedUpload ())
+            let record = Expect.wantOk upload "upload"
+            let! deleted = lib.Delete(phase971Container, record.Id)
+
+            match deleted with
+            | Error(MediaDeleteError.StorageError message) ->
+                Expect.stringContains message "media/derived/" "the error names the derived blobs still at rest"
+            | other -> failtestf "a refused derived delete must fail the delete, got %A" other
+
+            let! still = lib.Get(phase971Container, record.Id)
+            Expect.isSome still "the record is kept, so a re-run of Delete finds the item"
+        }
+
+        testCaseAsync "control: Delete over a healthy store removes the item and its derived blobs"
+        <| async {
+            let store = makeStore ()
+            let lib = makeLibraryOver fakeHlsTranscoder MediaLibraryOptions.defaults store
+            let! upload = lib.Upload(phase971Container, derivedUpload ())
+            let record = Expect.wantOk upload "upload"
+            let! deleted = lib.Delete(phase971Container, record.Id)
+            Expect.isOk deleted "a healthy delete succeeds"
+            let! still = lib.Get(phase971Container, record.Id)
+            Expect.isNone still "the record is gone"
+            let! left = store.List(phase971Container, "media/")
+            Expect.isEmpty left "nothing of the item is left at rest"
+        }
+
+        testCaseAsync "a refused manifest delete fails AbortUpload and publishes no aborted event"
+        <| async {
+            let channel = RecordingNotificationChannel()
+
+            let sessions, _ =
+                makeSessionsOver
+                    (Some(channel :> INotificationChannel))
+                    MediaLibraryOptions.defaults
+                    (fun () -> DateTimeOffset.UtcNow)
+                    (refusingDelete (fun n -> n.EndsWith("/session.json", StringComparison.Ordinal)))
+
+            let! opened = sessions.BeginUpload(phase971Container, sessionDeclaration MediaLibraryOptions.defaults 3000L)
+            let sessionId = Expect.wantOk opened "begin"
+            let! _ = sessions.AppendChunk(phase971Container, sessionId, 0L, sessionPayload[0..999])
+            channel.Clear()
+            let! aborted = sessions.AbortUpload(phase971Container, sessionId)
+
+            match aborted with
+            | Error(SessionStorageError message) ->
+                Expect.stringContains message "session.json" "the error names the manifest still at rest"
+            | other -> failtestf "a refused manifest delete must fail the abort, got %A" other
+
+            Expect.isEmpty
+                (channel.CustomPayloads "MediaLibrary.UploadProgress")
+                "an abort that did not remove the session announces nothing"
+        }
+
+        testCaseAsync "a refused chunk delete fails AbortUpload and keeps the manifest for the next pass"
+        <| async {
+            let inner = makeStore ()
+
+            let sessions, _ =
+                makeSessionsOver
+                    None
+                    MediaLibraryOptions.defaults
+                    (fun () -> DateTimeOffset.UtcNow)
+                    (DataObjectStoreTests.DeleteRefusingBlobStorage(
+                        inner,
+                        fun n -> n.Contains("/chunks/", StringComparison.Ordinal)
+                    )
+                    :> IBlobStorage)
+
+            let! opened = sessions.BeginUpload(phase971Container, sessionDeclaration MediaLibraryOptions.defaults 3000L)
+            let sessionId = Expect.wantOk opened "begin"
+            let! _ = sessions.AppendChunk(phase971Container, sessionId, 0L, sessionPayload[0..999])
+            let! aborted = sessions.AbortUpload(phase971Container, sessionId)
+
+            match aborted with
+            | Error(SessionStorageError _) -> ()
+            | other -> failtestf "a refused chunk delete must fail the abort, got %A" other
+
+            let manifest = "media/uploads/" + UploadSessionId.value sessionId + "/session.json"
+
+            let! kept = inner.Exists(phase971Container, manifest)
+            Expect.isTrue kept "the manifest is deleted last, so the next sweep can still find the session"
+        }
+
+        testCaseAsync "a composed original whose length disagrees and cannot be removed is named in the error"
+        <| async {
+            let! commit, originals = composedCommitFailure true false
+
+            match commit with
+            | Error(UploadFailed(MediaUploadError.StorageError message)) ->
+                Expect.stringContains message "could not be removed" "the orphaned original is named"
+            | other -> failtestf "the length mismatch must fail the commit, got %A" other
+
+            Expect.equal (List.length originals) 1 "the refused rollback leaves the composed original"
+        }
+
+        testCaseAsync "a composed original whose record write failed and cannot be removed is named in the error"
+        <| async {
+            let! commit, originals = composedCommitFailure false true
+
+            match commit with
+            | Error(UploadFailed(MediaUploadError.StorageError message)) ->
+                Expect.stringContains message "simulated record write refusal" "the record failure stays the answer"
+                Expect.stringContains message "could not be removed" "the orphaned original is named"
+            | other -> failtestf "the record write failure must fail the commit, got %A" other
+
+            Expect.equal (List.length originals) 1 "the refused rollback leaves the composed original"
+        }
+    ]
+
+
 [<Tests>]
 let tests =
     testList "MediaLibrary (Phase 88)" [

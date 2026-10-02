@@ -243,14 +243,58 @@ type BlobUploadSessionStore
                     return Ok manifest
     }
 
-    /// Delete every blob under a session's prefix. Best-effort per blob
-    /// — a store that fails one delete must not strand the rest.
-    let deleteSession (container: string) (sessionId: UploadSessionId) = async {
+    /// Delete every blob under a session's prefix. Every chunk delete is
+    /// attempted — a store that fails one must not strand the rest.
+    ///
+    /// Phase 971 — the manifest goes LAST, and only once every chunk
+    /// went: `sweepStale` finds sessions BY the manifest, so a kept
+    /// manifest is what lets the next sweep finish the job, where a
+    /// manifest deleted over a refused chunk would orphan that chunk.
+    /// `Error` names every blob still at rest and the storage error.
+    let deleteSession (container: string) (sessionId: UploadSessionId) : Async<Result<unit, string>> = async {
+        let manifestPath = UploadSessionPaths.manifest sessionId
         let! names = blobStorage.List(container, UploadSessionPaths.sessionDir sessionId)
 
-        for name in names do
-            let! _ = blobStorage.Delete(container, name)
-            ()
+        let! chunkDeletes =
+            names
+            |> List.filter (fun name -> name <> manifestPath)
+            |> List.map (fun name -> async {
+                let! result = blobStorage.Delete(container, name)
+                return name, result
+            })
+            |> Async.Sequential
+
+        let refused =
+            chunkDeletes
+            |> Array.toList
+            |> List.choose (fun (name, result) ->
+                match result with
+                | Result.Ok() -> None
+                | Result.Error e -> Some(sprintf "%s (%s)" name e))
+
+        if not (List.isEmpty refused) then
+            return Result.Error(sprintf "%s; manifest %s kept" (String.concat ", " refused) manifestPath)
+        else
+            match! blobStorage.Delete(container, manifestPath) with
+            | Result.Ok() -> return Result.Ok()
+            | Result.Error e -> return Result.Error(sprintf "%s (%s)" manifestPath e)
+    }
+
+    /// Phase 971 — `deleteSession` where removing the session is cleanup
+    /// after the operation's own answer (a sweep, a commit): a refusal is
+    /// logged, and the kept manifest is what the next sweep re-finds.
+    let reclaimSession (container: string) (sessionId: UploadSessionId) (pass: string) = async {
+        match! deleteSession container sessionId with
+        | Result.Ok() -> ()
+        | Result.Error e ->
+            logger.Warn(
+                sprintf
+                    "[MediaLibrary] upload session %s/%s not fully removed after %s: %s; its manifest is kept, so the next sweepStale (past UploadSessionTtl) re-finds it and finishes the job"
+                    container
+                    (UploadSessionId.value sessionId)
+                    pass
+                    e
+            )
     }
 
     /// 469.C — reclaim sessions whose last append is older than the
@@ -274,7 +318,7 @@ type BlobUploadSessionStore
                     | None -> ()
                     | Some manifest ->
                         if manifest.LastTouchedAt < cutoff then
-                            do! deleteSession container (UploadSessionId manifest.SessionId)
+                            do! reclaimSession container (UploadSessionId manifest.SessionId) "the stale-session sweep"
         with ex ->
             logger.Warn(sprintf "[MediaLibrary] upload-session sweep failed: %s" ex.Message)
     }
@@ -478,14 +522,14 @@ type BlobUploadSessionStore
                     if actual < manifest.DeclaredSizeBytes then
                         return Error(IncompleteUpload(actual, manifest.DeclaredSizeBytes))
                     elif actual > manifest.DeclaredSizeBytes then
-                        do! deleteSession scopeContainer sessionId
+                        do! reclaimSession scopeContainer sessionId "a fail-closed commit (declared size exceeded)"
                         return Error(DeclaredSizeExceeded(actual, manifest.DeclaredSizeBytes))
                     elif actual > options.MaxBytes then
-                        do! deleteSession scopeContainer sessionId
+                        do! reclaimSession scopeContainer sessionId "a fail-closed commit (size cap exceeded)"
                         return Error(InvalidDeclaration(FileTooLarge(actual, options.MaxBytes)))
                     else
                         let committed (record: MediaRecord) = async {
-                            do! deleteSession scopeContainer sessionId
+                            do! reclaimSession scopeContainer sessionId "a successful commit"
 
                             do!
                                 publishProgress
@@ -514,7 +558,7 @@ type BlobUploadSessionStore
                                     manifest.Caption
                             with
                             | Error e ->
-                                do! deleteSession scopeContainer sessionId
+                                do! reclaimSession scopeContainer sessionId "a fail-closed commit (invalid declaration)"
                                 return Error(InvalidDeclaration e)
                             | Ok declaration ->
                                 let original = {
@@ -545,7 +589,7 @@ type BlobUploadSessionStore
                                     manifest.Caption
                             with
                             | Error e ->
-                                do! deleteSession scopeContainer sessionId
+                                do! reclaimSession scopeContainer sessionId "a fail-closed commit (invalid declaration)"
                                 return Error(InvalidDeclaration e)
                             | Ok request ->
                                 match! library.Upload(scopeContainer, request) with
@@ -563,7 +607,20 @@ type BlobUploadSessionStore
             match! loadManifest scopeContainer sessionId with
             | Error e -> return Error e
             | Ok manifest ->
-                do! deleteSession scopeContainer sessionId
-                do! publishProgress manifest.UploadedBy (progressOf manifest UploadSessionPhase.aborted None)
-                return Ok()
+                // Phase 971 — removing the session IS the abort, so a
+                // refused delete is the answer, and an abort that did
+                // not happen announces nothing. The manifest is kept
+                // (deleted last), so a retried abort — or the next sweep
+                // past the TTL — finds the session and finishes the job.
+                match! deleteSession scopeContainer sessionId with
+                | Error e ->
+                    return
+                        Error(
+                            SessionStorageError(
+                                sprintf "upload session %s not fully removed: %s" (UploadSessionId.value sessionId) e
+                            )
+                        )
+                | Ok() ->
+                    do! publishProgress manifest.UploadedBy (progressOf manifest UploadSessionPhase.aborted None)
+                    return Ok()
         }

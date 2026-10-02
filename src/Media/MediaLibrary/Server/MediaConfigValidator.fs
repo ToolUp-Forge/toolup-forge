@@ -131,7 +131,7 @@ type private RangeProbe(storage: IBlobStorage) =
                     return ValidationResult.Ok
                 | Result.Ok _ ->
                     let! ranged = storage.DownloadRange(probeContainer, probeBlob, 4L, 8)
-                    let! _ = storage.Delete(probeContainer, probeBlob)
+                    let! _ = storage.Delete(probeContainer, probeBlob) // best-effort-write: fixed-name probe sentinel; the next RangeProbe.Validate overwrites and re-deletes it
 
                     match ranged with
                     | Result.Ok bytes when bytes.Length > 0 -> return ValidationResult.Ok
