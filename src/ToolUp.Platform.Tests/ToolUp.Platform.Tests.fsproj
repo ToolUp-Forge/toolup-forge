@@ -2805,6 +2805,8 @@
         <Compile Include="InProcess\Phase971EmbeddingTests.fs" />
         <!-- Phase 971 — AI: a refused delete that is the operation propagates. -->
         <Compile Include="InProcess\Phase971AITests.fs" />
+        <!-- Phase 971 — PublicRendering: a refused delete that is the operation propagates. -->
+        <Compile Include="InProcess\Phase971PublicRenderingTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />

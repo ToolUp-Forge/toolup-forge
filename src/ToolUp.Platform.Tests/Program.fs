@@ -2565,6 +2565,8 @@ let private registeredTests =
         Phase971EmbeddingTests.tests
         // Phase 971 - AI: a refused delete that is the operation propagates.
         Phase971AITests.tests
+        // Phase 971 - PublicRendering: a refused delete that is the operation propagates.
+        Phase971PublicRenderingTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each
