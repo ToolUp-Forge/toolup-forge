@@ -261,6 +261,8 @@ let private registeredTests =
         // Phase 766 — the cron tick as a single-leader election, paired
         // with an own-lock-table control that must observe the double-run.
         CronTickElectionTests.tests
+        // Phase 968 — the webhook dispatcher's dequeue loop backs off and ends when closed.
+        WebhookDispatcherTests.tests
         // Phase 241 — presence substrate.
         PresenceChannelTests.tests
         // Phase 622 — presence + lock platform API (scope isolation,
