@@ -652,12 +652,15 @@ module FactTableRunProvenance =
             | Error e -> return Error e
         }
 
+    // Phase 971 - known storage leak, not an oversight: both callers run this
+    // after the run's terminal record is persisted, nothing reads an ended
+    // run's provenance after that, and no pass reclaims a leftover today.
     /// Drop a run's kept provenance, when one is kept.
     let internal discard (storage: IBlobStorage) (scopeId: string) (name: string) : Async<unit> = async {
         let! kept = storage.Exists(scopeId, name)
 
         if kept then
-            let! _ = storage.Delete(scopeId, name)
+            let! _ = storage.Delete(scopeId, name) // best-effort-write: kept provenance of a run already recorded terminal; read by nothing after it - a leftover is unreachable bytes, never a wrong answer (no sweep reclaims it)
             ()
     }
 
@@ -856,11 +859,14 @@ type DefaultFactTableWriter
             Payload = FactTableBlobIo.serialize payload
         }
 
+    // Phase 971 - known storage leak, not an oversight: this runs after the
+    // run's terminal record is persisted, `stagedRows` reads an open run only,
+    // and no pass reclaims a leftover today.
     let discardStaged (scopeId: string) (runId: string) : Async<unit> = async {
         let! names = storage.List(scopeId, rowsPrefix runId)
 
         for name in names do
-            let! _ = storage.Delete(scopeId, name)
+            let! _ = storage.Delete(scopeId, name) // best-effort-write: scratch of a run already recorded terminal; read by nothing after it - a leftover is unreachable bytes, never a wrong answer (no sweep reclaims it)
             ()
 
         do! FactTableRunProvenance.discard storage scopeId (FactTableRunProvenance.blobName runId)

@@ -241,8 +241,13 @@ let create (deps: ReportSubscriptionApiDeps) (principal: string) (scopeId: strin
                     | Some definition -> do! deps.Scheduler.Cancel(scopeId, definition.JobId)
                     | None -> ()
 
-                    do! deps.Subscriptions.Delete(scopeId, id)
-                    return Ok()
+                    // Phase 971 — the store raises when storage refuses the
+                    // delete; answer it as a refused save is answered. The
+                    // job is already cancelled, which is the visible,
+                    // re-runnable side of the order chosen above.
+                    match! Async.Catch(deps.Subscriptions.Delete(scopeId, id)) with
+                    | Choice1Of2() -> return Ok()
+                    | Choice2Of2 ex -> return Error(SubscriptionStorageFailure ex.Message)
             }
 
         RunSubscriptionNow =

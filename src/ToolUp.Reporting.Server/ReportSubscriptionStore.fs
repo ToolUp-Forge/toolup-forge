@@ -53,7 +53,9 @@ type IReportSubscriptionStore =
     /// into writing into a scope the caller was not resolved to.
     abstract Save: scopeId: string * subscription: ReportSubscription -> Async<Result<ReportSubscription, string>>
 
-    /// Delete. Idempotent — deleting an unknown id is a no-op.
+    /// Delete. Idempotent — deleting an unknown id is a no-op. Raises
+    /// when storage REFUSES the delete (Phase 971): the record is still
+    /// there, and no failure channel exists to say so.
     abstract Delete: scopeId: string * id: SubscriptionId -> Async<unit>
 
 module ReportSubscriptionStore =
@@ -219,8 +221,14 @@ module ReportSubscriptionStore =
             }
 
             member _.Delete(scopeId, id) = async {
-                let! _ = storage.Delete(PlatformContainer, subscriptionBlob scopeId id)
-                return ()
+                // A missing blob answers Ok, so an Error is a refusal: the
+                // subscription is still stored and still listed. Raise
+                // rather than read it as deleted (Phase 971).
+                match! storage.Delete(PlatformContainer, subscriptionBlob scopeId id) with
+                | Ok() -> return ()
+                | Error storageError ->
+                    return
+                        failwithf "report subscription %s in scope %s could not be deleted: %s" id scopeId storageError
             }
 
     /// Build the blob-backed store over the deployment's `IBlobStorage`.

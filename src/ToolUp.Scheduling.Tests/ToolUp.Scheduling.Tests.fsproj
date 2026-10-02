@@ -30,6 +30,8 @@
         <Compile Include="InProcess\InMemoryCalendarBridgeTests.fs" />
         <Compile Include="InProcess\CalDAVCalendarBridgeTests.fs" />
         <Compile Include="InProcess\CalendarSyncTests.fs" />
+        <!-- Phase 971 — a refused calendar-link delete is reported. -->
+        <Compile Include="InProcess\Phase971SchedulingTests.fs" />
         <!-- Phase 830 — the Google Calendar bridge, the third binding of the
              ICalendarBridge contract pack. -->
         <Compile Include="InProcess\GoogleCalendarBridgeTests.fs" />

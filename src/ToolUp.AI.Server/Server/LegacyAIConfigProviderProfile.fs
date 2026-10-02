@@ -160,12 +160,21 @@ let wrap (storage: IBlobStorage) (platform: IProviderProfile) : IProviderProfile
 
         member _.Clear scope = async {
             do! platform.Clear scope
-            // Best-effort legacy purge so Clear is total — otherwise a
-            // cleared scope could resurrect from the legacy blob via
-            // the read-through. Errors (blob absent) are swallowed;
-            // Clear is idempotent by contract.
-            let! _ = storage.Delete(scope.Container, legacyBlobName)
-            return ()
+            // The legacy purge is part of Clear — otherwise a cleared
+            // scope resurrects from the legacy blob via the read-through.
+            // An absent blob already answers Ok (Delete is idempotent, so
+            // Clear stays idempotent); an Error is a REFUSAL — the legacy
+            // blob is still there — and Clear has no failure channel, so
+            // it raises (Phase 971), as the canonical Clear above does.
+            match! storage.Delete(scope.Container, legacyBlobName) with
+            | Ok() -> return ()
+            | Error storageError ->
+                return
+                    failwithf
+                        "legacy AI config %s in %s could not be cleared: %s"
+                        legacyBlobName
+                        scope.Container
+                        storageError
         }
 
         member _.ResolveEntry(scope, surface, context) = async {

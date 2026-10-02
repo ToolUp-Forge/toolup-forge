@@ -442,50 +442,60 @@ type CalendarSync
         Metadata = Map.empty
     }
 
+    /// One link's share of a push. A bridge failure rides the outcome
+    /// (one unreachable provider never hides the others' work); a refused
+    /// entity-store delete is `Error`, because the push then did not do
+    /// what its outcome would claim.
     let pushOne
         (scopeId: string)
         (actor: EntityPrincipal)
         (booking: Booking)
         (link: CalendarLink)
         (outcome: PushOutcome)
-        =
+        : Async<Result<PushOutcome, CalendarSyncError>> =
         async {
             match tryBridge link.Kind with
             | Error _ ->
                 // A link naming a kind no longer composed is not a failure of
                 // this push: the deployment dropped the bridge, and the link
                 // is inert until it is composed again.
-                return outcome
+                return Ok outcome
             | Ok bridge ->
                 let! existing = tryGetEventLink scopeId link booking.Id
                 let existingId = existing |> Option.map _.ExternalEventId
 
                 match! bridge.Push(linkRef scopeId link, booking, existingId) with
                 | Error err ->
-                    return {
-                        outcome with
-                            Failures = outcome.Failures @ [ link.Kind, err ]
-                    }
+                    return
+                        Ok {
+                            outcome with
+                                Failures = outcome.Failures @ [ link.Kind, err ]
+                        }
                 | Ok externalId ->
                     if booking.Status = Cancelled then
-                        match existing with
-                        | Some l ->
-                            let! _ = entityStore.Delete(scopeId, actor, CalendarEventLinkTypeName, l.Id)
-
-                            ()
-                        | None -> ()
-
-                        return {
+                        let removed = {
                             outcome with
                                 Removed = outcome.Removed + 1
                         }
+
+                        match existing with
+                        | Some l ->
+                            // Phase 971 — `Delete` answers Ok on a missing
+                            // entity, so an Error is a refusal: the event
+                            // link of a booking whose external event is
+                            // already gone is still stored.
+                            match! entityStore.Delete(scopeId, actor, CalendarEventLinkTypeName, l.Id) with
+                            | Ok() -> return Ok removed
+                            | Error err -> return Error(SyncStorageFailure(EntityError.message err))
+                        | None -> return Ok removed
                     else
                         do! recordEventLink scopeId actor link booking externalId
 
-                        return {
-                            outcome with
-                                Pushed = outcome.Pushed + 1
-                        }
+                        return
+                            Ok {
+                                outcome with
+                                    Pushed = outcome.Pushed + 1
+                            }
         }
 
     /// Write one external event into the local schedule. Uses the
@@ -684,19 +694,38 @@ type CalendarSync
                                 resourceId
                             )
 
+                        // Phase 971 — every event link is attempted, and a
+                        // refused delete (`Delete` answers Ok on a missing
+                        // entity, so an Error is a refusal) keeps the
+                        // calendar link: it is what a re-run finds this
+                        // resource's links by, so it goes LAST and only once
+                        // every event link went.
+                        let refusals = ResizeArray<string>()
+
                         match eventRefs with
                         | Error _ -> ()
                         | Ok refs ->
                             for r in refs do
                                 match! entityStore.Get<CalendarEventLink>(scopeId, CalendarEventLinkTypeName, r.Id) with
                                 | Ok l when l.Kind = kind ->
-                                    let! _ = entityStore.Delete(scopeId, actor, CalendarEventLinkTypeName, l.Id)
-
-                                    ()
+                                    match! entityStore.Delete(scopeId, actor, CalendarEventLinkTypeName, l.Id) with
+                                    | Ok() -> ()
+                                    | Error err -> refusals.Add(sprintf "%s (%s)" l.Id (EntityError.message err))
                                 | _ -> ()
 
-                        let! _ = entityStore.Delete(scopeId, actor, CalendarLinkTypeName, link.Id)
-                        return Ok()
+                        if refusals.Count > 0 then
+                            return
+                                Error(
+                                    SyncStorageFailure(
+                                        sprintf
+                                            "event links not deleted, calendar link kept for a re-run: %s"
+                                            (String.concat "; " refusals)
+                                    )
+                                )
+                        else
+                            match! entityStore.Delete(scopeId, actor, CalendarLinkTypeName, link.Id) with
+                            | Ok() -> return Ok()
+                            | Error err -> return Error(SyncStorageFailure(EntityError.message err))
         }
 
         member _.ListLinks(scopeId, resourceId) = listLinks scopeId resourceId
@@ -704,12 +733,20 @@ type CalendarSync
         member _.PushBooking(scopeId, booking, actor) = async {
             let! links = listLinks scopeId booking.ResourceId
             let mutable outcome = PushOutcome.empty
+            let refusals = ResizeArray<string>()
 
+            // Every link is pushed even after a refused delete on one, so a
+            // cancellation still reaches every calendar; the refusals then
+            // answer the whole push (Phase 971).
             for link in links do
-                let! next = pushOne scopeId actor booking link outcome
-                outcome <- next
+                match! pushOne scopeId actor booking link outcome with
+                | Ok next -> outcome <- next
+                | Error err -> refusals.Add(sprintf "%s: %s" link.Kind (CalendarSyncError.message err))
 
-            return Ok outcome
+            if refusals.Count > 0 then
+                return Error(SyncStorageFailure(String.concat "; " refusals))
+            else
+                return Ok outcome
         }
 
         member _.PullResource(scopeId, resourceId) = async {

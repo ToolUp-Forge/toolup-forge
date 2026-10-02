@@ -141,9 +141,8 @@ type BlobRenderCache(blobStorage: IBlobStorage, container: string) =
                     return Some entry
                 else
                     // Hard-expired, no stale-while-revalidate — delete and
-                    // report a miss. Best-effort delete; a failed delete
-                    // just means the next request re-evaluates expiry.
-                    let! _ = blobStorage.Delete(container, blobName key)
+                    // report a miss.
+                    let! _ = blobStorage.Delete(container, blobName key) // best-effort-write: hard-expired entry reads as a miss either way; the next TryGet re-evaluates expiry and re-deletes it
                     return None
         }
 
@@ -156,18 +155,44 @@ type BlobRenderCache(blobStorage: IBlobStorage, container: string) =
                 return ()
         }
 
+        // Phase 971 — an explicit invalidation the caller is told happened.
+        // `Delete` answers Ok on a missing blob, so an Error is a REFUSAL:
+        // the entry is still there and is served until its TTL. No failure
+        // channel, so it raises.
         member _.Invalidate(key: RenderKey) : Async<unit> = async {
-            let! _ = blobStorage.Delete(container, blobName key)
-            return ()
+            match! blobStorage.Delete(container, blobName key) with
+            | Ok() -> return ()
+            | Error storageError ->
+                return
+                    failwithf
+                        "render cache entry %s/%s could not be invalidated: %s"
+                        container
+                        (blobName key)
+                        storageError
         }
 
     interface IRenderCacheInvalidation with
+        // Phase 971 — every entry is attempted, so one refusal does not keep
+        // the rest of the slug cached; the refusals are then raised together,
+        // naming each kept entry. A re-run purges what is left.
         member _.PurgeSlug(slug: string) : Async<unit> = async {
             let! names = blobStorage.List(container, slugPrefix slug)
+            let refusals = ResizeArray<string>()
 
             for name in names do
-                let! _ = blobStorage.Delete(container, name)
-                ()
+                match! blobStorage.Delete(container, name) with
+                | Ok() -> ()
+                | Error storageError -> refusals.Add(sprintf "%s (%s)" name storageError)
+
+            if refusals.Count > 0 then
+                return
+                    failwithf
+                        "render cache purge of slug '%s' in %s left %d entr%s cached: %s"
+                        slug
+                        container
+                        refusals.Count
+                        (if refusals.Count = 1 then "y" else "ies")
+                        (String.Join("; ", refusals))
         }
 
 module BlobRenderCache =

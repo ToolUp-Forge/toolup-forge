@@ -85,10 +85,44 @@ let private retryPolicy = {
         MaxAttempts = 3
 }
 
+/// Phase 971 — `Delete` answers `Error` for every subscription blob while
+/// `refusing` is set; every other operation passes through to `inner`.
+type private SubscriptionDeleteRefusingBlobStorage(inner: BlobStorage.IBlobStorage, refusing: bool ref) =
+    interface BlobStorage.IBlobStorage with
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            BlobStorage.composeNotSupported "test double"
+
+        member _.Upload(c, n, content) = inner.Upload(c, n, content)
+        member _.Download(c, n) = inner.Download(c, n)
+
+        member _.Delete(c, n) =
+            if refusing.Value && n.StartsWith ReportSubscription.StorePrefix then
+                async { return Error "simulated storage delete refusal" }
+            else
+                inner.Delete(c, n)
+
+        member _.List(c, prefix) = inner.List(c, prefix)
+        member _.Exists(c, n) = inner.Exists(c, n)
+        member _.GetMetadata(c, n) = inner.GetMetadata(c, n)
+
+        member _.DownloadRange(c, n, offset, length) =
+            inner.DownloadRange(c, n, offset, length)
+
+        member _.Erase(c, prefix, policy, dryRun) = inner.Erase(c, prefix, policy, dryRun)
+
 /// One wired-up world. Every test builds its own, so nothing leaks
-/// between cases.
-type private World(?sink: RecordingSink, ?addresses: (string * string) list) =
-    let blobs = ToolUp.Platform.Testing.Fakes.standardBlobStorage ()
+/// between cases. `refuseSubscriptionDeletes` (Phase 971) puts the store
+/// over a blob layer that refuses subscription deletes while it is set.
+type private World(?sink: RecordingSink, ?addresses: (string * string) list, ?refuseSubscriptionDeletes: bool ref) =
+    let blobs =
+        let standard = ToolUp.Platform.Testing.Fakes.standardBlobStorage ()
+
+        match refuseSubscriptionDeletes with
+        | Some refusing -> SubscriptionDeleteRefusingBlobStorage(standard, refusing) :> BlobStorage.IBlobStorage
+        | None -> standard
+
     let subscriptions = ReportSubscriptionStore.create blobs
 
     let artefacts =
@@ -902,4 +936,48 @@ let tests =
                     "the handler's terminal-failure judgement and the job's retry budget must be one value"
             }
         ]
+    ]
+
+// ─── Phase 971 — a refused subscription delete is reported ───────────
+//
+// `IBlobStorage.Delete` answers `Ok` on a missing blob, so an `Error` is a
+// refusal: the subscription record is still there and keeps being listed
+// (and is what re-registers its job on the next save). `Delete` has no
+// failure channel, so the store raises; the API handler answers it as it
+// answers a refused save, `SubscriptionStorageFailure`.
+
+let phase971Tests =
+    testList "Phase 971 - Reporting" [
+        test "the store's Delete raises when the subscription delete is refused, and the subscription is still listed" {
+            let refusing = ref false
+            let world = World(refuseSubscriptionDeletes = refusing)
+            let api = world.Api scopeA
+            let created = api.CreateSubscription newSubscription |> run |> expectOk
+            refusing.Value <- true
+
+            match Async.Catch(world.Subscriptions.Delete(scopeA, created.Id)) |> run with
+            | Choice1Of2() -> failtest "a refused delete must not read as done"
+            | Choice2Of2 _ -> ()
+
+            Expect.isSome (world.Subscriptions.Get(scopeA, created.Id) |> run) "the record is still at rest"
+
+            Expect.contains (world.Subscriptions.List scopeA |> run |> List.map _.Id) created.Id "and still listed"
+        }
+
+        test "DeleteSubscription answers SubscriptionStorageFailure when the delete is refused" {
+            let refusing = ref false
+            let world = World(refuseSubscriptionDeletes = refusing)
+            let api = world.Api scopeA
+            let created = api.CreateSubscription newSubscription |> run |> expectOk
+            refusing.Value <- true
+
+            match api.DeleteSubscription created.Id |> run |> expectError with
+            | SubscriptionStorageFailure _ -> ()
+            | other -> failtestf "expected SubscriptionStorageFailure, got %A" other
+
+            Expect.contains
+                (api.ListSubscriptions() |> run |> List.map _.Id)
+                created.Id
+                "the subscription is still listed, so the caller had to be told"
+        }
     ]

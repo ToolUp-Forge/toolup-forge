@@ -180,7 +180,13 @@ type BlobMapStore<'T>(storage: IBlobStorage, codec: BlobCodec<'T>, logger: ILogg
             | Ok _ ->
                 // A backend that ignored the precondition wrote the probe:
                 // it is not conditional, and the probe must not linger.
-                let! _ = storage.Delete(container, probe)
+                match! storage.Delete(container, probe) with
+                | Ok() -> ()
+                | Error e ->
+                    logger.Warn(
+                        $"[BlobMapStore] {container}/{probe}: the capability-probe blob could not be deleted ({e}); a non-conditional answer is not cached, so the next Update re-probes and re-deletes it."
+                    )
+
                 return false
     }
 

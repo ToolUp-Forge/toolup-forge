@@ -94,7 +94,7 @@ type DataProtectionBackendValidator(storage: IBlobStorage, ?timeout: TimeSpan) =
                         // Best-effort delete — a leftover sentinel is
                         // valid XML at a fixed path, overwritten on the
                         // next deploy and skipped by the key manager.
-                        let! _ = storage.Delete(BlobDpKeyRing.Container, sentinelBlobName)
+                        let! _ = storage.Delete(BlobDpKeyRing.Container, sentinelBlobName) // best-effort-write: fixed-key preflight sentinel; the next DataProtectionBackendValidator.Validate overwrites and re-deletes it
 
                         if readback = payload then
                             return Ok

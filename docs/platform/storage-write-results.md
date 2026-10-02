@@ -130,16 +130,33 @@ match undo with
 | Error e -> return Error(SaveFailed(StorageFailure $"… {blobName} could not be removed ({e}) …"))
 ```
 
-**Enforcement is opt-in, and why.** `VerifyUploadResults --single-delete` reports a single-call
-`Delete` discarded where it is made (one-line `let! _ =`, the call on the next lines, or its own
-`|> Async.Ignore`), red on a planted instance of each shape and green for a call whose result is
-matched on. It is not the default scan: with the four sites above fixed, it still reports **69
-unmarked sites across 43 files** under `src/` — probe and sentinel deletes in config validators,
-cache and retention sweeps, membership and subscription records, outbox intents — that nobody has
-yet judged as the operation's own effect or as cleanup. A default scan that is red on the tree gates
-nothing, so the flag becomes the default once those are triaged: each either propagates, or carries
-`// best-effort-write: <why>` naming the pass that recovers a leftover. Until then a single call is
-the reviewer's, and the four above are the precedent a reviewer holds it to.
+**Enforced by default (Phase 971).** `VerifyUploadResults` reports a single-call `Delete` discarded
+where it is made — one-line `let! _ =`, the call on the next lines, or its own `|> Async.Ignore` —
+with no flag; a call whose result is matched on is not a site. Every remaining site on the tree was
+judged one way or the other first, module by module, and the split is the rule above applied:
+
+| The single call deletes… | Disposition | Examples |
+|---|---|---|
+| a record or registration the operation exists to remove | propagated through the operation's own error, or raised where the signature is `Async<unit>` | a config document's or provider profile's `Clear`, a webhook or report subscription, a data-source config, a module-visibility profile, a round's state, a calendar link, a lifecycle done-set |
+| bytes at rest the caller is told are gone | propagated, **with the record a re-run finds them by deleted last** | a media item's original and renditions, a knowledge document's original, note body and prior versions, a retention purge's raw blob, a conversation's turns (the manifest goes last) |
+| a pointer or membership a purge or removal must not leave behind | propagated, the pointer cleared **before** the row a retry re-reads | the active-team pointer in `RemoveMember`, `PurgeUser`, `PurgeTeam` and `SetArchived` |
+| scratch, a cache entry, a probe or sentinel, an expired entry a later pass re-reaps | best-effort: `Warn` where a logger is in reach, else the marker naming the pass | preflight sentinels, the render cache's expired entry, TTL reaps in the idempotency and peer-job stores, the outbox's intents, retention eviction, upload-session scratch on commit |
+
+Two findings from that triage are worth keeping. A discard can hide that a delete NEVER happens:
+conversation turns are written strictly versioned, so `IDataObjectStore.Delete` refused every one
+of them and the conversation delete answered `Ok` over every turn still at rest — the turns now go
+through `Evict`, the retention owner's removal. And a few cleanup sites have no pass that reclaims
+a leftover: a fact-table run's staged rows and an ended run's kept provenance (read by nothing once
+the run is recorded terminal), and a stale secondary-index ref (`BlobIndex` — the drift contract
+holds the canonical record authoritative, but no vacuum exists yet). Their markers say so in as
+many words, so a reader meets a known storage leak, not an oversight.
+
+**History — why Phase 967 shipped it opt-in.** With the four sites above fixed, the walk still
+reported 69 unmarked sites across 43 files — probe and sentinel deletes, cache and retention sweeps,
+membership and subscription records, outbox intents — that nobody had yet judged as the operation's
+own effect or as cleanup. A default scan that is red on the tree gates nothing, so 967 shipped it
+behind `--single-delete` and Phase 971 made it the default once those were triaged. The flag is
+accepted as a no-op for one release.
 
 The gate is textual. A result dropped some other way — through a helper that returns the
 upload's `Result` under another name, say — is the same defect, and a reviewer holds it to the

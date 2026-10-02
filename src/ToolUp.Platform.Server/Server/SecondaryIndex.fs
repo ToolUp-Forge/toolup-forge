@@ -212,7 +212,7 @@ module BlobIndex =
 
         let remove key value = async {
             let blobName = leafName indexPrefix keyToSegment valueToSegment key value
-            let! _ = storage.Delete(container, blobName)
+            let! _ = storage.Delete(container, blobName) // best-effort-write: derived index ref (the drift contract above); a stale ref soft-misses where the caller re-resolves canonical state, and in a store with an IndexConsistencyCheck (events, jobs) a sampled one shows as OrphanedIndexEntries — no vacuum reclaims it yet
             return ()
         }
 

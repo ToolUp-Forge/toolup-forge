@@ -407,6 +407,25 @@ type DefaultMediaLibrary
         | Error e -> return Error e
     }
 
+    /// Phase 971 — roll back a just-composed original on a path that has
+    /// already failed. The failure stays the answer; a refused rollback
+    /// is appended to it and logged at Warn, naming the orphan, since no
+    /// record was written and nothing will find the blob by id again.
+    let rollbackComposedOriginal (container: string) (id: MediaId) (failure: string) : Async<string> = async {
+        match! blobStorage.Delete(container, MediaPaths.original id) with
+        | Ok() -> return failure
+        | Error e ->
+            logger.Warn(
+                sprintf
+                    "[MediaLibrary] composed original %s/%s could not be removed after a failed ingest and is orphaned at rest: %s"
+                    container
+                    (MediaPaths.original id)
+                    e
+            )
+
+            return sprintf "%s; the composed original %s could not be removed (%s)" failure (MediaPaths.original id) e
+    }
+
     /// Phase 471 — run the HLS pass, encrypted or not.
     ///
     /// The key is minted only once BOTH preconditions hold (a composed
@@ -695,12 +714,22 @@ type DefaultMediaLibrary
             if not recordExists then
                 return Error MediaDeleteError.NotFound
             else
-                // Best-effort delete of derived blobs, then original + record.
+                // Phase 971 — the derived blobs and the original are the
+                // item's own bytes at rest, so their deletes are part of
+                // the operation, not cleanup: every one is attempted, and
+                // any refusal fails the delete, naming what is still
+                // there. The record goes LAST and only once everything
+                // else went — it is what a re-run finds the item by, so a
+                // record deleted over a refused blob would orphan it.
                 let! derived = blobStorage.List(scopeContainer, MediaPaths.derivedDir id)
 
-                for d in derived do
-                    let! _ = blobStorage.Delete(scopeContainer, d)
-                    ()
+                let! derivedDeletes =
+                    derived
+                    |> List.map (fun d -> async {
+                        let! result = blobStorage.Delete(scopeContainer, d)
+                        return d, result
+                    })
+                    |> Async.Sequential
 
                 // Phase 471 — the item's HLS key lives in `ISecretStore`,
                 // not in the container, so deleting derived blobs does
@@ -710,20 +739,41 @@ type DefaultMediaLibrary
                 | Some keys -> do! keys.Delete(scopeContainer, id)
                 | None -> ()
 
-                let! _ = blobStorage.Delete(scopeContainer, MediaPaths.original id)
-                let! recDelete = blobStorage.Delete(scopeContainer, MediaPaths.record id)
+                let! originalDelete = blobStorage.Delete(scopeContainer, MediaPaths.original id)
 
-                match recDelete with
-                | Ok() ->
-                    // Phase 472 — a deleted item must stop playing, and
-                    // deleting the blobs does not reach an edge copy.
-                    // Purged only on a SUCCESSFUL record delete: a
-                    // failed delete leaves the item live, and purging
-                    // its edge objects would then be a pointless cache
-                    // miss rather than a correctness fix.
-                    purgeEdge id "delete"
-                    return Ok()
-                | Error e -> return Error(MediaDeleteError.StorageError e)
+                let refused =
+                    [
+                        yield! derivedDeletes |> Array.toList
+                        yield MediaPaths.original id, originalDelete
+                    ]
+                    |> List.choose (fun (name, result) ->
+                        match result with
+                        | Ok() -> None
+                        | Error e -> Some(sprintf "%s (%s)" name e))
+
+                if not (List.isEmpty refused) then
+                    return
+                        Error(
+                            MediaDeleteError.StorageError(
+                                sprintf
+                                    "blobs still at rest: %s; record kept so a re-run of Delete finds the item"
+                                    (String.concat ", " refused)
+                            )
+                        )
+                else
+                    let! recDelete = blobStorage.Delete(scopeContainer, MediaPaths.record id)
+
+                    match recDelete with
+                    | Ok() ->
+                        // Phase 472 — a deleted item must stop playing, and
+                        // deleting the blobs does not reach an edge copy.
+                        // Purged only on a SUCCESSFUL record delete: a
+                        // failed delete leaves the item live, and purging
+                        // its edge objects would then be a pointless cache
+                        // miss rather than a correctness fix.
+                        purgeEdge id "delete"
+                        return Ok()
+                    | Error e -> return Error(MediaDeleteError.StorageError e)
         }
 
         member _.SignedUrl(id, scope, ttl) = async {
@@ -855,17 +905,16 @@ type DefaultMediaLibrary
                     // caller measured. Fail closed and take the target
                     // with it — a record written over this would claim a
                     // hash for bytes nobody verified.
-                    let! _ = blobStorage.Delete(scopeContainer, MediaPaths.original id)
+                    let! message =
+                        rollbackComposedOriginal
+                            scopeContainer
+                            id
+                            (sprintf
+                                "composed original is %d bytes, expected %d — the store's compose disagrees with the measured parts"
+                                written
+                                original.SizeBytes)
 
-                    return
-                        Error(
-                            MediaUploadError.StorageError(
-                                sprintf
-                                    "composed original is %d bytes, expected %d — the store's compose disagrees with the measured parts"
-                                    written
-                                    original.SizeBytes
-                            )
-                        )
+                    return Error(MediaUploadError.StorageError message)
                 else
                     let provisional = {
                         Id = id
@@ -901,8 +950,8 @@ type DefaultMediaLibrary
 
                     match! writeRecord scopeContainer record with
                     | Error e ->
-                        let! _ = blobStorage.Delete(scopeContainer, MediaPaths.original id)
-                        return Error(MediaUploadError.StorageError e)
+                        let! message = rollbackComposedOriginal scopeContainer id e
+                        return Error(MediaUploadError.StorageError message)
                     | Ok() ->
                         do! publishStatus declaration.UploadedBy record
 

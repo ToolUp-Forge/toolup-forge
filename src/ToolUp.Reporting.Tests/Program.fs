@@ -12,6 +12,7 @@ let private registeredTests =
         SubscriptionTests.tests
         NarrativeEgressTests.tests
         NarrativeEgressTests.componentTests
+        SubscriptionTests.phase971Tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

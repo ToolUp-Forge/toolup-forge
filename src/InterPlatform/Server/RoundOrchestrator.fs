@@ -481,8 +481,15 @@ type BlobRoundStateStore(blobs: IBlobStorage) =
         }
 
         member _.Clear(scopeId: string, runId: string) = async {
-            let! _ = blobs.Delete(container, blobNameFor scopeId runId)
-            return ()
+            // Phase 971 — the delete IS the clear. `Clear` is `Async<unit>`,
+            // so a refusal raises, mirroring `Save`: returning normally would
+            // claim a run's state is gone while it is still there for the
+            // next `RunRounds` to resume from. `Delete` is idempotent on a
+            // missing blob, so an `Error` here is always a refusal.
+            match! blobs.Delete(container, blobNameFor scopeId runId) with
+            | Ok _ -> return ()
+            | Error storageError ->
+                return failwithf "BlobRoundStateStore: state of run %s could not be cleared: %s" runId storageError
         }
 
 /// In-process state store. Dev / test only — state lives in a dictionary

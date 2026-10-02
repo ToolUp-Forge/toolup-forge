@@ -80,7 +80,7 @@ type BlobStorageValidator(storage: IBlobStorage, ?timeout: TimeSpan) =
                         // Best-effort delete — a delete failure isn't an
                         // outage signal (the sentinel is keyed at a fixed
                         // path so it'll be overwritten on the next deploy).
-                        let! _ = storage.Delete(platformContainer, blobSentinelKey)
+                        let! _ = storage.Delete(platformContainer, blobSentinelKey) // best-effort-write: fixed-key preflight sentinel; the next BlobStorageValidator.Validate overwrites and re-deletes it
 
                         if readback = payload then
                             return Ok

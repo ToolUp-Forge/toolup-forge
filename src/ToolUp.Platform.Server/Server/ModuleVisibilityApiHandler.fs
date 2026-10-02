@@ -203,9 +203,17 @@ let moduleVisibilityApi (registeredModuleIds: string list) (ctx: HttpContext) : 
         ClearProfile =
             fun () ->
                 withWriteScope (fun scope -> async {
-                    do! store.ClearProfile scope
-                    logger.Info $"ModuleVisibility: profile cleared scope={FlagScope.slug scope}"
-                    do! audit scope ModuleVisibilityChangeAction.Cleared
-                    return Ok()
+                    // Phase 971 — `ClearProfile` raises when the store
+                    // refuses the delete. Answer it as `SetProfile` answers
+                    // a refused save: Warn and Error, no "cleared" log and
+                    // no Cleared audit, since the profile still governs.
+                    match! Async.Catch(store.ClearProfile scope) with
+                    | Choice1Of2() ->
+                        logger.Info $"ModuleVisibility: profile cleared scope={FlagScope.slug scope}"
+                        do! audit scope ModuleVisibilityChangeAction.Cleared
+                        return Ok()
+                    | Choice2Of2 ex ->
+                        logger.Warn $"ModuleVisibility: clear failed scope={FlagScope.slug scope}: {ex.Message}"
+                        return Error ex.Message
                 })
     }

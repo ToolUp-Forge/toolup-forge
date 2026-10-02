@@ -14,6 +14,8 @@
         <Compile Include="Doubles.fs" />
         <Compile Include="InProcess\DerivativePipelineTests.fs" />
         <Compile Include="InProcess\DerivativeDlqTests.fs" />
+        <!-- Phase 971 — a refused derivative-status clear fails the job. -->
+        <Compile Include="InProcess\Phase971AssetStoreTests.fs" />
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
              ToolUp.Platform.Tests so there is one implementation. -->
         <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />

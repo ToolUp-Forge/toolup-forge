@@ -306,7 +306,7 @@ type BlobPeerJobResultStore(blobs: IBlobStorage, retention: PeerJobRetentionPoli
                     // Retired. Reclaim the blob on the way past — this is
                     // the whole sweep, and it runs on the read that would
                     // otherwise have served a stale federated result.
-                    let! _ = blobs.Delete(container, blobNameFor scopeId jobId)
+                    let! _ = blobs.Delete(container, blobNameFor scopeId jobId) // best-effort-write: expired result reads None either way; the next TryGetResult for this job re-finds and re-deletes it
                     return None
                 | _ ->
                     // A delete-on-read record starts its grace clock on
@@ -804,7 +804,7 @@ type BlobPeerGroupJobMap(blobs: IBlobStorage, retention: PeerJobRetentionPolicy,
                     // Retired. Reclaim the blob on the way past — the whole
                     // sweep, running on the read that would otherwise have
                     // routed a poll at a member record that is itself gone.
-                    let! _ = blobs.Delete(container, blobNameFor scopeId groupJobId)
+                    let! _ = blobs.Delete(container, blobNameFor scopeId groupJobId) // best-effort-write: expired binding reads None either way; the next TryGet for this handle re-finds and re-deletes it
                     return None
                 else
                     return Some doc.Binding

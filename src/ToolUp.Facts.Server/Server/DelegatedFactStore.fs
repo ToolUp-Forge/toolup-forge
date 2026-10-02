@@ -1441,11 +1441,14 @@ type DelegateTableWriter
             Payload = FactTableBlobIo.serialize payload
         }
 
+    // Phase 971 - known storage leak, not an oversight: this runs after the
+    // run's terminal record is persisted, `stagedRows` reads an open run only,
+    // and no pass reclaims a leftover today.
     let discardStaged (scopeId: string) (runId: string) = async {
         let! names = storage.List(scopeId, tables.StagedPrefix runId)
 
         for name in names do
-            let! _ = storage.Delete(scopeId, name)
+            let! _ = storage.Delete(scopeId, name) // best-effort-write: scratch of a run already recorded terminal; read by nothing after it - a leftover is unreachable bytes, never a wrong answer (no sweep reclaims it)
             ()
     }
 

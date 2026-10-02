@@ -792,6 +792,11 @@ type ScopedLocalEmbeddingProviders(blobStorage: IBlobStorage option) =
     /// Idempotent (`IBlobStorage.Delete` is), so resetting a scope that
     /// never embedded anything succeeds.
     ///
+    /// Raises when storage REFUSES the snapshot delete (Phase 971): the
+    /// snapshot is still at rest, so the next `For(scope)` would rehydrate
+    /// the vocabulary this reset was asked to wipe. The in-memory state is
+    /// already dropped by then; re-running the reset retries the delete.
+    ///
     /// A `For` call racing a `ResetScope` may re-create the scope's
     /// state before the blob delete lands; callers serialise reset
     /// against ingestion for that scope, exactly as they must for the
@@ -803,8 +808,16 @@ type ScopedLocalEmbeddingProviders(blobStorage: IBlobStorage option) =
         match blobStorage with
         | None -> ()
         | Some storage ->
-            let! _ = storage.Delete(platformContainer, scopedStateBlobName key)
-            return ()
+            match! storage.Delete(platformContainer, scopedStateBlobName key) with
+            | Ok() -> ()
+            | Error e ->
+                return
+                    failwithf
+                        "ResetScope(%s): the persisted TF-IDF state %s/%s was not deleted (%s); a later For(scope) would rehydrate it"
+                        key
+                        platformContainer
+                        (scopedStateBlobName key)
+                        e
     }
 
     // ─── The composable surfaces (Phase 14z, Option 1) ───────────

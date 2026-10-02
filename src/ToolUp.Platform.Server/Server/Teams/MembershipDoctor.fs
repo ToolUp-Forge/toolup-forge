@@ -365,8 +365,17 @@ module MembershipDoctorStorage =
                 }
             ClearActiveTeam =
                 fun userId teamId -> async {
-                    let! _ = storage.Delete(platformContainer, activeTeamBlobName userId)
-                    do! publish teamId userId MembershipChangeKind.ActiveTeamSet
+                    // Phase 971 — a refused delete raises, as a refused save
+                    // does above, so `repair` stops before it reports a
+                    // pointer Repaired that is still there.
+                    match! storage.Delete(platformContainer, activeTeamBlobName userId) with
+                    | Ok() -> do! publish teamId userId MembershipChangeKind.ActiveTeamSet
+                    | Error storageError ->
+                        return
+                            failwithf
+                                "MembershipDoctor: active-team pointer %s could not be cleared: %s"
+                                (activeTeamBlobName userId)
+                                storageError
                 }
             EmitMemberRemoved =
                 fun teamId affectedUserId -> async {

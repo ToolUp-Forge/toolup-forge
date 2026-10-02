@@ -2549,6 +2549,28 @@ let private registeredTests =
         // publishing, the grant and its two consents, the source's gate at the
         // publication door, withdrawal, both sides' audit, and the one seam.
         FactPublicationTests.tests
+        // Phase 971 - InterPlatform: a refused delete that is the operation propagates.
+        Phase971InterPlatformTests.tests
+        // Phase 971 - Media: a refused delete that is the operation propagates.
+        MediaLibraryTests.phase971Tests
+        // Phase 971 - KnowledgeBase: a refused delete that is the operation propagates.
+        Phase971KnowledgeBaseTests.tests
+        // Phase 971 - Facts: a refused ledger delete fails the consolidation.
+        FactPublicationTests.phase971Tests
+        // Phase 971 - PlatformTeams: a refused delete that is the operation propagates.
+        Phase971PlatformTeamsTests.tests
+        // Phase 971 - PlatformStores: a refused delete that is the operation propagates.
+        Phase971PlatformStoresTests.tests
+        // Phase 971 - PlatformRecords: a refused delete that is the operation propagates.
+        Phase971PlatformRecordsTests.tests
+        // Phase 971 - Embedding: a refused delete that is the operation propagates.
+        Phase971EmbeddingTests.tests
+        // Phase 971 - AI: a refused delete that is the operation propagates.
+        Phase971AITests.tests
+        // Phase 971 - PublicRendering: a refused delete that is the operation propagates.
+        Phase971PublicRenderingTests.tests
+        // Phase 971 - PlatformTenant: provisioning clears the offboard ledger first.
+        Phase971PlatformTenantTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

@@ -3893,18 +3893,16 @@ let main args =
     // the container. They propagate now (storage-write-results.md carries
     // the rule and the four answers).
     //
-    // `--single-delete` extends the walk to a `Delete` whose result is
-    // discarded where it is made: `let! _ = x.Delete(…)` on one line or the
-    // call on the next lines, or `do! x.Delete(…) |> Async.Ignore`. It is
-    // OPT-IN, and the default scan is unchanged, because the same
-    // measurement refuted the other half of the claim: with the four fixed
-    // the flag still reports 69 unmarked sites across 43 files (the
-    // phase had assumed the four, plus one known retired-job reclaim, were
-    // the only ones). Each of the 69 is a separate judgement — an operation's
-    // own delete to propagate, or cleanup to mark with the pass that
-    // re-sweeps it — in a module this phase does not own. Making the flag
-    // the default is the step that follows that triage, and not before:
-    // a default scan that is red on the tree gates nothing.
+    // Phase 971 — the walk covers a SINGLE-call `Delete` discarded where it
+    // is made, by default: `let! _ = x.Delete(…)` on one line or the call on
+    // the next lines, or `do! x.Delete(…) |> Async.Ignore`. Phase 967 shipped
+    // it behind `--single-delete` because, with its four sites fixed, the walk
+    // still reported 69 unmarked sites across 43 files, and a default scan
+    // that is red on the tree gates nothing. Phase 971 triaged all 69 — each
+    // operation's own delete now propagates, each cleanup carries the marker
+    // naming the pass that re-sweeps it (storage-write-results.md) — so the
+    // walk is the default. `--single-delete` is accepted as a no-op for one
+    // release, so a script that passes it keeps working.
     //
     // Scope: production code under `src/`. Test projects (a directory named
     // `*.Tests`) are excluded — a fixture that seeds a blob is not a store,
@@ -3912,8 +3910,9 @@ let main args =
     // skipped, so prose quoting the pattern is not a finding.
     //
     // Usage: `dotnet run --project Build.fsproj -- VerifyUploadResults`
-    //        `… -- VerifyUploadResults --single-delete` also reports a single-call
-    //        `Delete` discarded where it is made (Phase 967, opt-in).
+    //        `… -- VerifyUploadResults --single-delete` is a no-op (Phase 971
+    //        made the single-call `Delete` walk the default; the flag is kept
+    //        for one release).
     //        `… -- VerifyUploadResults --root <dir>` scans `<dir>/src` instead
     //        of this repository's (how the check is shown red on a planted
     //        discard without touching the tree).
@@ -3925,8 +3924,13 @@ let main args =
 
         let srcDir = Path.Combine(root, "src")
 
-        // Phase 967 - opt-in: count a SINGLE-call `Delete` discarded where it is made.
-        let includeSingleDelete = args |> Array.contains "--single-delete"
+        // Phase 971 - a SINGLE-call `Delete` discarded where it is made is always
+        // counted; `--single-delete` (Phase 967's opt-in) is a no-op kept for one release.
+        let includeSingleDelete = true
+
+        if args |> Array.contains "--single-delete" then
+            Trace.tracefn
+                "VerifyUploadResults: --single-delete is now the default and the flag is a no-op (Phase 971); it will be removed in a later release."
 
         if not (Directory.Exists srcDir) then
             failwithf "VerifyUploadResults: no `src` directory under %s — nothing to scan is not a pass." root
@@ -4032,13 +4036,12 @@ let main args =
 
         // Phase 965 — a `Delete` in the fan-out shape. `IBlobStorage.Delete`
         // is idempotent on a missing blob, so its `Error` is a refusal, and
-        // a fan-out that discards the list of results hides one. Unlike an
-        // upload, a SINGLE `Delete` discard is out of scope (cleanup is
-        // recoverable by the next pass), so a `Delete` counts only when the
-        // call IS the element's value inside a pipeline that runs through
-        // `Async.Parallel`: a call already discarded where it is made
-        // (`let! _ =`, or ended by its own `|> Async.Ignore`) is a visible
-        // single-call discard, not the wholesale one this shape is.
+        // a fan-out that discards the list of results hides one. In this
+        // shape a `Delete` counts only when the call IS the element's value
+        // inside a pipeline that runs through `Async.Parallel`: a call already
+        // discarded where it is made (`let! _ =`, or ended by its own
+        // `|> Async.Ignore`) is a single-call discard, which the Phase 967/971
+        // branches below report at the call itself.
         let deleteCall = System.Text.RegularExpressions.Regex(@"\.Delete\s*\(")
         let asyncParallel = System.Text.RegularExpressions.Regex(@"\bAsync\.Parallel\b")
 
@@ -4196,13 +4199,13 @@ let main args =
                 Trace.traceError (sprintf "    %s:%d: %s" rel line text)
 
             failwithf
-                "VerifyUploadResults: %d site(s) discard the Result of an `Upload`, or of a fan-out of `Delete`s. A failed write or delete must reach its caller: propagate it (match on the Result; raise where the enclosing signature carries no failure), or — where best-effort is the DESIGN — match the Error and log it at Warn. A discard that must stay a discard says why with `// best-effort-write: <why>` on the line. See docs/platform/storage-write-results.md."
+                "VerifyUploadResults: %d site(s) discard the Result of an `Upload`, or of a `Delete` (single call or fan-out). A failed write or delete must reach its caller: propagate it (match on the Result; raise where the enclosing signature carries no failure), or — where best-effort is the DESIGN — match the Error and log it at Warn. A discard that must stay a discard says why with `// best-effort-write: <why>` on the line. See docs/platform/storage-write-results.md."
                 unmarked.Length
 
         Trace.tracefn ""
 
         Trace.tracefn
-            "VerifyUploadResults: OK — no unmarked discarded upload or delete-fan-out result (%d marked best-effort)."
+            "VerifyUploadResults: OK — no unmarked discarded upload or delete result (%d marked best-effort)."
             marked.Length)
 
     // App-specific target: Azure deployment

@@ -168,7 +168,7 @@ type PersistentNarrativeStore(blobStorage: IBlobStorage, policy: NarrativeRetent
 
         for old in agedOut @ countOverflow do
             let oldName = blobName scopeId old
-            let! _ = blobStorage.Delete(platformContainer, oldName)
+            let! _ = blobStorage.Delete(platformContainer, oldName) // best-effort-write: retention eviction; the next publish's sweep re-lists and re-evicts entries past MaxAge/MaxPerScope
             ()
 
         return id
@@ -188,7 +188,7 @@ type PersistentNarrativeStore(blobStorage: IBlobStorage, policy: NarrativeRetent
 
         for old in toRemove do
             let oldName = blobName scopeId old
-            let! _ = blobStorage.Delete(platformContainer, oldName)
+            let! _ = blobStorage.Delete(platformContainer, oldName) // best-effort-write: ReplaceLatest dedup; the next ReplaceLatest for this tuple re-lists matches and removes leftovers, and retention eviction reaps them
             ()
 
         return! publishInternal (scopeId, moduleId, pageRoute, document, tags)

@@ -94,12 +94,14 @@ type BlobDataSourceConfigStore(storage: IBlobStorage) =
         }
 
         member _.Delete(scopeId, sourceId) = async {
-            // Idempotent — Delete on a missing blob returns Ok in
-            // every shipped IBlobStorage; we treat any failure as
-            // a no-op so the contract stays "deleting a non-existent
-            // id is a no-op".
-            let! _ = storage.Delete(platformContainer, configBlob scopeId sourceId)
-            return ()
+            // Idempotent — `IBlobStorage.Delete` answers Ok on a missing
+            // blob, so deleting a non-existent id is still a no-op. An
+            // Error is therefore a refusal (Phase 971): it raises, as a
+            // refused `Save` does, rather than reading as deleted while
+            // the config is still there.
+            match! storage.Delete(platformContainer, configBlob scopeId sourceId) with
+            | Ok() -> return ()
+            | Error e -> return failwith $"DataSourceConfigStore: failed to delete {sourceId}: {e}"
         }
 
 let create (storage: IBlobStorage) : IDataSourceConfigStore =

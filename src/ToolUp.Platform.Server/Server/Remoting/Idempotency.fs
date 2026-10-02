@@ -343,7 +343,7 @@ type BlobIdempotencyStore(blobStorage: ToolUp.Platform.BlobStorage.IBlobStorage,
                             }
                     else
                         // Lazy TTL expiry — best-effort delete, read as miss.
-                        let! _ = blobStorage.Delete(container, name)
+                        let! _ = blobStorage.Delete(container, name) // best-effort-write: expired envelope reads as a miss; the next TryGet re-issues the delete and IdempotencySweepJob re-lists it
                         return None
                 with _ ->
                     // Corrupt / unreadable envelope is a miss, never a crash.

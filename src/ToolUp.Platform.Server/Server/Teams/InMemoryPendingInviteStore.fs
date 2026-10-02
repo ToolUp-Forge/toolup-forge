@@ -150,7 +150,7 @@ module PendingInviteStore =
                 // destroy the only copy of the bytes.
                 match! storage.Upload(platformContainer, target, bytes) with
                 | Ok _ ->
-                    let! _ = storage.Delete(platformContainer, blobName)
+                    let! _ = storage.Delete(platformContainer, blobName) // best-effort-write: corrupt-blob heal after the bytes are quarantined; the read fails closed and the next read re-quarantines and retries this delete
                     return raise (PendingInvitesBlobCorrupt(target, reason))
                 | Error storageError ->
                     return

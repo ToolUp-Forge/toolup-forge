@@ -205,7 +205,11 @@ let private readOriginalBytes (deps: KnowledgeApiDeps) (docId: string) (fileName
 /// were gone — the orphan-erasure gap. Both paths are swept for a
 /// note (a note whose sanitised title happens to be `note` has them
 /// coincide, and `Delete` is idempotent).
-let private deleteOriginal (deps: KnowledgeApiDeps) (doc: KnowledgeDocument) : Async<unit> = async {
+///
+/// Phase 971 — a refused blob delete is reported, not swallowed: the
+/// `Error` names every convention blob still at rest, and the caller
+/// keeps the index entry so a re-run finds the document again.
+let private deleteOriginal (deps: KnowledgeApiDeps) (doc: KnowledgeDocument) : Async<Result<unit, string>> = async {
     let docId = doc.Id
 
     match deps.DataObjectStore with
@@ -221,14 +225,56 @@ let private deleteOriginal (deps: KnowledgeApiDeps) (doc: KnowledgeDocument) : A
                     err
             )
 
-    let! _ = deps.Storage.Delete(deps.Scope.Container, conventionOriginalBlobName docId doc.FileName)
+    let blobs = [
+        conventionOriginalBlobName docId doc.FileName
+        match doc.Source with
+        | Note _ -> noteBodyBlobName docId
+        | UploadedFile
+        | FromNarrative _ -> ()
+    ]
 
-    match doc.Source with
-    | Note _ ->
-        let! _ = deps.Storage.Delete(deps.Scope.Container, noteBodyBlobName docId)
-        ()
-    | UploadedFile
-    | FromNarrative _ -> ()
+    let refused = ResizeArray<string>()
+
+    for blob in List.distinct blobs do
+        match! deps.Storage.Delete(deps.Scope.Container, blob) with
+        | Ok() -> ()
+        | Error e -> refused.Add(sprintf "%s (%s)" blob e)
+
+    if refused.Count = 0 then
+        return Ok()
+    else
+        return Error(String.concat "; " refused)
+}
+
+/// Phase 971 — delete a document's Phase 510 lineage (every preserved
+/// prior-version original under `knowledge/{docId}/versions/`, the version
+/// manifest, the chunk-hash manifest) and answer the blobs still at rest,
+/// each with its refusal; `[]` when everything went. Every delete is
+/// attempted. The version manifest goes only once every prior-version
+/// original went: while a refusal keeps the document listed it is what
+/// `getDocumentVersions` describes the surviving versions by.
+let private deleteLineage (deps: KnowledgeApiDeps) (docId: string) : Async<string list> = async {
+    let refused = ResizeArray<string>()
+
+    let! versionBlobs = deps.Storage.List(deps.Scope.Container, sprintf "knowledge/%s/versions/" docId)
+
+    for blob in versionBlobs do
+        match! deps.Storage.Delete(deps.Scope.Container, blob) with
+        | Ok() -> ()
+        | Error e -> refused.Add(sprintf "%s (%s)" blob e)
+
+    let manifests = [
+        if refused.Count = 0 then
+            versionsBlobName docId
+        chunkHashesBlobName docId
+    ]
+
+    for blob in manifests do
+        match! deps.Storage.Delete(deps.Scope.Container, blob) with
+        | Ok() -> ()
+        | Error e -> refused.Add(sprintf "%s (%s)" blob e)
+
+    return List.ofSeq refused
 }
 
 /// `true` when the object store is composed AND actually holds an
@@ -1566,7 +1612,7 @@ let deleteDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<unit,
                     // Phase 105 — removes the object-store object AND the
                     // convention blob, so a scope holding documents from
                     // both eras is fully swept.
-                    do! deleteOriginal deps doc
+                    let! originalOutcome = deleteOriginal deps doc
 
                     // Phase 510 — a deleted document takes its whole
                     // lineage with it: every preserved prior-version
@@ -1579,38 +1625,63 @@ let deleteDocument (deps: KnowledgeApiDeps) (docId: string) : Async<Result<unit,
                     // rest is exactly what a data-subject deletion cannot
                     // afford. `Delete` is idempotent, so a document with
                     // no history simply deletes nothing extra.
-                    let! versionBlobs = deps.Storage.List(deps.Scope.Container, sprintf "knowledge/%s/versions/" docId)
+                    //
+                    // Phase 971 — every delete is attempted and every
+                    // refusal collected (`deleteLineage`). The index entry
+                    // is what a re-run finds the document by, so it stays
+                    // until every blob went: a refusal answers `Error` and
+                    // leaves the document listed. The retrieval-index
+                    // fan-out above already ran; it is idempotent, so the
+                    // re-run repeats it at no cost.
+                    let! lineageRefusals = deleteLineage deps docId
 
-                    for blob in versionBlobs do
-                        let! _ = deps.Storage.Delete(deps.Scope.Container, blob)
-                        ()
+                    let refused =
+                        (match originalOutcome with
+                         | Ok() -> []
+                         | Error e -> [ e ])
+                        @ lineageRefusals
 
-                    let! _ = deps.Storage.Delete(deps.Scope.Container, versionsBlobName docId)
-                    let! _ = deps.Storage.Delete(deps.Scope.Container, chunkHashesBlobName docId)
-                    // Phase 867 — and the current ingestion attempt.
-                    do! forgetIngestionAttempt deps.Storage deps.Scope.Container docId
+                    if not refused.IsEmpty then
+                        let stillAtRest = String.concat "; " refused
 
-                    // Phase 959 — removed from the index as it stands NOW,
-                    // through the guarded writer: the `existing` snapshot
-                    // above is stale by the time the fan-out completes, and
-                    // writing it back would drop any document added since.
-                    do! removeIndexEntries deps.Storage deps.Scope.Container [ docId ]
+                        deps.Logger.Warn(
+                            sprintf
+                                "[KnowledgeBase] deleteDocument %s left blobs at rest — %s. The document stays listed so the delete can be retried."
+                                docId
+                                stillAtRest
+                        )
 
-                    // Phase 14x — drop the content-hash dedup ref so a
-                    // future upload of the same bytes re-ingests fresh
-                    // instead of being pointed at the deleted docId
-                    // (`Remove` is idempotent; legacy docs carry no hash).
-                    match doc.ContentHash with
-                    | Some hash -> do! (contentHashIndex deps).Remove hash docId
-                    | None -> ()
+                        return
+                            Error(
+                                sprintf
+                                    "Some of the document's stored files could not be deleted (%s). Try again."
+                                    stillAtRest
+                            )
+                    else
+                        // Phase 867 — and the current ingestion attempt.
+                        do! forgetIngestionAttempt deps.Storage deps.Scope.Container docId
 
-                    clearStatus docId
-                    // Invalidate the prompt-build inventory cache so the next AI
-                    // turn sees the updated document count, not the stale 30-s
-                    // cached string.
-                    KnowledgeBase.ServerInventory.invalidateInventoryCache deps.Scope.Container
-                    do! deps.PublishInventory()
-                    return Ok()
+                        // Phase 959 — removed from the index as it stands NOW,
+                        // through the guarded writer: the `existing` snapshot
+                        // above is stale by the time the fan-out completes, and
+                        // writing it back would drop any document added since.
+                        do! removeIndexEntries deps.Storage deps.Scope.Container [ docId ]
+
+                        // Phase 14x — drop the content-hash dedup ref so a
+                        // future upload of the same bytes re-ingests fresh
+                        // instead of being pointed at the deleted docId
+                        // (`Remove` is idempotent; legacy docs carry no hash).
+                        match doc.ContentHash with
+                        | Some hash -> do! (contentHashIndex deps).Remove hash docId
+                        | None -> ()
+
+                        clearStatus docId
+                        // Invalidate the prompt-build inventory cache so the next AI
+                        // turn sees the updated document count, not the stale 30-s
+                        // cached string.
+                        KnowledgeBase.ServerInventory.invalidateInventoryCache deps.Scope.Container
+                        do! deps.PublishInventory()
+                        return Ok()
             | None ->
                 // Unknown id — preserve the pre-115 idempotent shape (the index
                 // is already in the requested state).

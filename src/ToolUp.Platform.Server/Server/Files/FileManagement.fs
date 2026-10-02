@@ -237,7 +237,7 @@ module ProcessedEntryStore =
         }
 
     let delete (store: IDataObjectStore) (container: string) (fileName: string) : Async<unit> = async {
-        do! store.Delete(container, objectIdFor fileName) |> Async.Ignore
+        do! store.Delete(container, objectIdFor fileName) |> Async.Ignore // best-effort-write: entry sidecar of a deleted file; SessionFileStore hydration's orphan sweep re-deletes a sidecar whose file is gone
     }
 
 // ─── File Store ───────────────────────────────────────────────────
@@ -449,10 +449,19 @@ type SessionFileStore
         | None -> ()
     }
 
-    let deletePersistedFile (fileName: string) = async {
+    // Phase 971 — the persisted delete IS the file delete, so its refusal
+    // reaches the caller: `Error` names the file still at rest. A missing
+    // object answers Ok (the delete is idempotent), as does no store.
+    let deletePersistedFile (fileName: string) : Async<Result<unit, string>> = async {
         match dataObjectStore with
-        | Some store -> do! store.Delete(container, fileName) |> Async.Ignore
-        | None -> ()
+        | Some store ->
+            match! store.Delete(container, fileName) with
+            | Ok()
+            | Error DataObjectError.NotFound -> return Ok()
+            | Error(DataObjectError.StorageFailure storageError) ->
+                return Error(sprintf "File '%s' could not be deleted from storage: %s" fileName storageError)
+            | Error other -> return Error(sprintf "File '%s' could not be deleted from storage: %A" fileName other)
+        | None -> return Ok()
     }
 
     // Bounded fan-out for the per-file blob reads in `loadPersistedFiles`.
@@ -623,11 +632,25 @@ type SessionFileStore
                 // Orphan-sweep: an entry sidecar whose underlying file is
                 // gone (e.g. earlier crash between file-delete and sidecar-
                 // delete). Idempotent — `Delete` on a missing object
-                // returns `Ok ()` per `IDataObjectStore` contract.
+                // returns `Ok ()` per `IDataObjectStore` contract. This IS
+                // the reclamation pass, so a refused delete is logged at Warn
+                // (Phase 971) and left for the next hydration to retry.
                 for orphan in entryObjects do
                     match ProcessedEntryStore.tryParseFileName orphan.ObjectId with
                     | Some fileName when not (files.ContainsKey fileName) ->
-                        do! store.Delete(container, orphan.ObjectId) |> Async.Ignore
+                        match! store.Delete(container, orphan.ObjectId) with
+                        | Ok() -> ()
+                        | Error e ->
+                            let msg =
+                                sprintf
+                                    "Orphan entry sidecar '%s' in scope '%s' could not be deleted (%A); the next hydration re-lists and re-deletes it."
+                                    orphan.ObjectId
+                                    container
+                                    e
+
+                            match runtime.PostSaveHooksLogger with
+                            | Some l -> l.Warn msg
+                            | None -> eprintfn "%s" msg
                     | _ -> ()
             }
 
@@ -894,41 +917,46 @@ type SessionFileStore
     member _.GetProcessedData() = processedEntries.Values |> Seq.toList
 
     member _.DeleteFile(fileName: string) = async {
-        processedData.TryRemove(fileName) |> ignore
-        processedEntries.TryRemove(fileName) |> ignore
-        do! deletePersistedFile fileName
+        // Phase 971 — the persisted delete runs FIRST: a refusal answers
+        // Error with the file still listed in memory and still persisted,
+        // so the caller is told the truth and a retry finds it again.
+        match! deletePersistedFile fileName with
+        | Error e -> return Error e
+        | Ok() ->
+            processedData.TryRemove(fileName) |> ignore
+            processedEntries.TryRemove(fileName) |> ignore
 
-        // Cascade the delete to the entry sidecar. Idempotent — a
-        // sidecar may not exist for legacy uploads that predate this
-        // feature, and `IDataObjectStore.Delete` returns `Ok ()` for
-        // missing objects.
-        match dataObjectStore with
-        | Some store -> do! ProcessedEntryStore.delete store container fileName
-        | None -> ()
-
-        match files.TryRemove(fileName) with
-        | true, removed ->
-            // Phase 9d — emit negative `storage.bytes` so the running
-            // sum reflects the live footprint. Same NoUsageMetering
-            // short-circuit as `AddFile`.
-            match runtime.UsageLog with
-            | Some usageLog ->
-                let record = {
-                    RecordId = Guid.NewGuid()
-                    ScopeId = scope.ScopeId
-                    ResourceKind = ResourceKinds.storageBytes
-                    Quantity = -(decimal removed.SizeBytes)
-                    Unit = "bytes"
-                    Origin = None
-                    Metadata = Map.ofList [ "fileName", fileName ]
-                    Timestamp = DateTime.UtcNow
-                }
-
-                do! usageLog.Record record
+            // Cascade the delete to the entry sidecar. Idempotent — a
+            // sidecar may not exist for legacy uploads that predate this
+            // feature, and `IDataObjectStore.Delete` returns `Ok ()` for
+            // missing objects.
+            match dataObjectStore with
+            | Some store -> do! ProcessedEntryStore.delete store container fileName
             | None -> ()
 
-            return Ok()
-        | false, _ -> return Error $"File '{fileName}' not found"
+            match files.TryRemove(fileName) with
+            | true, removed ->
+                // Phase 9d — emit negative `storage.bytes` so the running
+                // sum reflects the live footprint. Same NoUsageMetering
+                // short-circuit as `AddFile`.
+                match runtime.UsageLog with
+                | Some usageLog ->
+                    let record = {
+                        RecordId = Guid.NewGuid()
+                        ScopeId = scope.ScopeId
+                        ResourceKind = ResourceKinds.storageBytes
+                        Quantity = -(decimal removed.SizeBytes)
+                        Unit = "bytes"
+                        Origin = None
+                        Metadata = Map.ofList [ "fileName", fileName ]
+                        Timestamp = DateTime.UtcNow
+                    }
+
+                    do! usageLog.Record record
+                | None -> ()
+
+                return Ok()
+            | false, _ -> return Error $"File '{fileName}' not found"
     }
 
     /// Re-run `DataType.Process` on the file's persisted bytes, refresh
@@ -1022,21 +1050,38 @@ type SessionFileStore
     /// summed negative `storage.bytes` usage record on success — one
     /// per-file would multiply log noise on a deliberate bulk
     /// operation. Returns the file count for audit + UX feedback.
+    ///
+    /// Phase 971 — every file's persisted delete is attempted; a file whose
+    /// delete was refused stays listed (in memory and at rest) and, once
+    /// the rest went, the reset RAISES naming the survivors (the member
+    /// has no failure channel). A re-run finds exactly those files again.
     member _.ResetDataStore() = async {
         let snapshot = files.Values |> Seq.toList
-        let totalBytes = snapshot |> List.sumBy _.SizeBytes
-        let fileCount = snapshot.Length
+        let removed = ResizeArray<StoredFile>()
+        let refused = ResizeArray<string>()
 
         for file in snapshot do
-            do! deletePersistedFile file.FileName
+            match! deletePersistedFile file.FileName with
+            | Error e -> refused.Add e
+            | Ok() ->
+                match dataObjectStore with
+                | Some store -> do! ProcessedEntryStore.delete store container file.FileName
+                | None -> ()
 
-            match dataObjectStore with
-            | Some store -> do! ProcessedEntryStore.delete store container file.FileName
-            | None -> ()
+                removed.Add file
 
-        files.Clear()
-        processedData.Clear()
-        processedEntries.Clear()
+        if refused.Count = 0 then
+            files.Clear()
+            processedData.Clear()
+            processedEntries.Clear()
+        else
+            for file in removed do
+                files.TryRemove(file.FileName) |> ignore
+                processedData.TryRemove(file.FileName) |> ignore
+                processedEntries.TryRemove(file.FileName) |> ignore
+
+        let totalBytes = removed |> Seq.sumBy _.SizeBytes
+        let fileCount = removed.Count
 
         if fileCount > 0 then
             match runtime.UsageLog with
@@ -1055,7 +1100,15 @@ type SessionFileStore
                 do! usageLog.Record record
             | None -> ()
 
-        return fileCount
+        if refused.Count > 0 then
+            return
+                failwithf
+                    "The data store was not fully reset: %d of %d file(s) are still stored — %s"
+                    refused.Count
+                    snapshot.Length
+                    (String.concat "; " refused)
+        else
+            return fileCount
     }
 
     member _.Clear() =

@@ -81,8 +81,14 @@ type BlobModuleVisibilityStore(storage: IBlobStorage) =
 
             match existing with
             | Ok _ ->
-                let! _ = storage.Delete(platformContainer, blobName scope)
-                return ()
+                // Phase 971 — a refused delete raises rather than reading
+                // as cleared while the profile still governs the scope.
+                match! storage.Delete(platformContainer, blobName scope) with
+                | Ok() -> return ()
+                | Error e ->
+                    return
+                        failwith
+                            $"ModuleVisibilityStore: clearing the profile for {FlagScope.slug scope} was refused: {e}"
             | Error _ ->
                 // Nothing stored — clearing is a no-op rather than an
                 // error, so an admin UI can offer "reset" unconditionally.

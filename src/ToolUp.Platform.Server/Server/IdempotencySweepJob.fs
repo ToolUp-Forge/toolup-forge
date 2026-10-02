@@ -57,7 +57,7 @@ type IdempotencySweepJob(blobStorage: IBlobStorage, ?container: string) =
                             // re-checks expiry itself, so removing an
                             // already-expired entry never strands a valid one;
                             // deleting an already-deleted blob is `Ok`.
-                            do! blobStorage.Delete(container, name) |> Async.Ignore
+                            do! blobStorage.Delete(container, name) |> Async.Ignore // best-effort-write: expired entry; the next IdempotencySweepJob pass re-lists and re-deletes it, and reads re-check expiry
                         | _ ->
                             // Live entry, or a corrupt / non-envelope blob —
                             // leave it (the lazy path owns corrupt-on-read).
