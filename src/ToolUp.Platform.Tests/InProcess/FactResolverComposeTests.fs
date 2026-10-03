@@ -665,6 +665,18 @@ let private pipelineSourceGuardTests =
                     "RetrievalPipeline.fs derives a fact scope:\n%s"
                     (found |> List.map (fun (_, why) -> "  - " + why) |> String.concat "\n")
         }
+
+        test "the prompt path carries the request's minted scope onto the retrieval request" {
+            let path =
+                Path.Combine(repoRoot (), "src", "ToolUp.RAG.Server", "Server", "RAGPromptBuilder.fs")
+
+            Expect.isTrue (File.Exists path) "RAGPromptBuilder.fs exists"
+
+            Expect.stringContains
+                (File.ReadAllText path)
+                "FactScope = ctx.Scope"
+                "the clause-bearing request reads in PromptContext.Scope, the scope the handler minted"
+        }
     ]
 
 let tests =
