@@ -1146,41 +1146,16 @@ let private importedMethodTests =
 
 // ─── 10. The orphan sweep (Phase 977) ────────────────────────────────
 
-/// A blob store whose deletes can be refused — the post-terminal deletes a
-/// writer makes when a run ends, refused as a real store can refuse them.
-type private RefusingDeletes(inner: IBlobStorage) =
-    member val Refusing = false with get, set
-
-    interface IBlobStorage with
-        member _.CanComposeFrom = inner.CanComposeFrom
-
-        member _.ComposeFrom(container, targetBlobName, sourceBlobNames) =
-            inner.ComposeFrom(container, targetBlobName, sourceBlobNames)
-
-        member _.Upload(container, blobName, content) =
-            inner.Upload(container, blobName, content)
-
-        member _.Download(container, blobName) = inner.Download(container, blobName)
-
-        member _.DownloadRange(container, blobName, offset, length) =
-            inner.DownloadRange(container, blobName, offset, length)
-
-        member this.Delete(container, blobName) =
-            if this.Refusing then
-                async { return Error(sprintf "refused: %s" blobName) }
-            else
-                inner.Delete(container, blobName)
-
-        member _.List(container, prefix) = inner.List(container, prefix)
-        member _.Exists(container, blobName) = inner.Exists(container, blobName)
-        member _.GetMetadata(container, blobName) = inner.GetMetadata(container, blobName)
-
-        member _.Erase(container, prefix, policy, dryRun) =
-            inner.Erase(container, prefix, policy, dryRun)
+// The store double is the contract pack's (`RefusableBlobStorage`).
 
 /// A world over a store refusing deletes on demand, for either writer.
-let private refusingWorld (delegated: bool) : World * RefusingDeletes =
-    let storage = RefusingDeletes(InMemoryBlobStorage() :> IBlobStorage)
+let private refusingWorld
+    (delegated: bool)
+    : World * ToolUp.Platform.Tests.Contracts.IFactTableOrphanSweepContract.RefusableBlobStorage =
+    let storage =
+        ToolUp.Platform.Tests.Contracts.IFactTableOrphanSweepContract.RefusableBlobStorage(
+            InMemoryBlobStorage() :> IBlobStorage
+        )
 
     let world =
         if delegated then

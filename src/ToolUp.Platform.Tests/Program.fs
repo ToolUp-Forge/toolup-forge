@@ -153,6 +153,12 @@ let private registeredTests =
         IFactTableWriterContract.decoratorTests
             "DelegateTableWriter, for a table it does not hold"
             IFactTableWriterContract.delegatePassThrough
+        // Phase 977 - the orphan sweep contract pack over every implementer.
+        IFactTableOrphanSweepContract.tests "DefaultFactTableWriter" IFactTableOrphanSweepContract.defaultWriterFactory
+        IFactTableOrphanSweepContract.tests "DelegateTableWriter" IFactTableOrphanSweepContract.delegateWriterFactory
+        IFactTableOrphanSweepContract.tests
+            "notifying decorator over DefaultFactTableWriter"
+            IFactTableOrphanSweepContract.notifyingWriterFactory
         // Phase 520 — grounding fact store: IFactStore contract pack (content-
         // address idempotency, AsOf reconstruction, supersession, competing
         // facts, scope isolation, disclosure/Absent round-trips) + BlobFactStore
