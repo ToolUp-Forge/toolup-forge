@@ -112,6 +112,15 @@ let tests =
                 let store = PostgresEntityStore.createWithAudit dataSource registry auditLog
                 store, registry, "team-audit-" + Guid.NewGuid().ToString("N").Substring(0, 8))
 
+            // Phase 973 — the stale-ref pack. An index here is the head row's
+            // own column, not a separate write, so there is no ref removal to
+            // refuse: the switch is ignored and the cases pin that the answer
+            // is already the head's.
+            IEntityStoreContract.staleRefTests "PostgresEntityStore" (fun _refuseIndexRemoval ->
+                let registry = EntityRegistry()
+                let store = PostgresEntityStore.create dataSource registry
+                store, registry, "team-stale-" + Guid.NewGuid().ToString("N").Substring(0, 8))
+
             testList "predicate pushdown (SQL, not client-side scans)" [
 
                 testCaseAsync "Eq matches exact value"
