@@ -749,7 +749,8 @@ module FactBrowseHandler =
     /// Decorate a table writer so each successful `Commit` publishes ONE
     /// `CustomNotification` keyed `FactBrowseLinks.RunCommittedNotificationKey`
     /// to the run's scope. Every other member passes straight through — a
-    /// run's provenance among them, untouched (Phase 938). A publish failure
+    /// run's provenance among them, untouched (Phase 938), and the orphan
+    /// sweep (Phase 977). A publish failure
     /// never fails the commit: the run is already durable, and the notice is
     /// a refresh hint, not a record.
     let notifyingWriter (channel: INotificationChannel) (inner: IFactTableWriter) : IFactTableWriter =
@@ -784,6 +785,11 @@ module FactBrowseHandler =
             member _.Abandon(scopeId, runId, reason) = inner.Abandon(scopeId, runId, reason)
             member _.Runs(scopeId, tableId) = inner.Runs(scopeId, tableId)
             member _.Status(scopeId, tableId) = inner.Status(scopeId, tableId)
+          // Phase 977 — the orphan sweep passes through, so the decorated
+          // writer still reclaims its ended runs' leftovers.
+          interface IFactTableOrphanSweep with
+              member _.SweepOrphans(scopeId) =
+                  FactTableOrphanSweep.sweep inner scopeId
         }
 
     let private decorateWriter (services: IServiceCollection) : IServiceCollection =

@@ -145,12 +145,31 @@ judged one way or the other first, module by module, and the split is the rule a
 Two findings from that triage are worth keeping. A discard can hide that a delete NEVER happens:
 conversation turns are written strictly versioned, so `IDataObjectStore.Delete` refused every one
 of them and the conversation delete answered `Ok` over every turn still at rest — the turns now go
-through `Evict`, the retention owner's removal. And a few cleanup sites have no pass that reclaims
-a leftover: a fact-table run's staged rows and an ended run's kept provenance (read by nothing once
-the run is recorded terminal). Their markers say so in as many words, so a reader meets a known
-storage leak, not an oversight. A stale secondary-index ref (`BlobIndex`) was the third until
-Phase 973 gave it a reclaimer: `BlobIndex.Vacuum`, which the entity store runs on every lookup that
-meets a stale ref and over a whole index through `BlobEntityStore.VacuumIndex`.
+through `Evict`, the retention owner's removal. And every cleanup site now has a pass that reclaims
+a leftover. A stale secondary-index ref (`BlobIndex`) is reclaimed by `BlobIndex.Vacuum`, which the
+entity store runs on every lookup that meets a stale ref and over a whole index through
+`BlobEntityStore.VacuumIndex` (Phase 973). A fact-table run's staged rows and an ended run's kept
+provenance are reclaimed by the fact-table orphan sweep (Phase 977, below).
+
+**History — the leak 971 named.** Phase 971 shipped those last two as markers that said, in as many
+words, that NO pass reclaimed a leftover: both writers deleted a run's staged rows and provenance
+best-effort once its terminal record was persisted, and a refused delete there left bytes nothing
+read again and nothing listed — a storage leak that grew per run and was never found. Phase 977
+replaced those discards with the sweep, so neither writer discards a delete result there any more and
+the markers went with the discards.
+
+**The fact-table orphan sweep (Phase 977).** `IFactTableOrphanSweep.SweepOrphans` — run through a
+composed writer with `FactTableOrphanSweep.sweep` — lists a scope's staged-row and kept-provenance
+blobs, keeps those whose run the run ledger records as ENDED (committed, rejected or abandoned),
+deletes them, and reports the counts in a `FactTableOrphanSweepReport`: runs swept, staged blobs and
+provenance blobs deleted, the blobs the store refused (each with its refusal) and any run whose record
+could not be read. It is keyed off the record that proves a blob a leftover, so it is safe beside a
+live run — an open run, or one whose record does not exist yet because it is being opened, is never
+touched — and it is idempotent. Both platform writers implement it and run it over the run's scope at
+the end of every run they end, so the scope's next run retries whatever a store refused; the
+fact-browse notifier forwards it to the writer it decorates. The delegate writer keeps a committed
+run's provenance (its rows are minted under it for as long as they are read) and spares it without
+reading the run's record; the default writer keeps no ended run's provenance.
 
 **History — why Phase 967 shipped it opt-in.** With the four sites above fixed, the walk still
 reported 69 unmarked sites across 43 files — probe and sentinel deletes, cache and retention sweeps,
@@ -214,6 +233,7 @@ one line, the write is not best-effort.
 | `BlobConfigStore`, `DataObjectStore` | a hard-delete erasure's deletes, fanned out | every result collected; a refusal fails the erasure with `HandlerPartialFailure` naming the blobs not deleted (those that went stay gone, so a re-run finishes), and the erasure ledger records `ErasureFailed`. `DataObjectStore` reclaims orphaned content only for version blobs that went, so no content is reclaimed from under metadata that still names it |
 | `DataObjectStore` | `Delete`, `Evict` and `DeleteIfVersion`'s version-blob removal (Phase 966) | every result collected; a refusal returns `StorageFailure` (`DeleteFailed(StorageFailure …)` from `DeleteIfVersion`) naming the version blobs still in the container. v1 is removed last and only once the rest went, so the object stays addressable for a re-run; the blobs that went stay gone and only their content is reclaimed. A `DeleteIfVersion` re-run states the head the store now reports |
 | `DataObjectStore` orphan reclamation, `DefaultAssetStore` derivative cleanup, `WebhookRegistry` delivery-log `Prune` | cleanup deletes, fanned out | best-effort by design, each carrying `// best-effort-write:` naming the pass that recovers a leftover — the next sweep, a cache that is never served stale, the next `Prune` |
+| `DefaultFactTableWriter`, `DelegateTableWriter` | an ended run's staged rows and kept provenance | every result collected by the orphan sweep (Phase 977), which runs at the end of every run; a refusal stays at rest and is named in the sweep's `Refused`, and the scope's next run (or a host's `SweepOrphans`) deletes it |
 
 The rest of the tree was swept to the same rule in Phase 863. The patterns, by what the write is:
 
