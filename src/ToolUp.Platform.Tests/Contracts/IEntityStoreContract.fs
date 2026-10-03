@@ -693,3 +693,96 @@ let auditTests (name: string) (factory: IAuditLog -> IEntityStore * EntityStore.
             | other -> failwithf "expected exactly one deleted row, got %A" other
         }
     ]
+
+// ─── Phase 973 — a lookup answers only for a value the head still carries ───
+//
+// A secondary index is derived data and canonical state is authoritative
+// (Phase 9f). So the claim every `IEntityStore` is held to is about the
+// ANSWER, whatever the index holds: `FindByIndex(index, v)` never returns an
+// entity whose head does not carry `v`. The cases run over a substrate whose
+// index-ref removal can be REFUSED — the state a refused `Remove` or an
+// unreadable previous version leaves behind — because a healthy substrate
+// cannot tell a store that filters at lookup from one that merely never
+// leaves a stale ref. A store whose index is not a separate write (a SQL
+// row's own column) has nothing to refuse and ignores the switch.
+
+/// Bind the stale-ref cases. `factory` receives `refuseIndexRemoval` — the
+/// pack's switch, read at call time — and builds the store under test over a
+/// substrate that refuses the removal of an index ref while it answers
+/// `true`. It returns the store, its registry and a fresh scope.
+let staleRefTests (name: string) (factory: (unit -> bool) -> IEntityStore * EntityStore.EntityRegistry * string) =
+    let setup () =
+        let refusing = ref true
+        let store, registry, scope = factory (fun () -> refusing.Value)
+        registry.Register<TestEntity>(testEntityRegistration)
+        store, scope
+
+    let idsUnder (store: IEntityStore) scope (value: string) = async {
+        match! store.FindByIndex<TestEntity>(scope, TestEntityType, "Owner", value) with
+        | Result.Ok refs -> return refs |> List.map (fun r -> r.Id, r.Version) |> List.sort
+        | Result.Error e -> return failwithf "expected Ok from FindByIndex(%s), got %A" value e
+    }
+
+    let saveOk (store: IEntityStore) scope entity = async {
+        match! store.Save<TestEntity>(scope, actor, entity) with
+        | Result.Ok _ -> ()
+        | Result.Error e -> failwithf "Save failed: %A" e
+    }
+
+    testList $"{name} — IEntityStore stale-ref contract (Phase 973)" [
+
+        testCaseAsync
+            "a re-save whose old index ref could not be removed is not found under the value its head no longer carries"
+        <| async {
+            let store, scope = setup ()
+            do! saveOk store scope (mkEntity "e-973-a" "alice" "active")
+            do! saveOk store scope (mkEntity "e-973-a" "bob" "active")
+
+            let! underAlice = idsUnder store scope "alice"
+            Expect.equal underAlice [] "the head carries bob; a lookup for alice answers nothing"
+
+            let! underBob = idsUnder store scope "bob"
+            Expect.equal underBob [ "e-973-a", 2 ] "the head is found under the value it carries"
+        }
+
+        testCaseAsync "an entity re-saved back to a value it once held is found under it, and only under it"
+        <| async {
+            let store, scope = setup ()
+            do! saveOk store scope (mkEntity "e-973-b" "alice" "active")
+            do! saveOk store scope (mkEntity "e-973-b" "bob" "active")
+            do! saveOk store scope (mkEntity "e-973-b" "alice" "active")
+
+            let! underAlice = idsUnder store scope "alice"
+            Expect.equal underAlice [ "e-973-b", 3 ] "the head carries alice again"
+
+            let! underBob = idsUnder store scope "bob"
+            Expect.equal underBob [] "the head no longer carries bob"
+        }
+
+        testCaseAsync "a deleted entity is not found under the value it carried, even when its ref removal is refused"
+        <| async {
+            let store, scope = setup ()
+            do! saveOk store scope (mkEntity "e-973-c" "alice" "active")
+
+            match! store.Delete(scope, actor, TestEntityType, "e-973-c") with
+            | Result.Ok() -> ()
+            | Result.Error e -> failwithf "Delete failed: %A" e
+
+            let! underAlice = idsUnder store scope "alice"
+            Expect.equal underAlice [] "a deleted entity answers no lookup"
+        }
+
+        testCaseAsync
+            "an entity removed by DeleteIfVersion is not found under the value it carried, even when its ref removal is refused"
+        <| async {
+            let store, scope = setup ()
+            do! saveOk store scope (mkEntity "e-973-d" "alice" "active")
+
+            match! store.DeleteIfVersion(scope, actor, TestEntityType, "e-973-d", 1) with
+            | Result.Ok() -> ()
+            | Result.Error e -> failwithf "DeleteIfVersion failed: %A" e
+
+            let! underAlice = idsUnder store scope "alice"
+            Expect.equal underAlice [] "a deleted entity answers no lookup"
+        }
+    ]

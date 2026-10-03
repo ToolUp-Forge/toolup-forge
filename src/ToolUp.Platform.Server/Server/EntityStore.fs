@@ -41,6 +41,15 @@ open ToolUp.Platform.ISparseIndex
 // is constructed lazily on first use and cached in a
 // `ConcurrentDictionary` for the store's lifetime. Save updates every
 // declared index for the entity type; Delete drops every entry.
+//
+// Phase 973 — an index ref is derived data and the head is authoritative:
+// `FindByIndex` re-runs the index's `Extract` over every head a ref
+// resolves to and answers only with the heads that still carry the
+// looked-up value. A ref whose entity is gone, or whose head carries
+// another value (a refused `Remove`, an unreadable previous version), is
+// STALE: never an answer, counted in `IndexDriftSnapshot`, and dropped
+// on the spot through `BlobIndex.Vacuum`. `VacuumIndex` runs the same
+// reclaim over a whole index.
 
 let private auditJsonOptions = FableConverters.create ()
 
@@ -121,10 +130,30 @@ type EntityRegistry() =
     // but can't unbox `EntityRegistration<'T>` without `'T`, so the names
     // are projected to plain strings here.
     let fullTextFieldNames = ConcurrentDictionary<string, string list>()
+    // Phase 973 — the same projection for the declared secondary indexes:
+    // per index, its name and its `Extract` composed with the read of a
+    // persisted head, closed over at Register time where `'T` is known. The
+    // untyped `Delete` and `VacuumIndex` paths resolve it by type name.
+    let indexKeyReaders =
+        ConcurrentDictionary<string, (string * (string -> string)) list>()
 
     member _.Register<'T>(reg: EntityRegistration<'T>) : unit =
         registrations[reg.EntityType] <- box reg
         fullTextFieldNames[reg.EntityType] <- reg.FullTextFields |> List.map fst
+
+        indexKeyReaders[reg.EntityType] <-
+            reg.Indexes
+            |> List.map (fun index -> index.Name, (fun (json: string) -> index.Extract(deserialise<'T> json)))
+
+    /// Phase 973 — the declared secondary indexes of an entity type, each
+    /// paired with the reader of its key from a persisted head's JSON (the
+    /// registered `Extract` over the head read as the registered type; it
+    /// raises on JSON that does not read as that type). Empty when the type
+    /// declares none, or isn't registered.
+    member _.IndexKeyReaders(entityType: string) : (string * (string -> string)) list =
+        match indexKeyReaders.TryGetValue entityType with
+        | true, readers -> readers
+        | false, _ -> []
 
     /// Declared full-text field names for an entity type (empty when the
     /// type declares none, or isn't registered).
@@ -159,6 +188,20 @@ type private IndexHandle<'T> = {
     Index: BlobIndex<string, EntityId>
     Definition: EntityIndex<'T>
 }
+
+/// Phase 973 — what canonical state says about one index ref: the entity
+/// `id` listed under `key`.
+type private RefState =
+    /// The head carries `key`; it answers the lookup at this version.
+    | Backed of version: int
+    /// The entity is gone, or its head carries another key whose ref path
+    /// cannot be this one: never an answer, and safe to reclaim.
+    | Stale
+    /// No verdict — the head could not be read or could not be keyed, or it
+    /// carries a key whose path differs from this one only in case (the
+    /// same ref on a case-insensitive file system). Never an answer, and
+    /// never reclaimed.
+    | Unjudged
 
 type BlobEntityStore
     (
@@ -208,6 +251,105 @@ type BlobEntityStore
                     id
                     Some
         )
+
+    // Phase 973 — read-time index drift per `(scopeId, entityType,
+    // indexName)`: the refs `FindByIndex` resolved, those whose head carried
+    // the looked-up value, and the stale ones. Counted since the store
+    // started; read by `IndexDriftSnapshot`.
+    let readDrift = ConcurrentDictionary<string * string * string, int * int * int>()
+
+    let recordReadDrift scopeId entityType indexName (seen: int) (consistent: int) (stale: int) =
+        if seen > 0 then
+            readDrift.AddOrUpdate(
+                (scopeId, entityType, indexName),
+                (seen, consistent, stale),
+                fun _ (s, c, st) -> (s + seen, c + consistent, st + stale)
+            )
+            |> ignore
+
+    /// Phase 973 — judge the ref `entityId` under `key` against the head:
+    /// `keyOf` reads the index's key from the head's JSON (the registered
+    /// `Extract` over the head read as the registered type).
+    let refStateOf
+        (scopeId: string)
+        (entityType: string)
+        (keyOf: string -> string)
+        (key: string)
+        (entityId: EntityId)
+        : Async<RefState> =
+        async {
+            let! head = dataObjectStore.Get(scopeId, objectIdFor entityType entityId)
+
+            match head with
+            | Error DataObjectError.NotFound -> return Stale
+            | Error _ -> return Unjudged
+            | Ok(dataObject, bytes) ->
+                let carried =
+                    try
+                        Some(keyOf (Encoding.UTF8.GetString bytes))
+                    with _ ->
+                        None
+
+                match carried with
+                | None -> return Unjudged
+                | Some k when k = key -> return Backed dataObject.Version
+                | Some k when
+                    String.Equals(
+                        BlobIndex.pathSafeSegment k,
+                        BlobIndex.pathSafeSegment key,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                    ->
+                    return Unjudged
+                | Some _ -> return Stale
+        }
+
+    /// Phase 973 — reclaim the stale refs under `key` in one index. Only a
+    /// ref `candidate` admits is judged (a lookup passes the ones it just
+    /// saw stale; a whole-index vacuum admits every ref), and `Vacuum`
+    /// re-judges it after the delete, so a concurrent save that re-indexed
+    /// it keeps its ref. Returns the number of refs removed.
+    let vacuumKey
+        (scopeId: string)
+        (entityType: string)
+        (indexName: string)
+        (keyOf: string -> string)
+        (key: string)
+        (candidate: EntityId -> bool)
+        : Async<int> =
+        let blobIndex = getIndex scopeId entityType indexName
+
+        blobIndex.Vacuum key (fun entityId -> async {
+            if not (candidate entityId) then
+                return false
+            else
+                match! refStateOf scopeId entityType keyOf key entityId with
+                | Stale -> return true
+                | Backed _
+                | Unjudged -> return false
+        })
+
+    /// Every key segment present under one index's prefix — the path
+    /// segments as written, still `pathSafeSegment`-encoded.
+    let indexKeySegments (scopeId: string) (entityType: string) (indexName: string) = async {
+        let prefix = indexPrefixFor entityType indexName + "/"
+        let! blobs = blobStorage.List(scopeId, prefix)
+        // Each blob path is `{prefix}/{keySegment}/{valueId}.ref`.
+        // LocalFileStorage on Windows returns backslash-separated
+        // paths via Path.GetRelativePath; normalise to forward
+        // slashes so the prefix match works cross-platform.
+        return
+            blobs
+            |> List.map (fun b -> b.Replace('\\', '/'))
+            |> List.choose (fun b ->
+                if b.StartsWith prefix then
+                    let tail = b.Substring(prefix.Length)
+                    let slash = tail.IndexOf '/'
+                    if slash > 0 then Some(tail.Substring(0, slash)) else None
+                else
+                    None)
+            |> List.distinct
+    }
 
     let entityIdFromObjectId (entityType: string) (objectId: string) : EntityId option =
         let prefix =
@@ -361,14 +503,14 @@ type BlobEntityStore
     /// the version the caller requires the head to be at, or `None` for
     /// the unconditional delete.
     ///
-    /// v1 simplification: delete the entity blob; rely on Phase 9f's
-    /// index drift contract — soft-miss-on-read gracefully handles stale
-    /// index entries that point at a deleted entity. A future commit can
-    /// introduce a typed-Delete that walks the registered Extract
-    /// closures via the typed registration to clean up indexes
-    /// proactively, but that requires preserving 'T at the Delete call
-    /// site (reflection-recovered Extract can't be unboxed without the
-    /// original 'T parameter).
+    /// Phase 973 — the entity's index refs go with it. `Delete` carries no
+    /// `'T`, so the registry's per-type projection supplies each declared
+    /// index's `Extract` (closed over the typed registration at `Register`
+    /// time); the head's keys are read BEFORE the delete and each ref is
+    /// removed AFTER it succeeds. Best-effort: a refused removal — or a
+    /// head the read could not key — leaves a stale ref, which
+    /// `FindByIndex` never answers with and reclaims when it meets it, and
+    /// which `VacuumIndex` reclaims across the whole index.
     ///
     /// Phase 806 — the conditional form routes through
     /// `ConditionalDataObjectStore.deleteIfVersion`, so over the default
@@ -398,6 +540,29 @@ type BlobEntityStore
                 let! versionsBefore = dataObjectStore.ListVersions(scopeId, objectId)
                 let headVersion = headOf versionsBefore
 
+                // Phase 973 — the head's key in every declared index, read
+                // while the head is still there. A type that declares no
+                // index reads nothing (GP 13).
+                let indexReaders = registry.IndexKeyReaders entityType
+
+                let! headKeys = async {
+                    if indexReaders.IsEmpty || headVersion = 0 then
+                        return []
+                    else
+                        match! dataObjectStore.Get(scopeId, objectId) with
+                        | Ok(_, bytes) ->
+                            let json = Encoding.UTF8.GetString bytes
+
+                            return
+                                indexReaders
+                                |> List.choose (fun (indexName, keyOf) ->
+                                    try
+                                        Some(indexName, keyOf json)
+                                    with _ ->
+                                        None)
+                        | Error _ -> return []
+                }
+
                 let! deleteResult =
                     match expected with
                     | Some e -> async {
@@ -417,6 +582,17 @@ type BlobEntityStore
 
                 match deleteResult with
                 | Ok() ->
+                    // Phase 973 — drop the entity's ref in every declared
+                    // index (`BlobIndex.Remove` is the marked best-effort
+                    // write; see the pipeline doc above for what reclaims a
+                    // ref it leaves). Nothing here fails the delete, which
+                    // has already happened.
+                    for indexName, key in headKeys do
+                        try
+                            do! (getIndex scopeId entityType indexName).Remove key entityId
+                        with _ ->
+                            ()
+
                     // Phase 19b — drop the entity from every declared
                     // full-text field's sparse index. Field names come from
                     // the registry's non-generic projection (Delete carries
@@ -461,6 +637,67 @@ type BlobEntityStore
             auditLog: IAuditLog option
         ) =
         BlobEntityStore(dataObjectStore, blobStorage, registry, auditLog, None)
+
+    /// Phase 973 — reclaim every stale ref in one `(entityType, indexName)`
+    /// index for `scopeId`: each ref whose entity is gone or whose head no
+    /// longer carries the key it is filed under. The separate operation the
+    /// `BlobIndex.Rebuild` doc names; `FindByIndex` runs the same reclaim on
+    /// the refs it reads. Idempotent and safe beside writes (see
+    /// `BlobIndex.Vacuum`). Returns the number of refs removed; a refused
+    /// delete is not counted and stays for the next run.
+    member _.VacuumIndex(scopeId: string, entityType: string, indexName: string) : Async<Result<int, EntityError>> = async {
+        if not (registry.Knows entityType) then
+            return Error(EntityError.UnknownEntityType entityType)
+        else
+            match
+                registry.IndexKeyReaders entityType
+                |> List.tryFind (fun (name, _) -> name = indexName)
+            with
+            | None -> return Error(InvalidIndex indexName)
+            | Some(_, keyOf) ->
+                let! segments = indexKeySegments scopeId entityType indexName
+
+                // A segment is the key `pathSafeSegment`-encoded, and every
+                // character outside its safe set (`%` included) is escaped,
+                // so unescaping recovers the key the ref was filed under.
+                let! removed =
+                    segments
+                    |> List.map (fun segment ->
+                        vacuumKey scopeId entityType indexName keyOf (Uri.UnescapeDataString segment) (fun _ -> true))
+                    |> Async.Sequential
+
+                return Ok(Array.sum removed)
+    }
+
+    /// Phase 973 — the entity store's index-drift snapshot for `scopeId`,
+    /// one `/dev/inspect` entry per index a `FindByIndex` has read since the
+    /// store started (`StoreName = "entities"`, `IndexName =
+    /// "{entityType}/{indexName}"`). The counts are of refs met AT READ TIME,
+    /// not a sample: `SampleSize` refs resolved, `ConsistentEntries` whose
+    /// head carried the looked-up value, `OrphanedIndexEntries` stale (the
+    /// entity gone, or its head carrying another value) — each of which the
+    /// lookup dropped from its answer and reclaimed through the vacuum.
+    /// `UnindexedCanonicals` is always 0: a lookup cannot see a ref that is
+    /// missing.
+    member _.IndexDriftSnapshot(scopeId: string) : IndexConsistencyEntry list =
+        readDrift
+        |> Seq.choose (fun kv ->
+            let scope, entityType, indexName = kv.Key
+            let seen, consistent, stale = kv.Value
+
+            if scope <> scopeId then
+                None
+            else
+                Some {
+                    StoreName = "entities"
+                    IndexName = $"{entityType}/{indexName}"
+                    SampleSize = seen
+                    ConsistentEntries = consistent
+                    OrphanedIndexEntries = stale
+                    UnindexedCanonicals = 0
+                })
+        |> Seq.sortBy _.IndexName
+        |> List.ofSeq
 
     interface IEntityStore with
 
@@ -636,38 +873,69 @@ type BlobEntityStore
             | Some reg ->
                 match EntityRegistration.tryFindIndex indexName reg with
                 | None -> return Error(InvalidIndex indexName)
-                | Some _ ->
+                | Some index ->
                     let blobIndex = getIndex scopeId entityType indexName
                     let! lookupResults = blobIndex.Lookup value
 
-                    // BlobIndex.Lookup returns (EntityId * byte[] option) list.
-                    // We don't store payload alongside the index entries (yet)
-                    // — strip the payload and resolve each match's head
-                    // version via ListVersions in parallel. Soft-miss on
-                    // stale index entries (Phase 9f drift contract).
-                    let! refs =
+                    // Phase 973 — a ref is derived; the head is authoritative.
+                    // Read each listed entity's head and re-run the index's own
+                    // `Extract` over it: only a head that still carries `value`
+                    // answers. A ref whose entity is gone, or whose head carries
+                    // another value (a refused `Remove`, an unreadable previous
+                    // version at save), is stale — a soft miss, counted in the
+                    // drift snapshot, and reclaimed below. (Entity refs carry
+                    // no payload; it is ignored.)
+                    let keyOf (json: string) = index.Extract(deserialise<'T> json)
+
+                    let! states =
                         lookupResults
                         |> List.map (fun (entityId, _payload) -> async {
-                            let! versions = dataObjectStore.ListVersions(scopeId, objectIdFor entityType entityId)
-
-                            return
-                                if versions.IsEmpty then
-                                    None
-                                else
-                                    let head = versions |> List.maxBy _.Version
-
-                                    Some(
-                                        {
-                                            Id = entityId
-                                            Type = entityType
-                                            Version = head.Version
-                                        }
-                                        : EntityRef<'T>
-                                    )
+                            let! state = refStateOf scopeId entityType keyOf value entityId
+                            return entityId, state
                         })
                         |> Async.Parallel
 
-                    return Ok(refs |> Array.choose id |> Array.toList)
+                    let answered =
+                        states
+                        |> Array.choose (fun (entityId, state) ->
+                            match state with
+                            | Backed version ->
+                                Some(
+                                    {
+                                        Id = entityId
+                                        Type = entityType
+                                        Version = version
+                                    }
+                                    : EntityRef<'T>
+                                )
+                            | Stale
+                            | Unjudged -> None)
+                        |> Array.toList
+
+                    let stale =
+                        states
+                        |> Array.choose (fun (entityId, state) ->
+                            match state with
+                            | Stale -> Some entityId
+                            | Backed _
+                            | Unjudged -> None)
+                        |> Set.ofArray
+
+                    recordReadDrift scopeId entityType indexName states.Length answered.Length stale.Count
+
+                    // Heal the folder this lookup read: reclaim the stale refs
+                    // it just met (each re-judged before and after its delete).
+                    // Opportunistic and best-effort by the same drift contract
+                    // — a failure here costs the next lookup a re-read, never
+                    // this answer.
+                    if not stale.IsEmpty then
+                        try
+                            let! _reclaimed = vacuumKey scopeId entityType indexName keyOf value stale.Contains
+                            ()
+                        with _ ->
+                            ()
+
+                    return Ok answered
         }
 
         member _.Count(scopeId: string, entityType: string) = async {
@@ -708,25 +976,8 @@ type BlobEntityStore
                         return results |> List.map fst
                     }
 
-                    let allIndexKeys (indexName: string) = async {
-                        let prefix = indexPrefixFor query.EntityType indexName + "/"
-                        let! blobs = blobStorage.List(scopeId, prefix)
-                        // Each blob path is `{prefix}/{keySegment}/{valueId}.ref`.
-                        // LocalFileStorage on Windows returns backslash-separated
-                        // paths via Path.GetRelativePath; normalise to forward
-                        // slashes so the prefix match works cross-platform.
-                        return
-                            blobs
-                            |> List.map (fun b -> b.Replace('\\', '/'))
-                            |> List.choose (fun b ->
-                                if b.StartsWith prefix then
-                                    let tail = b.Substring(prefix.Length)
-                                    let slash = tail.IndexOf '/'
-                                    if slash > 0 then Some(tail.Substring(0, slash)) else None
-                                else
-                                    None)
-                            |> List.distinct
-                    }
+                    let allIndexKeys (indexName: string) =
+                        indexKeySegments scopeId query.EntityType indexName
 
                     let allEntityIds () = async {
                         let! allObjects = dataObjectStore.ListObjects scopeId
