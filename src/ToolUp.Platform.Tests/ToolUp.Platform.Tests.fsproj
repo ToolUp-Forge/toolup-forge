@@ -57,6 +57,8 @@
         <!-- Phase 128 — outbound API connector kit contract (paged fetch, retry
              as data, outbound rate budget, incremental sync cursors). -->
         <Compile Include="Contracts\IExternalApiConnectorContract.fs" />
+        <!-- Phase 128 — the IHttpTransport seam's contract pack. -->
+        <Compile Include="Contracts\IHttpTransportContract.fs" />
         <Compile Include="Contracts\IDeclaresPayloadFormatContract.fs" />
         <!-- Phase 836 - the IDataSource null-and-type fidelity pack. -->
         <Compile Include="Contracts\DataSourceFidelityContract.fs" />
@@ -1242,6 +1244,10 @@
         <Compile Include="InProcess\ProviderOAuthFlowTests.fs" />
         <Compile Include="InProcess\SmokeTestDefaultsTests.fs" />
         <Compile Include="InProcess\InProcessRateLimiterTests.fs" />
+        <!-- Phase 128 — bindings: IHttpTransport (HttpClientTransport, the
+             outbound rate budget) and IExternalApiConnector (two connectors). -->
+        <Compile Include="InProcess\HttpTransportBindingTests.fs" />
+        <Compile Include="InProcess\ExternalApiConnectorBindingTests.fs" />
         <Compile Include="InProcess\PlatformTestingFrameworkTests.fs" />
         <Compile Include="InProcess\I18nInfrastructureTests.fs" />
         <Compile Include="InProcess\I18nCoverageTests.fs" />

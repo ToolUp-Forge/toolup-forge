@@ -25,9 +25,10 @@ open ToolUp.DataSources.Common
 // machinery under it — paged fetch, retry as data, the outbound rate
 // budget, and incremental sync cursors over a real `IEntityStore`.
 //
-// `tests` holds the kit-level cases; `connectorTests` is the parametrised
-// half an `IExternalApiConnector` implementation binds to, given a
-// transport serving a known resource.
+// `tests` is the parametrised pack an `IExternalApiConnector`
+// implementation binds to, given a transport serving a known resource
+// (bindings: `InProcess/ExternalApiConnectorBindingTests.fs`). `kitTests`
+// holds the kit-level cases over the mock connector.
 
 // ── the mock provider ────────────────────────────────────────────
 
@@ -344,7 +345,7 @@ let private status (code: int) () : HttpResponse = {
 /// `factory ()` returns the connector, a transport serving its `endpoint`
 /// with exactly `expectedRows` rows across more than one page, and the
 /// resolved call to read it with.
-let connectorTests
+let tests<'Row when 'Row: equality>
     (name: string)
     (factory: unit -> IExternalApiConnector<'Row> * IHttpTransport * ExternalApiCall)
     (expectedRows: int)
@@ -395,6 +396,49 @@ let connectorTests
             let a = connector.PageRequest(call, PageCursor.First)
             let b = connector.PageRequest(call, PageCursor.First)
             Expect.equal a b "request building is deterministic (GP 12 rule 4)"
+        }
+
+        testCaseAsync "an incremental sync resumes after a restart and ingests every row exactly once"
+        <| async {
+            let connector, transport, call = factory ()
+            let directory = tempDir ()
+            let sink = ResizeArray<'Row>()
+
+            let source = {
+                source with
+                    Id = "contract-source"
+                    Kind = connector.Provider.Id
+                    ConnectionScope = call.ConnectionScope
+                    CredentialKey = "contract-credential"
+            }
+
+            let request: IncrementalSyncRequest = {
+                Source = source
+                Endpoint = call.Endpoint
+                ScheduledBy = "contract"
+            }
+
+            // A fresh deps value per "process": only the cursor store's
+            // directory survives between the two runs.
+            let depsFor maxPages : IncrementalSyncDeps<'Row> = {
+                Connector = connector
+                Transport = transport
+                Cursors = openCursorStore directory
+                SecretStore = Some(secretStore call.ScopeId "contract-credential" call.Credential)
+                Options = { options with MaxPages = maxPages }
+                Ingest =
+                    fun _ rows -> async {
+                        sink.AddRange rows
+                        return Ok()
+                    }
+            }
+
+            let! first = IncrementalSync.run (depsFor (Some 1)) call.ScopeId request
+            Expect.isFalse (Expect.wantOk first "the first run reports").Completed "stopped at the page cap"
+            let! second = IncrementalSync.run (depsFor None) call.ScopeId request
+            Expect.isTrue (Expect.wantOk second "the second run reports").Completed "the pass completes"
+            Expect.hasLength sink expectedRows "every row ingested"
+            Expect.equal (sink |> Seq.distinct |> Seq.length) expectedRows "no row ingested twice"
         }
     ]
 
@@ -1174,60 +1218,6 @@ let private cursorTests =
         }
     ]
 
-/// A stub handler recording what the BCL transport put on the wire.
-type private RecordingHandler(respond: Net.Http.HttpRequestMessage -> Net.Http.HttpResponseMessage) =
-    inherit Net.Http.HttpMessageHandler()
-    member val Seen = ResizeArray<Net.Http.HttpRequestMessage>()
-
-    override this.SendAsync(request, _) =
-        this.Seen.Add request
-        Threading.Tasks.Task.FromResult(respond request)
-
-let private httpClientTransportTests =
-    testList "HttpClientTransport (the one BCL adapter)" [
-        testCaseAsync "maps the portable records onto HttpClient and returns non-2xx as data"
-        <| async {
-            let handler =
-                new RecordingHandler(fun request ->
-                    let response =
-                        new Net.Http.HttpResponseMessage(
-                            if request.RequestUri.AbsolutePath = "/v1/missing" then
-                                Net.HttpStatusCode.NotFound
-                            else
-                                Net.HttpStatusCode.OK
-                        )
-
-                    response.Headers.Add("x-next-token", "abc")
-                    response.Content <- new Net.Http.StringContent("1|t0001")
-                    response)
-
-            use client =
-                new Net.Http.HttpClient(handler, BaseAddress = Uri "https://api.example.test/")
-
-            let transport =
-                HttpClientTransport(client, TimeSpan.FromSeconds 5.0) :> IHttpTransport
-
-            let! ok = transport.Send(HttpCall.get "/v1/items?after=2" [ "Authorization", "Bearer k" ])
-            Expect.equal ok.StatusCode 200 "status mapped"
-            Expect.equal ok.Body "1|t0001" "body read"
-            Expect.contains ok.Headers ("x-next-token", "abc") "response headers mapped"
-            let seen = handler.Seen[0]
-            Expect.equal (string seen.RequestUri) "https://api.example.test/v1/items?after=2" "relative URL resolved"
-            Expect.equal (seen.Headers.Authorization.ToString()) "Bearer k" "request headers carried"
-
-            let! absolute = transport.Send(HttpCall.get "https://other.example.test/v1/items?offset=4" [])
-            Expect.equal absolute.StatusCode 200 "absolute next-page URL"
-
-            Expect.equal
-                (string handler.Seen[1].RequestUri)
-                "https://other.example.test/v1/items?offset=4"
-                "used as given"
-
-            let! missing = transport.Send(HttpCall.get "/v1/missing" [])
-            Expect.equal missing.StatusCode 404 "a 404 is data, not an exception"
-        }
-    ]
-
 let private stripImportsTests =
     testList "strip-imports (GP 1 / GP 13)" [
         testCase "the kit carries no vendor SDK — BCL, FSharp.Core and ToolUp.* only"
@@ -1284,23 +1274,15 @@ let private stripImportsTests =
             Expect.isFalse (references |> Array.contains "System.Net.Http") "stays HTTP-client-free (Fable-safe)"
     ]
 
-/// The kit-level pack, plus the parametrised connector half bound to the
-/// mock connector in all three continuation styles.
-let tests =
+/// The kit-level cases over the mock connector. The parametrised pack
+/// above (`tests`) is bound per connector in
+/// `InProcess/ExternalApiConnectorBindingTests.fs`.
+let kitTests =
     testList "Phase 128 — outbound API connector kit" [
         pagedFetchTests
         retryTests
         declaredRetryTests
         budgetTests
         cursorTests
-        httpClientTransportTests
         stripImportsTests
-        for style in [ MockStyle.Token; MockStyle.Offset; MockStyle.NextLink ] do
-            connectorTests
-                $"MockConnector ({style})"
-                (fun () ->
-                    let provider = MockProvider(style, 2)
-                    provider.Add(rowsUpTo 5)
-                    connector, provider :> IHttpTransport, call)
-                5
     ]

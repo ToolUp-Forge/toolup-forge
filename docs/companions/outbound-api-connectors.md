@@ -251,7 +251,7 @@ scheduler.RegisterHandler("contacts-api.sync", IncrementalSync.handler deps)
 
 The validation bar a new connector meets is the contract pack in
 `src/ToolUp.Platform.Tests/Contracts/IExternalApiConnectorContract.fs`: bind
-`connectorTests "<name>" factory expectedRows` with a transport serving a known resource across
+`IExternalApiConnectorContract.tests "<name>" factory expectedRows` with a transport serving a known resource across
 more than one page.
 
 ## Six-rule portability audit
