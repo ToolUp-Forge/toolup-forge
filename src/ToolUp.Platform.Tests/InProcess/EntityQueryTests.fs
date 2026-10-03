@@ -141,6 +141,64 @@ let private ftDocs = [
     mkFtDoc "d-4" "safety" "annual flood inspection report"
 ]
 
+// ─── Phase 974 — `Query` answers only from heads that still carry the value ───
+//
+// The same rig Phase 973 pinned `FindByIndex` over, wired as the real
+// `BlobEntityStore` sees it: a `LocalFileStorage` whose index-ref (`*.ref`)
+// deletes are refused while `Refusing` is set — the state a refused `Remove`
+// leaves behind. `Inner` reads what is on disk past the double.
+
+type private StaleQueryRig = {
+    Store: BlobEntityStore
+    Inner: IBlobStorage
+    Refusing: bool ref
+    Scope: string
+}
+
+let private mkStaleQueryRig () =
+    let dir =
+        Path.Combine(Path.GetTempPath(), "toolup-query-stale-" + Guid.NewGuid().ToString("N"))
+
+    Directory.CreateDirectory dir |> ignore
+    let inner = LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage
+    let refusing = ref false
+
+    let blob =
+        DataObjectStoreTests.DeleteRefusingBlobStorage(inner, (fun name -> refusing.Value && name.EndsWith ".ref"))
+        :> IBlobStorage
+
+    let registry = EntityRegistry()
+    registry.Register<Item>(itemRegistration)
+
+    {
+        Store = BlobEntityStore(DataObjectStore(blob), blob, registry, None)
+        Inner = inner
+        Refusing = refusing
+        Scope = "team-974-" + Guid.NewGuid().ToString("N").Substring(0, 8)
+    }
+
+let private saveItem (store: IEntityStore) (scope: string) (item: Item) = async {
+    match! store.Save<Item>(scope, EntityPrincipal.ofPrincipal "tester", item) with
+    | Result.Ok _ -> ()
+    | Result.Error e -> failwithf "Save failed: %A" e
+}
+
+/// The ids `Query(where predicate)` answers with, sorted.
+let private queryIds (store: IEntityStore) (scope: string) (predicate: Predicate) = async {
+    match! store.Query<Item>(scope, EntityQuery.forType<Item> ItemType |> EntityQuery.where predicate) with
+    | Result.Ok items -> return items |> List.map _.Id |> List.sort
+    | Result.Error e -> return failwithf "expected Ok from Query(%A), got %A" predicate e
+}
+
+/// Save `id` under `Owner = alice`, then re-save it under `Owner = bob`
+/// while index-ref deletes are refused: the alice ref outlives the value.
+let private staleAliceNowBob (rig: StaleQueryRig) (id: EntityId) = async {
+    rig.Refusing.Value <- true
+    do! saveItem rig.Store rig.Scope (mkItem id "alice" "active" "01")
+    do! saveItem rig.Store rig.Scope (mkItem id "bob" "active" "01")
+    rig.Refusing.Value <- false
+}
+
 let tests =
     testList "EntityQuery" [
 
@@ -427,5 +485,105 @@ let tests =
             // validator rejects it with the same shape as a non-indexed field.
             | Result.Error(InvalidIndex name) -> Expect.equal name "Category" "undeclared full-text field surfaces"
             | _ -> failtest "expected InvalidIndex"
+        }
+
+        // ─── Phase 974 — a stale ref never shapes a `Query` answer ───
+
+        testCaseAsync "Phase 974 — Eq never returns an entity whose head no longer carries the value"
+        <| async {
+            let rig = mkStaleQueryRig ()
+            do! staleAliceNowBob rig "s-1"
+
+            let! underAlice = queryIds rig.Store rig.Scope (Eq("Owner", "alice"))
+            Expect.equal underAlice [] "the head carries bob; Eq(Owner, alice) answers nothing"
+
+            let! underBob = queryIds rig.Store rig.Scope (Eq("Owner", "bob"))
+            Expect.equal underBob [ "s-1" ] "the head is found under the value it carries"
+        }
+
+        testCaseAsync "Phase 974 — Ne never excludes an entity whose head no longer carries the value"
+        <| async {
+            let rig = mkStaleQueryRig ()
+            do! staleAliceNowBob rig "s-1"
+            do! saveItem rig.Store rig.Scope (mkItem "s-2" "alice" "active" "01")
+            do! saveItem rig.Store rig.Scope (mkItem "s-3" "carol" "active" "01")
+
+            let! notAlice = queryIds rig.Store rig.Scope (Ne("Owner", "alice"))
+            Expect.equal notAlice [ "s-1"; "s-3" ] "s-1 carries bob, so it is not alice"
+
+            let! notEqAlice = queryIds rig.Store rig.Scope (Not(Eq("Owner", "alice")))
+            Expect.equal notEqAlice [ "s-1"; "s-3" ] "Not(Eq) is the same complement"
+
+            let! inAlice = queryIds rig.Store rig.Scope (In("Owner", [ "alice"; "dave" ]))
+            Expect.equal inAlice [ "s-2" ] "In answers only from heads carrying a listed value"
+        }
+
+        testCaseAsync
+            "Phase 974 — a range predicate never returns an entity whose head no longer carries a matching value"
+        <| async {
+            let rig = mkStaleQueryRig ()
+            do! staleAliceNowBob rig "s-1"
+            do! saveItem rig.Store rig.Scope (mkItem "s-2" "alice" "active" "01")
+
+            let! belowB = queryIds rig.Store rig.Scope (Lt("Owner", "b"))
+            Expect.equal belowB [ "s-2" ] "s-1's head carries bob, which is not below b"
+
+            let! fromB = queryIds rig.Store rig.Scope (Gte("Owner", "b"))
+            Expect.equal fromB [ "s-1" ] "s-1 is found under the value its head carries"
+        }
+
+        testCaseAsync "Phase 974 — a range predicate matches an indexed value with a path-unsafe character"
+        <| async {
+            let store, scope = mkStore ()
+            do! saveItem store scope (mkItem "p-1" "zed/one" "active" "01")
+            do! saveItem store scope (mkItem "p-2" "dave smith" "active" "01")
+            do! saveItem store scope (mkItem "p-3" "alice" "active" "01")
+            do! saveItem store scope (mkItem "p-4" "a b" "active" "01")
+
+            let! fromD = queryIds store scope (Gte("Owner", "d"))
+            Expect.equal fromD [ "p-1"; "p-2" ] "a slash and a space do not hide a value from Gte"
+
+            let! aboveZed = queryIds store scope (Gt("Owner", "zed"))
+            Expect.equal aboveZed [ "p-1" ] "Gt compares the value, not its encoded segment"
+
+            // Ordinal order on the VALUE: ' ' (0x20) sorts below '!' (0x21),
+            // where the encoded segment `a%20b` would sort above it.
+            let! belowBang = queryIds store scope (Lt("Owner", "a!"))
+            Expect.equal belowBang [ "p-4" ] "the comparison is made on the decoded value"
+
+            let! upToDave = queryIds store scope (Lte("Owner", "dave smith"))
+            Expect.equal upToDave [ "p-2"; "p-3"; "p-4" ] "Lte includes the path-unsafe bound itself"
+
+            let! exact = queryIds store scope (Eq("Owner", "zed/one"))
+            Expect.equal exact [ "p-1" ] "Eq over a path-unsafe value"
+        }
+
+        testCaseAsync "Phase 974 — a stale ref Query meets is counted in the drift snapshot and reclaimed"
+        <| async {
+            let rig = mkStaleQueryRig ()
+            do! staleAliceNowBob rig "s-1"
+
+            let refsUnderAlice () = async {
+                let! names = rig.Inner.List(rig.Scope, $"entities/_indexes/{ItemType}/Owner/alice/")
+                return names.Length
+            }
+
+            let ownerDrift () =
+                rig.Store.IndexDriftSnapshot rig.Scope
+                |> List.filter (fun e -> e.IndexName = $"{ItemType}/Owner")
+                |> List.map (fun e -> e.SampleSize, e.ConsistentEntries, e.OrphanedIndexEntries, e.UnindexedCanonicals)
+
+            let! before = refsUnderAlice ()
+            Expect.equal before 1 "the refused removal left the alice ref on disk"
+
+            let! answer = queryIds rig.Store rig.Scope (Eq("Owner", "alice"))
+            Expect.equal answer [] "the head carries bob"
+            Expect.equal (ownerDrift ()) [ 1, 0, 1, 0 ] "one ref read, and it was stale"
+
+            let! after = refsUnderAlice ()
+            Expect.equal after 0 "the query reclaimed the stale ref it met"
+
+            let! vacuumed = rig.Store.VacuumIndex(rig.Scope, ItemType, "Owner")
+            Expect.equal vacuumed (Result.Ok 0) "nothing is left for the whole-index vacuum"
         }
     ]

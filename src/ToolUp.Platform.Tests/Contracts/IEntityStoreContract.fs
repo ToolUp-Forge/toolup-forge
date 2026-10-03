@@ -729,6 +729,17 @@ let staleRefTests (name: string) (factory: (unit -> bool) -> IEntityStore * Enti
         | Result.Error e -> failwithf "Save failed: %A" e
     }
 
+    let queryIds (store: IEntityStore) scope (predicate: EntityQueryTypes.Predicate) = async {
+        match!
+            store.Query<TestEntity>(
+                scope,
+                EntityQuery.forType<TestEntity> TestEntityType |> EntityQuery.where predicate
+            )
+        with
+        | Result.Ok entities -> return entities |> List.map _.Id |> List.sort
+        | Result.Error e -> return failwithf "expected Ok from Query(%A), got %A" predicate e
+    }
+
     testList $"{name} — IEntityStore stale-ref contract (Phase 973)" [
 
         testCaseAsync
@@ -784,5 +795,35 @@ let staleRefTests (name: string) (factory: (unit -> bool) -> IEntityStore * Enti
 
             let! underAlice = idsUnder store scope "alice"
             Expect.equal underAlice [] "a deleted entity answers no lookup"
+        }
+
+        // Phase 974 — the `Query` form of the same claim. A predicate leaf is
+        // answered by the head, never by a ref the head no longer backs: `Eq`
+        // does not return the entity, `Ne` (and `Not(Eq)`) does not exclude
+        // it, and a range predicate answers from the value the head carries.
+        testCaseAsync "a Query answers from the head, not from an old index ref: Eq, Ne and the range predicates"
+        <| async {
+            let store, scope = setup ()
+            do! saveOk store scope (mkEntity "e-974-a" "alice" "active")
+            do! saveOk store scope (mkEntity "e-974-a" "bob" "active")
+            do! saveOk store scope (mkEntity "e-974-b" "alice" "active")
+
+            let! eqAlice = queryIds store scope (EntityQueryTypes.Eq("Owner", "alice"))
+            Expect.equal eqAlice [ "e-974-b" ] "Eq(Owner, alice) answers only the head carrying alice"
+
+            let! eqBob = queryIds store scope (EntityQueryTypes.Eq("Owner", "bob"))
+            Expect.equal eqBob [ "e-974-a" ] "the re-saved entity answers under the value it carries"
+
+            let! neAlice = queryIds store scope (EntityQueryTypes.Ne("Owner", "alice"))
+            Expect.equal neAlice [ "e-974-a" ] "Ne(Owner, alice) does not exclude a head carrying bob"
+
+            let! notEqAlice = queryIds store scope (EntityQueryTypes.Not(EntityQueryTypes.Eq("Owner", "alice")))
+            Expect.equal notEqAlice [ "e-974-a" ] "Not(Eq) is the same complement"
+
+            let! belowB = queryIds store scope (EntityQueryTypes.Lt("Owner", "b"))
+            Expect.equal belowB [ "e-974-b" ] "a range predicate answers from the carried value"
+
+            let! fromB = queryIds store scope (EntityQueryTypes.Gte("Owner", "b"))
+            Expect.equal fromB [ "e-974-a" ] "the re-saved entity answers the range its value is in"
         }
     ]
