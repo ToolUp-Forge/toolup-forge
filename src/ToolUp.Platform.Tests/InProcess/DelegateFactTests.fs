@@ -29,6 +29,11 @@ module ToolUp.Platform.Tests.InProcess.DelegateFactTests
 //      the coverage narrative reads the last run's reach and mints nothing.
 //   7. **Composition.** No delegate is the same app; `withDelegateFacts`
 //      decorates the store and the writer in DI, end to end.
+//  10. **The orphan sweep (Phase 977).** Over a store refusing the
+//      post-terminal deletes, an ended run's staged rows and provenance
+//      survive; the sweep reclaims them, reports the counts, is idempotent,
+//      never touches a live run, and runs at the end of every run - for
+//      both the default writer and the delegate one.
 
 open System
 open Expecto
@@ -160,9 +165,8 @@ type private World = {
     Scope: ResolvedScope
 }
 
-let private plainWorld (history: FactTableHistoryMode) : World =
+let private plainWorldOver (storage: IBlobStorage) (history: FactTableHistoryMode) : World =
     let clock = tickingClock ()
-    let storage = InMemoryBlobStorage() :> IBlobStorage
     let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
     let store =
@@ -185,9 +189,11 @@ let private plainWorld (history: FactTableHistoryMode) : World =
         Scope = resolved (newScope ())
     }
 
-let private delegatedWorldWith (history: FactTableHistoryMode) (refresh: bool) : World =
+let private plainWorld (history: FactTableHistoryMode) : World =
+    plainWorldOver (InMemoryBlobStorage() :> IBlobStorage) history
+
+let private delegatedWorldOver (storage: IBlobStorage) (history: FactTableHistoryMode) (refresh: bool) : World =
     let clock = tickingClock ()
-    let storage = InMemoryBlobStorage() :> IBlobStorage
     let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
     let inner =
@@ -223,6 +229,9 @@ let private delegatedWorldWith (history: FactTableHistoryMode) (refresh: bool) :
         Storage = storage
         Scope = resolved (newScope ())
     }
+
+let private delegatedWorldWith (history: FactTableHistoryMode) (refresh: bool) : World =
+    delegatedWorldOver (InMemoryBlobStorage() :> IBlobStorage) history refresh
 
 let private delegatedWorld (history: FactTableHistoryMode) = delegatedWorldWith history true
 
@@ -1135,6 +1144,232 @@ let private importedMethodTests =
         }
     ]
 
+// ─── 10. The orphan sweep (Phase 977) ────────────────────────────────
+
+// The store double is the contract pack's (`RefusableBlobStorage`).
+
+/// A world over a store refusing deletes on demand, for either writer.
+let private refusingWorld
+    (delegated: bool)
+    : World * ToolUp.Platform.Tests.Contracts.IFactTableOrphanSweepContract.RefusableBlobStorage =
+    let storage =
+        ToolUp.Platform.Tests.Contracts.IFactTableOrphanSweepContract.RefusableBlobStorage(
+            InMemoryBlobStorage() :> IBlobStorage
+        )
+
+    let world =
+        if delegated then
+            delegatedWorldOver storage FactTableHistoryMode.AppendByRun true
+        else
+            plainWorldOver storage FactTableHistoryMode.AppendByRun
+
+    world, storage
+
+/// A run's leftovers at rest: its staged rows, and its kept provenance.
+let private leftovers (w: World) : string list * string list =
+    let root, staged =
+        if w.Delegated.IsSome then
+            "_delegate-tables/", "staged/"
+        else
+            "_fact-tables/", "rows/"
+
+    let list prefix =
+        w.Storage.List(w.Scope.ScopeId, root + prefix)
+        |> Async.RunSynchronously
+        |> List.sort
+
+    list staged, list "provenance/"
+
+let private sweptOrigin: FactTableImportOrigin = {
+    RootMember = "brand-01"
+    CertificateRef = "cert:brand-01"
+    TriggerRef = "import:brand-01"
+    Withdrawal = None
+    Cells = []
+}
+
+/// Open an imported run and stage `batches` of rows on it (one blob each).
+let private openStaged (w: World) (batches: FactTableRow list list) : FactTableRunRecord =
+    let run =
+        match
+            w.Writer.OpenRun(w.Scope.ScopeId, "sku-sales", ImportedRun [ sweptOrigin ])
+            |> Async.RunSynchronously
+        with
+        | Ok run -> run
+        | Error e -> failtestf "open: %s" (FactTableWriteError.describe e)
+
+    for batch in batches do
+        w.Writer.WriteRows(w.Scope.ScopeId, run.RunId, batch)
+        |> Async.RunSynchronously
+        |> Result.defaultWith (fun e -> failtestf "write: %s" (FactTableWriteError.describe e))
+        |> ignore
+
+    run
+
+let private abandon (w: World) (runId: string) =
+    w.Writer.Abandon(w.Scope.ScopeId, runId, "ended")
+    |> Async.RunSynchronously
+    |> Result.defaultWith (fun e -> failtestf "abandon: %s" (FactTableWriteError.describe e))
+    |> ignore
+
+let private commitRun (w: World) (runId: string) =
+    w.Writer.Commit(w.Scope.ScopeId, runId)
+    |> Async.RunSynchronously
+    |> Result.defaultWith (fun e -> failtestf "commit: %s" (FactTableWriteError.describe e))
+
+let private sweepOf (w: World) : FactTableOrphanSweepReport =
+    match FactTableOrphanSweep.sweep w.Writer w.Scope.ScopeId |> Async.RunSynchronously with
+    | Ok report -> report
+    | Error e -> failtestf "sweep: %s" (FactTableWriteError.describe e)
+
+let private isOpen (run: FactTableRunRecord) =
+    match run.Status with
+    | FactTableRunStatus.Open -> true
+    | _ -> false
+
+let private orphanSweepTests =
+    testList "the orphan sweep (Phase 977)" [
+        for delegated in [ false; true ] do
+            let name = if delegated then "delegate writer" else "default writer"
+
+            test
+                $"{name}: a refused post-terminal delete leaves leftovers nothing lists; the sweep reclaims them and reports the counts" {
+                let w, storage = refusingWorld delegated
+                let run = openStaged w [ population 5; population 5 ]
+                storage.Refusing <- true
+                abandon w run.RunId
+
+                // The red pin: the run is recorded ended, so nothing the
+                // writer reports reads its blobs again — yet they are at rest.
+                let runs =
+                    w.Writer.Runs(w.Scope.ScopeId, "sku-sales")
+                    |> Async.RunSynchronously
+                    |> Result.defaultWith (fun e -> failtestf "runs: %s" (FactTableWriteError.describe e))
+
+                Expect.isFalse (runs |> List.exists isOpen) "the run is recorded ended"
+
+                let staged, provenance = leftovers w
+                Expect.hasLength staged 2 "both staged batches survived the refused delete"
+                Expect.hasLength provenance 1 "and so did the ended run's provenance"
+
+                storage.Refusing <- false
+                let report = sweepOf w
+
+                Expect.equal report.RunsSwept 1 "one ended run swept"
+                Expect.equal report.StagedBlobsDeleted 2 "its two staged batches went"
+                Expect.equal report.ProvenanceBlobsDeleted 1 "and its provenance"
+                Expect.isEmpty report.Refused "nothing refused"
+                Expect.equal (leftovers w) ([], []) "nothing is left at rest"
+
+                Expect.equal (sweepOf w) FactTableOrphanSweepReport.empty "a second sweep reclaims nothing (idempotent)"
+            }
+
+            test $"{name}: a live run's staged rows and provenance are never swept" {
+                let w, storage = refusingWorld delegated
+                let live = openStaged w [ population 5 ]
+                let ended = openStaged w [ population 5 ]
+                storage.Refusing <- true
+                abandon w ended.RunId
+                storage.Refusing <- false
+
+                let report = sweepOf w
+                Expect.equal report.RunsSwept 1 "only the ended run is swept"
+
+                let staged, provenance = leftovers w
+                Expect.hasLength staged 1 "one staged batch left"
+                Expect.stringContains staged.Head live.RunId "the live run's, untouched"
+                Expect.hasLength provenance 1 "one provenance left"
+                Expect.stringContains provenance.Head live.RunId "the live run's, untouched"
+
+                Expect.equal (commitRun w live.RunId).RowCount 5 "the live run still commits every row it staged"
+            }
+
+            test $"{name}: the end of every run sweeps the scope, so a later run reclaims an earlier run's leftovers" {
+                let w, storage = refusingWorld delegated
+                let first = openStaged w [ population 5 ]
+                storage.Refusing <- true
+                abandon w first.RunId
+                Expect.notEqual (leftovers w) ([], []) "the refused deletes left the first run's leftovers"
+                storage.Refusing <- false
+
+                let second = openStaged w [ population 5 ]
+                abandon w second.RunId
+
+                Expect.equal (leftovers w) ([], []) "the second run's end reclaimed both runs' leftovers"
+            }
+
+            test $"{name}: a sweep the store refuses names what it could not delete, and the next sweep retries it" {
+                let w, storage = refusingWorld delegated
+                let run = openStaged w [ population 5 ]
+                storage.Refusing <- true
+                abandon w run.RunId
+
+                let refused = sweepOf w
+                Expect.equal refused.StagedBlobsDeleted 0 "nothing deleted"
+                Expect.hasLength refused.Refused 2 "the staged batch and the provenance are named"
+                Expect.notEqual (leftovers w) ([], []) "and still at rest"
+
+                storage.Refusing <- false
+                let retried = sweepOf w
+
+                Expect.equal
+                    (retried.StagedBlobsDeleted, retried.ProvenanceBlobsDeleted)
+                    (1, 1)
+                    "the next sweep reclaims them"
+            }
+
+        test "delegate writer: the sweep keeps a committed run's provenance, because its rows are minted under it" {
+            let w, storage = refusingWorld true
+            let run = openStaged w [ population 5 ]
+            storage.Refusing <- true
+            commitRun w run.RunId |> ignore
+            storage.Refusing <- false
+
+            let report = sweepOf w
+            Expect.equal report.StagedBlobsDeleted 1 "the committed run's staged batch is reclaimed"
+            Expect.equal report.ProvenanceBlobsDeleted 0 "its provenance is not"
+
+            Expect.equal
+                (leftovers w)
+                ([], [ sprintf "_delegate-tables/provenance/%s.json" run.RunId ])
+                "the provenance stays at rest"
+
+            match point w "revenue" [ "brand-01"; "sku-000001" ] with
+            | [ fact ] -> Expect.equal fact.Method (Imported "cert:brand-01") "and the run's rows still mint Imported"
+            | other -> failtestf "expected one fact, got %d" other.Length
+        }
+
+        test "default writer: a committed run's staged rows and provenance are reclaimed" {
+            let w, storage = refusingWorld false
+            let run = openStaged w [ population 5 ]
+            storage.Refusing <- true
+            commitRun w run.RunId |> ignore
+            Expect.notEqual (leftovers w) ([], []) "the refused deletes left the committed run's leftovers"
+            storage.Refusing <- false
+
+            let report = sweepOf w
+            Expect.equal (report.StagedBlobsDeleted, report.ProvenanceBlobsDeleted) (1, 1) "both reclaimed"
+            Expect.equal (leftovers w) ([], []) "nothing left"
+        }
+
+        test "a decorated writer still sweeps: the fact-browse notifier forwards the sweep" {
+            let w, storage = refusingWorld false
+            let run = openStaged w [ population 5 ]
+            storage.Refusing <- true
+            abandon w run.RunId
+            storage.Refusing <- false
+
+            let decorated =
+                FactBrowseHandler.notifyingWriter
+                    (ToolUp.Platform.NotificationChannel.InMemoryNotificationChannel(None) :> INotificationChannel)
+                    w.Writer
+
+            match FactTableOrphanSweep.sweep decorated w.Scope.ScopeId |> Async.RunSynchronously with
+            | Ok report -> Expect.equal report.RunsSwept 1 "the decorated writer's sweep reached the default writer"
+            | Error e -> failtestf "sweep: %s" (FactTableWriteError.describe e)
+        }
+    ]
+
 /// Every Phase 889 case.
 let tests =
     testList "Phase 889 — delegate facts" [
@@ -1147,4 +1382,5 @@ let tests =
         compositionTests
         importedTests
         importedMethodTests
+        orphanSweepTests
     ]

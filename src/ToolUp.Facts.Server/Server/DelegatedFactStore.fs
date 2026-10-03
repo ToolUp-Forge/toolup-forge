@@ -285,11 +285,13 @@ type internal DelegateTableStore(storage: IBlobStorage) =
     member _.RecordName(runId: string) = sprintf "%sruns/%s.json" root runId
     member _.RecordsPrefix = sprintf "%sruns/" root
     member _.StagedPrefix(runId: string) = sprintf "%sstaged/%s/" root runId
+    member _.StagedRoot = sprintf "%sstaged/" root
 
     member this.StagedName (runId: string) (offset: int) =
         sprintf "%s%010d.json" (this.StagedPrefix runId) offset
 
     member _.HeadName(tableId: string) = sprintf "%shead/%s.json" root tableId
+    member _.HeadsPrefix = sprintf "%shead/" root
 
     member _.RowsName (tableId: string) (sequence: int64) =
         sprintf "%srows/%s/%020d.json" root tableId sequence
@@ -300,6 +302,8 @@ type internal DelegateTableStore(storage: IBlobStorage) =
     /// run; a computed run keeps nothing.
     member _.ProvenanceName(runId: string) =
         sprintf "%sprovenance/%s.json" root runId
+
+    member _.ProvenanceRoot = sprintf "%sprovenance/" root
 
     /// Where the certificates a table's runs imported under are recorded.
     member _.LineagesName(tableId: string) =
@@ -1441,21 +1445,55 @@ type DelegateTableWriter
             Payload = FactTableBlobIo.serialize payload
         }
 
-    // Phase 971 - known storage leak, not an oversight: this runs after the
-    // run's terminal record is persisted, `stagedRows` reads an open run only,
-    // and no pass reclaims a leftover today.
-    let discardStaged (scopeId: string) (runId: string) = async {
-        let! names = storage.List(scopeId, tables.StagedPrefix runId)
-
-        for name in names do
-            let! _ = storage.Delete(scopeId, name) // best-effort-write: scratch of a run already recorded terminal; read by nothing after it - a leftover is unreachable bytes, never a wrong answer (no sweep reclaims it)
-            ()
+    // Phase 977 — the orphan sweep over the delegate layout. An ended run's
+    // staged rows are read by nothing (`stagedRows` reads an open run only),
+    // and neither is a rejected or abandoned run's kept provenance; a
+    // committed run's provenance STAYS, because its rows are minted under it
+    // for as long as they are read.
+    let orphanLayout: FactTableOrphanSweep.Layout = {
+        StagedRoot = tables.StagedRoot
+        ProvenanceRoot = tables.ProvenanceRoot
+        RecordName = tables.RecordName
+        KeepsProvenance =
+            function
+            | FactTableRunStatus.Committed _ -> true
+            | _ -> false
     }
 
-    // An ended run's kept provenance goes with it; a committed run's stays,
-    // because its rows are minted under it for as long as they are read.
-    let discardProvenance (scopeId: string) (runId: string) =
-        FactTableRunProvenance.discard storage scopeId (tables.ProvenanceName runId)
+    // The runs every table head records as committed: their provenance is
+    // kept, so the sweep reads no record for them — its cost follows the
+    // scope's tables and its leftovers, never its committed history.
+    let committedRuns (scopeId: string) = async {
+        let! heads = storage.List(scopeId, tables.HeadsPrefix)
+
+        let rec load (remaining: string list) (acc: Set<string>) = async {
+            match remaining with
+            | [] -> return acc
+            | name :: rest ->
+                match! FactTableBlobIo.tryGet<DelegateTableHead> storage scopeId name with
+                | Ok(Some head) -> return! load rest (head.Commits |> List.fold (fun s c -> Set.add c.Run.RunId s) acc)
+                // An unreadable head spares nothing; the sweep then reads
+                // each run's record, which keeps a committed run's anyway.
+                | Ok None
+                | Error _ -> return! load rest acc
+        }
+
+        return! load heads Set.empty
+    }
+
+    let sweepOrphans (scopeId: string) = async {
+        let! spared = committedRuns scopeId
+        return! FactTableOrphanSweep.run storage scopeId orphanLayout spared
+    }
+
+    // The end of every run: its terminal record is persisted, so the sweep
+    // reclaims its leftovers and retries any earlier run's the store
+    // refused. What a refused delete leaves stays listed, and the scope's
+    // next run (or a host's `SweepOrphans`) sweeps it again.
+    let endRun (scopeId: string) = async {
+        let! _ = sweepOrphans scopeId
+        ()
+    }
 
     let stagedRows (scopeId: string) (runId: string) = async {
         let! names = storage.List(scopeId, tables.StagedPrefix runId)
@@ -1491,8 +1529,7 @@ type DelegateTableWriter
         match! FactTableBlobIo.put storage scopeId (tables.RecordName run.RunId) closed with
         | Error e -> return Error e
         | Ok() ->
-            do! discardStaged scopeId run.RunId
-            do! discardProvenance scopeId run.RunId
+            do! endRun scopeId
             do! audit scopeId table closed FactTableEvents.RunRejectedType "Rejected" None (Some reason)
             return Error error
     }
@@ -1633,7 +1670,7 @@ type DelegateTableWriter
                                         with
                                         | Error e -> return Error e
                                         | Ok() ->
-                                            do! discardStaged scopeId run.RunId
+                                            do! endRun scopeId
 
                                             do!
                                                 audit
@@ -1774,8 +1811,7 @@ type DelegateTableWriter
                     match! FactTableBlobIo.put storage scopeId (tables.RecordName runId) closed with
                     | Error e -> return Error e
                     | Ok() ->
-                        do! discardStaged scopeId runId
-                        do! discardProvenance scopeId runId
+                        do! endRun scopeId
 
                         match registrations.TryGetTable run.TableId with
                         | Some table ->
@@ -1854,6 +1890,20 @@ type DelegateTableWriter
                                     LatestRun = latest
                                     LatestRunOutcome = latest |> Option.map (FactTableRun.outcome table at)
                                 }
+        }
+
+    interface IFactTableOrphanSweep with
+
+        // The delegate layout, then the writer it hands every other table to.
+        member _.SweepOrphans(scopeId) = async {
+            let! own = sweepOrphans scopeId
+
+            match inner with
+            | None -> return Ok own
+            | Some w ->
+                match! FactTableOrphanSweep.sweep w scopeId with
+                | Error e -> return Error e
+                | Ok passed -> return Ok(FactTableOrphanSweepReport.combine own passed)
         }
 
 /// Construction for the delegate pieces. The table store is internal, so a

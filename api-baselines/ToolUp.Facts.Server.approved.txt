@@ -814,6 +814,18 @@ ToolUp.Facts.FactTableImportedCell.From : System.DateTime { get }
 ToolUp.Facts.FactTableImportedCell.Metric : System.String { get }
 ToolUp.Facts.FactTableImportedCell.Subject : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.FactTableImportedCell.To : System.DateTime { get }
+ToolUp.Facts.FactTableOrphanSweep (class)
+ToolUp.Facts.FactTableOrphanSweep.sweep(ToolUp.Facts.IFactTableWriter, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactTableOrphanSweepReport, ToolUp.Facts.FactTableWriteError]]
+ToolUp.Facts.FactTableOrphanSweepReport (class)
+ToolUp.Facts.FactTableOrphanSweepReport..ctor(System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Facts.FactTableOrphanSweepReport.ProvenanceBlobsDeleted : System.Int32 { get }
+ToolUp.Facts.FactTableOrphanSweepReport.Refused : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.FactTableOrphanSweepReport.RunsSwept : System.Int32 { get }
+ToolUp.Facts.FactTableOrphanSweepReport.StagedBlobsDeleted : System.Int32 { get }
+ToolUp.Facts.FactTableOrphanSweepReport.Unreadable : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.FactTableOrphanSweepReportModule (class)
+ToolUp.Facts.FactTableOrphanSweepReportModule.combine(ToolUp.Facts.FactTableOrphanSweepReport, ToolUp.Facts.FactTableOrphanSweepReport) : ToolUp.Facts.FactTableOrphanSweepReport
+ToolUp.Facts.FactTableOrphanSweepReportModule.empty : ToolUp.Facts.FactTableOrphanSweepReport { get }
 ToolUp.Facts.FactTableRow (class)
 ToolUp.Facts.FactTableRow..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Facts.TemporalExtent, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Facts.FactValue])
 ToolUp.Facts.FactTableRow.Period : ToolUp.Facts.TemporalExtent { get }
@@ -1015,6 +1027,8 @@ ToolUp.Facts.IFactStore.QuerySupersessionChain(System.String, System.String) : M
 ToolUp.Facts.IFactStore.QuerySupersessionChain(ToolUp.Platform.ResolvedScope, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]]
 ToolUp.Facts.IFactStore.QueryWithCompetition(System.String, ToolUp.Facts.FactQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactWithCompetition]]
 ToolUp.Facts.IFactStore.QueryWithCompetition(ToolUp.Platform.ResolvedScope, ToolUp.Facts.FactQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactWithCompetition]]
+ToolUp.Facts.IFactTableOrphanSweep (interface)
+ToolUp.Facts.IFactTableOrphanSweep.SweepOrphans(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactTableOrphanSweepReport, ToolUp.Facts.FactTableWriteError]]
 ToolUp.Facts.IFactTableWriter (interface)
 ToolUp.Facts.IFactTableWriter.Abandon(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Grounding.FactTableRunRecord, ToolUp.Facts.FactTableWriteError]]
 ToolUp.Facts.IFactTableWriter.Commit(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Grounding.FactTableCommit, ToolUp.Facts.FactTableWriteError]]

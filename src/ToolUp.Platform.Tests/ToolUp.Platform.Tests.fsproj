@@ -257,6 +257,8 @@
         <!-- Phase 520 — grounding fact store contract pack. -->
         <Compile Include="Contracts\IFactStoreContract.fs" />
         <Compile Include="Contracts\IFactTableWriterContract.fs" />
+        <!-- Phase 977 - the orphan sweep contract pack. -->
+        <Compile Include="Contracts\IFactTableOrphanSweepContract.fs" />
         <Compile Include="Contracts\ITelemetrySinkContract.fs" />
         <Compile Include="Contracts\IAdAnalyticsSinkContract.fs" />
         <!-- Phase 62 — IUserClaims contract pack (premium-status round-trip). -->

@@ -618,12 +618,15 @@ type FactTableHead = {
 /// Keeping and applying a run's provenance.
 module FactTableRunProvenance =
 
+    /// The prefix the default writer keeps every run's provenance under.
+    [<Literal>]
+    let internal Root = "_fact-tables/provenance/"
+
     /// The blob the default writer keeps an imported run's provenance in,
     /// beside the run's staged rows, in the run's scope (rule 4: any
     /// instance can commit a run another opened). Nothing is kept for a
     /// computed run.
-    let internal blobName (runId: string) =
-        sprintf "_fact-tables/provenance/%s.json" runId
+    let internal blobName (runId: string) = sprintf "%s%s.json" Root runId
 
     /// Keep a run's provenance at open: an imported one is written, a
     /// computed one writes nothing (GP 11).
@@ -651,18 +654,6 @@ module FactTableRunProvenance =
             | Ok None -> return Ok ComputedRun
             | Error e -> return Error e
         }
-
-    // Phase 971 - known storage leak, not an oversight: both callers run this
-    // after the run's terminal record is persisted, nothing reads an ended
-    // run's provenance after that, and no pass reclaims a leftover today.
-    /// Drop a run's kept provenance, when one is kept.
-    let internal discard (storage: IBlobStorage) (scopeId: string) (name: string) : Async<unit> = async {
-        let! kept = storage.Exists(scopeId, name)
-
-        if kept then
-            let! _ = storage.Delete(scopeId, name) // best-effort-write: kept provenance of a run already recorded terminal; read by nothing after it - a leftover is unreachable bytes, never a wrong answer (no sweep reclaims it)
-            ()
-    }
 
     /// The draft rewrite a provenance implies: identity for `ComputedRun`.
     /// ONE definition of what an imported row is, shared by every writer —
@@ -718,6 +709,200 @@ module FactTableRunProvenance =
                                 }
                         }
                 | [] -> draft
+
+/// What one orphan sweep reclaimed (Phase 977): the leftovers of runs the
+/// run ledger records as ended — staged rows, and kept provenance the
+/// writer does not keep past the run's end.
+type FactTableOrphanSweepReport = {
+    /// Ended runs the sweep found leftovers of.
+    RunsSwept: int
+    /// Staged-row blobs deleted.
+    StagedBlobsDeleted: int
+    /// Kept-provenance blobs deleted.
+    ProvenanceBlobsDeleted: int
+    /// Blobs whose delete the store refused, each with the refusal. They are
+    /// still at rest and still listed, so the next sweep retries them.
+    Refused: string list
+    /// Runs left untouched because their record could not be read, each
+    /// with the reason: a run not PROVEN ended is never swept.
+    Unreadable: string list
+}
+
+/// Combining sweep reports.
+module FactTableOrphanSweepReport =
+
+    /// A sweep that found nothing to reclaim.
+    let empty: FactTableOrphanSweepReport = {
+        RunsSwept = 0
+        StagedBlobsDeleted = 0
+        ProvenanceBlobsDeleted = 0
+        Refused = []
+        Unreadable = []
+    }
+
+    /// Two sweeps' reports as one — a writer and the writer it decorates.
+    let combine (a: FactTableOrphanSweepReport) (b: FactTableOrphanSweepReport) : FactTableOrphanSweepReport = {
+        RunsSwept = a.RunsSwept + b.RunsSwept
+        StagedBlobsDeleted = a.StagedBlobsDeleted + b.StagedBlobsDeleted
+        ProvenanceBlobsDeleted = a.ProvenanceBlobsDeleted + b.ProvenanceBlobsDeleted
+        Refused = a.Refused @ b.Refused
+        Unreadable = a.Unreadable @ b.Unreadable
+    }
+
+/// A fact-table writer that reclaims the leftovers of its ended runs
+/// (Phase 977). A writer stages a run's rows, and keeps an imported run's
+/// provenance, as blobs it deletes when the run ends; a refused delete
+/// there leaves bytes nothing reads again. The sweep finds them by the
+/// record that proves them leftovers — the run's terminal record — so a run
+/// that is open, or whose record does not exist yet, is never touched, and a
+/// sweep is safe beside a live run. Idempotent: a second sweep over the same
+/// state reclaims nothing.
+///
+/// Both platform writers implement it and run it over the run's scope at
+/// the end of every run they end (commit, rejection, abandonment), so a
+/// refused delete is retried by the scope's next run. A decorator forwards
+/// it to the writer it decorates.
+type IFactTableOrphanSweep =
+    /// Sweep a scope: delete the staged rows, and the provenance the writer
+    /// does not keep, of every run its ledger records as ended, and report
+    /// what went and what the store refused.
+    abstract SweepOrphans: scopeId: string -> Async<Result<FactTableOrphanSweepReport, FactTableWriteError>>
+
+/// Running the orphan sweep, and the sweep the platform writers share.
+module FactTableOrphanSweep =
+
+    /// Sweep a scope through a composed writer: `SweepOrphans` when the
+    /// writer implements `IFactTableOrphanSweep`, otherwise an empty report
+    /// (a writer that keeps no leftovers has none to reclaim).
+    let sweep
+        (writer: IFactTableWriter)
+        (scopeId: string)
+        : Async<Result<FactTableOrphanSweepReport, FactTableWriteError>> =
+        match box writer with
+        | :? IFactTableOrphanSweep as sweeper -> sweeper.SweepOrphans scopeId
+        | _ -> async { return Ok FactTableOrphanSweepReport.empty }
+
+    /// Where a writer keeps a run's leftovers.
+    type internal Layout = {
+        /// The prefix every run's staged rows sit under, as `<root><runId>/…`.
+        StagedRoot: string
+        /// The prefix every run's kept provenance sits under, as `<root><runId>.json`.
+        ProvenanceRoot: string
+        /// The blob a run's record is kept in.
+        RecordName: string -> string
+        /// Whether an ended run's provenance is kept past its end (the
+        /// delegate writer keeps a committed run's: its rows are minted
+        /// under it for as long as they are read).
+        KeepsProvenance: FactTableRunStatus -> bool
+    }
+
+    let private runOfStaged (layout: Layout) (name: string) : string option =
+        if name.StartsWith layout.StagedRoot then
+            let rest = name.Substring layout.StagedRoot.Length
+
+            match rest.IndexOf '/' with
+            | slash when slash > 0 -> Some(rest.Substring(0, slash))
+            | _ -> None
+        else
+            None
+
+    let private runOfProvenance (layout: Layout) (name: string) : string option =
+        if name.StartsWith layout.ProvenanceRoot then
+            let rest = name.Substring layout.ProvenanceRoot.Length
+
+            if rest.EndsWith ".json" && rest.Length > 5 && not (rest.Contains '/') then
+                Some(rest.Substring(0, rest.Length - 5))
+            else
+                None
+        else
+            None
+
+    let private deleteAll (storage: IBlobStorage) (scopeId: string) (names: string list) : Async<int * string list> =
+        let rec go (remaining: string list) (deleted: int) (refused: string list) = async {
+            match remaining with
+            | [] -> return deleted, List.rev refused
+            | name :: rest ->
+                match! storage.Delete(scopeId, name) with
+                | Ok() -> return! go rest (deleted + 1) refused
+                | Error e -> return! go rest deleted (sprintf "%s (%s)" name e :: refused)
+        }
+
+        go names 0 []
+
+    /// Sweep one scope's leftovers under `layout`. `spared` names runs whose
+    /// provenance is known kept, so the sweep need not read their records.
+    let internal run
+        (storage: IBlobStorage)
+        (scopeId: string)
+        (layout: Layout)
+        (spared: Set<string>)
+        : Async<FactTableOrphanSweepReport> =
+        async {
+            let! staged = storage.List(scopeId, layout.StagedRoot)
+            let! kept = storage.List(scopeId, layout.ProvenanceRoot)
+
+            let stagedByRun =
+                staged
+                |> List.choose (fun name -> runOfStaged layout name |> Option.map (fun runId -> runId, name))
+                |> List.groupBy fst
+                |> List.map (fun (runId, names) -> runId, names |> List.map snd |> List.sort)
+                |> Map.ofList
+
+            let provenanceByRun =
+                kept
+                |> List.choose (fun name -> runOfProvenance layout name |> Option.map (fun runId -> runId, name))
+                |> List.filter (fun (runId, _) -> not (spared.Contains runId))
+                |> Map.ofList
+
+            let candidates =
+                Set.union (stagedByRun |> Map.keys |> Set.ofSeq) (provenanceByRun |> Map.keys |> Set.ofSeq)
+                |> Set.toList
+
+            let rec go (remaining: string list) (report: FactTableOrphanSweepReport) = async {
+                match remaining with
+                | [] -> return report
+                | runId :: rest ->
+                    match! FactTableBlobIo.tryGet<FactTableRunRecord> storage scopeId (layout.RecordName runId) with
+                    | Error e ->
+                        let why = sprintf "%s (%s)" runId (FactTableWriteError.describe e)
+
+                        return!
+                            go rest {
+                                report with
+                                    Unreadable = report.Unreadable @ [ why ]
+                            }
+                    // No record yet: a run is being opened (its provenance is
+                    // kept before its record) — never touched.
+                    | Ok None -> return! go rest report
+                    | Ok(Some run) ->
+                        match run.Status with
+                        | FactTableRunStatus.Open -> return! go rest report
+                        | status ->
+                            let stagedNames = stagedByRun.TryFind runId |> Option.defaultValue []
+
+                            let provenanceNames =
+                                match provenanceByRun.TryFind runId with
+                                | Some name when not (layout.KeepsProvenance status) -> [ name ]
+                                | _ -> []
+
+                            if List.isEmpty stagedNames && List.isEmpty provenanceNames then
+                                return! go rest report
+                            else
+                                let! stagedDeleted, stagedRefused = deleteAll storage scopeId stagedNames
+                                let! provenanceDeleted, provenanceRefused = deleteAll storage scopeId provenanceNames
+
+                                return!
+                                    go rest {
+                                        report with
+                                            RunsSwept = report.RunsSwept + 1
+                                            StagedBlobsDeleted = report.StagedBlobsDeleted + stagedDeleted
+                                            ProvenanceBlobsDeleted = report.ProvenanceBlobsDeleted + provenanceDeleted
+                                            Refused = report.Refused @ stagedRefused @ provenanceRefused
+                                    }
+            }
+
+            return! go candidates FactTableOrphanSweepReport.empty
+        }
 
 /// The default `IFactTableWriter`, over the composed `IFactStore` — so a
 /// declared table is usable before any dedicated table store is composed,
@@ -859,17 +1044,28 @@ type DefaultFactTableWriter
             Payload = FactTableBlobIo.serialize payload
         }
 
-    // Phase 971 - known storage leak, not an oversight: this runs after the
-    // run's terminal record is persisted, `stagedRows` reads an open run only,
-    // and no pass reclaims a leftover today.
-    let discardStaged (scopeId: string) (runId: string) : Async<unit> = async {
-        let! names = storage.List(scopeId, rowsPrefix runId)
+    // Phase 977 — the orphan sweep over this writer's layout. A run's staged
+    // rows and its kept provenance are read by nothing once its record is
+    // terminal (`stagedRows` reads an open run only, and the facts a commit
+    // writes carry their provenance), so an ended run keeps neither.
+    let orphanLayout: FactTableOrphanSweep.Layout = {
+        StagedRoot = sprintf "%srows/" root
+        ProvenanceRoot = FactTableRunProvenance.Root
+        RecordName = recordName
+        KeepsProvenance = fun _ -> false
+    }
 
-        for name in names do
-            let! _ = storage.Delete(scopeId, name) // best-effort-write: scratch of a run already recorded terminal; read by nothing after it - a leftover is unreachable bytes, never a wrong answer (no sweep reclaims it)
-            ()
+    let sweepOrphans (scopeId: string) : Async<FactTableOrphanSweepReport> =
+        FactTableOrphanSweep.run storage scopeId orphanLayout Set.empty
 
-        do! FactTableRunProvenance.discard storage scopeId (FactTableRunProvenance.blobName runId)
+    // The end of every run: its terminal record is persisted, so the sweep
+    // reclaims its staged rows and provenance, and retries any earlier run's
+    // the store refused. The report is the sweep's own: what a refused delete
+    // leaves stays listed, and the scope's next run (or a host's
+    // `SweepOrphans`) sweeps it again.
+    let endRun (scopeId: string) : Async<unit> = async {
+        let! _ = sweepOrphans scopeId
+        ()
     }
 
     let stagedRows (scopeId: string) (runId: string) : Async<Result<FactTableRow list, FactTableWriteError>> = async {
@@ -975,7 +1171,7 @@ type DefaultFactTableWriter
             match! FactTableBlobIo.put storage scopeId (recordName run.RunId) closed with
             | Error e -> return Error e
             | Ok() ->
-                do! discardStaged scopeId run.RunId
+                do! endRun scopeId
                 do! audit scopeId table closed FactTableEvents.RunRejectedType "Rejected" None (Some reason)
                 return Error error
         }
@@ -1145,7 +1341,7 @@ type DefaultFactTableWriter
                                                     with
                                                     | Error e -> return Error e
                                                     | Ok() ->
-                                                        do! discardStaged scopeId runId
+                                                        do! endRun scopeId
 
                                                         do!
                                                             audit
@@ -1172,7 +1368,7 @@ type DefaultFactTableWriter
                 match! FactTableBlobIo.put storage scopeId (recordName runId) closed with
                 | Error e -> return Error e
                 | Ok() ->
-                    do! discardStaged scopeId runId
+                    do! endRun scopeId
 
                     match tables.TryGetTable run.TableId with
                     | Some table ->
@@ -1230,6 +1426,13 @@ type DefaultFactTableWriter
                         }
 
                         return Ok status
+        }
+
+    interface IFactTableOrphanSweep with
+
+        member _.SweepOrphans(scopeId) = async {
+            let! report = sweepOrphans scopeId
+            return Ok report
         }
 
 /// Construction for the default writer.
