@@ -50,6 +50,14 @@ open ToolUp.Platform.ISparseIndex
 // STALE: never an answer, counted in `IndexDriftSnapshot`, and dropped
 // on the spot through `BlobIndex.Vacuum`. `VacuumIndex` runs the same
 // reclaim over a whole index.
+//
+// Phase 974 — `Query` answers by the same rule. Its executor context's
+// `LookupByIndex` is the lookup above (one head read per listed ref, the
+// stale ones counted and reclaimed), so `Eq`/`In` never return, and
+// `Ne`/`Not` never exclude, an entity whose head does not carry the value;
+// and `AllIndexKeys` hands the range predicates the DECODED keys, so a value
+// with a character outside `[A-Za-z0-9_-]` is compared, and looked up, as
+// the value it is rather than as its path segment.
 
 let private auditJsonOptions = FableConverters.create ()
 
@@ -350,6 +358,76 @@ type BlobEntityStore
                     None)
             |> List.distinct
     }
+
+    /// Phase 974 — every key present in one index, DECODED: the value each
+    /// ref was filed under, not its path segment. A segment is the key
+    /// `pathSafeSegment`-encoded, and every character outside its safe set
+    /// (`%` included) is escaped, so unescaping recovers the key.
+    let indexKeys (scopeId: string) (entityType: string) (indexName: string) = async {
+        let! segments = indexKeySegments scopeId entityType indexName
+        return segments |> List.map Uri.UnescapeDataString |> List.distinct
+    }
+
+    /// Phase 973/974 — the entities listed under `key` in one index whose
+    /// head still carries `key`, each with its head version. A ref is
+    /// derived; the head is authoritative: each listed entity's head is read
+    /// and `keyOf` (the index's own `Extract` over the head) re-run on it. A
+    /// ref whose entity is gone, or whose head carries another value (a
+    /// refused `Remove`, an unreadable previous version at save), is stale —
+    /// never an answer, counted in the drift snapshot, and reclaimed on the
+    /// spot, best-effort (a failed reclaim costs the next lookup a re-read,
+    /// never this answer). One head read per listed ref, in parallel.
+    let backedRefs
+        (scopeId: string)
+        (entityType: string)
+        (indexName: string)
+        (keyOf: string -> string)
+        (key: string)
+        : Async<(EntityId * int) list> =
+        async {
+            let blobIndex = getIndex scopeId entityType indexName
+            let! lookupResults = blobIndex.Lookup key
+
+            // Entity refs carry no payload; it is ignored.
+            let! states =
+                lookupResults
+                |> List.map (fun (entityId, _payload) -> async {
+                    let! state = refStateOf scopeId entityType keyOf key entityId
+                    return entityId, state
+                })
+                |> Async.Parallel
+
+            let backed =
+                states
+                |> Array.choose (fun (entityId, state) ->
+                    match state with
+                    | Backed version -> Some(entityId, version)
+                    | Stale
+                    | Unjudged -> None)
+                |> Array.toList
+
+            let stale =
+                states
+                |> Array.choose (fun (entityId, state) ->
+                    match state with
+                    | Stale -> Some entityId
+                    | Backed _
+                    | Unjudged -> None)
+                |> Set.ofArray
+
+            recordReadDrift scopeId entityType indexName states.Length backed.Length stale.Count
+
+            // Heal the folder this lookup read: reclaim the stale refs it just
+            // met (each re-judged before and after its delete).
+            if not stale.IsEmpty then
+                try
+                    let! _reclaimed = vacuumKey scopeId entityType indexName keyOf key stale.Contains
+                    ()
+                with _ ->
+                    ()
+
+            return backed
+        }
 
     let entityIdFromObjectId (entityType: string) (objectId: string) : EntityId option =
         let prefix =
@@ -655,15 +733,11 @@ type BlobEntityStore
             with
             | None -> return Error(InvalidIndex indexName)
             | Some(_, keyOf) ->
-                let! segments = indexKeySegments scopeId entityType indexName
+                let! keys = indexKeys scopeId entityType indexName
 
-                // A segment is the key `pathSafeSegment`-encoded, and every
-                // character outside its safe set (`%` included) is escaped,
-                // so unescaping recovers the key the ref was filed under.
                 let! removed =
-                    segments
-                    |> List.map (fun segment ->
-                        vacuumKey scopeId entityType indexName keyOf (Uri.UnescapeDataString segment) (fun _ -> true))
+                    keys
+                    |> List.map (fun key -> vacuumKey scopeId entityType indexName keyOf key (fun _ -> true))
                     |> Async.Sequential
 
                 return Ok(Array.sum removed)
@@ -874,68 +948,23 @@ type BlobEntityStore
                 match EntityRegistration.tryFindIndex indexName reg with
                 | None -> return Error(InvalidIndex indexName)
                 | Some index ->
-                    let blobIndex = getIndex scopeId entityType indexName
-                    let! lookupResults = blobIndex.Lookup value
-
-                    // Phase 973 — a ref is derived; the head is authoritative.
-                    // Read each listed entity's head and re-run the index's own
-                    // `Extract` over it: only a head that still carries `value`
-                    // answers. A ref whose entity is gone, or whose head carries
-                    // another value (a refused `Remove`, an unreadable previous
-                    // version at save), is stale — a soft miss, counted in the
-                    // drift snapshot, and reclaimed below. (Entity refs carry
-                    // no payload; it is ignored.)
+                    // Phase 973 — a ref is derived; the head is authoritative:
+                    // only a head that still carries `value` answers (see
+                    // `backedRefs` for the stale-ref count and reclaim).
                     let keyOf (json: string) = index.Extract(deserialise<'T> json)
+                    let! backed = backedRefs scopeId entityType indexName keyOf value
 
-                    let! states =
-                        lookupResults
-                        |> List.map (fun (entityId, _payload) -> async {
-                            let! state = refStateOf scopeId entityType keyOf value entityId
-                            return entityId, state
-                        })
-                        |> Async.Parallel
-
-                    let answered =
-                        states
-                        |> Array.choose (fun (entityId, state) ->
-                            match state with
-                            | Backed version ->
-                                Some(
-                                    {
-                                        Id = entityId
-                                        Type = entityType
-                                        Version = version
-                                    }
-                                    : EntityRef<'T>
-                                )
-                            | Stale
-                            | Unjudged -> None)
-                        |> Array.toList
-
-                    let stale =
-                        states
-                        |> Array.choose (fun (entityId, state) ->
-                            match state with
-                            | Stale -> Some entityId
-                            | Backed _
-                            | Unjudged -> None)
-                        |> Set.ofArray
-
-                    recordReadDrift scopeId entityType indexName states.Length answered.Length stale.Count
-
-                    // Heal the folder this lookup read: reclaim the stale refs
-                    // it just met (each re-judged before and after its delete).
-                    // Opportunistic and best-effort by the same drift contract
-                    // — a failure here costs the next lookup a re-read, never
-                    // this answer.
-                    if not stale.IsEmpty then
-                        try
-                            let! _reclaimed = vacuumKey scopeId entityType indexName keyOf value stale.Contains
-                            ()
-                        with _ ->
-                            ()
-
-                    return Ok answered
+                    return
+                        Ok(
+                            backed
+                            |> List.map (fun (entityId, version) ->
+                                {
+                                    Id = entityId
+                                    Type = entityType
+                                    Version = version
+                                }
+                                : EntityRef<'T>)
+                        )
         }
 
         member _.Count(scopeId: string, entityType: string) = async {
@@ -965,19 +994,30 @@ type BlobEntityStore
                 | Result.Error(IndexValidationError.UnknownEntityType t) ->
                     return Error(EntityError.UnknownEntityType t)
                 | Result.Ok validated ->
-                    // Build the executor context. LookupByIndex calls
-                    // through to the cached BlobIndex; AllIndexKeys
-                    // enumerates segments via IBlobStorage.List.
-                    // AllEntityIds / LoadEntity go through
-                    // IDataObjectStore.
+                    // Build the executor context. AllEntityIds / LoadEntity go
+                    // through IDataObjectStore.
+                    //
+                    // Phase 974 — LookupByIndex is `FindByIndex`'s lookup: the
+                    // cached BlobIndex lists the candidates, and only those whose
+                    // head still carries `value` (the index's own `Extract` over
+                    // the head) answer; a stale ref is counted in the drift
+                    // snapshot and reclaimed. So `Eq`/`In` never return, and
+                    // `Ne`/`Not` never exclude, an entity on a ref alone.
+                    // AllIndexKeys enumerates the index's keys via
+                    // IBlobStorage.List and DECODES each path segment, so the
+                    // range predicates compare the values themselves and hand
+                    // LookupByIndex a value it encodes exactly once.
                     let lookupByIndex (indexName: string) (value: string) = async {
-                        let blobIndex = getIndex scopeId query.EntityType indexName
-                        let! results = blobIndex.Lookup value
-                        return results |> List.map fst
+                        match EntityRegistration.tryFindIndex indexName reg with
+                        | None -> return []
+                        | Some index ->
+                            let keyOf (json: string) = index.Extract(deserialise<'T> json)
+                            let! backed = backedRefs scopeId query.EntityType indexName keyOf value
+                            return backed |> List.map fst
                     }
 
                     let allIndexKeys (indexName: string) =
-                        indexKeySegments scopeId query.EntityType indexName
+                        indexKeys scopeId query.EntityType indexName
 
                     let allEntityIds () = async {
                         let! allObjects = dataObjectStore.ListObjects scopeId

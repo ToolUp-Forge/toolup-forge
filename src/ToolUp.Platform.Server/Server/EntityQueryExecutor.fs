@@ -32,6 +32,13 @@ open ToolUp.Platform.EntityQueryTypes
 // string ordering. Same caveat — large scopes are slow on
 // range-style predicates. A future commit may add range-aware
 // indexes; v1 trades query cost for implementation simplicity.
+//
+// Phase 974 — the index is a candidate list and canonical state is the
+// authority. The executor trusts `LookupByIndex` to answer only from heads
+// that still carry the value, and `AllIndexKeys` to hand back DECODED keys
+// (see their contracts on `ExecutorContext`); `BlobEntityStore` meets both,
+// so a stale ref never puts an entity into an `Eq`/`In`/range answer and
+// never takes one out of a `Ne`/`Not` complement.
 
 let private fableJsonOptions = FableConverters.create ()
 
@@ -41,11 +48,20 @@ let private deserialise<'T> (json: string) : 'T =
 /// I/O surface the executor needs. Injected by the caller; tests
 /// supply in-memory implementations.
 type ExecutorContext = {
-    /// Look up entity ids by an exact-match value on a declared index.
+    /// Look up entity ids by an exact-match value on a declared index:
+    /// `(indexName, value)`. Phase 974 — the answer is the entities whose
+    /// HEAD still carries `value` (the index's own extractor re-run over
+    /// it), not every id an index entry lists: `Eq`/`In` return these and
+    /// `Ne`/`Not` subtract them from `AllEntityIds`, so an entry left
+    /// behind by a refused removal must not reach this list. `value` is the
+    /// key as indexed — never its storage encoding.
     LookupByIndex: string -> string -> Async<EntityId list>
     /// Enumerate every key for an index. Used by range predicates
-    /// (`Gt`/`Gte`/`Lt`/`Lte`) and complement predicates
-    /// (`Ne`/`Not`). Returns the full key space; empty when the
+    /// (`Gt`/`Gte`/`Lt`/`Lte`), which compare each key to the bound and
+    /// pass the matching ones to `LookupByIndex`. Phase 974 — the keys are
+    /// DECODED: the values as indexed, not their storage path segments, so
+    /// the comparison is on the value and each key reaches `LookupByIndex`
+    /// in the form it takes. Returns the full key space; empty when the
     /// index has no entries.
     AllIndexKeys: string -> Async<string list>
     /// List every entity id in the scope (regardless of index
