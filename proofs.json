@@ -66,6 +66,14 @@
     "pin the visibility; its `residual` names what is still assumed (a caller assembling outside the doors),",
     "which is the assembly entry's shape and is stated there. Nothing the F* model proves moved.",
     "",
+    "Phase 821 AMENDED two entries and moved no level. `model-input-scope-resolution` loses the half of",
+    "its `residual` that named a caller assembling outside the doors: the answer planner, the one shipped",
+    "caller that resolved and gated facts for the model outside the three tools, now takes a ResolvedScope,",
+    "and `ModelInput.disclose` - the one shipped construction of a DisclosedFact - writes the scope from",
+    "`ResolvedScope.scopeId`, with a source scan pinning that nothing else does. The carried-scope half of",
+    "the residual is untouched. `model-input-assembly-is-callers-code` narrows to the fold's SHAPE: the",
+    "scope string a folded fact carries is no longer the caller's to choose. Nothing the F* model proves moved.",
+    "",
     "Phase 850 - the verified-implementation spike - APPENDED three entries and AMENDED two. The",
     "question was whether the code the prover checked can be the code that runs, on both hosts; the",
     "answer is the `policy` entry `verified-implementation-road`: NO on the pinned toolchain, with the",
@@ -813,7 +821,7 @@
     {
       "id": "model-input-scope-resolution",
       "level": "proved",
-      "claim": "The scope a fact door compares against is the one the platform's scope resolution minted for the request. Since Phase 797 every fact door - the store's members, the gate's Check, the three fact tools' executors - takes a ResolvedScope whose representation is private and whose constructor is internal to the platform's server tier, minted at the one point the scope-resolution middleware resolves the request; a door cannot be handed a scope the principal did not resolve to, because the construction does not compile. Until Phase 797 this entry was ASSUMED: the scope was a caller-supplied string, compared and never derived.",
+      "claim": "The scope a fact door compares against is the one the platform's scope resolution minted for the request. Since Phase 797 every fact door - the store's members, the gate's Check, the three fact tools' executors - takes a ResolvedScope whose representation is private and whose constructor is internal to the platform's server tier, minted at the one point the scope-resolution middleware resolves the request; a door cannot be handed a scope the principal did not resolve to, because the construction does not compile. Since Phase 821 the same holds where a model's input is ASSEMBLED rather than read: the answer planner and its clause-planner twin take the ResolvedScope and reach the store and the gate through their ResolvedScope members, and the one shipped construction of a DisclosedFact, ModelInput.disclose, writes Scope from ResolvedScope.scopeId - a source scan, go-red pinned, refuses any other expression in that field in shipped code. Until Phase 797 this entry was ASSUMED: the scope was a caller-supplied string, compared and never derived.",
       "evidence": {
         "theorem": "ResolvedScope",
         "model": "src/ToolUp.Platform.Core/Shared/Types/ResolvedScope.fs",
@@ -829,9 +837,21 @@
           "a StorageScope planted in the request items is NOT a resolved scope",
           "end to end: a fact under a resolved scope is invisible to a request that planted that scope",
           "every door reads its scope through ScopeResolution.forRequest and carries none of the old spellings"
-        ]
+        ],
+        "assembly": {
+          "construction": "ToolUp.AI.ModelInput.disclose (src/ToolUp.AI.Core/Shared/ModelInput.fs)",
+          "host": "src/ToolUp.Platform.Tests/InProcess/AnswerPlannerTests.fs",
+          "list": "Phase 821 the planner takes the typed scope",
+          "cases": [
+            "the typed Plan reads and gates through the ResolvedScope members only",
+            "the string Plan (kept one release) goes through the string members — the probe distinguishes",
+            "the DisclosedFact scope classifier fires on every unsanctioned spelling (go-red)",
+            "no shipped source writes a DisclosedFact's Scope from anything but a ResolvedScope",
+            "the prompt path hands the clause planner the request's minted scope"
+          ]
+        }
       },
-      "residual": "a caller assembling a ModelInput OUTSIDE the doors writes DisclosedFact.Scope itself and nothing checks it wrote the resolver's - the same shape as model-input-assembly-is-callers-code, and stated there. Beyond the doors, scopes the platform CARRIES stay strings except where they ride its carrier: since Phase 935 a scope written down for later is a token the platform's ScopeCarrier issued from a ResolvedScope and bound to the work it was issued for, re-minted through the internal carried mint whose one caller is the carrier (pinned in the same pack) - so a job scheduled with a resolver-minted scope runs under it on either shipped scheduler, the in-process default or a companion outside the server tier, across a restart, and a team-to-team publication grant's target consent is restored into the scope it was given in; since Phase 930 the job-admin API schedules under the request's resolved scope and the reactive recompute path runs under the scope a data write was made under when the write's request resolved that shard, but a write made off the request path or into another shard still reaches the recompute as a string, as do imports, coherence sweeps and knowledge-base dependency records"
+      "residual": "since Phase 821 no longer a caller assembling a ModelInput outside the doors: the one shipped construction of a DisclosedFact writes the resolver's scope, scan-pinned (a test fixture may still write any string, by design - the differential feeds the model's own). Beyond the doors, scopes the platform CARRIES stay strings except where they ride its carrier: since Phase 935 a scope written down for later is a token the platform's ScopeCarrier issued from a ResolvedScope and bound to the work it was issued for, re-minted through the internal carried mint whose one caller is the carrier (pinned in the same pack) - so a job scheduled with a resolver-minted scope runs under it on either shipped scheduler, the in-process default or a companion outside the server tier, across a restart, and a team-to-team publication grant's target consent is restored into the scope it was given in; since Phase 930 the job-admin API schedules under the request's resolved scope and the reactive recompute path runs under the scope a data write was made under when the write's request resolved that shard, but a write made off the request path or into another shard still reaches the recompute as a string, as do imports, coherence sweeps and knowledge-base dependency records"
     },
     {
       "id": "model-input-tool-effect-side",
@@ -846,7 +866,7 @@
     {
       "id": "model-input-assembly-is-callers-code",
       "level": "assumed",
-      "claim": "The shipped module ships the constructors; the fold over a candidate set is what each caller writes around them. The model states the theorem over that fold, because a statement about one constructor call says nothing about a store - but a caller free to write a different fold is free to write one these lemmas do not describe.",
+      "claim": "The shipped module ships the constructors; the fold over a candidate set is what each caller writes around them. The model states the theorem over that fold, because a statement about one constructor call says nothing about a store - but a caller free to write a different fold is free to write one these lemmas do not describe. What a caller does NOT choose, since Phase 821, is the scope string each folded fact carries: the one shipped construction writes it from a ResolvedScope, scan-pinned, so the assumption is narrowed to the fold's shape.",
       "evidence": {
         "assumption": "a caller assembles model input with the fold the theorem is stated over, not a fold of its own"
       },
