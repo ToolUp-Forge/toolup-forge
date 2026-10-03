@@ -3,6 +3,7 @@
 
 module ToolUp.Offline.Tests.OfflineSyncHandlerTests
 
+open ToolUp.Platform.Transport
 open System
 open System.Collections.Generic
 open System.IO

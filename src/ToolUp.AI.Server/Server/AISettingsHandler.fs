@@ -1,5 +1,6 @@
 module ToolUp.AI.AISettingsHandler
 
+open ToolUp.Platform.Transport
 open System
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform

@@ -179,10 +179,10 @@ type MockConnector() =
             let headers = [ "Authorization", "Bearer " + call.Credential ]
 
             match cursor with
-            | PageCursor.First -> Ok(HttpRequest.get (withQuery "/items" since) headers)
-            | PageCursor.Token token -> Ok(HttpRequest.get (withQuery "/items" (("after=" + token) :: since)) headers)
-            | PageCursor.Offset offset -> Ok(HttpRequest.get (withQuery "/items" ($"offset={offset}" :: since)) headers)
-            | PageCursor.NextUrl url -> Ok(HttpRequest.get url headers)
+            | PageCursor.First -> Ok(HttpCall.get (withQuery "/items" since) headers)
+            | PageCursor.Token token -> Ok(HttpCall.get (withQuery "/items" (("after=" + token) :: since)) headers)
+            | PageCursor.Offset offset -> Ok(HttpCall.get (withQuery "/items" ($"offset={offset}" :: since)) headers)
+            | PageCursor.NextUrl url -> Ok(HttpCall.get url headers)
 
         member _.DecodePage(_, response) =
             let rows =
@@ -607,7 +607,7 @@ let private retryTests =
             }
 
             let started = DateTime.UtcNow
-            let! sent = HttpCall.send policy provider (HttpRequest.get "/items" [ "Authorization", "Bearer secret" ])
+            let! sent = HttpCall.send policy provider (HttpCall.get "/items" [ "Authorization", "Bearer secret" ])
 
             match sent with
             | Error(TransportError.Exhausted(1, TransportError.Transient(429, _, Some wait))) ->
@@ -691,7 +691,7 @@ let private budgetTests =
                         HttpCall.send
                             (fastRetry 1)
                             transport
-                            (HttpRequest.get "/items" [ "Authorization", "Bearer secret" ])
+                            (HttpCall.get "/items" [ "Authorization", "Bearer secret" ])
                 ]
                 |> Async.Parallel
 
@@ -718,7 +718,7 @@ let private budgetTests =
             let transport =
                 OutboundRateBudget.decorate (limiterOf [ descriptor ]) TimeProvider.System budget "team-a" None provider
 
-            let req = HttpRequest.get "/items" [ "Authorization", "Bearer secret" ]
+            let req = HttpCall.get "/items" [ "Authorization", "Bearer secret" ]
             let! _ = HttpCall.send (fastRetry 5) transport req
             let! second = HttpCall.send (fastRetry 5) transport req
 
@@ -761,7 +761,7 @@ let private budgetTests =
             let transport =
                 OutboundRateBudget.decorate (limiterOf [ descriptor ]) TimeProvider.System budget "team-a" None slow
 
-            let! _ = [ for _ in 1..10 -> transport.Send(HttpRequest.get "/x" []) ] |> Async.Parallel
+            let! _ = [ for _ in 1..10 -> transport.Send(HttpCall.get "/x" []) ] |> Async.Parallel
             Expect.isLessThanOrEqual peak 2 "never more than two in flight"
             Expect.equal peak 2 "the cap is reached, not undershot"
         }
@@ -776,7 +776,7 @@ let private budgetTests =
             let transport =
                 OutboundRateBudget.decorate (limiterOf [ descriptor ]) TimeProvider.System budget "team-a" None provider
 
-            let req = HttpRequest.get "/items" [ "Authorization", "Bearer secret" ]
+            let req = HttpCall.get "/items" [ "Authorization", "Bearer secret" ]
             let! first = transport.Send req
             Expect.equal first.StatusCode 429 "the provider's 429 passes through"
             let started = DateTime.UtcNow
@@ -799,7 +799,7 @@ let private budgetTests =
             let transport =
                 OutboundRateBudget.decorate (limiterOf [ descriptor ]) TimeProvider.System budget "team-a" None provider
 
-            let req = HttpRequest.get "/items" [ "Authorization", "Bearer secret" ]
+            let req = HttpCall.get "/items" [ "Authorization", "Bearer secret" ]
             let! _ = transport.Send req
             let! second = HttpCall.send (fastRetry 3) transport req
 
@@ -1031,8 +1031,8 @@ type private RecordingHandler(respond: Net.Http.HttpRequestMessage -> Net.Http.H
         this.Seen.Add request
         Threading.Tasks.Task.FromResult(respond request)
 
-let private connectorTransportTests =
-    testList "ConnectorTransport.ofHttpClient" [
+let private httpClientTransportTests =
+    testList "HttpClientTransport (the one BCL adapter)" [
         testCaseAsync "maps the portable records onto HttpClient and returns non-2xx as data"
         <| async {
             let handler =
@@ -1053,9 +1053,9 @@ let private connectorTransportTests =
                 new Net.Http.HttpClient(handler, BaseAddress = Uri "https://api.example.test/")
 
             let transport =
-                ConnectorTransport.ofHttpClient client (Some(TimeSpan.FromSeconds 5.0))
+                HttpClientTransport(client, TimeSpan.FromSeconds 5.0) :> IHttpTransport
 
-            let! ok = transport.Send(HttpRequest.get "/v1/items?after=2" [ "Authorization", "Bearer k" ])
+            let! ok = transport.Send(HttpCall.get "/v1/items?after=2" [ "Authorization", "Bearer k" ])
             Expect.equal ok.StatusCode 200 "status mapped"
             Expect.equal ok.Body "1|t0001" "body read"
             Expect.contains ok.Headers ("x-next-token", "abc") "response headers mapped"
@@ -1063,7 +1063,7 @@ let private connectorTransportTests =
             Expect.equal (string seen.RequestUri) "https://api.example.test/v1/items?after=2" "relative URL resolved"
             Expect.equal (seen.Headers.Authorization.ToString()) "Bearer k" "request headers carried"
 
-            let! absolute = transport.Send(HttpRequest.get "https://other.example.test/v1/items?offset=4" [])
+            let! absolute = transport.Send(HttpCall.get "https://other.example.test/v1/items?offset=4" [])
             Expect.equal absolute.StatusCode 200 "absolute next-page URL"
 
             Expect.equal
@@ -1071,7 +1071,7 @@ let private connectorTransportTests =
                 "https://other.example.test/v1/items?offset=4"
                 "used as given"
 
-            let! missing = transport.Send(HttpRequest.get "/v1/missing" [])
+            let! missing = transport.Send(HttpCall.get "/v1/missing" [])
             Expect.equal missing.StatusCode 404 "a 404 is data, not an exception"
         }
     ]
@@ -1099,19 +1099,37 @@ let private stripImportsTests =
 
         testCase "nothing in ToolUp.Platform.* or ToolUp.AI.Wire references the kit"
         <| fun () ->
-            for platformType in [ typeof<RetryPolicy>; typeof<IRateLimiter>; typeof<IJobHandler> ] do
+            for platformType in
+                [
+                    typeof<RetryPolicy>
+                    typeof<AIProviderError>
+                    typeof<IRateLimiter>
+                    typeof<IJobHandler>
+                ] do
                 let references = platformType.Assembly.GetReferencedAssemblies() |> Array.map _.Name
 
                 Expect.isFalse
                     (references |> Array.contains "ToolUp.DataSources.Common")
                     $"{platformType.Assembly.GetName().Name} must not reference the kit"
 
-        testCase "the neutral transport layer adds no System.Net.Http to the Fable-safe tier"
+        testCase "ToolUp.Platform.Transport is the lowest tier: no ToolUp.* and no System.Net.Http reference"
         <| fun () ->
             let references =
                 typeof<TransportError>.Assembly.GetReferencedAssemblies() |> Array.map _.Name
 
-            Expect.isFalse (references |> Array.contains "System.Net.Http") "ToolUp.AI.Wire stays HTTP-client-free"
+            Expect.equal
+                (typeof<TransportError>.Assembly.GetName().Name)
+                "ToolUp.Platform.Transport"
+                "the taxonomy lives in the transport package"
+
+            Expect.equal typeof<IHttpTransport>.Assembly typeof<TransportError>.Assembly "the seam lives beside it"
+            Expect.equal typeof<RetryPolicy>.Assembly typeof<TransportError>.Assembly "so does RetryPolicy"
+
+            Expect.isEmpty
+                (references |> Array.filter (fun name -> name.StartsWith "ToolUp."))
+                "references no other ToolUp package"
+
+            Expect.isFalse (references |> Array.contains "System.Net.Http") "stays HTTP-client-free (Fable-safe)"
     ]
 
 /// The kit-level pack, plus the parametrised connector half bound to the
@@ -1122,7 +1140,7 @@ let tests =
         retryTests
         budgetTests
         cursorTests
-        connectorTransportTests
+        httpClientTransportTests
         stripImportsTests
         for style in [ MockStyle.Token; MockStyle.Offset; MockStyle.NextLink ] do
             connectorTests

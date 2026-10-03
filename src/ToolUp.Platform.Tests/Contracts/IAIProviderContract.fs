@@ -28,6 +28,7 @@ module ToolUp.Platform.Tests.Contracts.IAIProviderContract
 // companions`) — gated on real API keys, not part of this
 // stub-driven contract pack.
 
+open ToolUp.Platform.Transport
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.AI

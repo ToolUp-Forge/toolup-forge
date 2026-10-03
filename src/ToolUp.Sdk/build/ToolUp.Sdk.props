@@ -254,6 +254,7 @@
     <PackageVersion Include="ToolUp.Platform.Core" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Platform.Server" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Platform.Testing" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Transport" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.Platform.UI" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.PublicRendering" Version="$(ToolUpSdkVersion)" />
     <PackageVersion Include="ToolUp.RAG.Core" Version="$(ToolUpSdkVersion)" />

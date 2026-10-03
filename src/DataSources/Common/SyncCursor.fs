@@ -10,7 +10,6 @@ open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.IEntityStore
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.AI // IHttpTransport (Phase 251 namespace)
 open ToolUp.Platform.Transport
 open ToolUp.Remoting.Json.SystemTextJson
 

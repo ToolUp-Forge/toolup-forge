@@ -874,6 +874,10 @@ let main args =
         TemplateGate.package "ToolUp.Feliz.AgCharts" "src/Feliz.AgCharts/Feliz.AgCharts.fsproj"
         // Declared by Platform.Core.
         TemplateGate.package "ToolUp.AI.Wire" "src/ToolUp.AI.Wire/ToolUp.AI.Wire.fsproj"
+        // Declared by AI.Wire and Platform.Core (Phase 128).
+        TemplateGate.package
+            "ToolUp.Platform.Transport"
+            "src/ToolUp.Platform.Transport/ToolUp.Platform.Transport.fsproj"
         // Declared by Platform.Server, and its own ProjectReference.
         TemplateGate.package "ToolUp.Graph.InMemory" "src/ToolUp.Graph.InMemory/ToolUp.Graph.InMemory.fsproj"
         TemplateGate.package "ToolUp.Graph.Core" "src/ToolUp.Graph.Core/ToolUp.Graph.Core.fsproj"
@@ -2570,6 +2574,7 @@ let main args =
             "open System"
             "open System.Threading.Tasks"
             "open ToolUp.Platform"
+            "open ToolUp.Platform.Transport"
             "open ToolUp.Platform.Auth"
             "open ToolUp.Platform.VectorKnowledgeTypes"
             "open DataManagementTypes"

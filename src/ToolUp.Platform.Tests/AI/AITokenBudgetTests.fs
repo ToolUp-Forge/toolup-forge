@@ -1,5 +1,6 @@
 module ToolUp.Platform.Tests.AI.AITokenBudgetTests
 
+open ToolUp.Platform.Transport
 open System
 open System.Text.Json
 open Expecto

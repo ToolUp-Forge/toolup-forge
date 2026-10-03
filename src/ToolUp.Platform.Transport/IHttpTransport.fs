@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform.AI
+namespace ToolUp.Platform.Transport
 
 // ─── Portable HTTP egress seam (Wave 32, Phase 251) ──────────────
 //
@@ -19,12 +19,6 @@ namespace ToolUp.Platform.AI
 // is the non-portable companion that maps these records onto the BCL
 // `HttpClient` (GP 12 — the injected-interface posture; GP 7 — async at
 // the boundary).
-//
-// Phase 128 — the seam carries no AI semantics and is the outbound
-// transport for every caller, not only AI providers: the outbound API
-// connector kit (`ToolUp.DataSources.Common`) runs paged fetches over it,
-// classified by the connector-neutral `ToolUp.Platform.Transport`
-// taxonomy. The namespace is the Phase 251 one, kept so no consumer moves.
 
 /// A single outbound HTTP request, host-agnostic. `Method` is the verb
 /// ("POST", "GET"); `Url` is relative to the transport's configured base
@@ -49,16 +43,6 @@ module HttpRequest =
         Url = url
         Headers = headers
         Body = Some body
-    }
-
-    /// A bodiless GET — the shape a paged third-party API read uses.
-    /// `url` may be relative to the transport's base address or absolute
-    /// (a provider's next-page link).
-    let get (url: string) (headers: (string * string) list) : HttpRequest = {
-        Method = "GET"
-        Url = url
-        Headers = headers
-        Body = None
     }
 
 /// A buffered HTTP response, host-agnostic. `StatusCode` is the numeric

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Platform.Transport — the lowest tier of the ToolUp SDK: the portable outbound HTTP seam (HttpRequest / HttpResponse / IHttpTransport), the unified RetryPolicy, the transport failure taxonomy and its classifier (429 / 5xx / Retry-After / local refusal), and the generic retry loop. FSharp.Core only and Fable-compilable, so the same source serves a server host and a browser host; no System.Net.Http (the BCL HttpClient adapter lives in ToolUp.Platform.Server).</Description>
+        <PackageTags>fsharp;fable;sdk;http;transport;retry;portable</PackageTags>
+        <!-- Fable-touching project: nullable reference types stay disabled
+             (forge CLAUDE.md "Nullable reference types — keep disabled on
+             Fable-touching projects"). -->
+        <Nullable>disable</Nullable>
+    </PropertyGroup>
+    <!-- Source ships in the nupkg under fable/ so Fable consumers compile
+         the same source the .NET host runs (mirrors ToolUp.AI.Wire). -->
+    <ItemGroup>
+        <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+    </ItemGroup>
+    <!-- Phase 128 — the transport seam lifted out of ToolUp.AI.Wire into
+         its own package beneath every other ToolUp package. RetryPolicy
+         and the HTTP seam are the Phase 251 sources, moved whole under
+         namespace ToolUp.Platform.Transport; the error taxonomy and the
+         retry loop depend on both, so they compile last. -->
+    <ItemGroup>
+        <Compile Include="RetryPolicy.fs" />
+        <Compile Include="IHttpTransport.fs" />
+        <Compile Include="TransportError.fs" />
+        <Compile Include="TransportRetry.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Pinned explicitly (CPM): TransportError.toMessage uses string
+             interpolation, which needs FSharp.Core 5.0+; left implicit the
+             compiler's older bundled copy can resolve (FS3349). -->
+        <PackageReference Include="FSharp.Core" />
+    </ItemGroup>
+</Project>

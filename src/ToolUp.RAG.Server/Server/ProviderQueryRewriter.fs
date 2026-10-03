@@ -1,5 +1,6 @@
 module ToolUp.RAG.ProviderQueryRewriter
 
+open ToolUp.Platform.Transport
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.IQueryRewriter

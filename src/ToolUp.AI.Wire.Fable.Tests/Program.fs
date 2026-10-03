@@ -4,6 +4,7 @@ open ToolUp.AI.Wire
 open ToolUp.AI.Wire.Fable.Tests.NodeTest
 open ToolUp.AI.Wire.Tests
 open ToolUp.Platform.AI // Phase 251 — ErrorClassifier / AIProviderError on the Fable host
+open ToolUp.Platform.Transport // Phase 128 — the lowest tier, on the Fable host
 
 // Fable smoke for the portable JSON value model. Runs the SAME fixture set
 // the .NET Expecto pack runs (WireFixtures.fs, compiled into both). Asserting
@@ -208,6 +209,52 @@ let tests =
                     (ErrorClassifier.classifyTransportFailure "refused")
                     (TransientNetwork "refused")
                     "transport failure maps to TransientNetwork")
+        ]
+
+        // Phase 128 — ToolUp.Platform.Transport is the FSharp.Core-only
+        // tier beneath AI.Wire; prove it Fable-compiles and runs on this
+        // host with the same rules the .NET contract pack pins.
+        testList "ToolUp.Platform.Transport (Fable host)" [
+            testCase "429 with Retry-After → Transient carrying the hint" (fun () ->
+                let response = {
+                    StatusCode = 429
+                    Headers = [ "retry-after", "7" ]
+                    Body = "slow"
+                }
+
+                Expect.equal
+                    (TransportClassifier.classifyResponse response)
+                    (TransportError.Transient(429, "slow", Some(System.TimeSpan.FromSeconds 7.0)))
+                    "Retry-After delta-seconds is read")
+            testCase "404 → Permanent" (fun () ->
+                Expect.equal
+                    (TransportClassifier.classifyStatus 404 "gone")
+                    (TransportError.Permanent(404, "gone"))
+                    "4xx maps to Permanent")
+            testCase "the refusal marker → Refused" (fun () ->
+                let response = {
+                    StatusCode = 429
+                    Headers = [ TransportClassifier.RefusedHeader, "true" ]
+                    Body = "quota spent"
+                }
+
+                Expect.equal
+                    (TransportClassifier.classifyResponse response)
+                    (TransportError.Refused "quota spent")
+                    "a local refusal is not retried")
+            testCase "RetryPolicy.delayFor grows exponentially to the cap" (fun () ->
+                let policy = {
+                    RetryPolicy.defaults with
+                        MaxBackoff = System.TimeSpan.FromSeconds 1.0
+                }
+
+                Expect.equal (RetryPolicy.delayFor policy 1) System.TimeSpan.Zero "first attempt immediate"
+                Expect.equal (RetryPolicy.delayFor policy 2) (System.TimeSpan.FromMilliseconds 500.0) "initial backoff"
+                Expect.equal (RetryPolicy.delayFor policy 4) (System.TimeSpan.FromSeconds 1.0) "capped at MaxBackoff")
+            testCase "HttpCall.get builds a bodiless GET" (fun () ->
+                let request = HttpCall.get "/v1/items" [ "Accept", "application/json" ]
+                Expect.equal request.Method "GET" "verb"
+                Expect.equal request.Body None "no body")
         ]
     ]
 

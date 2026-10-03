@@ -7,6 +7,7 @@ module ToolUp.AI.Wire.Tests.TransportTests
 // the egress semantics the per-provider mappers (252–254) will rely on
 // once they migrate off their inline loops.
 
+open ToolUp.Platform.Transport
 open System
 open Expecto
 open ToolUp.Platform // RetryPolicy

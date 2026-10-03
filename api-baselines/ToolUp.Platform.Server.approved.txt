@@ -571,14 +571,14 @@ ToolUp.Platform.AuditReplicatorCursorModule (class)
 ToolUp.Platform.AuditReplicatorCursorModule.empty : ToolUp.Platform.AuditReplicatorCursor { get }
 ToolUp.Platform.AuditReplicatorCursorModule.isAfter(ToolUp.Platform.AuditReplicatorCursor, ToolUp.Platform.ModuleEvent) : System.Boolean
 ToolUp.Platform.AuditReplicatorOptions (class)
-ToolUp.Platform.AuditReplicatorOptions..ctor(ToolUp.Platform.RetryPolicy, ToolUp.Platform.AuditReplicatorBatchPolicy, System.TimeSpan)
+ToolUp.Platform.AuditReplicatorOptions..ctor(ToolUp.Platform.Transport.RetryPolicy, ToolUp.Platform.AuditReplicatorBatchPolicy, System.TimeSpan)
 ToolUp.Platform.AuditReplicatorOptions.BatchPolicy : ToolUp.Platform.AuditReplicatorBatchPolicy { get }
 ToolUp.Platform.AuditReplicatorOptions.CatchUpSweepInterval : System.TimeSpan { get }
-ToolUp.Platform.AuditReplicatorOptions.RetryPolicy : ToolUp.Platform.RetryPolicy { get }
+ToolUp.Platform.AuditReplicatorOptions.RetryPolicy : ToolUp.Platform.Transport.RetryPolicy { get }
 ToolUp.Platform.AuditReplicatorOptionsModule (class)
 ToolUp.Platform.AuditReplicatorOptionsModule.defaults : ToolUp.Platform.AuditReplicatorOptions { get }
 ToolUp.Platform.AuditReplicatorRetryPolicy (class)
-ToolUp.Platform.AuditReplicatorRetryPolicy.defaults : ToolUp.Platform.RetryPolicy { get }
+ToolUp.Platform.AuditReplicatorRetryPolicy.defaults : ToolUp.Platform.Transport.RetryPolicy { get }
 ToolUp.Platform.AuditViewApiHandler (class)
 ToolUp.Platform.AuditViewApiHandler.auditViewApi(ToolUp.Platform.AuditLogMode, Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IAuditViewApi
 ToolUp.Platform.Auth.IdentitySanitiser (class)
@@ -10671,6 +10671,9 @@ ToolUp.Platform.TransientFault+TransientFaultRunner (class)
 ToolUp.Platform.TransientFault+TransientFaultRunner..ctor(ToolUp.Platform.TransientFault+TransientFaultPolicy, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset]])
 ToolUp.Platform.TransientFault+TransientFaultRunner.Policy : ToolUp.Platform.TransientFault+TransientFaultPolicy { get }
 ToolUp.Platform.TransientFault+TransientFaultRunner.Run`1(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[T]]) : Microsoft.FSharp.Control.FSharpAsync`1[T]
+ToolUp.Platform.Transport.HttpClientTransport (class)
+ToolUp.Platform.Transport.HttpClientTransport..ctor(System.Net.Http.HttpClient, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.Transport.HttpClientTransport.SendForStreaming(ToolUp.Platform.Transport.HttpRequest, System.Threading.CancellationToken) : Microsoft.FSharp.Control.FSharpAsync`1[System.Net.Http.HttpResponseMessage]
 ToolUp.Platform.TreePatchChannel (class)
 ToolUp.Platform.TreePatchChannel.createInMemory(ToolUp.Platform.ILiveChannel, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.String]) : ToolUp.Platform.ITreePatchChannel
 ToolUp.Platform.TreePatchChannel.forSession(ToolUp.Platform.ILiveSessionHost, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ITreePatchChannel]]

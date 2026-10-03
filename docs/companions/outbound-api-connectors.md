@@ -60,11 +60,11 @@ is sent.
 
 ### Transport, classification and retry — `ToolUp.Platform.Transport`
 
-The kit calls through `IHttpTransport` (in `ToolUp.AI.Wire`, namespace `ToolUp.Platform.AI` — the
-seam carries no AI semantics; it is the one portable egress seam the SDK has). On the server host
-`ConnectorTransport.ofHttpClient client timeout` maps it onto a BCL `HttpClient`; give that client a
-handler chain that includes the platform's egress-policy handler, so a connector's destinations are
-governed like every other outbound call.
+The kit calls through `IHttpTransport`, in `ToolUp.Platform.Transport` — the lowest package of the
+SDK (FSharp.Core only, Fable-compiled), which also holds `RetryPolicy` and everything below. On the
+server host `HttpClientTransport(client, timeout)` (in `ToolUp.Platform.Server`, the SDK's one BCL
+adapter) maps it onto an `HttpClient`; give that client a handler chain that includes the platform's
+egress-policy handler, so a connector's destinations are governed like every other outbound call.
 
 Failures classify into the connector-neutral `TransportError`:
 
@@ -143,7 +143,7 @@ with a bearer token, and supports `updated_since`:
 
 ```fsharp
 open System
-open ToolUp.Platform.AI
+open ToolUp.Platform.Transport
 open ToolUp.DataSources.Common
 
 type Contact = { Id: string; Email: string; UpdatedAt: string }
@@ -177,7 +177,7 @@ type ContactsConnector() =
 
             match cursor with
             | PageCursor.First
-            | PageCursor.Token _ -> Ok(HttpRequest.get path [ "Authorization", "Bearer " + call.Credential ])
+            | PageCursor.Token _ -> Ok(HttpCall.get path [ "Authorization", "Bearer " + call.Credential ])
             | other -> Error $"the contacts API pages by token, not %A{other}"
 
         member _.DecodePage(_, response) =
@@ -199,7 +199,7 @@ let window: RateLimitDescriptor = {
 }
 
 let transport =
-    ConnectorTransport.ofHttpClient contactsHttpClient None   // BaseAddress = the provider
+    (HttpClientTransport(contactsHttpClient) :> IHttpTransport)   // BaseAddress = the provider
     |> OutboundRateBudget.decorate limiter TimeProvider.System
         { OutboundRateBudget.ofWindow window with MaxConcurrency = Some 4 }
         scopeId None
@@ -238,8 +238,8 @@ Many companions hand-roll their HTTP: an `HttpClient`, an inline status check, s
 loop. They do not have to adopt the whole kit to benefit — the transport layer stands alone:
 
 1. Build requests as `HttpRequest` records and send them through an injected `IHttpTransport`
-   instead of calling `HttpClient` directly (server host: `ConnectorTransport.ofHttpClient` over the
-   client you already have; AI providers already have `HttpClientTransport`).
+   instead of calling `HttpClient` directly (server host: `HttpClientTransport` over the client you
+   already have — the same adapter the AI providers use).
 2. Replace the inline status check and retry loop with `HttpCall.send policy transport request`,
    carrying the `RetryPolicy` your companion already accepts; branch on `TransportError`.
 3. If the provider publishes a quota, declare a `RateLimitDescriptor` and wrap the transport with

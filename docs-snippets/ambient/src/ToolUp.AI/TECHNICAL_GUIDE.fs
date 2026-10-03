@@ -30,6 +30,7 @@
 // `ToolUp.Platform.Providers`, and the client-tier blocks need
 // `ToolUp.AI.Client` + Feliz + SimpleJson. `Fable.SimpleJson` is opened
 // LAST so the export-decoder block's `Json.parseAs` resolves to it.
+open ToolUp.Platform.Transport
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open Giraffe

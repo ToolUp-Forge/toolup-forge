@@ -6,7 +6,6 @@ namespace ToolUp.DataSources.Common
 open System
 open System.Threading
 open ToolUp.Platform
-open ToolUp.Platform.AI // IHttpTransport, HttpResponse (Phase 251 namespace)
 open ToolUp.Platform.Transport
 
 // ─── Phase 128 — quota-aware outbound HTTP ───────────────────────

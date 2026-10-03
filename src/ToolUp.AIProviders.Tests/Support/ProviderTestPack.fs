@@ -3,6 +3,7 @@
 
 module ToolUp.AIProviders.Tests.Support.ProviderTestPack
 
+open ToolUp.Platform.Transport
 open System
 open Expecto
 open ToolUp.Platform

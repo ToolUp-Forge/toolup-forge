@@ -23,6 +23,7 @@ module ToolUp.Platform.Tests.AI.AIProviderModelOverrideTests
 // deployment cannot lose the override to a wrapper — and the metering
 // decorator bills the model that SERVED, not the one configured.
 
+open ToolUp.Platform.Transport
 open System
 open System.Collections.Concurrent
 open Expecto

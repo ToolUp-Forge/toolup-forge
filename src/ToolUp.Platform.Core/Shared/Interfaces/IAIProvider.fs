@@ -8,6 +8,7 @@ namespace ToolUp.Platform.AI
 // signatures can reference the type unqualified (the pre-11.C.5
 // AI-specific `RetryPolicy` was declared in this same namespace, so
 // no `open` was needed; the relocation introduces this one-liner).
+open ToolUp.Platform.Transport
 open ToolUp.Platform
 
 // ─── Connector contract value types — relocated (Phase 250) ───────

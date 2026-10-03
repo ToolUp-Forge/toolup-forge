@@ -34,8 +34,10 @@
              companion). RetryRunner depends on both RetryPolicy (delayFor /
              MaxAttempts) and Contract (AIProviderError / RetriesExhausted), so
              it is compiled last. -->
-        <Compile Include="Transport\RetryPolicy.fs" />
-        <Compile Include="Transport\IHttpTransport.fs" />
+        <!-- Phase 128 — RetryPolicy and the HTTP seam moved down to
+             ToolUp.Platform.Transport (referenced below); what stays here is
+             the AI projection of the transport taxonomy (ErrorClassifier)
+             and the AI wrapper over the shared retry loop (RetryRunner). -->
         <Compile Include="Transport\ErrorClassifier.fs" />
         <Compile Include="Transport\RetryRunner.fs" />
         <!-- Phase 254 — the pure SSE streaming state machine. Depends on
@@ -43,6 +45,9 @@
              compiles after them. Shared home for per-provider stream
              processors (Claude first; OpenAI folds in later). -->
         <Compile Include="Streaming.fs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ToolUp.Platform.Transport\ToolUp.Platform.Transport.fsproj" />
     </ItemGroup>
     <ItemGroup>
         <!-- Fable.Core supplies the [<Emit>] / JsInterop surface the

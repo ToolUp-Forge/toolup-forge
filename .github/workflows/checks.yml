@@ -206,6 +206,9 @@ jobs:
       - name: Create empty local-feed dir (CI workaround)
         run: mkdir -p ../../local-nuget-feed
 
+      - name: Build ToolUp.Platform.Transport (.NET host)
+        run: dotnet build src/ToolUp.Platform.Transport/ToolUp.Platform.Transport.fsproj
+
       - name: Build ToolUp.AI.Wire (.NET host)
         run: dotnet build src/ToolUp.AI.Wire/ToolUp.AI.Wire.fsproj
 

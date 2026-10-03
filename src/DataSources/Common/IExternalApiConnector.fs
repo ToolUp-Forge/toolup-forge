@@ -4,12 +4,8 @@
 namespace ToolUp.DataSources.Common
 
 open System
-open System.Net.Http
-open System.Text
-open System.Threading
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
-open ToolUp.Platform.AI // IHttpTransport, HttpRequest, HttpResponse (Phase 251 namespace)
 open ToolUp.Platform.Transport
 
 // ─── Phase 128 — the outbound API connector authoring pattern ────
@@ -29,7 +25,8 @@ open ToolUp.Platform.Transport
 //                   access token in that store and Phase 10h's refresher
 //                   keeps it current, so a connector never sees a refresh
 //                   flow;
-//   * the call    — `IHttpTransport` (BCL `HttpClient` on the server host),
+//   * the call    — `IHttpTransport` (`HttpClientTransport` over a BCL
+//                   `HttpClient` on the server host),
 //                   wrapped by `OutboundRateBudget.decorate` for quota;
 //   * retry       — `RetryPolicy`, as data (`PagedFetchOptions.Retry`);
 //   * paging      — `PagedFetch`, over the connector's two functions;
@@ -189,60 +186,3 @@ module ExternalApi =
         | PageFailure.Stalled _ -> SchemaMismatch message
         | PageFailure.Transport _ -> SourceUnreachable message
         | PageFailure.Consume _ -> IngestionError.StorageFailure message
-
-/// The server host's `IHttpTransport` for connectors: the portable
-/// request/response records mapped onto a BCL `HttpClient`. The client's
-/// handler chain is the caller's — compose it with the platform's egress
-/// policy handler so a connector's destinations are governed like every
-/// other outbound call.
-[<RequireQualifiedAccess>]
-module ConnectorTransport =
-
-    /// One request lifecycle per `Send`: a fresh `HttpRequestMessage`
-    /// (relative URLs resolve against `client.BaseAddress`, absolute ones —
-    /// a provider's next-page link — are used as given), request headers
-    /// added without vendor-format validation, a UTF-8 JSON body when
-    /// present, and a per-call timeout clamped by `RetryPolicy.clampTimeoutMs`
-    /// (`None` defers to the client's own `Timeout`). A non-2xx returns as
-    /// data; only a transport failure raises, which `HttpCall.attempt`
-    /// classifies as `TransportError.Network`.
-    let ofHttpClient (client: HttpClient) (timeout: TimeSpan option) : IHttpTransport =
-        let collect (headers: Headers.HttpHeaders) =
-            headers
-            |> Seq.collect (fun kv -> kv.Value |> Seq.map (fun v -> kv.Key, v))
-            |> List.ofSeq
-
-        { new IHttpTransport with
-            member _.Send(request: HttpRequest) = async {
-                use message =
-                    new HttpRequestMessage(HttpMethod(request.Method), Uri(request.Url, UriKind.RelativeOrAbsolute))
-
-                match request.Body with
-                | Some body -> message.Content <- new StringContent(body, Encoding.UTF8, "application/json")
-                | None -> ()
-
-                for name, value in request.Headers do
-                    message.Headers.TryAddWithoutValidation(name, value) |> ignore
-
-                use cts =
-                    match timeout with
-                    | Some t ->
-                        let clamped = RetryPolicy.clampTimeoutMs (int t.TotalMilliseconds)
-                        new CancellationTokenSource(TimeSpan.FromMilliseconds(float clamped))
-                    | None -> new CancellationTokenSource()
-
-                use! response = client.SendAsync(message, cts.Token) |> Async.AwaitTask
-                let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
-
-                return {
-                    StatusCode = int response.StatusCode
-                    Headers =
-                        collect response.Headers
-                        @ (if isNull response.Content then
-                               []
-                           else
-                               collect response.Content.Headers)
-                    Body = body
-                }
-            }
-        }

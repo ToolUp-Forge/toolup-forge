@@ -3,6 +3,7 @@
 
 module ToolUp.AI.AIProviderEntryProbe
 
+open ToolUp.Platform.Transport
 open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.AI

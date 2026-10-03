@@ -5,7 +5,6 @@ namespace ToolUp.DataSources.Common
 
 open System
 open ToolUp.Platform
-open ToolUp.Platform.AI // IHttpTransport, HttpRequest, HttpResponse (Phase 251 namespace)
 open ToolUp.Platform.Transport
 
 // ─── Phase 128 — typed paged fetch over IHttpTransport ───────────
