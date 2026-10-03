@@ -38,7 +38,10 @@ type DisclosedFact = {
     /// The verdict from the disclosure gate. `ModelInput.tryAddFact`
     /// refuses anything other than `FactDisclosable`.
     Verdict: FactDisclosureVerdict
-    /// The scope (principal / tenant) the verdict was resolved for.
+    /// The scope (principal / tenant) the verdict was resolved for. A
+    /// string because the admissibility model compares strings; outside
+    /// tests it is written only by `ModelInput.disclose`, from the scope the
+    /// platform's scope resolution minted (Phase 821).
     Scope: string
 }
 
@@ -122,6 +125,27 @@ module ModelInput =
         ToolResults = []
         Messages = []
     }
+
+    /// Construct a `DisclosedFact` whose `Scope` is the minted scope's shard
+    /// key (Phase 821). The one sanctioned construction outside tests: the
+    /// record is a plain record so the admissibility model can compare its
+    /// scope as a string, and a source scan pins that no shipped code
+    /// writes `Scope` from anything but a `ResolvedScope` — so the string a
+    /// disclosed fact carries is the resolver's at every assembly site, not
+    /// only at the fact doors. The verdict is carried as given; `addFact`
+    /// still refuses one the gate did not admit.
+    let disclose
+        (scope: ResolvedScope)
+        (factId: string)
+        (value: string)
+        (verdict: FactDisclosureVerdict)
+        : DisclosedFact =
+        {
+            FactId = factId
+            Value = value
+            Verdict = verdict
+            Scope = ResolvedScope.scopeId scope
+        }
 
     /// Refuse a fact that the disclosure gate did not admit. This is the
     /// constructor Phase 792 relies on: the type cannot be populated by a

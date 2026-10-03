@@ -976,6 +976,7 @@ ToolUp.Facts.GroundingCertificateModule.verifyAttested(ToolUp.ArtefactSigning.IA
 ToolUp.Facts.GroundingCertificateModule.verifyAttestedFor(ToolUp.ArtefactSigning.IApplicationSigner, System.String, ToolUp.Facts.AttestedGroundingCertificate) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.AttestedCertificateVerdict]
 ToolUp.Facts.IAnswerPlanner (interface)
 ToolUp.Facts.IAnswerPlanner.Plan(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.AnswerPlan]
+ToolUp.Facts.IAnswerPlanner.Plan(ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.AnswerPlan]
 ToolUp.Facts.IAnswerPlanner.Record(System.String, System.String, ToolUp.Facts.AnswerPlan) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Facts.IAttestedGroundingCertificateIssuer (interface)
 ToolUp.Facts.IAttestedGroundingCertificateIssuer.Issue(System.String, System.String, ToolUp.Facts.CertificateSubject, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.AttestedGroundingCertificate, ToolUp.Facts.CertificateError]]

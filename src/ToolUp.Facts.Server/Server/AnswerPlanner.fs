@@ -129,13 +129,36 @@ type IAnswerPlanner =
     /// each to a typed `PlanStep` (560.C) under the caller's resolved
     /// storage scope (GP 4). Never throws for an unanswerable question —
     /// the refusal is typed data in the returned plan.
+    ///
+    /// The string-keyed form, kept for one release as the compatibility
+    /// path (Phase 821). A request-path caller takes the `ResolvedScope`
+    /// overload below, so the plan cannot be resolved under a scope the
+    /// principal did not resolve to.
     abstract Plan: scopeId: string * principal: string * question: string -> Async<AnswerPlan>
+
+    /// The request-path form (Phase 821): compile and resolve `question`
+    /// under the scope the platform's scope resolution minted for the
+    /// request. Every store read and disclosure check the plan makes takes
+    /// the store's and the gate's `ResolvedScope` members, so the scope a
+    /// plan step was resolved and gated under is the resolver's. Semantics
+    /// are otherwise exactly the string form's over `scope.ScopeId`.
+    abstract Plan: scope: ResolvedScope * principal: string * question: string -> Async<AnswerPlan>
 
     /// Record a compiled plan against the answer message it produced
     /// (560.D) — the durable `AnswerPlanRecorded` event the provenance
     /// chain walk (`AnswerPlanProvenance.chainForMessage`) surfaces as a
     /// plan node.
     abstract Record: scopeId: string * messageId: string * plan: AnswerPlan -> Async<unit>
+
+/// The scope a plan resolves under (Phase 821): the minted one on the
+/// request path, or — for the one release the string form is kept — the
+/// caller's string. Each store and gate call dispatches to the member of
+/// the same form, so a minted scope is never lowered to a string on the
+/// way to the fact tier.
+[<RequireQualifiedAccess>]
+type internal PlanScope =
+    | Minted of ResolvedScope
+    | Legacy of string
 
 /// The default `IAnswerPlanner` over the composed fact tier. Construct
 /// via `AnswerPlanner.create` / `createWithClock`; registered in DI by
@@ -152,12 +175,34 @@ type AnswerPlanner
 
     static let jsonOptions = FableConverters.create ()
 
+    // ── Scope dispatch (Phase 821) ────────────────────────────────
+
+    let queryHeads (scope: PlanScope) (query: FactQuery) =
+        match scope with
+        | PlanScope.Minted minted -> store.Query(minted, query)
+        | PlanScope.Legacy scopeId -> store.Query(scopeId, query)
+
+    let querySupersessionChain (scope: PlanScope) (factId: string) =
+        match scope with
+        | PlanScope.Minted minted -> store.QuerySupersessionChain(minted, factId)
+        | PlanScope.Legacy scopeId -> store.QuerySupersessionChain(scopeId, factId)
+
+    let queryPopulation (scope: PlanScope) (query: PopulationQuery) =
+        match scope with
+        | PlanScope.Minted minted -> store.QueryPopulation(minted, query)
+        | PlanScope.Legacy scopeId -> store.QueryPopulation(scopeId, query)
+
+    let checkRetrieval (scope: PlanScope) (principal: string) (factIds: string list) =
+        match scope with
+        | PlanScope.Minted minted -> gate.Check(minted, principal, FactRetrieval, factIds)
+        | PlanScope.Legacy scopeId -> gate.Check(scopeId, principal, FactRetrieval, factIds)
+
     // ── Per-triple resolution (560.C) ─────────────────────────────
 
     // Vocabulary validation is deterministic and conservative: an id the
     // registry does not declare refuses, naming the id (GP 9) — the
     // planner never "helpfully" resolves a near-miss.
-    let resolveCandidate (scopeId: string) (principal: string) (candidate: TripleCandidate) : Async<PlanStep> = async {
+    let resolveCandidate (scope: PlanScope) (principal: string) (candidate: TripleCandidate) : Async<PlanStep> = async {
         let metricDef = registry |> Option.bind (fun r -> r.TryGetMetric candidate.Metric)
 
         let subjectDef =
@@ -194,7 +239,7 @@ type AnswerPlanner
                     IncludeSuperseded = false
                 }
 
-                let! heads = store.Query(scopeId, query)
+                let! heads = queryHeads scope query
 
                 match heads with
                 | [] ->
@@ -217,7 +262,7 @@ type AnswerPlanner
                     // a planned UseFact rides the retrieval path, and the
                     // model must never see a denied fact. An id the gate
                     // returned no verdict for is denied, conservatively.
-                    let! verdicts = gate.Check(scopeId, principal, FactRetrieval, heads |> List.map _.FactId)
+                    let! verdicts = checkRetrieval scope principal (heads |> List.map _.FactId)
 
                     let verdictFor (factId: string) =
                         verdicts
@@ -251,7 +296,7 @@ type AnswerPlanner
                             // Freshness is derived, never stored (Phase
                             // 520): the head's successor (if a later
                             // assertion corrected it) feeds isCurrent.
-                            let! chain = store.QuerySupersessionChain(scopeId, head.FactId)
+                            let! chain = querySupersessionChain scope head.FactId
 
                             let successor = chain |> List.tryFind (fun g -> g.Supersedes = Some head.FactId)
 
@@ -273,7 +318,7 @@ type AnswerPlanner
     // disclose differently from one store. What is genuinely new here is
     // only the freshness disposition of a *population*, which a point
     // read has no analogue for.
-    let resolvePopulation (scopeId: string) (principal: string) (triple: PopulationTriple) : Async<PlanStep> = async {
+    let resolvePopulation (scope: PlanScope) (principal: string) (triple: PopulationTriple) : Async<PlanStep> = async {
         let metricDef = registry |> Option.bind (fun r -> r.TryGetMetric triple.Metric)
 
         let subjectDef =
@@ -324,7 +369,7 @@ type AnswerPlanner
                         Methods = CanonicalMethodOnly
                     }
 
-                    let! outcome = store.QueryPopulation(scopeId, query)
+                    let! outcome = queryPopulation scope query
 
                     match outcome with
                     // Phase 701's `Error` is a typed REFUSAL — an
@@ -358,8 +403,7 @@ type AnswerPlanner
                         // citation rides the retrieval path, and the model
                         // must never see a denied fact. An id the gate
                         // returned no verdict for is denied, conservatively.
-                        let! verdicts =
-                            gate.Check(scopeId, principal, FactRetrieval, result.Ranked |> List.map _.FactId)
+                        let! verdicts = checkRetrieval scope principal (result.Ranked |> List.map _.FactId)
 
                         let verdictFor (factId: string) =
                             verdicts
@@ -446,59 +490,65 @@ type AnswerPlanner
         ) =
         AnswerPlanner(store, gate, registry, events, QuestionCompiler.ofTriples compiler, clock)
 
-    interface IAnswerPlanner with
+    member private _.PlanUnder (scope: PlanScope) (principal: string) (question: string) : Async<AnswerPlan> = async {
+        let planId = "plan-" + Guid.NewGuid().ToString "N"
+        let compiledAt = clock().ToUniversalTime()
 
-        member _.Plan(scopeId, principal, question) = async {
-            let planId = "plan-" + Guid.NewGuid().ToString "N"
-            let compiledAt = clock().ToUniversalTime()
+        let unanswerable detail = {
+            PlanId = planId
+            Question = question
+            CompiledAt = compiledAt
+            Steps = []
+            Refusal = Some(QuestionNotCompiled detail)
+        }
 
-            let unanswerable detail = {
+        let! compiled = compiler question
+
+        match compiled with
+        | Error detail -> return unanswerable detail
+        | Ok compiled when CompiledQuestion.isEmpty compiled ->
+            return unanswerable "the question references no registered subject or metric — nothing to resolve"
+        | Ok compiled ->
+            let! pointSteps =
+                compiled.Triples
+                |> List.map (fun candidate -> async {
+                    let! step = resolveCandidate scope principal candidate
+                    return { Candidate = candidate; Step = step }
+                })
+                |> Async.Sequential
+
+            // Population steps ride the same `PlannedTriple` list
+            // behind the point-shaped shadow candidate — the plan's
+            // shape is unchanged, the population form lives on the
+            // step (see `PopulationTriple.toCandidate`).
+            let! populationSteps =
+                compiled.Populations
+                |> List.map (fun triple -> async {
+                    let! step = resolvePopulation scope principal triple
+
+                    return {
+                        Candidate = PopulationTriple.toCandidate triple
+                        Step = step
+                    }
+                })
+                |> Async.Sequential
+
+            return {
                 PlanId = planId
                 Question = question
                 CompiledAt = compiledAt
-                Steps = []
-                Refusal = Some(QuestionNotCompiled detail)
+                Steps = Array.toList pointSteps @ Array.toList populationSteps
+                Refusal = None
             }
+    }
 
-            let! compiled = compiler question
+    interface IAnswerPlanner with
 
-            match compiled with
-            | Error detail -> return unanswerable detail
-            | Ok compiled when CompiledQuestion.isEmpty compiled ->
-                return unanswerable "the question references no registered subject or metric — nothing to resolve"
-            | Ok compiled ->
-                let! pointSteps =
-                    compiled.Triples
-                    |> List.map (fun candidate -> async {
-                        let! step = resolveCandidate scopeId principal candidate
-                        return { Candidate = candidate; Step = step }
-                    })
-                    |> Async.Sequential
+        member this.Plan(scopeId: string, principal, question) =
+            this.PlanUnder (PlanScope.Legacy scopeId) principal question
 
-                // Population steps ride the same `PlannedTriple` list
-                // behind the point-shaped shadow candidate — the plan's
-                // shape is unchanged, the population form lives on the
-                // step (see `PopulationTriple.toCandidate`).
-                let! populationSteps =
-                    compiled.Populations
-                    |> List.map (fun triple -> async {
-                        let! step = resolvePopulation scopeId principal triple
-
-                        return {
-                            Candidate = PopulationTriple.toCandidate triple
-                            Step = step
-                        }
-                    })
-                    |> Async.Sequential
-
-                return {
-                    PlanId = planId
-                    Question = question
-                    CompiledAt = compiledAt
-                    Steps = Array.toList pointSteps @ Array.toList populationSteps
-                    Refusal = None
-                }
-        }
+        member this.Plan(scope: ResolvedScope, principal, question) =
+            this.PlanUnder (PlanScope.Minted scope) principal question
 
         member _.Record(scopeId, messageId, plan) = async {
             do!

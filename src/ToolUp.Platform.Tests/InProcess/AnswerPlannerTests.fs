@@ -1505,6 +1505,372 @@ let populationComposeTests =
         }
     ]
 
+// ── Phase 821 — the planner takes the typed scope ─────────────────
+//
+// Phase 797 made scope a value only the resolver can mint and moved every
+// fact door onto it. The answer planner — the assembly point the 792
+// ladder's residual described — still took a string. These cases pin the
+// typed form end to end: the planner's store reads and gate checks go
+// through the `ResolvedScope` members (and the string form, kept one
+// release, through the string ones — the probe distinguishes the two), a
+// minted scope reads its own shard and the anonymous scope reads nothing
+// else, and a source scan pins that no shipped code constructs a
+// `DisclosedFact` whose `Scope` is anything but a `ResolvedScope`'s.
+
+/// A `ResolvedScope` for a test scope id, through the same internal mint
+/// the scope-resolution middleware uses.
+let private resolved (scopeId: string) : ResolvedScope =
+    StorageScopeResolver.ScopeResolution.ofStorageScope {
+        ScopeId = scopeId
+        Container = "container-" + scopeId
+        Persist = true
+    }
+
+/// A store and gate over `inner` that record which overload each read
+/// arrived through — "typed" or "string" — and forward unchanged.
+let private recordingTier
+    (inner: IFactStore)
+    (innerGate: IFactDisclosureGate)
+    : IFactStore * IFactDisclosureGate * System.Collections.Concurrent.ConcurrentQueue<string> =
+    let calls = System.Collections.Concurrent.ConcurrentQueue<string>()
+    let note (form: string) (name: string) = calls.Enqueue(name + "(" + form + ")")
+
+    let store =
+        { new IFactStore with
+            member _.Assert(scopeId: string, d) = inner.Assert(scopeId, d)
+            member _.Assert(scope: ResolvedScope, d) = inner.Assert(scope, d)
+            member _.AssertBatch(scopeId: string, ds) = inner.AssertBatch(scopeId, ds)
+            member _.AssertBatch(scope: ResolvedScope, ds) = inner.AssertBatch(scope, ds)
+
+            member _.Get(scopeId: string, factId: string) =
+                note "string" "Get"
+                inner.Get(scopeId, factId)
+
+            member _.Get(scope: ResolvedScope, factId: string) =
+                note "typed" "Get"
+                inner.Get(scope, factId)
+
+            member _.Query(scopeId: string, query) =
+                note "string" "Query"
+                inner.Query(scopeId, query)
+
+            member _.Query(scope: ResolvedScope, query) =
+                note "typed" "Query"
+                inner.Query(scope, query)
+
+            member _.QueryWithCompetition(scopeId: string, query) =
+                note "string" "QueryWithCompetition"
+                inner.QueryWithCompetition(scopeId, query)
+
+            member _.QueryWithCompetition(scope: ResolvedScope, query) =
+                note "typed" "QueryWithCompetition"
+                inner.QueryWithCompetition(scope, query)
+
+            member _.QuerySupersessionChain(scopeId: string, factId: string) =
+                note "string" "QuerySupersessionChain"
+                inner.QuerySupersessionChain(scopeId, factId)
+
+            member _.QuerySupersessionChain(scope: ResolvedScope, factId: string) =
+                note "typed" "QuerySupersessionChain"
+                inner.QuerySupersessionChain(scope, factId)
+
+            member _.QueryPopulation(scopeId: string, query) =
+                note "string" "QueryPopulation"
+                inner.QueryPopulation(scopeId, query)
+
+            member _.QueryPopulation(scope: ResolvedScope, query) =
+                note "typed" "QueryPopulation"
+                inner.QueryPopulation(scope, query)
+        }
+
+    let gate =
+        { new IFactDisclosureGate with
+            member _.Check(scopeId: string, principal, surface, factIds) =
+                note "string" "Check"
+                innerGate.Check(scopeId, principal, surface, factIds)
+
+            member _.Check(scope: ResolvedScope, principal, surface, factIds) =
+                note "typed" "Check"
+                innerGate.Check(scope, principal, surface, factIds)
+        }
+
+    store, gate, calls
+
+/// A planner over the recording tier, compiling one point candidate and
+/// one population triple so both resolution paths run.
+let private recordedPlanner () =
+    let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+    let registry = Some(registryDirected HigherIsBetter UntilSuperseded None)
+
+    let inner =
+        BlobFactStore.createWithRegistryAndClock (InMemoryBlobStorage()) events registry utcNow
+
+    let store, gate, calls =
+        recordingTier inner (FactDisclosureGate.create inner events)
+
+    let compiler: QuestionCompiler =
+        fun _ -> async {
+            return
+                Ok {
+                    Triples = [ candidate "brand" [ "acme" ] "revenue" ]
+                    Populations = [ PopulationTriple.create "brand" "revenue" ]
+                }
+        }
+
+    AnswerPlanner.createCompilingWithClock store gate registry events compiler utcNow, inner, calls
+
+let private repoRoot () =
+    let assemblyDir =
+        System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)
+
+    System.IO.Path.GetFullPath(System.IO.Path.Combine(assemblyDir, "..", "..", "..", "..", ".."))
+
+/// The sanctioned spelling of a `DisclosedFact`'s scope: a minted scope's
+/// shard key, read through `ResolvedScope.scopeId`.
+let private sanctionedScope =
+    System.Text.RegularExpressions.Regex(@"^ResolvedScope\.scopeId\s+[A-Za-z_][A-Za-z0-9_']*$")
+
+/// Pure classifier: every `Scope = <expr>` a source writes into a
+/// `DisclosedFact` whose expression is not the sanctioned spelling.
+///
+/// Two shapes are recognised. (1) A record literal carrying the four
+/// `DisclosedFact` fields — `FactId`, `Value`, `Verdict`, `Scope` — in any
+/// file, whatever its annotation. (2) Any `Scope =` assignment in a file
+/// that names `DisclosedFact` at all, which covers a copy-and-update
+/// (`{ fact with Scope = … }`) the literal shape cannot see. Comment lines
+/// are stripped first, so prose naming the field is not an offence.
+let private disclosedScopeOffences (source: string) : string list =
+    let code =
+        source.Split('\n')
+        |> Array.filter (fun line -> not (line.TrimStart().StartsWith "//"))
+        |> String.concat "\n"
+
+    let scopeAssignment =
+        System.Text.RegularExpressions.Regex(@"\bScope\s*=\s*([^\n;}]+)")
+
+    let assignmentsIn (text: string) =
+        scopeAssignment.Matches text
+        |> Seq.map (fun m -> m.Groups.[1].Value.Trim())
+        |> List.ofSeq
+
+    let literals =
+        System.Text.RegularExpressions.Regex(@"\{[^{}]*\}").Matches code
+        |> Seq.map _.Value
+        |> Seq.filter (fun body ->
+            [ @"\bFactId\s*="; @"\bValue\s*="; @"\bVerdict\s*="; @"\bScope\s*=" ]
+            |> List.forall (fun field -> System.Text.RegularExpressions.Regex.IsMatch(body, field)))
+        |> Seq.collect assignmentsIn
+        |> List.ofSeq
+
+    let named =
+        if code.Contains "DisclosedFact" then
+            assignmentsIn code
+        else
+            []
+
+    literals @ named
+    |> List.distinct
+    |> List.filter (fun expr -> not (sanctionedScope.IsMatch expr))
+
+/// The non-test F# sources under `src/` — every project but the test
+/// projects, whose fixtures construct `DisclosedFact` from model values on
+/// purpose (the differential host feeds the F* model's own strings).
+let private shippedSources () : string list =
+    let src = System.IO.Path.Combine(repoRoot (), "src")
+
+    System.IO.Directory.EnumerateFiles(src, "*.fs", System.IO.SearchOption.AllDirectories)
+    |> Seq.filter (fun path ->
+        let rel = System.IO.Path.GetRelativePath(src, path).Replace('\\', '/')
+        let project = rel.Split('/').[0]
+
+        not (project.EndsWith ".Tests")
+        && not (rel.Contains "/obj/")
+        && not (rel.Contains "/bin/"))
+    |> List.ofSeq
+
+let typedScopeTests =
+    testList "Phase 821 the planner takes the typed scope" [
+
+        testCaseAsync "the typed Plan reads and gates through the ResolvedScope members only"
+        <| async {
+            let planner, inner, calls = recordedPlanner ()
+            let scopeId = newScope ()
+            assertFact inner scopeId (brandDraft "acme" (Scalar 300m)) |> ignore
+
+            let! result = planner.Plan(resolved scopeId, "user-1", "acme revenue, and who leads?")
+
+            Expect.equal (List.length result.Steps) 2 "both the point and the population step resolved"
+
+            let seen = List.ofSeq calls
+            Expect.isNonEmpty seen "the probe saw the planner's reads"
+
+            Expect.isEmpty
+                (seen |> List.filter (fun c -> c.EndsWith "(string)"))
+                "no read or check on the typed path lowered the scope to a string"
+
+            for name in [ "Query"; "QueryPopulation"; "Check" ] do
+                Expect.contains seen (name + "(typed)") (sprintf "%s went through the typed member" name)
+        }
+
+        testCaseAsync "the string Plan (kept one release) goes through the string members — the probe distinguishes"
+        <| async {
+            let planner, inner, calls = recordedPlanner ()
+            let scopeId = newScope ()
+            assertFact inner scopeId (brandDraft "acme" (Scalar 300m)) |> ignore
+
+            let! _ = planner.Plan(scopeId, "user-1", "acme revenue, and who leads?")
+
+            let seen = List.ofSeq calls
+
+            Expect.isEmpty
+                (seen |> List.filter (fun c -> c.EndsWith "(typed)"))
+                "the compatibility form is the string form, unchanged"
+
+            Expect.contains seen "Query(string)" "and the probe records it"
+        }
+
+        testCaseAsync "a minted scope plans exactly what its shard's string plans"
+        <| async {
+            let registry = Some(registryWith UntilSuperseded None)
+
+            let planner, store, _ =
+                plannerWith registry (compilerOf [ candidate "brand" [ "acme" ] "revenue" ]) utcNow
+
+            let scopeId = newScope ()
+            let fact = assertFact store scopeId (draft "revenue" [ "h1" ] (Scalar 21800m))
+
+            let! typed = planner.Plan(resolved scopeId, "user-1", "acme revenue?")
+            let! legacy = planner.Plan(scopeId, "user-1", "acme revenue?")
+
+            Expect.equal (stepsOf typed) [ UseFact fact.FactId ] "the minted scope reads its own shard"
+            Expect.equal (stepsOf typed) (stepsOf legacy) "the typed form is the string form over scope.ScopeId"
+        }
+
+        testCaseAsync "the anonymous scope reads its own shard and never another"
+        <| async {
+            let registry = Some(registryWith UntilSuperseded (Some "rollup-op"))
+
+            let planner, store, _ =
+                plannerWith registry (compilerOf [ candidate "brand" [ "acme" ] "revenue" ]) utcNow
+
+            assertFact store (newScope ()) (draft "revenue" [ "h1" ] (Scalar 21800m))
+            |> ignore
+
+            let! result = planner.Plan(ResolvedScope.anonymous, "user-1", "acme revenue?")
+
+            Expect.equal
+                (stepsOf result)
+                [ ComputeFact "rollup-op" ]
+                "a fact in a resolved shard is a miss to the anonymous scope"
+        }
+
+        testCaseAsync "the clause planner's typed twin reaches the planner's typed form"
+        <| async {
+            let planner, inner, calls = recordedPlanner ()
+            let scopeId = newScope ()
+            assertFact inner scopeId (brandDraft "acme" (Scalar 300m)) |> ignore
+
+            let feeder = AnswerPlanClausePlanner.create planner :> IFactClausePlanner
+            let! planned = feeder.PlanClauses(resolved scopeId, "user-1", "acme revenue?")
+
+            Expect.isFalse (PlannedFactClauses.isEmpty planned) "the point fact is pushable"
+
+            Expect.isEmpty
+                (List.ofSeq calls |> List.filter (fun c -> c.EndsWith "(string)"))
+                "the twin never lowered the scope"
+        }
+
+        test "the DisclosedFact scope classifier fires on every unsanctioned spelling (go-red)" {
+            let planted =
+                String.concat "\n" [
+                    "let a = { FactId = f; Value = v; Verdict = FactDisclosable; Scope = \"team-x\" }"
+                    "let b : DisclosedFact = {"
+                    "    FactId = f"
+                    "    Value = v"
+                    "    Verdict = verdict"
+                    "    Scope = ctx.Access.UserId"
+                    "}"
+                    "let c = { fact with Scope = principal }"
+                ]
+
+            Expect.equal
+                (disclosedScopeOffences planted |> List.sort)
+                ([ "\"team-x\""; "ctx.Access.UserId"; "principal" ] |> List.sort)
+                "a literal string, a derived identity and a copy-and-update are each caught"
+        }
+
+        test "the classifier is quiet on the sanctioned spelling and on comments" {
+            let clean =
+                String.concat "\n" [
+                    "// a DisclosedFact's Scope = whatever, in prose"
+                    "let d : DisclosedFact = {"
+                    "    FactId = factId"
+                    "    Value = value"
+                    "    Verdict = verdict"
+                    "    Scope = ResolvedScope.scopeId scope"
+                    "}"
+                ]
+
+            Expect.isEmpty (disclosedScopeOffences clean) "the minted scope's shard key is the one spelling"
+        }
+
+        test "no shipped source writes a DisclosedFact's Scope from anything but a ResolvedScope" {
+            let sources = shippedSources ()
+            Expect.isNonEmpty sources "the scan found the shipped sources"
+
+            let offending =
+                sources
+                |> List.choose (fun path ->
+                    match disclosedScopeOffences (System.IO.File.ReadAllText path) with
+                    | [] -> None
+                    | found -> Some(sprintf "%s: %s" path (String.concat ", " found)))
+
+            Expect.isEmpty offending "every DisclosedFact scope in shipped code is a minted scope's"
+
+            // Not vacuous: the scan must SEE the one sanctioned construction.
+            // If `ModelInput.disclose` moved or changed spelling, a scan that
+            // found nothing would pass on a tree it no longer understands.
+            let sanctioned =
+                sources
+                |> List.filter (fun path ->
+                    let source = System.IO.File.ReadAllText path
+
+                    source.Contains "DisclosedFact"
+                    && source.Contains "Scope = ResolvedScope.scopeId scope")
+
+            Expect.equal
+                (sanctioned |> List.map System.IO.Path.GetFileName)
+                [ "ModelInput.fs" ]
+                "the one assembly site is ModelInput.disclose"
+        }
+
+        test "the prompt path hands the clause planner the request's minted scope" {
+            let source =
+                System.IO.File.ReadAllText(
+                    System.IO.Path.Combine(repoRoot (), "src", "ToolUp.RAG.Server", "Server", "RAGPromptBuilder.fs")
+                )
+
+            Expect.stringContains
+                source
+                "planner.PlanClauses(ctx.Scope, ctx.Access.UserId, query)"
+                "the planner call takes the minted scope"
+
+            Expect.isFalse (source.Contains "factScopeId") "the builder derives no fact scope of its own"
+        }
+
+        test "ModelInput.disclose writes the minted scope's shard key" {
+            let fact =
+                ToolUp.AI.ModelInput.disclose (resolved "team-q") "f1" "£1" FactDisclosable
+
+            Expect.equal fact.Scope "team-q" "the scope is the resolver's"
+
+            Expect.equal
+                (ToolUp.AI.ModelInput.disclose ResolvedScope.anonymous "f1" "£1" FactDisclosable).Scope
+                ResolvedScope.AnonymousScopeId
+                "the anonymous scope is its own shard key"
+        }
+    ]
+
 let tests =
     testList "Phase 560 grounded answer planner" [
         compilerTests
@@ -1516,4 +1882,5 @@ let tests =
         chainTests
         composeTests
         populationComposeTests
+        typedScopeTests
     ]

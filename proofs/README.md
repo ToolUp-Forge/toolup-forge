@@ -42,8 +42,9 @@ same value and byte-for-byte the same rendering, whatever the facts they withhol
 identities, contents, counts, policies. **Two things it does not claim**, each because nothing
 here can see them — and one it no longer needs to assume: since Phase 797 the scope a door
 compares against is a `ResolvedScope` only the platform's scope resolution can mint, so "which
-string is right" is settled by the type at every door rather than taken on trust (the
-residual, a caller assembling outside the doors, is stated on the ladder); anything on the *outbound* side — the transport, what a model answers,
+string is right" is settled by the type at every door rather than taken on trust, and since
+Phase 821 at the one shipped site that assembles a disclosed fact as well (what remains, the scopes
+the platform carries rather than resolves, is stated on the ladder); anything on the *outbound* side — the transport, what a model answers,
 and what a tool it calls may fetch, the last of which is load-bearing for the plain-English
 sentence and so is carried as a stated assumption rather than quietly dropped; and, within the
 value, that retrieved passages
@@ -553,7 +554,18 @@ lemmas and their companions alone:**
   what keeps it honest is pinned in the test pack (`ScopeChokePointTests`): no public
   constructor and no public union case on the type, the mint internal, a `StorageScope` planted
   in the request items *not* reaching a door, and a source guard over the three doors that
-  refuses the pre-797 spellings, go-red pinned. What it does NOT cover is stated on Rung 3.
+  refuses the pre-797 spellings, go-red pinned. Phase 821 carries the same instrument to the
+  assembly side. The answer planner — the shipped caller that resolves and gates facts for the
+  model outside the three tools — and its clause-planner twin take the `ResolvedScope` and reach
+  the store and the gate only through their `ResolvedScope` members (a recording store and gate
+  pin it, and pin that the string form kept for one release takes the string members, so the
+  probe distinguishes the two). The one shipped construction of a `DisclosedFact`,
+  `ModelInput.disclose`, writes `Scope` from `ResolvedScope.scopeId`, and a source scan over every
+  non-test source refuses any other expression in that field — a literal, a derived identity, a
+  copy-and-update — go-red pinned on a planted copy-and-update, and asserting it sees the
+  sanctioned site so it cannot pass on a tree it no longer understands. `DisclosedFact.Scope`
+  stays a string, because the model compares strings; what changed is that no shipped code
+  writes any other string there. What it does NOT cover is stated on Rung 3.
 
 Three things the model leaves *opaque*, each because a second implementation here would be free to
 disagree with the host's: substring containment (the leak differential asks the host `Contains`;
@@ -599,14 +611,15 @@ Not proved. *Measured*, on every run of the gate.
 
 ### Rung 3 — Assumed, and stated
 
-* **Scope resolution — retired to Rung 1 by Phase 797, with this residual.** Until Phase 797
-  this bullet read: the scope is a caller-supplied string, compared and never derived, so
-  everything above was conditional on that string being the one the caller is entitled to. At
-  every fact door that is now settled by the type (Rung 1, last bullet). What remains assumed is
-  narrower and is the same shape as the assembly bullet below: a caller that assembles a
-  `ModelInput` *outside* the doors writes the `DisclosedFact.Scope` string itself, and nothing
-  here checks that it wrote the resolver's. The doors are where the theorem's fold runs in the
-  shipped code, so this is the residual, not the rule. Behind the doors, the scopes the platform
+* **Scope resolution — retired to Rung 1 by Phases 797 and 821, with this residual.** Until
+  Phase 797 this bullet read: the scope is a caller-supplied string, compared and never derived,
+  so everything above was conditional on that string being the one the caller is entitled to. At
+  every fact door that is now settled by the type (Rung 1, last bullet). Phase 797 left one
+  residual of the assembly's shape — a caller assembling a `ModelInput` *outside* the doors
+  writes the `DisclosedFact.Scope` string itself — and Phase 821 discharged it: the one shipped
+  construction writes the resolver's scope and a source scan refuses any other (Rung 1, last
+  bullet). A test fixture may still write any string, by design: the differential feeds the
+  model's own. What remains is the platform's *carrying*. Behind the doors, the scopes the platform
   *carries* rather than resolves are still strings unless they ride the platform's carrier, and
   Phase 818 names them: a job scheduled with a resolver-minted scope now runs under it. Since Phase
   935 the scope is written down as a token the platform's `ScopeCarrier` issued from a
@@ -639,7 +652,9 @@ Not proved. *Measured*, on every run of the gate.
   them. The model states the theorem over that fold because a statement about one constructor call
   says nothing about a store — but a caller free to write a different fold is free to write one
   these lemmas do not describe. What keeps that honest is the differential, which runs production's
-  constructors in the same sequence.
+  constructors in the same sequence. Since Phase 821 the assumption is narrower: the fold's
+  *shape* is the caller's, but the scope string each folded fact carries is not — the one shipped
+  construction writes it from a `ResolvedScope`, scan-pinned.
 * **The bridge is hand-written.** A defect in it would make the comparison compare the wrong thing.
   It is case-for-case on purpose, and the block renderer is *shared* between the two sides — the
   model's facts are mapped back to production records and handed to production's own renderer —
