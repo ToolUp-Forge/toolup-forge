@@ -18,7 +18,9 @@ type IndexConsistencyEntry = {
     /// Sampled entries that resolved consistently in both directions.
     ConsistentEntries: int
     /// Sampled index refs whose canonical record could not be
-    /// resolved.
+    /// resolved — or, where a store re-checks the key against the record
+    /// (the entity store, Phase 973), whose record no longer carries the
+    /// key the ref is filed under.
     OrphanedIndexEntries: int
     /// Sampled canonical records whose index ref was missing.
     UnindexedCanonicals: int
@@ -54,9 +56,13 @@ type IndexConsistencyEntry = {
 // ──────────────
 // Canonical state is authoritative. If a canonical write succeeds
 // and the subsequent index `Add` fails, `Lookup` will miss the entry
-// until `Rebuild` is run. If a canonical record is deleted while an
-// index ref still points at it, the caller's resolver returns `None`
-// and the entry is silently dropped. Both are recoverable bug
+// until `Rebuild` is run. If a ref outlives what it indexed — the
+// canonical record was deleted, or re-written under another key and
+// the old ref's `Remove` was refused — the ref is STALE: `Lookup`
+// still lists it, so a caller re-checks every listed value against
+// canonical state before answering with it (the entity store re-runs
+// the index's extractor over the head, Phase 973) and drops the stale
+// one. `Vacuum` reclaims stale refs. Both are recoverable bug
 // classes; surfaces in `IndexConsistencyCheck` (Phase 9f Step 5)
 // without alerting on every transient miss.
 //
@@ -92,10 +98,17 @@ type BlobIndex<'TKey, 'TValue> = {
     /// miss.
     Lookup: 'TKey -> Async<('TValue * byte[] option) list>
     /// Idempotently re-write index entries from the supplied loader.
-    /// Never deletes existing entries (that's a separate vacuum
-    /// operation). Safe to run concurrently with writes. Returns the
-    /// number of entries written.
+    /// Never deletes existing entries (that's `Vacuum`). Safe to run
+    /// concurrently with writes. Returns the number of entries written.
     Rebuild: (unit -> Async<seq<'TKey * 'TValue * byte[] option>>) -> Async<int>
+    /// Phase 973 — reclaim stale refs under `key`: list them, and delete
+    /// every one the supplied `isStale` says canonical state no longer
+    /// backs. Returns the number of refs removed; a refused delete is not
+    /// counted and stays for the next pass. Idempotent — a second run over
+    /// a clean key removes nothing. Safe beside writes: after a delete the
+    /// value is asked again, and a ref a concurrent writer re-asserted in
+    /// the meantime is written back with the payload it had.
+    Vacuum: 'TKey -> ('TValue -> Async<bool>) -> Async<int>
 }
 
 module BlobIndex =
@@ -212,7 +225,7 @@ module BlobIndex =
 
         let remove key value = async {
             let blobName = leafName indexPrefix keyToSegment valueToSegment key value
-            let! _ = storage.Delete(container, blobName) // best-effort-write: derived index ref (the drift contract above); a stale ref soft-misses where the caller re-resolves canonical state, and in a store with an IndexConsistencyCheck (events, jobs) a sampled one shows as OrphanedIndexEntries — no vacuum reclaims it yet
+            let! _ = storage.Delete(container, blobName) // best-effort-write: derived index ref (the drift contract above); a stale ref soft-misses where the caller re-resolves canonical state, and the caller's Vacuum reclaims it (the entity store runs one on every lookup that meets one, Phase 973); the event and job stores run none, and a sampled one shows there as OrphanedIndexEntries
             return ()
         }
 
@@ -269,9 +282,43 @@ module BlobIndex =
             return Array.sum written
         }
 
+        let vacuum key (isStale: 'TValue -> Async<bool>) = async {
+            let! listed = lookup key
+
+            let! removed =
+                listed
+                |> List.map (fun (value, payload) -> async {
+                    let! stale = isStale value
+
+                    if not stale then
+                        return 0
+                    else
+                        let blobName = leafName indexPrefix keyToSegment valueToSegment key value
+
+                        match! storage.Delete(container, blobName) with
+                        | Error _ -> return 0
+                        | Ok() ->
+                            // A writer that re-indexed this value under `key`
+                            // between the check and the delete wrote the ref
+                            // the delete just took: ask again, and put it back.
+                            let! stillStale = isStale value
+
+                            if stillStale then
+                                return 1
+                            else
+                                let bytes = payload |> Option.defaultValue Array.empty
+                                let! _ = storage.Upload(container, blobName, bytes) // best-effort-write: a re-asserted ref this put-back loses is a missed ref under the drift contract above — Rebuild re-writes it
+                                return 0
+                })
+                |> Async.Parallel
+
+            return Array.sum removed
+        }
+
         {
             Add = add
             Remove = remove
             Lookup = lookup
             Rebuild = rebuild
+            Vacuum = vacuum
         }

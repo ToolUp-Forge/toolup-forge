@@ -137,6 +137,7 @@ type BlobIndex<'TKey, 'TValue> = {
     Remove: 'TKey -> 'TValue -> Async<unit>
     Lookup: 'TKey -> Async<('TValue * byte[] option) list>
     Rebuild: (unit -> Async<seq<'TKey * 'TValue * byte[] option>>) -> Async<int>
+    Vacuum: 'TKey -> ('TValue -> Async<bool>) -> Async<int>
 }
 ```
 
@@ -147,7 +148,11 @@ type BlobIndex<'TKey, 'TValue> = {
 Canonical state is authoritative. The two failure modes:
 
 1. **Canonical write succeeds, index `Add` fails.** Reader `Lookup` misses the entry until `Rebuild` runs. The store treats index writes as best-effort (try/with that swallows) and never propagates the failure.
-2. **Canonical record is deleted while an index ref still points at it.** The caller's resolver downloads the canonical, gets `Error`, and silently drops the entry from the result (a "soft miss"). Stale refs accumulate but reads stay correct.
+2. **A ref outlives what it indexed.** The canonical record was deleted, or re-written under another key while the old ref's `Remove` was refused (or the previous version could not be read to find it). `Lookup` still lists that STALE ref, so a list of refs is never an answer by itself: the caller re-checks every listed value against canonical state and drops the ones it no longer backs (a "soft miss"). Checking only that the record still EXISTS is not enough — a record re-written under another key exists, and answering with it is a wrong answer, not a miss.
+
+`Vacuum key isStale` is the reclaim: it lists the key's refs, deletes each one `isStale` says canonical state no longer backs, and returns how many it removed. A refused delete is not counted and stays for the next pass, a second run over a clean key removes nothing, and it is safe beside writes — after each delete the value is asked again, and a ref a concurrent writer re-asserted in the meantime is written back with its payload. `Rebuild` never deletes; `Vacuum` never writes a ref that was not there.
+
+**The entity store (Phase 973).** `BlobEntityStore.FindByIndex` re-runs the registered index's `Extract` over each head a ref resolves to and answers only with heads that still carry the looked-up value, so a lookup never returns an entity whose head does not carry it — the contract every `IEntityStore` is held to (`IEntityStoreContract.staleRefTests`). A stale ref it meets is counted and reclaimed on the spot through `Vacuum`, so a lookup heals the folder it read. `Delete` and `DeleteIfVersion` remove the entity's ref in every declared index (best-effort; the registry carries each index's extractor by type name, closed over the typed registration at `Register`). `BlobEntityStore.VacuumIndex(scopeId, entityType, indexName)` runs the reclaim over a whole index, for the refs no lookup has met — a deleted entity's ref whose removal was refused, or the refs left by deletes before Phase 973. `BlobEntityStore.IndexDriftSnapshot(scopeId)` is its `/dev/inspect` entry: per index a lookup has read, the refs met at read time (`Sample`), those whose head carried the value (`Consistent`), and the stale ones (`Orphans`); a read cannot see a missing ref, so `Unindexed` is 0.
 
 Both surface in `IndexConsistencyCheck` (Phase 9f Step 5 — `/dev/inspect` exposes drift counts per indexed store / per index for the caller's scope). Drift > 0 is a recoverable bug class, not an alerting condition. The recovery is `Rebuild`: the Owner-only `MaintenanceApi` record (`MaintenanceApi.fs`) exposes `RebuildEventIndexes` and `RebuildJobIndexes`. It has **no fact-store rebuild** — the blob fact store's index (Phase 890) is repaired by `BlobFactStore.RebuildIndex(scopeId)` in the facts companion, which no remote API exposes. The fact store's check reaches `/dev/inspect` through `DevDiagnosticsHandler.IIndexConsistencyInspector`, which the facts companion registers (Phase 946), because the platform tier cannot reference the companion.
 

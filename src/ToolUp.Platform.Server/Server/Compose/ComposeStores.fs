@@ -183,6 +183,24 @@ let registerEntityStore
 
             EntityStore.BlobEntityStore(dos, bs, entityRegistry, auditLog, sparseIndex) :> IEntityStore.IEntityStore)
         |> ignore
+
+        // Phase 973 — the entity store's read-time index drift
+        // (`BlobEntityStore.IndexDriftSnapshot`) on /dev/inspect, through the
+        // Phase-946 inspector seam: `EntityStore.fs` compiles before
+        // `DevDiagnosticsHandler.fs`, so the store cannot implement the
+        // interface itself. A replacement `IEntityStore` (one whose index is
+        // not a set of blob refs) reports nothing here.
+        services.AddSingleton<DevDiagnosticsHandler.IIndexConsistencyInspector>(
+            System.Func<System.IServiceProvider, DevDiagnosticsHandler.IIndexConsistencyInspector>(fun sp ->
+                { new DevDiagnosticsHandler.IIndexConsistencyInspector with
+                    member _.Inspect(scopeId) = async {
+                        match sp.GetService<IEntityStore.IEntityStore>() |> box with
+                        | :? EntityStore.BlobEntityStore as blob -> return blob.IndexDriftSnapshot scopeId
+                        | _ -> return []
+                    }
+                })
+        )
+        |> ignore
     | NoEntityStore -> ()
 
 /// Phase 7b — register the user-authored schema store (`IUserSchemaStore`)
