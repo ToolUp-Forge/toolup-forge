@@ -59,6 +59,7 @@ let private mkContext () : PromptContext = {
     RetrievedSources = ref []
     ShortCircuit = ref None
     PlannedAnswerId = ref None
+    Scope = ResolvedScope.anonymous
 }
 
 /// Phase 538 — a tool that DECLARES the live-interface capability. Named
