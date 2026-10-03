@@ -188,6 +188,7 @@ ToolUp.Platform.AI.HttpRequest.Headers : Microsoft.FSharp.Collections.FSharpList
 ToolUp.Platform.AI.HttpRequest.Method : System.String { get }
 ToolUp.Platform.AI.HttpRequest.Url : System.String { get }
 ToolUp.Platform.AI.HttpRequestModule (class)
+ToolUp.Platform.AI.HttpRequestModule.get(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]) : ToolUp.Platform.AI.HttpRequest
 ToolUp.Platform.AI.HttpRequestModule.post(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], System.String) : ToolUp.Platform.AI.HttpRequest
 ToolUp.Platform.AI.HttpResponse (class)
 ToolUp.Platform.AI.HttpResponse..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], System.String)
@@ -262,3 +263,60 @@ ToolUp.Platform.RetryPolicyModule.defaults : ToolUp.Platform.RetryPolicy { get }
 ToolUp.Platform.RetryPolicyModule.delayFor(ToolUp.Platform.RetryPolicy, System.Int32) : System.TimeSpan
 ToolUp.Platform.RetryPolicyModule.noRetry : ToolUp.Platform.RetryPolicy { get }
 ToolUp.Platform.RetryPolicyModule.timeoutDescription(ToolUp.Platform.RetryPolicy) : System.String
+ToolUp.Platform.Transport.HttpCall (class)
+ToolUp.Platform.Transport.HttpCall.attempt(ToolUp.Platform.AI.IHttpTransport, ToolUp.Platform.AI.HttpRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AI.HttpResponse, ToolUp.Platform.Transport.TransportError]]
+ToolUp.Platform.Transport.HttpCall.send(ToolUp.Platform.RetryPolicy, ToolUp.Platform.AI.IHttpTransport, ToolUp.Platform.AI.HttpRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AI.HttpResponse, ToolUp.Platform.Transport.TransportError]]
+ToolUp.Platform.Transport.RetryClass (class)
+ToolUp.Platform.Transport.RetryClass.IsPermanent : System.Boolean { get }
+ToolUp.Platform.Transport.RetryClass.IsTransient : System.Boolean { get }
+ToolUp.Platform.Transport.RetryClass.IsTransientAfter : System.Boolean { get }
+ToolUp.Platform.Transport.RetryClass.Permanent : ToolUp.Platform.Transport.RetryClass { get }
+ToolUp.Platform.Transport.RetryClass.Tag : System.Int32 { get }
+ToolUp.Platform.Transport.RetryClass.Transient : ToolUp.Platform.Transport.RetryClass { get }
+ToolUp.Platform.Transport.RetryClass+Tags (class)
+ToolUp.Platform.Transport.RetryClass+Tags.Permanent : System.Int32 (literal)
+ToolUp.Platform.Transport.RetryClass+Tags.Transient : System.Int32 (literal)
+ToolUp.Platform.Transport.RetryClass+Tags.TransientAfter : System.Int32 (literal)
+ToolUp.Platform.Transport.RetryClass+TransientAfter (class)
+ToolUp.Platform.Transport.RetryClass+TransientAfter.minimumWait : System.TimeSpan { get }
+ToolUp.Platform.Transport.TransportClassifier (class)
+ToolUp.Platform.Transport.TransportClassifier.RefusedHeader : System.String (literal)
+ToolUp.Platform.Transport.TransportClassifier.classifyResponse(ToolUp.Platform.AI.HttpResponse) : ToolUp.Platform.Transport.TransportError
+ToolUp.Platform.Transport.TransportClassifier.classifyStatus(System.Int32, System.String) : ToolUp.Platform.Transport.TransportError
+ToolUp.Platform.Transport.TransportClassifier.classifyTransportFailure(System.String) : ToolUp.Platform.Transport.TransportError
+ToolUp.Platform.Transport.TransportClassifier.tryRetryAfter(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]) : Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan]
+ToolUp.Platform.Transport.TransportError (class)
+ToolUp.Platform.Transport.TransportError.IsExhausted : System.Boolean { get }
+ToolUp.Platform.Transport.TransportError.IsNetwork : System.Boolean { get }
+ToolUp.Platform.Transport.TransportError.IsPermanent : System.Boolean { get }
+ToolUp.Platform.Transport.TransportError.IsRefused : System.Boolean { get }
+ToolUp.Platform.Transport.TransportError.IsTransient : System.Boolean { get }
+ToolUp.Platform.Transport.TransportError.Tag : System.Int32 { get }
+ToolUp.Platform.Transport.TransportError+Exhausted (class)
+ToolUp.Platform.Transport.TransportError+Exhausted.attempts : System.Int32 { get }
+ToolUp.Platform.Transport.TransportError+Exhausted.lastError : ToolUp.Platform.Transport.TransportError { get }
+ToolUp.Platform.Transport.TransportError+Network (class)
+ToolUp.Platform.Transport.TransportError+Network.message : System.String { get }
+ToolUp.Platform.Transport.TransportError+Permanent (class)
+ToolUp.Platform.Transport.TransportError+Permanent.body : System.String { get }
+ToolUp.Platform.Transport.TransportError+Permanent.statusCode : System.Int32 { get }
+ToolUp.Platform.Transport.TransportError+Refused (class)
+ToolUp.Platform.Transport.TransportError+Refused.reason : System.String { get }
+ToolUp.Platform.Transport.TransportError+Tags (class)
+ToolUp.Platform.Transport.TransportError+Tags.Exhausted : System.Int32 (literal)
+ToolUp.Platform.Transport.TransportError+Tags.Network : System.Int32 (literal)
+ToolUp.Platform.Transport.TransportError+Tags.Permanent : System.Int32 (literal)
+ToolUp.Platform.Transport.TransportError+Tags.Refused : System.Int32 (literal)
+ToolUp.Platform.Transport.TransportError+Tags.Transient : System.Int32 (literal)
+ToolUp.Platform.Transport.TransportError+Transient (class)
+ToolUp.Platform.Transport.TransportError+Transient.body : System.String { get }
+ToolUp.Platform.Transport.TransportError+Transient.retryAfter : Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan] { get }
+ToolUp.Platform.Transport.TransportError+Transient.statusCode : System.Int32 { get }
+ToolUp.Platform.Transport.TransportErrorModule (class)
+ToolUp.Platform.Transport.TransportErrorModule.isRetryable(ToolUp.Platform.Transport.TransportError) : System.Boolean
+ToolUp.Platform.Transport.TransportErrorModule.statusCode(ToolUp.Platform.Transport.TransportError) : Microsoft.FSharp.Core.FSharpOption`1[System.Int32]
+ToolUp.Platform.Transport.TransportErrorModule.toMessage(ToolUp.Platform.Transport.TransportError) : System.String
+ToolUp.Platform.Transport.TransportRetry (class)
+ToolUp.Platform.Transport.TransportRetry.classOf(ToolUp.Platform.Transport.TransportError) : ToolUp.Platform.Transport.RetryClass
+ToolUp.Platform.Transport.TransportRetry.runWith`2(Microsoft.FSharp.Core.FSharpFunc`2[E, ToolUp.Platform.Transport.RetryClass], Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[E, E]], ToolUp.Platform.RetryPolicy, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, E]]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, E]]
+ToolUp.Platform.Transport.TransportRetry.run`1(ToolUp.Platform.RetryPolicy, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.Transport.TransportError]]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.Transport.TransportError]]

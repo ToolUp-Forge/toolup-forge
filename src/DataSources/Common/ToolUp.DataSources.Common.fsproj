@@ -12,6 +12,13 @@
     <!-- Phase 10d — file acquisition + type-probe inference shared by the
          Csv / Excel / Parquet connectors. Still BCL-only. -->
     <Compile Include="LocalFileSupport.fs" />
+    <!-- Phase 128 — the outbound API connector kit: typed paged fetch,
+         the quota-aware transport decorator, the IExternalApiConnector
+         authoring seam, and incremental sync cursors. Still BCL-only. -->
+    <Compile Include="PagedFetch.fs" />
+    <Compile Include="OutboundRateBudget.fs" />
+    <Compile Include="IExternalApiConnector.fs" />
+    <Compile Include="SyncCursor.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />

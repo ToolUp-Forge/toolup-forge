@@ -54,6 +54,9 @@
         <Compile Include="Contracts\IScopeCarrierBindingContract.fs" />
         <Compile Include="Contracts\IModuleQueryBusContract.fs" />
         <Compile Include="Contracts\IDataSourceContract.fs" />
+        <!-- Phase 128 — outbound API connector kit contract (paged fetch, retry
+             as data, outbound rate budget, incremental sync cursors). -->
+        <Compile Include="Contracts\IExternalApiConnectorContract.fs" />
         <Compile Include="Contracts\IDeclaresPayloadFormatContract.fs" />
         <!-- Phase 836 - the IDataSource null-and-type fidelity pack. -->
         <Compile Include="Contracts\DataSourceFidelityContract.fs" />
@@ -2906,6 +2909,8 @@
              Google client libraries into the TEST project only; no
              ToolUp.Platform.* project references it (GP 1). -->
         <ProjectReference Include="..\DataSources\GoogleAnalytics\ToolUp.DataSources.GoogleAnalytics.fsproj" />
+        <!-- Phase 128 — the outbound API connector kit (BCL-only). -->
+        <ProjectReference Include="..\DataSources\Common\ToolUp.DataSources.Common.fsproj" />
         <!-- LDAP / Active Directory auth companion — bind-based identity,
              group→role mapping, health probe, and security-class config
              validator, all exercised via an in-memory fake directory (no
