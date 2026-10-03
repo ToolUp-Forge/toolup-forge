@@ -147,9 +147,10 @@ conversation turns are written strictly versioned, so `IDataObjectStore.Delete` 
 of them and the conversation delete answered `Ok` over every turn still at rest — the turns now go
 through `Evict`, the retention owner's removal. And a few cleanup sites have no pass that reclaims
 a leftover: a fact-table run's staged rows and an ended run's kept provenance (read by nothing once
-the run is recorded terminal), and a stale secondary-index ref (`BlobIndex` — the drift contract
-holds the canonical record authoritative, but no vacuum exists yet). Their markers say so in as
-many words, so a reader meets a known storage leak, not an oversight.
+the run is recorded terminal). Their markers say so in as many words, so a reader meets a known
+storage leak, not an oversight. A stale secondary-index ref (`BlobIndex`) was the third until
+Phase 973 gave it a reclaimer: `BlobIndex.Vacuum`, which the entity store runs on every lookup that
+meets a stale ref and over a whole index through `BlobEntityStore.VacuumIndex`.
 
 **History — why Phase 967 shipped it opt-in.** With the four sites above fixed, the walk still
 reported 69 unmarked sites across 43 files — probe and sentinel deletes, cache and retention sweeps,
