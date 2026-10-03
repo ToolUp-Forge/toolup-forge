@@ -1,5 +1,6 @@
 module ToolUp.AI.AIAgentEngine
 
+open ToolUp.Platform.Transport
 open System
 open System.Diagnostics
 open System.Threading.Tasks

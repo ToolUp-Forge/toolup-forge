@@ -3,6 +3,7 @@
 
 namespace ToolUp.Facts
 
+open ToolUp.Platform.Transport
 open System
 open System.Globalization
 open System.Text

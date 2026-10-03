@@ -3,6 +3,7 @@
 
 module ToolUp.Offline.Client.OfflineQueue
 
+open ToolUp.Platform.Transport
 open System
 open Fable.Core
 open Fable.Core.JsInterop

@@ -3,6 +3,7 @@
 
 module ToolUp.Offline.Tests.OfflineTypesTests
 
+open ToolUp.Platform.Transport
 open System
 open Expecto
 open ToolUp.Offline

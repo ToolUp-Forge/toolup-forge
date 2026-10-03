@@ -1,5 +1,6 @@
 module ToolUp.AI.AIAssistantHandler
 
+open ToolUp.Platform.Transport
 open System
 open System.Text
 open System.Collections.Generic

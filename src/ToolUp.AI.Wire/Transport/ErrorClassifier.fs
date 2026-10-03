@@ -3,6 +3,8 @@
 
 namespace ToolUp.Platform.AI
 
+open ToolUp.Platform.Transport
+
 // ─── Pure HTTP error classification (Wave 32, Phase 251) ─────────
 //
 // The `statusCode → AIProviderError` decision currently inlined
@@ -11,6 +13,10 @@ namespace ToolUp.Platform.AI
 // function so the per-provider mappers (Phases 252–254) classify by calling
 // in, not by re-deriving the rule. No `System.Net.Http` — reasons over the
 // numeric status only, so it Fable-compiles.
+//
+// Phase 128 — the rule itself now lives once, in the connector-neutral
+// `TransportClassifier` (`ToolUp.Platform.Transport`); this module
+// projects it onto the AI taxonomy. Behaviour is unchanged.
 
 module ErrorClassifier =
 
@@ -28,10 +34,9 @@ module ErrorClassifier =
     /// Callers pass this only for non-2xx responses — a 2xx never reaches
     /// the classifier (the mapper parses the success body instead).
     let classifyStatus (statusCode: int) (body: string) : AIProviderError =
-        if statusCode = 429 || statusCode >= 500 then
-            TransientServer(statusCode, body)
-        else
-            PermanentClient(statusCode, body)
+        match TransportClassifier.classifyStatus statusCode body with
+        | TransportError.Transient(code, payload, _) -> TransientServer(code, payload)
+        | _ -> PermanentClient(statusCode, body)
 
     /// Classify a transport-level failure (connection refused, TCP reset,
     /// DNS failure, a timeout from the HTTP client) — the `catch` arm in

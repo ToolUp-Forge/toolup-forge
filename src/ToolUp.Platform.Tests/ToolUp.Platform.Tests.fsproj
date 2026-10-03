@@ -54,6 +54,11 @@
         <Compile Include="Contracts\IScopeCarrierBindingContract.fs" />
         <Compile Include="Contracts\IModuleQueryBusContract.fs" />
         <Compile Include="Contracts\IDataSourceContract.fs" />
+        <!-- Phase 128 — outbound API connector kit contract (paged fetch, retry
+             as data, outbound rate budget, incremental sync cursors). -->
+        <Compile Include="Contracts\IExternalApiConnectorContract.fs" />
+        <!-- Phase 128 — the IHttpTransport seam's contract pack. -->
+        <Compile Include="Contracts\IHttpTransportContract.fs" />
         <Compile Include="Contracts\IDeclaresPayloadFormatContract.fs" />
         <!-- Phase 836 - the IDataSource null-and-type fidelity pack. -->
         <Compile Include="Contracts\DataSourceFidelityContract.fs" />
@@ -1239,6 +1244,10 @@
         <Compile Include="InProcess\ProviderOAuthFlowTests.fs" />
         <Compile Include="InProcess\SmokeTestDefaultsTests.fs" />
         <Compile Include="InProcess\InProcessRateLimiterTests.fs" />
+        <!-- Phase 128 — bindings: IHttpTransport (HttpClientTransport, the
+             outbound rate budget) and IExternalApiConnector (two connectors). -->
+        <Compile Include="InProcess\HttpTransportBindingTests.fs" />
+        <Compile Include="InProcess\ExternalApiConnectorBindingTests.fs" />
         <Compile Include="InProcess\PlatformTestingFrameworkTests.fs" />
         <Compile Include="InProcess\I18nInfrastructureTests.fs" />
         <Compile Include="InProcess\I18nCoverageTests.fs" />
@@ -2906,6 +2915,8 @@
              Google client libraries into the TEST project only; no
              ToolUp.Platform.* project references it (GP 1). -->
         <ProjectReference Include="..\DataSources\GoogleAnalytics\ToolUp.DataSources.GoogleAnalytics.fsproj" />
+        <!-- Phase 128 — the outbound API connector kit (BCL-only). -->
+        <ProjectReference Include="..\DataSources\Common\ToolUp.DataSources.Common.fsproj" />
         <!-- LDAP / Active Directory auth companion — bind-based identity,
              group→role mapping, health probe, and security-class config
              validator, all exercised via an in-memory fake directory (no

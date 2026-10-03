@@ -1,5 +1,6 @@
 module ToolUp.Platform.Tests.InProcess.AIProviderFallbackTests
 
+open ToolUp.Platform.Transport
 open System
 open System.Collections.Concurrent
 open Expecto

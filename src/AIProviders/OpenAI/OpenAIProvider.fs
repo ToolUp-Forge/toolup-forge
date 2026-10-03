@@ -1,5 +1,6 @@
 module OpenAIProvider
 
+open ToolUp.Platform.Transport
 open System
 open System.IO
 open System.Net.Http

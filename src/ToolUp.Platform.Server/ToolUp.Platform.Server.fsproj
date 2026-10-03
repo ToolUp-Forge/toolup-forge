@@ -46,6 +46,12 @@
              Fable-safe half staying in Core and this tier declaring a module
              of the same name beside it, which F# resolves as one. First in
              the compile order, so every server file sees them. -->
+        <!-- Phase 128 — the one BCL HttpClient adapter for the portable
+             ToolUp.Platform.Transport seam (moved here from ToolUp.AI.Server):
+             this is the lowest .NET-only assembly that both the AI providers
+             and the data-source connectors reference. No deps on other
+             Server files. -->
+        <Compile Include="Server\HttpClientTransport.fs" />
         <Compile Include="Server\JwtCrypto.fs" />
         <Compile Include="Server\Config\ConfigResolution.fs" />
         <Compile Include="Server\Config\ServerConfigFromEnv.fs" />

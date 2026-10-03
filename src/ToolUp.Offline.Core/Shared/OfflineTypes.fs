@@ -3,6 +3,7 @@
 
 namespace ToolUp.Offline
 
+open ToolUp.Platform.Transport
 open System
 
 // ─── Phase 24 — offline-first queued-mutation model ──────────────────

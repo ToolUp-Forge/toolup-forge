@@ -1,5 +1,6 @@
 module ToolUp.Platform.AuditReplicator
 
+open ToolUp.Platform.Transport
 open System
 open System.Threading
 open System.Threading.Channels

@@ -3,6 +3,7 @@
 
 module ToolUp.Platform.Tests.InProcess.AISpendBudgetTests
 
+open ToolUp.Platform.Transport
 open System
 open System.Collections.Concurrent
 open System.Text.Json

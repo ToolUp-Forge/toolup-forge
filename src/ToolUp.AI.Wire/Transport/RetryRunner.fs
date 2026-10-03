@@ -3,7 +3,7 @@
 
 namespace ToolUp.Platform.AI
 
-open ToolUp.Platform // RetryPolicy (relocated alongside, namespace ToolUp.Platform)
+open ToolUp.Platform.Transport // RetryPolicy, TransportRetry, RetryClass (Phase 128)
 
 // ─── Pure portable retry loop (Wave 32, Phase 251) ───────────────
 //
@@ -15,9 +15,9 @@ open ToolUp.Platform // RetryPolicy (relocated alongside, namespace ToolUp.Platf
 // policy. Generic in the success type `'T`, so it is host-agnostic and
 // blind to whether the attempt is a buffered or streamed response.
 //
-// The only effect is `Async.Sleep` between attempts, which Fable supports,
-// so this file Fable-compiles (GP 7 — the async is at the boundary; GP 8 —
-// Fable native).
+// Phase 128 — the loop itself is now the connector-neutral
+// `TransportRetry.runWith`; this module supplies the AI taxonomy's
+// classification and exhaustion wrapper. Behaviour is unchanged.
 
 module RetryRunner =
 
@@ -37,26 +37,12 @@ module RetryRunner =
         (policy: RetryPolicy)
         (singleAttempt: unit -> Async<Result<'T, AIProviderError>>)
         : Async<Result<'T, AIProviderError>> =
-        let rec loop attemptsMade = async {
-            let! result = singleAttempt ()
-            let attemptsMade = attemptsMade + 1
-
-            match result with
-            | Ok r -> return Ok r
-            | Error err when not (AIProviderError.isRetryable err) -> return Error err
-            | Error err when attemptsMade >= policy.MaxAttempts ->
-                return
-                    if policy.MaxAttempts = 1 then
-                        Error err
-                    else
-                        Error(RetriesExhausted(attemptsMade, err))
-            | Error _ ->
-                let delay = RetryPolicy.delayFor policy (attemptsMade + 1)
-                // int-ms overload (not the TimeSpan one) — Fable's Async.Sleep
-                // only accepts milliseconds; the values are whole ms so this is
-                // behaviourally identical to the providers' `Async.Sleep delay`.
-                do! Async.Sleep(int delay.TotalMilliseconds)
-                return! loop attemptsMade
-        }
-
-        loop 0
+        TransportRetry.runWith
+            (fun err ->
+                if AIProviderError.isRetryable err then
+                    RetryClass.Transient
+                else
+                    RetryClass.Permanent)
+            (fun attempts last -> RetriesExhausted(attempts, last))
+            policy
+            singleAttempt

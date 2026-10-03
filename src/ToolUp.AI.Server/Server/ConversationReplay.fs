@@ -3,6 +3,7 @@
 
 module ToolUp.AI.ConversationReplay
 
+open ToolUp.Platform.Transport
 open System
 open System.Security.Cryptography
 open System.Text

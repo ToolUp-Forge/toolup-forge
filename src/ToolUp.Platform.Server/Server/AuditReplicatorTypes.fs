@@ -1,5 +1,6 @@
 namespace ToolUp.Platform
 
+open ToolUp.Platform.Transport
 open System
 
 // Phase 11.C.5 Tier 3 — `AuditReplicatorRetryPolicy` consolidated into

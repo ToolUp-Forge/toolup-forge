@@ -28,6 +28,7 @@ module ToolUp.Platform.Tests.Contracts.IAIProviderModelOverrideContract
 // `ToolUp.AIProviders.Tests` instead, and the live half rides the
 // env-gated per-provider packs.
 
+open ToolUp.Platform.Transport
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.AI

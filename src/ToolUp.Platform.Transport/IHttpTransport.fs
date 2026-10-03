@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform.AI
+namespace ToolUp.Platform.Transport
 
 // ─── Portable HTTP egress seam (Wave 32, Phase 251) ──────────────
 //

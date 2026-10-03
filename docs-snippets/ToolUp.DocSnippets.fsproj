@@ -185,6 +185,7 @@
     <ProjectReference Include="../src/ToolUp.Platform.Core/ToolUp.Platform.Core.fsproj" />
     <ProjectReference Include="../src/ToolUp.Platform.Server/ToolUp.Platform.Server.fsproj" />
     <ProjectReference Include="../src/ToolUp.Platform.Tests/ToolUp.Platform.Tests.fsproj" />
+    <ProjectReference Include="../src/ToolUp.Platform.Transport/ToolUp.Platform.Transport.fsproj" />
     <ProjectReference Include="../src/ToolUp.PublicRendering/ToolUp.PublicRendering.fsproj" />
     <ProjectReference Include="../src/ToolUp.RAG.Core/ToolUp.RAG.Core.fsproj" />
     <ProjectReference Include="../src/ToolUp.Reporting.Server/ToolUp.Reporting.Server.fsproj" />

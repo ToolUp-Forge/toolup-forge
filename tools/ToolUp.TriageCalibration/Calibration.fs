@@ -9,6 +9,7 @@
 /// re-scored at every confidence floor. See README.md for both schemas.
 module ToolUp.TriageCalibration.Calibration
 
+open ToolUp.Platform.Transport
 open System
 open System.Diagnostics
 open System.IO

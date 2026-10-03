@@ -1,5 +1,6 @@
 module ToolUp.AI.FastPathTriageResolver
 
+open ToolUp.Platform.Transport
 open System
 open System.Diagnostics
 open System.Text.Json

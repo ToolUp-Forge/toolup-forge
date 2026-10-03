@@ -29,6 +29,7 @@
 /// `IAIProvider`, so nothing here is vendor-specific.
 module ToolUp.AI.Evaluation.ConversationEval
 
+open ToolUp.Platform.Transport
 open System
 open System.Collections.Generic
 open System.IO

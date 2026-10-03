@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
 
-namespace ToolUp.Platform.AI
+namespace ToolUp.Platform.Transport
 
 open System
 open System.Net.Http
 open System.Text
 open System.Threading
-open ToolUp.Platform // RetryPolicy.clampTimeoutMs
 
 // ─── .NET HTTP transport (Wave 32, Phase 251) ────────────────────
 //
@@ -21,10 +20,13 @@ open ToolUp.Platform // RetryPolicy.clampTimeoutMs
 // via `RetryPolicy.clampTimeoutMs`, and the same `ResponseHeadersRead`
 // completion option for the SSE streaming path.
 //
-// This lives in `ToolUp.AI.Server` (not the portable `ToolUp.AI.Wire`
-// tier) because it references `System.Net.Http` — GP 1 keeps the BCL HTTP
-// dependency out of the Fable-safe wire tier. The browser `fetch` transport
-// is the consumer-side mirror; it never enters the SDK.
+// It lives in `ToolUp.Platform.Server` (not the portable
+// `ToolUp.Platform.Transport` tier) because it references `System.Net.Http`
+// — GP 1 keeps the BCL HTTP dependency out of the Fable-safe tier. Phase 128
+// moved it here from `ToolUp.AI.Server` so the AI providers and the
+// data-source connectors share ONE adapter: this is the lowest .NET-only
+// assembly both already reference. The browser `fetch` transport is the
+// consumer-side mirror; it never enters the SDK.
 //
 // Phase 251 is purely additive: the existing providers keep their inline
 // egress until their own migration phases (252–254). This transport is the

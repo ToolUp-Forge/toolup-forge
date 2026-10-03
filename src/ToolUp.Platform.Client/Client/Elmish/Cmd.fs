@@ -4,6 +4,7 @@
 
 namespace ToolUp.Elmish
 
+open ToolUp.Platform.Transport
 open System
 
 /// Dispatch — feed a new message into the processing loop.

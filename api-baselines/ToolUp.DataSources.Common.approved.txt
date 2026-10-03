@@ -10,6 +10,12 @@ ToolUp.DataSources.Common.ConnectionScope.optionalEnum(Microsoft.FSharp.Collecti
 ToolUp.DataSources.Common.ConnectionScope.optionalInt(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Common.ConnectionScope.optionalOr(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String, System.String) : System.String
 ToolUp.DataSources.Common.ConnectionScope.require(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]
+ToolUp.DataSources.Common.ConnectorDeclarationError (class)
+ToolUp.DataSources.Common.ConnectorDeclarationError.Tag : System.Int32 { get }
+ToolUp.DataSources.Common.ConnectorDeclarationError.connector : System.String { get }
+ToolUp.DataSources.Common.ConnectorDeclarationError.reason : System.String { get }
+ToolUp.DataSources.Common.ConnectorDeclarationErrorModule (class)
+ToolUp.DataSources.Common.ConnectorDeclarationErrorModule.toMessage(ToolUp.DataSources.Common.ConnectorDeclarationError) : System.String
 ToolUp.DataSources.Common.CredentialJson (class)
 ToolUp.DataSources.Common.CredentialJson.parseObject(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Common.CredentialJson.tryFind(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
@@ -42,6 +48,36 @@ ToolUp.DataSources.Common.Csv+PayloadField+Value.Item : System.String { get }
 ToolUp.DataSources.Common.Errors (class)
 ToolUp.DataSources.Common.Errors.classify(System.String, System.Exception) : ToolUp.Platform.IngestionError
 ToolUp.DataSources.Common.Errors.guard`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.IngestionError]]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.IngestionError]]
+ToolUp.DataSources.Common.ExternalApi (class)
+ToolUp.DataSources.Common.ExternalApi.effectiveRetry`1(ToolUp.DataSources.Common.IExternalApiConnector`1[Row], ToolUp.DataSources.Common.PagedFetchOptions) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Transport.RetryPolicy, ToolUp.DataSources.Common.ConnectorDeclarationError]
+ToolUp.DataSources.Common.ExternalApi.endpoint`1(ToolUp.DataSources.Common.IExternalApiConnector`1[Row], ToolUp.DataSources.Common.PagedFetchOptions, ToolUp.DataSources.Common.ExternalApiCall) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.PagedEndpoint`1[Row], ToolUp.DataSources.Common.ConnectorDeclarationError]
+ToolUp.DataSources.Common.ExternalApi.fetchAll`1(ToolUp.DataSources.Common.PagedFetchOptions, ToolUp.Platform.Transport.IHttpTransport, ToolUp.DataSources.Common.IExternalApiConnector`1[Row], ToolUp.DataSources.Common.ExternalApiCall, ToolUp.DataSources.Common.PageCursor) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.PagedOutcome`1[Microsoft.FSharp.Collections.FSharpList`1[Row]], ToolUp.DataSources.Common.ConnectorDeclarationError]]
+ToolUp.DataSources.Common.ExternalApi.prepare`1(ToolUp.DataSources.Common.IExternalApiConnector`1[Row], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Secrets+ISecretStore], ToolUp.Platform.DataSourceCallContext, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.ExternalApiCall, ToolUp.Platform.IngestionError]]
+ToolUp.DataSources.Common.ExternalApi.toIngestionError`1(ToolUp.DataSources.Common.IExternalApiConnector`1[Row], ToolUp.DataSources.Common.PageError) : ToolUp.Platform.IngestionError
+ToolUp.DataSources.Common.ExternalApi.tryEndpoint`1(ToolUp.DataSources.Common.IExternalApiConnector`1[Row], System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.DataSources.Common.ExternalApiEndpoint]
+ToolUp.DataSources.Common.ExternalApi.withBudget`1(ToolUp.Platform.IRateLimiter, System.TimeProvider, ToolUp.DataSources.Common.IExternalApiConnector`1[Row], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Transport.IHttpTransport) : ToolUp.Platform.Transport.IHttpTransport
+ToolUp.DataSources.Common.ExternalApiBackPressure (class)
+ToolUp.DataSources.Common.ExternalApiBackPressure..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.DataSources.Common.OutboundRateBudget], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Transport.RetryPolicy])
+ToolUp.DataSources.Common.ExternalApiBackPressure.RateBudget : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.DataSources.Common.OutboundRateBudget] { get }
+ToolUp.DataSources.Common.ExternalApiBackPressure.Retry : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Transport.RetryPolicy] { get }
+ToolUp.DataSources.Common.ExternalApiBackPressureModule (class)
+ToolUp.DataSources.Common.ExternalApiBackPressureModule.none : ToolUp.DataSources.Common.ExternalApiBackPressure { get }
+ToolUp.DataSources.Common.ExternalApiCall (class)
+ToolUp.DataSources.Common.ExternalApiCall..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.DataSources.Common.ExternalApiCall.ConnectionScope : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
+ToolUp.DataSources.Common.ExternalApiCall.Credential : System.String { get }
+ToolUp.DataSources.Common.ExternalApiCall.Endpoint : System.String { get }
+ToolUp.DataSources.Common.ExternalApiCall.ScopeId : System.String { get }
+ToolUp.DataSources.Common.ExternalApiCall.Watermark : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.DataSources.Common.ExternalApiEndpoint (class)
+ToolUp.DataSources.Common.ExternalApiEndpoint..ctor(System.String, System.String, ToolUp.DataSources.Common.SyncMode)
+ToolUp.DataSources.Common.ExternalApiEndpoint.Description : System.String { get }
+ToolUp.DataSources.Common.ExternalApiEndpoint.Name : System.String { get }
+ToolUp.DataSources.Common.ExternalApiEndpoint.Sync : ToolUp.DataSources.Common.SyncMode { get }
+ToolUp.DataSources.Common.ExternalApiProvider (class)
+ToolUp.DataSources.Common.ExternalApiProvider..ctor(System.String, System.String)
+ToolUp.DataSources.Common.ExternalApiProvider.DisplayName : System.String { get }
+ToolUp.DataSources.Common.ExternalApiProvider.Id : System.String { get }
 ToolUp.DataSources.Common.Files (class)
 ToolUp.DataSources.Common.Files.blobName(ToolUp.DataSources.Common.Files+FileSourceSettings, System.String) : System.String
 ToolUp.DataSources.Common.Files.download(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, ToolUp.DataSources.Common.Files+FileSourceSettings, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], ToolUp.Platform.IngestionError]]
@@ -58,10 +94,211 @@ ToolUp.DataSources.Common.Files+FileSourceSettings.Container : System.String { g
 ToolUp.DataSources.Common.Files+FileSourceSettings.Extension : System.String { get }
 ToolUp.DataSources.Common.Files+FileSourceSettings.Prefix : System.String { get }
 ToolUp.DataSources.Common.Files+FileSourceSettings.SampleRows : System.Int32 { get }
+ToolUp.DataSources.Common.IExternalApiConnector`1 (interface)
+ToolUp.DataSources.Common.IExternalApiConnector`1.BackPressure : ToolUp.DataSources.Common.ExternalApiBackPressure { get }
+ToolUp.DataSources.Common.IExternalApiConnector`1.DecodePage(ToolUp.DataSources.Common.ExternalApiCall, ToolUp.Platform.Transport.HttpResponse) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.Page`1[Row], System.String]
+ToolUp.DataSources.Common.IExternalApiConnector`1.Endpoints : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.Common.ExternalApiEndpoint] { get }
+ToolUp.DataSources.Common.IExternalApiConnector`1.PageRequest(ToolUp.DataSources.Common.ExternalApiCall, ToolUp.DataSources.Common.PageCursor) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Transport.HttpRequest, System.String]
+ToolUp.DataSources.Common.IExternalApiConnector`1.Provider : ToolUp.DataSources.Common.ExternalApiProvider { get }
+ToolUp.DataSources.Common.IExternalApiConnector`1.Watermark(Row) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.DataSources.Common.IncrementalSync (class)
+ToolUp.DataSources.Common.IncrementalSync.handler`1(ToolUp.DataSources.Common.IncrementalSyncDeps`1[Row]) : ToolUp.Platform.IJobHandler
+ToolUp.DataSources.Common.IncrementalSync.payload(ToolUp.DataSources.Common.IncrementalSyncRequest) : System.String
+ToolUp.DataSources.Common.IncrementalSync.run`1(ToolUp.DataSources.Common.IncrementalSyncDeps`1[Row], System.String, ToolUp.DataSources.Common.IncrementalSyncRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.IncrementalSyncReport, ToolUp.DataSources.Common.IncrementalSyncError]]
+ToolUp.DataSources.Common.IncrementalSync.toJobResult(Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.IncrementalSyncReport, ToolUp.DataSources.Common.IncrementalSyncError]) : ToolUp.Platform.JobResult
+ToolUp.DataSources.Common.IncrementalSync.tryParsePayload(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.IncrementalSyncRequest, System.String]
+ToolUp.DataSources.Common.IncrementalSyncDeps`1 (class)
+ToolUp.DataSources.Common.IncrementalSyncDeps`1..ctor(ToolUp.DataSources.Common.IExternalApiConnector`1[Row], ToolUp.Platform.Transport.IHttpTransport, ToolUp.Platform.IEntityStore+IEntityStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Secrets+ISecretStore], ToolUp.DataSources.Common.PagedFetchOptions, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.DataSources.Common.ExternalApiCall, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[Row], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]])
+ToolUp.DataSources.Common.IncrementalSyncDeps`1.Connector : ToolUp.DataSources.Common.IExternalApiConnector`1[Row] { get }
+ToolUp.DataSources.Common.IncrementalSyncDeps`1.Cursors : ToolUp.Platform.IEntityStore+IEntityStore { get }
+ToolUp.DataSources.Common.IncrementalSyncDeps`1.Ingest : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.DataSources.Common.ExternalApiCall, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[Row], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]]] { get }
+ToolUp.DataSources.Common.IncrementalSyncDeps`1.Options : ToolUp.DataSources.Common.PagedFetchOptions { get }
+ToolUp.DataSources.Common.IncrementalSyncDeps`1.SecretStore : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Secrets+ISecretStore] { get }
+ToolUp.DataSources.Common.IncrementalSyncDeps`1.Transport : ToolUp.Platform.Transport.IHttpTransport { get }
+ToolUp.DataSources.Common.IncrementalSyncError (class)
+ToolUp.DataSources.Common.IncrementalSyncError.IsCursor : System.Boolean { get }
+ToolUp.DataSources.Common.IncrementalSyncError.IsDeclaration : System.Boolean { get }
+ToolUp.DataSources.Common.IncrementalSyncError.IsPrepare : System.Boolean { get }
+ToolUp.DataSources.Common.IncrementalSyncError.Tag : System.Int32 { get }
+ToolUp.DataSources.Common.IncrementalSyncError+Cursor (class)
+ToolUp.DataSources.Common.IncrementalSyncError+Cursor.Item : ToolUp.DataSources.Common.SyncCursorError { get }
+ToolUp.DataSources.Common.IncrementalSyncError+Declaration (class)
+ToolUp.DataSources.Common.IncrementalSyncError+Declaration.Item : ToolUp.DataSources.Common.ConnectorDeclarationError { get }
+ToolUp.DataSources.Common.IncrementalSyncError+Prepare (class)
+ToolUp.DataSources.Common.IncrementalSyncError+Prepare.Item : ToolUp.Platform.IngestionError { get }
+ToolUp.DataSources.Common.IncrementalSyncError+Tags (class)
+ToolUp.DataSources.Common.IncrementalSyncError+Tags.Cursor : System.Int32 (literal)
+ToolUp.DataSources.Common.IncrementalSyncError+Tags.Declaration : System.Int32 (literal)
+ToolUp.DataSources.Common.IncrementalSyncError+Tags.Prepare : System.Int32 (literal)
+ToolUp.DataSources.Common.IncrementalSyncReport (class)
+ToolUp.DataSources.Common.IncrementalSyncReport..ctor(System.Int32, System.Int32, System.Boolean, ToolUp.DataSources.Common.SyncCursor, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.DataSources.Common.PageError])
+ToolUp.DataSources.Common.IncrementalSyncReport.Completed : System.Boolean { get }
+ToolUp.DataSources.Common.IncrementalSyncReport.Cursor : ToolUp.DataSources.Common.SyncCursor { get }
+ToolUp.DataSources.Common.IncrementalSyncReport.Failure : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.DataSources.Common.PageError] { get }
+ToolUp.DataSources.Common.IncrementalSyncReport.Pages : System.Int32 { get }
+ToolUp.DataSources.Common.IncrementalSyncReport.Rows : System.Int32 { get }
+ToolUp.DataSources.Common.IncrementalSyncRequest (class)
+ToolUp.DataSources.Common.IncrementalSyncRequest..ctor(ToolUp.Platform.DataSourceConfig, System.String, System.String)
+ToolUp.DataSources.Common.IncrementalSyncRequest.Endpoint : System.String { get }
+ToolUp.DataSources.Common.IncrementalSyncRequest.ScheduledBy : System.String { get }
+ToolUp.DataSources.Common.IncrementalSyncRequest.Source : ToolUp.Platform.DataSourceConfig { get }
+ToolUp.DataSources.Common.OutboundRateBudget (class)
+ToolUp.DataSources.Common.OutboundRateBudget..ctor(ToolUp.Platform.RateLimitDescriptor, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.DataSources.Common.RetryAfterHandling)
+ToolUp.DataSources.Common.OutboundRateBudget.MaxConcurrency : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.DataSources.Common.OutboundRateBudget.RetryAfter : ToolUp.DataSources.Common.RetryAfterHandling { get }
+ToolUp.DataSources.Common.OutboundRateBudget.Window : ToolUp.Platform.RateLimitDescriptor { get }
+ToolUp.DataSources.Common.OutboundRateBudgetModule (class)
+ToolUp.DataSources.Common.OutboundRateBudgetModule.decorate(ToolUp.Platform.IRateLimiter, System.TimeProvider, ToolUp.DataSources.Common.OutboundRateBudget, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Transport.IHttpTransport) : ToolUp.Platform.Transport.IHttpTransport
+ToolUp.DataSources.Common.OutboundRateBudgetModule.ofWindow(ToolUp.Platform.RateLimitDescriptor) : ToolUp.DataSources.Common.OutboundRateBudget
+ToolUp.DataSources.Common.OutboundRateBudgetModule.refusal(System.String) : ToolUp.Platform.Transport.HttpResponse
+ToolUp.DataSources.Common.OutboundRateBudgetModule.validate(ToolUp.DataSources.Common.OutboundRateBudget) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.OutboundRateBudget, System.String]
+ToolUp.DataSources.Common.PageCursor (class)
+ToolUp.DataSources.Common.PageCursor.First : ToolUp.DataSources.Common.PageCursor { get }
+ToolUp.DataSources.Common.PageCursor.IsFirst : System.Boolean { get }
+ToolUp.DataSources.Common.PageCursor.IsNextUrl : System.Boolean { get }
+ToolUp.DataSources.Common.PageCursor.IsOffset : System.Boolean { get }
+ToolUp.DataSources.Common.PageCursor.IsToken : System.Boolean { get }
+ToolUp.DataSources.Common.PageCursor.Tag : System.Int32 { get }
+ToolUp.DataSources.Common.PageCursor+NextUrl (class)
+ToolUp.DataSources.Common.PageCursor+NextUrl.url : System.String { get }
+ToolUp.DataSources.Common.PageCursor+Offset (class)
+ToolUp.DataSources.Common.PageCursor+Offset.offset : System.Int32 { get }
+ToolUp.DataSources.Common.PageCursor+Tags (class)
+ToolUp.DataSources.Common.PageCursor+Tags.First : System.Int32 (literal)
+ToolUp.DataSources.Common.PageCursor+Tags.NextUrl : System.Int32 (literal)
+ToolUp.DataSources.Common.PageCursor+Tags.Offset : System.Int32 (literal)
+ToolUp.DataSources.Common.PageCursor+Tags.Token : System.Int32 (literal)
+ToolUp.DataSources.Common.PageCursor+Token (class)
+ToolUp.DataSources.Common.PageCursor+Token.token : System.String { get }
+ToolUp.DataSources.Common.PageCursorModule (class)
+ToolUp.DataSources.Common.PageCursorModule.encode(ToolUp.DataSources.Common.PageCursor) : System.String
+ToolUp.DataSources.Common.PageCursorModule.tryDecode(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.DataSources.Common.PageCursor]
+ToolUp.DataSources.Common.PageError (class)
+ToolUp.DataSources.Common.PageError..ctor(System.Int32, ToolUp.DataSources.Common.PageCursor, ToolUp.DataSources.Common.PageFailure)
+ToolUp.DataSources.Common.PageError.Cursor : ToolUp.DataSources.Common.PageCursor { get }
+ToolUp.DataSources.Common.PageError.Failure : ToolUp.DataSources.Common.PageFailure { get }
+ToolUp.DataSources.Common.PageError.PageIndex : System.Int32 { get }
+ToolUp.DataSources.Common.PageFailure (class)
+ToolUp.DataSources.Common.PageFailure.IsConsume : System.Boolean { get }
+ToolUp.DataSources.Common.PageFailure.IsDecode : System.Boolean { get }
+ToolUp.DataSources.Common.PageFailure.IsRequest : System.Boolean { get }
+ToolUp.DataSources.Common.PageFailure.IsStalled : System.Boolean { get }
+ToolUp.DataSources.Common.PageFailure.IsTransport : System.Boolean { get }
+ToolUp.DataSources.Common.PageFailure.Tag : System.Int32 { get }
+ToolUp.DataSources.Common.PageFailure+Consume (class)
+ToolUp.DataSources.Common.PageFailure+Consume.message : System.String { get }
+ToolUp.DataSources.Common.PageFailure+Decode (class)
+ToolUp.DataSources.Common.PageFailure+Decode.message : System.String { get }
+ToolUp.DataSources.Common.PageFailure+Request (class)
+ToolUp.DataSources.Common.PageFailure+Request.message : System.String { get }
+ToolUp.DataSources.Common.PageFailure+Stalled (class)
+ToolUp.DataSources.Common.PageFailure+Stalled.cursor : ToolUp.DataSources.Common.PageCursor { get }
+ToolUp.DataSources.Common.PageFailure+Tags (class)
+ToolUp.DataSources.Common.PageFailure+Tags.Consume : System.Int32 (literal)
+ToolUp.DataSources.Common.PageFailure+Tags.Decode : System.Int32 (literal)
+ToolUp.DataSources.Common.PageFailure+Tags.Request : System.Int32 (literal)
+ToolUp.DataSources.Common.PageFailure+Tags.Stalled : System.Int32 (literal)
+ToolUp.DataSources.Common.PageFailure+Tags.Transport : System.Int32 (literal)
+ToolUp.DataSources.Common.PageFailure+Transport (class)
+ToolUp.DataSources.Common.PageFailure+Transport.error : ToolUp.Platform.Transport.TransportError { get }
+ToolUp.DataSources.Common.PageFailureModule (class)
+ToolUp.DataSources.Common.PageFailureModule.isTransient(ToolUp.DataSources.Common.PageFailure) : System.Boolean
+ToolUp.DataSources.Common.PageFailureModule.toMessage(ToolUp.DataSources.Common.PageFailure) : System.String
+ToolUp.DataSources.Common.Page`1 (class)
+ToolUp.DataSources.Common.Page`1..ctor(Microsoft.FSharp.Collections.FSharpList`1[Row], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.DataSources.Common.PageCursor])
+ToolUp.DataSources.Common.Page`1.Next : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.DataSources.Common.PageCursor] { get }
+ToolUp.DataSources.Common.Page`1.Rows : Microsoft.FSharp.Collections.FSharpList`1[Row] { get }
+ToolUp.DataSources.Common.PagedEndpoint`1 (class)
+ToolUp.DataSources.Common.PagedEndpoint`1..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.DataSources.Common.PageCursor, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Transport.HttpRequest, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Transport.HttpResponse, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.Page`1[Row], System.String]], ToolUp.Platform.Transport.RetryPolicy)
+ToolUp.DataSources.Common.PagedEndpoint`1.Decode : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Transport.HttpResponse, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.Page`1[Row], System.String]] { get }
+ToolUp.DataSources.Common.PagedEndpoint`1.Request : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.DataSources.Common.PageCursor, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Transport.HttpRequest, System.String]] { get }
+ToolUp.DataSources.Common.PagedEndpoint`1.Retry : ToolUp.Platform.Transport.RetryPolicy { get }
+ToolUp.DataSources.Common.PagedFetch (class)
+ToolUp.DataSources.Common.PagedFetch.all`1(ToolUp.DataSources.Common.PagedFetchOptions, ToolUp.Platform.Transport.IHttpTransport, ToolUp.DataSources.Common.PagedEndpoint`1[Row], ToolUp.DataSources.Common.PageCursor) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.DataSources.Common.PagedOutcome`1[Microsoft.FSharp.Collections.FSharpList`1[Row]]]
+ToolUp.DataSources.Common.PagedFetch.fold`2(ToolUp.DataSources.Common.PagedFetchOptions, ToolUp.Platform.Transport.IHttpTransport, ToolUp.DataSources.Common.PagedEndpoint`1[Row], Microsoft.FSharp.Core.FSharpFunc`2[State, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.DataSources.Common.Page`1[Row], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[State, System.String]]]], State, ToolUp.DataSources.Common.PageCursor) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.DataSources.Common.PagedOutcome`1[State]]
+ToolUp.DataSources.Common.PagedFetch.page`1(ToolUp.Platform.Transport.IHttpTransport, ToolUp.DataSources.Common.PagedEndpoint`1[Row], ToolUp.DataSources.Common.PageCursor) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.Page`1[Row], ToolUp.DataSources.Common.PageFailure]]
+ToolUp.DataSources.Common.PagedFetchOptions (class)
+ToolUp.DataSources.Common.PagedFetchOptions..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Transport.RetryPolicy], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
+ToolUp.DataSources.Common.PagedFetchOptions.MaxPages : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.DataSources.Common.PagedFetchOptions.Retry : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Transport.RetryPolicy] { get }
+ToolUp.DataSources.Common.PagedFetchOptionsModule (class)
+ToolUp.DataSources.Common.PagedFetchOptionsModule.defaults : ToolUp.DataSources.Common.PagedFetchOptions { get }
+ToolUp.DataSources.Common.PagedOutcome`1 (class)
+ToolUp.DataSources.Common.PagedOutcome`1..ctor(State, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.DataSources.Common.PageError], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.DataSources.Common.PageCursor])
+ToolUp.DataSources.Common.PagedOutcome`1.Failure : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.DataSources.Common.PageError] { get }
+ToolUp.DataSources.Common.PagedOutcome`1.Pages : System.Int32 { get }
+ToolUp.DataSources.Common.PagedOutcome`1.ResumeFrom : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.DataSources.Common.PageCursor] { get }
+ToolUp.DataSources.Common.PagedOutcome`1.State : State { get }
+ToolUp.DataSources.Common.RetryAfterHandling (class)
+ToolUp.DataSources.Common.RetryAfterHandling.Ignore : ToolUp.DataSources.Common.RetryAfterHandling { get }
+ToolUp.DataSources.Common.RetryAfterHandling.IsHoldUpTo : System.Boolean { get }
+ToolUp.DataSources.Common.RetryAfterHandling.IsIgnore : System.Boolean { get }
+ToolUp.DataSources.Common.RetryAfterHandling.Tag : System.Int32 { get }
+ToolUp.DataSources.Common.RetryAfterHandling+HoldUpTo (class)
+ToolUp.DataSources.Common.RetryAfterHandling+HoldUpTo.maxWait : System.TimeSpan { get }
+ToolUp.DataSources.Common.RetryAfterHandling+Tags (class)
+ToolUp.DataSources.Common.RetryAfterHandling+Tags.HoldUpTo : System.Int32 (literal)
+ToolUp.DataSources.Common.RetryAfterHandling+Tags.Ignore : System.Int32 (literal)
 ToolUp.DataSources.Common.SqlIdentifier (class)
 ToolUp.DataSources.Common.SqlIdentifier.isSafe(System.String) : System.Boolean
 ToolUp.DataSources.Common.SqlIdentifier.quoteLiteral(System.String) : System.String
 ToolUp.DataSources.Common.SqlIdentifier.require(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]
+ToolUp.DataSources.Common.SyncCursor (class)
+ToolUp.DataSources.Common.SyncCursor..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.DataSources.Common.PageCursor], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32, System.Int32)
+ToolUp.DataSources.Common.SyncCursor.CompletedPasses : System.Int32 { get }
+ToolUp.DataSources.Common.SyncCursor.Connector : System.String { get }
+ToolUp.DataSources.Common.SyncCursor.Endpoint : System.String { get }
+ToolUp.DataSources.Common.SyncCursor.PendingWatermark : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.DataSources.Common.SyncCursor.Resume : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.DataSources.Common.PageCursor] { get }
+ToolUp.DataSources.Common.SyncCursor.SourceId : System.String { get }
+ToolUp.DataSources.Common.SyncCursor.Version : System.Int32 { get }
+ToolUp.DataSources.Common.SyncCursor.Watermark : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.DataSources.Common.SyncCursorEntity (class)
+ToolUp.DataSources.Common.SyncCursorEntity..ctor(System.String, System.String, System.Int32, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32)
+ToolUp.DataSources.Common.SyncCursorEntity.CompletedPasses : System.Int32 { get }
+ToolUp.DataSources.Common.SyncCursorEntity.Connector : System.String { get }
+ToolUp.DataSources.Common.SyncCursorEntity.Endpoint : System.String { get }
+ToolUp.DataSources.Common.SyncCursorEntity.Id : System.String { get }
+ToolUp.DataSources.Common.SyncCursorEntity.PendingWatermark : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.DataSources.Common.SyncCursorEntity.Resume : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.DataSources.Common.SyncCursorEntity.SourceId : System.String { get }
+ToolUp.DataSources.Common.SyncCursorEntity.Type : System.String { get }
+ToolUp.DataSources.Common.SyncCursorEntity.Version : System.Int32 { get }
+ToolUp.DataSources.Common.SyncCursorEntity.Watermark : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.DataSources.Common.SyncCursorError (class)
+ToolUp.DataSources.Common.SyncCursorError.IsConflict : System.Boolean { get }
+ToolUp.DataSources.Common.SyncCursorError.IsCorrupt : System.Boolean { get }
+ToolUp.DataSources.Common.SyncCursorError.IsStore : System.Boolean { get }
+ToolUp.DataSources.Common.SyncCursorError.Tag : System.Int32 { get }
+ToolUp.DataSources.Common.SyncCursorError+Conflict (class)
+ToolUp.DataSources.Common.SyncCursorError+Conflict.actual : System.Int32 { get }
+ToolUp.DataSources.Common.SyncCursorError+Conflict.expected : System.Int32 { get }
+ToolUp.DataSources.Common.SyncCursorError+Corrupt (class)
+ToolUp.DataSources.Common.SyncCursorError+Corrupt.stored : System.String { get }
+ToolUp.DataSources.Common.SyncCursorError+Store (class)
+ToolUp.DataSources.Common.SyncCursorError+Store.error : ToolUp.Platform.EntityTypes+EntityError { get }
+ToolUp.DataSources.Common.SyncCursorError+Tags (class)
+ToolUp.DataSources.Common.SyncCursorError+Tags.Conflict : System.Int32 (literal)
+ToolUp.DataSources.Common.SyncCursorError+Tags.Corrupt : System.Int32 (literal)
+ToolUp.DataSources.Common.SyncCursorError+Tags.Store : System.Int32 (literal)
+ToolUp.DataSources.Common.SyncCursorModule (class)
+ToolUp.DataSources.Common.SyncCursorModule.EntityType : System.String (literal)
+ToolUp.DataSources.Common.SyncCursorModule.advance(Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.DataSources.Common.PageCursor], ToolUp.DataSources.Common.SyncCursor) : ToolUp.DataSources.Common.SyncCursor
+ToolUp.DataSources.Common.SyncCursorModule.entityId(System.String, System.String, System.String) : System.String
+ToolUp.DataSources.Common.SyncCursorModule.initial(System.String, System.String, System.String) : ToolUp.DataSources.Common.SyncCursor
+ToolUp.DataSources.Common.SyncCursorModule.load(ToolUp.Platform.IEntityStore+IEntityStore, System.String, System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.SyncCursor, ToolUp.DataSources.Common.SyncCursorError]]
+ToolUp.DataSources.Common.SyncCursorModule.registration : ToolUp.Platform.EntityTypes+EntityRegistration`1[ToolUp.DataSources.Common.SyncCursorEntity] { get }
+ToolUp.DataSources.Common.SyncCursorModule.save(ToolUp.Platform.IEntityStore+IEntityStore, System.String, ToolUp.Platform.EntityTypes+EntityPrincipal, ToolUp.DataSources.Common.SyncCursor) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.SyncCursor, ToolUp.DataSources.Common.SyncCursorError]]
+ToolUp.DataSources.Common.SyncCursorModule.toMessage(ToolUp.DataSources.Common.SyncCursorError) : System.String
+ToolUp.DataSources.Common.SyncMode (class)
+ToolUp.DataSources.Common.SyncMode.FullRefresh : ToolUp.DataSources.Common.SyncMode { get }
+ToolUp.DataSources.Common.SyncMode.Incremental : ToolUp.DataSources.Common.SyncMode { get }
+ToolUp.DataSources.Common.SyncMode.IsFullRefresh : System.Boolean { get }
+ToolUp.DataSources.Common.SyncMode.IsIncremental : System.Boolean { get }
+ToolUp.DataSources.Common.SyncMode.Tag : System.Int32 { get }
+ToolUp.DataSources.Common.SyncMode+Tags (class)
+ToolUp.DataSources.Common.SyncMode+Tags.FullRefresh : System.Int32 (literal)
+ToolUp.DataSources.Common.SyncMode+Tags.Incremental : System.Int32 (literal)
 ToolUp.DataSources.Common.TypeMap (class)
 ToolUp.DataSources.Common.TypeMap.ansi(System.String) : DataManagementTypes+ColumnType
 ToolUp.DataSources.Common.TypeMap.classify(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[DataManagementTypes+ColumnType]], System.String) : DataManagementTypes+ColumnType
