@@ -307,9 +307,17 @@ let private sampleClause: FactClause = {
     AsOf = None
 }
 
+// Phase 820 — the request carries the scope the platform minted for it;
+// the pipeline's resolver and egress door read that scope as given.
 let private clausedRequest = {
     RetrievalRequest.create "q" [ User "u" ] 10 Interleaved with
         FactClause = Some sampleClause
+        FactScope =
+            StorageScopeResolver.ScopeResolution.ofStorageScope {
+                ScopeId = "u"
+                Container = "user-u"
+                Persist = true
+            }
 }
 
 let private factIdsIn (results: VectorMatch list) =
@@ -363,7 +371,7 @@ let retrievalTests =
 
                 match gate.LastCall with
                 | Some(scopeId, principal, surface, ids) ->
-                    Expect.equal scopeId "u" "the gate is handed the caller's own fact scope"
+                    Expect.equal scopeId "u" "the gate is handed the request's resolved fact scope"
                     Expect.equal principal "u" "the principal is the authenticated caller"
                     Expect.equal surface FactRetrieval "checked at the retrieval surface"
                     Expect.equal (List.sort ids) [ "fact-open"; "fact-secret" ] "every resolved fact is checked"

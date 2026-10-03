@@ -1802,6 +1802,7 @@ let aiAssistantApi
                             RetrievedSources = retrievedSourcesCell
                             ShortCircuit = shortCircuitCell
                             PlannedAnswerId = plannedAnswerCell
+                            Scope = ScopeResolution.forRequest ctx
                         }
                     | None -> async { return "" }
 

@@ -500,6 +500,10 @@ and withRetrievalPlanned
                     // budgeting work that owns how much fact material a
                     // turn may carry at all.
                     FactClause = List.tryHead planned.Clauses
+                    // Phase 820 — the fact stage reads in the scope the
+                    // platform minted for this request (the one the fact
+                    // tools read), never one derived from `ctx.Access`.
+                    FactScope = ctx.Scope
                     // Phase 502.D — the metadata-equality scope for this
                     // turn. This is the wiring that makes `Filters` reachable
                     // from the prompt path at all: 502.A taught the default

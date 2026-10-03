@@ -288,6 +288,7 @@ let private promptFor (defaults: RetrievalDefaults) (pipeline: IRetrievalPipelin
         RetrievedSources = sources
         ShortCircuit = ref None
         PlannedAnswerId = ref None
+        Scope = ResolvedScope.anonymous
     }
 
     let! prompt = ToolUp.RAG.RAGPromptBuilder.withRetrieval defaults None None pipeline ctx

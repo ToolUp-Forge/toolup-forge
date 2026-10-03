@@ -224,17 +224,39 @@ let tests =
         }
 
         // ── Scope isolation (RAG-side of GP 4) ────────────────────────
-        testAsync "the resolver is handed the caller's own scope, never a caller-supplied one" {
+        testAsync "the resolver is handed the request's resolved scope, never one derived from the access context" {
             let store, dispose = newStore ()
 
             try
                 let resolver = RecordingResolver [ freshFact ]
                 let pipeline = pipelineWith store (Some(resolver :> IFactResolver))
-                let request = withClause (RetrievalRequest.create "q" [ User "bob" ] 10 Interleaved)
+
+                // Phase 820 — the scope the platform minted for the request.
+                let request = {
+                    withClause (RetrievalRequest.create "q" [ User "bob" ] 10 Interleaved) with
+                        FactScope =
+                            StorageScopeResolver.ScopeResolution.ofStorageScope {
+                                ScopeId = "bob"
+                                Container = "user-bob"
+                                Persist = true
+                            }
+                }
 
                 let! _ = pipeline.Retrieve request (uctx "bob")
 
-                Expect.equal resolver.LastScope (Some "bob") "resolver scoped to the authenticated caller's id"
+                Expect.equal resolver.LastScope (Some "bob") "resolver scoped to the request's resolved scope"
+
+                // No minted scope ⇒ the anonymous shard, never the caller's
+                // user or team id read off the access context.
+                let unresolved =
+                    withClause (RetrievalRequest.create "q" [ User "bob" ] 10 Interleaved)
+
+                let! _ = pipeline.Retrieve unresolved (uctx "bob")
+
+                Expect.equal
+                    resolver.LastScope
+                    (Some ResolvedScope.AnonymousScopeId)
+                    "an unresolved request reads the anonymous scope"
             finally
                 dispose.Dispose()
         }
@@ -320,6 +342,7 @@ let tests =
                 RetrievedSources = sources
                 ShortCircuit = ref None
                 PlannedAnswerId = ref None
+                Scope = ResolvedScope.anonymous
             }
 
             let builder =
@@ -384,6 +407,7 @@ let tests =
                 RetrievedSources = sources
                 ShortCircuit = ref None
                 PlannedAnswerId = ref None
+                Scope = ResolvedScope.anonymous
             }
 
             // A high MinScore that would drop any real chunk.

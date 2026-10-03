@@ -885,8 +885,14 @@ type RetrievalPipeline
             // resolver is wired AND the request carries a fact clause,
             // resolve the (subject, metric, period) query against the fact
             // store FIRST. The resolver is scope-filtered (GP 4): it is
-            // handed the caller's own fact scope and reads only within it,
-            // so a fact from another tenant is structurally unreachable.
+            // handed the request's resolved fact scope and reads only within
+            // it, so a fact from another tenant is structurally unreachable.
+            // Phase 820 — that scope is `request.FactScope`, the value the
+            // platform's scope resolution minted for the request (the one
+            // the fact tools read). The pipeline derives no scope of its own
+            // from the access context: a second derivation here would let
+            // the retrieval turn and the fact tools read different shards
+            // for one request.
             // Resolution is independent of the vector-scope authorisation
             // below — a fact clause is answerable even for a caller with no
             // readable KB scope. Clause-less / resolver-less ⇒ no facts,
@@ -895,14 +901,14 @@ type RetrievalPipeline
                 match factResolver, request.FactClause with
                 | Some resolver, Some clause -> async {
                     stages.Add "FactResolve"
-                    let factScopeId = ctx.TeamId |> Option.defaultValue ctx.UserId
+                    let factScope = request.FactScope
 
                     // Phase 894 — the stage body touches no shared state:
                     // an overrunning run is abandoned under a budget and may
                     // still be executing when the turn moves on, so it
                     // returns its stage marks instead of appending them.
                     let resolveAndDisclose = async {
-                        let! resolved = resolver.Resolve(factScopeId, clause)
+                        let! resolved = resolver.Resolve(factScope.ScopeId, clause)
 
                         // Phase 525.B — disclosure egress filter, applied to the
                         // resolved facts BEFORE merge. Default-deny at retrieval:
@@ -910,14 +916,14 @@ type RetrievalPipeline
                         // or missing from the verdict map) never enters the
                         // result set, the `RetrievedSource`s, or the prompt block
                         // — absent, not annotated. The gate is handed the same
-                        // caller-derived fact scope as the resolver (GP 4), so
+                        // resolved fact scope as the resolver (GP 4), so
                         // scope never overrides a deny and disclosure never
                         // widens scope. No gate wired ⇒ pass-through (GP 11).
                         let! disclosed =
                             match disclosureGate, resolved with
                             | Some gate, _ :: _ -> async {
                                 let ids = resolved |> List.map _.FactId
-                                let! verdicts = gate.Check(factScopeId, ctx.UserId, FactRetrieval, ids)
+                                let! verdicts = gate.Check(factScope, ctx.UserId, FactRetrieval, ids)
 
                                 let permitted =
                                     resolved

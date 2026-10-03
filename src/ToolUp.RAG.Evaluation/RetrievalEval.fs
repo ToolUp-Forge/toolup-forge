@@ -65,6 +65,7 @@ let private runQuery (pipeline: IRetrievalPipeline) (q: LabelledQuery) : Async<Q
         OriginFilter = None
         ActiveModule = None
         FactClause = None
+        FactScope = ResolvedScope.anonymous
     }
 
     let sw = Stopwatch.StartNew()

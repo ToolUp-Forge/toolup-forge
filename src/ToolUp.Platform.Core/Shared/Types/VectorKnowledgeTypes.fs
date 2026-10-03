@@ -866,11 +866,24 @@ type RetrievalRequest = {
     /// plan D17). The clause has no effect unless a fact resolver is wired
     /// into the pipeline (GP 13).
     FactClause: FactClause option
+    /// The scope the fact stage reads in (Phase 820) — the `ResolvedScope`
+    /// the platform's scope resolution minted for the request this
+    /// retrieval serves, the same value the fact tools read through
+    /// `ScopeResolution.forRequest`. The pipeline hands it to the fact
+    /// resolver and the `FactRetrieval` disclosure check as given; it never
+    /// derives a fact scope of its own from the access context, so one
+    /// request reads one fact shard whichever door it comes through.
+    ///
+    /// `RetrievalRequest.create` defaults it to `ResolvedScope.anonymous`:
+    /// a retrieval built without a request (ingestion, evaluation, tests)
+    /// reads the anonymous shard, never a scope inferred from a user or
+    /// team id. Only a clause-bearing request reads it.
+    FactScope: ResolvedScope
 }
 
 module RetrievalRequest =
     /// Construct a `RetrievalRequest` with the optional fields defaulted to
-    /// `None`. Existing callers should migrate to this helper to insulate
+    /// `None` and the fact scope to the anonymous scope. Existing callers should migrate to this helper to insulate
     /// against future field additions.
     let create (query: string) (scopes: VectorScope list) (topK: int) (merge: MergeStrategy) : RetrievalRequest = {
         Query = query
@@ -883,6 +896,7 @@ module RetrievalRequest =
         OriginFilter = None
         ActiveModule = None
         FactClause = None
+        FactScope = ResolvedScope.anonymous
     }
 
 /// Per-deployment defaults applied by `RAGPromptBuilder.withRetrieval`. Lets

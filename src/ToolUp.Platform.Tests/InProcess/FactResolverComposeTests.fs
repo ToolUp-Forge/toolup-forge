@@ -5,9 +5,13 @@ module ToolUp.Platform.Tests.InProcess.FactResolverComposeTests
 
 open System
 open System.IO
+open System.Reflection
 open Expecto
+open System.Text.Json
+open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
+open ToolUp.Platform.StorageScopeResolver
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
 open ToolUp.Platform.IVectorStore
@@ -373,10 +377,23 @@ let private pipelineOver (vectorStore: IVectorStore) (sp: ServiceProvider) : IRe
     )
     :> IRetrievalPipeline
 
+/// A storage scope as the scope-resolution middleware would produce it.
+let private storageScope (scopeId: string) : StorageScope = {
+    ScopeId = scopeId
+    Container = "container-" + scopeId
+    Persist = true
+}
+
+/// Phase 820 — the request carries the scope the platform minted for it;
+/// the pipeline reads the fact tier in that scope and derives none.
 let private clausedRequest = {
     RetrievalRequest.create "what was revenue?" [ User "u" ] 10 Interleaved with
         FactClause = Some(clauseFor "revenue")
+        FactScope = ScopeResolution.ofStorageScope (storageScope "u")
 }
+
+let private queryFactsArgs =
+    """{"subject_hierarchy":"brand","subject_path":"acme","metric":"revenue"}"""
 
 let composedLoopTests =
     testList "Phase 558 composed Stage-1 loop" [
@@ -396,9 +413,8 @@ let composedLoopTests =
                 let sp = builtProviderUnder EnabledFactStore
                 let factStore = sp.GetRequiredService<IFactStore>()
 
-                // The pipeline hands the resolver the caller's own fact scope
-                // — the authenticated user id here — so the store is seeded
-                // under that scope.
+                // The pipeline hands the resolver the request's resolved
+                // fact scope — `"u"` here — so the store is seeded under it.
                 let surfaceable = assertFact factStore "u" (draft "revenue" q2 [ "h1" ] 21800m)
 
                 // A competing Internal fact (different method ⇒ both heads
@@ -478,5 +494,196 @@ let composedLoopTests =
         }
     ]
 
+// ── One scope per request across RAG and Facts (Phase 820) ────────
+//
+// The divergence the phase retires: an access context whose team pointer
+// and user id would have derived one fact shard (team-else-user) while the
+// platform's scope resolution resolved the request to another. Before 820
+// the retrieval turn read the derived shard and `query_facts` read the
+// resolved one — two shards for one request. Now both read the scope
+// `ScopeResolution.forRequest` returns for the request, so they agree.
+
+let divergenceTests =
+    testList "Phase 820 one scope per request" [
+
+        testCaseAsync
+            "a request whose team pointer and user id derive a different shard reads ONE shard through retrieval and query_facts"
+        <| async {
+            let vectorStore, dispose = newVectorStore ()
+
+            try
+                let sp = builtProviderUnder EnabledFactStore
+                let factStore = sp.GetRequiredService<IFactStore>()
+
+                // The resolver minted the user's own scope; the access
+                // context also carries an active-team pointer, so the
+                // retired team-else-user rule would have read the team's
+                // shard instead.
+                let resolvedId = "alice"
+                let teamPointer = "team-pointer"
+
+                let ctx = {
+                    AccessContext.unrestricted (AuthenticatedUser resolvedId) with
+                        TeamId = Some teamPointer
+                }
+
+                let inResolved =
+                    assertFact factStore resolvedId (draft "revenue" q2 [ "h-resolved" ] 21800m)
+
+                let inDerived =
+                    assertFact factStore teamPointer (draft "revenue" q2 [ "h-derived" ] 99999m)
+
+                // The request as the middleware leaves it: the minted scope
+                // recorded on the HttpContext, read back through the one
+                // function both doors use.
+                let http = DefaultHttpContext()
+                http.RequestServices <- sp
+                ScopeResolution.remember http (storageScope resolvedId) |> ignore
+                http.Items["ToolUp.UserId"] <- box resolvedId
+
+                // The retrieval turn.
+                let request = {
+                    RetrievalRequest.create "what was revenue?" [ User resolvedId ] 10 Interleaved with
+                        FactClause = Some(clauseFor "revenue")
+                        FactScope = ScopeResolution.forRequest http
+                }
+
+                let! results = (pipelineOver vectorStore sp).Retrieve request ctx
+
+                let retrievedFactIds =
+                    results |> List.choose (fun m -> m.Metadata.TryFind ChunkMetadata.FactIdKey)
+
+                Expect.equal retrievedFactIds [ inResolved.FactId ] "the retrieval turn reads the resolved shard only"
+
+                // The fact door, on the same request.
+                let! toolJson = FactQueryTool.execute (http :> HttpContext) queryFactsArgs
+
+                let toolFactIds =
+                    let root = (JsonDocument.Parse toolJson).RootElement
+
+                    root.GetProperty("facts").EnumerateArray()
+                    |> Seq.map (fun f -> f.GetProperty("factId").GetString())
+                    |> List.ofSeq
+
+                Expect.equal toolFactIds [ inResolved.FactId ] "query_facts reads the resolved shard only"
+                Expect.equal retrievedFactIds toolFactIds "both doors read ONE shard for the request"
+
+                Expect.isFalse
+                    (retrievedFactIds @ toolFactIds |> List.contains inDerived.FactId)
+                    "the shard the retired derivation named is read by neither door"
+            finally
+                dispose.Dispose()
+        }
+
+        testCaseAsync "a retrieval built without a request reads the anonymous scope, never a derived one"
+        <| async {
+            let vectorStore, dispose = newVectorStore ()
+
+            try
+                let sp = builtProviderUnder EnabledFactStore
+                let factStore = sp.GetRequiredService<IFactStore>()
+                let userFact = assertFact factStore "u" (draft "revenue" q2 [ "h-user" ] 21800m)
+
+                let request = {
+                    RetrievalRequest.create "what was revenue?" [ User "u" ] 10 Interleaved with
+                        FactClause = Some(clauseFor "revenue")
+                }
+
+                Expect.isTrue request.FactScope.IsAnonymous "RetrievalRequest.create defaults to the anonymous scope"
+
+                let! results =
+                    (pipelineOver vectorStore sp).Retrieve request (AccessContext.unrestricted (AuthenticatedUser "u"))
+
+                Expect.isFalse
+                    (results
+                     |> List.exists (fun m -> m.Metadata.TryFind ChunkMetadata.FactIdKey = Some userFact.FactId))
+                    "the user's shard is not inferred from the access context"
+            finally
+                dispose.Dispose()
+        }
+    ]
+
+// ── The source says so (Phase 820, widening the Phase 797 guard) ──
+//
+// The 797 source guard pins the three fact tools; the retrieval pipeline
+// is a fourth reader of the fact tier and is pinned here until the guard
+// becomes a discovery over every door. The spellings are assembled at
+// runtime so this file does not match itself.
+
+/// The spellings of a fact scope derived from the access context.
+let private derivationSpellings = [
+    "Option.defaultValue ctx." + "UserId", "a team-else-user fallback onto the access context's user id"
+    "let factScope" + "Id =", "a locally-derived fact scope id"
+    "ctx.TeamId |> " + "Option.defaultValue", "a fact scope read off the access context's team pointer"
+]
+
+/// Pure classifier: the derivations a source carries, as (needle, why).
+let private derivations (source: string) : (string * string) list =
+    derivationSpellings |> List.filter (fun (needle, _) -> source.Contains needle)
+
+let private repoRoot () =
+    let assemblyDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
+    Path.GetFullPath(Path.Combine(assemblyDir, "..", "..", "..", "..", ".."))
+
+let private pipelineSourceGuardTests =
+    testList "Phase 820 the retrieval pipeline derives no fact scope" [
+
+        test "the classifier fires on the pre-820 derivation (go-red)" {
+            let planted =
+                "                    let factScope"
+                + "Id = ctx.TeamId |> "
+                + "Option.defaultValue ctx."
+                + "UserId"
+
+            Expect.equal (List.length (derivations planted)) 3 "every spelling of the derivation is caught"
+        }
+
+        test "the classifier is quiet on the post-820 read" {
+            Expect.isEmpty
+                (derivations "                    let factScope = request.FactScope")
+                "the request's scope is not an offence"
+        }
+
+        test "RetrievalPipeline.fs reads the request's resolved scope and carries no derivation" {
+            let path =
+                Path.Combine(repoRoot (), "src", "ToolUp.RAG.Server", "Server", "RetrievalPipeline.fs")
+
+            Expect.isTrue (File.Exists path) "RetrievalPipeline.fs exists"
+            let source = File.ReadAllText path
+
+            Expect.stringContains source "request.FactScope" "the fact stage takes the request's resolved scope"
+
+            Expect.stringContains
+                source
+                "gate.Check(factScope, ctx.UserId, FactRetrieval"
+                "the egress door is asked through the typed overload"
+
+            match derivations source with
+            | [] -> ()
+            | found ->
+                failtestf
+                    "RetrievalPipeline.fs derives a fact scope:\n%s"
+                    (found |> List.map (fun (_, why) -> "  - " + why) |> String.concat "\n")
+        }
+
+        test "the prompt path carries the request's minted scope onto the retrieval request" {
+            let path =
+                Path.Combine(repoRoot (), "src", "ToolUp.RAG.Server", "Server", "RAGPromptBuilder.fs")
+
+            Expect.isTrue (File.Exists path) "RAGPromptBuilder.fs exists"
+
+            Expect.stringContains
+                (File.ReadAllText path)
+                "FactScope = ctx.Scope"
+                "the clause-bearing request reads in PromptContext.Scope, the scope the handler minted"
+        }
+    ]
+
 let tests =
-    testList "Phase 558 fact-resolver compose wiring" [ resolverTests; registrationTests; composedLoopTests ]
+    testList "Phase 558 fact-resolver compose wiring" [
+        resolverTests
+        registrationTests
+        composedLoopTests
+        divergenceTests
+        pipelineSourceGuardTests
+    ]
