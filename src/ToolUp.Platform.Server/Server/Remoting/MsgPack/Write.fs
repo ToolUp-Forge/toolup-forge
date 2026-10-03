@@ -149,14 +149,55 @@ let inline writeNil (out: Stream) = out.WriteByte Format.Nil
 let inline writeBool b (out: Stream) =
     out.WriteByte(if b then Format.True else Format.False)
 
-let inline writeByte b (out: Stream) =
-    if b < 128uy then
-        out.WriteByte(Format.fixposnum b)
-    else
-        out.WriteByte Format.Uint8
-        out.WriteByte b
+// Phase 802 — every integer arm below picks its format by the rule in
+// `Format.fs`'s header: a non-negative value rides the narrowest
+// UNSIGNED format whose top bit stays clear, a negative one the narrowest
+// SIGNED format other than `Int16`. So no emitted integer reads as a different value at any
+// width the reader accepts, which is what lets the reader's width rule
+// refuse a narrowing instead of reinterpreting it.
 
-let inline writeSByte (b: sbyte) (out: Stream) = writeByte (byte b) out
+let inline writeUInt64 (n: UInt64) (out: Stream) =
+    if n < 128UL then
+        out.WriteByte(Format.fixposnum n)
+    elif n <= 32767UL then
+        // Never `Uint8` for 128..255: that byte's top bit is the sign bit
+        // of an int8, so `uint8 200` reads as `-56y` at an sbyte target.
+        out.WriteByte Format.Uint16
+        out.WriteByte(n >>> 8 |> byte)
+        out.WriteByte(byte n)
+    elif n <= 2147483647UL then
+        out.WriteByte Format.Uint32
+        write32bitNumberFull n out
+    else
+        // Above `Int32.MaxValue` the 32-bit form would read as a negative
+        // int32 — the `wrong-width-int64-into-int32` mutation. A value
+        // above `Int64.MaxValue` (a uint64 source only) has no wider
+        // format and is the one emission whose top bit is set.
+        out.WriteByte Format.Uint64
+        write64bitNumberFull n out
+
+let inline writeInt64 (n: int64) (out: Stream) =
+    if n >= 0L then
+        writeUInt64 (uint64 n) out
+    elif n >= -32L then
+        out.WriteByte(Format.fixnegnum n)
+    elif n >= -128L then
+        out.WriteByte Format.Int8
+        out.WriteByte(byte n)
+    // No `Int16`: a Fable reader before Phase 802 does not sign-extend
+    // it (`d1 80 00` read as 32768), so a browser client still running
+    // that reader would decode a negative int16 as a positive number.
+    // `Int32` is read correctly by every reader generation.
+    elif n >= -2147483648L then
+        out.WriteByte Format.Int32
+        write32bitNumberFull n out
+    else
+        out.WriteByte Format.Int64
+        write64bitNumberFull n out
+
+let inline writeByte (b: byte) (out: Stream) = writeUInt64 (uint64 b) out
+
+let inline writeSByte (b: sbyte) (out: Stream) = writeInt64 (int64 b) out
 
 let inline writeArrayHeader length (out: Stream) =
     if length < 16 then
@@ -228,21 +269,6 @@ let inline writeMap
         keyWriter.Invoke(k, out)
         valueWriter.Invoke(v, out))
 
-let inline writeUInt64 (n: UInt64) (out: Stream) =
-    if n < 128UL then
-        out.WriteByte(Format.fixposnum n)
-    else
-        write64bitNumber n out
-
-let inline writeInt64 (n: int64) (out: Stream) =
-    if n >= 0L then
-        writeUInt64 (uint64 n) out
-    elif n > -32L then
-        out.WriteByte(Format.fixnegnum n)
-    else
-        out.WriteByte Format.Int64
-        write64bitNumberFull n out
-
 let inline writeSingle (n: float32) (out: Stream) =
     let mutable n = n
     out.WriteByte Format.Float32
@@ -272,8 +298,11 @@ let writeDecimal (n: decimal) (out: Stream) =
 
     out.WriteByte(Format.fixarr 4)
 
+    // Phase 802 — each word is an int32, and travels as one: a negative
+    // word (the sign flag, or a magnitude word with its top bit set) in a
+    // signed format, never as the uint32 of the same bits.
     for b in bits do
-        write32bitNumber b out true
+        writeInt64 (int64 b) out
 
 let inline writeStringHeader length (out: Stream) =
     if length < 32 then
@@ -340,8 +369,7 @@ let writeBin (data: byte[]) (out: Stream) =
         out.Write(data, 0, data.Length)
 
 #if NET6_0_OR_GREATER
-let inline writeDateOnly (date: DateOnly) (out: Stream) =
-    write32bitNumber date.DayNumber out true
+let inline writeDateOnly (date: DateOnly) (out: Stream) = writeInt64 (int64 date.DayNumber) out
 
 let inline writeTimeOnly (time: TimeOnly) (out: Stream) = writeInt64 time.Ticks out
 #endif

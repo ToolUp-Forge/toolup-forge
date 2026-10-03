@@ -244,16 +244,16 @@ let private generatedRoundTrip =
 /// One past `Int32.MaxValue`: the smallest `int64` whose `int32`
 /// truncation is a different number rather than the same one.
 ///
-/// Note what `writeInt64` does with it: the four high bytes are zero, so
-/// it is emitted as a `Uint32`, and those bytes are indistinguishable
-/// from a well-formed `int32 -2147483648`. That is why the falsifier's
-/// refusal arm uses the value below instead.
+/// Until Phase 802 `writeInt64` compacted it into a `Uint32` — bytes
+/// indistinguishable from a well-formed `int32 -2147483648` — so no
+/// reader could refuse it, and the refusal arm had to use the value
+/// below. Since 802 the writer keeps a positive value's top bit clear,
+/// so this one leaves as a `Uint64` and is refused like any other.
 let private beyondInt32 = 2147483648L
 
-/// Past 32 bits in the ENCODING as well as in the value: 2^32 keeps a
-/// non-zero byte above the low four, so `writeInt64` emits a `Uint64` and
-/// the reader sees a 64-bit source it can measure against a 32-bit
-/// target. Phase 786's refusal needs a value the format does not flatten.
+/// Past 32 bits in the VALUE's magnitude as well: 2^32 has a non-zero
+/// byte above the low four, so it was a `Uint64` before Phase 802 too.
+/// Kept as the arm that was refusable under both writers.
 let private unambiguouslyWide = 4294967296L
 
 let private narrowingFalsifier =
@@ -281,36 +281,43 @@ let private narrowingFalsifier =
             | Error error ->
                 Expect.equal error.Expected "Int32" "the refusal names the target width that could not hold the value"
 
-        testCase "and one that is NOT wider cannot be refused by any reader — the format says so"
+        testCase "and the value one past Int32.MaxValue is refused too — the emitter no longer flattens it"
         <| fun () ->
-            // The limit of what a reader can do, measured rather than
-            // assumed, and the reason the arm above had to move its value.
-            //
-            // `writeInt64` compacts: 2147483648L has four zero high bytes,
-            // so it goes out as `Uint32 80 00 00 00` — which is BYTE FOR
-            // BYTE a well-formed `int32 -2147483648` payload, the shape
-            // `writeDecimal`'s sign word actually travels in. The two are
-            // not distinguishable on this wire, so refusing one refuses
-            // the other, and the corpus's own `decimal-max` fixture is the
-            // one that would break.
-            //
-            // The narrowing is therefore real and unrefusable HERE. Closing
-            // it is an emitter-side change (a signed value would have to
-            // keep a signed format), which is a wire break and belongs to
-            // whoever takes the closed decoder algebra on.
+            // Phase 802's go-red case. Before it, this arm asserted the
+            // opposite: `writeInt64` compacted 2147483648L into
+            // `Uint32 80 00 00 00`, byte for byte a legitimate
+            // `int32 -2147483648`, so the narrowing was real and
+            // unrefusable at any reader. The emitter now keeps a positive
+            // value's top bit clear, which moves this value into a 64-bit
+            // format the width rule can measure.
             let declared = both WireClass.NumericWidth "falsifier-int64" beyondInt32
             let bytes = declared.WriteMsgPack()
 
             Expect.equal
-                (Read.Reader(bytes).Read typeof<int32> :?> int32)
-                Int32.MinValue
-                "the same bytes at int32 are a legitimate negative — if this ever refuses, check that `decimal-max` still decodes"
+                bytes
+                [| 0xcfuy; 0uy; 0uy; 0uy; 0uy; 0x80uy; 0uy; 0uy; 0uy |]
+                "2147483648L must leave as a Uint64; a 32-bit form is the ambiguity Phase 802 closed"
 
-            match declared.Compare(Read.Reader(bytes).Read typeof<int32>) with
-            | Error _ -> ()
-            | Ok() ->
-                failtest
-                    "the corpus comparison ACCEPTED an int32 against an int64 declaration. The wire cannot catch this one, so the comparison is the only thing that can."
+            match Read.Reader(bytes).TryRead typeof<int32> with
+            | Ok value ->
+                failtestf
+                    "the reader produced %A from 2147483648L read at int32. The emitter is flattening across the sign boundary again."
+                    value
+            | Error error -> Expect.equal error.Expected "Int32" "the refusal names the target width"
+
+        testCase "while the PRE-802 bytes for that value still decode — the reader did not change"
+        <| fun () ->
+            // The other half of the compatibility claim. An older writer
+            // still emits `Uint32 80 00 00 00`, and the reader still
+            // admits a same-width source, so a peer on the older writer
+            // reads exactly what it read before. Refusing these bytes
+            // would be the wire break; Phase 802 deliberately does not.
+            let legacy = [| 0xceuy; 0x80uy; 0uy; 0uy; 0uy |]
+
+            Expect.equal
+                (Read.Reader(legacy).Read typeof<int32> :?> int32)
+                Int32.MinValue
+                "the pre-802 form is a legitimate int32 -2147483648 at an int32 target"
 
         testCase "a narrowed value is REPORTED by the comparison, not accepted"
         <| fun () ->
@@ -630,11 +637,11 @@ let private refusals =
             // `int32`. Closing those is the content of Phase 785's closed
             // algebra.
             //
-            // One row will NOT move when 785 lands, and it is worth
-            // knowing why: `wrong-width-int64-into-int32` is unrefusable
-            // at the reader because `writeInt64` compacts the value into
-            // an encoding a legitimate negative `int32` also uses. That
-            // one needs the emitter, not the algebra.
+            // Phase 802 gained `wrong-width-int64-into-int32`. It was
+            // unrefusable at the reader while `writeInt64` compacted the
+            // value into an encoding a legitimate negative `int32` also
+            // used; it needed the emitter, not the algebra, and the
+            // emitter now keeps a positive value's top bit clear.
             let refused =
                 mutations ()
                 |> List.filter (fun m ->
@@ -644,7 +651,11 @@ let private refusals =
                 |> List.map (fun m -> m.Name)
                 |> List.sort
 
-            let expected = [ "truncated-record-body"; "truncated-string-header" ]
+            let expected = [
+                "truncated-record-body"
+                "truncated-string-header"
+                "wrong-width-int64-into-int32"
+            ]
 
             Expect.equal
                 refused
@@ -741,6 +752,175 @@ let private generatedRefusals =
                 (sprintf "these mutation kinds drew zero MsgPack-payload mutations across BOTH populations: %A" missing)
     ]
 
+// ─── Emitter width discipline (Phase 802) ────────────────────────────
+
+/// Every width a target can be declared at, as a reader target type.
+let private integerTargets: Type list = [
+    typeof<sbyte>
+    typeof<byte>
+    typeof<int16>
+    typeof<uint16>
+    typeof<int32>
+    typeof<uint32>
+    typeof<int64>
+    typeof<uint64>
+]
+
+/// The boundary values of every width, either side of each sign and
+/// magnitude edge — the values a compacting writer gets wrong.
+let private signedProbes: int64 list = [
+    0L
+    1L
+    127L
+    128L
+    255L
+    256L
+    32767L
+    32768L
+    65535L
+    65536L
+    2147483647L
+    2147483648L
+    4294967295L
+    4294967296L
+    Int64.MaxValue
+    -1L
+    -31L
+    -32L
+    -33L
+    -128L
+    -129L
+    -32768L
+    -32769L
+    -2147483648L
+    -2147483649L
+    Int64.MinValue
+]
+
+let private unsignedProbes: uint64 list = [
+    yield! signedProbes |> List.filter (fun v -> v >= 0L) |> List.map uint64
+    9223372036854775808UL
+    UInt64.MaxValue
+]
+
+/// Every (source, target) pair at which the writer's bytes decode to a
+/// DIFFERENT number than the one written. Refusals are fine — that is the
+/// point; only a silently different value is collected.
+let private misreadings () =
+    let probe (source: string) (value: decimal) (bytes: byte[]) =
+        integerTargets
+        |> List.choose (fun target ->
+            match Read.Reader(bytes).TryRead target with
+            | Ok decoded when Convert.ToDecimal decoded <> value ->
+                Some(sprintf "%s %M at %s read as %O" source value target.Name decoded)
+            | _ -> None)
+
+    [
+        for v in signedProbes do
+            yield! probe "int64" (decimal v) ((both WireClass.NumericWidth "probe" v).WriteMsgPack())
+        for v in unsignedProbes do
+            yield! probe "uint64" (decimal v) ((both WireClass.NumericWidth "probe" v).WriteMsgPack())
+        for v in [ SByte.MinValue; -1y; SByte.MaxValue ] do
+            yield! probe "sbyte" (decimal v) ((both WireClass.NumericWidth "probe" v).WriteMsgPack())
+        for v in [ 128uy; Byte.MaxValue ] do
+            yield! probe "byte" (decimal v) ((both WireClass.NumericWidth "probe" v).WriteMsgPack())
+        for v in [ Int16.MinValue; Int16.MaxValue ] do
+            yield! probe "int16" (decimal v) ((both WireClass.NumericWidth "probe" v).WriteMsgPack())
+        for v in [ UInt16.MaxValue ] do
+            yield! probe "uint16" (decimal v) ((both WireClass.NumericWidth "probe" v).WriteMsgPack())
+        for v in [ Int32.MinValue; Int32.MaxValue ] do
+            yield! probe "int32" (decimal v) ((both WireClass.NumericWidth "probe" v).WriteMsgPack())
+        for v in [ UInt32.MaxValue ] do
+            yield! probe "uint32" (decimal v) ((both WireClass.NumericWidth "probe" v).WriteMsgPack())
+    ]
+
+let private emitterDiscipline =
+    testList "emitter width discipline (Phase 802)" [
+        testCase "no integer the writer emits reads as a different value at any width the reader accepts"
+        <| fun () ->
+            // The acceptance criterion, asserted over every width's
+            // boundary values at every integer target. The ONE expected
+            // misreading is the format's own limit: a uint64 above
+            // Int64.MaxValue has no wider format, so at an int64 target it
+            // is a same-width reinterpretation. It is asserted as a SET so
+            // that a new misreading and a vanished residual both go red.
+            let expectedResidual = [
+                "uint64 9223372036854775808 at Int64 read as -9223372036854775808"
+                "uint64 18446744073709551615 at Int64 read as -1"
+            ]
+
+            Expect.equal
+                (misreadings ())
+                expectedResidual
+                "the writer emitted an integer that a reader accepts as a DIFFERENT value. Every format must keep its top bit clear unless no wider format exists - see Format.fs's Phase 802 header."
+
+        testCase "and never emits Uint8 or Int16 for an integer"
+        <| fun () ->
+            // Two formats the rule leaves out on purpose (Format.fs's
+            // Phase 802 header): `Uint8` because 128..255 sets an int8's
+            // sign bit, `Int16` because a pre-802 Fable reader does not
+            // sign-extend it. The .NET reader reads both correctly, so the
+            // misreading probe above cannot see a regression to either;
+            // this case can.
+            let firstBytes =
+                [
+                    for v in signedProbes -> (both WireClass.NumericWidth "probe" v).WriteMsgPack()
+                    for v in unsignedProbes -> (both WireClass.NumericWidth "probe" v).WriteMsgPack()
+                    for v in [ Int16.MinValue; -200s; -129s ] -> (both WireClass.NumericWidth "probe" v).WriteMsgPack()
+                    for v in [ 128uy; Byte.MaxValue ] -> (both WireClass.NumericWidth "probe" v).WriteMsgPack()
+                ]
+                |> List.map (fun bytes -> bytes[0])
+
+            Expect.isFalse (List.contains Format.Uint8 firstBytes) "an integer left as Uint8"
+            Expect.isFalse (List.contains Format.Int16 firstBytes) "an integer left as Int16"
+
+        testCase "and the probe is not vacuous: a compacting writer's bytes ARE misread"
+        <| fun () ->
+            // Make the probe fail once. The pre-802 form of 2147483648L
+            // decodes at int32 as a different number; if this ever stops
+            // being true the reader changed, and the assertion above no
+            // longer measures the writer.
+            match Read.Reader([| 0xceuy; 0x80uy; 0uy; 0uy; 0uy |]).TryRead typeof<int32> with
+            | Ok decoded -> Expect.notEqual (Convert.ToDecimal decoded) 2147483648M "the compacted form misreads"
+            | Error e ->
+                failtestf
+                    "the reader refused the pre-802 compacted form (%s); the compatibility leg below needs it accepted"
+                    e.Found
+
+        yield! [
+            for name, legacy in preEmitterDisciplinePayloads ->
+                testCase ("pre-802 bytes still decode — " + name)
+                <| fun () ->
+                    // The compatibility claim, measured: a peer on the
+                    // older writer sends these bytes, and the unchanged
+                    // reader must still produce the declared value.
+                    let c =
+                        match pinnedCases |> List.tryFind (fun c -> c.Name = name) with
+                        | Some c -> c
+                        | None -> failtestf "preEmitterDisciplinePayloads names `%s`, which is no pinned case" name
+
+                    Expect.notEqual
+                        legacy
+                        (c.WriteMsgPack())
+                        "a pre-802 row whose bytes the current writer still emits pins nothing; drop it"
+
+                    match c.Compare(Read.Reader(legacy).Read c.ClrType) with
+                    | Ok() -> ()
+                    | Error problem ->
+                        failtestf
+                            "the pre-802 bytes for `%s` no longer decode to the declared value: %s. That is a wire break for every peer still on the older writer."
+                            name
+                            problem
+        ]
+
+        testCase "the pre-802 population is not vacuous"
+        <| fun () ->
+            Expect.isGreaterThanOrEqual
+                (List.length preEmitterDisciplinePayloads)
+                10
+                "every re-pinned fixture keeps its older bytes"
+    ]
+
 [<Tests>]
 let tests =
     testList "Remoting MsgPack wire corpus" [
@@ -750,6 +930,7 @@ let tests =
         narrowingFalsifier
         fixturePin
         refusals
+        emitterDiscipline
         generatedRefusals
         adequacy
         divergences

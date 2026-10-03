@@ -197,21 +197,24 @@ let tests =
         test "a same-width reinterpretation is NOT narrowing, and is accepted" {
             // The rule the Phase 784 corpus forced, pinned here so it is
             // not re-tightened by someone reading `refuse silent
-            // narrowing` and stopping there. This encoder writes some
-            // negatives as their unsigned BIT PATTERN, and the target
-            // type is what recovers the sign — so a source no wider than
-            // its target loses nothing and must decode.
+            // narrowing` and stopping there. Writers before Phase 802
+            // put some negatives out as their unsigned BIT PATTERN, and
+            // the target type is what recovers the sign — so a source no
+            // wider than its target loses nothing and must decode, or
+            // every peer still on such a writer breaks.
             //
-            // `writeSByte` puts -128y out as `uint8 128`. Refusing this
-            // refuses every sbyte at its own minimum, which is what the
-            // corpus's `width-sbyte-min` fixture caught.
+            // Such a `writeSByte` puts -128y out as `uint8 128`. Refusing
+            // this refuses every sbyte at its own minimum, which is what
+            // the corpus's `width-sbyte-min` fixture caught (its pre-802
+            // bytes are kept in `preEmitterDisciplinePayloads`).
             Expect.equal
                 (valueOf [| MsgPack.Format.Uint8; 0x80uy |] typeof<sbyte>)
                 (box -128y)
                 "uint8 128 at sbyte is -128, the encoder's own round trip"
 
-            // `writeDecimal`'s four words go through `write32bitNumber`,
-            // so a negative int32 arrives as uint32 0xFFFFFFFF.
+            // A pre-802 `writeDecimal` put its four words through
+            // `write32bitNumber`, so a negative int32 arrives as uint32
+            // 0xFFFFFFFF.
             Expect.equal
                 (valueOf [| MsgPack.Format.Uint32; 0xFFuy; 0xFFuy; 0xFFuy; 0xFFuy |] typeof<int>)
                 (box -1)

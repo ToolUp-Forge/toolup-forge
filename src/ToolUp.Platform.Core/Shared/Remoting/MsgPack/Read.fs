@@ -48,13 +48,18 @@ open System.Buffers.Binary
 ///     a SIGNED target a negative source always fits, because a narrower
 ///     signed range is contained in a wider one.
 ///   * A source NO WIDER than the target always survives — including the
-///     signed/unsigned reinterpretation this encoder depends on. That is
-///     not a loophole, it is the format: `writeSByte` puts `-128y` on the
-///     wire as `uint8 128`, and `writeDecimal`'s four words go through
+///     signed/unsigned reinterpretation writers before Phase 802 depend
+///     on. That is not a loophole, it is the format as those writers
+///     emit it: their `writeSByte` puts `-128y` on the wire as `uint8
+///     128`, and their `writeDecimal`'s four words go through
 ///     `write32bitNumber`, so a negative int32 arrives as `uint32
 ///     0xFFFFFFFF`. The target type is what recovers the sign, and no bit
 ///     is lost either way. Refusing these would refuse well-formed
-///     traffic — the Phase 784 corpus pins three such fixtures.
+///     traffic from every peer still on such a writer — the corpus pins
+///     those older bytes in `preEmitterDisciplinePayloads`. Since Phase
+///     802 this repository's own writers no longer emit the form at all
+///     (see `Format.fs`), which is what lets this rule refuse a value
+///     that is genuinely too wide: it now always arrives wider.
 ///   * A source WIDER than the target is the genuine narrowing, and it is
 ///     refused unless the value fits the target's own range. This is the
 ///     arm that catches an `int64` payload aimed at an `int` field.
@@ -423,14 +428,29 @@ type Reader(data: byte[], maxDepth: int) =
 
     member x.ReadInt8() = x.ReadByte() |> sbyte
 
-    member x.ReadUInt16() = x.ReadInt16() |> uint16
+    member x.ReadUInt16() =
+#if !FABLE_COMPILER
+        x.ReadInt16() |> uint16
+#else
+        // Read directly rather than through the sign-extending
+        // `ReadInt16` below: no int16-to-uint16 wrap to depend on.
+        pos <- pos + 2
+        uint16 ((int data.[pos - 2] <<< 8) ||| int data.[pos - 1])
+#endif
 
     member _.ReadInt16() =
         pos <- pos + 2
 #if !FABLE_COMPILER && NETCOREAPP2_1_OR_GREATER
         BinaryPrimitives.ReadInt16BigEndian(data.AsSpan(pos - 2, 2))
 #else
-        (int16 data.[pos - 2] <<< 8) ||| (int16 data.[pos - 1])
+        // Phase 802 — sign-extend explicitly. The old `int16 hi <<< 8 |||
+        // int16 lo` was computed on a JS number that never wraps at 16
+        // bits, so `d1 80 00` came back as 32768 rather than -32768. Our
+        // own writers no longer emit `Int16` (see `Format.fs`), but any
+        // MessagePack writer may, and the Fable parity pack pins it.
+        let hi = int data.[pos - 2]
+        let lo = int data.[pos - 1]
+        int16 (((hi <<< 8) ||| lo) - (if hi >= 128 then 65536 else 0))
 #endif
 
     member x.ReadUInt32() = x.ReadInt32() |> uint32

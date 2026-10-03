@@ -31,8 +31,8 @@ open ToolUp.Remoting.MsgPack
 // value that does not fit an `int32` is an `Error`, not a narrowing.
 // That is the whole reason the value model carries the source width
 // class: Phase 786 established that the rule is about INFORMATION and
-// not about signed range (`writeSByte` puts `-128y` on the wire as
-// `uint8 128`), so the combinators apply `Value.signedFits` /
+// not about signed range (a writer before Phase 802 puts `-128y` on
+// the wire as `uint8 128`), so the combinators apply `Value.signedFits` /
 // `Value.unsignedFits` and never a range test of their own.
 //
 // **Records are positional on this wire, and `field` is what makes the
@@ -565,12 +565,13 @@ module Decode =
                  |> apply (field "OffsetMinutes" 1 asInt64))
                     value
 
-    /// `decimal` is its four 32-bit words (`Write.writeDecimal`), each
-    /// written through `write32bitNumber` — so a negative word arrives
+    /// `decimal` is its four 32-bit words (`Write.writeDecimal`). Since
+    /// Phase 802 each travels as the int32 it is; a writer before that
+    /// put each through `write32bitNumber`, so a negative word arrives
     /// as a `uint32` and the `Int32` target recovers the sign. That is
     /// the same-width reinterpretation `asInt32` admits by Phase 786's
     /// second rule, and refusing it would refuse every negative decimal
-    /// the corpus carries.
+    /// such a peer sends.
     let asDecimal: Decoder<decimal> =
         fun value ->
             match exactly 4 value with

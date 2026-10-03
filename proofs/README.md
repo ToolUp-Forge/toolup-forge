@@ -281,11 +281,14 @@ Named because an unstated exclusion reads, to anyone who finds it later, as a cl
   interpreter over an open, possibly recursive type graph walked with a mutable cursor, so "total on
   every input" is not a well-formed statement about it — the input includes the type graph. That
   asymmetry is the whole argument for the closed value model.
-* **The emitter.** One narrowing is unrefusable at the reader by construction: `writeInt64` compacts
-  `2147483648L` into bytes that *are* a well-formed `int32 -2147483648`. The value model faithfully
-  carries a 32-bit source and the information rule admits it — correctly, since refusing it would
-  refuse every negative decimal the corpus pins. Closing it needs a writer that never compacts
-  across a sign boundary, which is a wire break.
+* **The emitter.** The model is about the reader; what the writer emits is outside it. Until
+  Phase 802 that left one narrowing unrefusable by construction: `writeInt64` compacted
+  `2147483648L` into bytes that *are* a well-formed `int32 -2147483648`, and the information rule
+  admits a 32-bit source into a 32-bit target. Phase 802 closed it at the writer — every integer
+  keeps its format's top bit clear unless no wider format exists — so the value now arrives as a
+  64-bit source and is refused. The rule itself is unchanged and still admits the same-width form,
+  because a pre-802 peer still sends it; that is a wire-compatibility property of the writer, tested
+  in the remoting suites, not a claim of this proof.
 * **Semantics, authorisation, tenancy.** A decoded value is well-typed, not authorised, not
   tenant-scoped and not semantically valid. Those are other phases' boundaries.
 * **`DateOnly` and `TimeOnly`.** No combinator, so no model: the Fable MessagePack reader refuses
