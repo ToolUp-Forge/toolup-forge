@@ -510,7 +510,7 @@ jobs:
       # would. It is not vendored here, so CI has to fetch it.
       #
       # The corpus home is public: the model-execution wire specification
-      # lives at https://github.com/Fuaran-Core/fuaran-model-execution-spec
+      # lives at https://github.com/Fuaran-Data/fuaran-model-execution-spec
       # (Apache-2.0). Three things about the shape below are deliberate:
       #
       #   1. **The corpus repository is named by a repository VARIABLE,
