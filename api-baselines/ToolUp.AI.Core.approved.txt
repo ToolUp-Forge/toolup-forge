@@ -488,6 +488,7 @@ ToolUp.AI.ModelInputModule.addBlock(ToolUp.AI.PromptBlock, ToolUp.AI.ModelInput)
 ToolUp.AI.ModelInputModule.addChunk(ToolUp.AI.Chunk, ToolUp.AI.ModelInput) : ToolUp.AI.ModelInput
 ToolUp.AI.ModelInputModule.addFact(ToolUp.AI.DisclosedFact, ToolUp.AI.ModelInput) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.ModelInput, System.String]
 ToolUp.AI.ModelInputModule.addToolResult(ToolUp.AI.ToolResult, ToolUp.AI.ModelInput) : ToolUp.AI.ModelInput
+ToolUp.AI.ModelInputModule.disclose(ToolUp.Platform.ResolvedScope, System.String, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict) : ToolUp.AI.DisclosedFact
 ToolUp.AI.ModelInputModule.disclosedFactIds(ToolUp.AI.ModelInput) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.AI.ModelInputModule.empty : ToolUp.AI.ModelInput { get }
 ToolUp.AI.ModelInputModule.hasFailedGates(ToolUp.AI.ModelInput) : System.Boolean

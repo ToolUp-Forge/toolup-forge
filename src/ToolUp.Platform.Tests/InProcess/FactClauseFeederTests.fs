@@ -39,6 +39,15 @@ open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 
 let private newScope () = "team-" + Guid.NewGuid().ToString("N")
 
+/// Phase 821 — a `ResolvedScope` for a test scope id, through the same
+/// internal mint the scope-resolution middleware uses.
+let private resolved (scopeId: string) : ResolvedScope =
+    StorageScopeResolver.ScopeResolution.ofStorageScope {
+        ScopeId = scopeId
+        Container = "container-" + scopeId
+        Persist = true
+    }
+
 let private q2: TemporalExtent = {
     From = DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
     To = DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
@@ -166,7 +175,12 @@ type private RecordingTelemetry() =
 /// guard exists for.
 type private HangingPlanner() =
     interface IFactClausePlanner with
-        member _.PlanClauses(_, _, _) = async {
+        member _.PlanClauses(_: string, _: string, _: string) = async {
+            do! Async.Sleep 60_000
+            return PlannedFactClauses.none
+        }
+
+        member _.PlanClauses(_: ResolvedScope, _: string, _: string) = async {
             do! Async.Sleep 60_000
             return PlannedFactClauses.none
         }
@@ -175,7 +189,13 @@ type private HangingPlanner() =
 /// same way a timeout does.
 type private FaultingPlanner() =
     interface IFactClausePlanner with
-        member _.PlanClauses(_, _, _) : Async<PlannedFactClauses> = async { return failwith "compiler exploded" }
+        member _.PlanClauses(_: string, _: string, _: string) : Async<PlannedFactClauses> = async {
+            return failwith "compiler exploded"
+        }
+
+        member _.PlanClauses(_: ResolvedScope, _: string, _: string) : Async<PlannedFactClauses> = async {
+            return failwith "compiler exploded"
+        }
 
 let private chunkMatch: VectorMatch = {
     ChunkId = "c1"
@@ -305,12 +325,9 @@ let promptPathTests =
             let pipeline = RecordingPipeline [ factMatch "fact-1" "£21,800"; chunkMatch ]
             let ctx = contextFor "what was acme revenue?"
 
-            // The prompt path derives the planner's scope from the caller,
-            // so the seeded scope has to be the caller's own.
-            let ctx = {
-                ctx with
-                    Access = AccessContext.unrestricted (AuthenticatedUser scope)
-            }
+            // Phase 821 — the prompt path hands the planner the scope the
+            // request resolved to, so the seeded scope is the minted one.
+            let ctx = { ctx with Scope = resolved scope }
 
             let builder =
                 RAGPromptBuilder.withRetrievalPlanned
@@ -342,6 +359,61 @@ let promptPathTests =
             Expect.isGreaterThan chunkIndex factIndex "the facts block precedes the chunk context"
 
             Expect.isSome ctx.PlannedAnswerId.Value "the plan id lands on the channel the provenance recording reads"
+        }
+
+        testCaseAsync "Phase 821 — the planner reads the request's minted scope, never one derived from Access"
+        <| async {
+            let compiler = CountingCompiler [ candidate [ "acme" ] "revenue" ]
+            let planner, store, _ = plannerOver compiler.Compiler
+            let seeded = newScope ()
+            assertFact store seeded (draftFor "acme" "revenue" (Scalar 21800m)) |> ignore
+
+            let feeder = AnswerPlanClausePlanner.create planner :> IFactClausePlanner
+
+            let build () =
+                let pipeline = RecordingPipeline [ chunkMatch ]
+
+                let builder =
+                    RAGPromptBuilder.withRetrievalPlanned
+                        RetrievalDefaults.defaults
+                        None
+                        None
+                        RAGPromptBuilder.ToolFraming.none
+                        (Some feeder)
+                        FactClausePlanOptions.defaults
+                        (pipeline :> IRetrievalPipeline)
+
+                builder, pipeline
+
+            let clauseOf (pipeline: RecordingPipeline) =
+                pipeline.LastRequest |> Option.bind _.FactClause
+
+            // The caller's identity names the seeded shard — the pre-821
+            // derivation (TeamId, else UserId) would have read it — but the
+            // request resolved to nothing: the planner must see nothing.
+            let builderA, pipelineA = build ()
+
+            let! _ =
+                builderA {
+                    contextFor "what was acme revenue?" with
+                        Access = AccessContext.unrestricted (AuthenticatedUser seeded)
+                        Scope = ResolvedScope.anonymous
+                }
+
+            Expect.isNone (clauseOf pipelineA) "an identity naming the shard is not a resolved scope"
+
+            // The converse: the identity names another shard, the request
+            // resolved to the seeded one — the planner reads the minted one.
+            let builderB, pipelineB = build ()
+
+            let! _ =
+                builderB {
+                    contextFor "what was acme revenue?" with
+                        Access = AccessContext.unrestricted (AuthenticatedUser(newScope ()))
+                        Scope = resolved seeded
+                }
+
+            Expect.isSome (clauseOf pipelineB) "the minted scope is the one the plan resolved in"
         }
 
         testCaseAsync "a non-resolving question builds the SAME request a planner-less turn does (GP 11)"

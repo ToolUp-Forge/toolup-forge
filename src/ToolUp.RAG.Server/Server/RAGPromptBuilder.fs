@@ -420,19 +420,18 @@ and withRetrievalPlanned
             // Phase 708 — the fact-clause feeder. Runs BEFORE the request
             // is built, because its whole output is one field on it.
             //
-            // The scope handed to the planner is the caller's own fact
-            // scope, derived exactly as `RetrievalPipeline` derives the one
-            // it hands `IFactResolver` (`TeamId`, else `UserId`) — the two
-            // must agree or the planner would resolve a triple in one scope
-            // and the pipeline re-resolve it in another, quietly pushing
-            // nothing. `principal` is the acting user, so the planner's
+            // The scope handed to the planner is the one the platform's
+            // scope resolution minted for this request (Phase 821) — never
+            // one derived here from `Access`. The planner resolves and gates
+            // under it through the fact tier's `ResolvedScope` members, so a
+            // pushed clause was resolved in the shard the request resolved
+            // to. `principal` is the acting user, so the planner's
             // disclosure gate (Phase 525) judges under the same identity
             // the pipeline's egress door will.
             let! planned =
                 match clausePlanner with
                 | Some planner when planOptions.Enabled -> async {
                     let opts = FactClausePlanOptions.clamp planOptions
-                    let factScopeId = ctx.Access.TeamId |> Option.defaultValue ctx.Access.UserId
                     let sw = System.Diagnostics.Stopwatch.StartNew()
 
                     // `Async.StartChild` bounds the wait, not the work: a
@@ -443,7 +442,7 @@ and withRetrievalPlanned
                     // to the user is that the turn proceeds.
                     let bounded = async {
                         let! child =
-                            Async.StartChild(planner.PlanClauses(factScopeId, ctx.Access.UserId, query), opts.TimeoutMs)
+                            Async.StartChild(planner.PlanClauses(ctx.Scope, ctx.Access.UserId, query), opts.TimeoutMs)
 
                         return! child
                     }

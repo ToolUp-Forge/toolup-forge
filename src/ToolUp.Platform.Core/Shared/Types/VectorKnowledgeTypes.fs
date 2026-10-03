@@ -507,7 +507,18 @@ type IFactClausePlanner =
     /// Never throws for an unanswerable question — an unresolvable turn
     /// returns `PlannedFactClauses.none`, exactly as a turn that named no
     /// vocabulary does.
+    ///
+    /// The string-keyed form, kept for one release as the compatibility
+    /// path (Phase 821). The request path calls the `ResolvedScope`
+    /// overload below.
     abstract PlanClauses: scopeId: string * principal: string * question: string -> Async<PlannedFactClauses>
+
+    /// The request-path form (Phase 821): plan under the scope the
+    /// platform's scope resolution minted for the request, so the clauses
+    /// are resolved and disclosure-gated under the resolver's scope rather
+    /// than one the caller derived. Semantics are otherwise exactly the
+    /// string form's over `scope.ScopeId`.
+    abstract PlanClauses: scope: ResolvedScope * principal: string * question: string -> Async<PlannedFactClauses>
 
 // ─── Disclosure egress seam (Phase 525) ──────────────────────────────
 //

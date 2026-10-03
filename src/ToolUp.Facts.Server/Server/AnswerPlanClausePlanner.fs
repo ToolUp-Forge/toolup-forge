@@ -4,6 +4,7 @@
 namespace ToolUp.Facts
 
 open System.Collections.Concurrent
+open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
 
 // ─── The fact-clause feeder (Phase 708) ──────────────────────────────
@@ -140,24 +141,36 @@ type AnswerPlanClausePlanner(planner: IAnswerPlanner, retention: int) =
         | true, plan -> Some plan
         | false, _ -> None
 
+    /// Project a compiled plan onto the clauses it pushes, retaining the
+    /// plan when it produced any (shared by both `PlanClauses` forms).
+    member private this.ClausesFor(plan: AnswerPlan) : PlannedFactClauses =
+        match AnswerPlanClausePlanner.ClausesOf plan with
+        | [] ->
+            // Nothing to push. Deliberately indistinguishable from an
+            // unwired planner at the request the caller then builds —
+            // the turn is byte-identical to its pre-708 self (GP 11).
+            PlannedFactClauses.none
+        | clauses ->
+            this.Retain plan
+
+            {
+                PlanId = plan.PlanId
+                Clauses = clauses
+            }
+
     interface IFactClausePlanner with
 
-        member this.PlanClauses(scopeId, principal, question) = async {
+        member this.PlanClauses(scopeId: string, principal, question) = async {
             let! plan = planner.Plan(scopeId, principal, question)
+            return this.ClausesFor plan
+        }
 
-            match AnswerPlanClausePlanner.ClausesOf plan with
-            | [] ->
-                // Nothing to push. Deliberately indistinguishable from an
-                // unwired planner at the request the caller then builds —
-                // the turn is byte-identical to its pre-708 self (GP 11).
-                return PlannedFactClauses.none
-            | clauses ->
-                this.Retain plan
-
-                return {
-                    PlanId = plan.PlanId
-                    Clauses = clauses
-                }
+        // Phase 821 — the request path: the minted scope reaches the
+        // planner's typed form, so the store reads and gate checks behind
+        // these clauses take the resolver's scope, never a derived string.
+        member this.PlanClauses(scope: ResolvedScope, principal, question) = async {
+            let! plan = planner.Plan(scope, principal, question)
+            return this.ClausesFor plan
         }
 
     interface IPlannedAnswerRecorder with
