@@ -93,6 +93,16 @@ type PromptContext = {
     /// Same mutable-cell lifecycle as `RetrievedSources` / `ShortCircuit`
     /// (fresh cell per request).
     PlannedAnswerId: string option ref
+    /// Phase 821 — the storage scope the platform's scope resolution
+    /// minted for this request (`ScopeResolution.forRequest`), or the
+    /// explicit anonymous scope when it minted none. Builders that read
+    /// the fact tier (the clause planner, the retrieval pipeline) key on
+    /// this value rather than deriving a scope of their own from
+    /// `Access`, so a turn reads the one shard its request resolved to.
+    /// A context built without a request (tests, startup-time prompt
+    /// construction) carries `ResolvedScope.anonymous`, never a derived
+    /// scope.
+    Scope: ResolvedScope
 }
 
 /// Builds the system prompt sent to the AI provider for a given request.

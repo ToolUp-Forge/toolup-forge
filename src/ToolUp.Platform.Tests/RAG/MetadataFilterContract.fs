@@ -295,6 +295,7 @@ let private promptContextWith (perRequest: Map<string, string> option) : ToolUp.
     RetrievedSources = ref []
     ShortCircuit = ref None
     PlannedAnswerId = ref None
+    Scope = ResolvedScope.anonymous
 }
 
 /// Run the tool-aware builder with the given deployment + per-request

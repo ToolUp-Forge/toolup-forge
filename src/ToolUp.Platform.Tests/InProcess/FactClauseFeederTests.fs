@@ -212,6 +212,7 @@ let private contextFor (question: string) : PromptContext = {
     RetrievedSources = ref []
     ShortCircuit = ref None
     PlannedAnswerId = ref None
+    Scope = ResolvedScope.anonymous
 }
 
 // ── The projection: plan steps → clauses (708.A) ──────────────────

@@ -342,6 +342,7 @@ let tests =
                 RetrievedSources = sources
                 ShortCircuit = ref None
                 PlannedAnswerId = ref None
+                Scope = ResolvedScope.anonymous
             }
 
             let builder =
@@ -406,6 +407,7 @@ let tests =
                 RetrievedSources = sources
                 ShortCircuit = ref None
                 PlannedAnswerId = ref None
+                Scope = ResolvedScope.anonymous
             }
 
             // A high MinScore that would drop any real chunk.
