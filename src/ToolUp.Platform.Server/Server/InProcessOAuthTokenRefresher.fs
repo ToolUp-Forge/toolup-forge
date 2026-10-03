@@ -16,6 +16,7 @@ open System.Text.RegularExpressions
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform.Metrics
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Phase 10h — in-process IOAuthTokenRefresher ──────────────────
 //
@@ -460,7 +461,7 @@ module InProcessOAuthTokenRefresher =
                                     sprintf "upstream %d: %s" (int resp.StatusCode) (scrubUpstreamBody respBody)
                                 )
                     with
-                    | :? HttpRequestException as ex ->
+                    | ProviderException(ex: HttpRequestException) ->
                         sw.Stop()
                         recordMetrics descriptor false sw.ElapsedMilliseconds
                         return TransientError(sprintf "network: %s" ex.Message)

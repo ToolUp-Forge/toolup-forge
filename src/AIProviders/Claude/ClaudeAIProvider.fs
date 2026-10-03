@@ -9,6 +9,7 @@ open ToolUp.Platform // RetryPolicy (Phase 11.C.5 Tier 3 — unified)
 open ToolUp.Platform.AI // IHttpTransport / HttpClientTransport / HttpRequest / ErrorClassifier (Phase 251/254)
 open ToolUp.Platform.Secrets
 open ClaudeAIProviderWire
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Provider implementation ─────────────────────────────────────
 
@@ -284,7 +285,7 @@ type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
                                             TransientNetwork
                                                 $"Request timed out after {RetryPolicy.timeoutDescription retryPolicy}"
                                         )
-                            | :? HttpRequestException as ex ->
+                            | ProviderException(ex: HttpRequestException) ->
                                 // Transport error mid-stream with no content yet =
                                 // transient; with partial content = StreamingAborted.
                                 if accumulated <> "" then
@@ -316,7 +317,7 @@ type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
                                         TransientNetwork
                                             $"Request timed out after {RetryPolicy.timeoutDescription retryPolicy}"
                                     )
-                            | :? HttpRequestException as ex -> return Error(TransientNetwork ex.Message)
+                            | ProviderException(ex: HttpRequestException) -> return Error(TransientNetwork ex.Message)
                             | ex -> return Error(TransientNetwork ex.Message)
                     }
 
@@ -503,7 +504,7 @@ type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
                                     TransientNetwork
                                         $"Request timed out after {RetryPolicy.timeoutDescription retryPolicy}"
                                 )
-                        | :? HttpRequestException as ex -> return Error(TransientNetwork ex.Message)
+                        | ProviderException(ex: HttpRequestException) -> return Error(TransientNetwork ex.Message)
                         | ex -> return Error(TransientNetwork ex.Message)
                     }
 

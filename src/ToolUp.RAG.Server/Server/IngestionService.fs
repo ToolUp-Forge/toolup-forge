@@ -15,6 +15,7 @@ open ToolUp.Platform.IRetrievalPipeline
 open ToolUp.Platform.IRagTelemetry
 open ToolUp.Platform.Usage
 open ToolUp.RAG.IngestionTypes
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Retry / dead-letter substrate (Phase 14t) ────────────────────
 
@@ -105,13 +106,12 @@ let rec private causeChain (ex: exn) : exn seq = seq {
 /// "retry, then dead-letter loudly" rather than "drop".
 let classifyIndexFailure (ex: exn) : EmbedFailureClass =
     let classifyByShape (ex: exn) =
-        let inner =
-            match ex with
-            | :? AggregateException as agg when not (isNull agg.InnerException) -> agg.InnerException
-            | _ -> ex
+        // Phase 972: the shared unwrap (flattened, so a nested aggregate is
+        // seen through too).
+        let inner = unwrap ex
 
         match inner with
-        | :? HttpRequestException as httpEx ->
+        | ProviderException(httpEx: HttpRequestException) ->
             match Option.ofNullable httpEx.StatusCode with
             | Some code ->
                 let status = int code
@@ -132,7 +132,7 @@ let classifyIndexFailure (ex: exn) : EmbedFailureClass =
                 // No status ⇒ transport / DNS / connection failure — transient.
                 Transient None
         | :? TaskCanceledException
-        | :? TimeoutException
+        | ProviderException(_: TimeoutException)
         | :? OperationCanceledException -> Transient None
         | _ -> Transient None
 

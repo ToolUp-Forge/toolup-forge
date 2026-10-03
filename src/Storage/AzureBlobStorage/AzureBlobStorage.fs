@@ -11,6 +11,7 @@ open Azure.Storage.Blobs.Models
 open Azure.Storage.Blobs.Specialized
 open Azure.Storage.Sas
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Configuration ───────────────────────────────────────────────────
 
@@ -73,26 +74,22 @@ module AzureBlobStorageConfig =
 
 let private blobKey (toolupContainer: string) (blobName: string) = $"{toolupContainer}/{blobName}"
 
-/// Azure SDK exceptions can surface at this companion's `with` handlers
-/// wrapped in `AggregateException`, so a direct `:? RequestFailedException`
-/// test never fires. Measured by the armed cloud-parity run (Phase 733,
-/// 2026-08-27): the `Status = 416` arm of `DownloadRange` sat dead and a
-/// fully-past-EOF range returned `Error "One or more errors occurred. …"`
-/// instead of the contract's `Ok [||]`. The 404 arms were unaffected in
-/// EFFECT only because their fall-through is also an `Error` — the
-/// semantic 416 arm is the one where being unreachable changes an answer.
-///
-/// Match through the wrapper: flatten and take the single inner exception
-/// a one-Task await carries; a bare exception passes through unchanged, so
-/// an unmatched case still rethrows the original. Mirrors the pattern
-/// `ToolUp.Storage.GoogleCloudStorage` carries for the same class.
-let private (|Unwrapped|) (ex: exn) =
-    match ex with
-    | :? AggregateException as aggregate ->
-        match Seq.tryHead (aggregate.Flatten().InnerExceptions) with
-        | Some inner -> inner
-        | None -> ex
-    | _ -> ex
+// Azure SDK exceptions can surface at this companion's `with` handlers
+// wrapped in `AggregateException`, so a direct `:? RequestFailedException`
+// test never fires. Measured by the armed cloud-parity run (Phase 733,
+// 2026-08-27): the `Status = 416` arm of `DownloadRange` sat dead and a
+// fully-past-EOF range returned `Error "One or more errors occurred. …"`
+// instead of the contract's `Ok [||]`. The 404 arms were unaffected in
+// EFFECT only because their fall-through is also an `Error` — the
+// semantic 416 arm is the one where being unreachable changes an answer.
+//
+// Match through the wrapper: flatten and take the single inner exception
+// a one-Task await carries; a bare exception passes through unchanged, so
+// an unmatched case still rethrows the original. Mirrors the pattern
+// `ToolUp.Storage.GoogleCloudStorage` carries for the same class.
+//
+// Phase 972: the private `(|Unwrapped|)` this note introduced is now the
+// shared `ToolUp.Platform.ProviderExceptions` (`ProviderException` / `Unwrapped`).
 
 /// Phase 2c — the companion id this storage backend records under, the
 /// SAME spelling its health probe uses (`blob_storage:azure`), so the
@@ -118,7 +115,7 @@ let internal companionId = "azure"
 /// not a credential fact and returns `None`.
 let internal authFailureStatus (ex: exn) : int option =
     match ex with
-    | Unwrapped(:? RequestFailedException as failure) when failure.Status = 401 || failure.Status = 403 ->
+    | ProviderException(failure: RequestFailedException) when failure.Status = 401 || failure.Status = 403 ->
         Some failure.Status
     | _ -> None
 
@@ -200,7 +197,7 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
             let! response = blob.GetPropertiesAsync() |> Async.AwaitTask
             return Ok(Some(response.Value.ETag.ToString()))
         with
-        | Unwrapped(:? RequestFailedException as ex) when ex.Status = 404 -> return Ok None
+        | ProviderException(ex: RequestFailedException) when ex.Status = 404 -> return Ok None
         | Unwrapped ex -> return Error ex.Message
     }
 
@@ -230,7 +227,7 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
                 let! response = blob.DownloadContentAsync() |> Async.AwaitTask
                 return Ok(response.Value.Content.ToArray())
             with
-            | Unwrapped(:? RequestFailedException as ex) when ex.Status = 404 ->
+            | ProviderException(ex: RequestFailedException) when ex.Status = 404 ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
             | Unwrapped ex ->
                 do! noteAuthFailure "Download" ex
@@ -251,9 +248,9 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
                     let! response = blob.DownloadContentAsync options |> Async.AwaitTask
                     return Ok(response.Value.Content.ToArray())
                 with
-                | Unwrapped(:? RequestFailedException as ex) when ex.Status = 404 ->
+                | ProviderException(ex: RequestFailedException) when ex.Status = 404 ->
                     return Error $"Blob not found: {toolupContainer}/{blobName}"
-                | Unwrapped(:? RequestFailedException as ex) when ex.Status = 416 ->
+                | ProviderException(ex: RequestFailedException) when ex.Status = 416 ->
                     // Fully past EOF → `Ok [||]` per the interface
                     // contract. Matched through `Unwrapped` because
                     // Azure's 416 arrives wrapped; see the pattern's
@@ -313,7 +310,7 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
                     let! _ = target.CommitBlockListAsync blockIds |> Async.AwaitTask
                     return Ok total
                 with
-                | Unwrapped(:? RequestFailedException as ex) when ex.Status = 404 ->
+                | ProviderException(ex: RequestFailedException) when ex.Status = 404 ->
                     return Error(ComposeRefusal.ComposeFailed $"Compose source not found in {toolupContainer}")
                 | Unwrapped ex ->
                     do! noteAuthFailure "ComposeFrom" ex
@@ -419,7 +416,7 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
                         ContentType = contentType
                     }
             with
-            | Unwrapped(:? RequestFailedException as ex) when ex.Status = 404 ->
+            | ProviderException(ex: RequestFailedException) when ex.Status = 404 ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
             | Unwrapped ex ->
                 do! noteAuthFailure "GetMetadata" ex
@@ -445,7 +442,7 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
                 let result = response.Value
                 return Ok(result.Content.ToArray(), result.Details.ETag.ToString())
             with
-            | Unwrapped(:? RequestFailedException as ex) when ex.Status = 404 ->
+            | ProviderException(ex: RequestFailedException) when ex.Status = 404 ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
             | Unwrapped ex ->
                 do! noteAuthFailure "DownloadWithETag" ex
@@ -468,7 +465,7 @@ type AzureBlobStorage(config: AzureBlobStorageConfig) =
                 let! response = blob.UploadAsync(ms, options) |> Async.AwaitTask
                 return Ok(response.Value.ETag.ToString())
             with
-            | Unwrapped(:? RequestFailedException as ex) when ex.Status = 412 || ex.Status = 409 ->
+            | ProviderException(ex: RequestFailedException) when ex.Status = 412 || ex.Status = 409 ->
                 match! currentETag key with
                 | Ok current -> return Error(ETagMismatch current)
                 | Error msg ->

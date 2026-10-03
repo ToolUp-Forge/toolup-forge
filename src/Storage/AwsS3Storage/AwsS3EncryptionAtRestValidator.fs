@@ -5,6 +5,7 @@ open Amazon.S3
 open Amazon.S3.Model
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Storage.AwsS3Storage
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Phase 22 AWS S3 encryption-at-rest preflight ───────────────────
 //
@@ -44,19 +45,15 @@ let private buildClient (config: AwsS3StorageConfig) : AmazonS3Client =
 
     new AmazonS3Client(clientConfig)
 
-/// AWS SDK exceptions can arrive at the `with` handler below wrapped in
-/// `AggregateException` (the class the first armed cloud-parity run
-/// proved live in the AWS Secrets Manager companion, 2026-08-27), which
-/// would route every vendor-classified verdict into the generic error
-/// arm. Match through the wrapper; a bare exception passes through
-/// unchanged.
-let private (|Unwrapped|) (ex: exn) =
-    match ex with
-    | :? AggregateException as aggregate ->
-        match Seq.tryHead (aggregate.Flatten().InnerExceptions) with
-        | Some inner -> inner
-        | None -> ex
-    | _ -> ex
+// AWS SDK exceptions can arrive at the `with` handler below wrapped in
+// `AggregateException` (the class the first armed cloud-parity run
+// proved live in the AWS Secrets Manager companion, 2026-08-27), which
+// would route every vendor-classified verdict into the generic error
+// arm. Match through the wrapper; a bare exception passes through
+// unchanged.
+//
+// Phase 972: the private `(|Unwrapped|)` this note introduced is now the
+// shared `ToolUp.Platform.ProviderExceptions` (`ProviderException` / `Unwrapped`).
 
 type private Impl(config: AwsS3StorageConfig, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
@@ -93,15 +90,17 @@ type private Impl(config: AwsS3StorageConfig, ?timeout: TimeSpan) =
                              at the bucket level, or wrap the IBlobStorage with \
                              EncryptedBlobStorage via ServerApp.withEncryptedBlobStorage."
             with
-            | Unwrapped(:? AmazonS3Exception as ex) when ex.ErrorCode = "ServerSideEncryptionConfigurationNotFoundError" ->
+            | ProviderException(ex: AmazonS3Exception) when
+                ex.ErrorCode = "ServerSideEncryptionConfigurationNotFoundError"
+                ->
                 return
                     Warning
                         "S3 bucket has no server-side encryption configuration. \
                          Enable bucket encryption at the bucket level or use \
                          EncryptedBlobStorage."
-            | Unwrapped(:? AmazonS3Exception as ex) when ex.ErrorCode = "NoSuchBucket" ->
+            | ProviderException(ex: AmazonS3Exception) when ex.ErrorCode = "NoSuchBucket" ->
                 return Error(sprintf "S3 bucket %s does not exist" config.BucketName)
-            | Unwrapped(:? AmazonS3Exception as ex) when ex.ErrorCode = "AccessDenied" ->
+            | ProviderException(ex: AmazonS3Exception) when ex.ErrorCode = "AccessDenied" ->
                 return
                     Error(
                         sprintf

@@ -4,6 +4,6 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ToolUp.ArtefactSigning.AwsKms.AwsKmsArtefactSigner (class)
-ToolUp.ArtefactSigning.AwsKms.AwsKmsArtefactSigner  # <members unavailable: FileNotFoundException>
+ToolUp.ArtefactSigning.AwsKms.AwsKmsArtefactSigner..ctor(Amazon.KeyManagementService.IAmazonKeyManagementService, System.String)
 ToolUp.ArtefactSigning.AwsKms.AwsKmsArtefactSignerModule (class)
-ToolUp.ArtefactSigning.AwsKms.AwsKmsArtefactSignerModule  # <members unavailable: FileNotFoundException>
+ToolUp.ArtefactSigning.AwsKms.AwsKmsArtefactSignerModule.create(Amazon.KeyManagementService.IAmazonKeyManagementService, System.String) : ToolUp.ArtefactSigning.IArtefactSigner

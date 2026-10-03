@@ -4,6 +4,8 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ToolUp.Encryption.GoogleCloudKms.GoogleCloudKmsKeyResolver (class)
-ToolUp.Encryption.GoogleCloudKms.GoogleCloudKmsKeyResolver  # <members unavailable: FileNotFoundException>
+ToolUp.Encryption.GoogleCloudKms.GoogleCloudKmsKeyResolver..ctor(Google.Cloud.Kms.V1.KeyManagementServiceClient, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.StorageScope, System.String])
+ToolUp.Encryption.GoogleCloudKms.GoogleCloudKmsKeyResolver..ctor(Google.Cloud.Kms.V1.KeyManagementServiceClient, System.String)
 ToolUp.Encryption.GoogleCloudKms.GoogleCloudKmsKeyResolverModule (class)
-ToolUp.Encryption.GoogleCloudKms.GoogleCloudKmsKeyResolverModule  # <members unavailable: FileNotFoundException>
+ToolUp.Encryption.GoogleCloudKms.GoogleCloudKmsKeyResolverModule.create(Google.Cloud.Kms.V1.KeyManagementServiceClient, System.String) : ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver
+ToolUp.Encryption.GoogleCloudKms.GoogleCloudKmsKeyResolverModule.createPerScope(Google.Cloud.Kms.V1.KeyManagementServiceClient, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.StorageScope, System.String]) : ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver

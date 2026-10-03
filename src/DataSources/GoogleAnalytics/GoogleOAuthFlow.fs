@@ -9,6 +9,7 @@ open System.Text.Json
 open System.Threading.Tasks
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Google OAuth 2.0 credential-flow companion ──────────────────────
 //
@@ -238,7 +239,7 @@ let private postToken
             with :? JsonException ->
                 return Error(OAuthFlowFailed "Google token response was not valid JSON")
         with
-        | :? HttpRequestException as ex -> return Error(NetworkError ex.Message)
+        | ProviderException(ex: HttpRequestException) -> return Error(NetworkError ex.Message)
         | :? TaskCanceledException -> return Error(NetworkError "request to the Google token endpoint timed out")
     }
 
@@ -455,7 +456,7 @@ let create
                     else
                         return Error(ProviderRejected(sprintf "revocation returned HTTP %d" (int resp.StatusCode)))
             with
-            | :? HttpRequestException as ex -> return Error(NetworkError ex.Message)
+            | ProviderException(ex: HttpRequestException) -> return Error(NetworkError ex.Message)
             | :? TaskCanceledException ->
                 return Error(NetworkError "request to the Google revocation endpoint timed out")
         }

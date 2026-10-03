@@ -27,6 +27,8 @@
         <Compile Include="InProcess\SigningProviderConformanceTests.fs" />
         <Compile Include="InProcess\DeployRecordSealingTests.fs" />
         <Compile Include="InProcess\ApplicationKeyedSigningTests.fs" />
+        <!-- Phase 972 — the three cloud-KMS signers classify a faulted KMS call (KeyUnavailable). -->
+        <Compile Include="InProcess\KmsProviderExceptionTests.fs" />
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
              ToolUp.Platform.Tests so there is one implementation. -->
         <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
@@ -35,6 +37,10 @@
     <ItemGroup>
         <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
         <ProjectReference Include="..\ToolUp.ArtefactSigning\ArtefactSigning.fsproj" />
+        <!-- Phase 972 — the cloud-KMS signer companions, driven over their real SDK client types. -->
+        <ProjectReference Include="..\ArtefactSigning\AwsKms\AwsKmsArtefactSigning.fsproj" />
+        <ProjectReference Include="..\ArtefactSigning\AzureKeyVault\AzureKeyVaultArtefactSigning.fsproj" />
+        <ProjectReference Include="..\ArtefactSigning\GoogleCloudKms\GoogleCloudKmsArtefactSigning.fsproj" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="FSharp.Core" />

@@ -10,6 +10,7 @@ open System.Text
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open DataManagementTypes
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Shared IDataSource connector support ─────────────────────────
 //
@@ -57,25 +58,18 @@ module Errors =
         // `AggregateException` (the class the first armed cloud-parity
         // run proved live in the AWS companions, 2026-08-27), which
         // would degrade every type test below to `UnexpectedFailure` —
-        // so unwrap first: flatten and take the single inner exception
-        // a one-Task await carries; a bare exception passes through
-        // unchanged.
-        let ex =
-            match ex with
-            | :? AggregateException as aggregate ->
-                match Seq.tryHead (aggregate.Flatten().InnerExceptions) with
-                | Some inner -> inner
-                | None -> ex
-            | _ -> ex
+        // so unwrap first, through the shared Phase 972 unwrap; a bare
+        // exception passes through unchanged.
+        let ex = unwrap ex
 
         let message = $"%s{context}: %s{ex.Message}"
 
         match ex with
         | :? OperationCanceledException -> SourceUnreachable $"%s{message} (cancelled)"
-        | :? TimeoutException
-        | :? System.Net.Http.HttpRequestException
-        | :? System.Net.Sockets.SocketException
-        | :? DbException -> SourceUnreachable message
+        | ProviderException(_: TimeoutException)
+        | ProviderException(_: System.Net.Http.HttpRequestException)
+        | ProviderException(_: System.Net.Sockets.SocketException)
+        | ProviderException(_: DbException) -> SourceUnreachable message
         | :? UnauthorizedAccessException -> SourceUnreachable message
         | _ -> UnexpectedFailure message
 

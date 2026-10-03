@@ -895,6 +895,47 @@ let tests =
                 | Error(CalendarNotFound _) -> ()
                 | other -> failtestf "expected CalendarNotFound, got %A" other
             }
+
+            // Phase 972 — `Async.AwaitTask` wraps the transport's exception in
+            // an AggregateException; before the shared ProviderException
+            // pattern the `HttpRequestException` arm never fired and the
+            // failure escaped.
+            testAsync "a refused connection is Unreachable, not an escaped exception" {
+                let rig = rigWith false None
+
+                let refused =
+                    { new HttpMessageHandler() with
+                        member _.SendAsync(_, _) =
+                            System.Threading.Tasks.Task.FromException<HttpResponseMessage>(
+                                HttpRequestException "connection refused"
+                            )
+                    }
+
+                let tokens =
+                    GoogleCalendarTokenSource(
+                        rig.Tokens.Post,
+                        rig.Secrets,
+                        None,
+                        GoogleCalendarOAuthConfig.defaults,
+                        fun () -> DateTimeOffset.UtcNow
+                    )
+
+                let bridge =
+                    GoogleCalendarBridge(
+                        tokens,
+                        rig.Secrets,
+                        settingsWith false,
+                        refused,
+                        fun () -> DateTimeOffset.UtcNow
+                    )
+                    :> ICalendarBridge
+
+                match! Async.Catch(bridge.LinkResource rig.Link) with
+                | Choice1Of2(Error(Unreachable message)) ->
+                    Expect.stringContains message "connection refused" "the transport's own message"
+                | Choice1Of2 other -> failtestf "expected Unreachable, got %A" other
+                | Choice2Of2 escaped -> failtestf "the failure ESCAPED as %s" (escaped.GetType().Name)
+            }
         ]
 
         testList "credentials" [

@@ -14,6 +14,7 @@ open ToolUp.Platform.Secrets
 open ToolUp.Scheduling
 open ToolUp.Scheduling.SchedulingTypes
 open ToolUp.Scheduling.ICalendarBridge
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Phase 20a — the generic CalDAV calendar bridge ─────────────────
 //
@@ -236,7 +237,7 @@ type CalDAVCalendarBridge(secretStore: ISecretStore, settings: CalDAVSettings, h
             return Ok(response.StatusCode, body)
         with
         | :? TaskCanceledException as ex -> return Error(Unreachable(sprintf "CalDAV request timed out: %s" ex.Message))
-        | :? HttpRequestException as ex -> return Error(Unreachable ex.Message)
+        | ProviderException(ex: HttpRequestException) -> return Error(Unreachable ex.Message)
     }
 
     let request

@@ -409,5 +409,32 @@ let tests =
             | Ok() -> failtest "a 401 reported success"
         }
 
+        // Phase 972 — `Async.AwaitTask` wraps the transport's exception in an
+        // AggregateException; before the shared ProviderException pattern the
+        // `HttpRequestException` arm never fired and the failure escaped.
+        testAsync "a refused connection is Unreachable, not an escaped exception" {
+            let refused =
+                { new HttpMessageHandler() with
+                    member _.SendAsync(_request, _ct) =
+                        Task.FromException<HttpResponseMessage>(HttpRequestException "connection refused")
+                }
+
+            let bridge =
+                CalDAVCalendarBridge(FixedSecretStore(Some Password), settings, refused) :> ICalendarBridge
+
+            let link: CalendarLinkRef = {
+                ScopeId = "team-refused"
+                ResourceId = "room-101"
+                ExternalCalendarId = CollectionPath
+                UserId = "alice"
+            }
+
+            match! Async.Catch(bridge.LinkResource link) with
+            | Choice1Of2(Error(Unreachable message)) ->
+                Expect.stringContains message "connection refused" "the transport's own message"
+            | Choice1Of2 other -> failtestf "expected Unreachable, got %A" other
+            | Choice2Of2 escaped -> failtestf "the failure ESCAPED as %s" (escaped.GetType().Name)
+        }
+
         liveTests
     ]

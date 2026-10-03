@@ -4,6 +4,7 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ToolUp.ArtefactSigning.GoogleCloudKms.GoogleCloudKmsArtefactSigner (class)
-ToolUp.ArtefactSigning.GoogleCloudKms.GoogleCloudKmsArtefactSigner  # <members unavailable: FileNotFoundException>
+ToolUp.ArtefactSigning.GoogleCloudKms.GoogleCloudKmsArtefactSigner..ctor(Google.Cloud.Kms.V1.KeyManagementServiceClient, Google.Cloud.Kms.V1.CryptoKeyVersionName)
 ToolUp.ArtefactSigning.GoogleCloudKms.GoogleCloudKmsArtefactSignerModule (class)
-ToolUp.ArtefactSigning.GoogleCloudKms.GoogleCloudKmsArtefactSignerModule  # <members unavailable: FileNotFoundException>
+ToolUp.ArtefactSigning.GoogleCloudKms.GoogleCloudKmsArtefactSignerModule.create(Google.Cloud.Kms.V1.KeyManagementServiceClient, Google.Cloud.Kms.V1.CryptoKeyVersionName) : ToolUp.ArtefactSigning.IArtefactSigner
+ToolUp.ArtefactSigning.GoogleCloudKms.GoogleCloudKmsArtefactSignerModule.createFromName(Google.Cloud.Kms.V1.KeyManagementServiceClient, System.String) : ToolUp.ArtefactSigning.IArtefactSigner

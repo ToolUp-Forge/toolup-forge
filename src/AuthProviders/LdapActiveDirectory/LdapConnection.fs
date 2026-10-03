@@ -10,6 +10,7 @@ open System.Threading.Tasks
 open System.DirectoryServices.Protocols
 open ToolUp.AuthProviders.LdapConfig
 open ToolUp.AuthProviders.LdapDirectory
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Real directory adapter (System.DirectoryServices.Protocols) ─────
 //
@@ -150,7 +151,7 @@ type private RealConnection(config: LdapConfig, connection: LdapConnection) =
 
                 return Ok result
             with
-            | :? LdapException as ex -> return Error(sprintf "LDAP search failed: %s" ex.Message)
+            | ProviderException(ex: LdapException) -> return Error(sprintf "LDAP search failed: %s" ex.Message)
             | ex -> return Error(sprintf "LDAP search failed: %s" ex.Message)
         }
 
@@ -202,7 +203,7 @@ type RealLdapConnectionFactory(config: LdapConfig, resolvePassword: unit -> Asyn
 
                 return Ok(new RealConnection(config, connection) :> ILdapConnection)
             with
-            | :? LdapException as ex -> return Error(sprintf "LDAP service bind failed: %s" ex.Message)
+            | ProviderException(ex: LdapException) -> return Error(sprintf "LDAP service bind failed: %s" ex.Message)
             | ex -> return Error(sprintf "LDAP service bind failed: %s" ex.Message)
         }
 
@@ -220,7 +221,7 @@ type RealLdapConnectionFactory(config: LdapConfig, resolvePassword: unit -> Asyn
                         try
                             connection.Bind(NetworkCredential(dn, password))
                             Ok true
-                        with :? LdapException as ex ->
+                        with ProviderException(ex: LdapException) ->
                             // 49 = invalidCredentials — a definitive
                             // "wrong password", not a transport fault.
                             if ex.ErrorCode = 49 then Ok false else Error ex.Message)

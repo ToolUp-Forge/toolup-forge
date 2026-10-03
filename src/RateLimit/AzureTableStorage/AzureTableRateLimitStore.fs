@@ -8,6 +8,7 @@ open System.Collections.Concurrent
 open Azure
 open Azure.Data.Tables
 open ToolUp.Platform
+open ToolUp.Platform.ProviderExceptions
 
 // ─── ToolUp.RateLimit.AzureTableStorage — Phase 56 reference impl ────
 //
@@ -142,7 +143,7 @@ module AzureTableRateLimitStore =
                 let entity = response.Value
                 let count = entity.GetInt32 "Count" |> Option.ofNullable |> Option.defaultValue 0
                 return Some(count, entity.ETag)
-            with :? RequestFailedException as ex when ex.Status = 404 ->
+            with ProviderException(ex: RequestFailedException) when ex.Status = 404 ->
                 return None
         }
 
@@ -173,11 +174,11 @@ module AzureTableRateLimitStore =
 
                         return Ok()
                 with
-                | :? RequestFailedException as ex when ex.Status = 412 || ex.Status = 409 ->
+                | ProviderException(ex: RequestFailedException) when ex.Status = 412 || ex.Status = 409 ->
                     // PreconditionFailed (412) or Conflict (409) —
                     // another writer raced. Caller retries.
                     return Error(StoreUnavailable "ETag mismatch — retry")
-                | :? RequestFailedException as ex ->
+                | ProviderException(ex: RequestFailedException) ->
                     return Error(StoreUnavailable(sprintf "Azure Table write failed: %s" ex.Message))
             }
 

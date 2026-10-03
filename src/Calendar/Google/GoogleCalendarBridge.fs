@@ -22,6 +22,7 @@ open ToolUp.Scheduling
 open ToolUp.Scheduling.SchedulingTypes
 open ToolUp.Scheduling.ICalendarBridge
 open ToolUp.Calendar.GoogleCalendarOAuth
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Phase 830 — the Google Calendar bridge ─────────────────────────
 //
@@ -740,7 +741,7 @@ type GoogleCalendarBridge
         with
         | :? TaskCanceledException as ex ->
             return Error(Unreachable(sprintf "Google Calendar request timed out: %s" ex.Message))
-        | :? HttpRequestException as ex -> return Error(Unreachable ex.Message)
+        | ProviderException(ex: HttpRequestException) -> return Error(Unreachable ex.Message)
     }
 
     /// Issue one request with the link's bearer token; on a 401, ask for

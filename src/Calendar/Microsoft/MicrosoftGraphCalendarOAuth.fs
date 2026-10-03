@@ -12,6 +12,7 @@ open System.Threading.Tasks
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
 open ToolUp.Scheduling.ICalendarBridge
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Phase 831 — Microsoft Graph delegated OAuth ────────────────────
 //
@@ -304,7 +305,7 @@ let private postToken
             with :? JsonException ->
                 return Error(OAuthFlowFailed "Microsoft token response was not valid JSON")
         with
-        | :? HttpRequestException as ex -> return Error(NetworkError ex.Message)
+        | ProviderException(ex: HttpRequestException) -> return Error(NetworkError ex.Message)
         | :? TaskCanceledException -> return Error(NetworkError "request to the Microsoft token endpoint timed out")
     }
 

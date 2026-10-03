@@ -7,6 +7,7 @@ open System.Text
 open System.Threading.Tasks
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Public surface ──────────────────────────────────────────────
 //
@@ -183,7 +184,7 @@ type TwilioNotificationSink
                 | 201 -> return SinkResult.Delivered(parseMessageSid responseBody)
                 | _ -> return classifyHttp response.StatusCode responseBody
             with
-            | :? HttpRequestException as ex ->
+            | ProviderException(ex: HttpRequestException) ->
                 return SinkResult.TransientFailure(sprintf "Twilio network: %s" ex.Message)
             | :? TaskCanceledException as ex ->
                 return SinkResult.TransientFailure(sprintf "Twilio timeout: %s" ex.Message)

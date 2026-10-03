@@ -4,6 +4,7 @@ open System
 open MailKit.Net.Smtp
 open MimeKit
 open ToolUp.Platform
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Public surface ──────────────────────────────────────────────
 //
@@ -154,24 +155,20 @@ let private resolveFromAddress (settings: SmtpSettings) (_scopeId: string) : Res
         with ex ->
             Error $"From: address parse failed: {settings.DefaultFromAddress} — {ex.GetType().Name}: {ex.Message}"
 
-/// Map a vendor-neutral `EmailAddress` to MailKit's `MailboxAddress`.
-/// Phase 6f uses MimeKit at the wire boundary only — `EmailAddress`
-/// stays in the shared layer so a future SendGrid sink reuses it.
-/// Vendor exceptions can surface at the `with` handlers below wrapped
-/// in `AggregateException` — MailKit's connect/authenticate/disconnect
-/// calls are non-generic `Task` awaits, the highest-risk shape for the
-/// class the first armed cloud-parity run (2026-08-27) proved live in
-/// the AWS companions. A wrapped `SmtpCommandException` would lose the
-/// mechanical 4xx-transient / 5xx-permanent classification. Match
-/// through the wrapper: flatten and take the single inner exception a
-/// one-Task await carries; a bare exception passes through unchanged.
-let private (|Unwrapped|) (ex: exn) =
-    match ex with
-    | :? AggregateException as aggregate ->
-        match Seq.tryHead (aggregate.Flatten().InnerExceptions) with
-        | Some inner -> inner
-        | None -> ex
-    | _ -> ex
+// Map a vendor-neutral `EmailAddress` to MailKit's `MailboxAddress`.
+// Phase 6f uses MimeKit at the wire boundary only — `EmailAddress`
+// stays in the shared layer so a future SendGrid sink reuses it.
+// Vendor exceptions can surface at the `with` handlers below wrapped
+// in `AggregateException` — MailKit's connect/authenticate/disconnect
+// calls are non-generic `Task` awaits, the highest-risk shape for the
+// class the first armed cloud-parity run (2026-08-27) proved live in
+// the AWS companions. A wrapped `SmtpCommandException` would lose the
+// mechanical 4xx-transient / 5xx-permanent classification. Match
+// through the wrapper: flatten and take the single inner exception a
+// one-Task await carries; a bare exception passes through unchanged.
+//
+// Phase 972: the private `(|Unwrapped|)` this note introduced is now the
+// shared `ToolUp.Platform.ProviderExceptions` (`ProviderException` / `Unwrapped`).
 
 let private toMailbox (addr: EmailAddress) : MailboxAddress =
     let display = addr.DisplayName |> Option.defaultValue ""
@@ -269,7 +266,7 @@ type SmtpNotificationSink(addressBook: INotificationAddressBook, settings: SmtpS
                                 // equivalent.
                                 return SinkResult.Delivered(Some message.MessageId)
                             with
-                            | Unwrapped(:? SmtpCommandException as ex) ->
+                            | ProviderException(ex: SmtpCommandException) ->
                                 // SMTP error codes 4xx are transient
                                 // (mailbox temporarily unavailable,
                                 // service shutting down, exceeded
@@ -285,7 +282,7 @@ type SmtpNotificationSink(addressBook: INotificationAddressBook, settings: SmtpS
                                     return SinkResult.TransientFailure(sprintf "SMTP %d: %s" code ex.Message)
                                 else
                                     return SinkResult.PermanentFailure(sprintf "SMTP %d: %s" code ex.Message)
-                            | Unwrapped(:? System.Net.Sockets.SocketException as ex) ->
+                            | ProviderException(ex: System.Net.Sockets.SocketException) ->
                                 // Network-level failure: connection
                                 // refused, DNS lookup failed, TCP
                                 // reset. All transient — retry could

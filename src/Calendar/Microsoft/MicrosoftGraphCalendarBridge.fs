@@ -21,6 +21,7 @@ open ToolUp.Scheduling
 open ToolUp.Scheduling.SchedulingTypes
 open ToolUp.Scheduling.ICalendarBridge
 open ToolUp.Calendar.MicrosoftGraphOAuth
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Phase 831 — the Microsoft Graph calendar bridge ────────────────
 //
@@ -915,7 +916,7 @@ type MicrosoftGraphCalendarBridge
         with
         | :? TaskCanceledException as ex ->
             return Error(Unreachable(sprintf "Microsoft Graph request timed out: %s" ex.Message))
-        | :? HttpRequestException as ex -> return Error(Unreachable ex.Message)
+        | ProviderException(ex: HttpRequestException) -> return Error(Unreachable ex.Message)
     }
 
     /// Issue one Graph request for a link. `build` gets the bearer token

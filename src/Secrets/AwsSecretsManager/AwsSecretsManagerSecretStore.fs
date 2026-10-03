@@ -5,6 +5,7 @@ open Amazon
 open Amazon.SecretsManager
 open Amazon.SecretsManager.Model
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Configuration ───────────────────────────────────────────────────
 //
@@ -124,22 +125,18 @@ module private Naming =
 
 // ─── Exception unwrapping ────────────────────────────────────────────
 
-/// AWS SDK exceptions surface at this companion's `with` handlers
-/// wrapped in `AggregateException` — proven by the first armed
-/// cloud-parity run (2026-08-27): every direct
-/// `:? ResourceNotFoundException` test below sat dead, so `SetSecret`'s
-/// CreateSecret fallback never fired and the companion could not create
-/// a secret that did not already exist. Match through the wrapper:
-/// flatten and take the single inner exception a one-Task await
-/// carries; a bare exception passes through unchanged, so an unmatched
-/// case still rethrows the original.
-let private (|Unwrapped|) (ex: exn) =
-    match ex with
-    | :? AggregateException as aggregate ->
-        match Seq.tryHead (aggregate.Flatten().InnerExceptions) with
-        | Some inner -> inner
-        | None -> ex
-    | _ -> ex
+// AWS SDK exceptions surface at this companion's `with` handlers
+// wrapped in `AggregateException` — proven by the first armed
+// cloud-parity run (2026-08-27): every direct
+// `:? ResourceNotFoundException` test below sat dead, so `SetSecret`'s
+// CreateSecret fallback never fired and the companion could not create
+// a secret that did not already exist. Match through the wrapper:
+// flatten and take the single inner exception a one-Task await
+// carries; a bare exception passes through unchanged, so an unmatched
+// case still rethrows the original.
+//
+// Phase 972: the private `(|Unwrapped|)` this note introduced is now the
+// shared `ToolUp.Platform.ProviderExceptions` (`ProviderException` / `Unwrapped`).
 
 // ─── ISecretStore implementation ─────────────────────────────────────
 
@@ -186,8 +183,8 @@ type AwsSecretsManagerSecretStore(config: AwsSecretsManagerConfig) =
                     else
                         Some response.SecretString
             with
-            | Unwrapped(:? ResourceNotFoundException) -> return None
-            | Unwrapped(:? InvalidRequestException) ->
+            | ProviderException(_: ResourceNotFoundException) -> return None
+            | ProviderException(_: InvalidRequestException) ->
                 // Secret in a scheduled-deletion or otherwise non-
                 // active state; surface as "not found" per the
                 // ISecretStore contract.
@@ -206,7 +203,7 @@ type AwsSecretsManagerSecretStore(config: AwsSecretsManagerConfig) =
             try
                 let! _ = client.PutSecretValueAsync put |> Async.AwaitTask
                 return Ok()
-            with Unwrapped(:? ResourceNotFoundException) ->
+            with ProviderException(_: ResourceNotFoundException) ->
                 let create = CreateSecretRequest()
                 create.Name <- name
                 create.SecretString <- value
@@ -231,8 +228,8 @@ type AwsSecretsManagerSecretStore(config: AwsSecretsManagerConfig) =
                 let! _ = client.DeleteSecretAsync req |> Async.AwaitTask
                 return Ok()
             with
-            | Unwrapped(:? ResourceNotFoundException) -> return Ok()
-            | Unwrapped(:? InvalidRequestException) ->
+            | ProviderException(_: ResourceNotFoundException) -> return Ok()
+            | ProviderException(_: InvalidRequestException) ->
                 // Already in scheduled-deletion state — idempotent.
                 return Ok()
             | Unwrapped ex -> return Error ex.Message

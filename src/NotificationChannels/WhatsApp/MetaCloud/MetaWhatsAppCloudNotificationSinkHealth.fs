@@ -12,6 +12,7 @@ open ToolUp.Platform
 open ToolUp.Platform.HealthChecks
 open ToolUp.Platform.NotificationChannels.WhatsApp.MetaCloud
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Phase 6f.C — Meta WhatsApp Cloud sink readiness probe ───────────
 //
@@ -84,7 +85,8 @@ type MetaWhatsAppCloudNotificationSinkHealthCheck
                             )
                     | code -> return Degraded(sprintf "Meta Graph API answered %d" code)
             with
-            | :? HttpRequestException as ex -> return Degraded(sprintf "Meta Graph API unreachable: %s" ex.Message)
+            | ProviderException(ex: HttpRequestException) ->
+                return Degraded(sprintf "Meta Graph API unreachable: %s" ex.Message)
             | ex -> return Unhealthy ex.Message
         }
 

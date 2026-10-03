@@ -4,6 +4,7 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ToolUp.ArtefactSigning.AzureKeyVault.AzureKeyVaultArtefactSigner (class)
-ToolUp.ArtefactSigning.AzureKeyVault.AzureKeyVaultArtefactSigner  # <members unavailable: FileNotFoundException>
+ToolUp.ArtefactSigning.AzureKeyVault.AzureKeyVaultArtefactSigner..ctor(Azure.Core.TokenCredential, System.Uri)
+ToolUp.ArtefactSigning.AzureKeyVault.AzureKeyVaultArtefactSigner..ctor(Azure.Security.KeyVault.Keys.Cryptography.CryptographyClient, Azure.Security.KeyVault.Keys.KeyClient, System.String)
 ToolUp.ArtefactSigning.AzureKeyVault.AzureKeyVaultArtefactSignerModule (class)
 ToolUp.ArtefactSigning.AzureKeyVault.AzureKeyVaultArtefactSignerModule.create(Azure.Core.TokenCredential, System.Uri) : ToolUp.ArtefactSigning.IArtefactSigner

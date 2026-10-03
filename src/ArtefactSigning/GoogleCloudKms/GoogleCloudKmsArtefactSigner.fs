@@ -10,6 +10,7 @@ open Google.Cloud.Kms.V1
 open Google.Protobuf
 open Grpc.Core
 open ToolUp.ArtefactSigning
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Phase 160 / 40 / 22a — GCP Cloud KMS-backed IArtefactSigner ────────
 //
@@ -70,9 +71,9 @@ type GoogleCloudKmsArtefactSigner(client: KeyManagementServiceClient, keyVersion
                             DetachedJws = JwsBuilder.assembleDetachedJws encodedHeader raw
                         }
             with
-            | :? RpcException as rpc when rpc.StatusCode = StatusCode.NotFound ->
+            | ProviderException(rpc: RpcException) when rpc.StatusCode = StatusCode.NotFound ->
                 return Error(KeyUnavailable rpc.Message)
-            | :? RpcException as rpc when
+            | ProviderException(rpc: RpcException) when
                 rpc.StatusCode = StatusCode.FailedPrecondition
                 || rpc.StatusCode = StatusCode.PermissionDenied
                 ->

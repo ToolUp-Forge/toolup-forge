@@ -2571,6 +2571,8 @@ let private registeredTests =
         Phase971PublicRenderingTests.tests
         // Phase 971 - PlatformTenant: provisioning clears the offboard ledger first.
         Phase971PlatformTenantTests.tests
+        // Phase 972 - provider exception matches see through Async.AwaitTask.
+        ProviderExceptionTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

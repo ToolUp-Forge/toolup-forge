@@ -12,6 +12,7 @@ open Azure.Security.KeyVault.Keys.Cryptography
 open ToolUp.Platform
 open ToolUp.Platform.EncryptionTypes
 open ToolUp.Platform.BlobEncryption
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Phase 22a — Azure Key Vault-backed IBlobEncryptionKeyResolver ─────
 //
@@ -100,19 +101,13 @@ type AzureKeyVaultKeyResolver
     // proved live in the AWS companions, 2026-08-27), which would
     // degrade the KeyNotFound / KeyDestroyed (crypto-shred)
     // classification to a generic StorageFailure — so unwrap before the
-    // type test: flatten and take the single inner exception a one-Task
-    // await carries; a bare exception passes through unchanged.
+    // type test, through the shared Phase 972 unwrap; a bare exception
+    // passes through unchanged.
     let mapFailure (keyId: string) (ex: exn) : KeyResolutionError =
-        let ex =
-            match ex with
-            | :? AggregateException as aggregate ->
-                match Seq.tryHead (aggregate.Flatten().InnerExceptions) with
-                | Some inner -> inner
-                | None -> ex
-            | _ -> ex
+        let ex = unwrap ex
 
         match ex with
-        | :? RequestFailedException as rfe ->
+        | ProviderException(rfe: RequestFailedException) ->
             match rfe.Status with
             // 404 — the KEK is gone (deleted / never existed).
             | 404 -> KeyNotFound keyId

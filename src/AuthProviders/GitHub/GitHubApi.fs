@@ -8,6 +8,7 @@ open System.Net
 open System.Net.Http
 open System.Text.Json
 open System.Threading.Tasks
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Narrow GitHub REST facade ───────────────────────────────────────
 //
@@ -140,7 +141,7 @@ let getUser
                 with :? JsonException ->
                     return Error(MalformedResponse "GitHub /user response was not valid JSON")
         with
-        | :? HttpRequestException as ex -> return Error(NetworkError ex.Message)
+        | ProviderException(ex: HttpRequestException) -> return Error(NetworkError ex.Message)
         | :? TaskCanceledException -> return Error(NetworkError "request to GitHub API timed out")
     }
 
@@ -187,7 +188,7 @@ let getPrimaryEmail
                 with :? JsonException ->
                     return Error(MalformedResponse "GitHub /user/emails response was not valid JSON")
         with
-        | :? HttpRequestException as ex -> return Error(NetworkError ex.Message)
+        | ProviderException(ex: HttpRequestException) -> return Error(NetworkError ex.Message)
         | :? TaskCanceledException -> return Error(NetworkError "request to GitHub API timed out")
     }
 
@@ -226,6 +227,6 @@ let checkOrgMembership
             | HttpStatusCode.Unauthorized -> return Error Unauthorized
             | other -> return Error(MalformedResponse(sprintf "unexpected HTTP %d checking org membership" (int other)))
         with
-        | :? HttpRequestException as ex -> return Error(NetworkError ex.Message)
+        | ProviderException(ex: HttpRequestException) -> return Error(NetworkError ex.Message)
         | :? TaskCanceledException -> return Error(NetworkError "request to GitHub API timed out")
     }

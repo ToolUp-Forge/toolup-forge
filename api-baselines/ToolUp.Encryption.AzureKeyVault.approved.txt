@@ -4,6 +4,9 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ToolUp.Encryption.AzureKeyVault.AzureKeyVaultKeyResolver (class)
-ToolUp.Encryption.AzureKeyVault.AzureKeyVaultKeyResolver  # <members unavailable: FileNotFoundException>
+ToolUp.Encryption.AzureKeyVault.AzureKeyVaultKeyResolver..ctor(Azure.Core.TokenCredential, System.String)
+ToolUp.Encryption.AzureKeyVault.AzureKeyVaultKeyResolver..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Azure.Security.KeyVault.Keys.Cryptography.CryptographyClient], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.StorageScope, System.String], Azure.Security.KeyVault.Keys.Cryptography.KeyWrapAlgorithm)
 ToolUp.Encryption.AzureKeyVault.AzureKeyVaultKeyResolverModule (class)
-ToolUp.Encryption.AzureKeyVault.AzureKeyVaultKeyResolverModule  # <members unavailable: FileNotFoundException>
+ToolUp.Encryption.AzureKeyVault.AzureKeyVaultKeyResolverModule.create(Azure.Core.TokenCredential, System.String) : ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver
+ToolUp.Encryption.AzureKeyVault.AzureKeyVaultKeyResolverModule.createPerScope(Azure.Core.TokenCredential, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.StorageScope, System.String]) : ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver
+ToolUp.Encryption.AzureKeyVault.AzureKeyVaultKeyResolverModule.createWith(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Azure.Security.KeyVault.Keys.Cryptography.CryptographyClient], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.StorageScope, System.String], Azure.Security.KeyVault.Keys.Cryptography.KeyWrapAlgorithm) : ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver

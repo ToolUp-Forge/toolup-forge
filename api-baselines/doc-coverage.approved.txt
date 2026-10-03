@@ -31,9 +31,9 @@ ToolUp.Algorithms.Client 4/5
 ToolUp.Algorithms.Core 118/346
 ToolUp.Algorithms.Server 58/81
 ToolUp.ArtefactSigning 156/323
-ToolUp.ArtefactSigning.AwsKms 1/2
-ToolUp.ArtefactSigning.AzureKeyVault 2/3
-ToolUp.ArtefactSigning.GoogleCloudKms 1/2
+ToolUp.ArtefactSigning.AwsKms 2/4
+ToolUp.ArtefactSigning.AzureKeyVault 3/5
+ToolUp.ArtefactSigning.GoogleCloudKms 3/5
 ToolUp.AssetStore 189/438
 ToolUp.AuditSinks.AzureBlobArchive 7/11
 ToolUp.AuditSinks.Cef 69/107
@@ -83,9 +83,9 @@ ToolUp.DataSources.Synapse 23/36
 ToolUp.EmbeddingCaches.Redis 33/63
 ToolUp.EmbeddingProviders.Local 19/23
 ToolUp.EmbeddingProviders.OpenAI 26/58
-ToolUp.Encryption.AwsKms 1/2
-ToolUp.Encryption.AzureKeyVault 1/2
-ToolUp.Encryption.GoogleCloudKms 1/2
+ToolUp.Encryption.AwsKms 4/6
+ToolUp.Encryption.AzureKeyVault 5/7
+ToolUp.Encryption.GoogleCloudKms 4/6
 ToolUp.EntityStores.Postgres 11/17
 ToolUp.Experiments.Core 9/41
 ToolUp.Experiments.Server 5/10
@@ -136,7 +136,7 @@ ToolUp.OpenXml.Spreadsheet 45/141
 ToolUp.OpenXml.SvgRasterizer.Skia 3/3
 ToolUp.Platform.Build 313/567
 ToolUp.Platform.Client 2848/7011
-ToolUp.Platform.Core 7009/14880
+ToolUp.Platform.Core 7014/14885
 ToolUp.Platform.Server 6569/11975
 ToolUp.Platform.Testing 118/264
 ToolUp.Platform.UI 71/183

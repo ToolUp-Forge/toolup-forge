@@ -12,6 +12,7 @@ open System.Text.Json.Nodes
 open System.Threading
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Phase 322 — the generic HTTP/REST IExternalComputeDispatcher ─────
 //
@@ -188,7 +189,7 @@ type HttpComputeDispatcher
                         stage
                         (sprintf "the request exceeded the %O per-request budget" config.RequestTimeout)
                 )
-        | :? HttpRequestException as ex -> return Error(transportError stage ex.Message)
+        | ProviderException(ex: HttpRequestException) -> return Error(transportError stage ex.Message)
         | ex -> return Error(transportError stage (sprintf "%s: %s" (ex.GetType().Name) ex.Message))
     }
 
