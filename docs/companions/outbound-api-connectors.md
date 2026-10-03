@@ -21,6 +21,7 @@ pays nothing for it (GP 13).
 | `PageRequest` — the request for one page at a `PageCursor` | retry and backoff, as a `RetryPolicy` record |
 | `DecodePage` — a 2xx response → typed rows + the next cursor | quota: requests-per-window, concurrency, `Retry-After` (`OutboundRateBudget`) |
 | `Watermark` — a row's high-water mark (incremental endpoints) | the paging loop, its stall guard and page cap (`PagedFetch`) |
+| `BackPressure` — the provider's rate budget and retry policy, each optional | the platform default where a value is absent, resolved in one place |
 | | resumable sync cursors over `IEntityStore` and a stateless job handler (`SyncCursor`, `IncrementalSync`) |
 
 Everything on the left is pure — no I/O, no state — which is what makes a connector portable by
@@ -30,10 +31,11 @@ construction (GP 12 rule 4) and testable without a network.
 
 ### `IExternalApiConnector<'Row>`
 
-Five members, all pure:
+Six members, all pure:
 
 - `Provider: ExternalApiProvider` — who the provider is.
 - `Endpoints: ExternalApiEndpoint list` — the resources it reads.
+- `BackPressure: ExternalApiBackPressure` — what it knows about the provider's back-pressure (below).
 - `PageRequest: ExternalApiCall * PageCursor -> Result<HttpRequest, string>` — the request for one
   page, credential header included; `Error` for a configuration problem, and nothing is sent.
 - `DecodePage: ExternalApiCall * HttpResponse -> Result<Page<'Row>, string>` — a 2xx response into
@@ -136,6 +138,29 @@ every invocation re-reads the cursor, and everything else rides the payload
 `Success` (the next scheduled run continues); a failure a later run could get past is a
 `TransientFailure`; one that would repeat is a `PermanentFailure`.
 
+### Declaring the provider's retry policy
+
+Retry values belong to the connector, because only the connector knows its provider: how many
+attempts a flaky endpoint deserves, how long its outages last. It declares them beside its rate
+budget, in one record:
+
+```fsharp skip=signature
+type ExternalApiBackPressure = {
+    RateBudget: OutboundRateBudget option   // None = no provider quota applied
+    Retry: RetryPolicy option               // None = the platform default
+}
+```
+
+`ExternalApi.effectiveRetry` resolves the policy a fetch runs under, and it is the only place the
+resolution happens. The order is: an explicit per-run override (`PagedFetchOptions.Retry`, `None`
+by default), then the connector's `BackPressure.Retry`, then `RetryPolicy.defaults`. A caller that
+sets nothing therefore gets the connector's declaration rather than silently overriding it. The
+winner is checked with `RetryPolicy.validate` (at least one attempt, a non-negative initial
+backoff, a cap no smaller than the initial backoff). An invalid policy is refused before any call
+as `ConnectorDeclarationError.InvalidRetryPolicy`, naming the connector, rather than surfacing
+mid-sync; under `IncrementalSync` that is a `PermanentFailure`. `ExternalApi.withBudget` applies the
+declared `RateBudget` to a transport, and leaves it unchanged when none is declared.
+
 ## Worked skeleton
 
 A connector for a hypothetical contacts API that pages with an opaque `after` token, authenticates
@@ -159,6 +184,19 @@ type ContactsConnector() =
                 Sync = SyncMode.Incremental
             }
         ]
+
+        member _.BackPressure = {
+            RateBudget =
+                Some(
+                    OutboundRateBudget.ofWindow {
+                        Provider = "contacts-api"
+                        ShortWindow = 100, TimeSpan.FromSeconds 10.0
+                        LongWindow = Some(250_000, TimeSpan.FromDays 1.0)
+                        FairnessMode = PerScope
+                    }
+                )
+            Retry = Some { RetryPolicy.defaults with MaxAttempts = 5 }
+        }
 
         member _.PageRequest(call, cursor) =
             let query =
@@ -191,25 +229,20 @@ type ContactsConnector() =
 Composition, on the server host:
 
 ```fsharp skip=fragment
-let window: RateLimitDescriptor = {
-    Provider = "contacts-api"
-    ShortWindow = 100, TimeSpan.FromSeconds 10.0
-    LongWindow = Some(250_000, TimeSpan.FromDays 1.0)
-    FairnessMode = PerScope
-}
+let connector = ContactsConnector()
 
+// Register the declared window with the limiter (ServerApp.withRateLimitDescriptor),
+// then apply the connector's budget to the one BCL adapter.
 let transport =
     (HttpClientTransport(contactsHttpClient) :> IHttpTransport)   // BaseAddress = the provider
-    |> OutboundRateBudget.decorate limiter TimeProvider.System
-        { OutboundRateBudget.ofWindow window with MaxConcurrency = Some 4 }
-        scopeId None
+    |> ExternalApi.withBudget limiter TimeProvider.System connector scopeId None
 
 let deps: IncrementalSyncDeps<Contact> = {
-    Connector = ContactsConnector()
+    Connector = connector
     Transport = transport
     Cursors = entityStore
     SecretStore = Some secretStore
-    Options = PagedFetchOptions.defaults
+    Options = PagedFetchOptions.defaults   // no override: the connector's 5 attempts apply
     Ingest = fun call rows -> upsertContacts call.ScopeId rows   // keyed by Contact.Id
 }
 

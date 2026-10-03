@@ -251,6 +251,17 @@ let tests =
                 Expect.equal (RetryPolicy.delayFor policy 1) System.TimeSpan.Zero "first attempt immediate"
                 Expect.equal (RetryPolicy.delayFor policy 2) (System.TimeSpan.FromMilliseconds 500.0) "initial backoff"
                 Expect.equal (RetryPolicy.delayFor policy 4) (System.TimeSpan.FromSeconds 1.0) "capped at MaxBackoff")
+            testCase "RetryPolicy.validate refuses a policy the loop cannot honour" (fun () ->
+                Expect.equal (RetryPolicy.validate RetryPolicy.defaults) (Ok RetryPolicy.defaults) "defaults are valid"
+
+                Expect.isTrue
+                    (Result.isError (
+                        RetryPolicy.validate {
+                            RetryPolicy.defaults with
+                                MaxAttempts = 0
+                        }
+                    ))
+                    "MaxAttempts = 0 is refused")
             testCase "HttpCall.get builds a bodiless GET" (fun () ->
                 let request = HttpCall.get "/v1/items" [ "Accept", "application/json" ]
                 Expect.equal request.Method "GET" "verb"

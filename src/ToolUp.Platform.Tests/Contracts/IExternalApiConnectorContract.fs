@@ -144,13 +144,18 @@ let private rowsUpTo (n: int) = [ for i in 1..n -> { Id = i; UpdatedAt = mark i 
 
 // ── the mock connector: the thin provider mapping ────────────────
 
-/// What a provider companion writes: two pure functions and two lists.
-type MockConnector() =
+/// What a provider companion writes: two pure functions, two lists and
+/// its back-pressure declaration.
+type MockConnector(backPressure: ExternalApiBackPressure) =
+    new() = MockConnector(ExternalApiBackPressure.none)
+
     interface IExternalApiConnector<MockRow> with
         member _.Provider = {
             Id = "mockapi"
             DisplayName = "Mock API"
         }
+
+        member _.BackPressure = backPressure
 
         member _.Endpoints = [
             {
@@ -225,7 +230,10 @@ let private fastRetry attempts : RetryPolicy = {
     Timeout = None
 }
 
-let private options: PagedFetchOptions = { Retry = fastRetry 3; MaxPages = None }
+let private options: PagedFetchOptions = {
+    Retry = Some(fastRetry 3)
+    MaxPages = None
+}
 
 let private call: ExternalApiCall = {
     Endpoint = "items"
@@ -237,7 +245,10 @@ let private call: ExternalApiCall = {
 
 let private connector = MockConnector() :> IExternalApiConnector<MockRow>
 
-let private endpointFor (call: ExternalApiCall) = ExternalApi.endpoint connector call
+let private endpointFor (call: ExternalApiCall) =
+    match ExternalApi.endpoint connector options call with
+    | Ok endpoint -> endpoint
+    | Error error -> failwith (ConnectorDeclarationError.toMessage error)
 
 let private noopLogger =
     { new ILogger with
@@ -349,7 +360,8 @@ let connectorTests
         testCaseAsync "reads the whole resource across pages, in order, with no failure"
         <| async {
             let connector, transport, call = factory ()
-            let! outcome = ExternalApi.fetchAll options transport connector call PageCursor.First
+            let! fetched = ExternalApi.fetchAll options transport connector call PageCursor.First
+            let outcome = Expect.wantOk fetched "the declaration is valid"
             Expect.isNone outcome.Failure "no page failed"
             Expect.isNone outcome.ResumeFrom "the resource is exhausted"
             Expect.isGreaterThan outcome.Pages 1 "more than one page"
@@ -361,11 +373,21 @@ let connectorTests
             let connector, transport, call = factory ()
             let capped = { options with MaxPages = Some 1 }
             let! first = ExternalApi.fetchAll capped transport connector call PageCursor.First
+            let first = Expect.wantOk first "the declaration is valid"
             Expect.equal first.Pages 1 "one page taken"
             Expect.isSome first.ResumeFrom "a resume point is reported"
             let! rest = ExternalApi.fetchAll options transport connector call first.ResumeFrom.Value
+            let rest = Expect.wantOk rest "the declaration is valid"
             Expect.hasLength (first.State @ rest.State) expectedRows "the two runs read every row once"
         }
+
+        testCase "its back-pressure declaration resolves to a valid retry policy"
+        <| fun () ->
+            let connector, _, _ = factory ()
+
+            Expect.isOk
+                (ExternalApi.effectiveRetry connector PagedFetchOptions.defaults)
+                "the declared (or default) retry policy validates"
 
         testCaseAsync "PageRequest and DecodePage are pure — the same inputs give the same request"
         <| async {
@@ -407,7 +429,7 @@ let private pagedFetchTests =
             let provider = MockProvider(MockStyle.Offset, 2)
             provider.Add(rowsUpTo 5)
             // Page 1 serves normally; the second request is a 404.
-            let! first = PagedFetch.page options provider (endpointFor call) PageCursor.First
+            let! first = PagedFetch.page provider (endpointFor call) PageCursor.First
             Expect.isOk first "page 1 reads"
             provider.Script(status 404)
             let! outcome = PagedFetch.all options provider (endpointFor call) (PageCursor.Offset 2)
@@ -529,6 +551,136 @@ let private pagedFetchTests =
 
             Expect.isNone (PageCursor.tryDecode "bogus") "an unknown form decodes to None"
             Expect.isNone (PageCursor.tryDecode "offset:-1") "a negative offset decodes to None"
+    ]
+
+let private declaredRetryTests =
+    let declared: RetryPolicy = {
+        MaxAttempts = 7
+        InitialBackoff = TimeSpan.FromMilliseconds 10.0
+        MaxBackoff = TimeSpan.FromSeconds 1.0
+        Timeout = None
+    }
+
+    let overriding = fastRetry 2
+
+    let declaring retry =
+        MockConnector(
+            {
+                ExternalApiBackPressure.none with
+                    Retry = retry
+            }
+        )
+        :> IExternalApiConnector<MockRow>
+
+    testList "declared retry policy (per connector)" [
+        testCase "a per-run override beats the connector's declaration"
+        <| fun () ->
+            Expect.equal
+                (ExternalApi.effectiveRetry (declaring (Some declared)) {
+                    PagedFetchOptions.defaults with
+                        Retry = Some overriding
+                })
+                (Ok overriding)
+                "override first"
+
+        testCase "the connector's declaration beats the platform default"
+        <| fun () ->
+            Expect.equal
+                (ExternalApi.effectiveRetry (declaring (Some declared)) PagedFetchOptions.defaults)
+                (Ok declared)
+                "declaration second"
+
+        testCase "nothing declared and no override gives the platform default"
+        <| fun () ->
+            Expect.equal
+                (ExternalApi.effectiveRetry (declaring None) PagedFetchOptions.defaults)
+                (Ok RetryPolicy.defaults)
+                "RetryPolicy.defaults last"
+
+        testCaseAsync "the declared policy is the one the fetch actually runs"
+        <| async {
+            let provider = MockProvider(MockStyle.Token, 10)
+
+            for _ in 1..7 do
+                provider.Script(status 503)
+
+            let connector =
+                declaring (
+                    Some {
+                        declared with
+                            InitialBackoff = TimeSpan.Zero
+                            MaxBackoff = TimeSpan.Zero
+                    }
+                )
+
+            let! fetched = ExternalApi.fetchAll PagedFetchOptions.defaults provider connector call PageCursor.First
+
+            match fetched with
+            | Ok {
+                     Failure = Some {
+                                        Failure = PageFailure.Transport(TransportError.Exhausted(7, _))
+                                    }
+                 } -> ()
+            | other -> failtestf "expected Exhausted after the declared 7 attempts, got %A" other
+
+            Expect.hasLength provider.Requests 7 "seven attempts, as declared"
+        }
+
+        for name, invalid in
+            [
+                "MaxAttempts = 0", { declared with MaxAttempts = 0 }
+                "a negative InitialBackoff",
+                {
+                    declared with
+                        InitialBackoff = TimeSpan.FromSeconds -1.0
+                }
+                "MaxBackoff below InitialBackoff",
+                {
+                    declared with
+                        MaxBackoff = TimeSpan.Zero
+                }
+            ] do
+            testCaseAsync $"an invalid declaration ({name}) is refused naming the connector, before any call"
+            <| async {
+                let provider = MockProvider(MockStyle.Token, 10)
+                let connector = declaring (Some invalid)
+
+                match ExternalApi.effectiveRetry connector PagedFetchOptions.defaults with
+                | Error(ConnectorDeclarationError.InvalidRetryPolicy("mockapi", _) as error) ->
+                    Expect.stringContains
+                        (ConnectorDeclarationError.toMessage error)
+                        "mockapi"
+                        "the message names the connector"
+                | other -> failtestf "expected InvalidRetryPolicy for mockapi, got %A" other
+
+                let! fetched = ExternalApi.fetchAll PagedFetchOptions.defaults provider connector call PageCursor.First
+                Expect.isError fetched "fetchAll refuses too"
+                Expect.isEmpty provider.Requests "nothing was sent"
+            }
+
+        testCaseAsync "an incremental sync over an invalid declaration is a permanent job failure"
+        <| async {
+            let provider = MockProvider(MockStyle.Token, 10)
+
+            let deps = {
+                depsFor provider (openCursorStore (tempDir ())) (ResizeArray()) None with
+                    Connector = declaring (Some { declared with MaxAttempts = 0 })
+                    Options = PagedFetchOptions.defaults
+            }
+
+            let! result = IncrementalSync.run deps "team-a" request
+
+            match IncrementalSync.toJobResult result with
+            | PermanentFailure message -> Expect.stringContains message "mockapi" "names the connector"
+            | other -> failtestf "expected PermanentFailure, got %A" other
+
+            Expect.isEmpty provider.Requests "nothing was sent"
+        }
+
+        testCase "RetryPolicy.validate accepts the shipped policies"
+        <| fun () ->
+            Expect.isOk (RetryPolicy.validate RetryPolicy.defaults) "defaults"
+            Expect.isOk (RetryPolicy.validate RetryPolicy.noRetry) "noRetry"
     ]
 
 let private retryTests =
@@ -1138,6 +1290,7 @@ let tests =
     testList "Phase 128 — outbound API connector kit" [
         pagedFetchTests
         retryTests
+        declaredRetryTests
         budgetTests
         cursorTests
         httpClientTransportTests

@@ -46,7 +46,7 @@ Migration notes:
 - [945-rag-operations-follow-ups](docs/migrations/945-rag-operations-follow-ups.md)
 - [9x-self-hosted-observability-module](docs/migrations/9x-self-hosted-observability-module.md)
 
-_Surface since `v0.23.0`: **breaking** — 44 packages moved; 3904 members added, 85 members changed, 617 members removed; 11 packages new._
+_Surface since `v0.23.0`: **breaking** — 45 packages moved; 3924 members added, 85 members changed, 617 members removed; 12 packages new._
 
 ### Added
 
@@ -165,7 +165,13 @@ _Surface since `v0.23.0`: **breaking** — 44 packages moved; 3904 members added
   - `ToolUp.ArtefactSigning.GoogleCloudKms.GoogleCloudKmsArtefactSignerModule.createFromName(Google.Cloud.Kms.V1.KeyManagementServiceClient, System.String) : ToolUp.ArtefactSigning.IArtefactSigner`
 - `ToolUp.Calendar.Google` — new package (102 public members)
 - `ToolUp.Calendar.Microsoft` — new package (76 public members)
-- `ToolUp.DataSources.Common` — 234 members:
+- `ToolUp.DataSources.Common` — 254 members:
+  - `ToolUp.DataSources.Common.ConnectorDeclarationError (class)`
+  - `ToolUp.DataSources.Common.ConnectorDeclarationError.Tag : System.Int32 { get }`
+  - `ToolUp.DataSources.Common.ConnectorDeclarationError.connector : System.String { get }`
+  - `ToolUp.DataSources.Common.ConnectorDeclarationError.reason : System.String { get }`
+  - `ToolUp.DataSources.Common.ConnectorDeclarationErrorModule (class)`
+  - `ToolUp.DataSources.Common.ConnectorDeclarationErrorModule.toMessage(ToolUp.DataSources.Common.ConnectorDeclarationError) : System.String`
   - `ToolUp.DataSources.Common.Csv+PayloadField (class)`
   - `ToolUp.DataSources.Common.Csv+PayloadField+Tags (class)`
   - `ToolUp.DataSources.Common.Csv+PayloadField+Tags.AmbiguousEmpty : System.Int32 (literal)`
@@ -180,13 +186,7 @@ _Surface since `v0.23.0`: **breaking** — 44 packages moved; 3904 members added
   - `ToolUp.DataSources.Common.Csv+PayloadField.Null : ToolUp.DataSources.Common.Csv+PayloadField { get }`
   - `ToolUp.DataSources.Common.Csv+PayloadField.Tag : System.Int32 { get }`
   - `ToolUp.DataSources.Common.Csv.NullDistinguishingPayloadFormat : System.Int32 (literal)`
-  - `ToolUp.DataSources.Common.Csv.absentIfEmpty(System.String) : System.String`
-  - `ToolUp.DataSources.Common.Csv.distinguishesNull(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.Boolean`
-  - `ToolUp.DataSources.Common.Csv.readField(Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.Boolean) : ToolUp.DataSources.Common.Csv+PayloadField`
-  - `ToolUp.DataSources.Common.ExternalApi (class)`
-  - `ToolUp.DataSources.Common.ExternalApi.endpoint`1(ToolUp.DataSources.Common.IExternalApiConnector`1[Row], ToolUp.DataSources.Common.ExternalApiCall) : ToolUp.DataSources.Common.PagedEndpoint`1[Row]`
-  - `ToolUp.DataSources.Common.ExternalApi.fetchAll`1(ToolUp.DataSources.Common.PagedFetchOptions, ToolUp.Platform.Transport.IHttpTransport, ToolUp.DataSources.Common.IExternalApiConnector`1[Row], ToolUp.DataSources.Common.ExternalApiCall, ToolUp.DataSources.Common.PageCursor) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.DataSources.Common.PagedOutcome`1[Microsoft.FSharp.Collections.FSharpList`1[Row]]]`
-  - … and 214 more — `git diff v0.23.0 -- api-baselines/ToolUp.DataSources.Common.approved.txt`
+  - … and 234 more — `git diff v0.23.0 -- api-baselines/ToolUp.DataSources.Common.approved.txt`
 - `ToolUp.DataSources.GoogleAnalytics` — 19 members:
   - `ToolUp.DataSources.GoogleAnalyticsSchema+Ga4Sentinel (class)`
   - `ToolUp.DataSources.GoogleAnalyticsSchema+Ga4Sentinel..ctor(System.String, ToolUp.DataSources.GoogleAnalyticsSchema+Ga4SentinelMeaning, System.String)`
@@ -381,6 +381,7 @@ _Surface since `v0.23.0`: **breaking** — 44 packages moved; 3904 members added
   - `ToolUp.Platform.BlobCodec`1..ctor(Microsoft.FSharp.Core.FSharpFunc`2[T, System.Byte[]], Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpResult`2[T, System.String]])`
   - `ToolUp.Platform.BlobCodec`1.Decode : Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpResult`2[T, System.String]] { get }`
   - … and 599 more — `git diff v0.23.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
+- `ToolUp.Platform.Transport` — new package (90 public members)
 - `ToolUp.RAG.Core` — 9 members:
   - `ToolUp.RAG.IngestionTypes+DocumentIngestionJob.Attempt : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IngestionAttempt] { get }`
   - `ToolUp.RAG.IngestionTypes+IIngestionQueue.TryDequeue() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IngestionLease]]`

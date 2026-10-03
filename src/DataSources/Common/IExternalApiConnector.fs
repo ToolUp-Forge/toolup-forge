@@ -28,7 +28,11 @@ open ToolUp.Platform.Transport
 //   * the call    — `IHttpTransport` (`HttpClientTransport` over a BCL
 //                   `HttpClient` on the server host),
 //                   wrapped by `OutboundRateBudget.decorate` for quota;
-//   * retry       — `RetryPolicy`, as data (`PagedFetchOptions.Retry`);
+//   * back-pressure — the connector DECLARES what it knows about the
+//                   provider (`BackPressure`: its rate budget and its retry
+//                   policy, both optional); `ExternalApi.effectiveRetry`
+//                   resolves the policy in one place — a per-run override,
+//                   else the declaration, else `RetryPolicy.defaults`;
 //   * paging      — `PagedFetch`, over the connector's two functions;
 //   * cursors     — `SyncCursor` / `IncrementalSync`, over `IEntityStore`.
 //
@@ -90,6 +94,36 @@ type ExternalApiCall = {
     Watermark: string option
 }
 
+/// Everything the connector knows about its provider's back-pressure,
+/// declared in one place. `None` in either field means "no provider-
+/// specific value": no budget is applied, and the retry policy falls back
+/// to the platform default.
+type ExternalApiBackPressure = {
+    /// The provider's quota — apply it with `ExternalApi.withBudget`.
+    RateBudget: OutboundRateBudget option
+    /// How hard the provider may be retried. Validated when resolved.
+    Retry: RetryPolicy option
+}
+
+[<RequireQualifiedAccess>]
+module ExternalApiBackPressure =
+    /// Nothing declared: no budget, the platform default retry policy.
+    let none: ExternalApiBackPressure = { RateBudget = None; Retry = None }
+
+/// A connector declaration the kit cannot run, named by connector.
+[<RequireQualifiedAccess>]
+type ConnectorDeclarationError =
+    /// The effective retry policy breaks `RetryPolicy.validate`.
+    | InvalidRetryPolicy of connector: string * reason: string
+
+[<RequireQualifiedAccess>]
+module ConnectorDeclarationError =
+    /// Human-readable rendering, naming the connector.
+    let toMessage (error: ConnectorDeclarationError) : string =
+        match error with
+        | ConnectorDeclarationError.InvalidRetryPolicy(connector, reason) ->
+            $"connector '{connector}' declares an invalid retry policy: {reason}"
+
 /// The connector authoring seam. Implement it once per provider; every
 /// member is pure.
 type IExternalApiConnector<'Row> =
@@ -97,6 +131,8 @@ type IExternalApiConnector<'Row> =
     abstract Provider: ExternalApiProvider
     /// The resources this connector reads.
     abstract Endpoints: ExternalApiEndpoint list
+    /// The provider's back-pressure: its rate budget and its retry policy.
+    abstract BackPressure: ExternalApiBackPressure
     /// The HTTP request for one page of `call.Endpoint` at `cursor` —
     /// headers included (the credential goes here). `Error` for a
     /// configuration problem; nothing is sent.
@@ -153,11 +189,48 @@ module ExternalApi =
                     })
         }
 
-    /// The connector's two functions for one call, as a `PagedEndpoint`.
-    let endpoint (connector: IExternalApiConnector<'Row>) (call: ExternalApiCall) : PagedEndpoint<'Row> = {
-        Request = fun cursor -> connector.PageRequest(call, cursor)
-        Decode = fun response -> connector.DecodePage(call, response)
-    }
+    /// THE retry resolution — the only place it happens. In order: the
+    /// per-run override (`PagedFetchOptions.Retry`), the connector's
+    /// declaration (`BackPressure.Retry`), `RetryPolicy.defaults`. The
+    /// winner is validated; an invalid one is refused naming the connector,
+    /// before any call is made.
+    let effectiveRetry
+        (connector: IExternalApiConnector<'Row>)
+        (options: PagedFetchOptions)
+        : Result<RetryPolicy, ConnectorDeclarationError> =
+        options.Retry
+        |> Option.orElse connector.BackPressure.Retry
+        |> Option.defaultValue RetryPolicy.defaults
+        |> RetryPolicy.validate
+        |> Result.mapError (fun reason -> ConnectorDeclarationError.InvalidRetryPolicy(connector.Provider.Id, reason))
+
+    /// The connector's two functions for one call, as a `PagedEndpoint`
+    /// running under the effective retry policy.
+    let endpoint
+        (connector: IExternalApiConnector<'Row>)
+        (options: PagedFetchOptions)
+        (call: ExternalApiCall)
+        : Result<PagedEndpoint<'Row>, ConnectorDeclarationError> =
+        effectiveRetry connector options
+        |> Result.map (fun retry -> {
+            Request = fun cursor -> connector.PageRequest(call, cursor)
+            Decode = fun response -> connector.DecodePage(call, response)
+            Retry = retry
+        })
+
+    /// `transport` under the connector's declared rate budget, when it
+    /// declares one (see `OutboundRateBudget.decorate`); unchanged otherwise.
+    let withBudget
+        (limiter: IRateLimiter)
+        (clock: TimeProvider)
+        (connector: IExternalApiConnector<'Row>)
+        (scopeId: string)
+        (subKey: string option)
+        (transport: IHttpTransport)
+        : IHttpTransport =
+        match connector.BackPressure.RateBudget with
+        | Some budget -> OutboundRateBudget.decorate limiter clock budget scopeId subKey transport
+        | None -> transport
 
     /// Read the whole resource (or up to the page cap) into typed rows,
     /// with any failure structured beside the rows already read.
@@ -167,8 +240,14 @@ module ExternalApi =
         (connector: IExternalApiConnector<'Row>)
         (call: ExternalApiCall)
         (start: PageCursor)
-        : Async<PagedOutcome<'Row list>> =
-        PagedFetch.all options transport (endpoint connector call) start
+        : Async<Result<PagedOutcome<'Row list>, ConnectorDeclarationError>> =
+        async {
+            match endpoint connector options call with
+            | Error error -> return Error error
+            | Ok paged ->
+                let! outcome = PagedFetch.all options transport paged start
+                return Ok outcome
+        }
 
     /// Project a page failure onto the ingestion taxonomy an admin UI
     /// renders: a 401/403 or a decode / request failure is the operator's

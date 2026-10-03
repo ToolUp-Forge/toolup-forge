@@ -51,6 +51,7 @@ ToolUp.Platform.Transport.RetryPolicyModule.defaults : ToolUp.Platform.Transport
 ToolUp.Platform.Transport.RetryPolicyModule.delayFor(ToolUp.Platform.Transport.RetryPolicy, System.Int32) : System.TimeSpan
 ToolUp.Platform.Transport.RetryPolicyModule.noRetry : ToolUp.Platform.Transport.RetryPolicy { get }
 ToolUp.Platform.Transport.RetryPolicyModule.timeoutDescription(ToolUp.Platform.Transport.RetryPolicy) : System.String
+ToolUp.Platform.Transport.RetryPolicyModule.validate(ToolUp.Platform.Transport.RetryPolicy) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Transport.RetryPolicy, System.String]
 ToolUp.Platform.Transport.TransportClassifier (class)
 ToolUp.Platform.Transport.TransportClassifier.RefusedHeader : System.String (literal)
 ToolUp.Platform.Transport.TransportClassifier.classifyResponse(ToolUp.Platform.Transport.HttpResponse) : ToolUp.Platform.Transport.TransportError

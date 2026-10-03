@@ -28,7 +28,7 @@ open ToolUp.Platform.Transport
 //   1. Identity by value  — `PageCursor` is a value; `encode`/`tryDecode`
 //                           round-trip it through a string for persistence.
 //   2. Async at boundary  — every fetch returns `Async<_>`.
-//   3. Retry as data      — `PagedFetchOptions.Retry` is a `RetryPolicy`;
+//   3. Retry as data      — every endpoint carries its resolved `RetryPolicy`;
 //                           failures are `PageFailure` values.
 //   4. Stateless          — the loop holds nothing between runs; a run
 //                           resumes from whatever cursor it is handed.
@@ -121,17 +121,22 @@ type PagedOutcome<'State> = {
     ResumeFrom: PageCursor option
 }
 
-/// How one paged resource is read: build the request for a cursor, and
-/// decode a success response into a page. Both are pure.
+/// How one paged resource is read: build the request for a cursor,
+/// decode a success response into a page (both pure), and the retry
+/// policy every page call runs under. For a connector, build it with
+/// `ExternalApi.endpoint`, which resolves the policy in one place.
 type PagedEndpoint<'Row> = {
     Request: PageCursor -> Result<HttpRequest, string>
     Decode: HttpResponse -> Result<Page<'Row>, string>
+    Retry: RetryPolicy
 }
 
 /// Run options, as data.
 type PagedFetchOptions = {
-    /// Retry policy applied to every page call.
-    Retry: RetryPolicy
+    /// A per-run retry override. `None` (the default) defers to the
+    /// connector's declared policy, then to `RetryPolicy.defaults` — see
+    /// `ExternalApi.effectiveRetry`, the only reader of this field.
+    Retry: RetryPolicy option
     /// Stop after this many pages in one run (resumable through
     /// `ResumeFrom`). `None` reads to the end.
     MaxPages: int option
@@ -139,11 +144,8 @@ type PagedFetchOptions = {
 
 [<RequireQualifiedAccess>]
 module PagedFetchOptions =
-    /// `RetryPolicy.defaults`, no page cap.
-    let defaults: PagedFetchOptions = {
-        Retry = RetryPolicy.defaults
-        MaxPages = None
-    }
+    /// No retry override, no page cap.
+    let defaults: PagedFetchOptions = { Retry = None; MaxPages = None }
 
 [<RequireQualifiedAccess>]
 module PageFailure =
@@ -171,9 +173,8 @@ module PageFailure =
 
 module PagedFetch =
 
-    /// Fetch and decode one page.
+    /// Fetch and decode one page, under the endpoint's retry policy.
     let page
-        (options: PagedFetchOptions)
         (transport: IHttpTransport)
         (endpoint: PagedEndpoint<'Row>)
         (cursor: PageCursor)
@@ -182,7 +183,7 @@ module PagedFetch =
             match endpoint.Request cursor with
             | Error message -> return Error(PageFailure.Request message)
             | Ok request ->
-                let! sent = HttpCall.send options.Retry transport request
+                let! sent = HttpCall.send endpoint.Retry transport request
 
                 match sent with
                 | Error error -> return Error(PageFailure.Transport error)
@@ -230,7 +231,7 @@ module PagedFetch =
                     ResumeFrom = Some cursor
                 }
             | _ ->
-                let! fetched = page options transport endpoint cursor
+                let! fetched = page transport endpoint cursor
 
                 match fetched with
                 | Error failure -> return failed state pages cursor failure

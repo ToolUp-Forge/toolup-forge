@@ -95,6 +95,20 @@ module RetryPolicy =
         | Some t -> sprintf "%d ms" (int t.TotalMilliseconds)
         | None -> "default timeout"
 
+    /// Phase 128 — a policy the retry loop can honour: at least one
+    /// attempt, a non-negative initial backoff, and a cap no smaller than
+    /// the initial backoff (a cap below it would make the backoff shrink).
+    /// `Error` names the first rule broken. Pure — Fable-safe.
+    let validate (policy: RetryPolicy) : Result<RetryPolicy, string> =
+        if policy.MaxAttempts < 1 then
+            Error $"MaxAttempts must be at least 1 (got {policy.MaxAttempts})"
+        elif policy.InitialBackoff < TimeSpan.Zero then
+            Error "InitialBackoff must not be negative"
+        elif policy.MaxBackoff < policy.InitialBackoff then
+            Error "MaxBackoff must be at least InitialBackoff"
+        else
+            Ok policy
+
     /// `attemptNumber` is 1-indexed. `delayFor _ 1 = TimeSpan.Zero`
     /// (the first attempt fires immediately). Subsequent attempts wait
     /// `min(InitialBackoff * 2^(N-2), MaxBackoff)`.

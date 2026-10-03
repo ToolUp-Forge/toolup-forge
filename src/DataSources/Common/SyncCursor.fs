@@ -275,6 +275,8 @@ type IncrementalSyncReport = {
 type IncrementalSyncError =
     | Cursor of SyncCursorError
     | Prepare of IngestionError
+    /// The connector's declaration cannot run (an invalid retry policy).
+    | Declaration of ConnectorDeclarationError
 
 [<RequireQualifiedAccess>]
 module IncrementalSync =
@@ -346,25 +348,21 @@ module IncrementalSync =
 
                     let start = cursor.Resume |> Option.defaultValue PageCursor.First
 
-                    let! outcome =
-                        PagedFetch.fold
-                            deps.Options
-                            deps.Transport
-                            (ExternalApi.endpoint deps.Connector call)
-                            step
-                            (cursor, 0)
-                            start
+                    match ExternalApi.endpoint deps.Connector deps.Options call with
+                    | Error error -> return Error(IncrementalSyncError.Declaration error)
+                    | Ok paged ->
+                        let! outcome = PagedFetch.fold deps.Options deps.Transport paged step (cursor, 0) start
 
-                    let finalCursor, rows = outcome.State
+                        let finalCursor, rows = outcome.State
 
-                    return
-                        Ok {
-                            Pages = outcome.Pages
-                            Rows = rows
-                            Completed = outcome.Failure.IsNone && outcome.ResumeFrom.IsNone
-                            Cursor = finalCursor
-                            Failure = outcome.Failure
-                        }
+                        return
+                            Ok {
+                                Pages = outcome.Pages
+                                Rows = rows
+                                Completed = outcome.Failure.IsNone && outcome.ResumeFrom.IsNone
+                                Cursor = finalCursor
+                                Failure = outcome.Failure
+                            }
         }
 
     /// The scheduler verdict for a pass: a page cap that left work behind is
@@ -387,6 +385,7 @@ module IncrementalSync =
         | Error(IncrementalSyncError.Prepare(CredentialMissing key)) ->
             PermanentFailure $"credential '{key}' is missing"
         | Error(IncrementalSyncError.Prepare error) -> PermanentFailure $"%A{error}"
+        | Error(IncrementalSyncError.Declaration error) -> PermanentFailure(ConnectorDeclarationError.toMessage error)
 
     /// The `IJobHandler` for incremental passes over `deps`. Register it
     /// once (`IJobScheduler.RegisterHandler`) and schedule a job per
