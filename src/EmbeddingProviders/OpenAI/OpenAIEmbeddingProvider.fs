@@ -10,6 +10,7 @@ open ToolUp.Platform // IEventStore, Events, ModuleEvent (SDK.Shared)
 open ToolUp.Platform.Metrics // IMetricsSink (Phase 9e)
 open ToolUp.Platform.IEmbeddingProvider
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Provider implementation ──────────────────────────────────────
 //
@@ -266,7 +267,7 @@ type private OpenAIEmbeddingProviderImpl
                     sprintf "request timed out after %g s" requestTimeout.TotalSeconds,
                     None
                 )
-        | :? HttpRequestException as ex ->
+        | ProviderException(ex: HttpRequestException) ->
             sw.Stop()
             recordLatency sw.ElapsedMilliseconds "network_error"
             return AttemptFailed(EmbedderFailureClass.Transient, None, ex.Message, None)

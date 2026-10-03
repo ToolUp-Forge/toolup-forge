@@ -15,6 +15,7 @@ open NpgsqlTypes
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Facts
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Phase 888 — PostgreSQL-backed IFactStore ────────────────────────
 //
@@ -1126,15 +1127,17 @@ type PostgresFactStore
 
     // ─── Writes ───────────────────────────────────────────────────────
 
-    let rec isRaceLost (ex: exn) : bool =
-        match ex with
-        | :? LostWriteRace -> true
-        | :? PostgresException as p ->
-            p.SqlState = PostgresErrorCodes.UniqueViolation
-            || p.SqlState = PostgresErrorCodes.SerializationFailure
-            || p.SqlState = PostgresErrorCodes.DeadlockDetected
-        | :? AggregateException as a -> a.InnerExceptions |> Seq.exists isRaceLost
-        | _ -> false
+    // Any cause counts: the attempt is awaited through `Async.AwaitTask`, so
+    // the race arrives wrapped (Phase 972's shared `causes` sees through it).
+    let isRaceLost (ex: exn) : bool =
+        causes ex
+        |> List.exists (function
+            | :? LostWriteRace -> true
+            | ProviderException(p: PostgresException) ->
+                p.SqlState = PostgresErrorCodes.UniqueViolation
+                || p.SqlState = PostgresErrorCodes.SerializationFailure
+                || p.SqlState = PostgresErrorCodes.DeadlockDetected
+            | _ -> false)
 
     // One write attempt: one transaction. Derivation mirrors
     // `BlobFactStore`'s write core exactly — content address, idempotency

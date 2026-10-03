@@ -11,6 +11,7 @@ open System.Text.Json
 open System.Threading.Tasks
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.ProviderExceptions
 
 // ─── GitHub App OAuth credential-flow companion ──────────────────────
 //
@@ -194,7 +195,7 @@ let private postToken
             with :? JsonException ->
                 return Error(OAuthFlowFailed "GitHub token response was not valid JSON")
         with
-        | :? HttpRequestException as ex -> return Error(NetworkError ex.Message)
+        | ProviderException(ex: HttpRequestException) -> return Error(NetworkError ex.Message)
         | :? TaskCanceledException -> return Error(NetworkError "request to the GitHub token endpoint timed out")
     }
 
@@ -371,7 +372,7 @@ let create (httpClient: HttpClient) (secretStore: ISecretStore) (config: GitHubA
                                     ProviderRejected(sprintf "grant revocation returned HTTP %d" (int resp.StatusCode))
                                 )
                     with
-                    | :? HttpRequestException as ex -> return Error(NetworkError ex.Message)
+                    | ProviderException(ex: HttpRequestException) -> return Error(NetworkError ex.Message)
                     | :? TaskCanceledException ->
                         return Error(NetworkError "request to the GitHub revocation endpoint timed out")
         }

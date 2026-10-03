@@ -8,6 +8,7 @@ open System.Text.Json
 open System.Threading.Tasks
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Public surface ──────────────────────────────────────────────
 //
@@ -293,7 +294,7 @@ type SendGridNotificationSink
                                     return SinkResult.Delivered vendorId
                                 | _ -> return classifyHttp response.StatusCode responseBody
                             with
-                            | :? HttpRequestException as ex ->
+                            | ProviderException(ex: HttpRequestException) ->
                                 return SinkResult.TransientFailure(sprintf "SendGrid network: %s" ex.Message)
                             | :? TaskCanceledException as ex ->
                                 return SinkResult.TransientFailure(sprintf "SendGrid timeout: %s" ex.Message)

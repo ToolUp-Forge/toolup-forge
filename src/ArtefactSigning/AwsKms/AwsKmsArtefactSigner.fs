@@ -17,6 +17,7 @@ open System.Text.Json.Nodes
 open Amazon.KeyManagementService
 open Amazon.KeyManagementService.Model
 open ToolUp.ArtefactSigning
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Phase 40 / 22a — AWS KMS-backed IArtefactSigner ───────────────────
 //
@@ -83,9 +84,9 @@ type AwsKmsArtefactSigner(kms: IAmazonKeyManagementService, keyId: string) =
                             DetachedJws = JwsBuilder.assembleDetachedJws encodedHeader raw
                         }
             with
-            | :? NotFoundException as ex -> return Error(KeyUnavailable ex.Message)
-            | :? DisabledException as ex -> return Error(KeyUnavailable ex.Message)
-            | :? KMSInvalidStateException as ex -> return Error(KeyUnavailable ex.Message)
+            | ProviderException(ex: NotFoundException) -> return Error(KeyUnavailable ex.Message)
+            | ProviderException(ex: DisabledException) -> return Error(KeyUnavailable ex.Message)
+            | ProviderException(ex: KMSInvalidStateException) -> return Error(KeyUnavailable ex.Message)
             | ex -> return Error(CryptoFailure ex.Message)
         }
 

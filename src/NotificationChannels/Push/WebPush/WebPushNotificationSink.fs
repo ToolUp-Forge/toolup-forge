@@ -4,6 +4,7 @@ open System
 open WebPush
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Public surface ──────────────────────────────────────────────
 //
@@ -101,21 +102,17 @@ let private buildPayload (envelope: PushEnvelope) : string =
 
     sprintf "{%s}" (String.concat "," parts)
 
-/// Vendor exceptions can surface at the sink's `with` handler wrapped
-/// in `AggregateException` — `SendNotificationAsync` is a non-generic
-/// `Task` await, the highest-risk shape for the class the first armed
-/// cloud-parity run (2026-08-27) proved live in the AWS companions. A
-/// wrapped `WebPushException` would lose the 404/410
-/// subscription-expiry classification. Match through the wrapper:
-/// flatten and take the single inner exception a one-Task await
-/// carries; a bare exception passes through unchanged.
-let private (|Unwrapped|) (ex: exn) =
-    match ex with
-    | :? AggregateException as aggregate ->
-        match Seq.tryHead (aggregate.Flatten().InnerExceptions) with
-        | Some inner -> inner
-        | None -> ex
-    | _ -> ex
+// Vendor exceptions can surface at the sink's `with` handler wrapped
+// in `AggregateException` — `SendNotificationAsync` is a non-generic
+// `Task` await, the highest-risk shape for the class the first armed
+// cloud-parity run (2026-08-27) proved live in the AWS companions. A
+// wrapped `WebPushException` would lose the 404/410
+// subscription-expiry classification. Match through the wrapper:
+// flatten and take the single inner exception a one-Task await
+// carries; a bare exception passes through unchanged.
+//
+// Phase 972: the private `(|Unwrapped|)` this note introduced is now the
+// shared `ToolUp.Platform.ProviderExceptions` (`ProviderException` / `Unwrapped`).
 
 /// Web Push sink.
 type WebPushNotificationSink
@@ -256,7 +253,7 @@ type WebPushNotificationSink
 
                                     lastResult <- SinkResult.Delivered None
                                 with
-                                | Unwrapped(:? WebPushException as ex) -> lastResult <- classifyWebPushException ex
+                                | ProviderException(ex: WebPushException) -> lastResult <- classifyWebPushException ex
                                 | Unwrapped ex ->
                                     logWarn
                                         $"[WebPushNotificationSink] unhandled exception: {ex.GetType().Name}: {ex.Message}"

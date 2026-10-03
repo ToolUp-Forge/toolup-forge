@@ -125,6 +125,11 @@
              lives in ToolUp.Platform.Server since Phase 880. Placed early —
              every later token/auth file references it. -->
         <Compile Include="Shared\Base64Url.fs" />
+        <!-- Phase 972 - the one shared unwrap for a provider exception that
+             crossed Async.AwaitTask (AggregateException) or reflection
+             (TargetInvocationException). Server-only body behind a small
+             FABLE_COMPILER guard; every companion opens it. -->
+        <Compile Include="Shared\ProviderExceptions.fs" />
         <Compile Include="Shared\Interfaces\ILogger.fs" />
         <!-- Phase 57 — static-prerender substrate types lifted out of
              Client/SDK.ClientTypes.fs so ToolUp.Platform.Build can

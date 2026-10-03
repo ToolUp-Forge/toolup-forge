@@ -2812,6 +2812,8 @@
         <Compile Include="InProcess\Phase971PublicRenderingTests.fs" />
         <!-- Phase 971 — PlatformTenant: provisioning clears the offboard ledger first. -->
         <Compile Include="InProcess\Phase971PlatformTenantTests.fs" />
+        <!-- Phase 972 — provider exception matches see through Async.AwaitTask: the shared pattern + red pins. -->
+        <Compile Include="InProcess\ProviderExceptionTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />
@@ -3073,6 +3075,8 @@
              Binds the Phase 324 IExternalComputeDispatcher contract pack
              unmodified against an in-process stub compute service. -->
         <ProjectReference Include="..\ExternalCompute\ToolUp.ExternalCompute.Http\ToolUp.ExternalCompute.Http.fsproj" />
+    <!-- Phase 972 — the Azure Table rate-limit store's 404 / 409 arms, pinned over a local Table endpoint. -->
+    <ProjectReference Include="..\RateLimit\AzureTableStorage\ToolUp.RateLimit.AzureTableStorage.fsproj" />
     </ItemGroup>
     <ItemGroup>
         <!-- Phase 239 — OpenFeature InMemoryProvider for the adapter test. -->

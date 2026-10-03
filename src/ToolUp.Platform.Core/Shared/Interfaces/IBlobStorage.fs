@@ -172,9 +172,11 @@ type IBlobStorage =
     /// as an `Error`. The defect is invisible against a local or
     /// in-memory store and reproduces only against a real backend,
     /// which is why it survived to the first armed parity run in all
-    /// three companions at once. Unwrap before matching — the in-tree
-    /// cloud companions each carry a private `(|Unwrapped|)` active
-    /// pattern for exactly this.
+    /// three companions at once. Unwrap before matching — match through
+    /// the `ProviderException` pattern of `ToolUp.Platform.ProviderExceptions`
+    /// (Phase 972; the in-tree cloud companions each carried a
+    /// private copy before it), which an architecture-fitness test now
+    /// requires of every module that awaits through `Async.AwaitTask`.
     ///
     /// **No open-ended range.** "Offset to EOF" is deliberately not
     /// expressible — callers combine `GetMetadata` (`Size`) with a

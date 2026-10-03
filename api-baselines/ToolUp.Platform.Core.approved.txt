@@ -10618,6 +10618,11 @@ ToolUp.Platform.ProviderEntryView.Origin : ToolUp.Platform.CredentialOrigin { ge
 ToolUp.Platform.ProviderEntryView.ProviderId : System.String { get }
 ToolUp.Platform.ProviderEntryView.Tags : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ProviderEntryView.UpdatedAt : System.DateTime { get }
+ToolUp.Platform.ProviderExceptions (class)
+ToolUp.Platform.ProviderExceptions.causes(System.Exception) : Microsoft.FSharp.Collections.FSharpList`1[System.Exception]
+ToolUp.Platform.ProviderExceptions.unwrap(System.Exception) : System.Exception
+ToolUp.Platform.ProviderExceptions.|ProviderException|_|`1(System.Exception) : Microsoft.FSharp.Core.FSharpOption`1[T]
+ToolUp.Platform.ProviderExceptions.|Unwrapped|(System.Exception) : System.Exception
 ToolUp.Platform.ProviderHealth (class)
 ToolUp.Platform.ProviderHealth..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.Double], ToolUp.Platform.ProviderHealthStatus)
 ToolUp.Platform.ProviderHealth.LastVerifiedAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }

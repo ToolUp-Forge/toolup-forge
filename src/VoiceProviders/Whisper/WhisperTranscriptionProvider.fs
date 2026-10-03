@@ -6,6 +6,7 @@ open System.Net.Http.Headers
 open System.Text.Json
 open ToolUp.Voice
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.ProviderExceptions
 
 // ─── OpenAI Whisper transcription provider ────────────────────────
 //
@@ -228,7 +229,7 @@ type private WhisperTranscriptionProviderImpl(apiKeyFetcher: unit -> Async<strin
                 with
                 | :? OperationCanceledException ->
                     return Error(TranscriptionError.Transient "Whisper transcription request timed out")
-                | :? HttpRequestException as ex -> return Error(TranscriptionError.Transient ex.Message)
+                | ProviderException(ex: HttpRequestException) -> return Error(TranscriptionError.Transient ex.Message)
                 | ex -> return Error(TranscriptionError.Transient ex.Message)
     }
 

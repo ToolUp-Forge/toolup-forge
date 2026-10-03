@@ -6,6 +6,7 @@ open System.Net.Http.Headers
 open System.Text.Json
 open ToolUp.Voice
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Azure AI Speech transcription provider ───────────────────────
 //
@@ -247,7 +248,7 @@ type private AzureSpeechTranscriptionProviderImpl
                 with
                 | :? OperationCanceledException ->
                     return Error(TranscriptionError.Transient "Azure Speech transcription request timed out")
-                | :? HttpRequestException as ex -> return Error(TranscriptionError.Transient ex.Message)
+                | ProviderException(ex: HttpRequestException) -> return Error(TranscriptionError.Transient ex.Message)
                 | ex -> return Error(TranscriptionError.Transient ex.Message)
     }
 

@@ -1042,6 +1042,59 @@ let private graphTests =
             | Error(RateLimited(Some after)) -> Expect.equal after (TimeSpan.FromSeconds 17.0) "the provider's own hint"
             | other -> failtestf "expected RateLimited, got %A" other
         }
+
+        // Phase 972 — `Async.AwaitTask` wraps the transport's exception in an
+        // AggregateException; before the shared ProviderException pattern the
+        // `HttpRequestException` arm never fired and the failure escaped.
+        testAsync "a refused connection is Unreachable, not an escaped exception" {
+            let refused =
+                { new HttpMessageHandler() with
+                    member _.SendAsync(_, _) =
+                        Task.FromException<HttpResponseMessage>(HttpRequestException "connection refused")
+                }
+
+            let f = fixtureWith settings
+            // Mint a token through the real stub first, then refuse Graph.
+            let! _ = (f.Bridge :> ICalendarBridge).LinkResource f.Link
+
+            let unreachable =
+                MicrosoftGraphCalendarBridge(f.Secrets, f.Refresher, settings, refused) :> ICalendarBridge
+
+            match! Async.Catch(unreachable.LinkResource f.Link) with
+            | Choice1Of2(Error(Unreachable message)) ->
+                Expect.stringContains message "connection refused" "the transport's own message"
+            | Choice1Of2 other -> failtestf "expected Unreachable, got %A" other
+            | Choice2Of2 escaped -> failtestf "the failure ESCAPED as %s" (escaped.GetType().Name)
+        }
+
+        testAsync "the OAuth flow's token exchange reports NetworkError on a refused connection" {
+            let refused =
+                { new HttpMessageHandler() with
+                    member _.SendAsync(_, _) =
+                        Task.FromException<HttpResponseMessage>(HttpRequestException "connection refused")
+                }
+
+            let f = fixtureWith settings
+            let flow = createFlow (new HttpClient(refused)) f.Secrets None settings
+
+            let ctx =
+                OAuthFlowContext.forDataSource f.Link.ScopeId (connectionId f.Link.UserId) None
+
+            match!
+                Async.Catch(
+                    flow.ExchangeCode(
+                        ctx,
+                        "code",
+                        "https://app.invalid/api/oauth/microsoft-graph-calendar/callback",
+                        None
+                    )
+                )
+            with
+            | Choice1Of2(Error(NetworkError message)) ->
+                Expect.stringContains message "connection refused" "the transport's own message"
+            | Choice1Of2 other -> failtestf "expected NetworkError, got %A" other
+            | Choice2Of2 escaped -> failtestf "the failure ESCAPED as %s" (escaped.GetType().Name)
+        }
     ]
 
 // ─── Tokens: the Phase 10h refresher end to end ─────────────────────

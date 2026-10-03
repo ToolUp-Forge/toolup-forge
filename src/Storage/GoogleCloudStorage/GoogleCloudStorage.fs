@@ -16,6 +16,7 @@ open Google
 open Google.Apis.Auth.OAuth2
 open Google.Cloud.Storage.V1
 open ToolUp.Platform.BlobStorage
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Configuration ───────────────────────────────────────────────────
 
@@ -102,21 +103,17 @@ let private blobKey (toolupContainer: string) (blobName: string) = $"{toolupCont
 /// folds in batches rather than issuing one call.
 let private composeBatchSize = 32
 
-/// GCS SDK exceptions can surface at this companion's `with` handlers
-/// wrapped in `AggregateException` — proven by the first armed
-/// cloud-parity run (2026-08-27): `Delete`'s direct
-/// `:? GoogleApiException` NotFound test sat dead, breaking delete
-/// idempotency on missing blobs. Match through the wrapper: flatten and
-/// take the single inner exception a one-Task await carries; a bare
-/// exception passes through unchanged, so an unmatched case still
-/// rethrows the original.
-let private (|Unwrapped|) (ex: exn) =
-    match ex with
-    | :? AggregateException as aggregate ->
-        match Seq.tryHead (aggregate.Flatten().InnerExceptions) with
-        | Some inner -> inner
-        | None -> ex
-    | _ -> ex
+// GCS SDK exceptions can surface at this companion's `with` handlers
+// wrapped in `AggregateException` — proven by the first armed
+// cloud-parity run (2026-08-27): `Delete`'s direct
+// `:? GoogleApiException` NotFound test sat dead, breaking delete
+// idempotency on missing blobs. Match through the wrapper: flatten and
+// take the single inner exception a one-Task await carries; a bare
+// exception passes through unchanged, so an unmatched case still
+// rethrows the original.
+//
+// Phase 972: the private `(|Unwrapped|)` this note introduced is now the
+// shared `ToolUp.Platform.ProviderExceptions` (`ProviderException` / `Unwrapped`).
 
 /// Phase 2c — the companion id this storage backend records under, the
 /// SAME spelling its health probe uses (`blob_storage:gcs`), so the
@@ -143,7 +140,7 @@ let internal companionId = "gcs"
 /// credential fact and returns `None`.
 let internal authFailureStatus (ex: exn) : int option =
     match ex with
-    | Unwrapped(:? GoogleApiException as failure) ->
+    | ProviderException(failure: GoogleApiException) ->
         match failure.HttpStatusCode with
         | HttpStatusCode.Unauthorized -> Some 401
         | HttpStatusCode.Forbidden -> Some 403
@@ -252,7 +249,7 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
             | Some g -> return Ok(Some(string g))
             | None -> return Error "GCS returned an object without a generation"
         with
-        | Unwrapped(:? GoogleApiException as ex) when ex.HttpStatusCode = HttpStatusCode.NotFound -> return Ok None
+        | ProviderException(ex: GoogleApiException) when ex.HttpStatusCode = HttpStatusCode.NotFound -> return Ok None
         | Unwrapped ex -> return Error ex.Message
     }
 
@@ -289,7 +286,7 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
                 let! _ = (client ()).DownloadObjectAsync(config.BucketName, key, ms) |> Async.AwaitTask
                 return Ok(ms.ToArray())
             with
-            | Unwrapped(:? GoogleApiException as ex) when ex.HttpStatusCode = HttpStatusCode.NotFound ->
+            | ProviderException(ex: GoogleApiException) when ex.HttpStatusCode = HttpStatusCode.NotFound ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
             | Unwrapped ex ->
                 do! noteAuthFailure "Download" ex
@@ -317,9 +314,9 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
 
                     return Ok(ms.ToArray())
                 with
-                | Unwrapped(:? GoogleApiException as ex) when ex.HttpStatusCode = HttpStatusCode.NotFound ->
+                | ProviderException(ex: GoogleApiException) when ex.HttpStatusCode = HttpStatusCode.NotFound ->
                     return Error $"Blob not found: {toolupContainer}/{blobName}"
-                | Unwrapped(:? GoogleApiException as ex) when
+                | ProviderException(ex: GoogleApiException) when
                     ex.HttpStatusCode = HttpStatusCode.RequestedRangeNotSatisfiable
                     ->
                     // Past-EOF clamp per the interface contract.
@@ -411,7 +408,7 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
                                 0L
                         )
                 with
-                | Unwrapped(:? GoogleApiException as ex) when ex.HttpStatusCode = HttpStatusCode.NotFound ->
+                | ProviderException(ex: GoogleApiException) when ex.HttpStatusCode = HttpStatusCode.NotFound ->
                     return Error(ComposeRefusal.ComposeFailed $"Compose source not found in {toolupContainer}")
                 | Unwrapped ex ->
                     do! noteAuthFailure "ComposeFrom" ex
@@ -427,7 +424,7 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
                 do! (client ()).DeleteObjectAsync(config.BucketName, key) |> Async.AwaitTask
                 return Ok()
             with
-            | Unwrapped(:? GoogleApiException as ex) when ex.HttpStatusCode = HttpStatusCode.NotFound -> return Ok()
+            | ProviderException(ex: GoogleApiException) when ex.HttpStatusCode = HttpStatusCode.NotFound -> return Ok()
             | Unwrapped ex ->
                 do! noteAuthFailure "Delete" ex
                 return Error ex.Message
@@ -487,7 +484,7 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
                 let! _ = (client ()).GetObjectAsync(config.BucketName, key) |> Async.AwaitTask
                 return true
             with
-            | Unwrapped(:? GoogleApiException as ex) when ex.HttpStatusCode = HttpStatusCode.NotFound -> return false
+            | ProviderException(ex: GoogleApiException) when ex.HttpStatusCode = HttpStatusCode.NotFound -> return false
             | ex ->
                 do! noteAuthFailure "Exists" ex
                 return false
@@ -538,7 +535,7 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
                         ContentType = contentType
                     }
             with
-            | Unwrapped(:? GoogleApiException as ex) when ex.HttpStatusCode = HttpStatusCode.NotFound ->
+            | ProviderException(ex: GoogleApiException) when ex.HttpStatusCode = HttpStatusCode.NotFound ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
             | Unwrapped ex ->
                 do! noteAuthFailure "GetMetadata" ex
@@ -581,7 +578,7 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
 
                     return Ok(ms.ToArray(), string gen)
             with
-            | Unwrapped(:? GoogleApiException as ex) when ex.HttpStatusCode = HttpStatusCode.NotFound ->
+            | ProviderException(ex: GoogleApiException) when ex.HttpStatusCode = HttpStatusCode.NotFound ->
                 return Error $"Blob not found: {toolupContainer}/{blobName}"
             | Unwrapped ex ->
                 do! noteAuthFailure "DownloadWithETag" ex
@@ -620,7 +617,7 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
                     | Some g -> return Ok(string g)
                     | None -> return Error(ConditionalWriteFailure "upload succeeded but GCS returned no generation")
                 with
-                | Unwrapped(:? GoogleApiException as ex) when ex.HttpStatusCode = HttpStatusCode.PreconditionFailed ->
+                | ProviderException(ex: GoogleApiException) when ex.HttpStatusCode = HttpStatusCode.PreconditionFailed ->
                     match! currentGeneration key with
                     | Ok current -> return Error(ETagMismatch current)
                     | Error msg ->

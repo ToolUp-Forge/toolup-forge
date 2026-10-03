@@ -15,6 +15,7 @@ open System.Text.Json.Nodes
 open System.Threading.Tasks
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Phase 6f.C — WhatsApp over the Meta WhatsApp Business Cloud API ─
 //
@@ -388,7 +389,7 @@ type MetaWhatsAppCloudNotificationSink
             else
                 return classifyFailure response.StatusCode responseBody
         with
-        | :? HttpRequestException as ex ->
+        | ProviderException(ex: HttpRequestException) ->
             return SinkResult.TransientFailure(sprintf "Meta WhatsApp network: %s" ex.Message)
         | :? TaskCanceledException as ex ->
             return SinkResult.TransientFailure(sprintf "Meta WhatsApp timeout: %s" ex.Message)

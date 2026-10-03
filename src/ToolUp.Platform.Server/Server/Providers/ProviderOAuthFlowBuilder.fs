@@ -9,6 +9,7 @@ open System.Text.Json
 open System.Threading.Tasks
 open ToolUp.Platform
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Phase 43.B — the shared Authorization Code provider flow ─────
 //
@@ -100,7 +101,7 @@ let httpPost (client: HttpClient) : OAuthTokenPost =
             let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
             return Ok body
         with
-        | :? HttpRequestException as ex -> return Error(NetworkError ex.Message)
+        | ProviderException(ex: HttpRequestException) -> return Error(NetworkError ex.Message)
         | :? TaskCanceledException -> return Error(NetworkError $"request to {url} timed out")
     }
 

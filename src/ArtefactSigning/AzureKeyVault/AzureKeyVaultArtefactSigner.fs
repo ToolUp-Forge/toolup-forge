@@ -12,6 +12,7 @@ open Azure.Core
 open Azure.Security.KeyVault.Keys
 open Azure.Security.KeyVault.Keys.Cryptography
 open ToolUp.ArtefactSigning
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Phase 160 / 40 / 22a — Azure Key Vault-backed IArtefactSigner ──────
 //
@@ -99,8 +100,10 @@ type AzureKeyVaultArtefactSigner(crypto: CryptographyClient, keyClient: KeyClien
                         DetachedJws = JwsBuilder.assembleDetachedJws encodedHeader result.Signature
                     }
             with
-            | :? RequestFailedException as rfe when rfe.Status = 404 -> return Error(KeyUnavailable rfe.Message)
-            | :? RequestFailedException as rfe when rfe.Status = 403 -> return Error(KeyUnavailable rfe.Message)
+            | ProviderException(rfe: RequestFailedException) when rfe.Status = 404 ->
+                return Error(KeyUnavailable rfe.Message)
+            | ProviderException(rfe: RequestFailedException) when rfe.Status = 403 ->
+                return Error(KeyUnavailable rfe.Message)
             | ex -> return Error(CryptoFailure ex.Message)
         }
 

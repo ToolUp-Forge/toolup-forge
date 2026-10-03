@@ -13,6 +13,7 @@ open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.EntityQueryTypes
 open ToolUp.Platform.IEntityStore
 open ToolUp.Remoting.Json.SystemTextJson
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Phase 531 — PostgreSQL / JSONB IEntityStore ────────────────────────
 //
@@ -124,13 +125,14 @@ module private Sql =
 /// than the `PostgresException` inside it, so a pattern on
 /// `PostgresException` alone never matched: a racer that lost the
 /// compare-and-set was reported as a `StorageFailure` instead of a
-/// `VersionConflict`. The unwrap matches `PostgresFactStore`'s.
+/// `VersionConflict`. The unwrap matches `PostgresFactStore`'s: any cause
+/// counts. Phase 972 moved both onto the shared `ProviderExceptions`.
 module private Errors =
-    let rec isUniqueViolation (ex: exn) : bool =
-        match ex with
-        | :? PostgresException as p -> p.SqlState = PostgresErrorCodes.UniqueViolation
-        | :? AggregateException as a -> a.InnerExceptions |> Seq.exists isUniqueViolation
-        | _ -> false
+    let isUniqueViolation (ex: exn) : bool =
+        causes ex
+        |> List.exists (function
+            | ProviderException(p: PostgresException) -> p.SqlState = PostgresErrorCodes.UniqueViolation
+            | _ -> false)
 
 /// PostgreSQL-backed `IEntityStore`. `dataSource` is built by the deployment
 /// (via `NpgsqlDataSource.Create connString`, the connection string resolved

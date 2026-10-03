@@ -11,6 +11,7 @@ open ToolUp.Platform // RetryPolicy
 open ToolUp.Platform.AI
 open ToolUp.Platform.Secrets
 open OpenAIProviderWire
+open ToolUp.Platform.ProviderExceptions
 
 // ─── Azure OpenAI ("Microsoft Copilot") provider ─────────────────────
 //
@@ -295,7 +296,7 @@ type CopilotAIProvider private (endpoint: string, apiVersion: string, auth: Copi
                                             TransientNetwork
                                                 $"Request timed out after {RetryPolicy.timeoutDescription retryPolicy}"
                                         )
-                            | :? HttpRequestException as ex ->
+                            | ProviderException(ex: HttpRequestException) ->
                                 if state.Content <> "" then
                                     return Error(StreamingAborted(state.Content, ex.Message))
                                 else
@@ -323,7 +324,7 @@ type CopilotAIProvider private (endpoint: string, apiVersion: string, auth: Copi
                                         TransientNetwork
                                             $"Request timed out after {RetryPolicy.timeoutDescription retryPolicy}"
                                     )
-                            | :? HttpRequestException as ex ->
+                            | ProviderException(ex: HttpRequestException) ->
                                 return Error(ErrorClassifier.classifyTransportFailure ex.Message)
                             | ex -> return Error(ErrorClassifier.classifyTransportFailure ex.Message)
                     }
@@ -382,7 +383,7 @@ type CopilotAIProvider private (endpoint: string, apiVersion: string, auth: Copi
                                         TransientNetwork
                                             $"Request timed out after {RetryPolicy.timeoutDescription retryPolicy}"
                                     )
-                            | :? HttpRequestException as ex ->
+                            | ProviderException(ex: HttpRequestException) ->
                                 return Error(ErrorClassifier.classifyTransportFailure ex.Message)
                             | ex -> return Error(ErrorClassifier.classifyTransportFailure ex.Message)
                         }

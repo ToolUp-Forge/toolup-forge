@@ -1221,6 +1221,208 @@ let private phase961Tests =
         }
     ]
 
+// ─── Phase 972 — provider exception matches see through Async.AwaitTask ───
+//
+// `Async.AwaitTask` raises a faulted task's `AggregateException`, not the
+// provider exception inside it, so a bare `:? RequestFailedException` (or
+// `HttpRequestException`, `AmazonS3Exception`, …) in a module that awaits a
+// `Task` that way never fires: the failure falls to a generic branch or out
+// of the function. Phase 968 found one such site; the Phase 972 inventory
+// found more that misclassified or escaped. The rule: in any module that
+// calls `Async.AwaitTask`, a type test on a provider / BCL I/O exception
+// goes through the `ProviderException` pattern of `ToolUp.Platform.ProviderExceptions`.
+// No pins — every site in the tree complies. The rule is module-scoped, as
+// the shard set it: a classifier that receives an exception from ANOTHER
+// module's await (the Graph tier's `classifyError`, whose project takes no
+// Platform.Core dependency) is outside it, and unwraps by hand.
+
+/// The provider / BCL I/O exception types whose arrival the rule guards, by
+/// simple name (a qualified spelling `:? Azure.RequestFailedException` is
+/// matched on its last segment). Add a type here when a companion starts
+/// classifying a new vendor's exception.
+let private providerExceptionTypes =
+    Set.ofList [
+        // BCL transport / I/O
+        "HttpRequestException"
+        "SocketException"
+        "IOException"
+        "TimeoutException"
+        "DbException"
+        // Azure
+        "RequestFailedException"
+        // AWS
+        "AmazonServiceException"
+        "AmazonS3Exception"
+        "AmazonKeyManagementServiceException"
+        "AmazonSecretsManagerException"
+        "NotFoundException"
+        "DisabledException"
+        "KMSInvalidStateException"
+        "ResourceNotFoundException"
+        "InvalidRequestException"
+        // Google
+        "GoogleApiException"
+        "TokenResponseException"
+        "RpcException"
+        // Postgres / SQL warehouses
+        "PostgresException"
+        "NpgsqlException"
+        "SqlException"
+        "SnowflakeDbException"
+        // Neo4j driver
+        "Neo4jException"
+        "ClientException"
+        "TransientException"
+        "DatabaseException"
+        "ServiceUnavailableException"
+        "SessionExpiredException"
+        // Mail / push / directory
+        "SmtpCommandException"
+        "SmtpProtocolException"
+        "WebPushException"
+        "LdapException"
+    ]
+
+let private bareTypeTest =
+    System.Text.RegularExpressions.Regex(@":\?\s*(?:[A-Za-z_][A-Za-z0-9_]*\.)*([A-Za-z_][A-Za-z0-9_]*)")
+
+/// `source` with every `//` line comment removed, line count preserved.
+/// (Doc comments in the tree quote the very bare test this rule bans.)
+let private stripLineComments (source: string) : string =
+    source.Split('\n')
+    |> Array.map (fun line ->
+        match line.IndexOf "//" with
+        | -1 -> line
+        | at -> line.Substring(0, at))
+    |> String.concat "\n"
+
+/// Every bare `:? <provider exception>` in a module that calls
+/// `Async.AwaitTask`, as `file:line — type`. Pure, so the fixtures below can
+/// plant a violation without touching the tree.
+let private bareProviderMatchFindings (sources: (string * string) list) : string list = [
+    for file, source in sources do
+        let code = stripLineComments source
+
+        if code.Contains "Async.AwaitTask" then
+            for m in bareTypeTest.Matches code do
+                let typeName = m.Groups[1].Value
+
+                if providerExceptionTypes.Contains typeName then
+                    yield
+                        sprintf
+                            "%s:%d — `:? %s` in a module that awaits through Async.AwaitTask; match `ProviderException(_: %s)` instead"
+                            file
+                            (lineOf code m.Index)
+                            typeName
+                            typeName
+]
+
+/// Every production `.fs` under `src/` (test projects excluded), repo-relative.
+let private productionSources () : (string * string) list =
+    let root = repoRoot ()
+
+    fsFilesUnder (Path.Combine(root, "src"))
+    |> List.map (fun p -> relative p, p)
+    |> List.filter (fun (rel, _) ->
+        not (
+            rel.Contains ".Tests/"
+            || rel.Contains "/Tests/"
+            || rel.Contains "/bin/"
+            || rel.Contains "/obj/"
+        ))
+    |> List.map (fun (rel, p) -> rel, File.ReadAllText p)
+
+let private phase972Tests =
+    testList "Phase 972 — provider exception matches go through ProviderException" [
+
+        test "no module that awaits through Async.AwaitTask type-tests a provider exception bare" {
+            let sources = productionSources ()
+
+            // Floor: the sweep reached the companions, so a broken walk cannot
+            // pass vacuously.
+            let awaiting =
+                sources
+                |> List.filter (fun (_, s) -> (stripLineComments s).Contains "Async.AwaitTask")
+
+            Expect.isGreaterThan awaiting.Length 150 "the AwaitTask sweep found almost nothing — the walk is broken"
+
+            Expect.isTrue
+                (awaiting
+                 |> List.exists (fun (f, _) -> f.EndsWith "Storage/AwsS3Storage/AwsS3Storage.fs"))
+                "the sweep reaches the S3 companion, a module that awaits through Async.AwaitTask"
+
+            let findings = bareProviderMatchFindings sources
+
+            Expect.isEmpty
+                findings
+                (sprintf
+                    "a bare provider-exception match never fires behind Async.AwaitTask:\n%s"
+                    (String.concat "\n" findings))
+        }
+
+        test "a planted bare match in an AwaitTask module is a finding" {
+            let planted =
+                String.concat "\n" [
+                    "module Planted"
+                    "let read (client: Client) = async {"
+                    "    try"
+                    "        let! r = client.GetAsync() |> Async.AwaitTask"
+                    "        return Ok r"
+                    "    with"
+                    "    | :? Azure.RequestFailedException as rfe when rfe.Status = 404 -> return Error \"missing\""
+                    "    | :? HttpRequestException -> return Error \"down\""
+                    "}"
+                ]
+
+            let findings = bareProviderMatchFindings [ "src/Planted/Planted.fs", planted ]
+
+            Expect.equal findings.Length 2 "both bare tests are findings"
+            Expect.stringContains findings.Head "src/Planted/Planted.fs:7" "the finding names the file and line"
+            Expect.stringContains findings.Head "RequestFailedException" "the finding names the type"
+        }
+
+        test "the ProviderException form, a module that never awaits a Task, and a comment are not findings" {
+            let throughPattern =
+                String.concat "\n" [
+                    "module Fixed"
+                    "let read (client: Client) = async {"
+                    "    try"
+                    "        let! r = client.GetAsync() |> Async.AwaitTask"
+                    "        return Ok r"
+                    "    with"
+                    "    | ProviderException(rfe: RequestFailedException) when rfe.Status = 404 -> return Error \"missing\""
+                    "    // a bare `:? RequestFailedException` here would never fire"
+                    "}"
+                ]
+
+            let synchronous =
+                String.concat "\n" [
+                    "module Sync"
+                    "let read (client: Client) ="
+                    "    try Ok(client.Get())"
+                    "    with :? RequestFailedException as rfe -> Error rfe.Message"
+                ]
+
+            let unrelated =
+                String.concat "\n" [
+                    "module Other"
+                    "let parse s = async {"
+                    "    let! t = Task.FromResult 1 |> Async.AwaitTask"
+                    "    try return Ok(JsonDocument.Parse s)"
+                    "    with :? JsonException as j -> return Error j.Message"
+                    "}"
+                ]
+
+            Expect.isEmpty
+                (bareProviderMatchFindings [
+                    "src/A/Fixed.fs", throughPattern
+                    "src/B/Sync.fs", synchronous
+                    "src/C/Other.fs", unrelated
+                ])
+                "only a bare provider-exception test in an AwaitTask module is a finding"
+        }
+    ]
+
 [<Tests>]
 let tests =
     testList "Phase 174 — architecture-fitness gate" [
@@ -1232,4 +1434,5 @@ let tests =
         phase880Tests
         phase946Tests
         phase961Tests
+        phase972Tests
     ]

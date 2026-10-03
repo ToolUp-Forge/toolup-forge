@@ -8,6 +8,7 @@ open System.Net.Http
 open System.Text.Json
 open System.Threading.Tasks
 open ToolUp.Platform.Secrets
+open ToolUp.Platform.ProviderExceptions
 
 // ─── GitHub sign-in leg (server-side authorize + code exchange) ──────
 //
@@ -199,7 +200,7 @@ let exchangeCode
                 with :? JsonException ->
                     return Error "GitHub code-exchange response was not valid JSON"
             with
-            | :? HttpRequestException as ex ->
+            | ProviderException(ex: HttpRequestException) ->
                 return Error(sprintf "could not reach the GitHub token endpoint: %s" ex.Message)
             | :? TaskCanceledException -> return Error "request to the GitHub token endpoint timed out"
     }
