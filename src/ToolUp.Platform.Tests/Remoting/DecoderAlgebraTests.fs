@@ -271,17 +271,14 @@ let private algebraOutcomes: (string * RefusalOutcome) list = [
     // list says so rather than the combinator pretending otherwise.
     "extra-field-record",
     Accepted "a trailing element past the declared fields is ignored, so an additive wire change stays non-breaking"
-    // The one mutation the algebra cannot refuse either, and Phase 786
-    // explained why it is not about the decoder: `writeInt64` compacts
-    // `2147483648L` into bytes that ARE a well-formed `int32
-    // -2147483648`, the shape `writeDecimal`'s sign word travels in. The
-    // value model faithfully carries `Int(-2147483648, Bits32)`, and a
-    // 32-bit source into a 32-bit target is admitted by Phase 786's
-    // second rule — correctly, because refusing it would refuse every
-    // negative decimal the corpus pins. Closing this needs the EMITTER,
-    // not the decode algebra, and the doc page's not-claimed list says
-    // so.
-    "wrong-width-int64-into-int32", Accepted "the compacted encoding is a well-formed int32 -2147483648"
+    // Until Phase 802 the algebra could not refuse this one either, and
+    // not for want of a rule: `writeInt64` compacted `2147483648L` into
+    // bytes that ARE a well-formed `int32 -2147483648`, and a 32-bit
+    // source into a 32-bit target is admitted by Phase 786's second rule.
+    // Phase 802 fixed the EMITTER — a positive value keeps its top bit
+    // clear, so this one now arrives as a 64-bit source — and the
+    // algebra refuses it by name with no change of its own.
+    "wrong-width-int64-into-int32", Refused
 ]
 
 // ─── The IL pin ──────────────────────────────────────────────────────

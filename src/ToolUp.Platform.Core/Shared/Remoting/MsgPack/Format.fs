@@ -44,6 +44,58 @@ module ToolUp.Remoting.MsgPack.Format
 // matches no arm and falls through to the reader's final refusal, so
 // there is no ext length to guard. And there is no `timestamp`
 // extension; `DateTime` and friends ride the integer and array arms.
+//
+// ─── Phase 802 — what the WRITER emits, so that rule 1 can refuse ─────
+//
+// Rule 1 can only refuse a narrowing it can SEE. The reader admits a
+// source no wider than its target even when the value's top bit is set
+// (`uint32 0x80000000` at an `int32` target reads as `-2147483648`),
+// because writers before this phase put signed values on the wire in
+// unsigned formats of the same width: `writeDecimal`'s four int32 words
+// as `uint32`, `writeSByte`'s negatives as `uint8`. And they compacted:
+// `writeInt64 2147483648L` left as `Uint32 80 00 00 00` — byte for byte
+// a well-formed `int32 -2147483648`, so `wrong-width-int64-into-int32`
+// was unrefusable at any reader.
+//
+// Both writers (the .NET one and the one Fable compiles) now pick every
+// integer's format by one rule, and the rule is about the TOP BIT:
+//
+//   * A NON-NEGATIVE value rides the narrowest unsigned format whose top
+//     bit stays clear — fixposnum below 128, then `Uint16` up to 32767,
+//     `Uint32` up to `Int32.MaxValue`, `Uint64` above. A positive value
+//     above a signed width's maximum goes one width UP, never into the
+//     unsigned form of the same width, so no integer leaves as `Uint8`.
+//   * A NEGATIVE value rides the narrowest signed format that holds it —
+//     fixnegnum down to -32, then `Int8`, `Int32`, `Int64` — with one
+//     deliberate gap: no `Int16`. The Fable reader before this phase did
+//     not sign-extend `Int16` (`d1 80 00` came back as 32768), so a
+//     browser client still running it would read a negative int16 as a
+//     positive number. Every reader generation reads `Int32` correctly,
+//     so values in -32768..-129 pay two bytes for that. The reader is
+//     fixed in this phase; the gap stays because old clients do not
+//     update when the server does.
+//   * The one emission with its top bit set is a `uint64` source above
+//     `Int64.MaxValue`, which has no wider format to move up into.
+//
+// So no integer either writer emits reads as a different value at any
+// narrower width the reader accepts: a value too wide for its target
+// always arrives in a format WIDER than the target, which rule 1
+// measures and refuses by name. The decimal words and the sbyte arm
+// follow the same rule — each word is an int32 and travels as one.
+//
+// **Compatibility, stated exactly.** This is a change to the BYTES and
+// not to the reader's RULES, and it is wire-compatible in both
+// directions: every form the writer now emits is one both reader
+// generations decode to the same value — measured, not assumed: the
+// Fable parity pack's first run over the re-pinned corpus caught the
+// `Int16` misread above, which is why that format is not emitted — and
+// the reader still admits the same-width forms older writers emit, so a
+// pre-802 peer on either end decodes identically. What is NOT preserved is byte
+// identity: the corpus fixtures that carried such values were re-pinned
+// in the same commit, and anything outside this repository that pins
+// bytes sees the same re-pin. Removing the reader's same-width admission
+// WOULD be a wire break — it would refuse a pre-802 writer's negative
+// decimals — and it is deliberately not done here.
 
 /// Phase 786 — how deeply containers may nest before the reader refuses.
 /// A `Reader` takes an override; this is what it uses when given none.

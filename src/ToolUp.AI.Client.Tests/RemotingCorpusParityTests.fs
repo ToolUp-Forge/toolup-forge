@@ -162,6 +162,30 @@ let tests =
                     (refusal.Found.Contains "65536")
                     (sprintf "the refusal should name the 65536 elements claimed; it said `%s`" refusal.Found)
 
+        // ─── Phase 802 — the 16-bit arms, which the corpus no longer pins ──
+        //
+        // The first parity run over the Phase 802 re-pin found that this
+        // reader did not sign-extend `Int16`: `d1 80 00` decoded as 32768.
+        // The writers now avoid `Int16` (an old client would still misread
+        // it), so no fixture carries the format; these cases hold the
+        // fixed reader to it directly, and to the `Uint16` arm that used
+        // to be read through it.
+        testCase "decodes a negative Int16 with its sign"
+        <| fun () ->
+            let read (bytes: byte[]) =
+                ToolUp.Remoting.MsgPack.Read.Reader(bytes).Read typeof<int16> :?> int16
+
+            Expect.equal (read [| 0xd1uy; 0x80uy; 0x00uy |]) -32768s "d1 80 00 is Int16.MinValue"
+            Expect.equal (read [| 0xd1uy; 0xffuy; 0x38uy |]) -200s "d1 ff 38 is -200"
+            Expect.equal (read [| 0xd1uy; 0x7fuy; 0xffuy |]) 32767s "d1 7f ff is Int16.MaxValue"
+
+        testCase "decodes a Uint16 above Int16.MaxValue as itself"
+        <| fun () ->
+            let decoded =
+                ToolUp.Remoting.MsgPack.Read.Reader([| 0xcduy; 0xffuy; 0xffuy |]).Read typeof<uint16> :?> uint16
+
+            Expect.equal decoded 65535us "cd ff ff is UInt16.MaxValue"
+
         yield! [
             for c in cases ->
                 testCase ("decodes " + c.Name)

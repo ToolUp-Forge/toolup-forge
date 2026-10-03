@@ -1355,30 +1355,36 @@ let mutations () : WireMutation list =
         // position to notice — a silent wrong ANSWER rather than a missing
         // error, which is why this was the most valuable row in the list.
         //
-        // Phase 786 added the check, and this row STILL reads Accepted —
-        // which is the more interesting answer, and it is about the
-        // FORMAT rather than the reader. `writeInt64` compacts: this
-        // value's four high bytes are zero, so it leaves as
-        // `Uint32 80 00 00 00`, and those bytes are byte for byte a
-        // well-formed `int32 -2147483648` — the shape `writeDecimal`'s
-        // sign word actually travels in, pinned by the `decimal-max`
-        // fixture. A reader that refused this would refuse that.
+        // Phase 786 added the check, and this row still read Accepted —
+        // which was an answer about the FORMAT rather than the reader.
+        // `writeInt64` compacted: the value's four high bytes are zero, so
+        // it left as `Uint32 80 00 00 00`, byte for byte a well-formed
+        // `int32 -2147483648` — the shape `writeDecimal`'s sign word
+        // travelled in, pinned by the `decimal-max` fixture. A reader that
+        // refused this would have refused that.
         //
-        // So the narrowing here is real and unrefusable at the reader.
-        // Closing it is an emitter-side change (a signed value keeping a
-        // signed format), which is a wire break. What Phase 786 does
-        // refuse is the narrowing the format does NOT flatten — a source
-        // genuinely wider than the target; the `narrowing falsifier` list
-        // measures both directions against each other.
+        // Phase 802 closed it at the EMITTER, and both halves of that
+        // ambiguity moved together. A non-negative value now rides the
+        // narrowest unsigned format whose top bit stays clear, so this one
+        // leaves as `Uint64 00 00 00 00 80 00 00 00` — a 64-bit source
+        // Phase 786's width rule measures against the 32-bit target and
+        // refuses by name. And the decimal's words now travel as the
+        // int32s they are (`decimal-max` re-pinned to `94 ff ff ff 00`),
+        // so no fixture depends on the same-width reinterpretation any
+        // more. The reader did NOT change and still admits that
+        // reinterpretation, because a pre-802 writer still emits it:
+        // `preEmitterDisciplinePayloads` below pins those older bytes, and
+        // is what proves the change wire-compatible rather than asserting
+        // it. (This comment once called the emitter change a wire break.
+        // It is not one: only REMOVING that admission from the reader
+        // would be.)
         {
             Name = "wrong-width-int64-into-int32"
             Kind = MutationKind.WrongWidth
             Target = typeof<int32>
             MsgPack = Some(int64Case.WriteMsgPack())
             Json = Some(int64Case.WriteJson())
-            ExpectedMsgPack =
-                Accepted
-                    "the compacted encoding is indistinguishable from a legitimate int32 -2147483648; unrefusable without an emitter change"
+            ExpectedMsgPack = Refused
             ExpectedJson = Refused
         }
         {
@@ -1688,5 +1694,86 @@ let sameOutcomeClass (a: RefusalOutcome) (b: RefusalOutcome) =
     | Accepted _, Accepted _ -> true
     | ThrewUnnamed _, ThrewUnnamed _ -> true
     | _ -> false
+
+// ─── Pre-802 writer bytes (Phase 802) ────────────────────────────────
+
+/// The bytes the writer emitted for each fixture Phase 802 re-pinned,
+/// BEFORE the emitter's width discipline: positive values compacted into
+/// the unsigned form of their own width, negative int32 decimal words and
+/// sbytes put out as the unsigned of the same bits, negatives below -31
+/// always in the nine-byte `Int64`.
+///
+/// They are kept because the change is only wire-compatible if the
+/// reader still decodes them to the same values — a peer running the
+/// older writer is still on the other end of this wire — and a
+/// compatibility claim nothing measures is a claim. Each row names the
+/// pinned case whose declared value its bytes must decode to.
+/// (`record-envelope` and `record-nested` were re-pinned too; the only
+/// bytes that moved in them are their embedded `decimal-simple` value,
+/// which its own row carries.)
+let preEmitterDisciplinePayloads: (string * byte[]) list = [
+    "date-dateonly-min", [| 0xccuy; 0x00uy |]
+    "decimal-max",
+    [|
+        0x94uy
+        0xceuy
+        0xffuy
+        0xffuy
+        0xffuy
+        0xffuy
+        0xceuy
+        0xffuy
+        0xffuy
+        0xffuy
+        0xffuy
+        0xceuy
+        0xffuy
+        0xffuy
+        0xffuy
+        0xffuy
+        0xccuy
+        0x00uy
+    |]
+    "decimal-negative-scale",
+    [|
+        0x94uy
+        0xccuy
+        0x01uy
+        0xccuy
+        0x00uy
+        0xccuy
+        0x00uy
+        0xceuy
+        0x80uy
+        0x04uy
+        0x00uy
+        0x00uy
+    |]
+    "decimal-simple",
+    [|
+        0x94uy
+        0xceuy
+        0x00uy
+        0x01uy
+        0xe2uy
+        0x40uy
+        0xccuy
+        0x00uy
+        0xccuy
+        0x00uy
+        0xceuy
+        0x00uy
+        0x02uy
+        0x00uy
+        0x00uy
+    |]
+    "width-byte-max", [| 0xccuy; 0xffuy |]
+    "width-int16-min", [| 0xd3uy; 0xffuy; 0xffuy; 0xffuy; 0xffuy; 0xffuy; 0xffuy; 0x80uy; 0x00uy |]
+    "width-int32-min", [| 0xd3uy; 0xffuy; 0xffuy; 0xffuy; 0xffuy; 0x80uy; 0x00uy; 0x00uy; 0x00uy |]
+    "width-int64-beyond-int32", [| 0xceuy; 0x80uy; 0x00uy; 0x00uy; 0x00uy |]
+    "width-sbyte-min", [| 0xccuy; 0x80uy |]
+    "width-uint16-max", [| 0xcduy; 0xffuy; 0xffuy |]
+    "width-uint32-max", [| 0xceuy; 0xffuy; 0xffuy; 0xffuy; 0xffuy |]
+]
 
 #endif

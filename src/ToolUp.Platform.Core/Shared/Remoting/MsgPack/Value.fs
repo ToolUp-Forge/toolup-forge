@@ -46,14 +46,16 @@ namespace ToolUp.Remoting.MsgPack
 /// information rule without re-reading the bytes.
 ///
 /// This is the WIRE's width, never the target's. Phase 786 established
-/// why the distinction matters: `writeSByte` puts `-128y` on the wire as
-/// `uint8 128`, and `writeDecimal`'s four words ride
+/// why the distinction matters: a writer before Phase 802 puts `-128y`
+/// on the wire as `uint8 128`, and its `writeDecimal`'s four words ride
 /// `write32bitNumber`, so a negative `int32` arrives as `uint32
 /// 0xFFFFFFFF`. A source no wider than its target therefore always
 /// survives, sign reinterpretation included, and only a WIDER source has
 /// to fit the target's range. A decoder that forgot the source width and
-/// applied a signed-range rule would refuse well-formed traffic — the
-/// Phase 784 corpus pins three such fixtures.
+/// applied a signed-range rule would refuse well-formed traffic from such
+/// a peer — the corpus pins those older bytes in
+/// `preEmitterDisciplinePayloads`. (Since Phase 802 this repository's
+/// writers emit no such form; see `Format.fs`.)
 ///
 /// `Fixnum` is a distinct case rather than an alias for `Bits8` because
 /// it is a distinct format (the value rides inside the format byte), and

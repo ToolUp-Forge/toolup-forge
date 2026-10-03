@@ -35,11 +35,13 @@ open ToolUp.Platform.Tests.Remoting.WireCorpus
 // source width class — every integer declared 64-bit, which is what a
 // naive bridge would do — and a case asserts the differential CATCHES
 // it. The disagreement it produces is not incidental: Phase 786
-// established that `writeDecimal`'s four words ride
-// `write32bitNumber`, so a negative word arrives as `uint32
+// established that `writeDecimal`'s four words rode
+// `write32bitNumber`, so a negative word arrived as `uint32
 // 0xFFFFFFFF`, and the width rule's "a source no wider than its target
-// always survives" clause is the only reason it decodes. Forget the
-// width and every negative decimal in the corpus refuses. A
+// always survives" clause is the only reason it decodes. Phase 802 moved
+// the writer off that form, but a pre-802 peer still sends it, so the
+// population below carries those bytes: forget the width and every
+// pre-802 negative decimal refuses. A
 // differential that has never been shown to fail agrees with whatever
 // it is shown.
 
@@ -592,6 +594,18 @@ let private disagreements (toModel: Value -> ModelValue) (cases: (string * Type 
 let private acceptCases () =
     coveredCases |> List.map (fun c -> c.Name, c.ClrType, c.WriteMsgPack())
 
+/// Phase 802 — the bytes a PRE-802 writer emitted for the fixtures that
+/// were re-pinned, at the covered cases' types. The current writer no
+/// longer puts a same-width reinterpretation on the wire, so the corpus
+/// alone stopped exercising the width rule's second clause; an older
+/// peer still sends these, and the rule still has to admit them.
+let private preEmitterCases () =
+    preEmitterDisciplinePayloads
+    |> List.choose (fun (name, bytes) ->
+        coveredCases
+        |> List.tryFind (fun c -> c.Name = name)
+        |> Option.map (fun c -> "pre-802 " + name, c.ClrType, bytes))
+
 let private refuseCases () =
     mutations ()
     |> List.choose (fun m ->
@@ -645,18 +659,40 @@ let tests =
 
         testCase "the differential CATCHES a bridge that forgets the source width - the go-red case"
         <| fun () ->
-            let found = disagreements blindBridge (acceptCases () @ refuseCases ())
+            // Phase 802 — the PRE-802 population is what makes this case
+            // non-vacuous now: the current writer keeps every value's top
+            // bit clear, so no corpus fixture leans on the clause a blind
+            // bridge loses, and a pre-802 peer's bytes do.
+            let found =
+                disagreements blindBridge (acceptCases () @ refuseCases () @ preEmitterCases ())
 
             Expect.isNonEmpty
                 found
                 "a bridge that declares every integer 64-bit must be caught: if this passes, the comparison is \
                  agreeing with whatever it is shown and every other arm in this pack is worthless"
 
+        testCase "the production algebra agrees with the model over the pre-802 bytes"
+        <| fun () ->
+            Expect.isNonEmpty (preEmitterCases ()) "the pre-802 population must reach the covered set"
+
+            let found = disagreements bridge (preEmitterCases ())
+
+            Expect.isEmpty
+                found
+                (sprintf
+                    "the proved model and the shipped algebra must agree on a pre-802 writer's bytes:
+  %s"
+                    (String.concat
+                        "
+  "
+                        found))
+
         testCase "and the width rule is what it catches"
         <| fun () ->
             // The mechanism, pinned rather than left to the population:
-            // `writeDecimal`'s words ride `write32bitNumber`, so a
-            // negative word arrives as a 32-bit UNSIGNED value that
+            // a pre-802 `writeDecimal` put its words through
+            // `write32bitNumber`, so a negative word arrives as a 32-bit
+            // UNSIGNED value that
             // `Decode.asInt32` admits under Phase 786's "a source no
             // wider than its target always survives" clause. Forget the
             // width and the same value refuses.

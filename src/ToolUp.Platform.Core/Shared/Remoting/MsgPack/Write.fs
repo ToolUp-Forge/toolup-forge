@@ -49,34 +49,8 @@ module Fable =
 
             out.Add b4
 
-    let private write64bitNumber b1 b2 b3 b4 b5 b6 b7 b8 (out: ResizeArray<byte>) =
-        if b4 > 0uy || b3 > 0uy || b2 > 0uy || b1 > 0uy then
-            out.Add Format.Uint64
-            out.Add b1
-            out.Add b2
-            out.Add b3
-            out.Add b4
-            out.Add b5
-            out.Add b6
-            out.Add b7
-            out.Add b8
-        else
-            write32bitNumber b5 b6 b7 b8 out true
-
     let inline private writeUnsigned32bitNumber (n: UInt32) (out: ResizeArray<byte>) =
         write32bitNumber (n >>> 24 |> byte) (n >>> 16 |> byte) (n >>> 8 |> byte) (byte n) out
-
-    let inline private writeUnsigned64bitNumber (n: UInt64) (out: ResizeArray<byte>) =
-        write64bitNumber
-            (n >>> 56 |> byte)
-            (n >>> 48 |> byte)
-            (n >>> 40 |> byte)
-            (n >>> 32 |> byte)
-            (n >>> 24 |> byte)
-            (n >>> 16 |> byte)
-            (n >>> 8 |> byte)
-            (byte n)
-            out
 
     let inline private writeNil (out: ResizeArray<byte>) = out.Add Format.Nil
 
@@ -89,28 +63,63 @@ module Fable =
         else
             out.AddRange bytes
 
+    // Phase 802 — every integer arm picks its format by the rule in
+    // `Format.fs`'s header, byte for byte the rule the .NET writer
+    // follows: a non-negative value rides the narrowest UNSIGNED format
+    // whose top bit stays clear, a negative one the narrowest SIGNED
+    // format other than `Int16`. So no emitted integer reads as a different value at any
+    // width the reader accepts.
     let private writeUInt64 (n: UInt64) (out: ResizeArray<byte>) =
         if n < 128UL then
             out.Add(Format.fixposnum n)
+        elif n <= 32767UL then
+            // Never `Uint8` for 128..255: that byte's top bit is the sign
+            // bit of an int8.
+            out.Add Format.Uint16
+            out.Add(n >>> 8 |> byte)
+            out.Add(byte n)
+        elif n <= 2147483647UL then
+            out.Add Format.Uint32
+            out.Add(n >>> 24 |> byte)
+            out.Add(n >>> 16 |> byte)
+            out.Add(n >>> 8 |> byte)
+            out.Add(byte n)
         else
-            writeUnsigned64bitNumber n out
+            // Above `Int32.MaxValue` the 32-bit form would read as a
+            // negative int32. A value above `Int64.MaxValue` (a uint64
+            // source only) has no wider format.
+            out.Add Format.Uint64
+            out.Add(n >>> 56 |> byte)
+            out.Add(n >>> 48 |> byte)
+            out.Add(n >>> 40 |> byte)
+            out.Add(n >>> 32 |> byte)
+            out.Add(n >>> 24 |> byte)
+            out.Add(n >>> 16 |> byte)
+            out.Add(n >>> 8 |> byte)
+            out.Add(byte n)
 
     let private writeInt64 (n: int64) (out: ResizeArray<byte>) =
         if n >= 0L then
             writeUInt64 (uint64 n) out
-        else if n > -32L then
+        elif n >= -32L then
             out.Add(Format.fixnegnum n)
+        elif n >= -128L then
+            out.Add Format.Int8
+            out.Add(byte n)
+        // No `Int16`, as on .NET: a Fable reader before Phase 802 does
+        // not sign-extend it, so `Int32` is the narrowest signed form
+        // every reader generation decodes correctly.
+        elif n >= -2147483648L then
+            out.Add Format.Int32
+            out.Add(n >>> 24 |> byte)
+            out.Add(n >>> 16 |> byte)
+            out.Add(n >>> 8 |> byte)
+            out.Add(byte n)
         else
-            //todo length optimization
             out.Add Format.Int64
             writeSignedNumber (BitConverter.GetBytes n) out
 
-    let private writeByte b (out: ResizeArray<byte>) =
-        if b < 128uy then
-            out.Add(Format.fixposnum b)
-        else
-            out.Add Format.Uint8
-            out.Add b
+    let private writeByte (b: byte) (out: ResizeArray<byte>) = writeUInt64 (uint64 b) out
 
     let inline private writeString (str: string) (out: ResizeArray<byte>) =
         let str = Encoding.UTF8.GetBytes str
@@ -154,10 +163,11 @@ module Fable =
         writeInt64 (int64 dto.Offset.TotalMinutes) out
 
 #if NET6_0_OR_GREATER
-    let inline private writeDateOnly (out: ResizeArray<byte>) (date: DateOnly) =
-        writeUnsigned32bitNumber (uint32 date.DayNumber) out true
+    let inline private writeDateOnly (out: ResizeArray<byte>) (date: DateOnly) = writeInt64 (int64 date.DayNumber) out
 
-    let inline private writeTimeOnly (out: ResizeArray<byte>) (time: TimeOnly) = writeUInt64 (uint64 time.Ticks) out
+    // `Ticks` is an int64, and the .NET writer emits it through
+    // `writeInt64`; routing it the same way keeps the two hosts' bytes one.
+    let inline private writeTimeOnly (out: ResizeArray<byte>) (time: TimeOnly) = writeInt64 time.Ticks out
 #endif
 
     let private writeArrayHeader len (out: ResizeArray<byte>) =
@@ -176,8 +186,10 @@ module Fable =
 
         out.Add(Format.fixarr 4)
 
+        // Phase 802 — each word is an int32 and travels as one, so a
+        // negative word keeps a signed format.
         for b in bits do
-            writeUnsigned32bitNumber (uint32 b) out true
+            writeInt64 (int64 b) out
 
     let rec private writeArray (out: ResizeArray<byte>) t (arr: System.Collections.ICollection) =
         writeArrayHeader arr.Count out
@@ -364,7 +376,7 @@ module Fable =
 
 #if FABLE_COMPILER
     serializerCache.Add(typeof<byte>.FullName, fun x out -> writeByte (x :?> byte) out)
-    serializerCache.Add(typeof<sbyte>.FullName, fun x out -> writeByte (x :?> sbyte |> byte) out)
+    serializerCache.Add(typeof<sbyte>.FullName, fun x out -> writeInt64 (x :?> sbyte |> int64) out)
     serializerCache.Add(typeof<unit>.FullName, fun _ out -> writeNil out)
     serializerCache.Add(typeof<bool>.FullName, fun x out -> writeBool (x :?> bool) out)
     serializerCache.Add(typeof<char>.FullName, fun x out -> writeString (x :?> string) out) // There are only strings in JS
