@@ -189,6 +189,7 @@ module RagAnswerSource =
                     OriginFilter = None
                     ActiveModule = None
                     FactClause = None
+                    FactScope = ResolvedScope.anonymous
                 }
 
                 let! matches = pipeline.Retrieve request ctx

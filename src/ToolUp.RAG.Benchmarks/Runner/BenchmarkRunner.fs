@@ -60,6 +60,7 @@ let private runQuery (pipeline: IRetrievalPipeline) (topK: int) (q: LabelledQuer
         OriginFilter = None
         ActiveModule = None
         FactClause = None
+        FactScope = ToolUp.Platform.ResolvedScope.anonymous
     }
 
     let sw = Stopwatch.StartNew()

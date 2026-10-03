@@ -599,6 +599,7 @@ let runRetrievalCell (cell: RetrievalCell) : Async<Result<RetrievalResult, strin
                     OriginFilter = None
                     ActiveModule = None
                     FactClause = None
+                    FactScope = ResolvedScope.anonymous
                 }
 
                 let queries =
