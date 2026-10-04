@@ -34,12 +34,14 @@ Then review the diff and commit it. A re-pin is a deliberate act: these bytes an
 what non-F# clients of the wire see, so a change here is a wire change whether or not both of our
 own ends still agree.
 
-**`-c Release` is load-bearing, not habit.** Under a build with the F# optimiser OFF — which is
-what `verify.ps1` produces — the MsgPack writer emits short strings and decimals from a popped
-stack frame and is not a function of its input; two runs produce two different byte strings.
-Pinning from such a build would commit noise. The measurement, its controls and the regime probe
-the suite runs before it asserts anything are in `WireCorpus.fs` under
-"The writer's regime, measured before anything is asserted".
+**Why `-c Release` — history, and the alarm that replaced the rule.** When this corpus was first
+pinned, a build with the F# optimiser OFF (which is what `verify.ps1` produces) made the MsgPack
+writer emit short strings and decimals from a popped stack frame, so two runs gave two different
+byte strings and pinning from Debug would have committed noise. That defect is FIXED: every call
+site now allocates its own stack buffer, and the gate runs this corpus in Debug. Release stays the
+regeneration recipe because it is the configuration production ships, not because Debug is unsound.
+The regime probe in `WireCorpus.fs` ("The writer's regime, measured before anything is asserted")
+still runs before anything is asserted, as the alarm that would notice the class coming back.
 
 ## Adding a case
 
