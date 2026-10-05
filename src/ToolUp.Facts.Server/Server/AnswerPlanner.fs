@@ -164,13 +164,19 @@ type internal PlanScope =
 /// The default `IAnswerPlanner` over the composed fact tier. Construct
 /// via `AnswerPlanner.create` / `createWithClock`; registered in DI by
 /// `FactsCompose.withFactStore`.
+///
+/// Phase 986 — the compiler may be chosen per plan (`compilerFor`, from the
+/// plan's resolved storage scope and principal) rather than fixed at
+/// construction; the public constructors fix it, and
+/// `AnswerPlanner.createResolvingCompiler` reaches the per-plan form.
 type AnswerPlanner
+    private
     (
         store: IFactStore,
         gate: IFactDisclosureGate,
         registry: Grounding.IMetricRegistry option,
         events: IEventStore,
-        compiler: QuestionCompiler,
+        compilerFor: StorageScope option -> string -> QuestionCompiler,
         clock: unit -> DateTime
     ) =
 
@@ -489,7 +495,37 @@ type AnswerPlanner
             compiler: TripleCompiler,
             clock: unit -> DateTime
         ) =
-        AnswerPlanner(store, gate, registry, events, QuestionCompiler.ofTriples compiler, clock)
+        let fixedCompiler: QuestionCompiler = QuestionCompiler.ofTriples compiler
+        AnswerPlanner(store, gate, registry, events, fixedCompiler, clock)
+
+    /// The Phase 706 construction: one question compiler for every plan.
+    new
+        (
+            store: IFactStore,
+            gate: IFactDisclosureGate,
+            registry: Grounding.IMetricRegistry option,
+            events: IEventStore,
+            compiler: QuestionCompiler,
+            clock: unit -> DateTime
+        ) =
+        let compilerFor: StorageScope option -> string -> QuestionCompiler =
+            fun _ _ -> compiler
+
+        AnswerPlanner(store, gate, registry, events, compilerFor, clock)
+
+    /// Phase 986 — the per-plan form: `compilerFor` picks the compiler from
+    /// the plan's resolved storage scope (`None` for the anonymous scope and
+    /// the string-keyed compatibility form) and its principal.
+    static member internal PerPlan
+        (
+            store: IFactStore,
+            gate: IFactDisclosureGate,
+            registry: Grounding.IMetricRegistry option,
+            events: IEventStore,
+            compilerFor: StorageScope option -> string -> QuestionCompiler,
+            clock: unit -> DateTime
+        ) : AnswerPlanner =
+        AnswerPlanner(store, gate, registry, events, compilerFor, clock)
 
     member private _.PlanUnder (scope: PlanScope) (principal: string) (question: string) : Async<AnswerPlan> = async {
         let planId = "plan-" + Guid.NewGuid().ToString "N"
@@ -503,7 +539,12 @@ type AnswerPlanner
             Refusal = Some(QuestionNotCompiled detail)
         }
 
-        let! compiled = compiler question
+        let storage =
+            match scope with
+            | PlanScope.Minted minted -> minted.Storage
+            | PlanScope.Legacy _ -> None
+
+        let! compiled = compilerFor storage principal question
 
         match compiled with
         | Error detail -> return unanswerable detail
@@ -1092,19 +1133,7 @@ module AnswerPlanner =
         (events: IEventStore)
         (compilerFor: StorageScope option -> string -> QuestionCompiler)
         : IAnswerPlanner =
-        let over compiler =
-            createCompiling store gate registry events compiler
-
-        { new IAnswerPlanner with
-            member _.Plan(scopeId: string, principal: string, question: string) =
-                (over (compilerFor None principal)).Plan(scopeId, principal, question)
-
-            member _.Plan(scope: ResolvedScope, principal: string, question: string) =
-                (over (compilerFor scope.Storage principal)).Plan(scope, principal, question)
-
-            member _.Record(scopeId, messageId, plan) =
-                (over noQuestionCompiler).Record(scopeId, messageId, plan)
-        }
+        AnswerPlanner.PerPlan(store, gate, registry, events, compilerFor, (fun () -> DateTime.UtcNow)) :> IAnswerPlanner
 
     /// The Phase 986 default planner when the AI tier is composed: the
     /// structured-output compiler over a provider the factory resolves
