@@ -13,8 +13,8 @@ open ToolUp.Platform
 // `PageAudience`. The result drives 200 / 401 / 403.
 //
 // No new auth machinery (GP — "reuse the surface that gates module
-// routes"): role checks go through `AccessContext.canAccessModule`
-// exactly like the SDK's per-module RBAC, and client-portal scoping goes
+// routes"): role checks read the same `AccessContext.ModulePermissions`
+// map the SDK's per-module RBAC reads, and client-portal scoping goes
 // through the principal's own resolved scope ids — a principal can only
 // satisfy a `ClientGated` page whose relationship is structurally its own
 // (GP 4). Platform admins bypass both gates.
@@ -43,6 +43,22 @@ module AudienceGate =
         @ (AccessContext.configScope ctx |> Option.map _.ScopeId |> Option.toList)
         |> Set.ofList
 
+    /// Phase 989 — whether the principal HOLDS a named role: the role is a
+    /// key of its `ModulePermissions` with at least one permission.
+    ///
+    /// Deliberately not `AccessContext.canAccessModule`, which reads an
+    /// empty permission map as "every module is accessible" (GP 11). That
+    /// reading is right for module access, where a deployment that has
+    /// configured no RBAC must keep working for its users. It is wrong for
+    /// a page that names the roles allowed to read it: there the author has
+    /// restricted the page, and a principal with no configured permissions
+    /// has been granted none of those roles. An empty map therefore holds
+    /// no role.
+    let private holdsRole (ctx: AccessContext) (role: string) : bool =
+        ctx.ModulePermissions
+        |> Map.tryFind role
+        |> Option.exists (fun perms -> not (List.isEmpty perms))
+
     /// Pure authorization decision for a page audience against a resolved
     /// `AccessContext`.
     ///
@@ -51,10 +67,11 @@ module AudienceGate =
     ///   else `RequireAuthentication`.
     /// - `ScopeGated roles` — anonymous → `RequireAuthentication`;
     ///   platform admin → `Allow`; an empty role list → `Allow` (gated to
-    ///   "any authenticated"); otherwise `Allow` iff the principal can
-    ///   access a module named like one of the roles
-    ///   (`AccessContext.canAccessModule`, which treats empty permissions
-    ///   as unrestricted per GP 11), else `Forbidden`.
+    ///   "any authenticated"); otherwise `Allow` iff the principal holds
+    ///   one of the roles — a `ModulePermissions` entry of that name with
+    ///   at least one permission — else `Forbidden`. An empty permission
+    ///   map holds no role (Phase 989; unlike module access, where it
+    ///   means unrestricted per GP 11).
     /// - `ClientGated relationship` — anonymous → `RequireAuthentication`;
     ///   platform admin → `Allow`; otherwise `Allow` iff `relationship`
     ///   is one of the principal's own scope ids, else `Forbidden`.
@@ -73,7 +90,7 @@ module AudienceGate =
                 AudienceDecision.Allow
             elif List.isEmpty roles then
                 AudienceDecision.Allow
-            elif roles |> List.exists (fun r -> AccessContext.canAccessModule r ctx) then
+            elif roles |> List.exists (holdsRole ctx) then
                 AudienceDecision.Allow
             else
                 AudienceDecision.Forbidden

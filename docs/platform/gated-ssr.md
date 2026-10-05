@@ -23,7 +23,16 @@ Set it from frontmatter:
 | `audience: scope:editor,admin` | `ScopeGated ["editor"; "admin"]` |
 | `audience: client:acme` | `ClientGated "acme"` |
 
-The handler runs `AudienceGate.evaluate` after the SDK's scope + auth middleware: `Public` serves unchanged; `Authenticated` is `401` to anonymous; `ScopeGated` is `403` to a principal lacking every named role (checked against the same `AccessContext.canAccessModule` surface that gates module routes); `ClientGated` is `403` unless the relationship matches one of the principal's own scope ids. Platform admins bypass the role / relationship gates. Non-`Public` pages are excluded from `sitemap.xml`, Atom feeds, and static export.
+The handler runs `AudienceGate.evaluate` against the request's `AccessContext`. The SDK's `ScopeResolutionMiddleware` resolves the principal on page routes exactly as it does for `/api` calls: the configured `IAuthProvider` reads whatever credentials it reads (a bearer token, a session cookie), and the subject resolver turns the result into the request's subject. A request whose principal was not resolved, for any reason, is anonymous.
+
+- `Public` serves unchanged.
+- `Authenticated` is `401` to an anonymous caller, including one that presented an invalid or expired credential.
+- `ScopeGated roles` is `401` to an anonymous caller and `403` to a principal that holds none of the named roles. A principal holds a role when its `ModulePermissions` has an entry of that name with at least one permission. **A principal with no configured permissions holds no role.** This differs from module access, where an empty permission map means unrestricted (GP 11): a page that names its roles has been restricted by its author. `ScopeGated []` admits any signed-in principal.
+- `ClientGated relationship` is `401` to an anonymous caller and `403` unless the relationship is one of the principal's own scope ids (its user id, its active team id, or its resolved config scope).
+
+Platform admins bypass the role / relationship gates. Non-`Public` pages are excluded from `sitemap.xml`, Atom feeds, and static export.
+
+What a deployment's surfaces admit decides who can be signed in at all. On a deployment whose only surface is anonymous, every request resolves to an anonymous session, whatever credential it carries, so every gated page is `401`. Serve gated pages from a deployment with an authenticated surface (`individual`, `team`, or a mix with `anonymous`). Roles come from team permissions (or a service account's declared set), so a `ScopeGated` page needs a team surface to be readable by anyone but a platform admin.
 
 ## Pattern 1 — media-agency intranet (authenticated, per-team content)
 
@@ -66,11 +75,14 @@ Make the rendered page `ClientGated "<client>"` (via frontmatter on a file page,
 ## Security notes
 
 - **The gate is structural, not advisory.** `ClientGated` matches against the principal's *own* resolved scope ids, never a value the caller supplies. A principal cannot request another client's page by guessing the slug.
+- **The gate fails closed.** A page route whose principal could not be resolved (no credentials, a credential the provider rejects, a resolver failure) is judged as anonymous, never as signed in. Releases before 0.24.0 did not resolve the principal on page routes; see [the 0.24.0 migration note](../migrations/989-gated-ssr-fails-closed.md).
+- **A public page carries no session cookie.** Page routes resolve the principal but are not bound to an anonymous session, so a public page served to an anonymous visitor sets no cookie and stays cacheable by a CDN.
 - **Cache hits re-run the gate.** A gated page cached for a scope is still authorization-checked per request using the stored audience, so a member who loses a role (or a different member in the same scope) is correctly denied on the next hit.
 - **Nothing gated leaks to crawlers.** Sitemap, feeds, and static export emit only `Public` pages.
 
 ## See also
 
 - [`docs/migrations/86-gated-ssr.md`](../migrations/86-gated-ssr.md) — the adoption / breaking-change summary.
+- [`docs/migrations/989-gated-ssr-fails-closed.md`](../migrations/989-gated-ssr-fails-closed.md) — page routes resolve the principal, and `ScopeGated` requires a held role.
 - [`docs/platform/dynamic-ssr.md`](dynamic-ssr.md) — data-bound content sources (the body of a `ClientGated` analytics page).
 - [`docs/migrations/84-ssr-render-cache.md`](../migrations/84-ssr-render-cache.md) — the render cache gated pages compose with.

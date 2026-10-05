@@ -328,8 +328,16 @@ let private observeResolverErrorDowngrade
 /// `HttpContext.Items`. See the module preamble for the full key
 /// inventory and the Stream A.6 cut-over notes.
 ///
-/// Runs for `/api/*` and `/dev/*` paths only — static assets, the
-/// SPA shell, and health endpoints skip the resolver. Infrastructure
+/// Runs for every request that reaches it — static assets have already
+/// been served by `UseStaticFiles` ahead of it in the pipeline. Phase 989:
+/// it used to run for `/api/*` and `/dev/*` only, so a page route (the
+/// public-rendering catch-all, whose audience gate reads the same
+/// `AccessContext`) never had its principal resolved. Page routes now
+/// resolve the principal exactly as an API call does, with two
+/// differences that keep a public page cheap and cacheable: no anonymous
+/// binding cookie is issued, and an ordinary anonymous visitor on a
+/// deployment that serves no anonymous surface is not reported as a
+/// resolver downgrade. Infrastructure
 /// errors are caught and translated to a synthetic-`AnonymousSession`
 /// fallback so the downstream `SurfaceEnforcementMiddleware` matrix
 /// can apply uniformly (the `userOrTeam` strict default rejects the
@@ -375,6 +383,14 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
             let isApi = path.StartsWithSegments(PathString "/api")
             let isDev = path.StartsWithSegments(PathString "/dev")
 
+            // Phase 989 — every other path is a page route (or the SPA
+            // shell / a health probe). Its principal is resolved too: an
+            // audience-gated SSR page decides 401 / 403 / 200 from the
+            // `AccessContext` built out of what this middleware writes, so
+            // a page route that skipped resolution was judged against no
+            // principal at all.
+            let isPageRoute = not (isApi || isDev)
+
             // Phase 9l — root activity for the request. Inherits parent
             // context from the incoming W3C `traceparent` header so a
             // calling system that already runs OTel (peer service /
@@ -399,399 +415,402 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
             let rootActivityOpt = activitySink.StartActivity(spanName, parentContext)
 
             try
-                if isApi || isDev then
-                    try
-                        let authProv =
-                            ctx.RequestServices.GetService(typeof<IAuthProvider>) :?> IAuthProvider
+                try
+                    let authProv =
+                        ctx.RequestServices.GetService(typeof<IAuthProvider>) :?> IAuthProvider
 
-                        let resolver =
-                            ctx.RequestServices.GetService(typeof<ISubjectResolver>) :?> ISubjectResolver
+                    let resolver =
+                        ctx.RequestServices.GetService(typeof<ISubjectResolver>) :?> ISubjectResolver
 
-                        let! request = runAsync (SubjectRequestExtractor.fromHttpContext ctx authProv)
+                    let! request = runAsync (SubjectRequestExtractor.fromHttpContext ctx authProv)
 
-                        let user = request.User |> Option.defaultValue AuthenticatedUser.anonymous
+                    let user = request.User |> Option.defaultValue AuthenticatedUser.anonymous
 
-                        ctx.Items["ToolUp.User"] <- box user
-                        ctx.Items["ToolUp.UserId"] <- box user.UserId
+                    ctx.Items["ToolUp.User"] <- box user
+                    ctx.Items["ToolUp.UserId"] <- box user.UserId
 
-                        let! resolved = runAsync (resolver.Resolve request)
+                    let! resolved = runAsync (resolver.Resolve request)
 
-                        // Resolved once per request, best-effort: feeds the
-                        // Phase 246 fail-closed-default diagnostic (Ok path)
-                        // and the resolver-Error downgrade observability
-                        // (Error path). `None` when no ILogger is composed.
-                        let loggerOpt =
-                            match ctx.RequestServices.GetService(typeof<ILogger>) with
-                            | :? ILogger as l -> Some l
-                            | _ -> None
+                    // Resolved once per request, best-effort: feeds the
+                    // Phase 246 fail-closed-default diagnostic (Ok path)
+                    // and the resolver-Error downgrade observability
+                    // (Error path). `None` when no ILogger is composed.
+                    let loggerOpt =
+                        match ctx.RequestServices.GetService(typeof<ILogger>) with
+                        | :? ILogger as l -> Some l
+                        | _ -> None
 
-                        let subject, scopeResult =
-                            match resolved with
-                            | Ok s ->
-                                let scope = StorageScopeDerivation.fromSubject loggerOpt config s
-                                s, Ok scope
-                            | Error err ->
-                                let fallback = fallbackAnonymous request
-                                let bridged = SubjectResolutionErrorBridge.toScopeError err
-                                // Phase 246 — make the silent authorization-shaped
-                                // downgrade observable (distinct from a normal
-                                // anonymous request). user.UserId is the resolved
-                                // identity whose scope was refused.
-                                observeResolverErrorDowngrade ctx loggerOpt err user.UserId
-                                fallback, Error bridged
+                    let subject, scopeResult =
+                        match resolved with
+                        | Ok s ->
+                            let scope = StorageScopeDerivation.fromSubject loggerOpt config s
+                            s, Ok scope
+                        | Error err ->
+                            let fallback = fallbackAnonymous request
+                            let bridged = SubjectResolutionErrorBridge.toScopeError err
+                            // Phase 246 — make the silent authorization-shaped
+                            // downgrade observable (distinct from a normal
+                            // anonymous request). user.UserId is the resolved
+                            // identity whose scope was refused.
+                            //
+                            // Phase 989 — on a page route an anonymous
+                            // visitor to a deployment with no anonymous
+                            // surface is the ordinary case (a public page
+                            // on an authenticated deployment), not a
+                            // refused scope, so it is not reported.
+                            match err with
+                            | SubjectResolutionError.UnsupportedSubject AnonymousKind when isPageRoute -> ()
+                            | _ -> observeResolverErrorDowngrade ctx loggerOpt err user.UserId
 
-                        ctx.Items["ToolUp.Subject"] <- box subject
-                        ctx.Items["ToolUp.ScopeResult"] <- box scopeResult
+                            fallback, Error bridged
 
-                        // Phase 337 — seal whatever anonymous session the
-                        // request actually resolved to into the binding
-                        // cookie, so this browser arrives verified (and
-                        // therefore continuous) next time. This is what
-                        // makes rejecting an unverified claim above cost
-                        // nothing: a first-time visitor is issued a fresh
-                        // session here and keeps it thereafter.
-                        //
-                        // A no-op when the browser is already bound to
-                        // this id, so a steady-state anonymous request
-                        // emits no `Set-Cookie`. Only anonymous subjects
-                        // are bound — an authenticated request neither
-                        // needs nor receives one (GP 11 / GP 13).
-                        match subject with
-                        | AnonymousSession sid -> AnonymousSessionBinding.ensureBound ctx sid
-                        | _ -> ()
+                    ctx.Items["ToolUp.Subject"] <- box subject
+                    ctx.Items["ToolUp.ScopeResult"] <- box scopeResult
 
-                        match scopeResult with
-                        | Ok scope ->
-                            ctx.Items["ToolUp.StorageScope"] <- box scope
+                    // Phase 337 — seal whatever anonymous session the
+                    // request actually resolved to into the binding
+                    // cookie, so this browser arrives verified (and
+                    // therefore continuous) next time. This is what
+                    // makes rejecting an unverified claim above cost
+                    // nothing: a first-time visitor is issued a fresh
+                    // session here and keeps it thereafter.
+                    //
+                    // A no-op when the browser is already bound to
+                    // this id, so a steady-state anonymous request
+                    // emits no `Set-Cookie`. Only anonymous subjects
+                    // are bound — an authenticated request neither
+                    // needs nor receives one (GP 11 / GP 13).
+                    //
+                    // Phase 989 — not on a page route: a page needs no
+                    // anonymous storage scope, and a `Set-Cookie` on every
+                    // public page would make it uncacheable downstream.
+                    match subject with
+                    | AnonymousSession sid when not isPageRoute -> AnonymousSessionBinding.ensureBound ctx sid
+                    | _ -> ()
 
-                            // Phase 797 — the fact tier's typed scope is
-                            // minted HERE and nowhere else: the resolver's
-                            // output becomes a `ResolvedScope` at the one
-                            // point the platform resolved it. The fact
-                            // doors read it back through
-                            // `ScopeResolution.forRequest`.
-                            StorageScopeResolver.ScopeResolution.remember ctx scope |> ignore
+                    match scopeResult with
+                    | Ok scope ->
+                        ctx.Items["ToolUp.StorageScope"] <- box scope
 
-                            // Phase 9 audit. Auth providers don't have
-                            // a "login" callback (only OIDC's callback
-                            // handler does), so we approximate "login"
-                            // as "first request from this user inside
-                            // a session-length window." Tracked in
-                            // `IMemoryCache` keyed by `userId` with a
-                            // 20-minute sliding TTL — matches the
-                            // ASP.NET Core default `SessionOptions
-                            // .IdleTimeout`. Anonymous users don't get
-                            // a `UserLoggedIn` event (every anonymous
-                            // request would emit one — too noisy).
-                            if not (AuthenticatedUser.isAnonymous user) then
+                        // Phase 797 — the fact tier's typed scope is
+                        // minted HERE and nowhere else: the resolver's
+                        // output becomes a `ResolvedScope` at the one
+                        // point the platform resolved it. The fact
+                        // doors read it back through
+                        // `ScopeResolution.forRequest`.
+                        StorageScopeResolver.ScopeResolution.remember ctx scope |> ignore
+
+                        // Phase 9 audit. Auth providers don't have
+                        // a "login" callback (only OIDC's callback
+                        // handler does), so we approximate "login"
+                        // as "first request from this user inside
+                        // a session-length window." Tracked in
+                        // `IMemoryCache` keyed by `userId` with a
+                        // 20-minute sliding TTL — matches the
+                        // ASP.NET Core default `SessionOptions
+                        // .IdleTimeout`. Anonymous users don't get
+                        // a `UserLoggedIn` event (every anonymous
+                        // request would emit one — too noisy).
+                        if not (AuthenticatedUser.isAnonymous user) then
+                            match
+                                ctx.RequestServices.GetService(typeof<IMemoryCache>),
+                                ctx.RequestServices.GetService(typeof<IAuditLog>)
+                            with
+                            | (:? IMemoryCache as cache), (:? IAuditLog as auditLog) ->
+                                let cacheKey = "audit:login:" + user.UserId
+
+                                let mutable existing = Unchecked.defaultof<obj>
+
+                                if not (cache.TryGetValue(cacheKey, &existing)) then
+                                    let entryOpts = MemoryCacheEntryOptions()
+                                    entryOpts.SlidingExpiration <- Nullable(TimeSpan.FromMinutes 20.0)
+                                    cache.Set(cacheKey, true, entryOpts) |> ignore
+
+                                    // Fire-and-forget — `Record` is
+                                    // contractually best-effort and
+                                    // swallows its own failures, so
+                                    // there's no value in awaiting.
+                                    auditLog.Record(
+                                        scope.ScopeId,
+                                        UserLoggedIn {
+                                            UserId = user.UserId
+                                            AuthProvider = authProv.GetType().Name
+                                        }
+                                    )
+                                    |> Async.Start
+
+                                    // Phase 3d — pending-invite-by-email
+                                    // consumption. Fires on the same
+                                    // first-request-per-session trigger
+                                    // as the login audit (separate cache
+                                    // key so the audit pathway's own
+                                    // cache hit doesn't suppress this).
+                                    // Distinct from the login audit
+                                    // because: (a) it needs IBlobStorage
+                                    // + ITeamStore which the audit
+                                    // pathway doesn't, and (b) on success
+                                    // it mutates state (AddMember),
+                                    // making the once-per-session
+                                    // semantics load-bearing rather than
+                                    // a cost-saving optimisation.
+                                    let pendingCacheKey = "pending-invite:check:" + user.UserId
+
+                                    let mutable pendingExisting = Unchecked.defaultof<obj>
+
+                                    if not (cache.TryGetValue(pendingCacheKey, &pendingExisting)) then
+                                        let pendingOpts = MemoryCacheEntryOptions()
+                                        pendingOpts.SlidingExpiration <- Nullable(TimeSpan.FromMinutes 20.0)
+                                        cache.Set(pendingCacheKey, true, pendingOpts) |> ignore
+
+                                        match
+                                            user.Email,
+                                            ctx.RequestServices.GetService(typeof<IPendingInviteStore>),
+                                            ctx.RequestServices.GetService(typeof<ITeamStore>)
+                                        with
+                                        | Some _, (:? IPendingInviteStore as pendingStore), (:? ITeamStore as teamStore) ->
+                                            ToolUp.Platform.Teams.TeamInvitationHandler.tryConsumePendingForUser
+                                                pendingStore
+                                                teamStore
+                                                auditLog
+                                                user
+                                            |> Async.Ignore
+                                            |> Async.Start
+                                        | _ -> ()
+                            | _ -> ()
+
+                        // Team scopes — load the user's effective
+                        // module permissions so the AccessContext
+                        // factory and the per-route guard see a
+                        // populated map. For non-Team scopes the map
+                        // stays empty (unrestricted — opt-in RBAC).
+                        if scope.Container.StartsWith "team-" then
+                            match ctx.RequestServices.GetService(typeof<IPermissionStore>) with
+                            | :? IPermissionStore as permStore ->
+                                let! perms = runAsync (permStore.GetEffectivePermissions(user.UserId, scope.ScopeId))
+
+                                ctx.Items["ToolUp.ModulePermissions"] <- box perms
+
+                                // Phase 245 — the team's per-module exposure
+                                // (tri-state) map, alongside the permission
+                                // map, so the AccessContext factory sees a
+                                // populated `ModuleExposure`.
+                                let! exposure = runAsync (permStore.GetModuleExposure scope.ScopeId)
+
+                                ctx.Items["ToolUp.ModuleExposure"] <- box exposure
+
+                                // Phase 551 — the subject's grant
+                                // records, so the module-access gate
+                                // can re-verify a declared
+                                // `GrantPolicy` ON USE rather than
+                                // trusting that the write path
+                                // enforced it.
+                                //
+                                // Loaded ONLY when at least one module
+                                // declares a policy stricter than
+                                // `AdminDiscretion`. A deployment that
+                                // declares none registers no registry,
+                                // so this is one failed `GetService`
+                                // and no extra store read (GP 13) —
+                                // and the dispatch gate answers
+                                // `AdminDiscretion` for every module,
+                                // which is unconditionally live.
                                 match
-                                    ctx.RequestServices.GetService(typeof<IMemoryCache>),
-                                    ctx.RequestServices.GetService(typeof<IAuditLog>)
+                                    ctx.RequestServices.GetService(typeof<GrantPolicyGuard.ModuleGrantPolicyRegistry>)
                                 with
-                                | (:? IMemoryCache as cache), (:? IAuditLog as auditLog) ->
-                                    let cacheKey = "audit:login:" + user.UserId
+                                | :? GrantPolicyGuard.ModuleGrantPolicyRegistry as registry when
+                                    not (GrantPolicyGuard.ModuleGrantPolicyRegistry.isEmpty registry)
+                                    ->
+                                    let! doc = runAsync (permStore.GetTeamPermissions scope.ScopeId)
 
-                                    let mutable existing = Unchecked.defaultof<obj>
+                                    let subjectGrants = TeamPermissions.grantsFor user.UserId doc
 
-                                    if not (cache.TryGetValue(cacheKey, &existing)) then
-                                        let entryOpts = MemoryCacheEntryOptions()
-                                        entryOpts.SlidingExpiration <- Nullable(TimeSpan.FromMinutes 20.0)
-                                        cache.Set(cacheKey, true, entryOpts) |> ignore
+                                    ctx.Items[GrantPolicyGuard.ModuleGrantsItemsKey] <- box subjectGrants
 
-                                        // Fire-and-forget — `Record` is
-                                        // contractually best-effort and
-                                        // swallows its own failures, so
-                                        // there's no value in awaiting.
-                                        auditLog.Record(
-                                            scope.ScopeId,
-                                            UserLoggedIn {
-                                                UserId = user.UserId
-                                                AuthProvider = authProv.GetType().Name
-                                            }
-                                        )
-                                        |> Async.Start
-
-                                        // Phase 3d — pending-invite-by-email
-                                        // consumption. Fires on the same
-                                        // first-request-per-session trigger
-                                        // as the login audit (separate cache
-                                        // key so the audit pathway's own
-                                        // cache hit doesn't suppress this).
-                                        // Distinct from the login audit
-                                        // because: (a) it needs IBlobStorage
-                                        // + ITeamStore which the audit
-                                        // pathway doesn't, and (b) on success
-                                        // it mutates state (AddMember),
-                                        // making the once-per-session
-                                        // semantics load-bearing rather than
-                                        // a cost-saving optimisation.
-                                        let pendingCacheKey = "pending-invite:check:" + user.UserId
-
-                                        let mutable pendingExisting = Unchecked.defaultof<obj>
-
-                                        if not (cache.TryGetValue(pendingCacheKey, &pendingExisting)) then
-                                            let pendingOpts = MemoryCacheEntryOptions()
-                                            pendingOpts.SlidingExpiration <- Nullable(TimeSpan.FromMinutes 20.0)
-                                            cache.Set(pendingCacheKey, true, pendingOpts) |> ignore
-
+                                    // Phase 552 — resolve the consent
+                                    // verdict for each module the
+                                    // subject holds a grant record on
+                                    // that declares
+                                    // `RequiresCounterpartyApproval`.
+                                    // Resolved PER REQUEST rather than
+                                    // cached, which is the whole of
+                                    // 552.D: a revocation takes effect
+                                    // at the very next call, not at the
+                                    // next sweep. The set is bounded by
+                                    // the subject's own counterparty
+                                    // grants — typically none, and never
+                                    // more than the modules that
+                                    // deployment declared — so the cost
+                                    // is zero for every deployment that
+                                    // declares no counterparty arm, and
+                                    // one registry read per genuinely
+                                    // counterparty-gated module
+                                    // otherwise (GP 13).
+                                    let counterpartyModules =
+                                        subjectGrants
+                                        |> Map.toList
+                                        |> List.choose (fun (moduleName, _) ->
                                             match
-                                                user.Email,
-                                                ctx.RequestServices.GetService(typeof<IPendingInviteStore>),
-                                                ctx.RequestServices.GetService(typeof<ITeamStore>)
+                                                GrantPolicyGuard.ModuleGrantPolicyRegistry.resolve registry moduleName
                                             with
-                                            | Some _,
-                                              (:? IPendingInviteStore as pendingStore),
-                                              (:? ITeamStore as teamStore) ->
-                                                ToolUp.Platform.Teams.TeamInvitationHandler.tryConsumePendingForUser
-                                                    pendingStore
-                                                    teamStore
-                                                    auditLog
-                                                    user
-                                                |> Async.Ignore
-                                                |> Async.Start
-                                            | _ -> ()
+                                            | GrantPolicy.RequiresCounterpartyApproval party -> Some(moduleName, party)
+                                            | _ -> None)
+
+                                    if not (List.isEmpty counterpartyModules) then
+                                        let consentStore =
+                                            match
+                                                ctx.RequestServices.GetService(
+                                                    typeof<GrantConsentStore.IGrantConsentStore>
+                                                )
+                                            with
+                                            | :? GrantConsentStore.IGrantConsentStore as s -> Some s
+                                            | _ -> None
+
+                                        let verifier =
+                                            match
+                                                ctx.RequestServices.GetService(
+                                                    typeof<GrantConsentStore.IGrantConsentVerifier>
+                                                )
+                                            with
+                                            | :? GrantConsentStore.IGrantConsentVerifier as v -> v
+                                            // No verifier composed ⇒
+                                            // nothing can be checked ⇒
+                                            // nothing is admitted. Never
+                                            // a fall-through to "trust
+                                            // the record".
+                                            | _ -> GrantConsentStore.denyingVerifier
+
+                                        let auditLog =
+                                            match ctx.RequestServices.GetService(typeof<IAuditLog>) with
+                                            | :? IAuditLog as log -> Some log
+                                            | _ -> None
+
+                                        let mutable verdicts = Map.empty<string, Result<unit, ConsentDenial>>
+
+                                        for moduleName, party in counterpartyModules do
+                                            let subject = ConsentSubject.create scope.ScopeId user.UserId moduleName
+
+                                            let! resolved =
+                                                runAsync (
+                                                    GrantConsentStore.resolveLive
+                                                        consentStore
+                                                        verifier
+                                                        auditLog
+                                                        Async.Start
+                                                        DateTimeOffset.UtcNow
+                                                        subject
+                                                        party
+                                                )
+
+                                            verdicts <- verdicts |> Map.add moduleName (resolved |> Result.map ignore)
+
+                                        ctx.Items[GrantConsentStore.ModuleGrantConsentsItemsKey] <- box verdicts
                                 | _ -> ()
-
-                            // Team scopes — load the user's effective
-                            // module permissions so the AccessContext
-                            // factory and the per-route guard see a
-                            // populated map. For non-Team scopes the map
-                            // stays empty (unrestricted — opt-in RBAC).
-                            if scope.Container.StartsWith "team-" then
-                                match ctx.RequestServices.GetService(typeof<IPermissionStore>) with
-                                | :? IPermissionStore as permStore ->
-                                    let! perms =
-                                        runAsync (permStore.GetEffectivePermissions(user.UserId, scope.ScopeId))
-
-                                    ctx.Items["ToolUp.ModulePermissions"] <- box perms
-
-                                    // Phase 245 — the team's per-module exposure
-                                    // (tri-state) map, alongside the permission
-                                    // map, so the AccessContext factory sees a
-                                    // populated `ModuleExposure`.
-                                    let! exposure = runAsync (permStore.GetModuleExposure scope.ScopeId)
-
-                                    ctx.Items["ToolUp.ModuleExposure"] <- box exposure
-
-                                    // Phase 551 — the subject's grant
-                                    // records, so the module-access gate
-                                    // can re-verify a declared
-                                    // `GrantPolicy` ON USE rather than
-                                    // trusting that the write path
-                                    // enforced it.
-                                    //
-                                    // Loaded ONLY when at least one module
-                                    // declares a policy stricter than
-                                    // `AdminDiscretion`. A deployment that
-                                    // declares none registers no registry,
-                                    // so this is one failed `GetService`
-                                    // and no extra store read (GP 13) —
-                                    // and the dispatch gate answers
-                                    // `AdminDiscretion` for every module,
-                                    // which is unconditionally live.
-                                    match
-                                        ctx.RequestServices.GetService(
-                                            typeof<GrantPolicyGuard.ModuleGrantPolicyRegistry>
-                                        )
-                                    with
-                                    | :? GrantPolicyGuard.ModuleGrantPolicyRegistry as registry when
-                                        not (GrantPolicyGuard.ModuleGrantPolicyRegistry.isEmpty registry)
-                                        ->
-                                        let! doc = runAsync (permStore.GetTeamPermissions scope.ScopeId)
-
-                                        let subjectGrants = TeamPermissions.grantsFor user.UserId doc
-
-                                        ctx.Items[GrantPolicyGuard.ModuleGrantsItemsKey] <- box subjectGrants
-
-                                        // Phase 552 — resolve the consent
-                                        // verdict for each module the
-                                        // subject holds a grant record on
-                                        // that declares
-                                        // `RequiresCounterpartyApproval`.
-                                        // Resolved PER REQUEST rather than
-                                        // cached, which is the whole of
-                                        // 552.D: a revocation takes effect
-                                        // at the very next call, not at the
-                                        // next sweep. The set is bounded by
-                                        // the subject's own counterparty
-                                        // grants — typically none, and never
-                                        // more than the modules that
-                                        // deployment declared — so the cost
-                                        // is zero for every deployment that
-                                        // declares no counterparty arm, and
-                                        // one registry read per genuinely
-                                        // counterparty-gated module
-                                        // otherwise (GP 13).
-                                        let counterpartyModules =
-                                            subjectGrants
-                                            |> Map.toList
-                                            |> List.choose (fun (moduleName, _) ->
-                                                match
-                                                    GrantPolicyGuard.ModuleGrantPolicyRegistry.resolve
-                                                        registry
-                                                        moduleName
-                                                with
-                                                | GrantPolicy.RequiresCounterpartyApproval party ->
-                                                    Some(moduleName, party)
-                                                | _ -> None)
-
-                                        if not (List.isEmpty counterpartyModules) then
-                                            let consentStore =
-                                                match
-                                                    ctx.RequestServices.GetService(
-                                                        typeof<GrantConsentStore.IGrantConsentStore>
-                                                    )
-                                                with
-                                                | :? GrantConsentStore.IGrantConsentStore as s -> Some s
-                                                | _ -> None
-
-                                            let verifier =
-                                                match
-                                                    ctx.RequestServices.GetService(
-                                                        typeof<GrantConsentStore.IGrantConsentVerifier>
-                                                    )
-                                                with
-                                                | :? GrantConsentStore.IGrantConsentVerifier as v -> v
-                                                // No verifier composed ⇒
-                                                // nothing can be checked ⇒
-                                                // nothing is admitted. Never
-                                                // a fall-through to "trust
-                                                // the record".
-                                                | _ -> GrantConsentStore.denyingVerifier
-
-                                            let auditLog =
-                                                match ctx.RequestServices.GetService(typeof<IAuditLog>) with
-                                                | :? IAuditLog as log -> Some log
-                                                | _ -> None
-
-                                            let mutable verdicts = Map.empty<string, Result<unit, ConsentDenial>>
-
-                                            for moduleName, party in counterpartyModules do
-                                                let subject = ConsentSubject.create scope.ScopeId user.UserId moduleName
-
-                                                let! resolved =
-                                                    runAsync (
-                                                        GrantConsentStore.resolveLive
-                                                            consentStore
-                                                            verifier
-                                                            auditLog
-                                                            Async.Start
-                                                            DateTimeOffset.UtcNow
-                                                            subject
-                                                            party
-                                                    )
-
-                                                verdicts <-
-                                                    verdicts |> Map.add moduleName (resolved |> Result.map ignore)
-
-                                            ctx.Items[GrantConsentStore.ModuleGrantConsentsItemsKey] <- box verdicts
-                                    | _ -> ()
-                                | _ -> ()
-
-                            // Phase 4b — resolve PlatformRole per request.
-                            // Anonymous callers cannot hold the role
-                            // (Platform Admin requires authenticated
-                            // identity). For authenticated users the
-                            // store is consulted once per request and
-                            // the result cached in HttpContext.Items so
-                            // the AccessContext factory and any handler
-                            // touching `canModifyPlatformConfig` reads
-                            // the same value without re-querying.
-                            if not (AuthenticatedUser.isAnonymous user) then
-                                match ctx.RequestServices.GetService(typeof<IPlatformAdminStore>) with
-                                | :? IPlatformAdminStore as adminStore ->
-                                    let! isAdmin = runAsync (adminStore.IsPlatformAdmin user.UserId)
-
-                                    if isAdmin then
-                                        ctx.Items["ToolUp.PlatformRole"] <- box PlatformRole.PlatformAdmin
-                                | _ -> ()
-                        | Error _ -> ()
-                    with ex ->
-                        // Auth-observability A1 — infrastructure error in
-                        // the scope-resolution pipeline (DI hiccup, store
-                        // throw, cache miss-and-throw). Pre-A1 this catch
-                        // was silent: handlers downstream saw missing
-                        // Items and fell back to anonymous, and operators
-                        // had no signal to distinguish "no credentials"
-                        // from "resolver crashed."
-                        //
-                        // This catch does NOT re-raise — bringing the
-                        // request path down for a DI hiccup would be
-                        // worse — and what changes here is observability:
-                        // structured log + best-effort audit event so a
-                        // spike in `ScopeResolutionFailed` is visible on
-                        // dashboards and per-incident triage has a query
-                        // path.
-                        //
-                        // **Swallowing is not by itself fail-closed, and
-                        // this comment used to say it was.** All the
-                        // catch does is leave the `HttpContext.Items`
-                        // entries unset; what makes that SAFE is
-                        // downstream, in [Phase 336] (`db622f5f`):
-                        // `SurfaceEnforcementMiddleware` treats a missing
-                        // Subject on an `/api/*` path as fail-closed,
-                        // synthesising a fresh `AnonymousSession` and
-                        // running the SAME surface gate over it, so a
-                        // crashed resolver yields an anonymous-privilege
-                        // request rather than an unjudged one. Before
-                        // 336 the fall-through was to whatever each
-                        // handler did with absent Items, which is not a
-                        // property this middleware could promise on its
-                        // own. Read the guarantee there; do not conclude
-                        // from this catch alone that it holds.
-                        //
-                        // Every observability call is itself wrapped in a
-                        // local try/with — a logger / audit failure
-                        // during the auth-failure path MUST NOT itself
-                        // bring the request down.
-
-                        let exceptionKind = ex.GetType().Name
-                        let methodName = ctx.Request.Method
-                        let pathStr = string ctx.Request.Path
-
-                        try
-                            match ctx.RequestServices.GetService(typeof<ILogger>) with
-                            | :? ILogger as log ->
-                                log.Error(
-                                    sprintf
-                                        "ScopeResolutionMiddleware swallowed %s on %s %s — request fell through to anonymous: %s"
-                                        exceptionKind
-                                        methodName
-                                        pathStr
-                                        ex.Message,
-                                    Some ex
-                                )
                             | _ -> ()
-                        with _ ->
-                            ()
 
-                        try
-                            match ctx.RequestServices.GetService(typeof<IAuditLog>) with
-                            | :? IAuditLog as auditLog ->
-                                let truncatedMessage =
-                                    let m = ex.Message
+                        // Phase 4b — resolve PlatformRole per request.
+                        // Anonymous callers cannot hold the role
+                        // (Platform Admin requires authenticated
+                        // identity). For authenticated users the
+                        // store is consulted once per request and
+                        // the result cached in HttpContext.Items so
+                        // the AccessContext factory and any handler
+                        // touching `canModifyPlatformConfig` reads
+                        // the same value without re-querying.
+                        if not (AuthenticatedUser.isAnonymous user) then
+                            match ctx.RequestServices.GetService(typeof<IPlatformAdminStore>) with
+                            | :? IPlatformAdminStore as adminStore ->
+                                let! isAdmin = runAsync (adminStore.IsPlatformAdmin user.UserId)
 
-                                    if isNull m then "(null)"
-                                    elif m.Length <= 512 then m
-                                    else m.Substring(0, 512)
-
-                                let correlationId = ToolUp.Remoting.Server.CallContext.correlationId ()
-
-                                auditLog.Record(
-                                    "_platform",
-                                    AuthScopeResolutionFailed {
-                                        Method = methodName
-                                        Path = pathStr
-                                        ExceptionKind = exceptionKind
-                                        Message = truncatedMessage
-                                        CorrelationId = correlationId
-                                        OccurredAt = DateTimeOffset.UtcNow
-                                    }
-                                )
-                                |> Async.Start
+                                if isAdmin then
+                                    ctx.Items["ToolUp.PlatformRole"] <- box PlatformRole.PlatformAdmin
                             | _ -> ()
-                        with _ ->
-                            ()
+                    | Error _ -> ()
+                with ex ->
+                    // Auth-observability A1 — infrastructure error in
+                    // the scope-resolution pipeline (DI hiccup, store
+                    // throw, cache miss-and-throw). Pre-A1 this catch
+                    // was silent: handlers downstream saw missing
+                    // Items and fell back to anonymous, and operators
+                    // had no signal to distinguish "no credentials"
+                    // from "resolver crashed."
+                    //
+                    // This catch does NOT re-raise — bringing the
+                    // request path down for a DI hiccup would be
+                    // worse — and what changes here is observability:
+                    // structured log + best-effort audit event so a
+                    // spike in `ScopeResolutionFailed` is visible on
+                    // dashboards and per-incident triage has a query
+                    // path.
+                    //
+                    // **Swallowing is not by itself fail-closed, and
+                    // this comment used to say it was.** All the
+                    // catch does is leave the `HttpContext.Items`
+                    // entries unset; what makes that SAFE is
+                    // downstream, in [Phase 336] (`db622f5f`):
+                    // `SurfaceEnforcementMiddleware` treats a missing
+                    // Subject on an `/api/*` path as fail-closed,
+                    // synthesising a fresh `AnonymousSession` and
+                    // running the SAME surface gate over it, so a
+                    // crashed resolver yields an anonymous-privilege
+                    // request rather than an unjudged one. Before
+                    // 336 the fall-through was to whatever each
+                    // handler did with absent Items, which is not a
+                    // property this middleware could promise on its
+                    // own. Read the guarantee there; do not conclude
+                    // from this catch alone that it holds.
+                    //
+                    // Every observability call is itself wrapped in a
+                    // local try/with — a logger / audit failure
+                    // during the auth-failure path MUST NOT itself
+                    // bring the request down.
+
+                    let exceptionKind = ex.GetType().Name
+                    let methodName = ctx.Request.Method
+                    let pathStr = string ctx.Request.Path
+
+                    try
+                        match ctx.RequestServices.GetService(typeof<ILogger>) with
+                        | :? ILogger as log ->
+                            log.Error(
+                                sprintf
+                                    "ScopeResolutionMiddleware swallowed %s on %s %s — request fell through to anonymous: %s"
+                                    exceptionKind
+                                    methodName
+                                    pathStr
+                                    ex.Message,
+                                Some ex
+                            )
+                        | _ -> ()
+                    with _ ->
+                        ()
+
+                    try
+                        match ctx.RequestServices.GetService(typeof<IAuditLog>) with
+                        | :? IAuditLog as auditLog ->
+                            let truncatedMessage =
+                                let m = ex.Message
+
+                                if isNull m then "(null)"
+                                elif m.Length <= 512 then m
+                                else m.Substring(0, 512)
+
+                            let correlationId = ToolUp.Remoting.Server.CallContext.correlationId ()
+
+                            auditLog.Record(
+                                "_platform",
+                                AuthScopeResolutionFailed {
+                                    Method = methodName
+                                    Path = pathStr
+                                    ExceptionKind = exceptionKind
+                                    Message = truncatedMessage
+                                    CorrelationId = correlationId
+                                    OccurredAt = DateTimeOffset.UtcNow
+                                }
+                            )
+                            |> Async.Start
+                        | _ -> ()
+                    with _ ->
+                        ()
 
                 do! next.Invoke(ctx)
             finally

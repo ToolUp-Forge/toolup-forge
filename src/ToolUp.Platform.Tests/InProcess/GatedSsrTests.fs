@@ -2,17 +2,28 @@ module ToolUp.Platform.Tests.InProcess.GatedSsrTests
 
 open System
 open System.IO
+open System.Net.Http
+open System.Security.Cryptography
+open System.Text
+open System.Text.Json
 open System.Threading.Tasks
 open Expecto
+open Microsoft.AspNetCore.Builder
+open Microsoft.AspNetCore.DataProtection
+open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.Http
+open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
+open Microsoft.Extensions.Hosting
 open Giraffe
 open Giraffe.ViewEngine
 open ToolUp.Platform
+open ToolUp.Platform.Auth
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.DataObjectStore
 open ToolUp.Platform.EntityStore
 open ToolUp.Platform.IEntityStore
+open ToolUp.Platform.NotificationChannel
 open ToolUp.PublicRendering
 
 // ─── Phase 86 — gated / tenant-scoped / audience-targeted SSR ────────
@@ -26,6 +37,12 @@ open ToolUp.PublicRendering
 //      (401 anon / 403 wrong-role / 200 right-role / 200 public).
 //   4. Gated exclusion from the sitemap + cross-tenant isolation through
 //      PublicContentApiImpl's scope-keyed overlay (GP 4).
+//   5. Phase 989 — the audience through the composed request pipeline:
+//      real credentials, the real `ScopeResolutionMiddleware`, the real
+//      `AccessContext` factory and the real page handler, on an
+//      authenticated, an anonymous and a mixed deployment. Layers 2 and 3
+//      inject a resolved `AccessContext`, so they cannot see whether the
+//      pipeline resolves one for a page route; this layer can.
 
 // ─── AccessContext fixtures ─────────────────────────────────────────
 
@@ -112,14 +129,30 @@ let private gateTests =
 
             Expect.equal (AudienceGate.evaluate userEditor gated) AudienceDecision.Allow "holds role → allow"
 
-        testCase "ScopeGated — unrestricted (empty permissions) principal passes (GP 11)"
+        testCase "ScopeGated — a principal with no configured permissions holds no role (Phase 989)"
         <| fun _ ->
-            // A principal with NO configured RBAC is unrestricted, matching
-            // the pre-RBAC module-route gating surface.
+            // Empty ModulePermissions means "unrestricted" for MODULE access
+            // (GP 11), and still does: canAccessModule is unchanged. A page
+            // that names its roles is restricted by its author, and a
+            // principal granted no permissions holds none of them.
             Expect.equal
                 (AudienceGate.evaluate user (PageAudience.ScopeGated [ "editor" ]))
-                AudienceDecision.Allow
-                "empty ModulePermissions = unrestricted"
+                AudienceDecision.Forbidden
+                "empty ModulePermissions holds no role"
+
+            Expect.isTrue (AccessContext.canAccessModule "editor" user) "module access keeps the GP 11 reading"
+
+        testCase "ScopeGated — a role entry with no permissions is not held"
+        <| fun _ ->
+            let revoked = {
+                user with
+                    ModulePermissions = Map["editor", []]
+            }
+
+            Expect.equal
+                (AudienceGate.evaluate revoked (PageAudience.ScopeGated [ "editor" ]))
+                AudienceDecision.Forbidden
+                "a revoked role entry grants nothing"
 
         testCase "ScopeGated [] gates to any-authenticated"
         <| fun _ ->
@@ -163,6 +196,15 @@ let private gateTests =
                 (AudienceGate.evaluate anon (PageAudience.ClientGated "team-a"))
                 AudienceDecision.RequireAuthentication
                 "anon → 401"
+
+        testCase "ClientGated — an individual user matches only its own scope"
+        <| fun _ ->
+            Expect.equal (AudienceGate.evaluate user (PageAudience.ClientGated "u1")) AudienceDecision.Allow "own"
+
+            Expect.equal
+                (AudienceGate.evaluate user (PageAudience.ClientGated "u2"))
+                AudienceDecision.Forbidden
+                "another user's relationship → 403"
     ]
 
 // ─── 3. Handler authorization pre-check ─────────────────────────────
@@ -297,5 +339,327 @@ let private exclusionTests =
         }
     ]
 
+
+// ─── 5. Phase 989 — the audience through the composed pipeline ──────
+
+let private jwtSecret = "gated-ssr-pipeline-test-secret-0123456789abcdef"
+
+let private base64Url (bytes: byte[]) =
+    Convert.ToBase64String(bytes).Replace('+', '-').Replace('/', '_').TrimEnd('=')
+
+/// An HS256 token for `sub`, valid for an hour — what a real issuer hands
+/// the client. Verified by the real `StaticJwtAuthProvider`.
+let private mintToken (sub: string) =
+    let header = base64Url (Encoding.UTF8.GetBytes """{"alg":"HS256","typ":"JWT"}""")
+
+    let payload =
+        dict [
+            "sub", box sub
+            "exp", box (DateTimeOffset.UtcNow.AddHours(1.0).ToUnixTimeSeconds())
+        ]
+        |> JsonSerializer.Serialize
+        |> Encoding.UTF8.GetBytes
+        |> base64Url
+
+    use hmac = new HMACSHA256(Encoding.UTF8.GetBytes jwtSecret)
+    let signature = hmac.ComputeHash(Encoding.UTF8.GetBytes $"{header}.{payload}")
+    $"{header}.{payload}.{base64Url signature}"
+
+/// The session cookie the cookie arm of the test provider reads.
+let private sessionCookie = "gated-ssr-session"
+
+/// Server-side session table for the cookie arm: an opaque id maps to a
+/// user, as a session-cookie provider's store does.
+let private sessions = Map["sess-alice", "alice"]
+
+/// Bearer credentials go to the real `StaticJwtAuthProvider`; a session
+/// cookie is looked up in `sessions`. So the pipeline is exercised with
+/// both kinds of credential a provider reads.
+let private authProvider () : IAuthProvider =
+    let jwt =
+        StaticJwtAuthProvider.StaticJwtAuthProvider(
+            {
+                Secret = jwtSecret
+                Issuer = None
+                Audience = None
+            }
+        )
+        :> IAuthProvider
+
+    let fromCookie (rc: RequestContext) =
+        let http = RequestContext.value rc :?> HttpContext
+
+        match http.Request.Cookies.TryGetValue sessionCookie with
+        | true, id -> sessions |> Map.tryFind id
+        | _ -> None
+
+    let userOf userId = {
+        AuthenticatedUser.anonymous with
+            UserId = userId
+            DisplayName = userId
+    }
+
+    { new IAuthProvider with
+        member _.GetUser rc =
+            match fromCookie rc with
+            | Some userId -> async { return userOf userId }
+            | None -> jwt.GetUser rc
+
+        member _.ValidateRequest rc =
+            match fromCookie rc with
+            | Some userId -> async { return Ok(userOf userId) }
+            | None -> jwt.ValidateRequest rc
+
+        member _.IsCryptographicallyVerified = true
+    }
+
+let private silentLogger: ILogger =
+    { new ILogger with
+        member _.Debug _ = ()
+        member _.Info _ = ()
+        member _.Warn _ = ()
+        member _.Error(_, _) = ()
+    }
+
+/// The pages of the probe: one per audience.
+let private pipelinePages =
+    [
+        mkPage "open" PageAudience.Public
+        mkPage "members" PageAudience.Authenticated
+        mkPage "editors" (PageAudience.ScopeGated [ "editor" ])
+        mkPage "client-alice" (PageAudience.ClientGated "alice")
+        mkPage "client-team-a" (PageAudience.ClientGated "team-a")
+    ]
+    |> List.map (fun p -> Slug.value p.Slug, p)
+    |> Map.ofList
+
+/// Build a host whose request pipeline is the SDK's, in the SDK's order:
+/// `ScopeResolutionMiddleware` → `SurfaceEnforcementMiddleware` → routes,
+/// with the SDK's own scope-resolution registrations (the `ISubjectResolver`
+/// and the scoped `AccessContext` factory). The routes are an `/api/x`
+/// control and the public-page catch-all.
+///
+/// Team data: `team-a` has members `carol` (holds `editor`), `dave` (holds
+/// only `viewer`) and `erin` (no permissions configured at all). `alice`
+/// and `bob` belong to no team.
+let private startHost (surfaces: SurfaceProfile list) : Async<IHost> = async {
+    let config = {
+        ServerConfig.defaults with
+            Surfaces = surfaces
+    }
+
+    let hasTeams = DeploymentConfig.hasTeamScope config
+    let blob = ToolUp.Platform.Testing.Fakes.standardBlobStorage ()
+    let notifications = InMemoryNotificationChannel(None) :> INotificationChannel
+    let teamStore = TeamManagement.TeamStore(blob, notifications, silentLogger)
+
+    let permissionStore =
+        PermissionStore.PermissionStore(blob) :> PermissionStore.IPermissionStore
+
+    if hasTeams then
+        let teams = teamStore :> TeamManagement.ITeamStore
+        let! _ = teams.CreateTeam("team-a", "Team A")
+
+        for userId in [ "carol"; "dave"; "erin" ] do
+            let! _ = teams.AddMember("team-a", userId, TeamRole.Member)
+            let! _ = teams.SetActiveTeam(userId, "team-a")
+            ()
+
+        let! _ = permissionStore.SetMemberPermissions("team-a", "carol", "editor", [ ModulePermission.Read ])
+        let! _ = permissionStore.SetMemberPermissions("team-a", "dave", "viewer", [ ModulePermission.Read ])
+        ()
+
+    let api = mkApi pipelinePages
+
+    let host =
+        Host
+            .CreateDefaultBuilder()
+            .ConfigureWebHostDefaults(fun webHost ->
+                webHost
+                    .UseTestServer()
+                    .ConfigureServices(fun services ->
+                        services.AddGiraffe() |> ignore
+                        services.AddDataProtection() |> ignore
+                        services.AddSingleton<ILogger>(silentLogger) |> ignore
+                        services.AddSingleton<IAuthProvider>(authProvider ()) |> ignore
+
+                        services.AddSingleton<PermissionStore.IPermissionStore>(permissionStore)
+                        |> ignore
+
+                        ComposeScopeResolver.registerScopeResolution
+                            services
+                            config
+                            (if hasTeams then Some teamStore else None)
+                            notifications
+                            silentLogger
+                            []
+                            []
+                            []
+                            None)
+                    .Configure(fun (app: IApplicationBuilder) ->
+                        app.UseMiddleware<Middleware.ScopeResolutionMiddleware>(config) |> ignore
+                        app.UseMiddleware<SurfaceEnforcement.SurfaceEnforcementMiddleware>() |> ignore
+
+                        app.UseGiraffe(
+                            choose [ route "/api/x" >=> text "api"; PublicPageHandler.handler api layouts ]
+                        ))
+                |> ignore)
+            .Build()
+
+    do! host.StartAsync() |> Async.AwaitTask
+    return host
+}
+
+/// The credential a request carries.
+type private Credential =
+    | NoCredential
+    | GarbageBearer
+    | Bearer of userId: string
+    | SessionCookie of sessionId: string
+
+let private send (client: HttpClient) (credential: Credential) (path: string) = async {
+    use request = new HttpRequestMessage(HttpMethod.Get, path)
+
+    match credential with
+    | NoCredential -> ()
+    | GarbageBearer -> request.Headers.Add("Authorization", "Bearer not.a.token")
+    | Bearer userId -> request.Headers.Add("Authorization", "Bearer " + mintToken userId)
+    | SessionCookie id -> request.Headers.Add("Cookie", $"{sessionCookie}={id}")
+
+    use! response = client.SendAsync request |> Async.AwaitTask
+    let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+    return int response.StatusCode, body
+}
+
+/// Run every `(credential, path, expected status)` cell against one host
+/// and fail with the whole list of mismatches, so a red run shows the
+/// table rather than its first wrong cell. A refused page must not carry
+/// the page body.
+let private expectCells (surfaces: SurfaceProfile list) (cells: (Credential * string * int) list) = async {
+    use! host = startHost surfaces
+    use client = host.GetTestClient()
+
+    let! results =
+        cells
+        |> List.map (fun (credential, path, expected) -> async {
+            let! status, body = send client credential path
+            return credential, path, expected, status, body
+        })
+        |> Async.Sequential
+
+    do! host.StopAsync() |> Async.AwaitTask
+
+    let mismatches =
+        results
+        |> Array.choose (fun (credential, path, expected, status, _) ->
+            if status <> expected then
+                Some $"%A{credential} GET {path}: expected {expected}, got {status}"
+            else
+                None)
+
+    Expect.isEmpty
+        mismatches
+        ("every cell returns the status its audience implies — mismatched: "
+         + String.concat "; " mismatches)
+
+    for credential, path, _, status, body in results do
+        if status = 401 || status = 403 then
+            Expect.isFalse (body.Contains "body-") $"%A{credential} GET {path}: a refused page carries no page body"
+}
+
+/// The authenticated deployment of the probe, plus a team surface so a
+/// principal can actually hold a role.
+let private authenticatedSurface = [ SurfaceProfile.individual; SurfaceProfile.team ]
+
+let private pipelineTests =
+    testList "Phase 989 — gated pages through the composed pipeline" [
+        testCaseAsync "authenticated deployment — no credentials and a garbage token are refused"
+        <| expectCells authenticatedSurface [
+            for credential in [ NoCredential; GarbageBearer ] do
+                credential, "/open", 200
+                credential, "/members", 401
+                credential, "/editors", 401
+                credential, "/client-alice", 401
+                credential, "/client-team-a", 401
+                credential, "/api/x", 401
+        ]
+
+        testCaseAsync "authenticated deployment — a valid token is read on page routes"
+        <| expectCells authenticatedSurface [
+            // alice: signed in, no team, no role.
+            Bearer "alice", "/open", 200
+            Bearer "alice", "/members", 200
+            Bearer "alice", "/editors", 403
+            Bearer "alice", "/client-alice", 200
+            Bearer "alice", "/client-team-a", 403
+            // bob: another individual — alice's client page is not his.
+            Bearer "bob", "/client-alice", 403
+            // carol: team-a member holding `editor`.
+            Bearer "carol", "/members", 200
+            Bearer "carol", "/editors", 200
+            Bearer "carol", "/client-team-a", 200
+            Bearer "carol", "/client-alice", 403
+            // dave: configured permissions, but not `editor`.
+            Bearer "dave", "/editors", 403
+            // erin: no permissions configured at all — holds no role.
+            Bearer "erin", "/members", 200
+            Bearer "erin", "/editors", 403
+        ]
+
+        testCaseAsync "authenticated deployment — a session cookie is read on page routes"
+        <| expectCells authenticatedSurface [
+            SessionCookie "sess-alice", "/members", 200
+            SessionCookie "sess-alice", "/client-alice", 200
+            SessionCookie "sess-alice", "/editors", 403
+            SessionCookie "sess-unknown", "/members", 401
+        ]
+
+        testCaseAsync "anonymous deployment — gated pages are refused, public pages served"
+        <| expectCells Surfaces.anonymous [
+            // The deployment admits no authenticated subject, so even a
+            // valid credential resolves to an anonymous session: every
+            // gated page is 401, for every credential.
+            for credential in [ NoCredential; GarbageBearer; Bearer "alice"; SessionCookie "sess-alice" ] do
+                credential, "/open", 200
+                credential, "/members", 401
+                credential, "/editors", 401
+                credential, "/client-alice", 401
+        ]
+
+        testCaseAsync "mixed anonymous + individual deployment — the principal decides"
+        <| expectCells [ SurfaceProfile.anonymous; SurfaceProfile.individual ] [
+            for credential in [ NoCredential; GarbageBearer ] do
+                credential, "/open", 200
+                credential, "/members", 401
+                credential, "/editors", 401
+                credential, "/client-alice", 401
+
+            Bearer "alice", "/members", 200
+            Bearer "alice", "/editors", 403
+            Bearer "alice", "/client-alice", 200
+            Bearer "bob", "/client-alice", 403
+        ]
+
+        testCaseAsync "a public page served to an anonymous visitor sets no cookie"
+        <| async {
+            use! host = startHost [ SurfaceProfile.anonymous; SurfaceProfile.individual ]
+            use client = host.GetTestClient()
+            use! page = client.GetAsync "/open" |> Async.AwaitTask
+            Expect.equal (int page.StatusCode) 200 "served"
+
+            Expect.isFalse
+                (page.Headers.Contains "Set-Cookie")
+                "a page route issues no anonymous session cookie, so the page stays cacheable"
+
+            // The falsifier: the same host DOES bind an anonymous API caller,
+            // so the assertion above is about the page route, not about a
+            // host that can never issue the cookie.
+            use! api = client.GetAsync "/api/x" |> Async.AwaitTask
+            Expect.isTrue (api.Headers.Contains "Set-Cookie") "an anonymous API caller is bound to its session"
+
+            do! host.StopAsync() |> Async.AwaitTask
+        }
+    ]
+
 let tests =
-    testList "GatedSsr (Phase 86)" [ parseTests; gateTests; handlerTests; exclusionTests ]
+    testList "GatedSsr (Phase 86)" [ parseTests; gateTests; handlerTests; exclusionTests; pipelineTests ]

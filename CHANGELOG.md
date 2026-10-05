@@ -44,9 +44,10 @@ Migration notes:
 - [938-run-provenance-in-the-fact-table-writer](docs/migrations/938-run-provenance-in-the-fact-table-writer.md)
 - [939-pgvector-tuned-default](docs/migrations/939-pgvector-tuned-default.md)
 - [945-rag-operations-follow-ups](docs/migrations/945-rag-operations-follow-ups.md)
+- [989-gated-ssr-fails-closed](docs/migrations/989-gated-ssr-fails-closed.md)
 - [9x-self-hosted-observability-module](docs/migrations/9x-self-hosted-observability-module.md)
 
-_Surface since `v0.23.0`: **breaking** — 45 packages moved; 3924 members added, 85 members changed, 617 members removed; 12 packages new._
+_Surface since `v0.23.0`: **breaking** — 45 packages moved; 3938 members added, 85 members changed, 617 members removed; 12 packages new._
 
 ### Added
 
@@ -254,7 +255,7 @@ _Surface since `v0.23.0`: **breaking** — 45 packages moved; 3924 members added
   - `ToolUp.Facts.DelegateFactModule.Destination : System.String (literal)`
   - `ToolUp.Facts.DelegateFactModule.advance(ToolUp.Facts.DelegateRun, ToolUp.Facts.DelegateFact) : ToolUp.Facts.DelegateFact`
   - … and 232 more — `git diff v0.23.0 -- api-baselines/ToolUp.Facts.Core.approved.txt`
-- `ToolUp.Facts.Server` — 313 members:
+- `ToolUp.Facts.Server` — 327 members:
   - `ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Facts.FactSurfaceOptions, ToolUp.Facts.FactIndexOptions)`
   - `ToolUp.Facts.BlobFactStore.CountScope(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]`
   - `ToolUp.Facts.BlobFactStore.ExportScope(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.FactScopeExport]`
@@ -275,7 +276,7 @@ _Surface since `v0.23.0`: **breaking** — 45 packages moved; 3924 members added
   - `ToolUp.Facts.CoverageNarrative.readCoverageWith(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IDelegatedFactWalks], System.DateTime, ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, System.String, System.String, ToolUp.Platform.Grounding.MetricDefinition, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.SubjectDefinition]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.CoverageNarrative+MetricCoverage]`
   - `ToolUp.Facts.DataChangeScope (class)`
   - `ToolUp.Facts.DataChangeScope+Carried (class)`
-  - … and 293 more — `git diff v0.23.0 -- api-baselines/ToolUp.Facts.Server.approved.txt`
+  - … and 307 more — `git diff v0.23.0 -- api-baselines/ToolUp.Facts.Server.approved.txt`
 - `ToolUp.Facts.Shared` — new package (183 public members)
 - `ToolUp.KnowledgeBase.Client` — 1 member:
   - `KnowledgeListView+Badges.factTableBadge(SharedTypes+KnowledgeSource) : Fable.React.ReactElement`
