@@ -1025,6 +1025,100 @@ module AnswerPlanner =
         : IAnswerPlanner =
         AnswerPlanner(store, gate, registry, events, compiler, clock) :> IAnswerPlanner
 
+    // ── Phase 986 — a compiler resolved from the provider factory ─────
+    //
+    // The AI tier registers `IAIProviderFactory`, never a bare
+    // `IAIProvider`, so a planner that looked only for the latter compiled
+    // nothing in a standard composition and the push door never fired.
+    // The factory resolves a provider PER CALLER (fallback policy, BYOK
+    // profile, usage metering and quota all key on the access context),
+    // so the compiler is resolved per plan, under the identity the plan
+    // runs for — never once, at composition, under nobody's.
+
+    /// The access context a question compile resolves its provider under:
+    /// the planning principal in the plan's scope. A team scope resolves as
+    /// a member of that team, a user scope as that user, and anything else
+    /// (a session scope, the anonymous scope, or the string-keyed
+    /// compatibility form) as the principal's own session — the narrowest
+    /// reading, so a strict-BYOK deployment refuses rather than borrowing a
+    /// team's configuration it cannot see. Provider resolution reads only
+    /// the subject; module permissions play no part in it.
+    let compilerAccessContext (scope: StorageScope option) (principal: string) : AccessContext =
+        match scope with
+        | Some s when s.Container.StartsWith("team-", StringComparison.Ordinal) ->
+            AccessContext.unrestricted (TeamMember(principal, s.ScopeId))
+        | Some s when s.Container.StartsWith("user-", StringComparison.Ordinal) ->
+            AccessContext.unrestricted (AuthenticatedUser principal)
+        | _ -> AccessContext.unrestricted (AnonymousSession principal)
+
+    /// The Phase 706 structured-output compiler over a provider the
+    /// platform's `IAIProviderFactory` resolves for `context`. Resolution
+    /// happens when a question is compiled; a factory that cannot resolve
+    /// a provider (strict BYOK with nothing configured, a missing key)
+    /// refuses the question with the factory's own reason — the same
+    /// typed `QuestionNotCompiled` refusal a deployment with no compiler
+    /// gets, never a throw.
+    let factoryQuestionCompiler
+        (factory: IAIProviderFactory)
+        (registry: Grounding.IMetricRegistry option)
+        (context: AccessContext)
+        : QuestionCompiler =
+        fun question -> async {
+            let! resolved = async {
+                try
+                    return! factory.Resolve context
+                with ex ->
+                    return Error(UnknownProvider ex.Message)
+            }
+
+            match resolved with
+            | Ok provider -> return! structuredQuestionCompiler provider registry question
+            | Error err ->
+                return
+                    Error(
+                        "no question compiler could be resolved from the AI provider factory: "
+                        + ProviderResolutionError.toMessage err
+                    )
+        }
+
+    /// A planner whose question compiler is chosen PER PLAN from the
+    /// plan's scope and principal (`compilerFor`), over one store, gate,
+    /// registry and event stream. Every other behaviour — resolution,
+    /// disclosure, recording — is exactly `createCompiling`'s.
+    let createResolvingCompiler
+        (store: IFactStore)
+        (gate: IFactDisclosureGate)
+        (registry: Grounding.IMetricRegistry option)
+        (events: IEventStore)
+        (compilerFor: StorageScope option -> string -> QuestionCompiler)
+        : IAnswerPlanner =
+        let over compiler =
+            createCompiling store gate registry events compiler
+
+        { new IAnswerPlanner with
+            member _.Plan(scopeId: string, principal: string, question: string) =
+                (over (compilerFor None principal)).Plan(scopeId, principal, question)
+
+            member _.Plan(scope: ResolvedScope, principal: string, question: string) =
+                (over (compilerFor scope.Storage principal)).Plan(scope, principal, question)
+
+            member _.Record(scopeId, messageId, plan) =
+                (over noQuestionCompiler).Record(scopeId, messageId, plan)
+        }
+
+    /// The Phase 986 default planner when the AI tier is composed: the
+    /// structured-output compiler over a provider the factory resolves
+    /// for each plan's principal and scope (`compilerAccessContext`).
+    let createOverProviderFactory
+        (store: IFactStore)
+        (gate: IFactDisclosureGate)
+        (registry: Grounding.IMetricRegistry option)
+        (events: IEventStore)
+        (factory: IAIProviderFactory)
+        : IAnswerPlanner =
+        createResolvingCompiler store gate registry events (fun scope principal ->
+            factoryQuestionCompiler factory registry (compilerAccessContext scope principal))
+
 /// The plan-in-the-chain composition (Phase 560.D): recorded plans join
 /// the Phase 524 provenance walk as typed plan nodes — message
 /// --PlannedBy--> plan --CitesFact--> facts — so "show me how this

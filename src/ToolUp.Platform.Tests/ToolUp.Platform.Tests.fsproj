@@ -1581,6 +1581,10 @@
              guard, and reuse-not-recompute behind the plan id. Compiled
              after the planner pack it builds on. -->
         <Compile Include="InProcess\FactClauseFeederTests.fs" />
+        <!-- Phase 986 — the fact tier on a RAG app in one call, either side of
+             withConfig, and its push door armed through the AI tier's provider
+             factory; the startup warning for a compiler-less planner. -->
+        <Compile Include="InProcess\RagFactTierTests.fs" />
         <!-- Phase 709 — the AI tool-result context budget: the knob and its
              refusal of a nonsensical declaration, byte-identical
              pass-through under the ceiling, the typed elision marker (valid

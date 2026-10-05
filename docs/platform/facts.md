@@ -418,17 +418,71 @@ behind the same six-rule-audited `IFactStore` contract.
 
 ### Facts reach the model two ways, and only one needs the model's consent
 
-Composing the store arms **both** doors, on that one knob:
+There are two doors, and they are armed by different things:
 
 - **The tool door.** `query_facts` / `query_metric_population` /
   `list_metric_coverage` — the model asks, and gets an answer. Reliable,
-  but it fires only when the model thinks to reach for it.
+  but it fires only when the model thinks to reach for it. **Armed by**
+  composing the fact store AND the AI tier: the store declares the tools,
+  and only the AI companion's composition registers them.
 - **The push door.** Each user turn is compiled into a
   `RetrievalRequest.FactClause` by the answer planner, resolved ahead of
   vector search, and merged into the prompt ahead of the similarity
   chunks under the verbatim-quoting contract. A question naming a
   registered metric and subject therefore arrives with its facts already
   in context — no tool round-trip, and nothing for the model to decide.
+  **Armed by** three things together: the fact store, a RAG app (whose
+  retrieval pipeline picks up the fact resolver and the clause planner),
+  and a **question compiler** for the planner.
+
+Composing the store on its own therefore arms neither door fully: with no
+AI tier the tools are never registered, and with no compiler the planner
+refuses every question, so the push door is dormant.
+
+#### The question compiler (Phase 986)
+
+The planner takes its compiler from the first of these that the
+composition provides:
+
+1. **An explicit choice** — `FactsCompose.withQuestionCompiler compiler`.
+2. **A registered `IAIProvider`** — the structured-output compiler over it.
+3. **The AI tier's `IAIProviderFactory`** — the registration every AI or
+   RAG composition makes. The compiler resolves a provider per plan, as the
+   planning principal in the plan's scope (a team member for a team scope,
+   the user for a user scope, a session otherwise), so the deployment's
+   fallback policy, a team's own provider profile, usage metering and quota
+   all apply to the compile exactly as they do to the turn it serves. A
+   factory that cannot resolve a provider refuses the question with its own
+   reason; nothing is pushed.
+
+With none of them, the planner refuses every question, and a startup
+warning — validator `fact-question-compiler` — says so and names the
+remedies. To keep the push door off deliberately, and silence the warning,
+choose the no-op compiler:
+`FactsCompose.withQuestionCompiler AnswerPlanner.noQuestionCompiler`.
+`RAGServerApp.withFactClausePlanning false` instead stops a RAG app from
+consulting the planner at all.
+
+#### Composing the tier onto a RAG app in one call
+
+```fsharp skip=fragment
+RAGServerApp.create factory providerProfile embedder
+|> RAGServerApp.withFacts FactsCompose.withFactTier
+|> RAGServerApp.withConfig config
+```
+
+`FactsCompose.withFactTier` switches `ServerConfig.FactStore` on and
+applies `withFactStore` and `withFactTableWriter`. `RAGServerApp.withFacts`
+applies it to the app's base when the app is **composed**, so it may sit on
+either side of `withConfig` — which replaces the whole `ServerConfig`,
+fact-store knob included, and used to make the hand-written
+`RAGServerApp.mapAI` route a silent no-op when it ran first. Because a RAG
+app always composes the AI tier, this one call arms both doors: the tools
+through the AI tier, the push door through the factory-backed compiler.
+The `mapAI` route still works when the knob is already on; `withFacts` is
+the order-independent form. The tier is passed in rather than referenced
+because the fact companion is a separate package — a RAG app that composes
+no facts takes no dependency on it.
 
 The push door refuses rather than guesses: unregistered vocabulary
 compiles to a typed refusal, never a nearest match, so a question that

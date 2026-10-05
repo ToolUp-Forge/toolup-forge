@@ -993,6 +993,13 @@ type RAGServerApp = {
     /// the same on every replica), `withAnalyzedSparseIndex` (an index built
     /// for the composed analyzer), or `withoutSparseIndex` (dense only).
     SparseIndex: SparseIndexComposition
+    /// Phase 986 — the fact tier, applied to the AI layer's base
+    /// `ServerApp` when the app is COMPOSED rather than when it is set, so
+    /// it sees the final `ServerConfig` whichever side of `withConfig` the
+    /// call sits. `None` (the default) composes no fact tier here — a
+    /// deployment that wires one by hand through `mapAI` is unchanged. Set
+    /// via `withFacts`.
+    FactTier: (ServerApp -> ServerApp) option
 }
 
 /// Phase 633 — does this app's composed `IEmbeddingCache` span replicas?
@@ -1192,6 +1199,20 @@ type internal RetrievalStoreFlushService(owned: (string * System.IDisposable) li
 /// `[<EditorBrowsable>]`.
 [<System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)>]
 let composeRAG (app: RAGServerApp) : ServerApp =
+    // Phase 986 — the fact tier goes onto the base FIRST, against the
+    // config the app was finally given, so every probe below (the fact
+    // resolver, the disclosure gate, the clause planner) sees it.
+    let app =
+        match app.FactTier with
+        | None -> app
+        | Some factTier -> {
+            app with
+                AI = {
+                    app.AI with
+                        Base = factTier app.AI.Base
+                }
+          }
+
     let ai = app.AI
     let b = ai.Base
     let config = b.Config
@@ -2265,6 +2286,7 @@ module RAGServerApp =
             RetrievalBudgets = RetrievalBudgets.defaults
             RetrievalTraceQueueCapacity = 1024
             SparseIndex = SparseIndexComposition.InProcessSparseIndex
+            FactTier = None
         }
 
     /// Phase 1h composition seam — lift an existing `ServerApp` into a
@@ -2316,6 +2338,7 @@ module RAGServerApp =
             RetrievalBudgets = RetrievalBudgets.defaults
             RetrievalTraceQueueCapacity = 1024
             SparseIndex = SparseIndexComposition.InProcessSparseIndex
+            FactTier = None
         }
 
     /// Internal helper: prepend a clamp note if `original ≠ clamped`.
@@ -2510,6 +2533,32 @@ module RAGServerApp =
     /// only when the transform genuinely lives on a companion, so RAG
     /// never grows a reverse dependency on that companion's package.
     let mapAI (f: AIServerApp -> AIServerApp) (app: RAGServerApp) : RAGServerApp = { app with AI = f app.AI }
+
+    /// Phase 986 — compose the fact tier onto this RAG app in one call:
+    ///
+    /// ```fsharp
+    /// app |> RAGServerApp.withFacts FactsCompose.withFactTier
+    /// ```
+    ///
+    /// `factTier` is applied to the AI layer's base `ServerApp` when the
+    /// app is composed, so the call may sit before or after `withConfig`
+    /// (which replaces the whole `ServerConfig`, the fact-store knob
+    /// included). Composed that way the fact tier arms both doors: the
+    /// retrieval pipeline picks up the fact resolver and the clause
+    /// planner — whose question compiler resolves through this app's own
+    /// `IAIProviderFactory` unless the tier chose one with
+    /// `FactsCompose.withQuestionCompiler` — so a question that names a
+    /// fact pushes it into the prompt
+    /// ahead of the retrieved passages, and the fact tools reach the model.
+    ///
+    /// The tier is a parameter rather than a reference because the fact
+    /// companion is a separate package: a RAG deployment that composes no
+    /// facts takes no dependency on it. Calling `withFacts` again replaces
+    /// the tier; the `mapAI` route keeps working unchanged.
+    let withFacts (factTier: ServerApp -> ServerApp) (app: RAGServerApp) : RAGServerApp = {
+        app with
+            FactTier = Some factTier
+    }
 
     let withPreMiddleware (f: IApplicationBuilder -> IApplicationBuilder) (app: RAGServerApp) : RAGServerApp = {
         app with

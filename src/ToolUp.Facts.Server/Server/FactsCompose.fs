@@ -244,6 +244,45 @@ type internal BlobFactStoreScaleGuard(replicaCount: int, services: IServiceColle
                     )
         }
 
+/// Phase 986 — a deployment's explicit question-compiler choice, registered
+/// by `FactsCompose.withQuestionCompiler`. Its presence outranks every
+/// derived compiler, and it is what tells the startup guard below that a
+/// compiler-less planner was chosen rather than forgotten.
+[<Sealed>]
+type internal ExplicitQuestionCompiler(compiler: QuestionCompiler) =
+    member _.Compiler = compiler
+
+/// Phase 986 — warns at startup when the composed answer planner has no
+/// question compiler. The planner then refuses every question, so fact
+/// clause planning (the push door) never places a fact in the prompt and
+/// only the fact tools reach the store — a state that used to be silent.
+/// An instance (the compose-time preflight refuses a factory), deciding
+/// when it runs from the service collection as finally assembled, so the
+/// AI tier may be composed before or after the fact tier.
+type internal FactQuestionCompilerGuard(services: IServiceCollection) =
+
+    member private _.Has(serviceType: Type) =
+        services
+        |> Seq.exists (fun d -> d.ServiceType = serviceType && not d.IsKeyedService)
+
+    interface ConfigValidation.IConfigValidator with
+        member _.Name = "fact-question-compiler"
+        member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
+
+        member this.Validate() = async {
+            let wired =
+                this.Has typeof<ExplicitQuestionCompiler>
+                || this.Has typeof<ToolUp.Platform.AI.IAIProvider>
+                || this.Has typeof<ToolUp.AI.IAIProviderFactory>
+
+            return
+                if wired then
+                    ConfigValidation.ValidationResult.Ok
+                else
+                    ConfigValidation.ValidationResult.Warning
+                        "The fact tier is composed but its answer planner has no question compiler, so fact clause planning (the push door: facts placed in the prompt ahead of retrieved passages) refuses every question and never pushes a fact; only the fact tools reach the store. Remedy: compose the AI tier (the planner then compiles through its IAIProviderFactory), register an IAIProvider, or supply a compiler with FactsCompose.withQuestionCompiler. To leave the push door off on purpose, compose FactsCompose.withQuestionCompiler AnswerPlanner.noQuestionCompiler."
+        }
+
 module FactsCompose =
 
     // ─── Phase 623 — shared optional-substrate lookups ────────────────
@@ -435,18 +474,35 @@ module FactsCompose =
                     // instead of degrading to an unanswerable point lookup.
                     // A deployment with no provider refuses with the same
                     // typed missing-compiler reason it always did.
-                    let compiler =
-                        match sp.GetService(typeof<ToolUp.Platform.AI.IAIProvider>) with
-                        | :? ToolUp.Platform.AI.IAIProvider as provider ->
-                            AnswerPlanner.structuredQuestionCompiler provider registry
-                        | _ -> AnswerPlanner.noQuestionCompiler
+                    //
+                    // Phase 986 — the compiler is chosen in this order: a
+                    // deployment's explicit choice
+                    // (`withQuestionCompiler`, which is also how one opts
+                    // out); a registered `IAIProvider` (the pre-986 route,
+                    // unchanged); else the AI tier's `IAIProviderFactory`,
+                    // resolved per plan under the planning principal — the
+                    // registration a standard AI composition actually
+                    // makes, so the push door fires without any extra
+                    // wiring. Nothing composed ⇒ the typed refusal, and
+                    // the `fact-question-compiler` startup warning names
+                    // the dormant door.
+                    let store = sp.GetRequiredService<IFactStore>()
+                    let gate = sp.GetRequiredService<IFactDisclosureGate>()
+                    let events = sp.GetRequiredService<IEventStore>()
 
-                    AnswerPlanner.createCompiling
-                        (sp.GetRequiredService<IFactStore>())
-                        (sp.GetRequiredService<IFactDisclosureGate>())
-                        registry
-                        (sp.GetRequiredService<IEventStore>())
-                        compiler)
+                    let fixedCompiler compiler =
+                        AnswerPlanner.createCompiling store gate registry events compiler
+
+                    match tryService<ExplicitQuestionCompiler> sp with
+                    | Some explicitChoice -> fixedCompiler explicitChoice.Compiler
+                    | None ->
+                        match tryService<ToolUp.Platform.AI.IAIProvider> sp with
+                        | Some provider -> fixedCompiler (AnswerPlanner.structuredQuestionCompiler provider registry)
+                        | None ->
+                            match tryService<ToolUp.AI.IAIProviderFactory> sp with
+                            | Some factory ->
+                                AnswerPlanner.createOverProviderFactory store gate registry events factory
+                            | None -> fixedCompiler AnswerPlanner.noQuestionCompiler)
             )
             // Phase 708 — the fact-clause feeder, on the SAME knob again.
             // Phase 522 built the push path (facts resolved ahead of
@@ -574,6 +630,21 @@ module FactsCompose =
                 BlobFactStoreScaleGuard(replicaCount, services) :> ConfigValidation.IConfigValidator
             )
 
+    // Once per collection: validator names are unique at preflight, and a
+    // composition that applies the fact tier twice must not refuse to start
+    // over a duplicate warning.
+    let private registerQuestionCompilerGuard (services: IServiceCollection) : IServiceCollection =
+        let present =
+            services
+            |> Seq.exists (fun d -> not d.IsKeyedService && (d.ImplementationInstance :? FactQuestionCompilerGuard))
+
+        if present then
+            services
+        else
+            services.AddSingleton<ConfigValidation.IConfigValidator>(
+                FactQuestionCompilerGuard(services) :> ConfigValidation.IConfigValidator
+            )
+
     let private registerReactiveRecomputation (services: IServiceCollection) : IServiceCollection =
         // (1) The default recompute engine — TryAdd so a deployment-
         //     supplied `IFactRecomputer` registered anywhere in the
@@ -679,6 +750,8 @@ module FactsCompose =
                 // Phase 888 — the backend marker and, for a multi-replica
                 // deployment only, the blob store's scale guard.
                 |> registerBlobScaleGuard app.Config.ReplicaCount
+                // Phase 986 — the dormant-push-door warning.
+                |> registerQuestionCompilerGuard
 
             let serviceConfig =
                 match app.Extensions.ServiceConfig with
@@ -1386,6 +1459,67 @@ module FactsCompose =
                     }
             }
             |> ServerApp.bindFactTables (Grounding.BindAllFactTables DefaultFactTableWriter.Destination)
+
+    // ─── Phase 986 — the fact tier as one composition, and its compiler ─
+
+    /// The whole fact tier in one call: turn the fact store on
+    /// (`ServerConfig.FactStore = EnabledFactStore`), then `withFactStore`
+    /// and `withFactTableWriter` over it. Because it sets the knob itself,
+    /// it does not depend on a `withConfig` having run first.
+    ///
+    /// For a RAG app, hand it to `RAGServerApp.withFacts`, which applies it
+    /// when the app is composed — after every `withConfig`, wherever the
+    /// call sits in the pipeline:
+    ///
+    /// ```fsharp
+    /// RAGServerApp.create factory providerProfile embedder
+    /// |> RAGServerApp.withFacts FactsCompose.withFactTier
+    /// |> RAGServerApp.withConfig config
+    /// ```
+    ///
+    /// What it arms: the fact tools (`query_facts` and its siblings, once
+    /// the AI tier is composed) and the fact store's push door — a
+    /// question compiled into a fact clause ahead of vector retrieval —
+    /// which compiles through the AI tier's `IAIProviderFactory` unless a
+    /// compiler is chosen with `withQuestionCompiler`.
+    let withFactTier (app: ServerApp) : ServerApp =
+        {
+            app with
+                Config = {
+                    app.Config with
+                        FactStore = EnabledFactStore
+                }
+        }
+        |> withFactStore
+        |> withFactTableWriter
+
+    /// Choose the answer planner's question compiler explicitly (Phase
+    /// 986). It outranks a registered `IAIProvider` and the AI tier's
+    /// `IAIProviderFactory`, which the planner otherwise compiles through.
+    /// Opt the push door out deliberately — and silence the startup
+    /// warning a compiler-less planner raises — with
+    /// `withQuestionCompiler AnswerPlanner.noQuestionCompiler`.
+    ///
+    /// Registers the choice whatever the fact-store knob says; it has an
+    /// effect only where the fact tier is composed, before or after this
+    /// call. The last choice registered wins.
+    let withQuestionCompiler (compiler: QuestionCompiler) (app: ServerApp) : ServerApp =
+        let register (s: IServiceCollection) =
+            s.AddSingleton<ExplicitQuestionCompiler>(ExplicitQuestionCompiler compiler)
+
+        let serviceConfig =
+            match app.Extensions.ServiceConfig with
+            | None -> Some register
+            | Some existing -> Some(fun s -> register (existing s))
+
+        {
+            app with
+                Extensions = {
+                    app.Extensions with
+                        ServiceConfig = serviceConfig
+                }
+        }
+
     // ─── Phase 888 — a replacement IFactStore behind the same knob ─────
     //
     // `withFactStore` composes the blob default. A deployment that has

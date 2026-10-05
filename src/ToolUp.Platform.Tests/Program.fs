@@ -1175,6 +1175,9 @@ let private registeredTests =
         // bounded compile degrading to no clause, and the plan reused for
         // provenance rather than recompiled.
         FactClauseFeederTests.tests
+        // Phase 986 — the fact tier composes onto a RAG app in one call and
+        // its push door fires through the AI tier's provider factory.
+        RagFactTierTests.tests
         // Phase 709 — the AI tool-result context budget, the last guard of
         // the population arc: a generous default that changes nothing, a
         // per-tool override and a NoBudget escape, and an over-budget
