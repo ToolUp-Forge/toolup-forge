@@ -229,31 +229,26 @@ let registerScopeResolution
                 // Phase 66 A.6 stashed a resolved `Subject` on
                 // `HttpContext.Items["ToolUp.Subject"]` upstream
                 // (`ScopeResolutionMiddleware` → `ISubjectResolver`).
-                // Prefer that when present; otherwise reconstruct the
-                // Subject from the per-request `userId` / `teamId` we
-                // already resolved above, branched on the deployment's
-                // surfaces. `hasTeamScope` + `Some teamId` ⇒ `TeamMember`,
-                // `requiresAnyAuth` ⇒ `AuthenticatedUser`, else
-                // `AnonymousSession`. For a mixed-mode deployment the
-                // per-request `teamId` decides team membership, not the
-                // deployment-wide dominant surface.
-                let subject =
-                    match ctx.Items.TryGetValue "ToolUp.Subject" with
-                    | true, (:? Subject as s) -> s
-                    | _ ->
-                        match teamId with
-                        | Some tid when DeploymentConfig.hasTeamScope config -> TeamMember(userId, tid)
-                        | _ when DeploymentConfig.requiresAnyAuth config -> AuthenticatedUser userId
-                        | _ -> AnonymousSession userId
-
-                {
+                // That is the only source of a principal.
+                //
+                // Phase 989 — when no Subject was resolved the request is
+                // ANONYMOUS, whatever the deployment's surfaces say (this
+                // branch used to derive a subject from the surfaces). A
+                // missing Subject means the resolver did not run or did not
+                // finish, and neither is evidence of identity, so the
+                // context also carries none of the per-request grants read
+                // above: no permissions, no exposure overrides, no platform
+                // role.
+                match ctx.Items.TryGetValue "ToolUp.Subject" with
+                | true, (:? Subject as subject) -> {
                     UserId = userId
                     TeamId = teamId
                     Subject = subject
                     ModulePermissions = modulePermissions
                     ModuleExposure = moduleExposure
                     PlatformRole = platformRole
-                })
+                  }
+                | _ -> AccessContext.unrestricted (AnonymousSession "anonymous"))
         .AddHttpContextAccessor()
         .AddSession()
     |> ignore

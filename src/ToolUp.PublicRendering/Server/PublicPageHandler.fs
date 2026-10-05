@@ -540,6 +540,12 @@ module PublicPageHandler =
             // unrestricted anonymous context when absent, matching the
             // convention in `BuildRouteHandlers` — a public content site
             // running without auth resolves every request as anonymous.
+            //
+            // Phase 989 — the fallback is ANONYMOUS, so it fails closed: the
+            // audience gate refuses it every non-`Public` page. When the SDK
+            // pipeline is composed, `ScopeResolutionMiddleware` has already
+            // resolved this request's principal (page routes included) and
+            // the registered factory builds the context from it.
             let accessContext =
                 match ctx.RequestServices.GetService(typeof<AccessContext>) with
                 | :? AccessContext as ac -> ac
