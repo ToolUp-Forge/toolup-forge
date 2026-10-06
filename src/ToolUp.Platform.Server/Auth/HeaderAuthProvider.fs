@@ -29,6 +29,7 @@ let private extractUser (httpCtx: HttpContext) =
         Email = None
         TenantId = None
         Roles = []
+        DirectoryRoles = []
     }
 
 /// Authentication provider that extracts user identity from a request header.

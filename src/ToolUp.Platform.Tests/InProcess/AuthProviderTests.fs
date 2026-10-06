@@ -1587,6 +1587,7 @@ let private fromEnvTests =
                                 GroupAliases = Map.empty
                                 AllowedTenants = []
                                 RequiredRoles = []
+                                ApiRoleGrants = Set.empty
                             })
                             "both variables reach AuthConfig.ClaimMapping")
 
@@ -1610,6 +1611,7 @@ let private fromEnvTests =
                                 GroupAliases = Map.empty
                                 AllowedTenants = []
                                 RequiredRoles = []
+                                ApiRoleGrants = Set.empty
                             })
                             "a UserId-only mapping is a legitimate configuration")
 
@@ -1651,6 +1653,7 @@ let private fromEnvTests =
                                 GroupAliases = Map.empty
                                 AllowedTenants = []
                                 RequiredRoles = []
+                                ApiRoleGrants = Set.empty
                             })
                             "surrounding whitespace in an env value never reaches the claim lookup")
         ]
@@ -1835,6 +1838,7 @@ module private ClaimMappingFixture =
         Email = Some "inner@example.com"
         TenantId = Some "inner-tenant"
         Roles = []
+        DirectoryRoles = []
     }
 
     /// The Entra mapping, expressed as a `ClaimMapping`. This IS the
@@ -1848,6 +1852,7 @@ module private ClaimMappingFixture =
         GroupAliases = Map.empty
         AllowedTenants = []
         RequiredRoles = []
+        ApiRoleGrants = Set.empty
     }
 
     let seamMapped (mapping: ClaimMapping) (claims: (string * string) list) =
@@ -1958,6 +1963,7 @@ let private oidcClaimMappingTests =
                         GroupAliases = Map.empty
                         AllowedTenants = []
                         RequiredRoles = []
+                        ApiRoleGrants = Set.empty
                     })
 
             let token =
@@ -1995,6 +2001,7 @@ let private oidcClaimMappingTests =
                         GroupAliases = Map.empty
                         AllowedTenants = []
                         RequiredRoles = []
+                        ApiRoleGrants = Set.empty
                     })
 
             let token = OidcFixture.mintRs256 key [ "sub", box "alice"; "exp", futureExp () ]
@@ -2025,6 +2032,7 @@ let private oidcClaimMappingTests =
                         GroupAliases = Map.empty
                         AllowedTenants = []
                         RequiredRoles = []
+                        ApiRoleGrants = Set.empty
                     })
 
             let token = OidcFixture.mintRs256 key [ "sub", box "alice"; "exp", futureExp () ]
@@ -2061,6 +2069,7 @@ let private oidcClaimMappingTests =
                         GroupAliases = Map.empty
                         AllowedTenants = []
                         RequiredRoles = []
+                        ApiRoleGrants = Set.empty
                     })
 
             let token = OidcFixture.mintRs256 key [ "sub", box "alice"; "exp", futureExp () ]
@@ -2081,6 +2090,7 @@ let private oidcClaimMappingTests =
                 GroupAliases = Map.empty
                 AllowedTenants = []
                 RequiredRoles = []
+                ApiRoleGrants = Set.empty
             }
 
             let cases = [
@@ -2118,6 +2128,7 @@ let private oidcClaimMappingTests =
                         GroupAliases = Map.empty
                         AllowedTenants = []
                         RequiredRoles = []
+                        ApiRoleGrants = Set.empty
                     }
                     [ "oid", "" ]
             with
@@ -2147,6 +2158,7 @@ let private oidcClaimMappingTests =
                             GroupAliases = Map.empty
                             AllowedTenants = []
                             RequiredRoles = []
+                            ApiRoleGrants = Set.empty
                         }
                         [ "oid", value ]
                 with
@@ -2169,6 +2181,7 @@ let private oidcClaimMappingTests =
                             GroupAliases = Map.empty
                             AllowedTenants = []
                             RequiredRoles = []
+                            ApiRoleGrants = Set.empty
                         }
                         [ "oid", value; "tid", value ]
                 with
@@ -2266,6 +2279,7 @@ let private oidcClaimMappingTests =
                             GroupAliases = Map.empty
                             AllowedTenants = []
                             RequiredRoles = []
+                            ApiRoleGrants = Set.empty
                         }
                         claims
                 with
@@ -2294,6 +2308,7 @@ let private oidcClaimMappingTests =
                             GroupAliases = Map.empty
                             AllowedTenants = []
                             RequiredRoles = []
+                            ApiRoleGrants = Set.empty
                         }
                         [ "oid", value ]
                 with

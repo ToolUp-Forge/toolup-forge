@@ -62,7 +62,22 @@ type AuthenticatedUser = {
     /// Finding 5 — documented rather than populated, since populating it
     /// would imply an isolation guarantee the SDK does not enforce here.)
     TenantId: string option
+    /// API roles — what `[<RequiresRole "…">]` (`IAuthContext.HasRole`)
+    /// reads, and what a `ScopeGated` page audience reads too. A provider
+    /// puts a role here only when the deployment grants it as an API role.
+    /// For the OIDC provider's directory mapping that means a mapped role
+    /// named in `ClaimMapping.ApiRoleGrants` (Phase 993); every other
+    /// mapped role lands in `DirectoryRoles` instead.
     Roles: string list
+    /// Phase 993 — roles and groups the identity provider's directory
+    /// asserted (the OIDC provider's `ClaimMapping.RolesClaim` /
+    /// `GroupsClaim`, after `GroupAliases`). They satisfy `ScopeGated`
+    /// page audiences (they ride into `AccessContext.TokenRoles`) and
+    /// NOTHING ELSE: no `[<RequiresRole>]` gate reads them, so whoever
+    /// administers the directory decides who reads published content
+    /// without being able to grant API privilege. Empty for every
+    /// provider that maps no directory claim.
+    DirectoryRoles: string list
 }
 
 module AuthenticatedUser =
@@ -73,9 +88,16 @@ module AuthenticatedUser =
         Email = None
         TenantId = None
         Roles = []
+        DirectoryRoles = []
     }
 
     let isAnonymous (user: AuthenticatedUser) = user.UserId = "anonymous"
+
+    /// Phase 993 — the roles a page audience reads for `user`: its API
+    /// roles and its directory roles, de-duplicated. The input to
+    /// `AccessContext.tokenRolesFor`; never an input to `HasRole`.
+    let pageRoles (user: AuthenticatedUser) : string list =
+        List.distinct (user.Roles @ user.DirectoryRoles)
 
 /// Server-side authentication provider interface.
 /// Implementations extract and validate user identity from HTTP requests.

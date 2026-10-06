@@ -163,7 +163,7 @@ Either field may be set alone. `ClaimMapping = None` (the default, and what both
 
 **Relationship to `PreferOidWhenPresent`.** That flag is a single-IdP convenience with *fallback* semantics: it prefers `oid` and falls back to `sub` when absent, and `AuthProvider.fromEnv` auto-enables it for `login.microsoftonline.com` / `ciamlogin.com` issuers. `ClaimMapping` is the generic form and is fail-closed. When both are set, `ClaimMapping.UserIdClaim` wins — it is the explicit operator instruction and the stricter of the two. They resolve identically for a token that carries `oid`, and differ only for one that does not.
 
-**Role and group claims (Phase 987).** `ClaimMapping.RolesClaim` / `GroupsClaim` (`TOOLUP_OIDC_ROLES_CLAIM` / `TOOLUP_OIDC_GROUPS_CLAIM`; `ClaimMapping.directoryRoles` names the conventional `roles` and `groups`) project the IdP's role and group claims onto `AuthenticatedUser.Roles`, renaming group ids through `GroupAliases`. `AllowedTenants` and `RequiredRoles` form an optional admission gate. The roles reach `AccessContext.TokenRoles`, which audience-gated pages read — module RBAC stays SDK-owned. Malformed role claims and a group overage reject the token rather than reading as "no roles". The worked example, including interactive sign-in for server-rendered pages, is [Gated SSR — identity-provider groups](../platform/gated-ssr.md#readers-governed-by-the-identity-providers-groups).
+**Role and group claims (Phase 987).** `ClaimMapping.RolesClaim` / `GroupsClaim` (`TOOLUP_OIDC_ROLES_CLAIM` / `TOOLUP_OIDC_GROUPS_CLAIM`; `ClaimMapping.directoryRoles` names the conventional `roles` and `groups`) project the IdP's role and group claims onto `AuthenticatedUser.DirectoryRoles`, renaming group ids through `GroupAliases`. **Directory roles gate pages only (Phase 993):** a mapped role reaches `AuthenticatedUser.Roles` — what `[<RequiresRole>]` reads — only when `ClaimMapping.ApiRoleGrants` (`TOOLUP_OIDC_API_ROLE_GRANTS`) names it, matched after aliasing; the allow-list is empty by default, and a malformed entry or `PlatformAdmin` refuses startup. `AllowedTenants` and `RequiredRoles` form an optional admission gate. The roles reach `AccessContext.TokenRoles`, which audience-gated pages read — module RBAC stays SDK-owned. Malformed role claims and a group overage reject the token rather than reading as "no roles". The worked example, including interactive sign-in for server-rendered pages, is [Gated SSR — identity-provider groups](../platform/gated-ssr.md#readers-governed-by-the-identity-providers-groups).
 
 #### Wiring `IMetricsSink`
 
@@ -812,6 +812,7 @@ type MyAuthProvider(config: MyAuthConfig) =
                     Email = claims.Email
                     TenantId = None
                     Roles = []
+                    DirectoryRoles = []
                 }
             | Error _ -> return AuthenticatedUser.anonymous
         }

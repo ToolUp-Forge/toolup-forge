@@ -107,6 +107,7 @@ let private authenticatedContext () = async {
         Email = Some "caller@example.test"
         TenantId = None
         Roles = []
+        DirectoryRoles = []
     }
 
     ctx.Items["ToolUp.User"] <- box user

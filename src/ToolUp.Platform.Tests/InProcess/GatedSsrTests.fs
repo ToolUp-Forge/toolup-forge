@@ -681,7 +681,8 @@ let private pipelineTests =
 // ─── 6. Phase 987 — readers governed by the identity provider ───────
 //
 // The directory half of gated SSR: the OIDC provider maps the token's
-// role and group claims onto `AuthenticatedUser.Roles` (`ClaimMapping`),
+// role and group claims onto `AuthenticatedUser.DirectoryRoles` (`ClaimMapping`;
+// Phase 993 — page audiences only, never API roles without an allow-list),
 // the `AccessContext` factory carries them as `TokenRoles`, and
 // `ScopeGated` reads them beside module permissions. Layer 6a drives the
 // shipped claim mapping and admission gate directly; 6b drives real RS256
@@ -708,7 +709,7 @@ let private mapWith (mapping: ClaimMapping) (payload: string) =
 
 let private rolesOf mapping payload =
     match mapWith mapping payload with
-    | Ok u -> Ok u.Roles
+    | Ok u -> Ok u.DirectoryRoles
     | Error(claim, _) -> Error claim
 
 let private claimMappingTests =
@@ -718,7 +719,7 @@ let private claimMappingTests =
     }
 
     testList "Phase 987 — role and group claims (ClaimMapping)" [
-        testCase "roles and groups become Roles; a group alias renames, an unaliased id is kept"
+        testCase "roles and groups become directory roles; a group alias renames, an unaliased id is kept"
         <| fun _ ->
             Expect.equal
                 (rolesOf groupsAliased """{"roles":["editor","reader"],"groups":["0b3e-finance","77aa"]}""")
@@ -762,7 +763,7 @@ let private claimMappingTests =
             | Error(claim, reason) ->
                 Expect.equal claim "groups" "the overage claim is named"
                 Expect.stringContains reason "overage" "the reason says why"
-            | Ok u -> failtestf "an overage must not map; got roles %A" u.Roles
+            | Ok u -> failtestf "an overage must not map; got roles %A" u.DirectoryRoles
 
         testCase "the overage check applies to the claim that is named, not to every claim"
         <| fun _ ->

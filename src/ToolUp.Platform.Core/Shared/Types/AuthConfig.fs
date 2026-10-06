@@ -133,9 +133,11 @@ type TokenLocation =
 /// existing deployment is byte-for-byte unchanged until it opts in (GP 11).
 ///
 /// Phase 987 adds the directory half: `RolesClaim` / `GroupsClaim` project
-/// the IdP's role and group claims onto `AuthenticatedUser.Roles`
-/// (`GroupAliases` renames group ids), and `AllowedTenants` /
-/// `RequiredRoles` form an optional admission gate. Build from
+/// the IdP's role and group claims onto `AuthenticatedUser.DirectoryRoles`
+/// (`GroupAliases` renames group ids), which gate pages only; Phase 993's
+/// `ApiRoleGrants` is the explicit allow-list that also makes a mapped
+/// role an API role. `AllowedTenants` / `RequiredRoles` form an optional
+/// admission gate. Build from
 /// `ClaimMapping.none` or `ClaimMapping.directoryRoles` with a copy-and-
 /// update expression so a later field addition does not break the call
 /// site.
@@ -164,9 +166,11 @@ type ClaimMapping = {
     /// leaves `TenantId` exactly as the provider resolved it (which is
     /// `None` for the generic OIDC provider). Example: `Some "tid"`.
     TenantIdClaim: string option
-    /// Phase 987 — claim whose values become `AuthenticatedUser.Roles`
-    /// (and so `AccessContext.TokenRoles`, which `ScopeGated` pages read).
-    /// `None` maps no role claim. The conventional name is `roles` (Entra
+    /// Phase 987 — claim whose values become directory roles
+    /// (`AuthenticatedUser.DirectoryRoles`, and so `AccessContext.TokenRoles`,
+    /// which `ScopeGated` pages read). Since Phase 993 a mapped role is an
+    /// API role (`AuthenticatedUser.Roles`, read by `[<RequiresRole>]`) only
+    /// when `ApiRoleGrants` names it. `None` maps no role claim. The conventional name is `roles` (Entra
     /// app roles, and most IdPs' role claim): `ClaimMapping.directoryRoles`
     /// names it. The claim may be a JSON string (one role) or an array of
     /// strings; an absent claim grants no role. Any other shape — a number,
@@ -174,7 +178,8 @@ type ClaimMapping = {
     /// the token (fail-closed), naming the claim.
     RolesClaim: string option
     /// Phase 987 — claim whose values (group ids or names) also become
-    /// `AuthenticatedUser.Roles`, after `GroupAliases`. `None` maps no
+    /// directory roles, after `GroupAliases` (and API roles only through
+    /// `ApiRoleGrants`, as for `RolesClaim`). `None` maps no
     /// group claim; the conventional name is `groups`. Same shape rules as
     /// `RolesClaim`. When the IdP reports a group OVERAGE instead of the
     /// claim — `_claim_names` names this claim, which Microsoft Entra does
@@ -200,6 +205,19 @@ type ClaimMapping = {
     /// (401), not a 403: the deployment does not accept the principal at
     /// all.
     RequiredRoles: string list
+    /// Phase 993 — the ONLY route from a directory role to an API role.
+    /// A mapped role or group (after `GroupAliases`, so a group that has an
+    /// alias is matched by its alias, never by its raw id) that is named
+    /// here is ALSO added to `AuthenticatedUser.Roles`, where
+    /// `[<RequiresRole>]` gates read it. Empty by default: role mapping
+    /// then grants page audiences only, and whoever administers the
+    /// directory cannot grant API privilege by naming a role or group.
+    /// Each entry is an exact role name; `ClaimMapping.validateApiRoleGrants`
+    /// refuses a blank or padded entry and `PlatformAdmin` (the platform-
+    /// admin grant is resolved server-side from `IPlatformAdminStore`, never
+    /// from a token), and the OIDC provider refuses to build over a refused
+    /// set.
+    ApiRoleGrants: Set<string>
 }
 
 module ClaimMapping =
@@ -213,10 +231,13 @@ module ClaimMapping =
         GroupAliases = Map.empty
         AllowedTenants = []
         RequiredRoles = []
+        ApiRoleGrants = Set.empty
     }
 
     /// Phase 987 — the conventional directory-role mapping: `roles` and
-    /// `groups` become `AuthenticatedUser.Roles`. Identity claims are left
+    /// `groups` become directory roles (`AuthenticatedUser.DirectoryRoles`,
+    /// which gate pages); none is an API role until `ApiRoleGrants` names
+    /// it (Phase 993). Identity claims are left
     /// as the provider resolves them; combine with `UserIdClaim` /
     /// `TenantIdClaim` as needed (`{ ClaimMapping.directoryRoles with
     /// UserIdClaim = Some "oid" }`).
@@ -236,6 +257,38 @@ module ClaimMapping =
         && mapping.GroupsClaim.IsNone
         && mapping.AllowedTenants.IsEmpty
         && mapping.RequiredRoles.IsEmpty
+
+    /// Phase 993 — the role names an `ApiRoleGrants` set may not carry, and
+    /// why: `PlatformAdmin` is resolved server-side (`IPlatformAdminStore`),
+    /// so naming it here could never take effect and would read as a grant.
+    let reservedApiRoleGrants: Map<string, string> =
+        Map["PlatformAdmin",
+            "the platform-admin grant is resolved server-side from IPlatformAdminStore and is never taken from a token"]
+
+    /// Phase 993 — `Ok ()` when every `ApiRoleGrants` entry is an exact,
+    /// non-blank role name with no whitespace or control character and is
+    /// not reserved; `Error reason` naming the first offending entry
+    /// otherwise. The OIDC provider calls this when it is BUILT, so a
+    /// malformed allow-list fails the deployment at startup rather than
+    /// silently granting nothing (or something else).
+    let validateApiRoleGrants (grants: Set<string>) : Result<unit, string> =
+        let malformed (role: string) =
+            System.String.IsNullOrWhiteSpace role
+            || role
+               |> Seq.exists (fun c -> System.Char.IsWhiteSpace c || System.Char.IsControl c)
+
+        let refusal (role: string) =
+            if malformed role then
+                Some
+                    $"ApiRoleGrants entry '{role}' is not a role name (blank, or carries whitespace or a control character)"
+            else
+                reservedApiRoleGrants
+                |> Map.tryFind role
+                |> Option.map (fun why -> $"ApiRoleGrants may not name '{role}': {why}")
+
+        match grants |> Seq.tryPick refusal with
+        | None -> Ok()
+        | Some reason -> Error reason
 
 /// Declarative configuration for an `IAuthProvider`. Providers read
 /// the fields they care about and ignore the rest — e.g.

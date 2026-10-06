@@ -43,6 +43,7 @@ let private aUser: AuthenticatedUser = {
     Email = Some "user-1@example.com"
     TenantId = None
     Roles = []
+    DirectoryRoles = []
 }
 
 let private aClaim: ShareTokenClaim = {

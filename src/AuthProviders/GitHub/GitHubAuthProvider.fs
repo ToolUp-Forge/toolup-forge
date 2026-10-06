@@ -138,6 +138,7 @@ let private userFromGitHub (ghUser: GitHubUser) (resolvedEmail: string option) :
         Email = resolvedEmail
         TenantId = None
         Roles = []
+        DirectoryRoles = []
     }
 
 // ─── Validation pipeline ─────────────────────────────────────────────

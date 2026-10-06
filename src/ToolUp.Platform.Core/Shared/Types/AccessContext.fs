@@ -53,8 +53,12 @@ type AccessContext = {
     /// by `canModifyPlatformConfig`.
     PlatformRole: PlatformRole option
     /// Phase 987 — roles the identity provider asserted for this principal
-    /// (`AuthenticatedUser.Roles`: for the OIDC provider, the token's role
-    /// and group claims as `AuthConfig.ClaimMapping` maps them). Carried
+    /// (`AuthenticatedUser.pageRoles`: its API roles plus its directory
+    /// roles — for the OIDC provider, the token's role and group claims as
+    /// `AuthConfig.ClaimMapping` maps them). Phase 993 — a directory role is
+    /// carried here WITHOUT being an API role: `[<RequiresRole>]` reads
+    /// `AuthenticatedUser.Roles`, which a directory role reaches only
+    /// through `ClaimMapping.ApiRoleGrants`. Carried
     /// for `AuthenticatedUser` and `TeamMember` subjects only; empty for an
     /// anonymous session or a share-token bearer, and empty when no
     /// mapping is configured. Read by audience-gated pages (`ScopeGated`)
@@ -102,7 +106,8 @@ module AccessContext =
     }
 
     /// Phase 987 — the `TokenRoles` a context for `subject` carries, given
-    /// the roles its identity provider asserted (`AuthenticatedUser.Roles`):
+    /// the roles its identity provider asserted (`AuthenticatedUser.pageRoles`
+    /// — API roles and, since Phase 993, directory roles):
     /// those roles, de-duplicated, for a signed-in human principal
     /// (`AuthenticatedUser` / `TeamMember`); none for an anonymous session
     /// or a share-token bearer, whose identity no provider asserted. The

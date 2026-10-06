@@ -25,6 +25,7 @@ let private alice: AuthenticatedUser = {
     Email = Some "alice@example.com"
     TenantId = None
     Roles = []
+    DirectoryRoles = []
 }
 
 let private freshStorage () =

@@ -120,6 +120,33 @@ let private preferOidFromIssuer (issuer: string) : bool option =
 /// resolves to the wrapper's parameter and the key reads as
 /// declared-bindable-but-unread. The check is right to say so — one
 /// level of indirection is exactly how a reader stops being findable.
+/// Phase 993 — parse `TOOLUP_OIDC_API_ROLE_GRANTS`: a comma-separated list
+/// of role names, each trimmed. A value that is whitespace only is unset
+/// (grants nothing — the safe reading). Anything malformed REFUSES STARTUP
+/// rather than being dropped: an empty entry (`a,,b`, a trailing comma), an
+/// entry carrying whitespace or a control character, or a reserved name
+/// (`PlatformAdmin`). A silently-dropped entry would leave an operator
+/// believing a grant exists, and a silently-kept one would grant something
+/// other than what was written; either way the mistake surfaces at request
+/// time as an unexplained 403, or worse, as an unexplained 200.
+let private apiRoleGrantsFromEnv (raw: string) : Set<string> =
+    let key = ConfigKeys.Names.oidcApiRoleGrants
+
+    if String.IsNullOrWhiteSpace raw then
+        Set.empty
+    else
+        let entries = raw.Split(',') |> Array.map _.Trim()
+
+        if entries |> Array.exists String.IsNullOrEmpty then
+            invalidOp
+                $"{key} has an empty entry (two adjacent commas, or a leading or trailing comma). Name each role once, comma-separated, or unset the variable to grant no API role from the directory."
+
+        let grants = Set.ofArray entries
+
+        match ClaimMapping.validateApiRoleGrants grants with
+        | Ok() -> grants
+        | Error reason -> invalidOp $"{key}: {reason}."
+
 let private claimMappingFromEnv () : ClaimMapping option =
     // A variable set to whitespace is a typo, not a claim name.
     let nonBlank =
@@ -133,7 +160,22 @@ let private claimMappingFromEnv () : ClaimMapping option =
             // Phase 987 — the directory-role claims.
             RolesClaim = ConfigResolution.tryValue ConfigKeys.Names.oidcRolesClaim |> nonBlank
             GroupsClaim = ConfigResolution.tryValue ConfigKeys.Names.oidcGroupsClaim |> nonBlank
+            // Phase 993 — the directory-to-API role allow-list.
+            ApiRoleGrants =
+                match ConfigResolution.tryValue ConfigKeys.Names.oidcApiRoleGrants with
+                | None -> Set.empty
+                | Some raw -> apiRoleGrantsFromEnv raw
     }
+
+    // Phase 993 — an allow-list with no role or group claim to draw from
+    // grants nothing, which is not what an operator who set it meant.
+    if
+        not mapping.ApiRoleGrants.IsEmpty
+        && mapping.RolesClaim.IsNone
+        && mapping.GroupsClaim.IsNone
+    then
+        invalidOp
+            $"{ConfigKeys.Names.oidcApiRoleGrants} is set but neither {ConfigKeys.Names.oidcRolesClaim} nor {ConfigKeys.Names.oidcGroupsClaim} names a claim, so no directory role can be granted. Name the role or group claim, or unset {ConfigKeys.Names.oidcApiRoleGrants}."
 
     if ClaimMapping.isEmpty mapping then None else Some mapping
 

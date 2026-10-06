@@ -241,13 +241,17 @@ let registerScopeResolution
                 // role.
                 //
                 // Phase 987 — the provider-asserted roles of the request's
-                // user (`AuthenticatedUser.Roles`, written by the same
-                // middleware) ride along as `TokenRoles`, for a signed-in
-                // human principal only: an anonymous session and a share-
-                // token bearer carry none, whatever the request's user says.
+                // user (written by the same middleware) ride along as
+                // `TokenRoles`, for a signed-in human principal only: an
+                // anonymous session and a share-token bearer carry none,
+                // whatever the request's user says. Phase 993 — the page
+                // roles are the user's API roles PLUS its directory roles
+                // (`AuthenticatedUser.pageRoles`); `[<RequiresRole>]` reads
+                // only the former.
                 let providerRoles =
                     match ctx.Items.TryGetValue "ToolUp.User" with
-                    | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) -> user.Roles
+                    | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) ->
+                        ToolUp.Platform.Auth.AuthenticatedUser.pageRoles user
                     | _ -> []
 
                 match ctx.Items.TryGetValue "ToolUp.Subject" with

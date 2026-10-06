@@ -1472,6 +1472,9 @@
              AudienceGate matrix + handler 401/403 + sitemap exclusion +
              cross-tenant isolation. -->
         <Compile Include="InProcess\GatedSsrTests.fs" />
+        <!-- Phase 993 — directory roles gate pages; a directory role is an
+             API role only through ClaimMapping.ApiRoleGrants. -->
+        <Compile Include="InProcess\DirectoryRoleApiGrantTests.fs" />
         <!-- Phase 91 — RAG-backed answer pages: RagAnswerSource grounding +
              extractive/synthesis + StrictlyGrounded refusal. -->
         <Compile Include="InProcess\KnowledgeSurfaceTests.fs" />

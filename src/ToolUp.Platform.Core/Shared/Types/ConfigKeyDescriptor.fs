@@ -284,6 +284,9 @@ module Names =
     let oidcGroupsClaim = "TOOLUP_OIDC_GROUPS_CLAIM"
 
     [<Literal>]
+    let oidcApiRoleGrants = "TOOLUP_OIDC_API_ROLE_GRANTS"
+
+    [<Literal>]
     let sseAuth = "TOOLUP_SSE_AUTH"
 
     [<Literal>]
@@ -1097,7 +1100,7 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.oidcRolesClaim
         Description =
-            "Claim whose values become AuthenticatedUser.Roles (and so the roles audience-gated pages read), e.g. `roles` for Microsoft Entra app roles. Unset maps no role claim. A string or an array of strings; any other shape rejects the token (fail-closed)."
+            "Claim whose values become directory roles — the roles audience-gated pages read — e.g. `roles` for Microsoft Entra app roles. A directory role is NOT an API role ([<RequiresRole>]) unless TOOLUP_OIDC_API_ROLE_GRANTS names it. Unset maps no role claim. A string or an array of strings; any other shape rejects the token (fail-closed)."
         Type = StringKey
         Default = Some "(unset — no role claim mapped)"
         IsSecret = false
@@ -1106,9 +1109,18 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.oidcGroupsClaim
         Description =
-            "Claim whose values (group ids or names) also become AuthenticatedUser.Roles, e.g. `groups`. Unset maps no group claim. Same shape rules as TOOLUP_OIDC_ROLES_CLAIM; a group overage (`_claim_names` naming the claim) rejects the token rather than reading as no groups."
+            "Claim whose values (group ids or names) also become directory roles (page audiences only, unless TOOLUP_OIDC_API_ROLE_GRANTS names them), e.g. `groups`. Unset maps no group claim. Same shape rules as TOOLUP_OIDC_ROLES_CLAIM; a group overage (`_claim_names` naming the claim) rejects the token rather than reading as no groups."
         Type = StringKey
         Default = Some "(unset — no group claim mapped)"
+        IsSecret = false
+        Category = "Auth & identity"
+    }
+    {
+        EnvVar = Names.oidcApiRoleGrants
+        Description =
+            "Comma-separated allow-list of mapped directory roles (after group aliasing) that are ALSO granted as API roles, which [<RequiresRole>] gates read. Unset grants none: role mapping then governs page audiences only. A blank entry, an entry carrying whitespace, or PlatformAdmin (resolved server-side, never from a token) refuses startup."
+        Type = StringKey
+        Default = Some "(unset — no directory role is an API role)"
         IsSecret = false
         Category = "Auth & identity"
     }
@@ -3055,6 +3067,7 @@ let manifestBindable: Set<string> =
         Names.notifyInviterOnInviteExpiry
         Names.oauthRedirectBase
         Names.oauthRefresher
+        Names.oidcApiRoleGrants
         Names.oidcAudience
         Names.oidcGroupsClaim
         Names.oidcIssuer

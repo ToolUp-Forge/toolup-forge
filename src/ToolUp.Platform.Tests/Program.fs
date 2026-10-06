@@ -1087,6 +1087,9 @@ let private registeredTests =
         // AudienceGate evaluate matrix + handler authorization pre-check
         // (401/403/200) + sitemap exclusion + cross-tenant isolation.
         GatedSsrTests.tests
+        // Phase 993 — directory roles gate pages; a directory role is an API
+        // role only through ClaimMapping.ApiRoleGrants.
+        DirectoryRoleApiGrantTests.tests
         // Phase 91 — RAG-backed answer pages: RagAnswerSource grounding,
         // extractive + synthesis-hook answers, and StrictlyGrounded refusal.
         KnowledgeSurfaceTests.tests

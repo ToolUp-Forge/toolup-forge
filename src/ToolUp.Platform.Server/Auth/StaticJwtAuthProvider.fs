@@ -162,6 +162,7 @@ let private validateToken (config: StaticJwtConfig) (token: string) : Result<Aut
             Email = Jwt.getClaim "email" doc
             TenantId = None
             Roles = []
+            DirectoryRoles = []
         }
     }
 

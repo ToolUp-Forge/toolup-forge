@@ -113,6 +113,7 @@ let private innerUser: AuthenticatedUser = {
     Email = Some "inner@example.com"
     TenantId = Some "inner-tenant"
     Roles = []
+    DirectoryRoles = []
 }
 
 /// An Entra id token carrying the given claims, in the shape the
@@ -161,6 +162,7 @@ let private claimBoundaryAccepts (claimName: string) (id: string) =
                 GroupAliases = Map.empty
                 AllowedTenants = []
                 RequiredRoles = []
+                ApiRoleGrants = Set.empty
             }
         else
             {
@@ -171,6 +173,7 @@ let private claimBoundaryAccepts (claimName: string) (id: string) =
                 GroupAliases = Map.empty
                 AllowedTenants = []
                 RequiredRoles = []
+                ApiRoleGrants = Set.empty
             }
 
     match claimMapped mapping [ claimName, id ] with
@@ -320,6 +323,7 @@ let parityTests =
                                 GroupAliases = Map.empty
                                 AllowedTenants = []
                                 RequiredRoles = []
+                                ApiRoleGrants = Set.empty
                             }
                             [ "oid", id ]
                     with
@@ -448,6 +452,7 @@ let negativeControlTests =
                 GroupAliases = Map.empty
                 AllowedTenants = []
                 RequiredRoles = []
+                ApiRoleGrants = Set.empty
             }
 
             match claimMapped mapping [ "oid", "entra-object-id"; "tid", "entra-tenant" ] with
@@ -512,6 +517,7 @@ let boundaryDetailTests =
                         GroupAliases = Map.empty
                         AllowedTenants = []
                         RequiredRoles = []
+                        ApiRoleGrants = Set.empty
                     }
                     [ "oid", "../../etc"; "sub", "well-formed-subject" ]
             with
@@ -536,6 +542,7 @@ let boundaryDetailTests =
                         GroupAliases = Map.empty
                         AllowedTenants = []
                         RequiredRoles = []
+                        ApiRoleGrants = Set.empty
                     }
                     [ "oid", "user-1" ]
             with

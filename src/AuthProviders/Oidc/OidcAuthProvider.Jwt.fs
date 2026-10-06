@@ -154,8 +154,9 @@ type JwtPayload = {
     /// ignore this field entirely (behaviour unchanged).
     AuthorizedParty: string option
     /// Well-known role/group claim names present on the token. The
-    /// provider maps none of them into `AuthenticatedUser.Roles` unless
-    /// `AuthConfig.ClaimMapping` names the claim (Phase 987); the
+    /// provider maps none of them (into `AuthenticatedUser.DirectoryRoles`,
+    /// or `Roles` through `ApiRoleGrants`) unless
+    /// `AuthConfig.ClaimMapping` names the claim (Phase 987 / 993); the
     /// validator subtracts the mapped ones. Detection only — never
     /// interpreted. Drives a one-time discoverability warning so a
     /// brownfield IdP migration notices the dropped claims.

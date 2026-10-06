@@ -297,6 +297,7 @@ let private validate
                                         Email = email
                                         TenantId = None
                                         Roles = roles
+                                        DirectoryRoles = []
                                     }
 
                                     if config.CacheTtlSeconds > 0 then

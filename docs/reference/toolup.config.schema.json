@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$comment": "GENERATED FILE — do not edit by hand. Regenerate with dev-scripts/generate-config-reference.ps1. The source of truth is ConfigKeys.all in src/ToolUp.Platform.Core/Shared/Types/ConfigKeyDescriptor.fs.",
   "title": "ToolUp deployment configuration manifest",
-  "description": "A ToolUp deployment configuration manifest: one JSON file of canonical TOOLUP_* keys, resolved one rung below the environment, optionally importing a named configuration profile via $profile (which resolves one rung below the manifest, so every key set here beats it). It lists the 120 keys a manifest may set today — a secret key is refused outright (set the environment variable instead), and a registered key whose reader has not migrated to the config-resolution seam is omitted until it can be honoured. Enum values are every spelling the key's reader accepts, alias spellings included (Phase 719 closed the gap where some were accepted but undeclared); the readers also compare case-insensitively, so a value flagged here for its LETTER CASE alone still boots — write it as listed. Full descriptions, defaults and per-key manifest status: docs/reference/config-reference.md.",
+  "description": "A ToolUp deployment configuration manifest: one JSON file of canonical TOOLUP_* keys, resolved one rung below the environment, optionally importing a named configuration profile via $profile (which resolves one rung below the manifest, so every key set here beats it). It lists the 121 keys a manifest may set today — a secret key is refused outright (set the environment variable instead), and a registered key whose reader has not migrated to the config-resolution seam is omitted until it can be honoured. Enum values are every spelling the key's reader accepts, alias spellings included (Phase 719 closed the gap where some were accepted but undeclared); the readers also compare case-insensitively, so a value flagged here for its LETTER CASE alone still boots — write it as listed. Full descriptions, defaults and per-key manifest status: docs/reference/config-reference.md.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -427,12 +427,16 @@
       "enum": [ "enabled", "on", "yes", "disabled", "no", "off" ],
       "default": "disabled"
     },
+    "TOOLUP_OIDC_API_ROLE_GRANTS": {
+      "description": "Comma-separated allow-list of mapped directory roles (after group aliasing) that are ALSO granted as API roles, which [<RequiresRole>] gates read. Unset grants none: role mapping then governs page audiences only. A blank entry, an entry carrying whitespace, or PlatformAdmin (resolved server-side, never from a token) refuses startup.",
+      "type": "string"
+    },
     "TOOLUP_OIDC_AUDIENCE": {
       "description": "Expected OIDC token audience. Unset accepts any audience (preflight warns in authenticated modes).",
       "type": "string"
     },
     "TOOLUP_OIDC_GROUPS_CLAIM": {
-      "description": "Claim whose values (group ids or names) also become AuthenticatedUser.Roles, e.g. `groups`. Unset maps no group claim. Same shape rules as TOOLUP_OIDC_ROLES_CLAIM; a group overage (`_claim_names` naming the claim) rejects the token rather than reading as no groups.",
+      "description": "Claim whose values (group ids or names) also become directory roles (page audiences only, unless TOOLUP_OIDC_API_ROLE_GRANTS names them), e.g. `groups`. Unset maps no group claim. Same shape rules as TOOLUP_OIDC_ROLES_CLAIM; a group overage (`_claim_names` naming the claim) rejects the token rather than reading as no groups.",
       "type": "string"
     },
     "TOOLUP_OIDC_ISSUER": {
@@ -440,7 +444,7 @@
       "type": "string"
     },
     "TOOLUP_OIDC_ROLES_CLAIM": {
-      "description": "Claim whose values become AuthenticatedUser.Roles (and so the roles audience-gated pages read), e.g. `roles` for Microsoft Entra app roles. Unset maps no role claim. A string or an array of strings; any other shape rejects the token (fail-closed).",
+      "description": "Claim whose values become directory roles — the roles audience-gated pages read — e.g. `roles` for Microsoft Entra app roles. A directory role is NOT an API role ([<RequiresRole>]) unless TOOLUP_OIDC_API_ROLE_GRANTS names it. Unset maps no role claim. A string or an array of strings; any other shape rejects the token (fail-closed).",
       "type": "string"
     },
     "TOOLUP_OIDC_TENANT_ID_CLAIM": {

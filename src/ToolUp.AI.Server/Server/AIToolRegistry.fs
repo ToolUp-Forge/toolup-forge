@@ -430,11 +430,12 @@ let reconstructAccessContext (ctx: HttpContext) : AccessContext =
         Subject = subject
         ModulePermissions = modulePermissions
         // Phase 987 — the same provider-asserted roles the request's
-        // scoped `AccessContext` carries.
+        // scoped `AccessContext` carries (Phase 993: API roles plus
+        // directory roles — `AuthenticatedUser.pageRoles`).
         TokenRoles =
             match ctx.Items.TryGetValue "ToolUp.User" with
             | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) ->
-                AccessContext.tokenRolesFor subject user.Roles
+                AccessContext.tokenRolesFor subject (ToolUp.Platform.Auth.AuthenticatedUser.pageRoles user)
             | _ -> []
         ModuleExposure = moduleExposure
         PlatformRole = platformRole

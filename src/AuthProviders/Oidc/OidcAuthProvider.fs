@@ -226,7 +226,7 @@ let private unixNow () =
 // ─── Unmapped role/group claim discoverability ───────────────────────
 //
 // By default the OIDC provider maps only `sub` / `name` / `email` —
-// `AuthenticatedUser.Roles` stays empty unless the deployment names a
+// `AuthenticatedUser.DirectoryRoles` / `Roles` stay empty unless the deployment names a
 // role or group claim in `AuthConfig.ClaimMapping` (Phase 987). A
 // brownfield IdP (Auth0 / Keycloak) that already organises users into
 // roles/groups would otherwise have those claims silently dropped. This module-level flag drives a single Warn the
@@ -426,6 +426,7 @@ let private userFromPayload (preferOid: bool) (payload: JwtPayload) : Authentica
         Email = resolvedEmail
         TenantId = None
         Roles = []
+        DirectoryRoles = []
     }
 
 // ─── Claim mapping (post-validation projection) ──────────────────────
@@ -598,7 +599,7 @@ let applyValidatedClaimMapping
                     |> Result.mapError (fun reason -> name, $"{label} mapping: {reason}")
                     |> Result.map (fun value -> set value current)
 
-            // Phase 987 — the role and group claims add to `Roles`. A group
+            // Phase 987 — the role and group claims are read here. A group
             // value with an alias becomes the alias, so a page can name a
             // group by a readable name instead of a directory object id.
             let readRoles (claim: string option) (label: string) (rename: string -> string) =
@@ -618,10 +619,23 @@ let applyValidatedClaimMapping
                 readRoles mapping.RolesClaim "Roles" id
                 |> Result.bind (fun roles ->
                     readRoles mapping.GroupsClaim "Groups" alias
-                    |> Result.map (fun groups -> {
-                        u with
-                            Roles = List.distinct (u.Roles @ roles @ groups)
-                    })))
+                    |> Result.map (fun groups ->
+                        // Phase 993 — two grants, kept apart. Every mapped
+                        // role and group is a DIRECTORY role (page audiences
+                        // read it). Only one named in `ApiRoleGrants` — matched
+                        // after aliasing — is also an API role, which is what
+                        // `[<RequiresRole>]` reads.
+                        let mapped = roles @ groups
+
+                        {
+                            u with
+                                DirectoryRoles = List.distinct (u.DirectoryRoles @ mapped)
+                                Roles =
+                                    List.distinct (
+                                        u.Roles
+                                        @ (mapped |> List.filter (fun r -> Set.contains r mapping.ApiRoleGrants))
+                                    )
+                        })))
 
 /// Phase 987 — the optional admission gate of `ClaimMapping`, applied to a
 /// user `applyValidatedClaimMapping` has already mapped.
@@ -629,8 +643,8 @@ let applyValidatedClaimMapping
 /// `Ok user` when the mapping sets no admission rule, or when the user
 /// passes every rule set: `AllowedTenants` (the mapped `TenantId` is one of
 /// them; a user with no mapped tenant is refused, so the rule needs
-/// `TenantIdClaim`) and `RequiredRoles` (the mapped `Roles` hold at least
-/// one of them). `Error reason` otherwise. The reason never echoes the
+/// `TenantIdClaim`) and `RequiredRoles` (the user's mapped directory roles
+/// or API roles hold at least one of them). `Error reason` otherwise. The reason never echoes the
 /// token's own values. Exposed for the same reason as
 /// `applyValidatedClaimMapping`: conformance packs drive the shipped gate.
 let applyAdmission (mapping: ClaimMapping) (user: AuthenticatedUser) : Result<AuthenticatedUser, string> =
@@ -648,7 +662,11 @@ let applyAdmission (mapping: ClaimMapping) (user: AuthenticatedUser) : Result<Au
     let rolesOk () =
         match mapping.RequiredRoles with
         | [] -> Result.Ok()
-        | required when required |> List.exists (fun r -> List.contains r user.Roles) -> Result.Ok()
+        | required when
+            required
+            |> List.exists (fun r -> List.contains r user.Roles || List.contains r user.DirectoryRoles)
+            ->
+            Result.Ok()
         | _ -> Error "the token carries none of RequiredRoles"
 
     tenantOk |> Result.bind rolesOk |> Result.map (fun () -> user)
@@ -787,7 +805,7 @@ let private validate
 
                                                 logger.Warn(
                                                     sprintf
-                                                        "OIDC token carries role/group claim(s) [%s] that are NOT mapped into AuthenticatedUser.Roles. Users authenticate but land with no roles from them; name the claim in AuthConfig.ClaimMapping (RolesClaim / GroupsClaim, or TOOLUP_OIDC_ROLES_CLAIM / TOOLUP_OIDC_GROUPS_CLAIM) to map it, or assign roles via team membership. This is logged once per process."
+                                                        "OIDC token carries role/group claim(s) [%s] that are NOT mapped (neither as directory roles nor as API roles). Users authenticate but land with no roles from them; name the claim in AuthConfig.ClaimMapping (RolesClaim / GroupsClaim, or TOOLUP_OIDC_ROLES_CLAIM / TOOLUP_OIDC_GROUPS_CLAIM) to map it, or assign roles via team membership. This is logged once per process."
                                                         (String.concat ", " unmappedRoleClaims)
                                                 )
 
@@ -928,6 +946,17 @@ let private buildProvider
             (nameof hardening)
             "OidcAuthProvider JwksEvictionSignal.OriginReplicaId is blank. It identifies THIS instance so a receiver can discard its own echo; with every instance sharing the empty identity, each would discard the others' eviction signals and the cross-instance window would silently stay at the full per-silo TTL. Use a stable per-instance value (e.g. sprintf \"%s/%d\" Environment.MachineName Environment.ProcessId)."
     | _ -> ()
+
+    // Phase 993 — the directory-to-API role allow-list is validated at
+    // construction, like the guards above: a malformed or reserved entry
+    // fails the deployment at startup instead of granting nothing (or
+    // something other than what was written) at request time.
+    match config.ClaimMapping with
+    | Some mapping ->
+        match ClaimMapping.validateApiRoleGrants mapping.ApiRoleGrants with
+        | Error reason -> invalidArg (nameof config) $"OidcAuthProvider ClaimMapping: {reason}."
+        | Ok() -> ()
+    | None -> ()
 
     let cachePolicy = OidcHardening.toCachePolicy hardening
 
