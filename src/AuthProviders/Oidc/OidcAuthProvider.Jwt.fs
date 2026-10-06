@@ -67,6 +67,12 @@ type JwtValidationError =
     /// why the message names the claim and the reason rather than
     /// reporting a signature or expiry problem.
     | MappedClaimUnusable of claim: string * reason: string
+    /// Phase 987 — the token is valid and its claims mapped, but the
+    /// deployment's admission gate (`ClaimMapping.AllowedTenants` /
+    /// `RequiredRoles`) does not admit the principal. An authentication
+    /// failure, not an authorization one: the deployment does not accept
+    /// this principal at all.
+    | AdmissionRefused of reason: string
 
 module JwtValidationError =
     let toMessage =
@@ -86,6 +92,8 @@ module JwtValidationError =
         | JwksUnavailable r -> $"JWKS unavailable: {r}"
         | MappedClaimUnusable(claim, reason) ->
             $"AuthConfig.ClaimMapping names the claim '{claim}', but the validated token cannot supply it: {reason}. The token is otherwise valid — signature, issuer, audience and expiry all passed. This is fail-closed by design: naming a claim asserts the IdP mints it, so falling back to `sub` would silently change the identity this deployment sees. Either configure the IdP to emit '{claim}', or remove it from AuthConfig.ClaimMapping."
+        | AdmissionRefused reason ->
+            $"The token is valid, but this deployment's admission gate (AuthConfig.ClaimMapping AllowedTenants / RequiredRoles) does not admit the principal: {reason}."
 
 // ─── JWT parsing ─────────────────────────────────────────────────────
 
@@ -145,10 +153,10 @@ type JwtPayload = {
     /// though it was authorized for the attacker. Single-audience tokens
     /// ignore this field entirely (behaviour unchanged).
     AuthorizedParty: string option
-    /// Well-known role/group claim names present on the token that the
-    /// provider does NOT map into `AuthenticatedUser.Roles` (the SDK
-    /// permission model is team-membership driven; a configurable
-    /// claim-mapper is a tracked roadmap item). Detection only — never
+    /// Well-known role/group claim names present on the token. The
+    /// provider maps none of them into `AuthenticatedUser.Roles` unless
+    /// `AuthConfig.ClaimMapping` names the claim (Phase 987); the
+    /// validator subtracts the mapped ones. Detection only — never
     /// interpreted. Drives a one-time discoverability warning so a
     /// brownfield IdP migration notices the dropped claims.
     UnmappedRoleClaims: string list

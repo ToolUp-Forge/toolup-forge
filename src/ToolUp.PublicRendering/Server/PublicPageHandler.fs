@@ -199,15 +199,47 @@ module PublicPageHandler =
     /// Phase 86 — write a bare audience-denial response. Gated pages set
     /// `X-Robots-Tag: noindex` and `Cache-Control: no-store` so a denied
     /// response is never indexed or shared-cached.
+    ///
+    /// Phase 987 — a `401` to a browser navigation becomes a sign-in when the
+    /// deployment registered an `InteractiveSignIn`: a `302` to its
+    /// `SignInPath`, carrying this page's path and query as the return URL.
+    /// Only for `GET` / `HEAD` requests that accept `text/html` (a page
+    /// navigation, not a script or a crawler fetching a resource), and never
+    /// for a `403` — a signed-in principal who is refused would only be sent
+    /// round the sign-in again.
     let private writeDenied
         (ctx: HttpContext)
         (code: int)
         (body: string)
         : System.Threading.Tasks.Task<HttpContext option> =
-        ctx.Response.StatusCode <- code
         ctx.Response.Headers["X-Robots-Tag"] <- StringValues "noindex"
         ctx.Response.Headers["Cache-Control"] <- StringValues "no-store"
-        ctx.WriteStringAsync body
+
+        let signIn =
+            match ctx.RequestServices with
+            | null -> None
+            | services ->
+                match services.GetService(typeof<InteractiveSignIn>) with
+                | :? InteractiveSignIn as s -> Some s
+                | _ -> None
+
+        let isNavigation =
+            (HttpMethods.IsGet ctx.Request.Method || HttpMethods.IsHead ctx.Request.Method)
+            && (string ctx.Request.Headers.Accept).Contains("text/html", StringComparison.OrdinalIgnoreCase)
+
+        match signIn with
+        | Some s when code = 401 && isNavigation ->
+            let returnUrl =
+                string ctx.Request.PathBase
+                + string ctx.Request.Path
+                + string ctx.Request.QueryString
+
+            ctx.Response.StatusCode <- 302
+            ctx.Response.Headers["Location"] <- StringValues(InteractiveSignIn.redirectFor s returnUrl)
+            System.Threading.Tasks.Task.FromResult(Some ctx)
+        | _ ->
+            ctx.Response.StatusCode <- code
+            ctx.WriteStringAsync body
 
     /// The pre-84 path: resolve, filter, render, write — no cache lookup,
     /// no cache headers. Byte-for-byte identical to the handler before

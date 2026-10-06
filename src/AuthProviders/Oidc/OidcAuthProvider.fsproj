@@ -13,6 +13,7 @@
     <Compile Include="OidcAuthProvider.Jwks.fs" />
     <Compile Include="OidcAuthProvider.fs" />
     <Compile Include="OidcAuthValidator.fs" />
+    <Compile Include="OidcSsrSignIn.fs" />
   </ItemGroup>
   <ItemGroup>
     <!-- AspNetCore framework reference for HttpContext visibility. -->

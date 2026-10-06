@@ -50,6 +50,7 @@ let private teamCtx (userId: string) (teamId: string) : AccessContext = {
     TeamId = Some teamId
     Subject = TeamMember(userId, teamId)
     ModulePermissions = Map.empty
+    TokenRoles = []
     ModuleExposure = Map.empty
     PlatformRole = None
 }

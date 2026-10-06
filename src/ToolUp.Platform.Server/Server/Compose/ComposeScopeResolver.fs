@@ -239,6 +239,17 @@ let registerScopeResolution
                 // context also carries none of the per-request grants read
                 // above: no permissions, no exposure overrides, no platform
                 // role.
+                //
+                // Phase 987 — the provider-asserted roles of the request's
+                // user (`AuthenticatedUser.Roles`, written by the same
+                // middleware) ride along as `TokenRoles`, for a signed-in
+                // human principal only: an anonymous session and a share-
+                // token bearer carry none, whatever the request's user says.
+                let providerRoles =
+                    match ctx.Items.TryGetValue "ToolUp.User" with
+                    | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) -> user.Roles
+                    | _ -> []
+
                 match ctx.Items.TryGetValue "ToolUp.Subject" with
                 | true, (:? Subject as subject) -> {
                     UserId = userId
@@ -247,6 +258,7 @@ let registerScopeResolution
                     ModulePermissions = modulePermissions
                     ModuleExposure = moduleExposure
                     PlatformRole = platformRole
+                    TokenRoles = AccessContext.tokenRolesFor subject providerRoles
                   }
                 | _ -> AccessContext.unrestricted (AnonymousSession "anonymous"))
         .AddHttpContextAccessor()

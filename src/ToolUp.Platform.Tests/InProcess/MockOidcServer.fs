@@ -125,13 +125,28 @@ type MockOidcServer(cfg: MockOidcConfig) =
     /// config asks for one; `jti` makes successive mints textually
     /// distinct so a test can prove a refresh actually ROTATED the
     /// bearer rather than re-storing the same string.
-    let mintTokenWith (lifetime: TimeSpan) (audience: string option) (jti: string option) =
+    // Phase 987 — the identity and extra claims the NEXT interactive
+    // sign-in mints into its id_token, and the nonce / PKCE challenge the
+    // last `/authorize` call carried. Set by `SetSignInIdentity`; the
+    // defaults reproduce the historical token exactly.
+    let mutable signInSubject: string option = None
+    let mutable signInClaims: (string * obj) list = []
+    let mutable pendingNonce: string option = None
+    let mutable pendingChallenge: string option = None
+
+    let mintTokenFull
+        (lifetime: TimeSpan)
+        (audience: string option)
+        (jti: string option)
+        (subject: string)
+        (extra: (string * obj) list)
+        =
         let now = DateTimeOffset.UtcNow
         let header = $"""{{"alg":"RS256","typ":"JWT","kid":"{Kid}"}}"""
 
         let payload =
             let d = Dictionary<string, obj>()
-            d["sub"] <- box cfg.Subject
+            d["sub"] <- box subject
             d["name"] <- box cfg.Name
             d["email"] <- box cfg.Email
             d["iss"] <- box issuerUrl
@@ -139,6 +154,10 @@ type MockOidcServer(cfg: MockOidcConfig) =
             d["exp"] <- box (now.Add(lifetime).ToUnixTimeSeconds())
             audience |> Option.iter (fun a -> d["aud"] <- box a)
             jti |> Option.iter (fun j -> d["jti"] <- box j)
+
+            for name, value in extra do
+                d[name] <- value
+
             JsonSerializer.Serialize d
 
         let hB = b64url (Encoding.UTF8.GetBytes header)
@@ -146,6 +165,9 @@ type MockOidcServer(cfg: MockOidcConfig) =
         let msg = Encoding.UTF8.GetBytes $"{hB}.{pB}"
         let sg = rsa.SignData(msg, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)
         $"{hB}.{pB}.{b64url sg}"
+
+    let mintTokenWith (lifetime: TimeSpan) (audience: string option) (jti: string option) =
+        mintTokenFull lifetime audience jti cfg.Subject []
 
     let mintToken (lifetime: TimeSpan) = mintTokenWith lifetime None None
 
@@ -183,6 +205,14 @@ type MockOidcServer(cfg: MockOidcConfig) =
                 let q = ctx.Request.Query
                 let redirectUri = string q["redirect_uri"]
                 let state = string q["state"]
+
+                let nonEmpty (name: string) =
+                    match string q[name] with
+                    | "" -> None
+                    | v -> Some v
+
+                pendingNonce <- nonEmpty "nonce"
+                pendingChallenge <- nonEmpty "code_challenge"
                 let sep = if redirectUri.Contains "?" then "&" else "?"
                 ctx.Response.Redirect $"{redirectUri}{sep}code={AuthCode}&state={state}"
                 Task.CompletedTask)
@@ -195,21 +225,42 @@ type MockOidcServer(cfg: MockOidcConfig) =
                 // The grant type decides whether this is the initial
                 // code exchange or a refresh; the id_token-reissue
                 // switch only applies to the latter.
-                let! grantType = task {
+                let! grantType, verifier = task {
                     if ctx.Request.HasFormContentType then
                         let! form = ctx.Request.ReadFormAsync()
-                        return string form["grant_type"]
+                        return string form["grant_type"], string form["code_verifier"]
                     else
-                        return ""
+                        return "", ""
                 }
 
                 let isRefresh = grantType = "refresh_token"
 
+                // Phase 987 — when the `/authorize` call carried an S256
+                // PKCE challenge, the exchange must present the verifier
+                // that hashes to it (RFC 7636 §4.6), as a real IdP checks.
+                let pkceOk =
+                    match pendingChallenge with
+                    | Some challenge when not isRefresh ->
+                        let hashed = b64url (SHA256.HashData(Encoding.ASCII.GetBytes(verifier: string)))
+
+                        hashed = challenge
+                    | _ -> true
+
                 // A fresh `jti` per mint, so a refreshed id_token is
                 // textually distinct from the one it replaces and a
                 // test can assert rotation rather than mere presence.
+                let nonceClaim =
+                    match pendingNonce with
+                    | Some n when not isRefresh -> [ "nonce", box n ]
+                    | _ -> []
+
                 let idToken =
-                    mintTokenWith cfg.TokenLifetime cfg.IdTokenAudience (Some(Guid.NewGuid().ToString "N"))
+                    mintTokenFull
+                        cfg.TokenLifetime
+                        cfg.IdTokenAudience
+                        (Some(Guid.NewGuid().ToString "N"))
+                        (signInSubject |> Option.defaultValue cfg.Subject)
+                        (signInClaims @ nonceClaim)
 
                 let accessToken =
                     if cfg.OpaqueAccessTokens then
@@ -231,8 +282,13 @@ type MockOidcServer(cfg: MockOidcConfig) =
 
                     JsonSerializer.Serialize d
 
-                ctx.Response.ContentType <- "application/json"
-                do! ctx.Response.WriteAsync body
+                if pkceOk then
+                    ctx.Response.ContentType <- "application/json"
+                    do! ctx.Response.WriteAsync body
+                else
+                    ctx.Response.StatusCode <- 400
+                    ctx.Response.ContentType <- "application/json"
+                    do! ctx.Response.WriteAsync """{"error":"invalid_grant"}"""
             })
         )
         |> ignore
@@ -262,6 +318,18 @@ type MockOidcServer(cfg: MockOidcConfig) =
     /// An already-expired RS256 access token (otherwise well-formed and
     /// correctly signed) — exercises the expiry-rejection path.
     member _.MintExpiredToken() = mintToken (TimeSpan.FromMinutes -5.0)
+
+    /// Phase 987 — a currently-valid RS256 token for `subject` carrying
+    /// `claims` besides the seeded ones (e.g. `"roles", box [| "editor" |]`).
+    member _.MintTokenFor(subject: string, claims: (string * obj) list) =
+        mintTokenFull cfg.TokenLifetime None None subject claims
+
+    /// Phase 987 — the identity the next `/authorize` → `/token` sign-in
+    /// mints into its id_token: `subject` and extra `claims`. The id_token
+    /// also carries the `nonce` the `/authorize` call sent.
+    member _.SetSignInIdentity(subject: string, claims: (string * obj) list) =
+        signInSubject <- Some subject
+        signInClaims <- claims
 
     interface IDisposable with
         member _.Dispose() =

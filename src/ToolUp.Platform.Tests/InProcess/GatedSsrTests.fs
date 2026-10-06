@@ -442,73 +442,87 @@ let private pipelinePages =
 /// Team data: `team-a` has members `carol` (holds `editor`), `dave` (holds
 /// only `viewer`) and `erin` (no permissions configured at all). `alice`
 /// and `bob` belong to no team.
-let private startHost (surfaces: SurfaceProfile list) : Async<IHost> = async {
-    let config = {
-        ServerConfig.defaults with
-            Surfaces = surfaces
-    }
+let private startHostWith
+    (surfaces: SurfaceProfile list)
+    (auth: IAuthProvider)
+    (configure: IServiceCollection -> unit)
+    (extraRoutes: HttpHandler list)
+    : Async<IHost> =
+    async {
+        let config = {
+            ServerConfig.defaults with
+                Surfaces = surfaces
+        }
 
-    let hasTeams = DeploymentConfig.hasTeamScope config
-    let blob = ToolUp.Platform.Testing.Fakes.standardBlobStorage ()
-    let notifications = InMemoryNotificationChannel(None) :> INotificationChannel
-    let teamStore = TeamManagement.TeamStore(blob, notifications, silentLogger)
+        let hasTeams = DeploymentConfig.hasTeamScope config
+        let blob = ToolUp.Platform.Testing.Fakes.standardBlobStorage ()
+        let notifications = InMemoryNotificationChannel(None) :> INotificationChannel
+        let teamStore = TeamManagement.TeamStore(blob, notifications, silentLogger)
 
-    let permissionStore =
-        PermissionStore.PermissionStore(blob) :> PermissionStore.IPermissionStore
+        let permissionStore =
+            PermissionStore.PermissionStore(blob) :> PermissionStore.IPermissionStore
 
-    if hasTeams then
-        let teams = teamStore :> TeamManagement.ITeamStore
-        let! _ = teams.CreateTeam("team-a", "Team A")
+        if hasTeams then
+            let teams = teamStore :> TeamManagement.ITeamStore
+            let! _ = teams.CreateTeam("team-a", "Team A")
 
-        for userId in [ "carol"; "dave"; "erin" ] do
-            let! _ = teams.AddMember("team-a", userId, TeamRole.Member)
-            let! _ = teams.SetActiveTeam(userId, "team-a")
+            for userId in [ "carol"; "dave"; "erin" ] do
+                let! _ = teams.AddMember("team-a", userId, TeamRole.Member)
+                let! _ = teams.SetActiveTeam(userId, "team-a")
+                ()
+
+            let! _ = permissionStore.SetMemberPermissions("team-a", "carol", "editor", [ ModulePermission.Read ])
+            let! _ = permissionStore.SetMemberPermissions("team-a", "dave", "viewer", [ ModulePermission.Read ])
             ()
 
-        let! _ = permissionStore.SetMemberPermissions("team-a", "carol", "editor", [ ModulePermission.Read ])
-        let! _ = permissionStore.SetMemberPermissions("team-a", "dave", "viewer", [ ModulePermission.Read ])
-        ()
+        let api = mkApi pipelinePages
 
-    let api = mkApi pipelinePages
+        let host =
+            Host
+                .CreateDefaultBuilder()
+                .ConfigureWebHostDefaults(fun webHost ->
+                    webHost
+                        .UseTestServer()
+                        .ConfigureServices(fun services ->
+                            services.AddGiraffe() |> ignore
+                            services.AddDataProtection() |> ignore
+                            services.AddSingleton<ILogger>(silentLogger) |> ignore
+                            services.AddSingleton<IAuthProvider>(auth) |> ignore
+                            configure services
 
-    let host =
-        Host
-            .CreateDefaultBuilder()
-            .ConfigureWebHostDefaults(fun webHost ->
-                webHost
-                    .UseTestServer()
-                    .ConfigureServices(fun services ->
-                        services.AddGiraffe() |> ignore
-                        services.AddDataProtection() |> ignore
-                        services.AddSingleton<ILogger>(silentLogger) |> ignore
-                        services.AddSingleton<IAuthProvider>(authProvider ()) |> ignore
+                            services.AddSingleton<PermissionStore.IPermissionStore>(permissionStore)
+                            |> ignore
 
-                        services.AddSingleton<PermissionStore.IPermissionStore>(permissionStore)
-                        |> ignore
+                            ComposeScopeResolver.registerScopeResolution
+                                services
+                                config
+                                (if hasTeams then Some teamStore else None)
+                                notifications
+                                silentLogger
+                                []
+                                []
+                                []
+                                None)
+                        .Configure(fun (app: IApplicationBuilder) ->
+                            app.UseMiddleware<Middleware.ScopeResolutionMiddleware>(config) |> ignore
+                            app.UseMiddleware<SurfaceEnforcement.SurfaceEnforcementMiddleware>() |> ignore
 
-                        ComposeScopeResolver.registerScopeResolution
-                            services
-                            config
-                            (if hasTeams then Some teamStore else None)
-                            notifications
-                            silentLogger
-                            []
-                            []
-                            []
-                            None)
-                    .Configure(fun (app: IApplicationBuilder) ->
-                        app.UseMiddleware<Middleware.ScopeResolutionMiddleware>(config) |> ignore
-                        app.UseMiddleware<SurfaceEnforcement.SurfaceEnforcementMiddleware>() |> ignore
+                            app.UseGiraffe(
+                                choose [
+                                    yield! extraRoutes
+                                    route "/api/x" >=> text "api"
+                                    PublicPageHandler.handler api layouts
+                                ]
+                            ))
+                    |> ignore)
+                .Build()
 
-                        app.UseGiraffe(
-                            choose [ route "/api/x" >=> text "api"; PublicPageHandler.handler api layouts ]
-                        ))
-                |> ignore)
-            .Build()
+        do! host.StartAsync() |> Async.AwaitTask
+        return host
+    }
 
-    do! host.StartAsync() |> Async.AwaitTask
-    return host
-}
+let private startHost (surfaces: SurfaceProfile list) : Async<IHost> =
+    startHostWith surfaces (authProvider ()) ignore []
 
 /// The credential a request carries.
 type private Credential =
@@ -564,7 +578,10 @@ let private expectCells (surfaces: SurfaceProfile list) (cells: (Credential * st
 
     for credential, path, _, status, body in results do
         if status = 401 || status = 403 then
-            Expect.isFalse (body.Contains "body-") $"%A{credential} GET {path}: a refused page carries no page body"
+            // Phase 987 — the layout renders the page's TITLE (`Title-<slug>`),
+            // not its body, so the marker a refused response must not carry is
+            // the title: a `body-` check could never fail.
+            Expect.isFalse (body.Contains "Title-") $"%A{credential} GET {path}: a refused page carries no page content"
 }
 
 /// The authenticated deployment of the probe, plus a team surface so a
@@ -661,5 +678,561 @@ let private pipelineTests =
         }
     ]
 
+// ─── 6. Phase 987 — readers governed by the identity provider ───────
+//
+// The directory half of gated SSR: the OIDC provider maps the token's
+// role and group claims onto `AuthenticatedUser.Roles` (`ClaimMapping`),
+// the `AccessContext` factory carries them as `TokenRoles`, and
+// `ScopeGated` reads them beside module permissions. Layer 6a drives the
+// shipped claim mapping and admission gate directly; 6b drives real RS256
+// tokens from the mock issuer through the real middleware, the real
+// factory and the real page handler — no injected `AccessContext`; 6c
+// drives the interactive sign-in end to end.
+
+/// An UNSIGNED token around `payload` — enough for the post-validation
+/// projection, which by contract reads already-trusted bytes and performs
+/// no validation of its own.
+let private rawToken (payload: string) =
+    let enc (s: string) = base64Url (Encoding.UTF8.GetBytes s)
+    let header = enc """{"alg":"RS256","kid":"k"}"""
+    header + "." + enc payload + ".sig"
+
+let private mapWith (mapping: ClaimMapping) (payload: string) =
+    let baseUser = {
+        AuthenticatedUser.anonymous with
+            UserId = "u"
+            DisplayName = "u"
+    }
+
+    ToolUp.AuthProviders.OidcAuthProvider.applyValidatedClaimMapping mapping (rawToken payload) baseUser
+
+let private rolesOf mapping payload =
+    match mapWith mapping payload with
+    | Ok u -> Ok u.Roles
+    | Error(claim, _) -> Error claim
+
+let private claimMappingTests =
+    let groupsAliased = {
+        ClaimMapping.directoryRoles with
+            GroupAliases = Map["0b3e-finance", "finance"]
+    }
+
+    testList "Phase 987 — role and group claims (ClaimMapping)" [
+        testCase "roles and groups become Roles; a group alias renames, an unaliased id is kept"
+        <| fun _ ->
+            Expect.equal
+                (rolesOf groupsAliased """{"roles":["editor","reader"],"groups":["0b3e-finance","77aa"]}""")
+                (Ok [ "editor"; "reader"; "finance"; "77aa" ])
+                "both claims, aliases applied"
+
+        testCase "a single-string claim is one role; an absent claim is none"
+        <| fun _ ->
+            Expect.equal (rolesOf ClaimMapping.directoryRoles """{"roles":"editor"}""") (Ok [ "editor" ]) "string"
+            Expect.equal (rolesOf ClaimMapping.directoryRoles """{"sub":"u"}""") (Ok []) "absent"
+
+        testCase "a mapping that names no role claim maps none, whatever the token carries"
+        <| fun _ ->
+            let idOnly = {
+                ClaimMapping.none with
+                    TenantIdClaim = Some "tid"
+            }
+
+            Expect.equal (rolesOf idOnly """{"tid":"t1","roles":["editor"]}""") (Ok []) "roles ignored"
+
+        testCase "malformed role claims fail closed, naming the claim"
+        <| fun _ ->
+            for payload, claim in
+                [
+                    """{"roles":42}""", "roles"
+                    """{"roles":{"x":1}}""", "roles"
+                    """{"roles":["editor",7]}""", "roles"
+                    """{"roles":["editor",""]}""", "roles"
+                    """{"roles":"   "}""", "roles"
+                    """{"roles":null}""", "roles"
+                    """{"groups":[true]}""", "groups"
+                ] do
+                Expect.equal (rolesOf ClaimMapping.directoryRoles payload) (Error claim) payload
+
+        testCase "a group overage is refused, never read as 'no groups'"
+        <| fun _ ->
+            let payload =
+                """{"roles":["editor"],"_claim_names":{"groups":"src1"},"_claim_sources":{"src1":{"endpoint":"https://graph.example/x"}}}"""
+
+            match mapWith ClaimMapping.directoryRoles payload with
+            | Error(claim, reason) ->
+                Expect.equal claim "groups" "the overage claim is named"
+                Expect.stringContains reason "overage" "the reason says why"
+            | Ok u -> failtestf "an overage must not map; got roles %A" u.Roles
+
+        testCase "the overage check applies to the claim that is named, not to every claim"
+        <| fun _ ->
+            let rolesOnly = {
+                ClaimMapping.none with
+                    RolesClaim = Some "roles"
+            }
+
+            Expect.equal
+                (rolesOf rolesOnly """{"roles":["editor"],"_claim_names":{"groups":"src1"}}""")
+                (Ok [ "editor" ])
+                "groups is not mapped here, so its overage is not this mapping's concern"
+
+        testCase "admission — AllowedTenants admits a listed tenant and refuses others"
+        <| fun _ ->
+            let gate = {
+                ClaimMapping.none with
+                    TenantIdClaim = Some "tid"
+                    AllowedTenants = [ "t-ours" ]
+            }
+
+            let admit payload =
+                mapWith gate payload
+                |> Result.mapError fst
+                |> Result.bind (ToolUp.AuthProviders.OidcAuthProvider.applyAdmission gate >> Result.mapError id)
+                |> Result.isOk
+
+            Expect.isTrue (admit """{"tid":"t-ours"}""") "listed tenant admitted"
+            Expect.isFalse (admit """{"tid":"t-theirs"}""") "other tenant refused"
+
+        testCase "admission — AllowedTenants without TenantIdClaim refuses every principal"
+        <| fun _ ->
+            let gate = {
+                ClaimMapping.none with
+                    AllowedTenants = [ "t-ours" ]
+            }
+
+            let user = {
+                AuthenticatedUser.anonymous with
+                    UserId = "u"
+                    TenantId = None
+            }
+
+            match ToolUp.AuthProviders.OidcAuthProvider.applyAdmission gate user with
+            | Error reason -> Expect.stringContains reason "TenantIdClaim" "the misconfiguration is named"
+            | Ok _ -> failtest "no tenant can be read, so nobody is admitted"
+
+        testCase "admission — RequiredRoles admits a holder of any listed role, after aliasing"
+        <| fun _ ->
+            let gate = {
+                groupsAliased with
+                    RequiredRoles = [ "finance"; "auditor" ]
+            }
+
+            let admit payload =
+                match mapWith gate payload with
+                | Ok u -> ToolUp.AuthProviders.OidcAuthProvider.applyAdmission gate u |> Result.isOk
+                | Error _ -> false
+
+            Expect.isTrue (admit """{"groups":["0b3e-finance"]}""") "aliased group satisfies the gate"
+            Expect.isFalse (admit """{"roles":["editor"]}""") "a holder of no listed role is refused"
+            Expect.isFalse (admit """{"sub":"u"}""") "a principal with no roles is refused"
+
+        testCase "TokenRoles ride only on a signed-in human principal"
+        <| fun _ ->
+            let roles = [ "editor"; "editor"; "reader" ]
+
+            Expect.equal
+                (AccessContext.tokenRolesFor (AuthenticatedUser "u") roles)
+                [ "editor"; "reader" ]
+                "authenticated user, de-duplicated"
+
+            Expect.equal (AccessContext.tokenRolesFor (TeamMember("u", "t")) roles) [ "editor"; "reader" ] "team member"
+            Expect.equal (AccessContext.tokenRolesFor (AnonymousSession "s") roles) [] "anonymous session"
+
+        testCase "a token role admits a ScopeGated page and grants no module permission"
+        <| fun _ ->
+            let directoryEditor = { user with TokenRoles = [ "editor" ] }
+
+            Expect.equal
+                (AudienceGate.evaluate directoryEditor (PageAudience.ScopeGated [ "editor" ]))
+                AudienceDecision.Allow
+                "the directory role satisfies the page"
+
+            Expect.equal
+                (AudienceGate.evaluate directoryEditor (PageAudience.ScopeGated [ "finance" ]))
+                AudienceDecision.Forbidden
+                "a role the principal does not hold is refused"
+
+            Expect.equal
+                (AudienceGate.evaluate { user with TokenRoles = [ "Editor" ] } (PageAudience.ScopeGated [ "editor" ]))
+                AudienceDecision.Forbidden
+                "roles compare exactly, as the IdP issued them"
+
+            // The module-RBAC reading is untouched: an empty permission map is
+            // still unrestricted for modules (GP 11), and a token role adds no
+            // permission entry.
+            Expect.isTrue directoryEditor.ModulePermissions.IsEmpty "no module permission was granted"
+    ]
+
+// ─── 6b. the composed pipeline, with the mock OIDC issuer ────────────
+
+/// One mock issuer for the whole section — Kestrel on a loopback port.
+let private issuer =
+    lazy (MockOidcServer.start MockOidcServer.MockOidcConfig.defaults)
+
+let private oidcProviderWith (mapping: ClaimMapping) : IAuthProvider =
+    let s = issuer.Force()
+
+    ToolUp.AuthProviders.OidcAuthProvider.fromConfigWith (new HttpClient()) None {
+        Issuer = Some s.IssuerUrl
+        Audience = None
+        KeySource = JwksDiscovery s.IssuerUrl
+        TokenLocation = BearerOrCookie AuthSession.CookieName
+        ClockSkewSeconds = None
+        AcceptedAlgorithms = None
+        PreferOidWhenPresent = None
+        ClaimMapping = Some mapping
+    }
+
+let private directoryMapping = {
+    ClaimMapping.directoryRoles with
+        GroupAliases = Map["0b3e-finance", "finance"]
+}
+
+/// A request to `path` carrying `token` (if any) as a bearer, optionally
+/// as a browser page navigation (`Accept: text/html`).
+let private sendToken (client: HttpClient) (token: string option) (navigation: bool) (path: string) = async {
+    use request = new HttpRequestMessage(HttpMethod.Get, path)
+
+    token
+    |> Option.iter (fun t -> request.Headers.Add("Authorization", "Bearer " + t))
+
+    if navigation then
+        request.Headers.Add("Accept", "text/html")
+
+    use! response = client.SendAsync request |> Async.AwaitTask
+    let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+
+    let location =
+        match response.Headers.Location with
+        | null -> None
+        | l -> Some(string l)
+
+    return int response.StatusCode, body, location
+}
+
+let private directoryPipelineTests =
+    testList "Phase 987 — directory roles through the composed pipeline" [
+        testCaseAsync "no token → 401; a non-member with the matching role → 200; wrong role → 403; no role → 403"
+        <| async {
+            let s = issuer.Force()
+            use! host = startHostWith authenticatedSurface (oidcProviderWith directoryMapping) ignore []
+            use client = host.GetTestClient()
+
+            let token sub (claims: (string * obj) list) = Some(s.MintTokenFor(sub, claims))
+
+            let cells = [
+                // no token at all
+                "no token", None, "/editors", 401
+                "no token", None, "/open", 200
+                // zoe: in no team, holds `editor` in the directory only
+                "zoe editor", token "zoe" [ "roles", box [| "editor" |] ], "/editors", 200
+                "zoe editor", token "zoe" [ "roles", box [| "editor" |] ], "/members", 200
+                // yuri: signed in, wrong role
+                "yuri viewer", token "yuri" [ "roles", box [| "viewer" |] ], "/editors", 403
+                // erin: team member with no permissions configured, no roles
+                "erin none", token "erin" [], "/editors", 403
+                // a group, aliased to the role the page names
+                "xavi group", token "xavi" [ "groups", box [| "0b3e-finance"; "editor" |] ], "/editors", 200
+                // a malformed role claim rejects the token: 401, not a silent 403
+                "wanda malformed", token "wanda" [ "roles", box 42 ], "/editors", 401
+                // carol's module permission still admits her without a token role
+                "carol rbac", token "carol" [], "/editors", 200
+            ]
+
+            let! results =
+                cells
+                |> List.map (fun (label, tok, path, expected) -> async {
+                    let! status, body, _ = sendToken client tok false path
+                    return label, path, expected, status, body
+                })
+                |> Async.Sequential
+
+            do! host.StopAsync() |> Async.AwaitTask
+
+            let mismatches =
+                results
+                |> Array.choose (fun (label, path, expected, status, _) ->
+                    if status <> expected then
+                        Some $"{label} GET {path}: expected {expected}, got {status}"
+                    else
+                        None)
+
+            Expect.isEmpty mismatches ("mismatched: " + String.concat "; " mismatches)
+
+            for label, path, _, status, body in results do
+                if status = 401 || status = 403 then
+                    Expect.isFalse
+                        (body.Contains "Title-")
+                        $"{label} GET {path}: a refused page carries no page content"
+                elif status = 200 then
+                    // The falsifier for the line above: a served page does
+                    // carry the marker.
+                    Expect.stringContains body "Title-" $"{label} GET {path}: a served page carries its content"
+        }
+
+        testCaseAsync "a directory role change changes access on the next token, with no change in the app"
+        <| async {
+            let s = issuer.Force()
+            use! host = startHostWith authenticatedSurface (oidcProviderWith directoryMapping) ignore []
+            use client = host.GetTestClient()
+
+            let! before, _, _ = sendToken client (Some(s.MintTokenFor("vic", []))) false "/editors"
+
+            let! granted, _, _ =
+                sendToken client (Some(s.MintTokenFor("vic", [ "roles", box [| "editor" |] ]))) false "/editors"
+
+            let! removed, _, _ = sendToken client (Some(s.MintTokenFor("vic", [ "roles", box [||] ]))) false "/editors"
+            do! host.StopAsync() |> Async.AwaitTask
+
+            Expect.equal (before, granted, removed) (403, 200, 403) "granted, then removed, in the directory"
+        }
+
+        testCaseAsync "with an InteractiveSignIn registered, a credential-less navigation is redirected — and only that"
+        <| async {
+            let s = issuer.Force()
+
+            let register (services: IServiceCollection) =
+                services.AddSingleton<InteractiveSignIn>({ SignInPath = "/auth/sign-in" })
+                |> ignore
+
+            use! host = startHostWith authenticatedSurface (oidcProviderWith directoryMapping) register []
+            use client = host.GetTestClient()
+
+            let! navStatus, _, navLocation = sendToken client None true "/editors?tab=q3"
+            let! fetchStatus, _, _ = sendToken client None false "/editors"
+
+            let! wrongRole, _, wrongLocation =
+                sendToken client (Some(s.MintTokenFor("yuri", [ "roles", box [| "viewer" |] ]))) true "/editors"
+
+            do! host.StopAsync() |> Async.AwaitTask
+
+            Expect.equal navStatus 302 "a browser navigation is sent to sign in"
+
+            Expect.equal
+                navLocation
+                (Some "/auth/sign-in?returnUrl=%2Feditors%3Ftab%3Dq3")
+                "to the sign-in route, carrying the page and its query"
+
+            Expect.equal fetchStatus 401 "a non-navigation request keeps the bare 401"
+            Expect.equal wrongRole 403 "a signed-in principal who is refused is never redirected"
+            Expect.isNone wrongLocation "no redirect on 403"
+        }
+    ]
+
+// ─── 6c. interactive sign-in, end to end ─────────────────────────────
+
+/// The value of the `name` cookie a response sets, with its attributes.
+let private setCookie (response: HttpResponseMessage) (name: string) : string option =
+    match response.Headers.TryGetValues "Set-Cookie" with
+    | true, values -> values |> Seq.tryFind (fun v -> v.StartsWith(name + "="))
+    | _ -> None
+
+let private cookieValue (header: string) =
+    let pair = header.Split(';')[0]
+    pair.Substring(pair.IndexOf '=' + 1)
+
+let private signInTests =
+    testList "Phase 987 — interactive SSR sign-in (authorization code + PKCE)" [
+        testCaseAsync "a link opened cold signs the reader in and returns them to the page"
+        <| async {
+            let s = issuer.Force()
+
+            let signInConfig =
+                ToolUp.AuthProviders.OidcSsrSignIn.defaults
+                    $"{s.IssuerUrl}/authorize"
+                    $"{s.IssuerUrl}/token"
+                    "gated-ssr-client"
+                    "http://localhost/auth/callback"
+
+            let register (services: IServiceCollection) =
+                ToolUp.AuthProviders.OidcSsrSignIn.register services signInConfig |> ignore
+
+            let routes = [ ToolUp.AuthProviders.OidcSsrSignIn.routes (new HttpClient()) signInConfig ]
+
+            use! host = startHostWith authenticatedSurface (oidcProviderWith directoryMapping) register routes
+            use client = host.GetTestClient()
+
+            use idp = new HttpClient(new HttpClientHandler(AllowAutoRedirect = false))
+
+            let get (path: string) (cookies: (string * string) list) = async {
+                use request = new HttpRequestMessage(HttpMethod.Get, path)
+                request.Headers.Add("Accept", "text/html")
+
+                if not cookies.IsEmpty then
+                    request.Headers.Add("Cookie", cookies |> List.map (fun (k, v) -> $"{k}={v}") |> String.concat "; ")
+
+                let! response = client.SendAsync request |> Async.AwaitTask
+                return response
+            }
+
+            // The directory says zoe holds `editor`.
+            s.SetSignInIdentity("zoe", [ "roles", box [| "editor" |] ])
+
+            // 1. the page sends a cold browser to sign in
+            use! page = get "/editors" []
+            Expect.equal (int page.StatusCode) 302 "redirected to sign in"
+            let signInPath = string page.Headers.Location
+
+            // 2. the sign-in route seals its state and goes to the IdP
+            use! start = get signInPath []
+            Expect.equal (int start.StatusCode) 302 "redirected to the IdP"
+            let authorize = string start.Headers.Location
+            Expect.stringStarts authorize $"{s.IssuerUrl}/authorize?" "to the authorization endpoint"
+            Expect.stringContains authorize "code_challenge_method=S256" "with a PKCE challenge"
+
+            let stateCookie =
+                setCookie start ToolUp.AuthProviders.OidcSsrSignIn.StateCookieName
+                |> Option.defaultWith (fun () -> failtest "the sign-in state cookie is set")
+
+            Expect.stringContains (stateCookie.ToLowerInvariant()) "httponly" "the state cookie is HttpOnly"
+
+            Expect.stringContains
+                (stateCookie.ToLowerInvariant())
+                "samesite=lax"
+                "and Lax, so the IdP's return carries it"
+
+            // 3. the IdP authenticates and redirects back with a code
+            use! fromIdp = idp.GetAsync authorize |> Async.AwaitTask
+            let callback = Uri(string fromIdp.Headers.Location)
+            Expect.equal callback.AbsolutePath "/auth/callback" "back to the callback"
+
+            // 4. the callback exchanges the code and sets the session
+            use! landed =
+                get callback.PathAndQuery [
+                    ToolUp.AuthProviders.OidcSsrSignIn.StateCookieName, cookieValue stateCookie
+                ]
+
+            Expect.equal (int landed.StatusCode) 302 "signed in"
+            Expect.equal (string landed.Headers.Location) "/editors" "returned to the page that was asked for"
+
+            let session =
+                setCookie landed AuthSession.CookieName
+                |> Option.defaultWith (fun () -> failtest "the session cookie is set")
+
+            let lower = session.ToLowerInvariant()
+            Expect.stringContains lower "httponly" "the session cookie is HttpOnly"
+            Expect.stringContains lower "samesite=lax" "and SameSite=Lax"
+
+            // 5. the page is now served
+            use! reread = get "/editors" [ AuthSession.CookieName, cookieValue session ]
+            let! body = reread.Content.ReadAsStringAsync() |> Async.AwaitTask
+            do! host.StopAsync() |> Async.AwaitTask
+
+            Expect.equal (int reread.StatusCode) 200 "the signed-in reader holds the role"
+            Expect.stringContains body "Title-editors" "and receives the page"
+        }
+
+        testCaseAsync "a signed-in reader without the role lands on 403, not back in the sign-in"
+        <| async {
+            let s = issuer.Force()
+
+            let signInConfig =
+                ToolUp.AuthProviders.OidcSsrSignIn.defaults
+                    $"{s.IssuerUrl}/authorize"
+                    $"{s.IssuerUrl}/token"
+                    "gated-ssr-client"
+                    "http://localhost/auth/callback"
+
+            let register (services: IServiceCollection) =
+                ToolUp.AuthProviders.OidcSsrSignIn.register services signInConfig |> ignore
+
+            let routes = [ ToolUp.AuthProviders.OidcSsrSignIn.routes (new HttpClient()) signInConfig ]
+            use! host = startHostWith authenticatedSurface (oidcProviderWith directoryMapping) register routes
+            use client = host.GetTestClient()
+            use idp = new HttpClient(new HttpClientHandler(AllowAutoRedirect = false))
+            s.SetSignInIdentity("yuri", [ "roles", box [| "viewer" |] ])
+
+            use! start = client.GetAsync "/auth/sign-in?returnUrl=%2Feditors" |> Async.AwaitTask
+
+            let stateCookie =
+                setCookie start ToolUp.AuthProviders.OidcSsrSignIn.StateCookieName |> Option.get
+
+            use! fromIdp = idp.GetAsync(string start.Headers.Location) |> Async.AwaitTask
+            let callback = Uri(string fromIdp.Headers.Location)
+
+            use callbackRequest = new HttpRequestMessage(HttpMethod.Get, callback.PathAndQuery)
+
+            callbackRequest.Headers.Add(
+                "Cookie",
+                $"{ToolUp.AuthProviders.OidcSsrSignIn.StateCookieName}={cookieValue stateCookie}"
+            )
+
+            use! landed = client.SendAsync callbackRequest |> Async.AwaitTask
+            let session = setCookie landed AuthSession.CookieName |> Option.get
+
+            use pageRequest = new HttpRequestMessage(HttpMethod.Get, "/editors")
+            pageRequest.Headers.Add("Accept", "text/html")
+            pageRequest.Headers.Add("Cookie", $"{AuthSession.CookieName}={cookieValue session}")
+            use! page = client.SendAsync pageRequest |> Async.AwaitTask
+            do! host.StopAsync() |> Async.AwaitTask
+
+            Expect.equal (int page.StatusCode) 403 "refused, and not redirected"
+            Expect.isNull page.Headers.Location "no redirect"
+        }
+
+        testCaseAsync "a forged state, a missing state cookie and a foreign return URL are refused"
+        <| async {
+            let s = issuer.Force()
+
+            let signInConfig =
+                ToolUp.AuthProviders.OidcSsrSignIn.defaults
+                    $"{s.IssuerUrl}/authorize"
+                    $"{s.IssuerUrl}/token"
+                    "gated-ssr-client"
+                    "http://localhost/auth/callback"
+
+            let routes = [ ToolUp.AuthProviders.OidcSsrSignIn.routes (new HttpClient()) signInConfig ]
+            use! host = startHostWith authenticatedSurface (oidcProviderWith directoryMapping) ignore routes
+            use client = host.GetTestClient()
+            use idp = new HttpClient(new HttpClientHandler(AllowAutoRedirect = false))
+            s.SetSignInIdentity("zoe", [ "roles", box [| "editor" |] ])
+
+            // An open-redirect attempt is replaced by `/`.
+            use! start =
+                client.GetAsync "/auth/sign-in?returnUrl=%2F%2Fevil.example%2Fx"
+                |> Async.AwaitTask
+
+            let stateCookie =
+                setCookie start ToolUp.AuthProviders.OidcSsrSignIn.StateCookieName |> Option.get
+
+            use! fromIdp = idp.GetAsync(string start.Headers.Location) |> Async.AwaitTask
+            let callback = Uri(string fromIdp.Headers.Location)
+
+            let callbackWith (pathAndQuery: string) (cookie: string option) = async {
+                use request = new HttpRequestMessage(HttpMethod.Get, pathAndQuery)
+
+                cookie
+                |> Option.iter (fun c ->
+                    request.Headers.Add("Cookie", $"{ToolUp.AuthProviders.OidcSsrSignIn.StateCookieName}={c}"))
+
+                let! response = client.SendAsync request |> Async.AwaitTask
+                return response
+            }
+
+            let forged = callback.PathAndQuery.Replace("state=", "state=forged")
+
+            use! forgedResponse = callbackWith forged (Some(cookieValue stateCookie))
+            use! noCookie = callbackWith callback.PathAndQuery None
+            use! good = callbackWith callback.PathAndQuery (Some(cookieValue stateCookie))
+            do! host.StopAsync() |> Async.AwaitTask
+
+            Expect.equal (int forgedResponse.StatusCode) 400 "a state that does not match is refused"
+            Expect.isNone (setCookie forgedResponse AuthSession.CookieName) "and sets no session"
+            Expect.equal (int noCookie.StatusCode) 400 "a callback with no sealed state is refused"
+            Expect.isNone (setCookie noCookie AuthSession.CookieName) "and sets no session"
+            Expect.equal (int good.StatusCode) 302 "the genuine callback signs in"
+            Expect.equal (string good.Headers.Location) "/" "to `/`, not to the foreign return URL"
+        }
+    ]
+
 let tests =
-    testList "GatedSsr (Phase 86)" [ parseTests; gateTests; handlerTests; exclusionTests; pipelineTests ]
+    testList "GatedSsr (Phase 86)" [
+        parseTests
+        gateTests
+        handlerTests
+        exclusionTests
+        pipelineTests
+        claimMappingTests
+        directoryPipelineTests
+        signInTests
+    ]

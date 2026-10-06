@@ -52,6 +52,16 @@ type AccessContext = {
     /// PlatformAdmin` unlocks deployment-wide admin operations gated
     /// by `canModifyPlatformConfig`.
     PlatformRole: PlatformRole option
+    /// Phase 987 — roles the identity provider asserted for this principal
+    /// (`AuthenticatedUser.Roles`: for the OIDC provider, the token's role
+    /// and group claims as `AuthConfig.ClaimMapping` maps them). Carried
+    /// for `AuthenticatedUser` and `TeamMember` subjects only; empty for an
+    /// anonymous session or a share-token bearer, and empty when no
+    /// mapping is configured. Read by audience-gated pages (`ScopeGated`)
+    /// alongside `ModulePermissions`. Deliberately NOT read by
+    /// `canAccessModule` / `hasPermission`: module RBAC stays SDK-owned, so
+    /// a directory role grants page access, never module permissions.
+    TokenRoles: string list
 }
 
 module AccessContext =
@@ -88,7 +98,20 @@ module AccessContext =
         ModulePermissions = Map.empty
         ModuleExposure = Map.empty
         PlatformRole = None
+        TokenRoles = []
     }
+
+    /// Phase 987 — the `TokenRoles` a context for `subject` carries, given
+    /// the roles its identity provider asserted (`AuthenticatedUser.Roles`):
+    /// those roles, de-duplicated, for a signed-in human principal
+    /// (`AuthenticatedUser` / `TeamMember`); none for an anonymous session
+    /// or a share-token bearer, whose identity no provider asserted. The
+    /// one rule every context builder applies.
+    let tokenRolesFor (subject: Subject) (providerRoles: string list) : string list =
+        match subject with
+        | Subject.AuthenticatedUser _
+        | Subject.TeamMember _ -> List.distinct providerRoles
+        | _ -> []
 
     /// True when the subject is `AnonymousSession`. Convenience for
     /// migration of old `match ctx.Mode with | Anonymous -> ...` code.

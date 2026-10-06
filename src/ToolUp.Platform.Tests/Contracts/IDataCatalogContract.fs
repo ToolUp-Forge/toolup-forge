@@ -534,6 +534,7 @@ let tests (name: string) (factory: (string * DataType) list * IDataObjectStore -
                 TeamId = Some "team-x"
                 Subject = TeamMember("partner-x", "team-x")
                 ModulePermissions = Map.ofList [ "Sales", [ ModulePermission.SchemaOnly ] ]
+                TokenRoles = []
                 ModuleExposure = Map.empty
                 PlatformRole = None
             }
@@ -548,6 +549,7 @@ let tests (name: string) (factory: (string * DataType) list * IDataObjectStore -
                 TeamId = Some "t"
                 Subject = TeamMember("u", "t")
                 ModulePermissions = Map.ofList [ "Sales", [ ModulePermission.SchemaOnly; ModulePermission.Read ] ]
+                TokenRoles = []
                 ModuleExposure = Map.empty
                 PlatformRole = None
             }
@@ -562,6 +564,7 @@ let tests (name: string) (factory: (string * DataType) list * IDataObjectStore -
                 TeamId = Some "t"
                 Subject = TeamMember("u", "t")
                 ModulePermissions = Map.ofList [ "Sales", [ ModulePermission.Read ] ]
+                TokenRoles = []
                 ModuleExposure = Map.empty
                 PlatformRole = None
             }

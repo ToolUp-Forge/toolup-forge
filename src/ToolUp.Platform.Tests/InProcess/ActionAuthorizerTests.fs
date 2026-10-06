@@ -26,6 +26,7 @@ let private teamCtx (userId: string) (teamId: string) : AccessContext = {
     TeamId = Some teamId
     Subject = TeamMember(userId, teamId)
     ModulePermissions = Map.empty
+    TokenRoles = []
     ModuleExposure = Map.empty
     PlatformRole = None
 }
@@ -35,6 +36,7 @@ let private userCtx (userId: string) (perms: Map<string, ModulePermission list>)
     TeamId = None
     Subject = AuthenticatedUser userId
     ModulePermissions = perms
+    TokenRoles = []
     ModuleExposure = Map.empty
     PlatformRole = None
 }

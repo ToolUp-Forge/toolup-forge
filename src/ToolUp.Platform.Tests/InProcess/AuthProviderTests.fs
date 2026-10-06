@@ -1582,6 +1582,11 @@ let private fromEnvTests =
                             (Some {
                                 UserIdClaim = Some "oid"
                                 TenantIdClaim = Some "tid"
+                                RolesClaim = None
+                                GroupsClaim = None
+                                GroupAliases = Map.empty
+                                AllowedTenants = []
+                                RequiredRoles = []
                             })
                             "both variables reach AuthConfig.ClaimMapping")
 
@@ -1600,6 +1605,11 @@ let private fromEnvTests =
                             (Some {
                                 UserIdClaim = Some "oid"
                                 TenantIdClaim = None
+                                RolesClaim = None
+                                GroupsClaim = None
+                                GroupAliases = Map.empty
+                                AllowedTenants = []
+                                RequiredRoles = []
                             })
                             "a UserId-only mapping is a legitimate configuration")
 
@@ -1636,6 +1646,11 @@ let private fromEnvTests =
                             (Some {
                                 UserIdClaim = Some "oid"
                                 TenantIdClaim = None
+                                RolesClaim = None
+                                GroupsClaim = None
+                                GroupAliases = Map.empty
+                                AllowedTenants = []
+                                RequiredRoles = []
                             })
                             "surrounding whitespace in an env value never reaches the claim lookup")
         ]
@@ -1828,6 +1843,11 @@ module private ClaimMappingFixture =
     let entraShaped: ClaimMapping = {
         UserIdClaim = Some "oid"
         TenantIdClaim = Some "tid"
+        RolesClaim = None
+        GroupsClaim = None
+        GroupAliases = Map.empty
+        AllowedTenants = []
+        RequiredRoles = []
     }
 
     let seamMapped (mapping: ClaimMapping) (claims: (string * string) list) =
@@ -1933,6 +1953,11 @@ let private oidcClaimMappingTests =
                     (Some {
                         UserIdClaim = Some "oid"
                         TenantIdClaim = Some "tid"
+                        RolesClaim = None
+                        GroupsClaim = None
+                        GroupAliases = Map.empty
+                        AllowedTenants = []
+                        RequiredRoles = []
                     })
 
             let token =
@@ -1965,6 +1990,11 @@ let private oidcClaimMappingTests =
                     (Some {
                         UserIdClaim = Some "sub"
                         TenantIdClaim = None
+                        RolesClaim = None
+                        GroupsClaim = None
+                        GroupAliases = Map.empty
+                        AllowedTenants = []
+                        RequiredRoles = []
                     })
 
             let token = OidcFixture.mintRs256 key [ "sub", box "alice"; "exp", futureExp () ]
@@ -1990,6 +2020,11 @@ let private oidcClaimMappingTests =
                     (Some {
                         UserIdClaim = Some "oid"
                         TenantIdClaim = None
+                        RolesClaim = None
+                        GroupsClaim = None
+                        GroupAliases = Map.empty
+                        AllowedTenants = []
+                        RequiredRoles = []
                     })
 
             let token = OidcFixture.mintRs256 key [ "sub", box "alice"; "exp", futureExp () ]
@@ -2021,6 +2056,11 @@ let private oidcClaimMappingTests =
                     (Some {
                         UserIdClaim = Some "oid"
                         TenantIdClaim = None
+                        RolesClaim = None
+                        GroupsClaim = None
+                        GroupAliases = Map.empty
+                        AllowedTenants = []
+                        RequiredRoles = []
                     })
 
             let token = OidcFixture.mintRs256 key [ "sub", box "alice"; "exp", futureExp () ]
@@ -2036,6 +2076,11 @@ let private oidcClaimMappingTests =
             let mapping = {
                 UserIdClaim = Some "oid"
                 TenantIdClaim = None
+                RolesClaim = None
+                GroupsClaim = None
+                GroupAliases = Map.empty
+                AllowedTenants = []
+                RequiredRoles = []
             }
 
             let cases = [
@@ -2068,6 +2113,11 @@ let private oidcClaimMappingTests =
                     {
                         UserIdClaim = Some "oid"
                         TenantIdClaim = None
+                        RolesClaim = None
+                        GroupsClaim = None
+                        GroupAliases = Map.empty
+                        AllowedTenants = []
+                        RequiredRoles = []
                     }
                     [ "oid", "" ]
             with
@@ -2092,6 +2142,11 @@ let private oidcClaimMappingTests =
                         {
                             UserIdClaim = Some "oid"
                             TenantIdClaim = None
+                            RolesClaim = None
+                            GroupsClaim = None
+                            GroupAliases = Map.empty
+                            AllowedTenants = []
+                            RequiredRoles = []
                         }
                         [ "oid", value ]
                 with
@@ -2109,6 +2164,11 @@ let private oidcClaimMappingTests =
                         {
                             UserIdClaim = Some "oid"
                             TenantIdClaim = Some "tid"
+                            RolesClaim = None
+                            GroupsClaim = None
+                            GroupAliases = Map.empty
+                            AllowedTenants = []
+                            RequiredRoles = []
                         }
                         [ "oid", value; "tid", value ]
                 with
@@ -2201,6 +2261,11 @@ let private oidcClaimMappingTests =
                         {
                             UserIdClaim = Some "oid"
                             TenantIdClaim = None
+                            RolesClaim = None
+                            GroupsClaim = None
+                            GroupAliases = Map.empty
+                            AllowedTenants = []
+                            RequiredRoles = []
                         }
                         claims
                 with
@@ -2224,6 +2289,11 @@ let private oidcClaimMappingTests =
                         {
                             UserIdClaim = Some "oid"
                             TenantIdClaim = None
+                            RolesClaim = None
+                            GroupsClaim = None
+                            GroupAliases = Map.empty
+                            AllowedTenants = []
+                            RequiredRoles = []
                         }
                         [ "oid", value ]
                 with

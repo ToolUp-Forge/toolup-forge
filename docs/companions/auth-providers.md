@@ -137,8 +137,9 @@ let authConfig: AuthConfig = {
     PreferOidWhenPresent = None
     ClaimMapping =
         Some {
-            UserIdClaim = Some "oid"    // -> AuthenticatedUser.UserId
-            TenantIdClaim = Some "tid"  // -> AuthenticatedUser.TenantId
+            ClaimMapping.none with
+                UserIdClaim = Some "oid"    // -> AuthenticatedUser.UserId
+                TenantIdClaim = Some "tid"  // -> AuthenticatedUser.TenantId
         }
 }
 ```
@@ -161,6 +162,8 @@ Either field may be set alone. `ClaimMapping = None` (the default, and what both
 *Turning it on renames every existing identity.* `UserId` is the key for RBAC entries, `TOOLUP_INITIAL_PLATFORM_ADMIN` matching, audit records, and (through the storage-scope resolver) the container every scoped read and write lands in. A deployment that switches from `sub` to `oid` will see previously-known users as new ones, with no data. Plan it as an identity migration, not a config tweak. The `oidc-claim-mapping-advisory` config validator announces an active mapping in the startup preflight summary for this reason — it is a `Warning`, never a refusal; the configuration is supported.
 
 **Relationship to `PreferOidWhenPresent`.** That flag is a single-IdP convenience with *fallback* semantics: it prefers `oid` and falls back to `sub` when absent, and `AuthProvider.fromEnv` auto-enables it for `login.microsoftonline.com` / `ciamlogin.com` issuers. `ClaimMapping` is the generic form and is fail-closed. When both are set, `ClaimMapping.UserIdClaim` wins — it is the explicit operator instruction and the stricter of the two. They resolve identically for a token that carries `oid`, and differ only for one that does not.
+
+**Role and group claims (Phase 987).** `ClaimMapping.RolesClaim` / `GroupsClaim` (`TOOLUP_OIDC_ROLES_CLAIM` / `TOOLUP_OIDC_GROUPS_CLAIM`; `ClaimMapping.directoryRoles` names the conventional `roles` and `groups`) project the IdP's role and group claims onto `AuthenticatedUser.Roles`, renaming group ids through `GroupAliases`. `AllowedTenants` and `RequiredRoles` form an optional admission gate. The roles reach `AccessContext.TokenRoles`, which audience-gated pages read — module RBAC stays SDK-owned. Malformed role claims and a group overage reject the token rather than reading as "no roles". The worked example, including interactive sign-in for server-rendered pages, is [Gated SSR — identity-provider groups](../platform/gated-ssr.md#readers-governed-by-the-identity-providers-groups).
 
 #### Wiring `IMetricsSink`
 
@@ -572,7 +575,7 @@ let entraCustomDomainCfg =
 
 Two further pieces of External-ID behaviour are configured on top of the preset rather than baked into it, because neither is a provider property:
 
-- **`oid` -> `UserId` / `tid` -> `TenantId` claim mapping.** External ID's `oid` is constant per user per tenant where `sub` varies per app registration, so most deployments want it. Set `AuthConfig.ClaimMapping = Some { UserIdClaim = Some "oid"; TenantIdClaim = Some "tid" }` on the server provider — see [Claim mapping](#claim-mapping-mapping-a-non-sub-identity), and note it is **fail-closed**: a validated token that does not carry the named claim is rejected rather than silently resolving a different identity.
+- **`oid` -> `UserId` / `tid` -> `TenantId` claim mapping.** External ID's `oid` is constant per user per tenant where `sub` varies per app registration, so most deployments want it. Set `AuthConfig.ClaimMapping = Some { ClaimMapping.none with UserIdClaim = Some "oid"; TenantIdClaim = Some "tid" }` on the server provider — see [Claim mapping](#claim-mapping-mapping-a-non-sub-identity), and note it is **fail-closed**: a validated token that does not carry the named claim is rejected rather than silently resolving a different identity.
 - **The sign-up user flow.** `OidcPresets.withEntraSignUpUserFlow "<policyId>"` adds the "Sign up" button beside "Sign in" and routes it through that policy — see [Secondary flow](#secondary-flow--the-sign-up-affordance).
 
 > **Removed in 0.23.0 — the `ToolUp.AuthProviders.EntraExternalId` and `ToolUp.AuthProviders.EntraExternalId.Client` companions.** Both were soft-deprecated at 0.4.0 in favour of the preset path above, and the two capabilities that kept them alive — the claim remapping and the dual-button sign-up affordance — are now substrate. The migration is mechanical and needs no Entra-side configuration change: [`docs/migrations/0.23.0-entra-external-id-removal.md`](../migrations/0.23.0-entra-external-id-removal.md). One capability did **not** move: routing the *primary* "Sign in" button through its own user-flow policy (the old `SignInPolicyId`) has no generic equivalent, because the secondary-flow slot is by definition a second journey and the primary flow carries no extras. A deployment that relies on it needs a `CustomAuthUI` wrapper of its own.

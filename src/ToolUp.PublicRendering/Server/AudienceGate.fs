@@ -14,7 +14,9 @@ open ToolUp.Platform
 //
 // No new auth machinery (GP — "reuse the surface that gates module
 // routes"): role checks read the same `AccessContext.ModulePermissions`
-// map the SDK's per-module RBAC reads, and client-portal scoping goes
+// map the SDK's per-module RBAC reads (plus, since Phase 987, the roles
+// the identity provider asserted, `AccessContext.TokenRoles`), and
+// client-portal scoping goes
 // through the principal's own resolved scope ids — a principal can only
 // satisfy a `ClientGated` page whose relationship is structurally its own
 // (GP 4). Platform admins bypass both gates.
@@ -54,10 +56,18 @@ module AudienceGate =
     /// restricted the page, and a principal with no configured permissions
     /// has been granted none of those roles. An empty map therefore holds
     /// no role.
+    ///
+    /// Phase 987 — OR the identity provider asserted the role:
+    /// `AccessContext.TokenRoles` (the token's role and group claims, as
+    /// the deployment's `ClaimMapping` maps them). So a page can be
+    /// restricted to a group in the organisation's directory, and read by
+    /// its members without their being app users or team members. The
+    /// comparison is exact (ordinal, case-sensitive), as the IdP issues it.
     let private holdsRole (ctx: AccessContext) (role: string) : bool =
-        ctx.ModulePermissions
-        |> Map.tryFind role
-        |> Option.exists (fun perms -> not (List.isEmpty perms))
+        (ctx.ModulePermissions
+         |> Map.tryFind role
+         |> Option.exists (fun perms -> not (List.isEmpty perms)))
+        || List.contains role ctx.TokenRoles
 
     /// Pure authorization decision for a page audience against a resolved
     /// `AccessContext`.
@@ -69,7 +79,8 @@ module AudienceGate =
     ///   platform admin → `Allow`; an empty role list → `Allow` (gated to
     ///   "any authenticated"); otherwise `Allow` iff the principal holds
     ///   one of the roles — a `ModulePermissions` entry of that name with
-    ///   at least one permission — else `Forbidden`. An empty permission
+    ///   at least one permission, or a provider-asserted `TokenRoles`
+    ///   entry (Phase 987) — else `Forbidden`. An empty permission
     ///   map holds no role (Phase 989; unlike module access, where it
     ///   means unrestricted per GP 11).
     /// - `ClientGated relationship` — anonymous → `RequireAuthentication`;

@@ -404,7 +404,9 @@ carelessly.
 > scripting defect a credential-theft defect. The token is now set server-side
 > as `HttpOnly`.
 > **Evidence:** `src/ToolUp.Platform.Server/Server/AuthSessionHandler.fs` ·
-> `docs/migrations/133-httponly-auth-cookie.md` (Phase 133)
+> `docs/migrations/133-httponly-auth-cookie.md` (Phase 133) ·
+> `src/AuthProviders/Oidc/OidcSsrSignIn.fs` (the server-side SSR sign-in sets
+> the same cookie `HttpOnly`, `SameSite=Lax`; Phase 987)
 
 > **AN-6 — State-changing API requests from session-bearing subjects carry a
 > synchroniser CSRF token, and an internet-facing authenticated deployment

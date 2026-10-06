@@ -48,7 +48,7 @@ ToolUp.AuthProviders.GitHub 38/74
 ToolUp.AuthProviders.GoogleDirectory 29/56
 ToolUp.AuthProviders.GoogleIdentity.Client 57/125
 ToolUp.AuthProviders.LdapActiveDirectory 73/127
-ToolUp.AuthProviders.Oidc 41/51
+ToolUp.AuthProviders.Oidc 63/82
 ToolUp.AuthProviders.Oidc.Client 130/336
 ToolUp.AuthProviders.Oidc.Shared 33/52
 ToolUp.AuthProviders.Passkey 75/150
@@ -136,7 +136,7 @@ ToolUp.OpenXml.Spreadsheet 45/141
 ToolUp.OpenXml.SvgRasterizer.Skia 3/3
 ToolUp.Platform.Build 313/567
 ToolUp.Platform.Client 2848/7011
-ToolUp.Platform.Core 7016/14887
+ToolUp.Platform.Core 7029/14904
 ToolUp.Platform.Server 6575/11982
 ToolUp.Platform.Testing 118/264
 ToolUp.Platform.Transport 44/90
