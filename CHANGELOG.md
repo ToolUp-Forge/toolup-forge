@@ -49,7 +49,7 @@ Migration notes:
 - [989-gated-ssr-fails-closed](docs/migrations/989-gated-ssr-fails-closed.md)
 - [9x-self-hosted-observability-module](docs/migrations/9x-self-hosted-observability-module.md)
 
-_Surface since `v0.23.0`: **breaking** — 46 packages moved; 4005 members added, 87 members changed, 617 members removed; 12 packages new._
+_Surface since `v0.23.0`: **breaking** — 46 packages moved; 4285 members added, 87 members changed, 617 members removed; 12 packages new._
 
 ### Added
 
@@ -97,7 +97,7 @@ _Surface since `v0.23.0`: **breaking** — 46 packages moved; 4005 members added
   - `ToolUp.AI.ConversationRetentionPolicy.MaxCount : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }`
   - `ToolUp.AI.ConversationRetentionPolicy.SweepSchedule : System.String { get }`
   - … and 24 more — `git diff v0.23.0 -- api-baselines/ToolUp.AI.Core.approved.txt`
-- `ToolUp.AI.Server` — 143 members:
+- `ToolUp.AI.Server` — 160 members:
   - `ToolUp.AI.AIAssistantHandler+AITaskStatusRegistry (class)`
   - `ToolUp.AI.AIAssistantHandler+AITaskStatusRegistry..ctor(System.Int32, System.TimeSpan)`
   - `ToolUp.AI.AIAssistantHandler+AITaskStatusRegistry.Count : System.Int32 { get }`
@@ -118,7 +118,7 @@ _Surface since `v0.23.0`: **breaking** — 46 packages moved; 4005 members added
   - `ToolUp.AI.AIAssistantHandler+ConversationListing.readOwnedRow(ToolUp.Platform.ILogger, ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.Int32, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.AI.AIAssistantHandler+ConversationListingRow, System.String]]]`
   - `ToolUp.AI.AIAssistantHandler+ConversationListing.readRow(ToolUp.Platform.ILogger, ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.Int32, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIAssistantHandler+ConversationListingRow]]`
   - `ToolUp.AI.AIAssistantHandler+ConversationListing.truncateTitle(System.Int32, System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]`
-  - … and 123 more — `git diff v0.23.0 -- api-baselines/ToolUp.AI.Server.approved.txt`
+  - … and 140 more — `git diff v0.23.0 -- api-baselines/ToolUp.AI.Server.approved.txt`
 - `ToolUp.AI.UiAwareness.Client` — new package (8 public members)
 - `ToolUp.AI.UiAwareness.Core` — new package (7 public members)
 - `ToolUp.AI.UiAwareness.Server` — new package (9 public members)
@@ -279,7 +279,7 @@ _Surface since `v0.23.0`: **breaking** — 46 packages moved; 4005 members added
   - `ToolUp.Facts.DelegateFactModule.Destination : System.String (literal)`
   - `ToolUp.Facts.DelegateFactModule.advance(ToolUp.Facts.DelegateRun, ToolUp.Facts.DelegateFact) : ToolUp.Facts.DelegateFact`
   - … and 232 more — `git diff v0.23.0 -- api-baselines/ToolUp.Facts.Core.approved.txt`
-- `ToolUp.Facts.Server` — 333 members:
+- `ToolUp.Facts.Server` — 428 members:
   - `ToolUp.Facts.AnswerPlannerModule.compilerAccessContext(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.StorageScope], System.String) : ToolUp.Platform.AccessContext`
   - `ToolUp.Facts.AnswerPlannerModule.createOverProviderFactory(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Platform.IEventStore, ToolUp.AI.IAIProviderFactory) : ToolUp.Facts.IAnswerPlanner`
   - `ToolUp.Facts.AnswerPlannerModule.createResolvingCompiler(ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.StorageScope], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.CompiledQuestion, System.String]]]]]) : ToolUp.Facts.IAnswerPlanner`
@@ -299,8 +299,8 @@ _Surface since `v0.23.0`: **breaking** — 46 packages moved; 4005 members added
   - `ToolUp.Facts.BlobFactStoreScaleValidator (class)`
   - `ToolUp.Facts.BlobFactStoreScaleValidator..ctor(System.Int32, ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]], System.Boolean)`
   - `ToolUp.Facts.BlobFactStoreScaleValidator..ctor(System.Int32, ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]], System.Boolean, System.Int32, System.Int32)`
-  - `ToolUp.Facts.CoherenceCheck.findings(ToolUp.Facts.IFactStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], ToolUp.Facts.CoherenceConfig, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.CoherenceFinding]]`
-  - … and 313 more — `git diff v0.23.0 -- api-baselines/ToolUp.Facts.Server.approved.txt`
+  - `ToolUp.Facts.CertificateSubject+NarrativeCertificate (class)`
+  - … and 408 more — `git diff v0.23.0 -- api-baselines/ToolUp.Facts.Server.approved.txt`
 - `ToolUp.Facts.Shared` — new package (183 public members)
 - `ToolUp.KnowledgeBase.Client` — 1 member:
   - `KnowledgeListView+Badges.factTableBadge(SharedTypes+KnowledgeSource) : Fable.React.ReactElement`
@@ -362,7 +362,7 @@ _Surface since `v0.23.0`: **breaking** — 46 packages moved; 4005 members added
   - `ExternalContactManagerUI+ContactFormModule.toCreate(ToolUp.Platform.ContactOwner, ExternalContactManagerUI+ContactForm) : ToolUp.Platform.CreateExternalContactRequest`
   - `ExternalContactManagerUI+ContactFormModule.toUpdate(System.String, ExternalContactManagerUI+ContactForm) : ToolUp.Platform.UpdateExternalContactRequest`
   - … and 946 more — `git diff v0.23.0 -- api-baselines/ToolUp.Platform.Client.approved.txt`
-- `ToolUp.Platform.Core` — 877 members:
+- `ToolUp.Platform.Core` — 940 members:
   - `ColumnMapping.columnTypeOfDeclared(System.String) : Microsoft.FSharp.Core.FSharpOption`1[DataManagementTypes+ColumnType]`
   - `ColumnMapping.profileColumnWith(Microsoft.FSharp.Core.FSharpOption`1[ColumnMappingTypes+ColumnDeclaration], System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : ColumnMappingTypes+ColumnProfile`
   - `ColumnMappingTypes+ColumnDeclaration (class)`
@@ -383,8 +383,8 @@ _Surface since `v0.23.0`: **breaking** — 46 packages moved; 4005 members added
   - `ColumnMappingTypes+ProfileSource.Tag : System.Int32 { get }`
   - `ToolUp.Platform.AI.AIProviderCallOptionsExtensions (class)`
   - `ToolUp.Platform.AI.AIProviderCallOptionsExtensions.IAIProvider.SendMessageWith(ToolUp.Platform.AI.IAIProvider, ToolUp.Platform.AI.AIProviderCallOptions, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolDef], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]], ToolUp.Platform.Transport.RetryPolicy) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AI.AIProviderCallResponse, ToolUp.Platform.AI.AIProviderError]]`
-  - … and 857 more — `git diff v0.23.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
-- `ToolUp.Platform.Server` — 630 members:
+  - … and 920 more — `git diff v0.23.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
+- `ToolUp.Platform.Server` — 729 members:
   - `ToolUp.Platform.AlertRuleEngine+AlertRuleStatusBoard (class)`
   - `ToolUp.Platform.AlertRuleEngine+AlertRuleStatusBoard..ctor()`
   - `ToolUp.Platform.AlertRuleEngine+AlertRuleStatusBoard.Get(System.String) : ToolUp.Platform.AlertRuleObservation`
@@ -405,7 +405,7 @@ _Surface since `v0.23.0`: **breaking** — 46 packages moved; 4005 members added
   - `ToolUp.Platform.BlobCodec`1 (class)`
   - `ToolUp.Platform.BlobCodec`1..ctor(Microsoft.FSharp.Core.FSharpFunc`2[T, System.Byte[]], Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpResult`2[T, System.String]])`
   - `ToolUp.Platform.BlobCodec`1.Decode : Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpResult`2[T, System.String]] { get }`
-  - … and 610 more — `git diff v0.23.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
+  - … and 709 more — `git diff v0.23.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
 - `ToolUp.Platform.Transport` — new package (90 public members)
 - `ToolUp.RAG.Core` — 9 members:
   - `ToolUp.RAG.IngestionTypes+DocumentIngestionJob.Attempt : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IngestionAttempt] { get }`
@@ -461,7 +461,13 @@ _Surface since `v0.23.0`: **breaking** — 46 packages moved; 4005 members added
   - `ToolUp.Remoting.Generator.ClientReadPolicy (class)`
   - `ToolUp.Remoting.Generator.ClientReadPolicy..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Collections.FSharpList`1[System.String])`
   - … and 35 more — `git diff v0.23.0 -- api-baselines/ToolUp.Remoting.Generator.approved.txt`
-- `ToolUp.Reporting.Server` — 52 members:
+- `ToolUp.Reporting.Server` — 58 members:
+  - `ToolUp.Reporting.GroundedNarrativeProducer (class)`
+  - `ToolUp.Reporting.GroundedNarrativeProducer.TriggerName : System.String (literal)`
+  - `ToolUp.Reporting.GroundedNarrativeProducer.create(System.String, System.String, ToolUp.Platform.IGroundedNarrativeRun, System.String, System.String, System.String) : ToolUp.Reporting.ReportProducer`
+  - `ToolUp.Reporting.ReportProducerScope (class)`
+  - `ToolUp.Reporting.ReportProducerScope.get() : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ResolvedScope]`
+  - `ToolUp.Reporting.ReportProducerScope.within`1(ToolUp.Platform.ResolvedScope, Microsoft.FSharp.Control.FSharpAsync`1[T]) : Microsoft.FSharp.Control.FSharpAsync`1[T]`
   - `ToolUp.Reporting.ReportingAITools (class)`
   - `ToolUp.Reporting.ReportingAITools+ItemsKeys (class)`
   - `ToolUp.Reporting.ReportingAITools+ItemsKeys.ActiveModule : System.String (literal)`
@@ -476,13 +482,7 @@ _Surface since `v0.23.0`: **breaking** — 46 packages moved; 4005 members added
   - `ToolUp.Reporting.ReportingAITools+LongRenderPolicyModule.never : ToolUp.Reporting.ReportingAITools+LongRenderPolicy { get }`
   - `ToolUp.Reporting.ReportingAITools+RenderJobPayload (class)`
   - `ToolUp.Reporting.ReportingAITools+RenderJobPayload..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Guid], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Reporting.PlaceholderValue])`
-  - `ToolUp.Reporting.ReportingAITools+RenderJobPayload.ConversationId : Microsoft.FSharp.Core.FSharpOption`1[System.Guid] { get }`
-  - `ToolUp.Reporting.ReportingAITools+RenderJobPayload.ScopeId : System.String { get }`
-  - `ToolUp.Reporting.ReportingAITools+RenderJobPayload.TemplateId : System.String { get }`
-  - `ToolUp.Reporting.ReportingAITools+RenderJobPayload.UserId : System.String { get }`
-  - `ToolUp.Reporting.ReportingAITools+RenderJobPayload.Values : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Reporting.PlaceholderValue] { get }`
-  - `ToolUp.Reporting.ReportingAITools+RenderJobPayloadModule (class)`
-  - … and 32 more — `git diff v0.23.0 -- api-baselines/ToolUp.Reporting.Server.approved.txt`
+  - … and 38 more — `git diff v0.23.0 -- api-baselines/ToolUp.Reporting.Server.approved.txt`
 - `ToolUp.Scheduling.Core` — 2 members:
   - `ToolUp.Scheduling.iCalendar.emitRRule(ToolUp.Scheduling.SchedulingTypes+RecurrenceRule) : System.String`
   - `ToolUp.Scheduling.iCalendar.parseRRule(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Scheduling.SchedulingTypes+RecurrenceRule, System.String]`

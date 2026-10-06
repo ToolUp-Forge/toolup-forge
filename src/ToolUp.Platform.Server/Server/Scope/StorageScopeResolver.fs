@@ -297,6 +297,15 @@ module ScopeResolution =
         ctx.Items[ItemsKey] <- box resolved
         resolved
 
+    /// Record an ALREADY-RESOLVED scope on a context the platform builds for
+    /// carried work — a background agent loop running for a job under the
+    /// scope on `JobContext.Scope` (Phase 985). It mints nothing: a
+    /// `ResolvedScope` can only have come from this module or from the
+    /// scheduler's carrier, so every door that reads the context through
+    /// `forRequest` still reads only a scope the platform resolved, and an
+    /// anonymous one stays anonymous.
+    let carry (ctx: HttpContext) (scope: ResolvedScope) : unit = ctx.Items[ItemsKey] <- box scope
+
     /// The scope the platform resolved for this request, or the explicit
     /// anonymous scope when it resolved none. This is how a fact door
     /// obtains its scope — it never reads `StorageScope` from the request

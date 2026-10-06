@@ -151,3 +151,89 @@ type ReportProducerRegistry() =
     /// How many producers are registered. Read by the compose-time
     /// diagnostic and the `/dev/inspect` panel.
     member _.Count = producers.Count
+// ─── Phase 985 — a grounded narrative as a report producer ───────────
+//
+// A grounded narrative run (a model-written report published only when
+// every number is a Fact) becomes a scheduled report through the same
+// registry as any other producer: the subscription job resolves it, the
+// run checks and publishes the narrative, and the narrative fills a
+// template placeholder as a `NarrativeValue` — so the render goes through
+// the ordinary pipeline and its disclosure export door. A refused narrative
+// is a producer `Error` naming every ungrounded claim, recorded on the
+// subscription's last-run outcome; nothing is rendered or delivered.
+//
+// **The scope.** The run reads facts through the request-path fact tools,
+// which take only a scope the platform resolved (Phase 797), and
+// `Resolve` is handed the subscription's scope id as a string. The resolved
+// scope therefore rides the async chain (GP 7): the subscription job
+// handler places its `JobContext.Scope` in `ReportProducerScope` for the
+// duration of the resolve, and this producer reads it there. A subscription
+// job that runs under the anonymous scope — one scheduled through the
+// string overload — gets a refusal naming that, never a run over the
+// anonymous shard.
+
+/// The resolved scope a report producer is being resolved under, carried
+/// on the async chain by the subscription job handler (GP 7).
+module ReportProducerScope =
+    let private current =
+        System.Threading.AsyncLocal<ToolUp.Platform.ResolvedScope option>()
+
+    /// The scope the current resolve runs under, when a job set one.
+    let get () : ToolUp.Platform.ResolvedScope option = current.Value
+
+    /// Run `work` with `scope` as the producer scope.
+    let within (scope: ToolUp.Platform.ResolvedScope) (work: Async<'T>) : Async<'T> = async {
+        let previous = current.Value
+        current.Value <- Some scope
+
+        try
+            return! work
+        finally
+            current.Value <- previous
+    }
+
+module GroundedNarrativeProducer =
+    open ToolUp.Platform
+
+    /// The `GroundedNarrativeRequest.Trigger` a scheduled run records.
+    [<Literal>]
+    let TriggerName = "report-subscription"
+
+    /// A report producer over a registered grounded narrative run: the
+    /// narrative fills `placeholder` in `templateId`. The producer takes no
+    /// parameters; which narrative runs is fixed by `runKey`.
+    let create
+        (key: ReportProducerKey)
+        (displayName: string)
+        (run: IGroundedNarrativeRun)
+        (runKey: string)
+        (templateId: TemplateId)
+        (placeholder: string)
+        : ReportProducer =
+        ReportProducer.create key displayName [] (fun _scopeId _parameters -> async {
+            match ReportProducerScope.get () with
+            | None ->
+                return
+                    Error
+                        "a grounded narrative report needs the subscription job's resolved scope, and none was carried to the producer"
+            | Some scope ->
+                let! outcome =
+                    run.Run {
+                        RunKey = runKey
+                        Scope = scope
+                        Access = None
+                        Trigger = TriggerName
+                    }
+
+                match outcome with
+                | GroundedNarrativePublished(_, document, _, _, _) ->
+                    return
+                        Ok {
+                            TemplateId = templateId
+                            Values = Map.ofList [ placeholder, NarrativeValue document ]
+                            FileNameStem = None
+                        }
+                | GroundedNarrativeRefused _
+                | GroundedNarrativeFailed _ -> return Error(GroundedNarrativeOutcome.describe outcome)
+        })
+        |> ReportProducer.withDescription "A model-written narrative, published only when every number in it is a Fact."

@@ -1350,6 +1350,25 @@ ToolUp.Platform.ChampionChallengerPolicy.Margin : System.Double { get }
 ToolUp.Platform.ChampionChallengerPolicyModule (class)
 ToolUp.Platform.ChampionChallengerPolicyModule.strictImprovement : ToolUp.Platform.ChampionChallengerPolicy { get }
 ToolUp.Platform.ChampionChallengerPolicyModule.withMargin(System.Double) : ToolUp.Platform.ChampionChallengerPolicy
+ToolUp.Platform.CitableReferenceResolution (class)
+ToolUp.Platform.CitableReferenceResolution.CitableReferenceUnresolved : ToolUp.Platform.CitableReferenceResolution { get }
+ToolUp.Platform.CitableReferenceResolution.IsCitableReferenceCurrent : System.Boolean { get }
+ToolUp.Platform.CitableReferenceResolution.IsCitableReferenceSuperseded : System.Boolean { get }
+ToolUp.Platform.CitableReferenceResolution.IsCitableReferenceUnresolved : System.Boolean { get }
+ToolUp.Platform.CitableReferenceResolution.IsCitableReferenceWithheld : System.Boolean { get }
+ToolUp.Platform.CitableReferenceResolution.Tag : System.Int32 { get }
+ToolUp.Platform.CitableReferenceResolution+CitableReferenceCurrent (class)
+ToolUp.Platform.CitableReferenceResolution+CitableReferenceCurrent.renderings : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.CitableReferenceResolution+CitableReferenceCurrent.value : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal] { get }
+ToolUp.Platform.CitableReferenceResolution+CitableReferenceSuperseded (class)
+ToolUp.Platform.CitableReferenceResolution+CitableReferenceSuperseded.supersededBy : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.CitableReferenceResolution+CitableReferenceWithheld (class)
+ToolUp.Platform.CitableReferenceResolution+CitableReferenceWithheld.policyRef : System.String { get }
+ToolUp.Platform.CitableReferenceResolution+Tags (class)
+ToolUp.Platform.CitableReferenceResolution+Tags.CitableReferenceCurrent : System.Int32 (literal)
+ToolUp.Platform.CitableReferenceResolution+Tags.CitableReferenceSuperseded : System.Int32 (literal)
+ToolUp.Platform.CitableReferenceResolution+Tags.CitableReferenceUnresolved : System.Int32 (literal)
+ToolUp.Platform.CitableReferenceResolution+Tags.CitableReferenceWithheld : System.Int32 (literal)
 ToolUp.Platform.ClassificationDecision (class)
 ToolUp.Platform.ClassificationDecision.Allow : ToolUp.Platform.ClassificationDecision { get }
 ToolUp.Platform.ClassificationDecision.IsAllow : System.Boolean { get }
@@ -5058,6 +5077,68 @@ ToolUp.Platform.GrantWritePath.PathSurface : System.String { get }
 ToolUp.Platform.GrantWritePathModule (class)
 ToolUp.Platform.GrantWritePathModule.identity(ToolUp.Platform.GrantWritePath) : System.String
 ToolUp.Platform.GrantWritePathModule.isOpenUnder(ToolUp.Platform.GrantPolicy, ToolUp.Platform.GrantWritePath) : System.Boolean
+ToolUp.Platform.GroundedNarrativeDefinition (class)
+ToolUp.Platform.GroundedNarrativeDefinition..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundedSectionShape], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], System.String]]], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface)
+ToolUp.Platform.GroundedNarrativeDefinition.DependsOnMetrics : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.GroundedNarrativeDefinition.DisplayName : System.String { get }
+ToolUp.Platform.GroundedNarrativeDefinition.Key : System.String { get }
+ToolUp.Platform.GroundedNarrativeDefinition.ModuleId : System.String { get }
+ToolUp.Platform.GroundedNarrativeDefinition.PageRoute : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.GroundedNarrativeDefinition.Principal : System.String { get }
+ToolUp.Platform.GroundedNarrativeDefinition.Project : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], System.String]]] { get }
+ToolUp.Platform.GroundedNarrativeDefinition.Prompt : System.String { get }
+ToolUp.Platform.GroundedNarrativeDefinition.Sections : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundedSectionShape] { get }
+ToolUp.Platform.GroundedNarrativeDefinition.Surface : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }
+ToolUp.Platform.GroundedNarrativeDefinition.Tags : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.GroundedNarrativeDefinition.Title : System.String { get }
+ToolUp.Platform.GroundedNarrativeDefinitionModule (class)
+ToolUp.Platform.GroundedNarrativeDefinitionModule.create(System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundedSectionShape]) : ToolUp.Platform.GroundedNarrativeDefinition
+ToolUp.Platform.GroundedNarrativeDefinitionModule.dependingOn(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.GroundedNarrativeDefinition) : ToolUp.Platform.GroundedNarrativeDefinition
+ToolUp.Platform.GroundedNarrativeDefinitionModule.withProjection(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], System.String]]], ToolUp.Platform.GroundedNarrativeDefinition) : ToolUp.Platform.GroundedNarrativeDefinition
+ToolUp.Platform.GroundedNarrativeDefinitionModule.withTags(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.GroundedNarrativeDefinition) : ToolUp.Platform.GroundedNarrativeDefinition
+ToolUp.Platform.GroundedNarrativeEvents (class)
+ToolUp.Platform.GroundedNarrativeEvents.FailedType : System.String (literal)
+ToolUp.Platform.GroundedNarrativeEvents.PublishedType : System.String (literal)
+ToolUp.Platform.GroundedNarrativeEvents.RefusedType : System.String (literal)
+ToolUp.Platform.GroundedNarrativeEvents.SourceModule : System.String (literal)
+ToolUp.Platform.GroundedNarrativeOutcome (class)
+ToolUp.Platform.GroundedNarrativeOutcome.IsGroundedNarrativeFailed : System.Boolean { get }
+ToolUp.Platform.GroundedNarrativeOutcome.IsGroundedNarrativePublished : System.Boolean { get }
+ToolUp.Platform.GroundedNarrativeOutcome.IsGroundedNarrativeRefused : System.Boolean { get }
+ToolUp.Platform.GroundedNarrativeOutcome.Tag : System.Int32 { get }
+ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeFailed (class)
+ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeFailed.reason : System.String { get }
+ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativePublished (class)
+ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativePublished.certificate : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.NarrativeGroundingCertificate, System.String] { get }
+ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativePublished.citations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeCitation] { get }
+ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativePublished.document : ToolUp.Platform.Narrative.NarrativeDocument { get }
+ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativePublished.indexed : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.NarrativeIngestOutcome] { get }
+ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativePublished.narrativeId : System.Guid { get }
+ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeRefused (class)
+ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeRefused.offences : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.GroundingOffence] { get }
+ToolUp.Platform.GroundedNarrativeOutcome+Tags (class)
+ToolUp.Platform.GroundedNarrativeOutcome+Tags.GroundedNarrativeFailed : System.Int32 (literal)
+ToolUp.Platform.GroundedNarrativeOutcome+Tags.GroundedNarrativePublished : System.Int32 (literal)
+ToolUp.Platform.GroundedNarrativeOutcome+Tags.GroundedNarrativeRefused : System.Int32 (literal)
+ToolUp.Platform.GroundedNarrativeOutcomeModule (class)
+ToolUp.Platform.GroundedNarrativeOutcomeModule.describe(ToolUp.Platform.GroundedNarrativeOutcome) : System.String
+ToolUp.Platform.GroundedNarrativeRegistry (class)
+ToolUp.Platform.GroundedNarrativeRegistry..ctor()
+ToolUp.Platform.GroundedNarrativeRegistry.Definitions : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundedNarrativeDefinition] { get }
+ToolUp.Platform.GroundedNarrativeRegistry.DependentOn(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundedNarrativeDefinition]
+ToolUp.Platform.GroundedNarrativeRegistry.Register(ToolUp.Platform.GroundedNarrativeDefinition) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
+ToolUp.Platform.GroundedNarrativeRegistry.TryResolve(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GroundedNarrativeDefinition]
+ToolUp.Platform.GroundedNarrativeRequest (class)
+ToolUp.Platform.GroundedNarrativeRequest..ctor(System.String, ToolUp.Platform.ResolvedScope, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessContext], System.String)
+ToolUp.Platform.GroundedNarrativeRequest.Access : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessContext] { get }
+ToolUp.Platform.GroundedNarrativeRequest.RunKey : System.String { get }
+ToolUp.Platform.GroundedNarrativeRequest.Scope : ToolUp.Platform.ResolvedScope { get }
+ToolUp.Platform.GroundedNarrativeRequest.Trigger : System.String { get }
+ToolUp.Platform.GroundedSectionShape (class)
+ToolUp.Platform.GroundedSectionShape..ctor(System.String, System.String, System.String)
+ToolUp.Platform.GroundedSectionShape.Guidance : System.String { get }
+ToolUp.Platform.GroundedSectionShape.Heading : System.String { get }
+ToolUp.Platform.GroundedSectionShape.Id : System.String { get }
 ToolUp.Platform.GroundingContinuity (class)
 ToolUp.Platform.GroundingContinuity.verify(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundingMutationRecord], ToolUp.Platform.GroundingEnvelope) : ToolUp.Platform.GroundingContinuityVerdict
 ToolUp.Platform.GroundingContinuity.verifyAgainst(ToolUp.Platform.GroundingEnvelope, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundingMutationRecord], ToolUp.Platform.GroundingEnvelope) : ToolUp.Platform.GroundingContinuityVerdict
@@ -5448,6 +5529,9 @@ ToolUp.Platform.IBuildOrchestrator.GetBuild(System.String) : Microsoft.FSharp.Co
 ToolUp.Platform.IBuildOrchestrator.GetBuildHistory(System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BuildSummary]]
 ToolUp.Platform.IBuildOrchestrator.GetQueueDepth() : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
 ToolUp.Platform.IBuildOrchestrator.ListActiveBuilds(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BuildSummary]]
+ToolUp.Platform.ICitableReferenceKind (interface)
+ToolUp.Platform.ICitableReferenceKind.Kind : System.String { get }
+ToolUp.Platform.ICitableReferenceKind.Resolve(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.CitableReferenceResolution]
 ToolUp.Platform.ICompositionCapabilityGate (interface)
 ToolUp.Platform.ICompositionCapabilityGate.Check(ToolUp.Platform.ComponentId, ToolUp.Platform.CompanionCapability) : ToolUp.Platform.CapabilityGateDecision
 ToolUp.Platform.IComputeBudgetStore (interface)
@@ -5804,6 +5888,8 @@ ToolUp.Platform.IFieldClassifier.IsClassified(System.String, System.String) : Mi
 ToolUp.Platform.IFieldClassifier.LookupBySubject(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FieldHit]]
 ToolUp.Platform.IFlagSource (interface)
 ToolUp.Platform.IFlagSource.Resolve(ToolUp.Platform.FeatureFlag, ToolUp.Platform.AccessContext) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.FlagValue]]
+ToolUp.Platform.IGroundedNarrativeRun (interface)
+ToolUp.Platform.IGroundedNarrativeRun.Run(ToolUp.Platform.GroundedNarrativeRequest) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.GroundedNarrativeOutcome]
 ToolUp.Platform.IGroundingEnvelopeMutator (interface)
 ToolUp.Platform.IGroundingEnvelopeMutator.Apply(ToolUp.Platform.GroundingMutationRequest) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.GroundingMutationRecord, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundingMutationRefusal]]]
 ToolUp.Platform.IGroundingEnvelopeMutator.Chain : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundingMutationRecord] { get }
@@ -5970,6 +6056,9 @@ ToolUp.Platform.IModuleVisibilityStore (interface)
 ToolUp.Platform.IModuleVisibilityStore.ClearProfile(ToolUp.Platform.FlagScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.IModuleVisibilityStore.GetProfile(ToolUp.Platform.FlagScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleVisibilityProfile]]
 ToolUp.Platform.IModuleVisibilityStore.SetProfile(ToolUp.Platform.FlagScope, ToolUp.Platform.ModuleVisibilityProfile) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.INarrativeGroundingGate (interface)
+ToolUp.Platform.INarrativeGroundingGate.Certify(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.NarrativeGroundingCertificate, System.String]]
+ToolUp.Platform.INarrativeGroundingGate.Check(System.String, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Narrative.NarrativeGroundingVerdict]
 ToolUp.Platform.INarrativeIngestor (interface)
 ToolUp.Platform.INarrativeIngestor.Ingest(ToolUp.Platform.StorageScope, System.String, ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.NarrativeIngestOutcome]
 ToolUp.Platform.INarrativePagePublisher (interface)
@@ -7765,6 +7854,14 @@ ToolUp.Platform.NarrativeEntryInfo.PublishedAt : System.DateTime { get }
 ToolUp.Platform.NarrativeEntryInfo.Subtitle : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.NarrativeEntryInfo.Tags : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.NarrativeEntryInfo.Title : System.String { get }
+ToolUp.Platform.NarrativeGroundingCertificate (class)
+ToolUp.Platform.NarrativeGroundingCertificate..ctor(System.String, System.String, System.String, System.DateTimeOffset, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String)
+ToolUp.Platform.NarrativeGroundingCertificate.CertificateJson : System.String { get }
+ToolUp.Platform.NarrativeGroundingCertificate.CitedFactIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.NarrativeGroundingCertificate.Digest : System.String { get }
+ToolUp.Platform.NarrativeGroundingCertificate.IssuedAt : System.DateTimeOffset { get }
+ToolUp.Platform.NarrativeGroundingCertificate.KeyId : System.String { get }
+ToolUp.Platform.NarrativeGroundingCertificate.Root : System.String { get }
 ToolUp.Platform.NarrativeIngestOutcome (class)
 ToolUp.Platform.NarrativeIngestOutcome.IsNarrativeIngestFailed : System.Boolean { get }
 ToolUp.Platform.NarrativeIngestOutcome.IsNarrativeIngestRefused : System.Boolean { get }
@@ -7815,6 +7912,7 @@ ToolUp.Platform.NarrativePublisher.getSection(Microsoft.AspNetCore.Http.HttpCont
 ToolUp.Platform.NarrativePublisher.list(Microsoft.AspNetCore.Http.HttpContext, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.NarrativeEntryInfo]]
 ToolUp.Platform.NarrativePublisher.listByTag(Microsoft.AspNetCore.Http.HttpContext, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.NarrativeEntryInfo]]
 ToolUp.Platform.NarrativePublisher.publish(Microsoft.AspNetCore.Http.HttpContext, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.Guid]]
+ToolUp.Platform.NarrativePublisher.publishForScope(System.IServiceProvider, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.Guid]]
 ToolUp.Platform.NarrativePublisher.publishTagged(Microsoft.AspNetCore.Http.HttpContext, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.Guid]]
 ToolUp.Platform.NarrativePublisher.publishWithProvenance(Microsoft.AspNetCore.Http.HttpContext, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Narrative.NarrativeDocument]
 ToolUp.Platform.NarrativePublisher.replaceLatest(Microsoft.AspNetCore.Http.HttpContext, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.Guid]]
@@ -10240,6 +10338,7 @@ ToolUp.Platform.StorageScopeResolver+ScopeRequestExtractor.fromHttpContext(Micro
 ToolUp.Platform.StorageScopeResolver+ScopeRequestExtractor.resolveForContext(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.StorageScope, ToolUp.Platform.ScopeResolutionError]]
 ToolUp.Platform.StorageScopeResolver+ScopeRequestExtractor.userId(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
 ToolUp.Platform.StorageScopeResolver+ScopeResolution (class)
+ToolUp.Platform.StorageScopeResolver+ScopeResolution.carry(Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.ResolvedScope) : System.Void
 ToolUp.Platform.StorageScopeResolver+ScopeResolution.forRequest(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.ResolvedScope
 ToolUp.Platform.StorageScopeResolver+TeamScopeResolver (class)
 ToolUp.Platform.StorageScopeResolver+TeamScopeResolver..ctor(ToolUp.Platform.TeamManagement+ITeamStore, Microsoft.Extensions.Caching.Memory.IMemoryCache, ToolUp.Platform.INotificationChannel, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])

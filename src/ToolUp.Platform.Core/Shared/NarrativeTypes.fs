@@ -341,3 +341,98 @@ module NarrativeRetentionPolicy =
     /// `DeleteScope`. Use with caution — the persisted-store layer's
     /// per-scope blob list grows linearly under this policy.
     let unbounded: NarrativeRetentionPolicy = { MaxPerScope = None; MaxAge = None }
+
+// ─── Phase 985 — grounded narratives: the verdict vocabulary ─────────
+//
+// A model-written narrative is published only when every number in it is
+// a reference to a Fact (or to a declared citable reference). The check
+// itself lives with the fact tier, the generation run with the agent
+// loop; what both — and every surface that reports a refusal — share is
+// the vocabulary below. It names offences and references by string, so
+// this file still takes no dependency on the fact companion's types.
+
+/// Why one numeric claim in a narrative was refused by the grounding gate.
+type GroundingOffenceReason =
+    /// A numeral, or a number written in words, in prose outside any
+    /// `Metric` span — or inside a span's label, which is prose too.
+    | UnreferencedNumber
+    /// A `Metric` span with no reference at all.
+    | MetricWithoutReference
+    /// A reference that names nothing the publishing scope can see.
+    | UnresolvedReference of reference: string
+    /// A reference to a Fact that is no longer the head of its lineage.
+    /// `supersededBy` is the current head's id, when known.
+    | SupersededReference of reference: string * supersededBy: string option
+    /// A reference to a Fact (or declared reference) the publishing surface
+    /// may not disclose. Names the policy, never the value.
+    | UndisclosableReference of reference: string * policyRef: string
+    /// A reference whose stated value is not the value it refers to.
+    | MisstatedValue of reference: string * stated: string * current: string
+    /// A `<kind>:<id>` reference whose kind no deployment registered.
+    | UnregisteredReferenceKind of kind: string * reference: string
+
+/// One refused claim: where it is, the text that made the claim, and why.
+type GroundingOffence = {
+    /// A readable location — `section 'summary' › element 2 › span 1`.
+    Location: string
+    /// The text carrying the claim (the prose run, or `label = value`).
+    Claim: string
+    Reason: GroundingOffenceReason
+}
+
+/// One reference a grounded narrative cites. `Kind` is `"fact"` for a Fact
+/// id and the registered kind name for a declared citable reference.
+type NarrativeCitation = {
+    ReferenceKind: string
+    Reference: string
+}
+
+/// The grounding gate's verdict over a whole document.
+type NarrativeGroundingVerdict =
+    /// Every numeric claim is a reference that resolves, is current, is
+    /// disclosable at the surface and states the value it refers to.
+    /// Carries the distinct references cited, in first-seen order.
+    | Grounded of citations: NarrativeCitation list
+    /// At least one claim failed. Carries EVERY offending claim, in
+    /// document order — never just the first.
+    | Ungrounded of offences: GroundingOffence list
+
+module GroundingOffenceReason =
+    /// Canonical refusal wording. Names references and policies, never a
+    /// withheld value.
+    let describe (reason: GroundingOffenceReason) : string =
+        match reason with
+        | UnreferencedNumber -> "a number in prose that is not a reference"
+        | MetricWithoutReference -> "a metric with no reference"
+        | UnresolvedReference reference -> sprintf "reference '%s' does not resolve" reference
+        | SupersededReference(reference, Some head) -> sprintf "reference '%s' is superseded by '%s'" reference head
+        | SupersededReference(reference, None) -> sprintf "reference '%s' is superseded" reference
+        | UndisclosableReference(reference, policyRef) ->
+            sprintf "reference '%s' is not disclosable here under policy %s" reference policyRef
+        | MisstatedValue(reference, stated, current) ->
+            sprintf "reference '%s' is stated as '%s' but its value is '%s'" reference stated current
+        | UnregisteredReferenceKind(kind, reference) ->
+            sprintf "reference '%s' names kind '%s', which is not a registered citable reference kind" reference kind
+
+module GroundingOffence =
+    /// One line per offence: `location: reason — "text"`.
+    let describe (offence: GroundingOffence) : string =
+        sprintf "%s: %s — \"%s\"" offence.Location (GroundingOffenceReason.describe offence.Reason) offence.Claim
+
+module NarrativeGroundingVerdict =
+    let isGrounded (verdict: NarrativeGroundingVerdict) : bool =
+        match verdict with
+        | Grounded _ -> true
+        | Ungrounded _ -> false
+
+module NarrativeCitation =
+    /// The `ReferenceKind` of a Fact id. A Fact reference is the bare id; a
+    /// declared citable reference is written `<kind>:<id>`.
+    [<Literal>]
+    let FactKind = "fact"
+
+    /// The Fact ids among `citations`, in order.
+    let factIds (citations: NarrativeCitation list) : string list =
+        citations
+        |> List.filter (fun c -> c.ReferenceKind = FactKind)
+        |> List.map _.Reference

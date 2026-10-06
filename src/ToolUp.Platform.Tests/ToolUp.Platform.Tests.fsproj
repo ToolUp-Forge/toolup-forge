@@ -1585,6 +1585,10 @@
              withConfig, and its push door armed through the AI tier's provider
              factory; the startup warning for a compiler-less planner. -->
         <Compile Include="InProcess\RagFactTierTests.fs" />
+        <!-- Phase 985 — grounded narratives: the gate tried by every defeat
+             case, the fact-tier gate and certificate, the run end to end on a
+             composed RAG app, and both triggers. -->
+        <Compile Include="InProcess\GroundedNarrativeTests.fs" />
         <!-- Phase 709 — the AI tool-result context budget: the knob and its
              refusal of a nonsensical declaration, byte-identical
              pass-through under the ceiling, the typed elision marker (valid

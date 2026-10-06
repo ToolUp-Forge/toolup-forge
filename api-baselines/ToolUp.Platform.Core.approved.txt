@@ -9290,6 +9290,49 @@ ToolUp.Platform.Narrative.EmbedSpec..ctor(System.String, System.String, Microsof
 ToolUp.Platform.Narrative.EmbedSpec.AspectRatio : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.Narrative.EmbedSpec.Title : System.String { get }
 ToolUp.Platform.Narrative.EmbedSpec.Url : System.String { get }
+ToolUp.Platform.Narrative.GroundingOffence (class)
+ToolUp.Platform.Narrative.GroundingOffence..ctor(System.String, System.String, ToolUp.Platform.Narrative.GroundingOffenceReason)
+ToolUp.Platform.Narrative.GroundingOffence.Claim : System.String { get }
+ToolUp.Platform.Narrative.GroundingOffence.Location : System.String { get }
+ToolUp.Platform.Narrative.GroundingOffence.Reason : ToolUp.Platform.Narrative.GroundingOffenceReason { get }
+ToolUp.Platform.Narrative.GroundingOffenceModule (class)
+ToolUp.Platform.Narrative.GroundingOffenceModule.describe(ToolUp.Platform.Narrative.GroundingOffence) : System.String
+ToolUp.Platform.Narrative.GroundingOffenceReason (class)
+ToolUp.Platform.Narrative.GroundingOffenceReason.IsMetricWithoutReference : System.Boolean { get }
+ToolUp.Platform.Narrative.GroundingOffenceReason.IsMisstatedValue : System.Boolean { get }
+ToolUp.Platform.Narrative.GroundingOffenceReason.IsSupersededReference : System.Boolean { get }
+ToolUp.Platform.Narrative.GroundingOffenceReason.IsUndisclosableReference : System.Boolean { get }
+ToolUp.Platform.Narrative.GroundingOffenceReason.IsUnreferencedNumber : System.Boolean { get }
+ToolUp.Platform.Narrative.GroundingOffenceReason.IsUnregisteredReferenceKind : System.Boolean { get }
+ToolUp.Platform.Narrative.GroundingOffenceReason.IsUnresolvedReference : System.Boolean { get }
+ToolUp.Platform.Narrative.GroundingOffenceReason.MetricWithoutReference : ToolUp.Platform.Narrative.GroundingOffenceReason { get }
+ToolUp.Platform.Narrative.GroundingOffenceReason.Tag : System.Int32 { get }
+ToolUp.Platform.Narrative.GroundingOffenceReason.UnreferencedNumber : ToolUp.Platform.Narrative.GroundingOffenceReason { get }
+ToolUp.Platform.Narrative.GroundingOffenceReason+MisstatedValue (class)
+ToolUp.Platform.Narrative.GroundingOffenceReason+MisstatedValue.current : System.String { get }
+ToolUp.Platform.Narrative.GroundingOffenceReason+MisstatedValue.reference : System.String { get }
+ToolUp.Platform.Narrative.GroundingOffenceReason+MisstatedValue.stated : System.String { get }
+ToolUp.Platform.Narrative.GroundingOffenceReason+SupersededReference (class)
+ToolUp.Platform.Narrative.GroundingOffenceReason+SupersededReference.reference : System.String { get }
+ToolUp.Platform.Narrative.GroundingOffenceReason+SupersededReference.supersededBy : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.Narrative.GroundingOffenceReason+Tags (class)
+ToolUp.Platform.Narrative.GroundingOffenceReason+Tags.MetricWithoutReference : System.Int32 (literal)
+ToolUp.Platform.Narrative.GroundingOffenceReason+Tags.MisstatedValue : System.Int32 (literal)
+ToolUp.Platform.Narrative.GroundingOffenceReason+Tags.SupersededReference : System.Int32 (literal)
+ToolUp.Platform.Narrative.GroundingOffenceReason+Tags.UndisclosableReference : System.Int32 (literal)
+ToolUp.Platform.Narrative.GroundingOffenceReason+Tags.UnreferencedNumber : System.Int32 (literal)
+ToolUp.Platform.Narrative.GroundingOffenceReason+Tags.UnregisteredReferenceKind : System.Int32 (literal)
+ToolUp.Platform.Narrative.GroundingOffenceReason+Tags.UnresolvedReference : System.Int32 (literal)
+ToolUp.Platform.Narrative.GroundingOffenceReason+UndisclosableReference (class)
+ToolUp.Platform.Narrative.GroundingOffenceReason+UndisclosableReference.policyRef : System.String { get }
+ToolUp.Platform.Narrative.GroundingOffenceReason+UndisclosableReference.reference : System.String { get }
+ToolUp.Platform.Narrative.GroundingOffenceReason+UnregisteredReferenceKind (class)
+ToolUp.Platform.Narrative.GroundingOffenceReason+UnregisteredReferenceKind.kind : System.String { get }
+ToolUp.Platform.Narrative.GroundingOffenceReason+UnregisteredReferenceKind.reference : System.String { get }
+ToolUp.Platform.Narrative.GroundingOffenceReason+UnresolvedReference (class)
+ToolUp.Platform.Narrative.GroundingOffenceReason+UnresolvedReference.reference : System.String { get }
+ToolUp.Platform.Narrative.GroundingOffenceReasonModule (class)
+ToolUp.Platform.Narrative.GroundingOffenceReasonModule.describe(ToolUp.Platform.Narrative.GroundingOffenceReason) : System.String
 ToolUp.Platform.Narrative.INarrativeRenderer (interface)
 ToolUp.Platform.Narrative.INarrativeRenderer.ContentType : System.String { get }
 ToolUp.Platform.Narrative.INarrativeRenderer.Name : System.String { get }
@@ -9400,6 +9443,13 @@ ToolUp.Platform.Narrative.NarrativeAtom (class)
 ToolUp.Platform.Narrative.NarrativeAtom.render(ToolUp.Platform.Narrative.NarrativeDocument) : System.String
 ToolUp.Platform.Narrative.NarrativeAtom.renderEntry(ToolUp.Platform.Narrative.NarrativeDocument) : System.String
 ToolUp.Platform.Narrative.NarrativeAtom.renderFeed(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeDocument]) : System.String
+ToolUp.Platform.Narrative.NarrativeCitation (class)
+ToolUp.Platform.Narrative.NarrativeCitation..ctor(System.String, System.String)
+ToolUp.Platform.Narrative.NarrativeCitation.Reference : System.String { get }
+ToolUp.Platform.Narrative.NarrativeCitation.ReferenceKind : System.String { get }
+ToolUp.Platform.Narrative.NarrativeCitationModule (class)
+ToolUp.Platform.Narrative.NarrativeCitationModule.FactKind : System.String (literal)
+ToolUp.Platform.Narrative.NarrativeCitationModule.factIds(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeCitation]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.Narrative.NarrativeDocument (class)
 ToolUp.Platform.Narrative.NarrativeDocument..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeSection], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Narrative.NarrativeProvenance], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.Narrative.NarrativeDocument.CanonicalUrl : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -9503,6 +9553,19 @@ ToolUp.Platform.Narrative.NarrativeFacts+StaleNarrativeFlag (class)
 ToolUp.Platform.Narrative.NarrativeFacts+StaleNarrativeFlag..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Platform.Narrative.NarrativeFacts+StaleNarrativeFlag.SupersededByFactId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.Narrative.NarrativeFacts+StaleNarrativeFlag.SupersededFactId : System.String { get }
+ToolUp.Platform.Narrative.NarrativeGroundingVerdict (class)
+ToolUp.Platform.Narrative.NarrativeGroundingVerdict.IsGrounded : System.Boolean { get }
+ToolUp.Platform.Narrative.NarrativeGroundingVerdict.IsUngrounded : System.Boolean { get }
+ToolUp.Platform.Narrative.NarrativeGroundingVerdict.Tag : System.Int32 { get }
+ToolUp.Platform.Narrative.NarrativeGroundingVerdict+Grounded (class)
+ToolUp.Platform.Narrative.NarrativeGroundingVerdict+Grounded.citations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeCitation] { get }
+ToolUp.Platform.Narrative.NarrativeGroundingVerdict+Tags (class)
+ToolUp.Platform.Narrative.NarrativeGroundingVerdict+Tags.Grounded : System.Int32 (literal)
+ToolUp.Platform.Narrative.NarrativeGroundingVerdict+Tags.Ungrounded : System.Int32 (literal)
+ToolUp.Platform.Narrative.NarrativeGroundingVerdict+Ungrounded (class)
+ToolUp.Platform.Narrative.NarrativeGroundingVerdict+Ungrounded.offences : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.GroundingOffence] { get }
+ToolUp.Platform.Narrative.NarrativeGroundingVerdictModule (class)
+ToolUp.Platform.Narrative.NarrativeGroundingVerdictModule.isGrounded(ToolUp.Platform.Narrative.NarrativeGroundingVerdict) : System.Boolean
 ToolUp.Platform.Narrative.NarrativeHtml (class)
 ToolUp.Platform.Narrative.NarrativeHtml.render(ToolUp.Platform.Narrative.NarrativeDocument) : System.String
 ToolUp.Platform.Narrative.NarrativeHtml.renderWith(ToolUp.Platform.Narrative.NarrativeHtml+RenderOptions, ToolUp.Platform.Narrative.NarrativeDocument) : System.String

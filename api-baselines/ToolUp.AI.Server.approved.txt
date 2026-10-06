@@ -894,6 +894,23 @@ ToolUp.AI.FastPathTriageResolver+TriageResult+Tags.TriageResolved : System.Int32
 ToolUp.AI.FastPathTriageResolver+TriageResult+Tags.TriageUnresolved : System.Int32 (literal)
 ToolUp.AI.FastPathTriageResolver+TriageResult+TriageResolved (class)
 ToolUp.AI.FastPathTriageResolver+TriageResult+TriageResolved.reply : System.String { get }
+ToolUp.AI.GroundedNarrativeRun (class)
+ToolUp.AI.GroundedNarrativeRun.assemble(ToolUp.Platform.GroundedNarrativeDefinition, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.InlineSpan]]]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], ToolUp.Platform.Narrative.NarrativeProvenance) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Narrative.NarrativeDocument, System.String]
+ToolUp.AI.GroundedNarrativeRun.parseOutput(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.InlineSpan]]]], System.String]
+ToolUp.AI.GroundedNarrativeRun.parseParagraph(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.InlineSpan]
+ToolUp.AI.GroundedNarrativeRun.systemPrompt(ToolUp.Platform.GroundedNarrativeDefinition, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
+ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions (class)
+ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])
+ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions.Clock : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset] { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions.Tools : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]] { get }
+ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptionsModule (class)
+ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptionsModule.create(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]]) : ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions
+ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunner (class)
+ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunner..ctor(System.IServiceProvider, ToolUp.Platform.GroundedNarrativeRegistry, ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions)
+ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunner.Run(ToolUp.Platform.GroundedNarrativeRequest) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.GroundedNarrativeOutcome]
+ToolUp.AI.GroundedNarrativeRun+GroundedNarratives (class)
+ToolUp.AI.GroundedNarrativeRun+GroundedNarratives.compose(ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundedNarrativeDefinition], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.AI.GroundedNarrativeRun+GroundedNarratives.create(System.IServiceProvider, ToolUp.Platform.GroundedNarrativeRegistry, ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions) : ToolUp.Platform.IGroundedNarrativeRun
 ToolUp.AI.ICitationCounters (interface)
 ToolUp.AI.ICitationCounters.Record(System.String, System.String, ToolUp.AI.CitationNormalisation) : System.Void
 ToolUp.AI.ICitationCounters.Snapshot() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.CitationCounterRow]

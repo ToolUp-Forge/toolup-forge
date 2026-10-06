@@ -333,6 +333,27 @@ module NarrativePublisher =
             | None -> return None
         }
 
+    /// Publish a tagged narrative for a CARRIED scope — a job, a reaction
+    /// to data arrival, a scheduled report — where there is no request to
+    /// resolve the scope or the store from (Phase 985). The store is read
+    /// from `services`; the scope is the one the caller carries. No-op
+    /// (`None`) when no store is registered, exactly as `publishTagged`.
+    let publishForScope
+        (services: System.IServiceProvider)
+        (scopeId: string)
+        (moduleId: string)
+        (pageRoute: string option)
+        (tags: string list)
+        (document: NarrativeDocument)
+        : Async<NarrativeId option> =
+        async {
+            match services.GetService(typeof<INarrativeStore>) with
+            | :? INarrativeStore as store ->
+                let! id = store.PublishTagged(scopeId, moduleId, pageRoute, document, tags)
+                return Some id
+            | _ -> return None
+        }
+
     /// Publish a narrative, replacing any existing entry for the same
     /// `(moduleId, pageRoute, subtitleKey)` tuple within the scope.
     /// Used by modules that regenerate narratives from parameters the

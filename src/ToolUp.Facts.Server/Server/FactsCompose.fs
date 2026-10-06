@@ -582,6 +582,20 @@ module FactsCompose =
                     | Some audit -> GroundingCertificate.createIssuerAudited graph store gate events signer audit
                     | None -> GroundingCertificate.createIssuer graph store gate events signer)
             )
+            // Phase 985 — the narrative grounding gate rides the store knob
+            // too: a grounded narrative run composed anywhere finds a gate
+            // whenever the fact tier is, and finds none (and refuses every
+            // narrative) when it is not. Declared reference kinds are every
+            // `ICitableReferenceKind` the deployment registered.
+            .AddSingleton<INarrativeGroundingGate>(
+                Func<IServiceProvider, INarrativeGroundingGate>(fun sp ->
+                    FactNarrativeGroundingGate.create
+                        (sp.GetRequiredService<IFactStore>())
+                        (sp.GetRequiredService<IFactDisclosureGate>())
+                        (tryService<Grounding.IMetricRegistry> sp)
+                        (sp.GetServices<ICitableReferenceKind>() |> List.ofSeq)
+                        (sp.GetRequiredService<IGroundingCertificateIssuer>()))
+            )
 
     // ─── Phase 623 — activate reactive recomputation ──────────────────
     //
@@ -674,16 +688,31 @@ module FactsCompose =
                     let registry () =
                         tryService<Grounding.IMetricRegistry> sp
 
+                    // Phase 985 — grounded narratives react to the same
+                    // arrival, after the recompute reaction (so an Eager
+                    // recompute is scheduled before the narrative job that
+                    // waits for it), and arm the decorator on their own.
+                    let narratives () =
+                        tryService<GroundedNarrativeRegistry> sp
+
                     let react =
-                        ReactiveDataChange.reaction
-                            (fun () -> sp.GetRequiredService<IFactStore>())
-                            (fun () -> resolveLineage sp)
-                            scheduler
-                            registry
+                        ReactiveDataChangeComposition.combine
+                            (ReactiveDataChange.reaction
+                                (fun () -> sp.GetRequiredService<IFactStore>())
+                                (fun () -> resolveLineage sp)
+                                scheduler
+                                registry)
+                            (GroundedNarrativeTrigger.reaction
+                                (fun () -> sp.GetRequiredService<IFactStore>())
+                                (fun () -> resolveLineage sp)
+                                scheduler
+                                narratives)
 
                     ReactiveDataChange.decorate
                         inner
-                        (ReactiveDataChange.gate registry scheduler)
+                        (ReactiveDataChangeComposition.either
+                            (ReactiveDataChange.gate registry scheduler)
+                            (GroundedNarrativeTrigger.armed scheduler narratives))
                         (ReactiveDataChange.requestScope (fun () ->
                             tryService<Microsoft.AspNetCore.Http.IHttpContextAccessor> sp))
                         react
@@ -708,6 +737,14 @@ module FactsCompose =
                                 (provider.GetRequiredService<ILogger>()))
                     ]
                     sp)
+        )
+        |> ignore
+
+        // Phase 985 — the grounded-narrative job handler, registered with
+        // the scheduler at startup only when a run registry and a run are
+        // composed; otherwise the start is a DI lookup and nothing else.
+        services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
+            Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(GroundedNarrativeTrigger.hostedService)
         )
         |> ignore
 
