@@ -2840,6 +2840,8 @@
         <Compile Include="InProcess\Phase971PlatformTenantTests.fs" />
         <!-- Phase 972 — provider exception matches see through Async.AwaitTask: the shared pattern + red pins. -->
         <Compile Include="InProcess\ProviderExceptionTests.fs" />
+        <!-- Phase 992 — interactive sign-in arms router-first SPA precedence: a bundle-shipped, PublicRendering-free host. -->
+        <Compile Include="InProcess\OidcSignInSpaPrecedenceTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />
