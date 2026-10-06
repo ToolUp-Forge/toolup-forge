@@ -1856,6 +1856,514 @@ let private hreflang154Tests =
             Expect.stringContains html "&amp;" "ampersand in href escaped"
     ]
 
+// ─── Phase 988 — a RAG team app and gated SSR pages on one pipeline ──
+//
+// `RAGCompose.withRAG` and `PublicRenderingCompose.withPublicRendering`
+// are both `ServerApp -> ServerApp` (Phase 80c), so one deployment can
+// carry the AI team app and audience-gated SSR pages. These cases host
+// that composition through the SDK's own terminal, `ServerApp.run`, on a
+// loopback port, so the request pipeline under test is the real one —
+// static files, the SPA shell fallback, scope resolution, surface
+// enforcement and the router, in the order `compose` mounts them. A
+// hand-assembled host would test a copy of that order, not the order.
+//
+// The deployment ships a client bundle (`PublicPath/index.html`), as
+// every SPA deployment does in production. Before Phase 988 the SPA
+// fallback ran ahead of the router and answered every extensionless GET
+// with the shell, so no SSR slug — and none of the sign-in routes — was
+// reachable once a bundle was present.
+
+let private shellMarker = "SPA-SHELL-988"
+
+/// Captures the host's lifetime once it has started, so the test can
+/// stop the host `ServerApp.run` blocks on.
+type private LifetimeCapture
+    (
+        lifetime: Microsoft.Extensions.Hosting.IHostApplicationLifetime,
+        sink: Threading.Tasks.TaskCompletionSource<Microsoft.Extensions.Hosting.IHostApplicationLifetime>
+    ) =
+    interface Microsoft.Extensions.Hosting.IHostedService with
+        member _.StartAsync _ =
+            lifetime.ApplicationStarted.Register(fun () -> sink.TrySetResult lifetime |> ignore)
+            |> ignore
+
+            Threading.Tasks.Task.CompletedTask
+
+        member _.StopAsync _ = Threading.Tasks.Task.CompletedTask
+
+let private freePort () =
+    let listener = Net.Sockets.TcpListener(Net.IPAddress.Loopback, 0)
+    listener.Start()
+    let port = (listener.LocalEndpoint :?> Net.IPEndPoint).Port
+    listener.Stop()
+    port
+
+let private ragStubFactory =
+    { new ToolUp.AI.IAIProviderFactory with
+        member _.Available = []
+        member _.PlatformDescriptors = []
+        member _.PlatformDescriptor = None
+        member _.Resolve _ = async { return Error ToolUp.AI.NoProviderConfigured }
+        member _.TryResolveByLabel(_, _) = async { return Error ToolUp.AI.NoProviderConfigured }
+        member _.BuildPlatform(_, _, _) = None
+    }
+
+let private ragStubProfile =
+    { new ToolUp.Platform.Providers.IProviderProfile with
+        member _.Get _ = async { return None }
+        member _.Set(_, _) = async { return Ok() }
+        member _.Clear _ = async { return () }
+        member _.ResolveEntry(_, _, _) = async { return None }
+        member _.SetEntryHealth(_, _, _) = async { return Ok() }
+    }
+
+let private ragStubEmbedder =
+    { new ToolUp.Platform.IEmbeddingProvider.IEmbeddingProvider with
+        member _.GenerateEmbedding _ = async { return Array.zeroCreate 8 }
+
+        member _.GenerateEmbeddings texts = async {
+            return texts |> Seq.map (fun _ -> Array.zeroCreate<float32> 8) |> Seq.toArray
+        }
+
+        member _.ProviderId = "stub"
+        member _.ModelId = "stub-model"
+        member _.Dimensions = 8
+    }
+
+let private coHostLogger: ILogger =
+    { new ILogger with
+        member _.Debug _ = ()
+        member _.Info _ = ()
+        member _.Warn _ = ()
+        member _.Error(_, _) = ()
+    }
+
+let private coHostIssuer =
+    lazy (MockOidcServer.start MockOidcServer.MockOidcConfig.defaults)
+
+let private coHostLayout (p: PublicPage) : XmlNode =
+    html [] [ body [] [ str ("Title-" + p.Title) ] ]
+
+/// The content tree: one page per audience the team app's readers meet.
+let private seedCoHostContent (root: string) =
+    writeFile (Path.Combine(root, "pages/about.md")) "---\ntitle: about\nlayout: page\n---\n\nPublic."
+
+    writeFile
+        (Path.Combine(root, "pages/members.md"))
+        "---\ntitle: members\nlayout: page\naudience: authenticated\n---\n\nMembers."
+
+    writeFile
+        (Path.Combine(root, "pages/editors.md"))
+        "---\ntitle: editors\nlayout: page\naudience: scope:editor\n---\n\nEditors."
+
+/// The client bundle a production SPA deployment ships.
+let private seedBundle (publicDir: string) =
+    writeFile (Path.Combine(publicDir, "index.html")) ("<!doctype html><html><body>" + shellMarker + "</body></html>")
+    writeFile (Path.Combine(publicDir, "main.js")) "console.log('bundle-988')"
+
+/// The composition under test, before it is hosted: the team app's base
+/// configuration and identity provider on the outer pipeline, RAG, the
+/// interactive SSR sign-in, then PublicRendering — the documented order.
+let private coHostApp (port: int) (contentRoot: string) (publicDir: string) (extensions: ComposeExtensions) =
+    let s = coHostIssuer.Force()
+
+    let config = {
+        ServerConfig.defaults with
+            Port = port
+            PublicPath = publicDir
+            Surfaces = [ SurfaceProfile.individual; SurfaceProfile.team ]
+            PublicRendering = EnabledPublicRendering(ContentRoot contentRoot)
+            // The team-mode boot preflight, answered the way a test
+            // deployment honestly can: no proxy in front, secrets in
+            // in-memory storage, SSE on the cookie, SameSite-only CSRF
+            // (the cases send no browser cookie), open team creation.
+            TrustForwardedHeaders = false
+            SseAuthMode = CookieRequired
+            AcceptPlaintextSecretsWhenAuthRequired = true
+            AcceptSameSiteOnlyCsrfWhenAuthRequired = true
+            TeamCreationPolicy = AnyAuthenticatedUser
+    }
+
+    let auth =
+        ToolUp.AuthProviders.OidcAuthProvider.fromConfigWith (new Net.Http.HttpClient()) None {
+            Issuer = Some s.IssuerUrl
+            Audience = None
+            KeySource = JwksDiscovery s.IssuerUrl
+            TokenLocation = BearerOrCookie AuthSession.CookieName
+            ClockSkewSeconds = None
+            AcceptedAlgorithms = None
+            PreferOidWhenPresent = None
+            ClaimMapping = Some ClaimMapping.directoryRoles
+        }
+
+    let signIn =
+        ToolUp.AuthProviders.OidcSsrSignIn.defaults
+            $"{s.IssuerUrl}/authorize"
+            $"{s.IssuerUrl}/token"
+            "co-host-client"
+            $"http://127.0.0.1:{port}/auth/callback"
+
+    ServerApp.empty
+    |> ServerApp.withConfig config
+    |> ServerApp.withExtensions extensions
+    |> ServerApp.withStorage (ToolUp.Platform.Testing.Fakes.standardBlobStorage ())
+    |> ServerApp.withLogger coHostLogger
+    |> ServerApp.withAuth auth
+    |> ToolUp.RAG.RAGCompose.withRAG ragStubFactory ragStubProfile ragStubEmbedder id
+    |> ToolUp.AuthProviders.OidcSsrSignIn.withInteractiveSignIn (new Net.Http.HttpClient()) signIn
+    |> PublicRenderingCompose.withPublicRendering (
+        PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "page") coHostLayout
+    )
+
+/// Host the composition through `ServerApp.run` and hand `body` a client
+/// on its port; the host is stopped, and the process-wide culture
+/// `compose` sets is restored, whatever `body` does.
+let private withCoHost (body: Net.Http.HttpClient -> Async<unit>) = async {
+    let contentRoot = mkFixtureDir ()
+    let publicDir = mkFixtureDir ()
+    seedCoHostContent contentRoot
+    seedBundle publicDir
+    let port = freePort ()
+
+    let started =
+        Threading.Tasks.TaskCompletionSource<Microsoft.Extensions.Hosting.IHostApplicationLifetime>(
+            Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously
+        )
+
+    let capture: ComposeExtensions = {
+        ComposeExtensions.empty with
+            ServiceConfig =
+                Some(fun services ->
+                    services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
+                        LifetimeCapture(
+                            sp.GetRequiredService<Microsoft.Extensions.Hosting.IHostApplicationLifetime>(),
+                            started
+                        )
+                        :> Microsoft.Extensions.Hosting.IHostedService)
+                    |> ignore
+
+                    services)
+    }
+
+    let app = coHostApp port contentRoot publicDir capture
+    let culture = Globalization.CultureInfo.DefaultThreadCurrentCulture
+    let uiCulture = Globalization.CultureInfo.DefaultThreadCurrentUICulture
+
+    let running =
+        Threading.Tasks.Task.Factory.StartNew(
+            (fun () -> ServerApp.run app),
+            Threading.Tasks.TaskCreationOptions.LongRunning
+        )
+
+    try
+        let! first =
+            Threading.Tasks.Task.WhenAny(
+                started.Task :> Threading.Tasks.Task,
+                running :> Threading.Tasks.Task,
+                Threading.Tasks.Task.Delay(TimeSpan.FromSeconds 60.0)
+            )
+            |> Async.AwaitTask
+
+        if not (obj.ReferenceEquals(first, started.Task)) then
+            if running.IsFaulted then
+                raise running.Exception.InnerException
+
+            failtest "the composed host did not start"
+
+        use handler =
+            new Net.Http.HttpClientHandler(AllowAutoRedirect = false, UseCookies = false)
+
+        use client =
+            new Net.Http.HttpClient(handler, BaseAddress = Uri $"http://127.0.0.1:{port}")
+
+        do! body client
+    finally
+        if started.Task.IsCompletedSuccessfully then
+            started.Task.Result.StopApplication()
+            running.Wait(TimeSpan.FromSeconds 30.0) |> ignore
+
+        Globalization.CultureInfo.DefaultThreadCurrentCulture <- culture
+        Globalization.CultureInfo.DefaultThreadCurrentUICulture <- uiCulture
+}
+
+/// One request: optional bearer token, optional browser navigation.
+let private coHostSend
+    (client: Net.Http.HttpClient)
+    (verb: Net.Http.HttpMethod)
+    (path: string)
+    (token: string option)
+    (navigation: bool)
+    =
+    async {
+        use request = new Net.Http.HttpRequestMessage(verb, path)
+
+        token
+        |> Option.iter (fun t -> request.Headers.Add("Authorization", "Bearer " + t))
+
+        if navigation then
+            request.Headers.Add("Accept", "text/html")
+
+        if verb = Net.Http.HttpMethod.Post then
+            request.Content <- new Net.Http.StringContent("[]", Text.Encoding.UTF8, "application/json")
+
+        use! response = client.SendAsync request |> Async.AwaitTask
+        let! text = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+
+        let location =
+            match response.Headers.Location with
+            | null -> None
+            | l -> Some(string l)
+
+        return int response.StatusCode, text, location
+    }
+
+let private ragCoHostTests =
+    testList "Phase 988 — a RAG app and gated SSR pages on one pipeline" [
+
+        testCase "the companion-marker guard holds when both composers run"
+        <| fun _ ->
+            let contentRoot = mkFixtureDir ()
+            seedCoHostContent contentRoot
+
+            let composed = coHostApp 5000 contentRoot (mkFixtureDir ()) ComposeExtensions.empty
+
+            Expect.isTrue
+                (composed.ComposedCompanions |> List.contains "ToolUp.PublicRendering")
+                "the PublicRendering marker survives the RAG composition beneath it"
+
+            let raised =
+                try
+                    composed
+                    |> PublicRenderingCompose.withPublicRendering (
+                        PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "page") coHostLayout
+                    )
+                    |> ignore
+
+                    None
+                with ex ->
+                    Some ex.Message
+
+            Expect.isSome raised "a second withPublicRendering over RAG + PublicRendering is refused at compose time"
+            Expect.stringContains raised.Value "ToolUp.PublicRendering" "and the refusal names the companion"
+
+            // RAG composed AFTER PublicRendering must not drop the marker either.
+            let reversed =
+                ServerApp.empty
+                |> ServerApp.withConfig {
+                    ServerConfig.defaults with
+                        PublicRendering = EnabledPublicRendering(ContentRoot contentRoot)
+                }
+                |> PublicRenderingCompose.withPublicRendering (
+                    PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "page") coHostLayout
+                )
+                |> ToolUp.RAG.RAGCompose.withRAG ragStubFactory ragStubProfile ragStubEmbedder id
+
+            Expect.isTrue
+                (reversed.ComposedCompanions |> List.contains "ToolUp.PublicRendering")
+                "withRAG after withPublicRendering keeps the marker"
+
+        testCaseAsync "every route resolves to its own handler on the shared pipeline, with a client bundle shipped"
+        <| withCoHost (fun client -> async {
+            let get path =
+                coHostSend client Net.Http.HttpMethod.Get path None true
+
+            let! about, aboutBody, _ = get "/about"
+            let! deep, deepBody, _ = get "/workspace/reports/q3"
+            let! asset, assetBody, _ = coHostSend client Net.Http.HttpMethod.Get "/main.js" None false
+            let! sitemap, sitemapBody, _ = coHostSend client Net.Http.HttpMethod.Get "/sitemap.xml" None false
+
+            // The team app's own calls carry the signed-in member's token.
+            let memberToken = Some(coHostIssuer.Force().MintTokenFor("carol", []))
+
+            let! platformInfo, platformInfoBody, _ =
+                coHostSend client Net.Http.HttpMethod.Post "/api/PlatformInfoApi/GetPlatformInfo" memberToken false
+
+            let! aiSettings, aiSettingsBody, _ =
+                coHostSend client Net.Http.HttpMethod.Post "/api/AISettingsApi/ListAvailable" memberToken false
+
+            let! unknownApi, unknownApiBody, _ =
+                coHostSend client Net.Http.HttpMethod.Get "/api/no-such-route" memberToken true
+
+            // SSR slug: the page, not the shell.
+            Expect.equal about 200 "GET /about is served"
+            Expect.stringContains aboutBody "Title-about" "by the SSR page handler"
+            Expect.isFalse (aboutBody.Contains shellMarker) "not by the SPA fallback"
+
+            // An unrouted SPA path still gets the shell.
+            Expect.equal deep 200 "an SPA deep link is served"
+            Expect.stringContains deepBody shellMarker "with the client shell"
+
+            // Static assets are untouched.
+            Expect.equal asset 200 "a bundle asset is served"
+            Expect.stringContains assetBody "bundle-988" "from PublicPath"
+
+            // PublicRendering's own routes resolve.
+            Expect.equal sitemap 200 "the sitemap is served"
+            Expect.stringContains sitemapBody "/about" "and lists the public page"
+            Expect.isFalse (sitemapBody.Contains "/editors") "but never a gated one"
+
+            // /api: the platform's API, the AI team app's API, and an unknown
+            // route that neither the shell nor a page may answer.
+            Expect.equal platformInfo 200 "the platform API is reachable"
+            Expect.isFalse (platformInfoBody.Contains shellMarker) "and is not shadowed"
+            Expect.equal aiSettings 200 "the AI settings API mounted by withRAG is reachable"
+            Expect.stringStarts aiSettingsBody "[" "and answers with its JSON"
+            Expect.equal unknownApi 404 "an unknown /api route is a 404"
+            Expect.isFalse (unknownApiBody.Contains shellMarker) "never the shell"
+        })
+
+        testCaseAsync "gated pages under the RAG root take the team app's auth context, with sign-in and token roles"
+        <| withCoHost (fun client -> async {
+            let s = coHostIssuer.Force()
+            let token sub (claims: (string * obj) list) = Some(s.MintTokenFor(sub, claims))
+            let editor = token "zoe" [ "roles", box [| "editor" |] ]
+            let viewer = token "yuri" [ "roles", box [| "viewer" |] ]
+
+            let! navMembers, navMembersBody, navMembersLocation =
+                coHostSend client Net.Http.HttpMethod.Get "/members" None true
+
+            let! navEditors, _, navEditorsLocation = coHostSend client Net.Http.HttpMethod.Get "/editors" None true
+            let! fetchEditors, fetchBody, _ = coHostSend client Net.Http.HttpMethod.Get "/editors" None false
+            let! memberOk, memberBody, _ = coHostSend client Net.Http.HttpMethod.Get "/members" viewer true
+            let! editorOk, editorBody, _ = coHostSend client Net.Http.HttpMethod.Get "/editors" editor true
+
+            let! viewerRefused, viewerBody, viewerLocation =
+                coHostSend client Net.Http.HttpMethod.Get "/editors" viewer true
+
+            let! signIn, _, signInLocation =
+                coHostSend client Net.Http.HttpMethod.Get "/auth/sign-in?returnUrl=%2Feditors" None true
+
+            // A cold browser is sent to sign in, never handed the shell.
+            Expect.equal navMembers 302 "a credential-less navigation to an Authenticated page is redirected"
+            Expect.isFalse (navMembersBody.Contains shellMarker) "not answered with the shell"
+
+            Expect.equal
+                navMembersLocation
+                (Some "/auth/sign-in?returnUrl=%2Fmembers")
+                "to the SSR sign-in, carrying the page"
+
+            Expect.equal navEditors 302 "and so is one to a ScopeGated page"
+            Expect.equal navEditorsLocation (Some "/auth/sign-in?returnUrl=%2Feditors") "carrying that page"
+            Expect.equal fetchEditors 401 "a non-navigation request keeps the bare 401"
+            Expect.isFalse (fetchBody.Contains "Title-editors") "with no page content"
+
+            // The sign-in route itself is reachable past the SPA fallback.
+            Expect.equal signIn 302 "the sign-in route answers"
+
+            Expect.isTrue
+                (signInLocation
+                 |> Option.exists (fun l -> l.StartsWith(s.IssuerUrl + "/authorize?")))
+                "and sends the browser to the identity provider"
+
+            // Token roles decide ScopeGated; any signed-in reader passes Authenticated.
+            Expect.equal memberOk 200 "a signed-in reader reads the Authenticated page"
+            Expect.stringContains memberBody "Title-members" "its content"
+            Expect.equal editorOk 200 "a reader holding the directory role reads the ScopeGated page"
+            Expect.stringContains editorBody "Title-editors" "its content"
+            Expect.equal viewerRefused 403 "a reader without the role is refused"
+            Expect.isNone viewerLocation "with no redirect back into sign-in"
+            Expect.isFalse (viewerBody.Contains "Title-editors") "and no page content"
+            Expect.isFalse (viewerBody.Contains shellMarker) "and not the shell"
+        })
+    ]
+
+/// Drive `SpaFallbackMiddleware` alone over a bundle directory: `downstream`
+/// is the rest of the pipeline (it sets a status and may write a body), and
+/// `precedence` is what DI holds. Returns (status, body, downstream ran).
+let private runSpaFallback (precedence: SpaFallbackPrecedence option) (downstream: int * string option) (path: string) =
+    let publicDir = mkFixtureDir ()
+    seedBundle publicDir
+
+    let services = ServiceCollection()
+
+    precedence
+    |> Option.iter (fun p -> services.AddSingleton<SpaFallbackPrecedence>(p) |> ignore)
+
+    let ctx = DefaultHttpContext()
+    ctx.RequestServices <- services.BuildServiceProvider()
+    ctx.Request.Method <- "GET"
+    ctx.Request.Path <- PathString path
+    let responseBody = new MemoryStream()
+    ctx.Response.Body <- responseBody
+    let mutable ran = false
+
+    let next =
+        RequestDelegate(fun c ->
+            ran <- true
+            let status, text = downstream
+            c.Response.StatusCode <- status
+
+            match text with
+            | Some t -> c.Response.WriteAsync t
+            | None -> Threading.Tasks.Task.CompletedTask)
+
+    let config = {
+        ServerConfig.defaults with
+            PublicPath = publicDir
+    }
+
+    (SpaFallbackMiddleware(next, config)).InvokeAsync(ctx).Wait()
+    ctx.Response.StatusCode, Text.Encoding.UTF8.GetString(responseBody.ToArray()), ran
+
+let private spaFallbackPrecedenceTests =
+    testList "Phase 988 — SPA fallback precedence" [
+        testCase "unregistered: the shell answers first and the router never runs (pre-988, GP 11)"
+        <| fun _ ->
+            let status, text, ran = runSpaFallback None (200, Some "page") "/about"
+            Expect.equal status 200 "served"
+            Expect.stringContains text shellMarker "the shell"
+            Expect.isFalse ran "the rest of the pipeline is not consulted"
+
+        testCase "RouterFirst: a route that answers wins over the shell"
+        <| fun _ ->
+            let status, text, ran =
+                runSpaFallback (Some RouterFirst) (200, Some "page") "/about"
+
+            Expect.isTrue ran "the router runs first"
+            Expect.equal (status, text) (200, "page") "and its answer stands"
+
+        testCase "RouterFirst: a refusal is not replaced by the shell"
+        <| fun _ ->
+            let status, text, _ = runSpaFallback (Some RouterFirst) (401, None) "/members"
+            Expect.equal status 401 "the refusal stands"
+            Expect.isFalse (text.Contains shellMarker) "with no shell"
+
+        testCase "RouterFirst: a path nothing answered gets the shell"
+        <| fun _ ->
+            let status, text, ran =
+                runSpaFallback (Some RouterFirst) (404, None) "/workspace/reports"
+
+            Expect.isTrue ran "the router was asked"
+            Expect.equal status 200 "then the shell is served"
+            Expect.stringContains text shellMarker "the shell"
+
+        testCase "RouterFirst: /api and asset paths are never the shell's"
+        <| fun _ ->
+            let apiStatus, apiText, _ =
+                runSpaFallback (Some RouterFirst) (404, None) "/api/nope"
+
+            let assetStatus, assetText, _ =
+                runSpaFallback (Some RouterFirst) (404, None) "/missing.png"
+
+            Expect.equal (apiStatus, apiText) (404, "") "an unrouted /api path stays a 404"
+            Expect.equal (assetStatus, assetText) (404, "") "a missing asset stays a 404"
+
+        testCase "useRouterFirst is idempotent"
+        <| fun _ ->
+            let services = ServiceCollection() :> IServiceCollection
+
+            SpaFallbackPrecedence.useRouterFirst services
+            |> SpaFallbackPrecedence.useRouterFirst
+            |> ignore
+
+            Expect.equal
+                (services
+                 |> Seq.filter (fun d -> d.ServiceType = typeof<SpaFallbackPrecedence>)
+                 |> Seq.length)
+                1
+                "one registration however many compositions ask"
+    ]
+
 let tests =
     testList "PublicRendering" [
         contractTests
@@ -1873,4 +2381,6 @@ let tests =
         structuredData151Tests
         robots152Tests
         hreflang154Tests
+        ragCoHostTests
+        spaFallbackPrecedenceTests
     ]

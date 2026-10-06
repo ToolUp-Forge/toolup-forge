@@ -137,6 +137,58 @@ A confidential client sets `ClientSecret = Some <secret from your secret store>`
 - The session cookie is `HttpOnly`, `SameSite=Lax` and `Secure` on HTTPS. **Lax rather than the SPA flow's Strict is the point**: the reader arrives by a cross-site navigation (a link in an email), which a `Strict` cookie is withheld from. `Lax` is still withheld from cross-site sub-requests and `POST`s, and mutating `/api` calls stay behind the CSRF middleware.
 - Only a credential-less browser navigation (`GET` / `HEAD` accepting `text/html`) is redirected; an API-style fetch keeps the `401`. A signed-in reader who lacks the role gets `403`, never a redirect, so a sign-in cannot loop. A forged or expired `state`, an IdP error, a failed exchange, a refused token or a nonce mismatch ends on an error page with no session cookie.
 
+## Worked example — gated reports beside a RAG team app
+
+A team app that computes with AI and retrieval can publish what it computes, to an audience, from the same
+deployment. `RAGCompose.withRAG` and `PublicRenderingCompose.withPublicRendering` are both
+`ServerApp -> ServerApp`, so they stack on one pipeline, and the gated pages are judged against the same
+`AccessContext` the team app's `/api` calls resolve: the same identity provider, the same team roles, the same
+token roles.
+
+```fsharp
+open ToolUp.Platform
+open ToolUp.PublicRendering
+open ToolUp.RAG
+open ToolUp.RAG.RAGCompose
+
+ServerApp.empty
+|> ServerApp.withConfig config            // team surface, PublicPath = the client bundle, PublicRendering enabled
+|> ServerApp.withAuth authProvider        // one identity provider for the app and the pages
+|> RAGCompose.withRAG factory providerProfile embedder (fun rag -> rag |> RAGServerApp.withTopK 8)
+|> ToolUp.AuthProviders.OidcSsrSignIn.withInteractiveSignIn (new System.Net.Http.HttpClient()) signIn
+|> PublicRenderingCompose.withPublicRendering (fun pr -> pr |> PublicRenderingServerApp.withLayout (LayoutName "page") pageLayout)
+|> ServerApp.run                          // the combined pipeline ends here
+
+// pages/q3-results.md  →  ---\naudience: scope:finance-reader\n---
+```
+
+**End the pipeline in `ServerApp.run`, never `RAGServerApp.run`.** `RAGServerApp.run` (like
+`PublicRenderingServerApp.run`) is a terminal: it composes RAG and starts the host, so nothing can be stacked
+after it. Use the `with*` composers for every companion and call `ServerApp.run` once, last. Set base
+configuration (`withConfig`, `withAuth`, `withStorage`) on the outer pipeline before the first composer; the
+delegating helpers on `RAGServerApp` / `PublicRenderingServerApp` overwrite it if called inside a configurator.
+
+How the routes divide on that pipeline:
+
+| Request | Answered by |
+|---|---|
+| a static file under `PublicPath` (`/main.js`, `/logo.svg`) | static files, unchanged |
+| `/api/*` — the platform's APIs and the AI / RAG endpoints `withRAG` mounts | the router; never the SPA shell |
+| a content slug (`/about`, `/q3-results`) | the SSR page handler, gated by its `audience:` |
+| `/sitemap.xml`, feeds, `/auth/sign-in`, `/auth/callback` | the router |
+| an extensionless path no route claims (`/workspace/reports`) | the SPA shell (`PublicPath/index.html`) |
+
+The shell is the last resort: composing PublicRendering registers `SpaFallbackPrecedence.RouterFirst`, so the
+SPA fallback lets the router answer first and serves the shell only to a `GET` nothing answered. A gated page
+therefore returns `401` / `403` (or the sign-in redirect) rather than the shell, even with a client bundle
+shipped. Releases before 0.24.0 answered every extensionless `GET` with the shell once a bundle was present, so
+no SSR page was reachable on such a deployment; see
+[the 0.24.0 migration note](../migrations/988-spa-fallback-defers-to-ssr-routes.md). Keep page slugs distinct
+from the client router's paths: a slug that names a client route is served by the page handler, not the SPA.
+
+PublicRendering's companion guard still holds on this pipeline: a second `withPublicRendering` is refused at
+compose time, whichever order it and `withRAG` ran in.
+
 ## Security notes
 
 - **The gate is structural, not advisory.** `ClientGated` matches against the principal's *own* resolved scope ids, never a value the caller supplies. A principal cannot request another client's page by guessing the slug.
@@ -151,6 +203,7 @@ A confidential client sets `ClientSecret = Some <secret from your secret store>`
 - [`docs/migrations/86-gated-ssr.md`](../migrations/86-gated-ssr.md) — the adoption / breaking-change summary.
 - [`docs/migrations/989-gated-ssr-fails-closed.md`](../migrations/989-gated-ssr-fails-closed.md) — page routes resolve the principal, and `ScopeGated` requires a held role.
 - [`docs/migrations/987-directory-roles-and-ssr-sign-in.md`](../migrations/987-directory-roles-and-ssr-sign-in.md) — `AccessContext.TokenRoles`, the `ClaimMapping` role and admission fields, and interactive sign-in.
+- [`docs/migrations/988-spa-fallback-defers-to-ssr-routes.md`](../migrations/988-spa-fallback-defers-to-ssr-routes.md) — SSR pages and the SPA shell on one deployment.
 - [Claim mapping](../companions/auth-providers.md) — the identity half of `ClaimMapping`.
 - [`docs/platform/dynamic-ssr.md`](dynamic-ssr.md) — data-bound content sources (the body of a `ClientGated` analytics page).
 - [`docs/migrations/84-ssr-render-cache.md`](../migrations/84-ssr-render-cache.md) — the render cache gated pages compose with.

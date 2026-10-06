@@ -45,10 +45,11 @@ Migration notes:
 - [939-pgvector-tuned-default](docs/migrations/939-pgvector-tuned-default.md)
 - [945-rag-operations-follow-ups](docs/migrations/945-rag-operations-follow-ups.md)
 - [987-directory-roles-and-ssr-sign-in](docs/migrations/987-directory-roles-and-ssr-sign-in.md)
+- [988-spa-fallback-defers-to-ssr-routes](docs/migrations/988-spa-fallback-defers-to-ssr-routes.md)
 - [989-gated-ssr-fails-closed](docs/migrations/989-gated-ssr-fails-closed.md)
 - [9x-self-hosted-observability-module](docs/migrations/9x-self-hosted-observability-module.md)
 
-_Surface since `v0.23.0`: **breaking** — 46 packages moved; 3994 members added, 87 members changed, 617 members removed; 12 packages new._
+_Surface since `v0.23.0`: **breaking** — 46 packages moved; 4005 members added, 87 members changed, 617 members removed; 12 packages new._
 
 ### Added
 
@@ -383,7 +384,7 @@ _Surface since `v0.23.0`: **breaking** — 46 packages moved; 3994 members added
   - `ToolUp.Platform.AI.AIProviderCallOptionsExtensions (class)`
   - `ToolUp.Platform.AI.AIProviderCallOptionsExtensions.IAIProvider.SendMessageWith(ToolUp.Platform.AI.IAIProvider, ToolUp.Platform.AI.AIProviderCallOptions, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolDef], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]], ToolUp.Platform.Transport.RetryPolicy) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AI.AIProviderCallResponse, ToolUp.Platform.AI.AIProviderError]]`
   - … and 857 more — `git diff v0.23.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
-- `ToolUp.Platform.Server` — 619 members:
+- `ToolUp.Platform.Server` — 630 members:
   - `ToolUp.Platform.AlertRuleEngine+AlertRuleStatusBoard (class)`
   - `ToolUp.Platform.AlertRuleEngine+AlertRuleStatusBoard..ctor()`
   - `ToolUp.Platform.AlertRuleEngine+AlertRuleStatusBoard.Get(System.String) : ToolUp.Platform.AlertRuleObservation`
@@ -404,7 +405,7 @@ _Surface since `v0.23.0`: **breaking** — 46 packages moved; 3994 members added
   - `ToolUp.Platform.BlobCodec`1 (class)`
   - `ToolUp.Platform.BlobCodec`1..ctor(Microsoft.FSharp.Core.FSharpFunc`2[T, System.Byte[]], Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpResult`2[T, System.String]])`
   - `ToolUp.Platform.BlobCodec`1.Decode : Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpResult`2[T, System.String]] { get }`
-  - … and 599 more — `git diff v0.23.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
+  - … and 610 more — `git diff v0.23.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
 - `ToolUp.Platform.Transport` — new package (90 public members)
 - `ToolUp.RAG.Core` — 9 members:
   - `ToolUp.RAG.IngestionTypes+DocumentIngestionJob.Attempt : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IngestionAttempt] { get }`

@@ -39,6 +39,41 @@ open Microsoft.AspNetCore.Http
 // `UseStaticFiles` isn't registered when `PublicPath` doesn't exist —
 // so the SPA fallback's `next.Invoke` path is never reached.
 
+// Phase 988 — precedence against server-rendered routes. The shell-first
+// order above is right for a pure SPA: every extensionless path is the
+// client router's. It is wrong once the deployment also serves pages from
+// the server — SSR slugs, gated pages, a server-side sign-in callback —
+// because those are extensionless GETs too, and the shell answered them
+// before the router ever ran: with a client bundle shipped, no SSR page
+// was reachable. A composition that serves such routes registers
+// `SpaFallbackPrecedence.RouterFirst` in DI, and the fallback then runs
+// the rest of the pipeline first and serves the shell only to a GET that
+// nothing downstream answered (an unstarted 404). Unregistered, the
+// shell-first behaviour is unchanged (GP 11). `/api`, the probes, `/dev`
+// and paths with an extension are excluded in both orders, and static
+// files are served upstream of this middleware in both.
+
+/// Phase 988 — which answers an extensionless GET first: the SPA shell or
+/// the server's router. Registered in DI by a composition that serves
+/// server-rendered routes (`ToolUp.PublicRendering`, the interactive SSR
+/// sign-in); absent means `ShellFirst`.
+type SpaFallbackPrecedence =
+    /// The shell answers every candidate path (the pre-988 behaviour).
+    | ShellFirst
+    /// The router answers first; the shell is served only where nothing
+    /// downstream did.
+    | RouterFirst
+
+module SpaFallbackPrecedence =
+    open Microsoft.Extensions.DependencyInjection
+    open Microsoft.Extensions.DependencyInjection.Extensions
+
+    /// Register `RouterFirst`. Idempotent: several compositions that serve
+    /// server-rendered routes may each call it.
+    let useRouterFirst (services: IServiceCollection) : IServiceCollection =
+        services.RemoveAll<SpaFallbackPrecedence>() |> ignore
+        services.AddSingleton<SpaFallbackPrecedence>(RouterFirst)
+
 type SpaFallbackMiddleware(next: RequestDelegate, config: ServerConfig) =
     let publicPath = Path.GetFullPath config.PublicPath
     let indexPath = Path.Combine(publicPath, "index.html")
@@ -62,10 +97,27 @@ type SpaFallbackMiddleware(next: RequestDelegate, config: ServerConfig) =
             && not (Path.HasExtension path)
             && File.Exists indexPath
 
-        if shouldServe then
+        let routerFirst =
+            match ctx.RequestServices with
+            | null -> false
+            | services ->
+                match services.GetService typeof<SpaFallbackPrecedence> with
+                | :? SpaFallbackPrecedence as precedence -> precedence = RouterFirst
+                | _ -> false
+
+        let serveShell () =
             ctx.Response.ContentType <- "text/html; charset=utf-8"
             ctx.Response.StatusCode <- 200
-            do! ctx.Response.SendFileAsync indexPath
+            ctx.Response.SendFileAsync indexPath
+
+        if shouldServe && routerFirst then
+            do! next.Invoke(ctx)
+
+            // Nothing downstream answered: the path is the client router's.
+            if not ctx.Response.HasStarted && ctx.Response.StatusCode = 404 then
+                do! serveShell ()
+        elif shouldServe then
+            do! serveShell ()
         else
             do! next.Invoke(ctx)
     }

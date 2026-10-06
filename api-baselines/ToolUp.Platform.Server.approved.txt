@@ -10114,6 +10114,17 @@ ToolUp.Platform.SoftwareBillOfMaterials.Subject : ToolUp.Platform.SbomSubject { 
 ToolUp.Platform.SpaFallbackMiddleware (class)
 ToolUp.Platform.SpaFallbackMiddleware..ctor(Microsoft.AspNetCore.Http.RequestDelegate, ToolUp.Platform.ServerConfig)
 ToolUp.Platform.SpaFallbackMiddleware.InvokeAsync(Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.Unit]
+ToolUp.Platform.SpaFallbackPrecedence (class)
+ToolUp.Platform.SpaFallbackPrecedence.IsRouterFirst : System.Boolean { get }
+ToolUp.Platform.SpaFallbackPrecedence.IsShellFirst : System.Boolean { get }
+ToolUp.Platform.SpaFallbackPrecedence.RouterFirst : ToolUp.Platform.SpaFallbackPrecedence { get }
+ToolUp.Platform.SpaFallbackPrecedence.ShellFirst : ToolUp.Platform.SpaFallbackPrecedence { get }
+ToolUp.Platform.SpaFallbackPrecedence.Tag : System.Int32 { get }
+ToolUp.Platform.SpaFallbackPrecedence+Tags (class)
+ToolUp.Platform.SpaFallbackPrecedence+Tags.RouterFirst : System.Int32 (literal)
+ToolUp.Platform.SpaFallbackPrecedence+Tags.ShellFirst : System.Int32 (literal)
+ToolUp.Platform.SpaFallbackPrecedenceModule (class)
+ToolUp.Platform.SpaFallbackPrecedenceModule.useRouterFirst(Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.Extensions.DependencyInjection.IServiceCollection
 ToolUp.Platform.SpendOutcome (class)
 ToolUp.Platform.SpendOutcome.IsSpendCommitted : System.Boolean { get }
 ToolUp.Platform.SpendOutcome.IsSpendReturned : System.Boolean { get }
