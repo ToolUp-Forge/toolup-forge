@@ -472,12 +472,13 @@ ToolUp.Platform.AIToolResultBudget+Tags.DefaultResultBudget : System.Int32 (lite
 ToolUp.Platform.AIToolResultBudget+Tags.NoResultBudget : System.Int32 (literal)
 ToolUp.Platform.AIToolResultBudget+Tags.ResultBudgetChars : System.Int32 (literal)
 ToolUp.Platform.AccessContext (class)
-ToolUp.Platform.AccessContext..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Subject, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole])
+ToolUp.Platform.AccessContext..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Subject, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole], Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Platform.AccessContext.ModuleExposure : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure] { get }
 ToolUp.Platform.AccessContext.ModulePermissions : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]] { get }
 ToolUp.Platform.AccessContext.PlatformRole : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole] { get }
 ToolUp.Platform.AccessContext.Subject : ToolUp.Platform.Subject { get }
 ToolUp.Platform.AccessContext.TeamId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.AccessContext.TokenRoles : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.AccessContext.UserId : System.String { get }
 ToolUp.Platform.AccessContextModule (class)
 ToolUp.Platform.AccessContextModule.canAccessModule(System.String, ToolUp.Platform.AccessContext) : System.Boolean
@@ -494,6 +495,7 @@ ToolUp.Platform.AccessContextModule.isClaimBearer(ToolUp.Platform.AccessContext)
 ToolUp.Platform.AccessContextModule.isModuleAvailable(System.String, ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.isModuleExposed(System.String, ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.kindLabel(ToolUp.Platform.AccessContext) : System.String
+ToolUp.Platform.AccessContextModule.tokenRolesFor(ToolUp.Platform.Subject, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.AccessContextModule.unrestricted(ToolUp.Platform.Subject) : ToolUp.Platform.AccessContext
 ToolUp.Platform.AccessibilityApi (class)
 ToolUp.Platform.AccessibilityApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.AccessibleModulesResponse]])
@@ -2569,10 +2571,16 @@ ToolUp.Platform.ClaimBearerConfig..ctor(System.Int32, Microsoft.FSharp.Core.FSha
 ToolUp.Platform.ClaimBearerConfig.DefaultLifetimeDays : System.Int32 { get }
 ToolUp.Platform.ClaimBearerConfig.DefaultUseLimit : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
 ToolUp.Platform.ClaimMapping (class)
-ToolUp.Platform.ClaimMapping..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.ClaimMapping..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.ClaimMapping.AllowedTenants : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ClaimMapping.GroupAliases : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
+ToolUp.Platform.ClaimMapping.GroupsClaim : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ClaimMapping.RequiredRoles : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ClaimMapping.RolesClaim : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClaimMapping.TenantIdClaim : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClaimMapping.UserIdClaim : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClaimMappingModule (class)
+ToolUp.Platform.ClaimMappingModule.directoryRoles : ToolUp.Platform.ClaimMapping { get }
 ToolUp.Platform.ClaimMappingModule.isEmpty(ToolUp.Platform.ClaimMapping) : System.Boolean
 ToolUp.Platform.ClaimMappingModule.none : ToolUp.Platform.ClaimMapping { get }
 ToolUp.Platform.ClassificationLevel (class)
@@ -3200,8 +3208,10 @@ ToolUp.Platform.ConfigKeys+Names.notifyInviterOnInviteExpiry : System.String (li
 ToolUp.Platform.ConfigKeys+Names.oauthRedirectBase : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.oauthRefresher : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.oidcAudience : System.String (literal)
+ToolUp.Platform.ConfigKeys+Names.oidcGroupsClaim : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.oidcIssuer : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.oidcPreflightTimeoutMs : System.String (literal)
+ToolUp.Platform.ConfigKeys+Names.oidcRolesClaim : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.oidcTenantIdClaim : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.oidcUserIdClaim : System.String (literal)
 ToolUp.Platform.ConfigKeys+Names.parityAzurite : System.String (literal)
@@ -7713,6 +7723,13 @@ ToolUp.Platform.InspectorPanel+Tags.SurfacesPanel : System.Int32 (literal)
 ToolUp.Platform.InspectorPanelModule (class)
 ToolUp.Platform.InspectorPanelModule.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InspectorPanel] { get }
 ToolUp.Platform.InspectorPanelModule.slug(ToolUp.Platform.InspectorPanel) : System.String
+ToolUp.Platform.InteractiveSignIn (class)
+ToolUp.Platform.InteractiveSignIn..ctor(System.String)
+ToolUp.Platform.InteractiveSignIn.SignInPath : System.String { get }
+ToolUp.Platform.InteractiveSignInModule (class)
+ToolUp.Platform.InteractiveSignInModule.ReturnUrlParameter : System.String (literal)
+ToolUp.Platform.InteractiveSignInModule.isLocalReturnUrl(System.String) : System.Boolean
+ToolUp.Platform.InteractiveSignInModule.redirectFor(ToolUp.Platform.InteractiveSignIn, System.String) : System.String
 ToolUp.Platform.InvalidatesAttribute (class)
 ToolUp.Platform.InvalidatesAttribute..ctor(System.String[])
 ToolUp.Platform.InvalidatesAttribute.MethodNames : System.String[] { get }

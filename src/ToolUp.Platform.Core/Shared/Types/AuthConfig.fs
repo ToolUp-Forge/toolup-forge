@@ -127,10 +127,18 @@ type TokenLocation =
 /// family generically instead of one provider-specific decorator per
 /// IdP.
 ///
-/// **Both fields are `string option` and both default to `None`.** A
-/// mapping that names no claim is a no-op, and `AuthConfig.ClaimMapping
-/// = None` skips the projection entirely — an existing deployment is
-/// byte-for-byte unchanged until it opts in (GP 11).
+/// **Every field defaults to "names nothing" (`ClaimMapping.none`).** A
+/// mapping that names no claim and no admission rule is a no-op, and
+/// `AuthConfig.ClaimMapping = None` skips the projection entirely — an
+/// existing deployment is byte-for-byte unchanged until it opts in (GP 11).
+///
+/// Phase 987 adds the directory half: `RolesClaim` / `GroupsClaim` project
+/// the IdP's role and group claims onto `AuthenticatedUser.Roles`
+/// (`GroupAliases` renames group ids), and `AllowedTenants` /
+/// `RequiredRoles` form an optional admission gate. Build from
+/// `ClaimMapping.none` or `ClaimMapping.directoryRoles` with a copy-and-
+/// update expression so a later field addition does not break the call
+/// site.
 ///
 /// **A named claim is REQUIRED, not preferred (fail-closed).** When a
 /// claim is named here and the validated token does not carry it as a
@@ -156,6 +164,42 @@ type ClaimMapping = {
     /// leaves `TenantId` exactly as the provider resolved it (which is
     /// `None` for the generic OIDC provider). Example: `Some "tid"`.
     TenantIdClaim: string option
+    /// Phase 987 — claim whose values become `AuthenticatedUser.Roles`
+    /// (and so `AccessContext.TokenRoles`, which `ScopeGated` pages read).
+    /// `None` maps no role claim. The conventional name is `roles` (Entra
+    /// app roles, and most IdPs' role claim): `ClaimMapping.directoryRoles`
+    /// names it. The claim may be a JSON string (one role) or an array of
+    /// strings; an absent claim grants no role. Any other shape — a number,
+    /// an object, an array holding a non-string or a blank entry — rejects
+    /// the token (fail-closed), naming the claim.
+    RolesClaim: string option
+    /// Phase 987 — claim whose values (group ids or names) also become
+    /// `AuthenticatedUser.Roles`, after `GroupAliases`. `None` maps no
+    /// group claim; the conventional name is `groups`. Same shape rules as
+    /// `RolesClaim`. When the IdP reports a group OVERAGE instead of the
+    /// claim — `_claim_names` names this claim, which Microsoft Entra does
+    /// when a user is in more groups than fit in a token — the token is
+    /// rejected naming the claim: the SDK does not call the directory to
+    /// resolve the groups, and treating the user as group-less would
+    /// silently deny (or, under a negative rule, silently admit) them.
+    GroupsClaim: string option
+    /// Phase 987 — group id → role name. A value of `GroupsClaim` found
+    /// here becomes the mapped name (so a page can say `scope:finance`
+    /// rather than an opaque object id); a value not found is kept as it
+    /// is. Empty by default.
+    GroupAliases: Map<string, string>
+    /// Phase 987 — admission gate: when non-empty, a token is admitted
+    /// only if its mapped `TenantId` is one of these values. Requires
+    /// `TenantIdClaim` (a token with no mapped tenant is refused). Empty
+    /// admits every tenant the issuer and audience checks admit.
+    AllowedTenants: string list
+    /// Phase 987 — admission gate: when non-empty, a token is admitted
+    /// only if it carries at least one of these roles after role and group
+    /// mapping (so an aliased group name may be named here). Empty admits
+    /// every principal. A refused token is an authentication failure
+    /// (401), not a 403: the deployment does not accept the principal at
+    /// all.
+    RequiredRoles: string list
 }
 
 module ClaimMapping =
@@ -164,13 +208,34 @@ module ClaimMapping =
     let none: ClaimMapping = {
         UserIdClaim = None
         TenantIdClaim = None
+        RolesClaim = None
+        GroupsClaim = None
+        GroupAliases = Map.empty
+        AllowedTenants = []
+        RequiredRoles = []
+    }
+
+    /// Phase 987 — the conventional directory-role mapping: `roles` and
+    /// `groups` become `AuthenticatedUser.Roles`. Identity claims are left
+    /// as the provider resolves them; combine with `UserIdClaim` /
+    /// `TenantIdClaim` as needed (`{ ClaimMapping.directoryRoles with
+    /// UserIdClaim = Some "oid" }`).
+    let directoryRoles: ClaimMapping = {
+        none with
+            RolesClaim = Some "roles"
+            GroupsClaim = Some "groups"
     }
 
     /// `true` when the mapping names no claim at all, so applying it is a
     /// no-op. Providers short-circuit on this so an explicitly-supplied
     /// empty mapping costs nothing (GP 13).
     let isEmpty (mapping: ClaimMapping) : bool =
-        mapping.UserIdClaim.IsNone && mapping.TenantIdClaim.IsNone
+        mapping.UserIdClaim.IsNone
+        && mapping.TenantIdClaim.IsNone
+        && mapping.RolesClaim.IsNone
+        && mapping.GroupsClaim.IsNone
+        && mapping.AllowedTenants.IsEmpty
+        && mapping.RequiredRoles.IsEmpty
 
 /// Declarative configuration for an `IAuthProvider`. Providers read
 /// the fields they care about and ignore the rest — e.g.
@@ -252,3 +317,44 @@ type AuthConfig = {
     /// explicit operator instruction and the stricter of the two.
     ClaimMapping: ClaimMapping option
 }
+
+/// Phase 987 — where an audience-gated SSR page sends a browser that
+/// arrived with no credential, instead of answering a bare `401`.
+///
+/// Registered in DI (a singleton) by whatever mounts the sign-in routes —
+/// `OidcSsrSignIn.register` for the OIDC provider. When it is registered,
+/// a page whose audience requires a principal answers a credential-less
+/// browser navigation (`GET` / `HEAD` accepting `text/html`) with a `302`
+/// to `SignInPath?returnUrl=<the page's path and query>`; every other
+/// request, and every deployment that registers nothing, keeps the `401`
+/// (GP 11). A principal that is signed in but refused is always `403` and
+/// never redirected, so a sign-in that lands an unauthorised principal
+/// cannot loop.
+type InteractiveSignIn = {
+    /// Local path of the route that starts the sign-in, e.g.
+    /// `/auth/sign-in`. It receives the return URL as the `returnUrl`
+    /// query parameter (`InteractiveSignIn.ReturnUrlParameter`).
+    SignInPath: string
+}
+
+module InteractiveSignIn =
+    /// Query parameter carrying the local URL to return to after sign-in.
+    [<Literal>]
+    let ReturnUrlParameter = "returnUrl"
+
+    /// Whether `url` is safe to redirect to after sign-in: a local,
+    /// rooted path (`/x`), never scheme- or authority-relative (`//host`,
+    /// `/\host`) and free of control characters — the open-redirect
+    /// guard every consumer of a return URL applies.
+    let isLocalReturnUrl (url: string) : bool =
+        not (System.String.IsNullOrEmpty url)
+        && url.StartsWith "/"
+        && not (url.StartsWith "//")
+        && not (url.StartsWith "/\\")
+        && not (url |> Seq.exists (fun c -> c < ' ' || c = char 127))
+
+    /// The redirect target for a page at `returnUrl`: `SignInPath` with
+    /// the return URL appended as `returnUrl`.
+    let redirectFor (signIn: InteractiveSignIn) (returnUrl: string) : string =
+        let sep = if signIn.SignInPath.Contains "?" then "&" else "?"
+        $"{signIn.SignInPath}{sep}{ReturnUrlParameter}={System.Uri.EscapeDataString returnUrl}"

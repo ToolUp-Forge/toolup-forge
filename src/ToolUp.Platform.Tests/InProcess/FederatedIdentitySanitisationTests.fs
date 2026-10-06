@@ -156,11 +156,21 @@ let private claimBoundaryAccepts (claimName: string) (id: string) =
             {
                 UserIdClaim = None
                 TenantIdClaim = Some "tid"
+                RolesClaim = None
+                GroupsClaim = None
+                GroupAliases = Map.empty
+                AllowedTenants = []
+                RequiredRoles = []
             }
         else
             {
                 UserIdClaim = Some claimName
                 TenantIdClaim = None
+                RolesClaim = None
+                GroupsClaim = None
+                GroupAliases = Map.empty
+                AllowedTenants = []
+                RequiredRoles = []
             }
 
     match claimMapped mapping [ claimName, id ] with
@@ -305,6 +315,11 @@ let parityTests =
                             {
                                 UserIdClaim = Some "oid"
                                 TenantIdClaim = None
+                                RolesClaim = None
+                                GroupsClaim = None
+                                GroupAliases = Map.empty
+                                AllowedTenants = []
+                                RequiredRoles = []
                             }
                             [ "oid", id ]
                     with
@@ -428,6 +443,11 @@ let negativeControlTests =
             let mapping: ClaimMapping = {
                 UserIdClaim = Some "oid"
                 TenantIdClaim = Some "tid"
+                RolesClaim = None
+                GroupsClaim = None
+                GroupAliases = Map.empty
+                AllowedTenants = []
+                RequiredRoles = []
             }
 
             match claimMapped mapping [ "oid", "entra-object-id"; "tid", "entra-tenant" ] with
@@ -487,6 +507,11 @@ let boundaryDetailTests =
                     {
                         UserIdClaim = Some "oid"
                         TenantIdClaim = None
+                        RolesClaim = None
+                        GroupsClaim = None
+                        GroupAliases = Map.empty
+                        AllowedTenants = []
+                        RequiredRoles = []
                     }
                     [ "oid", "../../etc"; "sub", "well-formed-subject" ]
             with
@@ -506,6 +531,11 @@ let boundaryDetailTests =
                     {
                         UserIdClaim = Some "oid"
                         TenantIdClaim = None
+                        RolesClaim = None
+                        GroupsClaim = None
+                        GroupAliases = Map.empty
+                        AllowedTenants = []
+                        RequiredRoles = []
                     }
                     [ "oid", "user-1" ]
             with

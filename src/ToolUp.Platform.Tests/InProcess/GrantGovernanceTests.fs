@@ -205,6 +205,7 @@ let private accessFor (perms: (string * ModulePermission list) list) = {
     TeamId = Some "t1"
     Subject = TeamMember("alice", "t1")
     ModulePermissions = Map.ofList perms
+    TokenRoles = []
     ModuleExposure = Map.empty
     PlatformRole = None
 }

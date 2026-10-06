@@ -225,12 +225,11 @@ let private unixNow () =
 
 // ─── Unmapped role/group claim discoverability ───────────────────────
 //
-// The OIDC provider deliberately maps only `sub` / `name` / `email` —
-// `AuthenticatedUser.Roles` stays empty because the SDK permission
-// model is team-membership driven, and a configurable claim-mapper is
-// a tracked roadmap item. A brownfield IdP (Auth0 / Keycloak) that
-// already organises users into roles/groups will have those claims
-// silently dropped. This module-level flag drives a single Warn the
+// By default the OIDC provider maps only `sub` / `name` / `email` —
+// `AuthenticatedUser.Roles` stays empty unless the deployment names a
+// role or group claim in `AuthConfig.ClaimMapping` (Phase 987). A
+// brownfield IdP (Auth0 / Keycloak) that already organises users into
+// roles/groups would otherwise have those claims silently dropped. This module-level flag drives a single Warn the
 // first time a token carrying such a claim is seen, so the limitation
 // is discoverable in the log rather than surfacing as "everyone is a
 // plain member after migration" with no explanation. A benign race on
@@ -378,9 +377,9 @@ let private extractToken (location: TokenLocation) (ctx: HttpContext) : string o
 // ─── User mapping ────────────────────────────────────────────────────
 
 /// Map a validated payload to `AuthenticatedUser`. `TenantId` and
-/// `Roles` remain empty — provider-specific claim shapes (Clerk's
-/// `org_id`, Auth0's custom roles claim, etc.) are a future concern
-/// handled by a claim-mapper hook or a provider-specific sub-companion.
+/// `Roles` start empty here; `AuthConfig.ClaimMapping` projects them
+/// afterwards (`TenantIdClaim`, and since Phase 987 `RolesClaim` /
+/// `GroupsClaim`) when a deployment names the claims.
 ///
 /// 0.5.4 — `preferOid` chooses between Entra's tenant-stable `oid`
 /// claim and the OIDC `sub` claim for the resolved `UserId`. When
@@ -484,6 +483,53 @@ let private readMappedClaim (root: JsonElement) (claim: string) : Result<string,
             // attacker-controlled at this boundary by construction.
             Error $"the claim's value is not a usable scope identifier ({reason})"
 
+/// Phase 987 — read a role / group claim from an already-validated payload.
+///
+/// `Ok []` when the claim is absent (the principal holds no role from it),
+/// `Ok values` for a JSON string (one value) or an array of strings, and
+/// `Error reason` for anything else — fail-closed, because a role claim
+/// the deployment named but cannot read is a misconfiguration to surface,
+/// not a principal to treat as role-less. A group OVERAGE (`_claim_names`
+/// names the claim instead of the token carrying it: Microsoft Entra's
+/// indirection for a user in more groups than fit in a token) is refused
+/// the same way — the SDK does not call the directory to resolve it, and
+/// "no groups" would be a silent wrong answer.
+let private readRoleClaim (root: JsonElement) (claim: string) : Result<string list, string> =
+    let usable (value: string) =
+        not (String.IsNullOrWhiteSpace value)
+        && not (value |> Seq.exists Char.IsControl)
+
+    match root.TryGetProperty claim with
+    | true, v when v.ValueKind = JsonValueKind.String ->
+        let value = v.GetString()
+
+        if usable value then
+            Result.Ok [ value ]
+        else
+            Error "the claim is present but its value is empty or carries control characters"
+    | true, v when v.ValueKind = JsonValueKind.Array ->
+        let entries = v.EnumerateArray() |> List.ofSeq
+
+        if
+            entries
+            |> List.forall (fun e -> e.ValueKind = JsonValueKind.String && usable (e.GetString()))
+        then
+            Result.Ok(entries |> List.map (fun e -> e.GetString()))
+        else
+            Error "the claim is an array, but not every entry is a non-empty string without control characters"
+    | true, v -> Error $"the claim is present but its JSON value is {v.ValueKind}, not a string or an array of strings"
+    | _ ->
+        let overage =
+            match root.TryGetProperty "_claim_names" with
+            | true, names when names.ValueKind = JsonValueKind.Object -> names.TryGetProperty claim |> fst
+            | _ -> false
+
+        if overage then
+            Error
+                "the IdP reported an overage for this claim (`_claim_names` names it) instead of including it in the token; the SDK does not resolve overage claims. Emit fewer values (for Microsoft Entra: assign app roles, or emit only the groups assigned to the application)"
+        else
+            Result.Ok []
+
 /// Apply a `ClaimMapping` to an already-validated `AuthenticatedUser`,
 /// given the raw token the validator accepted.
 ///
@@ -514,6 +560,8 @@ let applyValidatedClaimMapping
         let firstNamed =
             mapping.UserIdClaim
             |> Option.orElse mapping.TenantIdClaim
+            |> Option.orElse mapping.RolesClaim
+            |> Option.orElse mapping.GroupsClaim
             |> Option.defaultValue ""
 
         let parsed =
@@ -550,8 +598,60 @@ let applyValidatedClaimMapping
                     |> Result.mapError (fun reason -> name, $"{label} mapping: {reason}")
                     |> Result.map (fun value -> set value current)
 
+            // Phase 987 — the role and group claims add to `Roles`. A group
+            // value with an alias becomes the alias, so a page can name a
+            // group by a readable name instead of a directory object id.
+            let readRoles (claim: string option) (label: string) (rename: string -> string) =
+                match claim with
+                | None -> Result.Ok []
+                | Some name ->
+                    readRoleClaim root name
+                    |> Result.mapError (fun reason -> name, $"{label} mapping: {reason}")
+                    |> Result.map (List.map rename)
+
+            let alias (group: string) =
+                mapping.GroupAliases |> Map.tryFind group |> Option.defaultValue group
+
             applyOne mapping.UserIdClaim "UserId" (fun value u -> { u with UserId = value }) user
             |> Result.bind (applyOne mapping.TenantIdClaim "TenantId" (fun value u -> { u with TenantId = Some value }))
+            |> Result.bind (fun u ->
+                readRoles mapping.RolesClaim "Roles" id
+                |> Result.bind (fun roles ->
+                    readRoles mapping.GroupsClaim "Groups" alias
+                    |> Result.map (fun groups -> {
+                        u with
+                            Roles = List.distinct (u.Roles @ roles @ groups)
+                    })))
+
+/// Phase 987 — the optional admission gate of `ClaimMapping`, applied to a
+/// user `applyValidatedClaimMapping` has already mapped.
+///
+/// `Ok user` when the mapping sets no admission rule, or when the user
+/// passes every rule set: `AllowedTenants` (the mapped `TenantId` is one of
+/// them; a user with no mapped tenant is refused, so the rule needs
+/// `TenantIdClaim`) and `RequiredRoles` (the mapped `Roles` hold at least
+/// one of them). `Error reason` otherwise. The reason never echoes the
+/// token's own values. Exposed for the same reason as
+/// `applyValidatedClaimMapping`: conformance packs drive the shipped gate.
+let applyAdmission (mapping: ClaimMapping) (user: AuthenticatedUser) : Result<AuthenticatedUser, string> =
+    let tenantOk =
+        match mapping.AllowedTenants with
+        | [] -> Result.Ok()
+        | allowed ->
+            match user.TenantId with
+            | Some tenant when List.contains tenant allowed -> Result.Ok()
+            | Some _ -> Error "the token's tenant is not one of AllowedTenants"
+            | None when mapping.TenantIdClaim.IsNone ->
+                Error "AllowedTenants is set but TenantIdClaim names no claim, so no tenant can be read"
+            | None -> Error "the token carries no tenant"
+
+    let rolesOk () =
+        match mapping.RequiredRoles with
+        | [] -> Result.Ok()
+        | required when required |> List.exists (fun r -> List.contains r user.Roles) -> Result.Ok()
+        | _ -> Error "the token carries none of RequiredRoles"
+
+    tenantOk |> Result.bind rolesOk |> Result.map (fun () -> user)
 
 // ─── Validation pipeline ─────────────────────────────────────────────
 
@@ -671,15 +771,24 @@ let private validate
                                             return Error e
                                         | Error e -> return Error e
                                         | Ok() ->
-                                            if
-                                                not unmappedRolesWarned && not jwt.Payload.UnmappedRoleClaims.IsEmpty
-                                            then
+                                            // Phase 987 — a claim the deployment's
+                                            // `ClaimMapping` maps is not "unmapped".
+                                            let mappedRoleClaims =
+                                                match config.ClaimMapping with
+                                                | Some m -> Option.toList m.RolesClaim @ Option.toList m.GroupsClaim
+                                                | None -> []
+
+                                            let unmappedRoleClaims =
+                                                jwt.Payload.UnmappedRoleClaims
+                                                |> List.filter (fun c -> not (List.contains c mappedRoleClaims))
+
+                                            if not unmappedRolesWarned && not unmappedRoleClaims.IsEmpty then
                                                 unmappedRolesWarned <- true
 
                                                 logger.Warn(
                                                     sprintf
-                                                        "OIDC token carries role/group claim(s) [%s] that are NOT mapped into AuthenticatedUser.Roles — the SDK permission model is team-membership driven. Users authenticate but land with no roles; assign roles via team membership, or track the claim-mapper roadmap item. This is logged once per process."
-                                                        (String.concat ", " jwt.Payload.UnmappedRoleClaims)
+                                                        "OIDC token carries role/group claim(s) [%s] that are NOT mapped into AuthenticatedUser.Roles. Users authenticate but land with no roles from them; name the claim in AuthConfig.ClaimMapping (RolesClaim / GroupsClaim, or TOOLUP_OIDC_ROLES_CLAIM / TOOLUP_OIDC_GROUPS_CLAIM) to map it, or assign roles via team membership. This is logged once per process."
+                                                        (String.concat ", " unmappedRoleClaims)
                                                 )
 
                                             let preferOid = config.PreferOidWhenPresent |> Option.defaultValue false
@@ -701,8 +810,24 @@ let private validate
                                             | Some mapping ->
                                                 match applyValidatedClaimMapping mapping raw baseUser with
                                                 | Result.Ok mapped ->
-                                                    incr AuthMetrics.ValidateSuccess
-                                                    return Ok mapped
+                                                    match applyAdmission mapping mapped with
+                                                    | Result.Ok admitted ->
+                                                        incr AuthMetrics.ValidateSuccess
+                                                        return Ok admitted
+                                                    | Result.Error reason ->
+                                                        // Phase 987 — counted with the
+                                                        // audience rejections: like `aud`,
+                                                        // the gate narrows which principals
+                                                        // this deployment accepts.
+                                                        incr AuthMetrics.ValidateInvalidAudience
+
+                                                        logger.Warn(
+                                                            sprintf
+                                                                "OIDC admission gate refused an otherwise-valid token: %s (AuthConfig.ClaimMapping)."
+                                                                reason
+                                                        )
+
+                                                        return Error(AdmissionRefused reason)
                                                 | Result.Error(claim, reason) ->
                                                     // Counted as a malformed-token outcome:
                                                     // from the deployment's point of view the

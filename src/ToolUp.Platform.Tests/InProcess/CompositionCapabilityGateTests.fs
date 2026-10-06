@@ -32,6 +32,7 @@ let private teamCtx: AccessContext = {
     TeamId = Some "team-1"
     Subject = TeamMember("u1", "team-1")
     ModulePermissions = Map.empty
+    TokenRoles = []
     ModuleExposure = Map.empty
     PlatformRole = None
 }

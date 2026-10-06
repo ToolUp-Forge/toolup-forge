@@ -278,6 +278,12 @@ module Names =
     let oidcTenantIdClaim = "TOOLUP_OIDC_TENANT_ID_CLAIM"
 
     [<Literal>]
+    let oidcRolesClaim = "TOOLUP_OIDC_ROLES_CLAIM"
+
+    [<Literal>]
+    let oidcGroupsClaim = "TOOLUP_OIDC_GROUPS_CLAIM"
+
+    [<Literal>]
     let sseAuth = "TOOLUP_SSE_AUTH"
 
     [<Literal>]
@@ -1085,6 +1091,24 @@ let all: ConfigKeyDescriptor list = [
             "Claim name projected onto AuthenticatedUser.TenantId (e.g. `tid` on Microsoft Entra). Unset leaves TenantId unpopulated. Fail-closed: a token missing the named claim is rejected."
         Type = StringKey
         Default = Some "(unset — no TenantId projection)"
+        IsSecret = false
+        Category = "Auth & identity"
+    }
+    {
+        EnvVar = Names.oidcRolesClaim
+        Description =
+            "Claim whose values become AuthenticatedUser.Roles (and so the roles audience-gated pages read), e.g. `roles` for Microsoft Entra app roles. Unset maps no role claim. A string or an array of strings; any other shape rejects the token (fail-closed)."
+        Type = StringKey
+        Default = Some "(unset — no role claim mapped)"
+        IsSecret = false
+        Category = "Auth & identity"
+    }
+    {
+        EnvVar = Names.oidcGroupsClaim
+        Description =
+            "Claim whose values (group ids or names) also become AuthenticatedUser.Roles, e.g. `groups`. Unset maps no group claim. Same shape rules as TOOLUP_OIDC_ROLES_CLAIM; a group overage (`_claim_names` naming the claim) rejects the token rather than reading as no groups."
+        Type = StringKey
+        Default = Some "(unset — no group claim mapped)"
         IsSecret = false
         Category = "Auth & identity"
     }
@@ -3032,7 +3056,9 @@ let manifestBindable: Set<string> =
         Names.oauthRedirectBase
         Names.oauthRefresher
         Names.oidcAudience
+        Names.oidcGroupsClaim
         Names.oidcIssuer
+        Names.oidcRolesClaim
         Names.oidcTenantIdClaim
         Names.oidcUserIdClaim
         Names.peerRoutePrefixes

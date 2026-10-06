@@ -4,6 +4,7 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ToolUp.AuthProviders.OidcAuthProvider (class)
+ToolUp.AuthProviders.OidcAuthProvider.applyAdmission(ToolUp.Platform.ClaimMapping, ToolUp.Platform.Auth+AuthenticatedUser) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Auth+AuthenticatedUser, System.String]
 ToolUp.AuthProviders.OidcAuthProvider.applyValidatedClaimMapping(ToolUp.Platform.ClaimMapping, System.String, ToolUp.Platform.Auth+AuthenticatedUser) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Auth+AuthenticatedUser, System.Tuple`2[System.String, System.String]]
 ToolUp.AuthProviders.OidcAuthProvider.fromConfig(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], ToolUp.Platform.AuthConfig) : ToolUp.Platform.Auth+IAuthProvider
 ToolUp.AuthProviders.OidcAuthProvider.fromConfigHardened(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger], ToolUp.AuthProviders.OidcAuthProvider+OidcHardening, ToolUp.Platform.AuthConfig) : ToolUp.Platform.Auth+IAuthProvider
@@ -54,3 +55,33 @@ ToolUp.AuthProviders.OidcJwksCacheTypes+JwksFetchFailedEnvelope.OriginReplicaId 
 ToolUp.AuthProviders.OidcJwksCacheTypes+JwksFetchFailedEnvelope.Reason : System.String { get }
 ToolUp.AuthProviders.OidcJwksCacheTypes+JwksFetchFailedNotification (class)
 ToolUp.AuthProviders.OidcJwksCacheTypes+JwksFetchFailedNotification.NotificationKey : System.String (literal)
+ToolUp.AuthProviders.OidcSsrSignIn (class)
+ToolUp.AuthProviders.OidcSsrSignIn.StateCookieName : System.String (literal)
+ToolUp.AuthProviders.OidcSsrSignIn.codeChallenge(System.String) : System.String
+ToolUp.AuthProviders.OidcSsrSignIn.defaults(System.String, System.String, System.String, System.String) : ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig
+ToolUp.AuthProviders.OidcSsrSignIn.interactiveSignIn(ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig) : ToolUp.Platform.InteractiveSignIn
+ToolUp.AuthProviders.OidcSsrSignIn.register(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig) : Microsoft.Extensions.DependencyInjection.IServiceCollection
+ToolUp.AuthProviders.OidcSsrSignIn.routes(System.Net.Http.HttpClient, ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]
+ToolUp.AuthProviders.OidcSsrSignIn.withInteractiveSignIn(System.Net.Http.HttpClient, ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig (class)
+ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken, System.String, System.String, System.String, System.TimeSpan)
+ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.AuthorizationEndpoint : System.String { get }
+ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.CallbackPath : System.String { get }
+ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.ClientId : System.String { get }
+ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.ClientSecret : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.CookieName : System.String { get }
+ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.RedirectUri : System.String { get }
+ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.Scopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.SessionToken : ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken { get }
+ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.SignInPath : System.String { get }
+ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.StateLifetime : System.TimeSpan { get }
+ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.TokenEndpoint : System.String { get }
+ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken (class)
+ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken.AccessToken : ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken { get }
+ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken.IdToken : ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken { get }
+ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken.IsAccessToken : System.Boolean { get }
+ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken.IsIdToken : System.Boolean { get }
+ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken.Tag : System.Int32 { get }
+ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken+Tags (class)
+ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken+Tags.AccessToken : System.Int32 (literal)
+ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken+Tags.IdToken : System.Int32 (literal)

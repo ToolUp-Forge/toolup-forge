@@ -96,7 +96,8 @@ let private preferOidFromIssuer (issuer: string) : bool option =
     if isEntra then Some true else None
 
 /// Derive `AuthConfig.ClaimMapping` from `TOOLUP_OIDC_USER_ID_CLAIM` /
-/// `TOOLUP_OIDC_TENANT_ID_CLAIM`. Both unset yields `None` — the
+/// `TOOLUP_OIDC_TENANT_ID_CLAIM` (and, since Phase 987,
+/// `TOOLUP_OIDC_ROLES_CLAIM` / `TOOLUP_OIDC_GROUPS_CLAIM`). All unset yields `None` — the
 /// provider then does no claim projection at all and an existing
 /// env-composed deployment is byte-for-byte unchanged (GP 11 / GP 13).
 ///
@@ -126,8 +127,12 @@ let private claimMappingFromEnv () : ClaimMapping option =
         >> Option.filter (String.IsNullOrWhiteSpace >> not)
 
     let mapping = {
-        UserIdClaim = ConfigResolution.tryValue ConfigKeys.Names.oidcUserIdClaim |> nonBlank
-        TenantIdClaim = ConfigResolution.tryValue ConfigKeys.Names.oidcTenantIdClaim |> nonBlank
+        ClaimMapping.none with
+            UserIdClaim = ConfigResolution.tryValue ConfigKeys.Names.oidcUserIdClaim |> nonBlank
+            TenantIdClaim = ConfigResolution.tryValue ConfigKeys.Names.oidcTenantIdClaim |> nonBlank
+            // Phase 987 — the directory-role claims.
+            RolesClaim = ConfigResolution.tryValue ConfigKeys.Names.oidcRolesClaim |> nonBlank
+            GroupsClaim = ConfigResolution.tryValue ConfigKeys.Names.oidcGroupsClaim |> nonBlank
     }
 
     if ClaimMapping.isEmpty mapping then None else Some mapping

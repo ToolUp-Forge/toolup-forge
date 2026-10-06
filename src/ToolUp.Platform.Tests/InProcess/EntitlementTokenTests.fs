@@ -205,6 +205,7 @@ let private ctx: AccessContext = {
     TeamId = None
     Subject = AuthenticatedUser "u-1"
     ModulePermissions = Map.empty
+    TokenRoles = []
     ModuleExposure = Map.empty
     PlatformRole = None
 }

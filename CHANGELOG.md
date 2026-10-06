@@ -44,10 +44,11 @@ Migration notes:
 - [938-run-provenance-in-the-fact-table-writer](docs/migrations/938-run-provenance-in-the-fact-table-writer.md)
 - [939-pgvector-tuned-default](docs/migrations/939-pgvector-tuned-default.md)
 - [945-rag-operations-follow-ups](docs/migrations/945-rag-operations-follow-ups.md)
+- [987-directory-roles-and-ssr-sign-in](docs/migrations/987-directory-roles-and-ssr-sign-in.md)
 - [989-gated-ssr-fails-closed](docs/migrations/989-gated-ssr-fails-closed.md)
 - [9x-self-hosted-observability-module](docs/migrations/9x-self-hosted-observability-module.md)
 
-_Surface since `v0.23.0`: **breaking** — 45 packages moved; 4226 members added, 85 members changed, 617 members removed; 12 packages new._
+_Surface since `v0.23.0`: **breaking** — 46 packages moved; 4274 members added, 87 members changed, 617 members removed; 12 packages new._
 
 ### Added
 
@@ -164,6 +165,28 @@ _Surface since `v0.23.0`: **breaking** — 45 packages moved; 4226 members added
   - `ToolUp.ArtefactSigning.GoogleCloudKms.GoogleCloudKmsArtefactSigner..ctor(Google.Cloud.Kms.V1.KeyManagementServiceClient, Google.Cloud.Kms.V1.CryptoKeyVersionName)`
   - `ToolUp.ArtefactSigning.GoogleCloudKms.GoogleCloudKmsArtefactSignerModule.create(Google.Cloud.Kms.V1.KeyManagementServiceClient, Google.Cloud.Kms.V1.CryptoKeyVersionName) : ToolUp.ArtefactSigning.IArtefactSigner`
   - `ToolUp.ArtefactSigning.GoogleCloudKms.GoogleCloudKmsArtefactSignerModule.createFromName(Google.Cloud.Kms.V1.KeyManagementServiceClient, System.String) : ToolUp.ArtefactSigning.IArtefactSigner`
+- `ToolUp.AuthProviders.Oidc` — 31 members:
+  - `ToolUp.AuthProviders.OidcAuthProvider.applyAdmission(ToolUp.Platform.ClaimMapping, ToolUp.Platform.Auth+AuthenticatedUser) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Auth+AuthenticatedUser, System.String]`
+  - `ToolUp.AuthProviders.OidcSsrSignIn (class)`
+  - `ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig (class)`
+  - `ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken, System.String, System.String, System.String, System.TimeSpan)`
+  - `ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.AuthorizationEndpoint : System.String { get }`
+  - `ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.CallbackPath : System.String { get }`
+  - `ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.ClientId : System.String { get }`
+  - `ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.ClientSecret : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }`
+  - `ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.CookieName : System.String { get }`
+  - `ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.RedirectUri : System.String { get }`
+  - `ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.Scopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }`
+  - `ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.SessionToken : ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken { get }`
+  - `ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.SignInPath : System.String { get }`
+  - `ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.StateLifetime : System.TimeSpan { get }`
+  - `ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig.TokenEndpoint : System.String { get }`
+  - `ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken (class)`
+  - `ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken+Tags (class)`
+  - `ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken+Tags.AccessToken : System.Int32 (literal)`
+  - `ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken+Tags.IdToken : System.Int32 (literal)`
+  - `ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken.AccessToken : ToolUp.AuthProviders.OidcSsrSignIn+SsrSessionToken { get }`
+  - … and 11 more — `git diff v0.23.0 -- api-baselines/ToolUp.AuthProviders.Oidc.approved.txt`
 - `ToolUp.Calendar.Google` — new package (102 public members)
 - `ToolUp.Calendar.Microsoft` — new package (76 public members)
 - `ToolUp.DataSources.Common` — 254 members:
@@ -338,7 +361,7 @@ _Surface since `v0.23.0`: **breaking** — 45 packages moved; 4226 members added
   - `ExternalContactManagerUI+ContactFormModule.toCreate(ToolUp.Platform.ContactOwner, ExternalContactManagerUI+ContactForm) : ToolUp.Platform.CreateExternalContactRequest`
   - `ExternalContactManagerUI+ContactFormModule.toUpdate(System.String, ExternalContactManagerUI+ContactForm) : ToolUp.Platform.UpdateExternalContactRequest`
   - … and 946 more — `git diff v0.23.0 -- api-baselines/ToolUp.Platform.Client.approved.txt`
-- `ToolUp.Platform.Core` — 923 members:
+- `ToolUp.Platform.Core` — 940 members:
   - `ColumnMapping.columnTypeOfDeclared(System.String) : Microsoft.FSharp.Core.FSharpOption`1[DataManagementTypes+ColumnType]`
   - `ColumnMapping.profileColumnWith(Microsoft.FSharp.Core.FSharpOption`1[ColumnMappingTypes+ColumnDeclaration], System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : ColumnMappingTypes+ColumnProfile`
   - `ColumnMappingTypes+ColumnDeclaration (class)`
@@ -359,7 +382,7 @@ _Surface since `v0.23.0`: **breaking** — 45 packages moved; 4226 members added
   - `ColumnMappingTypes+ProfileSource.Tag : System.Int32 { get }`
   - `ToolUp.Platform.AI.AIProviderCallOptionsExtensions (class)`
   - `ToolUp.Platform.AI.AIProviderCallOptionsExtensions.IAIProvider.SendMessageWith(ToolUp.Platform.AI.IAIProvider, ToolUp.Platform.AI.AIProviderCallOptions, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolDef], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]], ToolUp.Platform.Transport.RetryPolicy) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AI.AIProviderCallResponse, ToolUp.Platform.AI.AIProviderError]]`
-  - … and 903 more — `git diff v0.23.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
+  - … and 920 more — `git diff v0.23.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
 - `ToolUp.Platform.Server` — 718 members:
   - `ToolUp.Platform.AlertRuleEngine+AlertRuleStatusBoard (class)`
   - `ToolUp.Platform.AlertRuleEngine+AlertRuleStatusBoard..ctor()`
@@ -563,11 +586,13 @@ _Surface since `v0.23.0`: **breaking** — 45 packages moved; 4226 members added
   - `UsageDashboard.adminTile` — `UsageDashboard.adminTile(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.UsageDashboardConfig]) : ToolUp.Platform.AdminTile` → `UsageDashboard.adminTile(ToolUp.Platform.ModuleDefinition) : ToolUp.Platform.AdminTile`
   - `UsageDashboard.create` — `UsageDashboard.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.UsageDashboardConfig]) : ToolUp.Platform.ErasedModule` → `UsageDashboard.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule`
   - `WebhookAdminUI.create` — `WebhookAdminUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.WebhookAdminConfig]) : ToolUp.Platform.ErasedModule` → `WebhookAdminUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule`
-- `ToolUp.Platform.Core` — 22 members:
+- `ToolUp.Platform.Core` — 24 members:
   - `ColumnMappingTypes+ColumnProfile..ctor` — `ColumnMappingTypes+ColumnProfile..ctor(System.String, DataManagementTypes+ColumnType, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+ColumnIssue])` → `ColumnMappingTypes+ColumnProfile..ctor(System.String, DataManagementTypes+ColumnType, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ColumnMappingTypes+ColumnIssue], ColumnMappingTypes+ProfileSource, System.Boolean, ColumnMappingTypes+ProfileSource)`
   - `ToolUp.Platform.AI.IAIProvider.SendMessage` — `ToolUp.Platform.AI.IAIProvider.SendMessage(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolDef], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]], ToolUp.Platform.RetryPolicy) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AI.AIProviderResponse, ToolUp.Platform.AI.AIProviderError]]` → `ToolUp.Platform.AI.IAIProvider.SendMessage(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolDef], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]], ToolUp.Platform.Transport.RetryPolicy) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AI.AIProviderResponse, ToolUp.Platform.AI.AIProviderError]]`
   - `ToolUp.Platform.AI.IAIProvider.SendStructuredMessage` — `ToolUp.Platform.AI.IAIProvider.SendStructuredMessage(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolDef], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.Platform.RetryPolicy) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AI.AIProviderResponse, ToolUp.Platform.AI.AIProviderError]]` → `ToolUp.Platform.AI.IAIProvider.SendStructuredMessage(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolDef], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.Platform.Transport.RetryPolicy) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AI.AIProviderResponse, ToolUp.Platform.AI.AIProviderError]]`
   - `ToolUp.Platform.AI.IAIProviderDefaults.sendStructuredViaFallback` — `ToolUp.Platform.AI.IAIProviderDefaults.sendStructuredViaFallback(ToolUp.Platform.AI.IAIProvider, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolDef], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.Platform.RetryPolicy) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AI.AIProviderResponse, ToolUp.Platform.AI.AIProviderError]]` → `ToolUp.Platform.AI.IAIProviderDefaults.sendStructuredViaFallback(ToolUp.Platform.AI.IAIProvider, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolDef], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, ToolUp.Platform.Transport.RetryPolicy) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AI.AIProviderResponse, ToolUp.Platform.AI.AIProviderError]]`
+  - `ToolUp.Platform.AccessContext..ctor` — `ToolUp.Platform.AccessContext..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Subject, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole])` → `ToolUp.Platform.AccessContext..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Subject, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole], Microsoft.FSharp.Collections.FSharpList`1[System.String])`
+  - `ToolUp.Platform.ClaimMapping..ctor` — `ToolUp.Platform.ClaimMapping..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])` → `ToolUp.Platform.ClaimMapping..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])`
   - `ToolUp.Platform.ColumnInfo..ctor` — `ToolUp.Platform.ColumnInfo..ctor(System.String, System.String, System.Boolean)` → `ToolUp.Platform.ColumnInfo..ctor(System.String, System.String, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpSet`1[System.String]])`
   - `ToolUp.Platform.DeploymentReadiness+DeploymentReadinessReport..ctor` — `ToolUp.Platform.DeploymentReadiness+DeploymentReadinessReport..ctor(ToolUp.Platform.ReadinessVerdict, ToolUp.Platform.DeploymentReadiness+PreflightSummary, ToolUp.Platform.DeploymentReadiness+SmokeSummary, ToolUp.Platform.DeploymentReadiness+DriftSummary, ToolUp.Platform.DeploymentReadiness+HealthSummary, System.DateTime)` → `ToolUp.Platform.DeploymentReadiness+DeploymentReadinessReport..ctor(ToolUp.Platform.ReadinessVerdict, ToolUp.Platform.DeploymentReadiness+PreflightSummary, ToolUp.Platform.DeploymentReadiness+SmokeSummary, ToolUp.Platform.DeploymentReadiness+DriftSummary, ToolUp.Platform.DeploymentReadiness+HealthSummary, System.DateTime, ToolUp.Platform.DeploymentReadiness+LiveInterfaceSummary)`
   - `ToolUp.Platform.EmailEnvelope..ctor` — `ToolUp.Platform.EmailEnvelope..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.EmailContent, Microsoft.FSharp.Core.FSharpOption`1[System.String])` → `ToolUp.Platform.EmailEnvelope..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.RecipientId], ToolUp.Platform.EmailContent, Microsoft.FSharp.Core.FSharpOption`1[System.String])`
