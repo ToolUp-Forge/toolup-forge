@@ -178,13 +178,18 @@ How the routes divide on that pipeline:
 | `/sitemap.xml`, feeds, `/auth/sign-in`, `/auth/callback` | the router |
 | an extensionless path no route claims (`/workspace/reports`) | the SPA shell (`PublicPath/index.html`) |
 
-The shell is the last resort: composing PublicRendering registers `SpaFallbackPrecedence.RouterFirst`, so the
-SPA fallback lets the router answer first and serves the shell only to a `GET` nothing answered. A gated page
+The shell is the last resort: composing either layer — PublicRendering, or the interactive sign-in
+(`OidcSsrSignIn.withInteractiveSignIn` / `OidcSsrSignIn.register`) — registers `SpaFallbackPrecedence.RouterFirst`,
+so the SPA fallback lets the router answer first and serves the shell only to a `GET` nothing answered. A gated page
 therefore returns `401` / `403` (or the sign-in redirect) rather than the shell, even with a client bundle
 shipped. Releases before 0.24.0 answered every extensionless `GET` with the shell once a bundle was present, so
 no SSR page was reachable on such a deployment; see
 [the 0.24.0 migration note](../migrations/988-spa-fallback-defers-to-ssr-routes.md). Keep page slugs distinct
 from the client router's paths: a slug that names a client route is served by the page handler, not the SPA.
+
+Either layer alone is sufficient, and composing both leaves one registration (`useRouterFirst` is idempotent).
+A deployment that composes interactive sign-in without PublicRendering — an SPA that only needs the
+server-side sign-in — therefore still reaches `/auth/sign-in` and `/auth/callback` with a client bundle shipped.
 
 PublicRendering's companion guard still holds on this pipeline: a second `withPublicRendering` is refused at
 compose time, whichever order it and `withRAG` ran in.

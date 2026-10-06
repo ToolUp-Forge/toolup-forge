@@ -2593,6 +2593,8 @@ let private registeredTests =
         Phase971PlatformTenantTests.tests
         // Phase 972 - provider exception matches see through Async.AwaitTask.
         ProviderExceptionTests.tests
+        // Phase 992 - interactive sign-in's routes precede the SPA shell without PublicRendering.
+        OidcSignInSpaPrecedenceTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

@@ -133,8 +133,16 @@ let interactiveSignIn (config: OidcSsrSignInConfig) : InteractiveSignIn = { Sign
 /// pages redirect a credential-less browser to `SignInPath`. Mount
 /// `routes` as well; one without the other is either a dead redirect or an
 /// unused route.
+///
+/// Phase 992 — it also arms `SpaFallbackPrecedence.RouterFirst`. The
+/// sign-in and callback routes are extensionless GETs, which the SPA
+/// fallback otherwise answers with the client shell whenever a bundle
+/// ships, so a deployment composing interactive sign-in without
+/// PublicRendering would never reach them. `useRouterFirst` is idempotent,
+/// so composing PublicRendering as well leaves one registration.
 let register (services: IServiceCollection) (config: OidcSsrSignInConfig) : IServiceCollection =
     services.AddSingleton<InteractiveSignIn>(interactiveSignIn config)
+    |> SpaFallbackPrecedence.useRouterFirst
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
