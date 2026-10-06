@@ -440,6 +440,24 @@ module ReportSubscriptionJobHandler =
             return ()
         }
 
+    /// Phase 990 — the reason a run whose scope did not re-mint adds to its
+    /// failure. A subscription's job names a real scope (`JobContext.ScopeId`)
+    /// but ran under the anonymous one (`JobContext.Scope`): the job carries
+    /// no scope token the platform accepts. Either it was scheduled without
+    /// the creating request's resolved scope (`ReportSubscriptionApiHandler.create`,
+    /// or a job first scheduled before subscriptions carried one, which a
+    /// re-save does not re-stamp), or the token was refused (issued over
+    /// another key ring, or by a scheduler whose own carrier did not survive
+    /// a restart). The run fails closed — it read nothing scoped — and this
+    /// says why, on the subscription's last-run outcome and in the audit row.
+    [<Literal>]
+    let ScopeNotReMinted =
+        "this run's scope did not re-mint: the subscription's job carries no scope token the platform accepts (it was scheduled without the creating request's resolved scope, or its token was refused), so it ran under the anonymous scope and read nothing scoped; re-create the subscription from a request resolved to the scope it reports on"
+
+    /// `true` when a job naming a real scope ran under the anonymous one.
+    let private scopeNotReMinted (ctx: JobContext) : bool =
+        ctx.Scope.IsAnonymous && ctx.ScopeId <> ResolvedScope.AnonymousScopeId
+
     /// Build the handler. Every dependency is supplied rather than
     /// resolved from a service locator inside `Execute`, so the handler
     /// is directly exercisable against in-memory sinks and stores —
@@ -501,6 +519,15 @@ module ReportSubscriptionJobHandler =
                             return Success
 
                         | Error failure ->
+                            let failure =
+                                if scopeNotReMinted ctx then
+                                    {
+                                        failure with
+                                            Reason = $"{failure.Reason} ({ScopeNotReMinted})"
+                                    }
+                                else
+                                    failure
+
                             // Terminal either because the handler judged
                             // it unrecoverable, or because the retry
                             // budget the compose registered is spent.

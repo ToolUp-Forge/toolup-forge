@@ -136,6 +136,14 @@ which take only a scope the platform resolved (Phase 797). A run is handed one �
 
 ## The triggers
 
+Both triggers are live, and each runs the narrative under a scope the platform resolved — never one
+it was told.
+
+| Trigger | Runs under |
+|---|---|
+| Scheduled report | the scope of the request that created the subscription, re-minted by the scheduler on every run |
+| Data arrival | the scope of the request whose write invalidated the facts |
+
 **Scheduled report.** Register a producer over the run; the narrative fills a template placeholder
 as a `NarrativeValue`, so the render goes through the ordinary pipeline and its export door. A
 refused narrative is the producer's `Error`, recorded on the subscription's last-run outcome.
@@ -147,9 +155,33 @@ GroundedNarrativeProducer.create
 |> producers.Register
 ```
 
-The subscription job carries its `JobContext.Scope` to the producer on the async chain
-(`ReportProducerScope`). A subscription job scheduled through the string `Schedule` overload runs
-under the anonymous scope, and the producer then refuses rather than run over the anonymous shard.
+Mount the subscription API with the scope the platform resolved for the managing request:
+
+```fsharp skip=fragment
+ReportSubscriptionApiHandler.createUnder apiDeps principal (ScopeResolution.forRequest ctx) scopeId
+```
+
+Saving a subscription then schedules its job through the typed `IJobScheduler.Schedule(scope, …)`
+overload: the scheduler persists a token the platform's `ScopeCarrier` issued for that job (Phase
+935), and every run re-mints the scope from it onto `JobContext.Scope`, which the subscription job
+hands to the producer on the async chain (`ReportProducerScope`). So a subscription created by a
+request resolved to a team produces its narrative from that team's Facts, publishes it to that
+team's narrative store, and certifies it there; a subscription created for another team runs under
+that team's scope and can read none of the first team's Facts.
+
+The scope is carried only when it names the shard the subscription is stored in. A subscription
+created under the anonymous scope, through `ReportSubscriptionApiHandler.create` (which carries no
+request scope), or with a resolved scope for some other shard runs **anonymous**, and the grounded
+producer refuses it rather than run over the anonymous shard. Producers that read no Facts are
+unaffected either way.
+
+**When the scope can no longer be re-minted, the run fails closed and says why.** A token issued
+over a key ring the deployment no longer holds, a scheduler restarted with no carrier bound to the
+deployment's ring, or a job first scheduled before subscriptions carried their scope (a re-save does
+not re-stamp a job its idempotency key recovers) all run under the anonymous scope, read nothing
+scoped, and record a last-run failure carrying
+`ReportSubscriptionJobHandler.ScopeNotReMinted`. Re-create the subscription from a request resolved
+to the scope it reports on.
 
 **Data arrival.** Where the fact tier is composed, the reactive data-change hook also enqueues every
 registered run whose `DependsOnMetrics` include the metric of a fact the change invalidated. Only a
@@ -158,6 +190,13 @@ change made under a resolved scope enqueues a run (the job is scheduled under it
 A metric whose recompute policy is `Eager` recomputes in its own job; the narrative job waits for
 it (a transient failure, backed off by its retry policy), and on its last attempt runs regardless.
 
+## In conversation
+
+The same fact tools answer the assistant in a chat turn, under the scope the platform resolved for
+the chat request. The turn's agent loop runs on a background context built from the request, which
+carries the request's `ResolvedScope` (`ScopeResolution.carry`); a request the platform resolved no
+scope for reads the anonymous shard, exactly as the request itself would.
+
 ## Tests
 
 [`GroundedNarrativeTests.fs`](../../src/ToolUp.Platform.Tests/InProcess/GroundedNarrativeTests.fs)
@@ -165,3 +204,10 @@ tries to defeat the gate claim by claim, runs the fact-tier gate and certificate
 drives the run end to end on a RAG app composed with `RAGServerApp.withFacts FactsCompose.withFactTier`
 (a scripted model that reads a fact, then writes each defeat case — every one refused, unpublished
 and logged), and exercises both triggers.
+[`ReportSubscriptionScopeTests.fs`](../../src/ToolUp.Platform.Tests/InProcess/ReportSubscriptionScopeTests.fs)
+runs subscriptions on the shipped in-process scheduler: each runs under the scope that created it,
+an anonymous or foreign scope is never carried, a token that no longer redeems fails closed with
+its reason, and the scheduled grounded report runs end to end under its team's scope and reads none
+of another team's Facts.
+[`AssistantFactScopeTests.fs`](../../src/ToolUp.Platform.Tests/InProcess/AssistantFactScopeTests.fs)
+drives a chat turn whose `query_facts` call reads the requesting team's Fact and no other.

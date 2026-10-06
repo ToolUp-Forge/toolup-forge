@@ -116,13 +116,29 @@ let private findJob
 
 /// Register (or re-register) the job for a subscription and align its
 /// enabled state. Idempotent: the stable idempotency key means a second
-/// call returns the existing job rather than creating a duplicate.
+/// call returns the existing job rather than creating a duplicate — and a
+/// job recovered by its key keeps the scope it was first scheduled under.
+///
+/// Phase 990 — the job is scheduled through the typed overload, under the
+/// scope the platform resolved for the creating request, when that scope
+/// names the shard the subscription is written to; the scheduler then
+/// carries it (Phase 935) and hands it back on `JobContext.Scope` when the
+/// job runs. Anything else — the anonymous scope, or a resolved scope for
+/// another shard — keeps the string overload, whose job runs anonymous: a
+/// subscription is never scheduled under a scope it is not stored in.
 let private syncJob
     (deps: ReportSubscriptionApiDeps)
+    (requestScope: ResolvedScope)
     (subscription: ReportSubscription)
     : Async<Result<unit, SubscriptionError>> =
     async {
-        let! scheduled = deps.Scheduler.Schedule(registrationFor deps subscription)
+        let registration = registrationFor deps subscription
+
+        let! scheduled =
+            if not requestScope.IsAnonymous && requestScope.ScopeId = subscription.ScopeId then
+                deps.Scheduler.Schedule(requestScope, registration)
+            else
+                deps.Scheduler.Schedule registration
 
         match scheduled with
         | Result.Error(InvalidCron(expr, reason)) -> return Error(InvalidSchedule(expr, reason))
@@ -136,11 +152,13 @@ let private syncJob
             return Ok()
     }
 
-/// Build a per-scope `IReportSubscriptionApi`.
-///
-/// `principal` is the resolved caller stamped into `CreatedBy` — the
-/// same value the audit trail attributes the subscription's runs to.
-let create (deps: ReportSubscriptionApiDeps) (principal: string) (scopeId: string) : IReportSubscriptionApi =
+/// The handler, under `requestScope` (see `createUnder`).
+let private build
+    (deps: ReportSubscriptionApiDeps)
+    (principal: string)
+    (requestScope: ResolvedScope)
+    (scopeId: string)
+    : IReportSubscriptionApi =
     let save
         (id: SubscriptionId)
         (createdBy: string)
@@ -157,7 +175,7 @@ let create (deps: ReportSubscriptionApiDeps) (principal: string) (scopeId: strin
                 match stored with
                 | Result.Error e -> return Error(SubscriptionStorageFailure e)
                 | Result.Ok persisted ->
-                    let! synced = syncJob deps persisted
+                    let! synced = syncJob deps requestScope persisted
 
                     return
                         match synced with
@@ -215,7 +233,7 @@ let create (deps: ReportSubscriptionApiDeps) (principal: string) (scopeId: strin
                         // repair, and it is what an operator expects
                         // "resume" to do.
                         | None ->
-                            let! synced = syncJob deps persisted
+                            let! synced = syncJob deps requestScope persisted
 
                             return
                                 match synced with
@@ -275,6 +293,38 @@ let create (deps: ReportSubscriptionApiDeps) (principal: string) (scopeId: strin
                             | Result.Error e -> Error(SchedulerUnavailable e)
             }
     }
+
+/// Build a per-scope `IReportSubscriptionApi` whose subscriptions' jobs run
+/// under the scope the platform resolved for the request (Phase 990).
+///
+/// `requestScope` is that scope — what `ScopeResolution.forRequest` returns
+/// for the managing request — and `scopeId` the shard the subscriptions
+/// are stored in. A job is scheduled under `requestScope` only when it
+/// names that same shard; otherwise, and for the anonymous scope, the job
+/// runs anonymous, exactly as `create`'s do. A producer that reads through
+/// the request-path fact tools (`GroundedNarrativeProducer`) needs the
+/// resolved scope and refuses without it, so a deployment composing one
+/// mounts this rather than `create`:
+///
+/// ```fsharp
+/// ReportSubscriptionApiHandler.createUnder deps principal (ScopeResolution.forRequest ctx) scopeId
+/// ```
+let createUnder
+    (deps: ReportSubscriptionApiDeps)
+    (principal: string)
+    (requestScope: ResolvedScope)
+    (scopeId: string)
+    : IReportSubscriptionApi =
+    build deps principal requestScope scopeId
+
+/// Build a per-scope `IReportSubscriptionApi`. Its subscriptions' jobs are
+/// scheduled under no resolved scope and run anonymous on
+/// `JobContext.Scope`; `createUnder` is the form that carries the request's.
+///
+/// `principal` is the resolved caller stamped into `CreatedBy` — the
+/// same value the audit trail attributes the subscription's runs to.
+let create (deps: ReportSubscriptionApiDeps) (principal: string) (scopeId: string) : IReportSubscriptionApi =
+    build deps principal ResolvedScope.anonymous scopeId
 
 /// Wrap an `IReportSubscriptionApi` so every mutating method also
 /// consults the deployment's management predicate. Reads

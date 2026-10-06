@@ -48,7 +48,7 @@ Migration notes:
 - [989-gated-ssr-fails-closed](docs/migrations/989-gated-ssr-fails-closed.md)
 - [9x-self-hosted-observability-module](docs/migrations/9x-self-hosted-observability-module.md)
 
-_Surface since `v0.23.0`: **breaking** — 46 packages moved; 4274 members added, 87 members changed, 617 members removed; 12 packages new._
+_Surface since `v0.23.0`: **breaking** — 46 packages moved; 4276 members added, 87 members changed, 617 members removed; 12 packages new._
 
 ### Added
 
@@ -460,13 +460,15 @@ _Surface since `v0.23.0`: **breaking** — 46 packages moved; 4274 members added
   - `ToolUp.Remoting.Generator.ClientReadPolicy (class)`
   - `ToolUp.Remoting.Generator.ClientReadPolicy..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Collections.FSharpList`1[System.String])`
   - … and 35 more — `git diff v0.23.0 -- api-baselines/ToolUp.Remoting.Generator.approved.txt`
-- `ToolUp.Reporting.Server` — 58 members:
+- `ToolUp.Reporting.Server` — 60 members:
   - `ToolUp.Reporting.GroundedNarrativeProducer (class)`
   - `ToolUp.Reporting.GroundedNarrativeProducer.TriggerName : System.String (literal)`
   - `ToolUp.Reporting.GroundedNarrativeProducer.create(System.String, System.String, ToolUp.Platform.IGroundedNarrativeRun, System.String, System.String, System.String) : ToolUp.Reporting.ReportProducer`
   - `ToolUp.Reporting.ReportProducerScope (class)`
   - `ToolUp.Reporting.ReportProducerScope.get() : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ResolvedScope]`
   - `ToolUp.Reporting.ReportProducerScope.within`1(ToolUp.Platform.ResolvedScope, Microsoft.FSharp.Control.FSharpAsync`1[T]) : Microsoft.FSharp.Control.FSharpAsync`1[T]`
+  - `ToolUp.Reporting.ReportSubscriptionApiHandler.createUnder(ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps, System.String, ToolUp.Platform.ResolvedScope, System.String) : ToolUp.Reporting.IReportSubscriptionApi`
+  - `ToolUp.Reporting.ReportSubscriptionJobHandler.ScopeNotReMinted : System.String (literal)`
   - `ToolUp.Reporting.ReportingAITools (class)`
   - `ToolUp.Reporting.ReportingAITools+ItemsKeys (class)`
   - `ToolUp.Reporting.ReportingAITools+ItemsKeys.ActiveModule : System.String (literal)`
@@ -479,9 +481,7 @@ _Surface since `v0.23.0`: **breaking** — 46 packages moved; 4274 members added
   - `ToolUp.Reporting.ReportingAITools+LongRenderPolicyModule.defaults : ToolUp.Reporting.ReportingAITools+LongRenderPolicy { get }`
   - `ToolUp.Reporting.ReportingAITools+LongRenderPolicyModule.defers(ToolUp.Reporting.ReportingAITools+LongRenderPolicy, ToolUp.Reporting.TemplateFormat, System.Int64) : System.Boolean`
   - `ToolUp.Reporting.ReportingAITools+LongRenderPolicyModule.never : ToolUp.Reporting.ReportingAITools+LongRenderPolicy { get }`
-  - `ToolUp.Reporting.ReportingAITools+RenderJobPayload (class)`
-  - `ToolUp.Reporting.ReportingAITools+RenderJobPayload..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Guid], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Reporting.PlaceholderValue])`
-  - … and 38 more — `git diff v0.23.0 -- api-baselines/ToolUp.Reporting.Server.approved.txt`
+  - … and 40 more — `git diff v0.23.0 -- api-baselines/ToolUp.Reporting.Server.approved.txt`
 - `ToolUp.Scheduling.Core` — 2 members:
   - `ToolUp.Scheduling.iCalendar.emitRRule(ToolUp.Scheduling.SchedulingTypes+RecurrenceRule) : System.String`
   - `ToolUp.Scheduling.iCalendar.parseRRule(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Scheduling.SchedulingTypes+RecurrenceRule, System.String]`
