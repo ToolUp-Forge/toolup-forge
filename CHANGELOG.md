@@ -46,9 +46,10 @@ Migration notes:
 - [945-rag-operations-follow-ups](docs/migrations/945-rag-operations-follow-ups.md)
 - [987-directory-roles-and-ssr-sign-in](docs/migrations/987-directory-roles-and-ssr-sign-in.md)
 - [989-gated-ssr-fails-closed](docs/migrations/989-gated-ssr-fails-closed.md)
+- [991-scoped-report-subscriptions-by-default](docs/migrations/991-scoped-report-subscriptions-by-default.md)
 - [9x-self-hosted-observability-module](docs/migrations/9x-self-hosted-observability-module.md)
 
-_Surface since `v0.23.0`: **breaking** — 46 packages moved; 4276 members added, 87 members changed, 617 members removed; 12 packages new._
+_Surface since `v0.23.0`: **breaking** — 46 packages moved; 4303 members added, 88 members changed, 617 members removed; 12 packages new._
 
 ### Added
 
@@ -383,7 +384,7 @@ _Surface since `v0.23.0`: **breaking** — 46 packages moved; 4276 members added
   - `ToolUp.Platform.AI.AIProviderCallOptionsExtensions (class)`
   - `ToolUp.Platform.AI.AIProviderCallOptionsExtensions.IAIProvider.SendMessageWith(ToolUp.Platform.AI.IAIProvider, ToolUp.Platform.AI.AIProviderCallOptions, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolDef], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit]], ToolUp.Platform.Transport.RetryPolicy) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.AI.AIProviderCallResponse, ToolUp.Platform.AI.AIProviderError]]`
   - … and 920 more — `git diff v0.23.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
-- `ToolUp.Platform.Server` — 718 members:
+- `ToolUp.Platform.Server` — 744 members:
   - `ToolUp.Platform.AlertRuleEngine+AlertRuleStatusBoard (class)`
   - `ToolUp.Platform.AlertRuleEngine+AlertRuleStatusBoard..ctor()`
   - `ToolUp.Platform.AlertRuleEngine+AlertRuleStatusBoard.Get(System.String) : ToolUp.Platform.AlertRuleObservation`
@@ -404,7 +405,7 @@ _Surface since `v0.23.0`: **breaking** — 46 packages moved; 4276 members added
   - `ToolUp.Platform.BlobCodec`1 (class)`
   - `ToolUp.Platform.BlobCodec`1..ctor(Microsoft.FSharp.Core.FSharpFunc`2[T, System.Byte[]], Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpResult`2[T, System.String]])`
   - `ToolUp.Platform.BlobCodec`1.Decode : Microsoft.FSharp.Core.FSharpFunc`2[System.Byte[], Microsoft.FSharp.Core.FSharpResult`2[T, System.String]] { get }`
-  - … and 698 more — `git diff v0.23.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
+  - … and 724 more — `git diff v0.23.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
 - `ToolUp.Platform.Transport` — new package (90 public members)
 - `ToolUp.RAG.Core` — 9 members:
   - `ToolUp.RAG.IngestionTypes+DocumentIngestionJob.Attempt : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.IngestionTypes+IngestionAttempt] { get }`
@@ -460,13 +461,14 @@ _Surface since `v0.23.0`: **breaking** — 46 packages moved; 4276 members added
   - `ToolUp.Remoting.Generator.ClientReadPolicy (class)`
   - `ToolUp.Remoting.Generator.ClientReadPolicy..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Collections.FSharpList`1[System.String])`
   - … and 35 more — `git diff v0.23.0 -- api-baselines/ToolUp.Remoting.Generator.approved.txt`
-- `ToolUp.Reporting.Server` — 60 members:
+- `ToolUp.Reporting.Server` — 61 members:
   - `ToolUp.Reporting.GroundedNarrativeProducer (class)`
   - `ToolUp.Reporting.GroundedNarrativeProducer.TriggerName : System.String (literal)`
   - `ToolUp.Reporting.GroundedNarrativeProducer.create(System.String, System.String, ToolUp.Platform.IGroundedNarrativeRun, System.String, System.String, System.String) : ToolUp.Reporting.ReportProducer`
   - `ToolUp.Reporting.ReportProducerScope (class)`
   - `ToolUp.Reporting.ReportProducerScope.get() : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ResolvedScope]`
   - `ToolUp.Reporting.ReportProducerScope.within`1(ToolUp.Platform.ResolvedScope, Microsoft.FSharp.Control.FSharpAsync`1[T]) : Microsoft.FSharp.Control.FSharpAsync`1[T]`
+  - `ToolUp.Reporting.ReportSubscriptionApiHandler.SubscriptionScopeNotReissued : System.String (literal)`
   - `ToolUp.Reporting.ReportSubscriptionApiHandler.createUnder(ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps, System.String, ToolUp.Platform.ResolvedScope, System.String) : ToolUp.Reporting.IReportSubscriptionApi`
   - `ToolUp.Reporting.ReportSubscriptionJobHandler.ScopeNotReMinted : System.String (literal)`
   - `ToolUp.Reporting.ReportingAITools (class)`
@@ -480,8 +482,7 @@ _Surface since `v0.23.0`: **breaking** — 46 packages moved; 4276 members added
   - `ToolUp.Reporting.ReportingAITools+LongRenderPolicyModule (class)`
   - `ToolUp.Reporting.ReportingAITools+LongRenderPolicyModule.defaults : ToolUp.Reporting.ReportingAITools+LongRenderPolicy { get }`
   - `ToolUp.Reporting.ReportingAITools+LongRenderPolicyModule.defers(ToolUp.Reporting.ReportingAITools+LongRenderPolicy, ToolUp.Reporting.TemplateFormat, System.Int64) : System.Boolean`
-  - `ToolUp.Reporting.ReportingAITools+LongRenderPolicyModule.never : ToolUp.Reporting.ReportingAITools+LongRenderPolicy { get }`
-  - … and 40 more — `git diff v0.23.0 -- api-baselines/ToolUp.Reporting.Server.approved.txt`
+  - … and 41 more — `git diff v0.23.0 -- api-baselines/ToolUp.Reporting.Server.approved.txt`
 - `ToolUp.Scheduling.Core` — 2 members:
   - `ToolUp.Scheduling.iCalendar.emitRRule(ToolUp.Scheduling.SchedulingTypes+RecurrenceRule) : System.String`
   - `ToolUp.Scheduling.iCalendar.parseRRule(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Scheduling.SchedulingTypes+RecurrenceRule, System.String]`
@@ -633,6 +634,8 @@ _Surface since `v0.23.0`: **breaking** — 46 packages moved; 4276 members added
   - `ToolUp.RAG.RetrievalPipeline+RetrievalPipeline..ctor` — `ToolUp.RAG.RetrievalPipeline+RetrievalPipeline..ctor(ToolUp.Platform.IVectorStore+IVectorStore, ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ISparseIndex+ISparseIndex], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.RetrievalPipeline+RetrievalPipelineOptions], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IRetrievalTracer+IRetrievalTracer], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformKnowledgeBaseMode], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.PlatformKnowledgeBaseMode]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IRagTelemetry+IRagTelemetry], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+IFactResolver], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IQueryRewriter+IQueryRewriter])` → `ToolUp.RAG.RetrievalPipeline+RetrievalPipeline..ctor(ToolUp.Platform.IVectorStore+IVectorStore, ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ISparseIndex+ISparseIndex], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.RetrievalPipeline+RetrievalPipelineOptions], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IRetrievalTracer+IRetrievalTracer], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformKnowledgeBaseMode], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.PlatformKnowledgeBaseMode]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IRagTelemetry+IRagTelemetry], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+IFactResolver], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IQueryRewriter+IQueryRewriter], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.RAG.RetrievalPipeline+RetrievalBudgets])`
 - `ToolUp.Remoting.Generator` — 1 member:
   - `ToolUp.Remoting.Generator.DispatchMethod..ctor` — `ToolUp.Remoting.Generator.DispatchMethod..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String)` → `ToolUp.Remoting.Generator.DispatchMethod..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])`
+- `ToolUp.Reporting.Server` — 1 member:
+  - `ToolUp.Reporting.ReportingCompose.withReportSubscriptions` — `ToolUp.Reporting.ReportingCompose.withReportSubscriptions(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Reporting.ReportSubscriptionJobDeps, ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps) : System.Tuple`2[ToolUp.Platform.IJobHandler, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, ToolUp.Reporting.IReportSubscriptionApi]]]` → `ToolUp.Reporting.ReportingCompose.withReportSubscriptions(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Reporting.ReportSubscriptionJobDeps, ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps) : System.Tuple`2[ToolUp.Platform.IJobHandler, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ResolvedScope, Microsoft.FSharp.Core.FSharpFunc`2[System.String, ToolUp.Reporting.IReportSubscriptionApi]]]]`
 
 ### Removed
 

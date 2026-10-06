@@ -308,3 +308,10 @@ type QuotaGatedJobScheduler(inner: IJobScheduler, quotaPolicy: ITeamQuotaPolicy)
 
         member _.NotifyEventWritten(scopeId, eventType, eventId) =
             inner.NotifyEventWritten(scopeId, eventType, eventId)
+
+    // Phase 991 — forward the re-issue capability, so wrapping a scheduler
+    // in the quota gate never hides that it can re-issue a job's scope (the
+    // inner scheduler answers `Unsupported` when it cannot).
+    interface IJobScopeReissue with
+        member _.ReissueScope(scope, scopeId, jobId) =
+            JobScopeReissue.reissue inner scope scopeId jobId

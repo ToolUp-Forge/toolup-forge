@@ -120,6 +120,7 @@ ToolUp.Reporting.ReportRenderRequest.TemplateId : System.String { get }
 ToolUp.Reporting.ReportRenderRequest.Values : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Reporting.PlaceholderValue] { get }
 ToolUp.Reporting.ReportSubscriptionApiHandler (class)
 ToolUp.Reporting.ReportSubscriptionApiHandler.SubscriptionManagementDenied : System.String (literal)
+ToolUp.Reporting.ReportSubscriptionApiHandler.SubscriptionScopeNotReissued : System.String (literal)
 ToolUp.Reporting.ReportSubscriptionApiHandler.create(ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps, System.String, System.String) : ToolUp.Reporting.IReportSubscriptionApi
 ToolUp.Reporting.ReportSubscriptionApiHandler.createUnder(ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps, System.String, ToolUp.Platform.ResolvedScope, System.String) : ToolUp.Reporting.IReportSubscriptionApi
 ToolUp.Reporting.ReportSubscriptionApiHandler.withManagementGate(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]], ToolUp.Reporting.IReportSubscriptionApi) : ToolUp.Reporting.IReportSubscriptionApi
@@ -215,7 +216,7 @@ ToolUp.Reporting.ReportingCompose.buildDefaultRegistry() : ToolUp.Reporting.Rend
 ToolUp.Reporting.ReportingCompose.buildRegistryWith(ToolUp.Reporting.ReportingCompose+ReportingComposeOptions) : ToolUp.Reporting.RendererRegistry+RendererRegistry
 ToolUp.Reporting.ReportingCompose.subscriptionDiagnostic(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
 ToolUp.Reporting.ReportingCompose.withRenderer(ToolUp.Reporting.IReportRenderer, ToolUp.Reporting.RendererRegistry+RendererRegistry) : ToolUp.Reporting.RendererRegistry+RendererRegistry
-ToolUp.Reporting.ReportingCompose.withReportSubscriptions(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Reporting.ReportSubscriptionJobDeps, ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps) : System.Tuple`2[ToolUp.Platform.IJobHandler, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, ToolUp.Reporting.IReportSubscriptionApi]]]
+ToolUp.Reporting.ReportingCompose.withReportSubscriptions(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Reporting.ReportSubscriptionJobDeps, ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps) : System.Tuple`2[ToolUp.Platform.IJobHandler, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ResolvedScope, Microsoft.FSharp.Core.FSharpFunc`2[System.String, ToolUp.Reporting.IReportSubscriptionApi]]]]
 ToolUp.Reporting.ReportingCompose+ReportSubscriptionsNotComposable (class)
 ToolUp.Reporting.ReportingCompose+ReportSubscriptionsNotComposable..ctor()
 ToolUp.Reporting.ReportingCompose+ReportSubscriptionsNotComposable..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String])

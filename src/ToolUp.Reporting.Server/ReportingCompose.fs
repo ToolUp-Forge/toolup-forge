@@ -149,7 +149,13 @@ let subscriptionDiagnostic (missing: string list) =
 ///
 /// Returns the job handler to register against the scheduler under
 /// `ReportSubscription.JobHandlerName`, and the per-caller API handler
-/// factory. Both are returned rather than registered here because
+/// factory — `ReportSubscriptionApiHandler.createUnder`, taking the
+/// principal, the scope the platform resolved for the managing request
+/// (`ScopeResolution.forRequest ctx`) and the shard the subscriptions are
+/// stored in. Phase 991: a subscription created through it runs under its
+/// creator's scope with no further opt-in, and re-saving one re-stamps its
+/// job; the anonymous `ReportSubscriptionApiHandler.create` is the explicit,
+/// named opt-out, and this function never hands it out. Both are returned rather than registered here because
 /// registration is the composition root's job — this function's
 /// responsibility is that the parts are consistent with each other,
 /// which is exactly what the shared `RetryPolicy` below buys.
@@ -163,7 +169,7 @@ let withReportSubscriptions
     (missing: string list)
     (deps: ReportSubscriptionJobDeps)
     (apiDeps: ReportSubscriptionApiHandler.ReportSubscriptionApiDeps)
-    : IJobHandler * (string -> string -> IReportSubscriptionApi) =
+    : IJobHandler * (string -> ResolvedScope -> string -> IReportSubscriptionApi) =
     if not (List.isEmpty missing) then
         raise (ReportSubscriptionsNotComposable missing)
 
@@ -181,4 +187,4 @@ let withReportSubscriptions
             ]
         )
 
-    ReportSubscriptionJobHandler.create deps, ReportSubscriptionApiHandler.create apiDeps
+    ReportSubscriptionJobHandler.create deps, ReportSubscriptionApiHandler.createUnder apiDeps

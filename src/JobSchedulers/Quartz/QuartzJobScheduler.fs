@@ -338,6 +338,26 @@ type QuartzJobScheduler
     interface IScopeCarrierBinding with
         member _.BindScopeCarrier(carrier) = scopeCarrier.Value <- carrier
 
+    // Phase 991 — re-issue a job's token through the platform's one re-issue
+    // (`CarriedJobScope.reissue`), written through the projecting store like
+    // every other definition change. The Quartz trigger is untouched: the
+    // token rides the definition, and a fire redeems whatever it carries.
+    interface IJobScopeReissue with
+        member _.ReissueScope(scope, scopeId, jobId) = async {
+            if not (CarriedJobScope.owns scope scopeId) then
+                return Error(ScopeReissueError.ScopeDoesNotOwnJob(scope.ScopeId, scopeId))
+            else
+                match! jobStore.Get(scopeId, jobId) with
+                | None -> return Error(ScopeReissueError.JobNotFound(scopeId, jobId))
+                | Some job ->
+                    match CarriedJobScope.reissue scopeCarrier.Value scope job with
+                    | Error e -> return Error e
+                    | Ok updated ->
+                        match! Async.Catch(jobStore.Update updated) with
+                        | Choice1Of2() -> return Ok()
+                        | Choice2Of2 ex -> return Error(ScopeReissueError.Failed ex.Message)
+        }
+
     interface IHostedService with
         member _.StartAsync(cancellationToken) =
             let work = async {

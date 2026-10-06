@@ -155,33 +155,51 @@ GroundedNarrativeProducer.create
 |> producers.Register
 ```
 
-Mount the subscription API with the scope the platform resolved for the managing request:
+`ReportingCompose.withReportSubscriptions` hands out the subscription API factory, and since Phase
+991 that factory carries the scope the platform resolved for the managing request — there is nothing
+to opt in to:
 
 ```fsharp skip=fragment
-ReportSubscriptionApiHandler.createUnder apiDeps principal (ScopeResolution.forRequest ctx) scopeId
+let handler, subscriptionsFor = ReportingCompose.withReportSubscriptions missing jobDeps apiDeps
+// per request:
+subscriptionsFor principal (ScopeResolution.forRequest ctx) scopeId
 ```
 
-Saving a subscription then schedules its job through the typed `IJobScheduler.Schedule(scope, …)`
-overload: the scheduler persists a token the platform's `ScopeCarrier` issued for that job (Phase
-935), and every run re-mints the scope from it onto `JobContext.Scope`, which the subscription job
-hands to the producer on the async chain (`ReportProducerScope`). So a subscription created by a
-request resolved to a team produces its narrative from that team's Facts, publishes it to that
-team's narrative store, and certifies it there; a subscription created for another team runs under
-that team's scope and can read none of the first team's Facts.
+The factory is `ReportSubscriptionApiHandler.createUnder`. Saving a subscription through it schedules
+its job through the typed `IJobScheduler.Schedule(scope, …)` overload: the scheduler persists a token
+the platform's `ScopeCarrier` issued for that job (Phase 935), and every run re-mints the scope from it
+onto `JobContext.Scope`, which the subscription job hands to the producer on the async chain
+(`ReportProducerScope`). So a subscription created by a request resolved to a team produces its
+narrative from that team's Facts, publishes it to that team's narrative store, and certifies it there;
+a subscription created for another team runs under that team's scope and can read none of the first
+team's Facts.
 
 The scope is carried only when it names the shard the subscription is stored in. A subscription
-created under the anonymous scope, through `ReportSubscriptionApiHandler.create` (which carries no
-request scope), or with a resolved scope for some other shard runs **anonymous**, and the grounded
-producer refuses it rather than run over the anonymous shard. Producers that read no Facts are
-unaffected either way.
+created under the anonymous scope, or with a resolved scope for some other shard, runs **anonymous**,
+and the grounded producer refuses it rather than run over the anonymous shard. The one way to build an
+API that never carries a scope is to ask for it by name — `ReportSubscriptionApiHandler.create`, the
+explicit opt-out, for subscriptions whose producers read nothing scoped. Producers that read no Facts
+are unaffected either way.
 
-**When the scope can no longer be re-minted, the run fails closed and says why.** A token issued
-over a key ring the deployment no longer holds, a scheduler restarted with no carrier bound to the
-deployment's ring, or a job first scheduled before subscriptions carried their scope (a re-save does
-not re-stamp a job its idempotency key recovers) all run under the anonymous scope, read nothing
-scoped, and record a last-run failure carrying
-`ReportSubscriptionJobHandler.ScopeNotReMinted`. Re-create the subscription from a request resolved
-to the scope it reports on.
+**Re-saving a subscription re-stamps its job.** A job found again by its idempotency key keeps the
+token it was first issued — that is what makes a second submission a no-op — so an UPDATE through
+`createUnder` re-issues the job's carried scope explicitly, through the scheduler's re-issue verb
+(`JobScopeReissue.reissue`, the `IJobScopeReissue` capability the in-process scheduler and the Quartz
+companion implement and the quota decorator forwards). The job keeps its id, its schedule and its run
+history; only its token changes. The verb takes a `ResolvedScope` — which only the platform's scope
+resolution mints, never a string — and refuses (`ScopeReissueError.ScopeDoesNotOwnJob`) the anonymous
+scope or a scope resolved for another shard than the job's, before it reads the job. A scheduler that
+cannot re-issue answers `Unsupported`; the save then refuses with
+`ReportSubscriptionApiHandler.SubscriptionScopeNotReissued` when the job carries no token at all, so a
+re-save never reports success over a job it left anonymous.
+
+**When the scope can no longer be re-minted, the run fails closed and says why.** A token issued over
+a key ring the deployment no longer holds, a scheduler restarted with no carrier bound to the
+deployment's ring, or a job first scheduled before subscriptions carried their scope (before Phase
+990, or through `create`) all run under the anonymous scope, read nothing scoped, and record a
+last-run failure carrying `ReportSubscriptionJobHandler.ScopeNotReMinted`. Save the subscription
+again from a request resolved to the scope it reports on: the save re-stamps the job in place. The
+upgrade is [`docs/migrations/991-scoped-report-subscriptions-by-default.md`](../migrations/991-scoped-report-subscriptions-by-default.md).
 
 **Data arrival.** Where the fact tier is composed, the reactive data-change hook also enqueues every
 registered run whose `DependsOnMetrics` include the metric of a fact the change invalidated. Only a
@@ -208,6 +226,9 @@ and logged), and exercises both triggers.
 runs subscriptions on the shipped in-process scheduler: each runs under the scope that created it,
 an anonymous or foreign scope is never carried, a token that no longer redeems fails closed with
 its reason, and the scheduled grounded report runs end to end under its team's scope and reads none
-of another team's Facts.
+of another team's Facts. Its Phase 991 cases compose through `withReportSubscriptions` alone: the
+subscription runs under its creator's scope, a pre-990 (anonymous-token) job is re-stamped in place by
+a save and then reads its team's Fact, and the re-issue verb — on the in-process scheduler and the
+Quartz companion — refuses a cross-shard or anonymous scope and leaves the job as it was.
 [`AssistantFactScopeTests.fs`](../../src/ToolUp.Platform.Tests/InProcess/AssistantFactScopeTests.fs)
 drives a chat turn whose `query_facts` call reads the requesting team's Fact and no other.

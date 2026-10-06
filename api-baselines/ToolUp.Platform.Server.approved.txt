@@ -1291,7 +1291,9 @@ ToolUp.Platform.CarriedJobScope (class)
 ToolUp.Platform.CarriedJobScope.Prefix : System.String (literal)
 ToolUp.Platform.CarriedJobScope.TokenTag : System.String (literal)
 ToolUp.Platform.CarriedJobScope.ofDefinition(ToolUp.Platform.ScopeCarrier, ToolUp.Platform.JobDefinition) : ToolUp.Platform.ResolvedScope
+ToolUp.Platform.CarriedJobScope.owns(ToolUp.Platform.ResolvedScope, System.String) : System.Boolean
 ToolUp.Platform.CarriedJobScope.purpose(System.String, System.Guid) : ToolUp.Platform.CarriedScopePurpose
+ToolUp.Platform.CarriedJobScope.reissue(ToolUp.Platform.ScopeCarrier, ToolUp.Platform.ResolvedScope, ToolUp.Platform.JobDefinition) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.JobDefinition, ToolUp.Platform.ScopeReissueError]
 ToolUp.Platform.CarriedJobScope.stamp(ToolUp.Platform.ScopeCarrier, ToolUp.Platform.ResolvedScope, System.Guid, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String]
 ToolUp.Platform.CarriedJobScope.strip(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]
 ToolUp.Platform.CarriedScopePurpose (class)
@@ -5958,6 +5960,8 @@ ToolUp.Platform.IJobScheduler.RegisterHandlerAsync(System.String, ToolUp.Platfor
 ToolUp.Platform.IJobScheduler.Schedule(ToolUp.Platform.JobRegistration) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, ToolUp.Platform.ScheduleError]]
 ToolUp.Platform.IJobScheduler.Schedule(ToolUp.Platform.ResolvedScope, ToolUp.Platform.JobRegistration) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, ToolUp.Platform.ScheduleError]]
 ToolUp.Platform.IJobScheduler.TriggerOnce(System.String, System.Guid, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.IJobScopeReissue (interface)
+ToolUp.Platform.IJobScopeReissue.ReissueScope(ToolUp.Platform.ResolvedScope, System.String, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ScopeReissueError]]
 ToolUp.Platform.IJobStore (interface)
 ToolUp.Platform.IJobStore.AwaitingExternalRuns(System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobRun]]
 ToolUp.Platform.IJobStore.DueJobs(System.String, System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobDefinition]]
@@ -6795,6 +6799,8 @@ ToolUp.Platform.JobSchedulerLifecycle (class)
 ToolUp.Platform.JobSchedulerLifecycle.create(System.IServiceProvider) : ToolUp.Platform.ITenantLifecycle
 ToolUp.Platform.JobSchedulerLifecycle+JobSchedulerLifecycle (class)
 ToolUp.Platform.JobSchedulerLifecycle+JobSchedulerLifecycle..ctor(System.IServiceProvider)
+ToolUp.Platform.JobScopeReissue (class)
+ToolUp.Platform.JobScopeReissue.reissue(ToolUp.Platform.IJobScheduler, ToolUp.Platform.ResolvedScope, System.String, System.Guid) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.ScopeReissueError]]
 ToolUp.Platform.JobStore (class)
 ToolUp.Platform.JobStore.MaintenanceSourceModule : System.String (literal)
 ToolUp.Platform.JobStore.create(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore) : ToolUp.Platform.IJobStore
@@ -9541,6 +9547,26 @@ ToolUp.Platform.ScopeEnumeration.fromTeamStore(ToolUp.Platform.TeamManagement+IT
 ToolUp.Platform.ScopeEnumeration.fromTeamStoreWith(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.TeamManagement+ITeamStore) : ToolUp.Platform.IScopeEnumerator
 ToolUp.Platform.ScopeEnumeration.ofScopes(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : ToolUp.Platform.IScopeEnumerator
 ToolUp.Platform.ScopeEnumeration.wellKnownContainers : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ScopeReissueError (class)
+ToolUp.Platform.ScopeReissueError.IsFailed : System.Boolean { get }
+ToolUp.Platform.ScopeReissueError.IsJobNotFound : System.Boolean { get }
+ToolUp.Platform.ScopeReissueError.IsScopeDoesNotOwnJob : System.Boolean { get }
+ToolUp.Platform.ScopeReissueError.IsUnsupported : System.Boolean { get }
+ToolUp.Platform.ScopeReissueError.Tag : System.Int32 { get }
+ToolUp.Platform.ScopeReissueError.Unsupported : ToolUp.Platform.ScopeReissueError { get }
+ToolUp.Platform.ScopeReissueError+Failed (class)
+ToolUp.Platform.ScopeReissueError+Failed.reason : System.String { get }
+ToolUp.Platform.ScopeReissueError+JobNotFound (class)
+ToolUp.Platform.ScopeReissueError+JobNotFound.jobId : System.Guid { get }
+ToolUp.Platform.ScopeReissueError+JobNotFound.scopeId : System.String { get }
+ToolUp.Platform.ScopeReissueError+ScopeDoesNotOwnJob (class)
+ToolUp.Platform.ScopeReissueError+ScopeDoesNotOwnJob.jobScopeId : System.String { get }
+ToolUp.Platform.ScopeReissueError+ScopeDoesNotOwnJob.resolvedScopeId : System.String { get }
+ToolUp.Platform.ScopeReissueError+Tags (class)
+ToolUp.Platform.ScopeReissueError+Tags.Failed : System.Int32 (literal)
+ToolUp.Platform.ScopeReissueError+Tags.JobNotFound : System.Int32 (literal)
+ToolUp.Platform.ScopeReissueError+Tags.ScopeDoesNotOwnJob : System.Int32 (literal)
+ToolUp.Platform.ScopeReissueError+Tags.Unsupported : System.Int32 (literal)
 ToolUp.Platform.ScoreContext (class)
 ToolUp.Platform.ScoreContext..ctor(System.String, ToolUp.Platform.FitCompositeKey, ToolUp.Platform.ArtifactRef, ToolUp.Platform.ModelArtifactStatus, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelSpecRef], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.DatasetVersionRef)
 ToolUp.Platform.ScoreContext.Annotations : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }

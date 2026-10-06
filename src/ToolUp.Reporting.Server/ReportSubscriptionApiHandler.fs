@@ -114,6 +114,44 @@ let private findJob
                 && job.Tags.TryFind "subscriptionId" = Some id)
     }
 
+/// The refusal a re-save returns when the job it would re-stamp carries no
+/// scope and the scheduler cannot re-issue one. One constant so a consumer
+/// can match on it.
+[<Literal>]
+let SubscriptionScopeNotReissued =
+    "this subscription's job was scheduled without a carried scope, and this deployment's scheduler cannot re-issue one (IJobScopeReissue) — delete and re-create the subscription, or compose a scheduler that re-issues"
+
+/// Phase 991 — re-issue the carried scope of a subscription's job under the
+/// saving request's scope. A scheduler that cannot re-issue is a refusal only
+/// when the job carries no token at all — the one case where the save would
+/// otherwise leave it running anonymous without saying so; a job that already
+/// carries one (scheduled through the typed overload) keeps it.
+let private restampJob
+    (deps: ReportSubscriptionApiDeps)
+    (requestScope: ResolvedScope)
+    (scopeId: string)
+    (jobId: JobId)
+    : Async<Result<unit, SubscriptionError>> =
+    async {
+        match! JobScopeReissue.reissue deps.Scheduler requestScope scopeId jobId with
+        | Result.Ok() -> return Ok()
+        | Result.Error ScopeReissueError.Unsupported ->
+            let! job = deps.Scheduler.Get(scopeId, jobId)
+
+            let carriesToken =
+                job
+                |> Option.exists (fun definition ->
+                    not (isNull (box definition.Tags))
+                    && definition.Tags.ContainsKey CarriedJobScope.TokenTag)
+
+            return
+                if carriesToken then
+                    Ok()
+                else
+                    Error(SchedulerUnavailable SubscriptionScopeNotReissued)
+        | Result.Error refusal -> return Error(SchedulerUnavailable(sprintf "%A" refusal))
+    }
+
 /// Register (or re-register) the job for a subscription and align its
 /// enabled state. Idempotent: the stable idempotency key means a second
 /// call returns the existing job rather than creating a duplicate — and a
@@ -126,24 +164,38 @@ let private findJob
 /// job runs. Anything else — the anonymous scope, or a resolved scope for
 /// another shard — keeps the string overload, whose job runs anonymous: a
 /// subscription is never scheduled under a scope it is not stored in.
+///
+/// Phase 991 — with `restamp`, a job recovered by its key under a scope that
+/// owns the subscription's shard has its carried scope RE-ISSUED under that
+/// scope (`JobScopeReissue`), so a subscription scheduled anonymously before
+/// Phase 990 — or whose token a restarted ephemeral carrier no longer
+/// redeems — moves onto the saving request's scope by being saved.
 let private syncJob
     (deps: ReportSubscriptionApiDeps)
     (requestScope: ResolvedScope)
+    (restamp: bool)
     (subscription: ReportSubscription)
     : Async<Result<unit, SubscriptionError>> =
     async {
         let registration = registrationFor deps subscription
+        let carried = CarriedJobScope.owns requestScope subscription.ScopeId
 
         let! scheduled =
-            if not requestScope.IsAnonymous && requestScope.ScopeId = subscription.ScopeId then
+            if carried then
                 deps.Scheduler.Schedule(requestScope, registration)
             else
                 deps.Scheduler.Schedule registration
 
-        match scheduled with
-        | Result.Error(InvalidCron(expr, reason)) -> return Error(InvalidSchedule(expr, reason))
-        | Result.Error err -> return Error(SchedulerUnavailable(sprintf "%A" err))
-        | Result.Ok jobId ->
+        let! restamped =
+            match scheduled with
+            | Result.Ok jobId when carried && restamp -> restampJob deps requestScope subscription.ScopeId jobId
+            | _ -> async { return Ok() }
+
+        match scheduled, restamped with
+        | Result.Error(InvalidCron(expr, reason)), _ -> return Error(InvalidSchedule(expr, reason))
+        | Result.Error err, _ -> return Error(SchedulerUnavailable(sprintf "%A" err))
+        | Result.Ok _, Error e -> return Error e
+        | Result.Ok jobId, Ok() ->
             if subscription.Enabled then
                 do! deps.Scheduler.Enable(subscription.ScopeId, jobId)
             else
@@ -160,6 +212,7 @@ let private build
     (scopeId: string)
     : IReportSubscriptionApi =
     let save
+        (restamp: bool)
         (id: SubscriptionId)
         (createdBy: string)
         (createdAt: DateTimeOffset)
@@ -175,7 +228,7 @@ let private build
                 match stored with
                 | Result.Error e -> return Error(SubscriptionStorageFailure e)
                 | Result.Ok persisted ->
-                    let! synced = syncJob deps requestScope persisted
+                    let! synced = syncJob deps requestScope restamp persisted
 
                     return
                         match synced with
@@ -189,7 +242,7 @@ let private build
         ListSubscriptions = fun () -> deps.Subscriptions.List scopeId
 
         CreateSubscription =
-            fun request -> save (Guid.NewGuid().ToString "N") principal DateTimeOffset.UtcNow NeverRun request
+            fun request -> save false (Guid.NewGuid().ToString "N") principal DateTimeOffset.UtcNow NeverRun request
 
         UpdateSubscription =
             fun (id, request) -> async {
@@ -201,7 +254,7 @@ let private build
                 // anything the caller sends: an update edits what the
                 // owner authored, never who created it or what it has
                 // already done.
-                | Some current -> return! save id current.CreatedBy current.CreatedAt current.LastRun request
+                | Some current -> return! save true id current.CreatedBy current.CreatedAt current.LastRun request
             }
 
         SetSubscriptionEnabled =
@@ -233,7 +286,7 @@ let private build
                         // repair, and it is what an operator expects
                         // "resume" to do.
                         | None ->
-                            let! synced = syncJob deps requestScope persisted
+                            let! synced = syncJob deps requestScope false persisted
 
                             return
                                 match synced with
@@ -304,11 +357,17 @@ let private build
 /// runs anonymous, exactly as `create`'s do. A producer that reads through
 /// the request-path fact tools (`GroundedNarrativeProducer`) needs the
 /// resolved scope and refuses without it, so a deployment composing one
-/// mounts this rather than `create`:
+/// mounts this rather than `create` — and `ReportingCompose.withReportSubscriptions`
+/// hands out exactly this factory (Phase 991):
 ///
 /// ```fsharp
 /// ReportSubscriptionApiHandler.createUnder deps principal (ScopeResolution.forRequest ctx) scopeId
 /// ```
+///
+/// An UPDATE through it re-issues the job's carried scope under
+/// `requestScope` (Phase 991, `JobScopeReissue`), so a subscription whose job
+/// was scheduled anonymously — before Phase 990, or through `create` — is
+/// brought onto the saving request's scope by being saved, not re-created.
 let createUnder
     (deps: ReportSubscriptionApiDeps)
     (principal: string)
@@ -317,9 +376,13 @@ let createUnder
     : IReportSubscriptionApi =
     build deps principal requestScope scopeId
 
-/// Build a per-scope `IReportSubscriptionApi`. Its subscriptions' jobs are
-/// scheduled under no resolved scope and run anonymous on
-/// `JobContext.Scope`; `createUnder` is the form that carries the request's.
+/// Build a per-scope `IReportSubscriptionApi` whose subscriptions' jobs are
+/// scheduled under NO resolved scope and run anonymous on `JobContext.Scope`
+/// — the explicit opt-out from `createUnder`, which is what
+/// `ReportingCompose.withReportSubscriptions` mounts (Phase 991). Use it only
+/// for subscriptions whose producers read nothing scoped; a grounded
+/// narrative scheduled through it refuses on every run (`ScopeNotReMinted`).
+/// Saving through it never re-stamps a job's carried scope.
 ///
 /// `principal` is the resolved caller stamped into `CreatedBy` — the
 /// same value the audit trail attributes the subscription's runs to.

@@ -919,7 +919,7 @@ let tests =
 
                 Expect.isNotNull (box handler) "the job handler is returned for registration"
 
-                let api = apiFactory "operator" scopeA
+                let api = apiFactory "operator" ResolvedScope.anonymous scopeA
                 Expect.isEmpty (api.ListSubscriptions() |> run) "and the API factory produces a scoped handler"
             }
 

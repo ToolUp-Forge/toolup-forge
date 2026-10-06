@@ -51,6 +51,8 @@ open ToolUp.RAG.RAGCompose
 open ToolUp.Reporting
 open ToolUp.Reporting.IReportTemplateStore
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.JobSchedulers
+open ToolUp.Platform.JobSchedulers.QuartzScheduler
 
 // ── The subscription substrate, over the shipped scheduler ────────
 
@@ -190,6 +192,13 @@ type private World(producers: ReportProducerRegistry) =
     /// The API built without the request's scope.
     member _.ApiWithoutScope(scopeId: string) =
         ReportSubscriptionApiHandler.create apiDeps "operator" scopeId
+
+    /// Phase 991 — the API factory the default composition hands out,
+    /// `ReportingCompose.withReportSubscriptions`, for a request resolved to
+    /// `scope` managing `scopeId`. Nothing here opts in to carrying a scope.
+    member _.ApiComposed (scope: ResolvedScope) (scopeId: string) =
+        let _, factory = ReportingCompose.withReportSubscriptions [] jobDeps apiDeps
+        factory "operator" scope scopeId
 
 let private storageFor (teamId: string) : StorageScope = {
     ScopeId = teamId
@@ -796,8 +805,415 @@ let groundedReportTests =
         }
     ]
 
+// ── Phase 991 — scoped by default, and an existing job re-stamped ──
+//
+// 990 made a subscription carry its creator's scope only when the
+// composition root chose `createUnder`; the default composition still handed
+// out the anonymous `create`, and a job found again by its idempotency key
+// kept the token it was first issued, so a subscription saved before 990 ran
+// anonymous until it was deleted and re-created. These cases prove the
+// default composition carries the scope with no opt-in, that a save re-stamps
+// a pre-990 job IN PLACE (same job, no re-create) through the scheduler's
+// re-issue verb, and that the verb refuses any scope that does not own the
+// job's shard — on the in-process scheduler and on the Quartz companion.
+
+/// Fire subscription `id` now through `api` and wait for a run newer than
+/// the one already recorded. Bounded, so a run that never happens fails.
+let private runAgain (world: World) (api: IReportSubscriptionApi) (scopeId: string) (id: SubscriptionId) =
+    let lastRunOf () =
+        match world.Subscriptions.Get(scopeId, id) |> Async.RunSynchronously with
+        | Some current -> current.LastRun
+        | None -> failtest "the subscription disappeared"
+
+    let before = lastRunOf ()
+
+    match api.RunSubscriptionNow id |> Async.RunSynchronously with
+    | Ok() -> ()
+    | Error e -> failtestf "run-now failed: %A" e
+
+    let deadline = DateTime.UtcNow.AddSeconds 60.0
+    let mutable outcome = before
+
+    while outcome = before && DateTime.UtcNow < deadline do
+        outcome <- lastRunOf ()
+
+        if outcome = before then
+            Thread.Sleep 25
+
+    if outcome = before then
+        failtest "the subscription's run was never recorded"
+
+    outcome
+
+/// The scheduler jobs backing subscription `id` at `scopeId`.
+let private jobsFor (scheduler: IJobScheduler) (scopeId: string) (id: SubscriptionId) =
+    scheduler.ListJobs scopeId
+    |> Async.RunSynchronously
+    |> List.filter (fun job -> job.Tags.TryFind "subscriptionId" = Some id)
+
+let private createVia (api: IReportSubscriptionApi) (producerKey: string) =
+    match api.CreateSubscription(subscriptionTo producerKey) |> Async.RunSynchronously with
+    | Ok s -> s
+    | Error e -> failtestf "create failed: %A" e
+
+let private resave (api: IReportSubscriptionApi) (id: SubscriptionId) (producerKey: string) =
+    match api.UpdateSubscription(id, subscriptionTo producerKey) |> Async.RunSynchronously with
+    | Ok _ -> ()
+    | Error e -> failtestf "re-save failed: %A" e
+
+let defaultCompositionTests =
+    testList "Phase 991.A / 991.C — the default composition carries the creator's scope, and a save re-stamps" [
+
+        test "a subscription created through the default composition runs under its creator's scope" {
+            let seen = ConcurrentQueue()
+            let world = worldWith (probe seen)
+            let team = newTeam ()
+            let scope = ScopeResolution.ofStorageScope (storageFor team)
+
+            createAndRun world (world.ApiComposed scope team) team "test.scope-probe"
+            |> expectSucceeded
+
+            Expect.equal (List.ofSeq seen) [ Some scope ] "no opt-in: the composed factory carried the request's scope"
+        }
+
+        test "a pre-990 (anonymous-token) job is re-stamped in place by a save, and then runs under its team's scope" {
+            let seen = ConcurrentQueue()
+            let world = worldWith (needsScope seen)
+            let team = newTeam ()
+            let scope = ScopeResolution.ofStorageScope (storageFor team)
+
+            // Before 990 every subscription was scheduled through the string
+            // overload — exactly what the anonymous `create` still does.
+            let legacy = world.ApiWithoutScope team
+            let subscription = createVia legacy "test.needs-scope"
+
+            match runAgain world legacy team subscription.Id with
+            | RunFailed(_, reason, _) ->
+                Expect.stringContains reason ReportSubscriptionJobHandler.ScopeNotReMinted "it ran anonymous"
+            | other -> failtestf "expected the anonymous job to refuse, got %A" other
+
+            let before = jobsFor world.Scheduler team subscription.Id
+
+            Expect.isFalse
+                (before |> List.exists (fun job -> job.Tags.ContainsKey CarriedJobScope.TokenTag))
+                "the legacy job carries no scope token"
+
+            // The owner re-saves it, unchanged, through the default composition.
+            let composed = world.ApiComposed scope team
+            resave composed subscription.Id "test.needs-scope"
+
+            let after = jobsFor world.Scheduler team subscription.Id
+
+            Expect.equal
+                (after |> List.map _.JobId)
+                (before |> List.map _.JobId)
+                "the same job, re-stamped in place — nothing was re-created"
+
+            runAgain world composed team subscription.Id |> expectSucceeded
+
+            Expect.equal (List.ofSeq seen |> List.last) (Some scope) "its next run resolved under the team's scope"
+        }
+
+        test "re-saving through the anonymous opt-out never re-stamps" {
+            let seen = ConcurrentQueue()
+            let world = worldWith (probe seen)
+            let team = newTeam ()
+
+            let legacy = world.ApiWithoutScope team
+            let subscription = createVia legacy "test.scope-probe"
+            resave legacy subscription.Id "test.scope-probe"
+
+            Expect.isFalse
+                (jobsFor world.Scheduler team subscription.Id
+                 |> List.exists (fun job -> job.Tags.ContainsKey CarriedJobScope.TokenTag))
+                "a save under no resolved scope carries none onto the job"
+        }
+    ]
+
+let groundedRestampTests =
+    testList "Phase 991.D — the scheduled grounded report, by default and after a re-save" [
+
+        test "composed with only withReportSubscriptions, the scheduled grounded report reads its creator's team's Fact" {
+            let deployment = deploy ()
+            let team = newTeam ()
+            let scope = ScopeResolution.ofStorageScope (storageFor team)
+            let fact = assertOk deployment.Store team (revenue 1250m)
+
+            createAndRun deployment.World (deployment.World.ApiComposed scope team) team groundedKey
+            |> expectSucceeded
+
+            Expect.equal
+                (deployment.Model.ToolResults |> List.map factIdsIn)
+                [ [ fact.FactId ] ]
+                "the default composition's run read the team's Fact"
+
+            Expect.equal (deployment.World.Sink.Sent |> List.map fst) [ team ] "and delivered it at the team's scope"
+        }
+
+        test "a pre-990 grounded subscription refuses, is re-saved, and then reads its team's Fact" {
+            let deployment = deploy ()
+            let team = newTeam ()
+            let scope = ScopeResolution.ofStorageScope (storageFor team)
+            let fact = assertOk deployment.Store team (revenue 1250m)
+
+            let legacy = deployment.World.ApiWithoutScope team
+            let subscription = createVia legacy groundedKey
+
+            match runAgain deployment.World legacy team subscription.Id with
+            | RunFailed(_, reason, _) ->
+                Expect.stringContains
+                    reason
+                    ReportSubscriptionJobHandler.ScopeNotReMinted
+                    "the anonymous job refused, as every pre-990 grounded subscription did"
+            | other -> failtestf "expected the anonymous grounded run to refuse, got %A" other
+
+            let composed = deployment.World.ApiComposed scope team
+            resave composed subscription.Id groundedKey
+
+            runAgain deployment.World composed team subscription.Id |> expectSucceeded
+
+            Expect.equal
+                (deployment.Model.ToolResults |> List.map factIdsIn |> List.tryLast)
+                (Some [ fact.FactId ])
+                "after the save its run read the team's Fact"
+
+            Expect.equal
+                (narrativeRows deployment team
+                 |> List.filter (fun row -> row.EventType = GroundedNarrativeEvents.PublishedType)
+                 |> List.length)
+                1
+                "and published one grounded narrative at the team's scope"
+        }
+    ]
+
+/// One scheduler under test: the scheduler, the carrier bound into it (so
+/// the test can read what a dispatch would redeem), and its teardown.
+type private ReissueBinding = {
+    Scheduler: IJobScheduler
+    Carrier: ScopeCarrier
+    Dispose: unit -> unit
+}
+
+let private nullHandler =
+    { new IJobHandler with
+        member _.Execute _ = async { return JobResult.Success }
+    }
+
+let private bindCarrier (scheduler: IJobScheduler) =
+    let carrier = ScopeCarrier.ephemeral ()
+    (scheduler :?> IScopeCarrierBinding).BindScopeCarrier carrier
+    scheduler.RegisterHandler("test.reissue", nullHandler)
+    carrier
+
+let private inProcessBinding () =
+    let blobs = InMemoryBlobStorage() :> IBlobStorage
+    let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+
+    let scheduler =
+        JobScheduler.create
+            (JobStore.create blobs events)
+            events
+            silentChannel
+            ServerConfig.defaults
+            silentLogger
+            (NoOpActivitySink() :> IActivitySink)
+        :> IJobScheduler
+
+    {
+        Scheduler = scheduler
+        Carrier = bindCarrier scheduler
+        Dispose = ignore
+    }
+
+let private quartzBinding () =
+    let blobs = InMemoryBlobStorage() :> IBlobStorage
+    let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+
+    let quartzConfig = {
+        QuartzConfig.defaults with
+            SchedulerName = "toolup-reissue-" + Guid.NewGuid().ToString "N"
+            StartScheduler = false
+    }
+
+    let companion =
+        QuartzJobScheduler.create
+            (JobStore.create blobs events)
+            silentChannel
+            ServerConfig.defaults
+            quartzConfig
+            silentLogger
+        |> Async.RunSynchronously
+
+    let scheduler = companion :> IJobScheduler
+
+    {
+        Scheduler = scheduler
+        Carrier = bindCarrier scheduler
+        Dispose =
+            fun () ->
+                (companion.QuartzScheduler.Shutdown false).AsTask()
+                |> Async.AwaitTask
+                |> Async.RunSynchronously
+    }
+
+/// A job scheduled the pre-990 way: the string overload, no token.
+let private anonymousJob (scheduler: IJobScheduler) (scopeId: string) : JobId =
+    let registration: JobRegistration = {
+        ScopeId = scopeId
+        Handler = "test.reissue"
+        Payload = ""
+        Trigger = CronTrigger "0 6 * * 1"
+        Idempotency = None
+        RetryPolicy = JobRetryPolicy.defaults
+        ShardKey = None
+        Precision = JobPrecision.Minute
+        CreatedBy = "operator"
+        Tags = Map [ "source", "test" ]
+    }
+
+    match scheduler.Schedule registration |> Async.RunSynchronously with
+    | Ok jobId -> jobId
+    | Error e -> failtestf "schedule failed: %A" e
+
+let private redeemed (binding: ReissueBinding) (scopeId: string) (jobId: JobId) =
+    match binding.Scheduler.Get(scopeId, jobId) |> Async.RunSynchronously with
+    | Some definition -> CarriedJobScope.ofDefinition binding.Carrier definition
+    | None -> failtest "the job disappeared"
+
+let private reissueTestsFor (name: string) (bind: unit -> ReissueBinding) =
+    let using (body: ReissueBinding -> unit) =
+        let binding = bind ()
+
+        try
+            body binding
+        finally
+            binding.Dispose()
+
+    testList $"Phase 991.B — {name} re-issues a job's carried scope, only to a scope that owns its shard" [
+
+        test "an anonymous job re-issued under its shard's resolved scope runs under that scope" {
+            using (fun binding ->
+                let team = newTeam ()
+                let scope = ScopeResolution.ofStorageScope (storageFor team)
+                let jobId = anonymousJob binding.Scheduler team
+
+                Expect.equal (redeemed binding team jobId) ResolvedScope.anonymous "it starts anonymous"
+
+                let reissued =
+                    JobScopeReissue.reissue binding.Scheduler scope team jobId
+                    |> Async.RunSynchronously
+
+                Expect.equal reissued (Ok()) "the re-issue is accepted"
+                Expect.equal (redeemed binding team jobId) scope "and a dispatch now redeems the team's scope"
+
+                match binding.Scheduler.Get(team, jobId) |> Async.RunSynchronously with
+                | Some definition ->
+                    Expect.equal (definition.Tags.TryFind "source") (Some "test") "the caller's tags are kept"
+                | None -> failtest "the job disappeared")
+        }
+
+        test "a cross-shard re-issue is refused, and the job keeps the scope it had" {
+            using (fun binding ->
+                let team = newTeam ()
+                let elsewhere = ScopeResolution.ofStorageScope (storageFor (newTeam ()))
+                let jobId = anonymousJob binding.Scheduler team
+
+                let before = binding.Scheduler.Get(team, jobId) |> Async.RunSynchronously
+
+                match
+                    JobScopeReissue.reissue binding.Scheduler elsewhere team jobId
+                    |> Async.RunSynchronously
+                with
+                | Error(ScopeReissueError.ScopeDoesNotOwnJob(offered, owned)) ->
+                    Expect.equal offered elsewhere.ScopeId "the refusal names the scope offered"
+                    Expect.equal owned team "and the shard it does not own"
+                | other -> failtestf "expected a cross-shard refusal, got %A" other
+
+                Expect.equal
+                    (binding.Scheduler.Get(team, jobId) |> Async.RunSynchronously)
+                    before
+                    "the definition is untouched"
+
+                Expect.equal (redeemed binding team jobId) ResolvedScope.anonymous "and it still runs anonymous")
+        }
+
+        test "the anonymous scope owns no shard, and an unknown job is reported" {
+            using (fun binding ->
+                let team = newTeam ()
+                let scope = ScopeResolution.ofStorageScope (storageFor team)
+                let jobId = anonymousJob binding.Scheduler team
+
+                match
+                    JobScopeReissue.reissue binding.Scheduler ResolvedScope.anonymous team jobId
+                    |> Async.RunSynchronously
+                with
+                | Error(ScopeReissueError.ScopeDoesNotOwnJob _) -> ()
+                | other -> failtestf "expected the anonymous scope to be refused, got %A" other
+
+                let unknown = Guid.NewGuid()
+
+                Expect.equal
+                    (JobScopeReissue.reissue binding.Scheduler scope team unknown
+                     |> Async.RunSynchronously)
+                    (Error(ScopeReissueError.JobNotFound(team, unknown)))
+                    "a job that does not exist is reported, never created")
+        }
+    ]
+
+let reissueTests =
+    testList "Phase 991.B — re-issuing a job's carried scope" [
+        reissueTestsFor "InProcessJobScheduler" inProcessBinding
+        reissueTestsFor "QuartzJobScheduler" quartzBinding
+
+        test "a scheduler that does not re-issue says so, and the quota decorator forwards one that does" {
+            let team = newTeam ()
+            let scope = ScopeResolution.ofStorageScope (storageFor team)
+
+            let bare =
+                { new IJobScheduler with
+                    member _.RegisterHandler(_, _) = ()
+                    member _.RegisterHandlerAsync(_, _) = async { return Ok() }
+                    member _.Schedule(_: JobRegistration) = async { return Ok(Guid.NewGuid()) }
+
+                    member _.Schedule(_: ResolvedScope, _: JobRegistration) = async { return Ok(Guid.NewGuid()) }
+
+                    member _.Cancel(_, _) = async { return () }
+                    member _.Disable(_, _) = async { return () }
+                    member _.Enable(_, _) = async { return () }
+                    member _.Get(_, _) = async { return None }
+                    member _.ListJobs _ = async { return [] }
+                    member _.GetRecentRuns(_, _, _) = async { return [] }
+                    member _.TriggerOnce(_, _, _) = async { return Ok() }
+                    member _.NotifyEventWritten(_, _, _) = async { return () }
+                }
+
+            Expect.equal
+                (JobScopeReissue.reissue bare scope team (Guid.NewGuid())
+                 |> Async.RunSynchronously)
+                (Error ScopeReissueError.Unsupported)
+                "Unsupported, never a silent success"
+
+            let binding = inProcessBinding ()
+            let jobId = anonymousJob binding.Scheduler team
+
+            let gated =
+                TeamQuotaPolicy.QuotaGatedJobScheduler(binding.Scheduler, ToolUp.Platform.Usage.NoOpTeamQuotaPolicy())
+                :> IJobScheduler
+
+            Expect.equal
+                (JobScopeReissue.reissue gated scope team jobId |> Async.RunSynchronously)
+                (Ok())
+                "the decorator forwards the re-issue to the scheduler it wraps"
+
+            Expect.equal (redeemed binding team jobId) scope "which re-stamped the job"
+        }
+    ]
+
 let tests =
     testList "Phase 990 — report subscriptions run under the scope that created them" [
         carriedScopeTests
         groundedReportTests
+        defaultCompositionTests
+        groundedRestampTests
+        reissueTests
     ]

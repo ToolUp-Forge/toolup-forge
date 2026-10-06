@@ -2216,6 +2216,33 @@ type InProcessJobScheduler
     interface IScopeCarrierBinding with
         member _.BindScopeCarrier(carrier) = scopeCarrier <- carrier
 
+    // ─── Phase 991 — re-issuing a job's carried scope ────────────
+    //
+    // Under the same per-`JobId` lease as `setStatus` and a dispatch, so a
+    // re-issue never interleaves with an in-flight run's write-back of the
+    // definition (which would otherwise restore the old tags).
+
+    interface IJobScopeReissue with
+        member _.ReissueScope(scope, scopeId, jobId) = async {
+            if not (CarriedJobScope.owns scope scopeId) then
+                return Error(ScopeReissueError.ScopeDoesNotOwnJob(scope.ScopeId, scopeId))
+            else
+                let! lease = DistributedLock.acquireBlocking jobLock (jobLockId jobId) (TimeSpan.FromMinutes 1.0)
+
+                try
+                    match! store.Get(scopeId, jobId) with
+                    | None -> return Error(ScopeReissueError.JobNotFound(scopeId, jobId))
+                    | Some job ->
+                        match CarriedJobScope.reissue scopeCarrier scope job with
+                        | Error e -> return Error e
+                        | Ok updated ->
+                            match! Async.Catch(store.Update updated) with
+                            | Choice1Of2() -> return Ok()
+                            | Choice2Of2 ex -> return Error(ScopeReissueError.Failed ex.Message)
+                finally
+                    releaseJobLease lease
+        }
+
     // ─── IJobScheduler ───────────────────────────────────────────
 
     interface IJobScheduler with

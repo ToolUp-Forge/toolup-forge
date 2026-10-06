@@ -190,6 +190,24 @@ type IJobScheduler =
 // A definition persisted with Phase 818's three tags and no token runs
 // anonymous: those tags are no longer read, and nothing released ever
 // wrote them.
+
+/// Why a scheduler refused to re-issue an existing job's carried scope
+/// (Phase 991, `IJobScopeReissue`).
+[<RequireQualifiedAccess>]
+type ScopeReissueError =
+    /// The scope offered does not own the job's shard: it is the anonymous
+    /// scope, or a scope resolved for another shard. Checked before the job
+    /// is read, so a refusal says nothing about whether the job exists.
+    | ScopeDoesNotOwnJob of resolvedScopeId: string * jobScopeId: string
+    /// No job with this id exists in this scope.
+    | JobNotFound of scopeId: string * jobId: JobId
+    /// The scheduler does not re-issue carried scopes (it is not an
+    /// `IJobScopeReissue`). The job keeps the token it was scheduled with.
+    | Unsupported
+    /// The carrier could not seal the token, or the job store refused the
+    /// write. The job keeps the token it had.
+    | Failed of reason: string
+
 /// The carried scope of a scheduled job (Phases 818 and 935): the token a
 /// typed `Schedule` persists on the definition's tags, and the scope a
 /// dispatch of the definition runs under. Public so a scheduler outside the
@@ -254,6 +272,31 @@ module CarriedJobScope =
 
         carrier.RedeemOrAnonymous(token, purpose definition.ScopeId definition.JobId)
 
+    /// `true` when `scope` owns the shard `scopeId`: a resolved scope for
+    /// that same shard. The anonymous scope owns none — re-issuing it would
+    /// only strip a job's scope, and it is never a re-issue's to grant.
+    let owns (scope: ResolvedScope) (scopeId: string) : bool =
+        not scope.IsAnonymous
+        && String.Equals(scope.ScopeId, scopeId, StringComparison.Ordinal)
+
+    /// Phase 991 — `definition` with its token re-issued for `scope`: the
+    /// caller's tags kept, the previous token (valid, foreign, expired or
+    /// absent) replaced by one the carrier issues now for this job. Refused
+    /// unless `scope` owns the job's shard, so a re-issue can never move a
+    /// job's scope across shards, nor clear one. What both schedulers run
+    /// inside their `IJobScopeReissue`, so there is one re-issue, not two.
+    let reissue
+        (carrier: ScopeCarrier)
+        (scope: ResolvedScope)
+        (definition: JobDefinition)
+        : Result<JobDefinition, ScopeReissueError> =
+        if not (owns scope definition.ScopeId) then
+            Error(ScopeReissueError.ScopeDoesNotOwnJob(scope.ScopeId, definition.ScopeId))
+        else
+            stamp carrier scope definition.JobId definition.Tags
+            |> Result.mapError ScopeReissueError.Failed
+            |> Result.map (fun tags -> { definition with Tags = tags })
+
 /// Phase 935 — a scheduler that carries a resolved scope through the
 /// platform's `ScopeCarrier`. Composition binds the deployment's carrier
 /// (over its DataProtection key ring) into the scheduler it composes or
@@ -264,6 +307,54 @@ module CarriedJobScope =
 type IScopeCarrierBinding =
     /// Bind the carrier this scheduler stamps and redeems job scopes with.
     abstract BindScopeCarrier: carrier: ScopeCarrier -> unit
+
+// ─── Phase 991 — re-issuing an existing job's carried scope ──────────
+//
+// A job recovered by its idempotency key keeps the token it was first
+// issued, by design: "submitting twice = the job runs once" must not let a
+// second submission change what the first one runs as. That leaves a job
+// scheduled before its caller could carry a scope (an anonymous token, or
+// none), or one whose token was sealed by a carrier that is gone (an
+// ephemeral carrier across a restart), running anonymous forever — the only
+// repair was to delete the job and schedule another.
+//
+// Re-issuing is the repair, as an explicit act rather than a side effect of
+// `Schedule`. The scope it re-issues is a `ResolvedScope`, which only the
+// platform's scope resolution mints — never a string — and it is refused
+// unless that scope owns the job's shard (`CarriedJobScope.owns`), so it can
+// neither move a job's scope to another shard nor promote one. A capability
+// interface beside `IScopeCarrierBinding`, not a new `IJobScheduler` member,
+// because it belongs to the schedulers that carry scopes; reach it through
+// `JobScopeReissue.reissue`, which answers `Unsupported` for a scheduler that
+// does not, so a caller can say so instead of assuming the job moved.
+
+/// Phase 991 — a scheduler that can re-issue an existing job's carried scope.
+/// Implemented by the in-process default and the Quartz companion, and
+/// forwarded by the SDK's scheduler decorators.
+type IJobScopeReissue =
+    /// Re-issue job `jobId`'s carried-scope token under `scope`, so its next
+    /// dispatch runs under `scope` on `JobContext.Scope`. Every other field of
+    /// the definition is untouched. Refused with `ScopeDoesNotOwnJob` when
+    /// `scope` is anonymous or resolved for another shard than `scopeId`,
+    /// before the job is read; `JobNotFound` when no such job exists there.
+    abstract ReissueScope:
+        scope: ResolvedScope * scopeId: string * jobId: JobId -> Async<Result<unit, ScopeReissueError>>
+
+/// Phase 991 — re-issue through whatever scheduler the deployment composed.
+[<RequireQualifiedAccess>]
+module JobScopeReissue =
+
+    /// `scheduler`'s `IJobScopeReissue.ReissueScope`, or `Unsupported` when
+    /// the scheduler does not re-issue carried scopes.
+    let reissue
+        (scheduler: IJobScheduler)
+        (scope: ResolvedScope)
+        (scopeId: string)
+        (jobId: JobId)
+        : Async<Result<unit, ScopeReissueError>> =
+        match box scheduler with
+        | :? IJobScopeReissue as reissuing -> reissuing.ReissueScope(scope, scopeId, jobId)
+        | _ -> async { return Error ScopeReissueError.Unsupported }
 
 // ─── Phase 9b.B — compose-time scheduled-job declarations ─────────────
 //
