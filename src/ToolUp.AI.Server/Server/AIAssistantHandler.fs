@@ -1254,6 +1254,13 @@ let private createBackgroundContext (ctx: HttpContext) (userId: string) =
         | true, value -> bgCtx.Items[key] <- value
         | _ -> ()
 
+    // Phase 990 — the scope the platform resolved for the request. The fact
+    // tools read only that (`ScopeResolution.forRequest`, Phase 797), and the
+    // list above never carried it, so every fact tool in a chat turn read the
+    // anonymous shard. `carry` records the request's own resolution and mints
+    // nothing: a request the platform resolved no scope for stays anonymous.
+    ScopeResolution.carry bgCtx (ScopeResolution.forRequest ctx)
+
     bgCtx, scope
 
 // ─── Phase 69c.tail A — typed streaming surface ──────────────────

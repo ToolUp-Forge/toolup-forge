@@ -121,6 +121,7 @@ ToolUp.Reporting.ReportRenderRequest.Values : Microsoft.FSharp.Collections.FShar
 ToolUp.Reporting.ReportSubscriptionApiHandler (class)
 ToolUp.Reporting.ReportSubscriptionApiHandler.SubscriptionManagementDenied : System.String (literal)
 ToolUp.Reporting.ReportSubscriptionApiHandler.create(ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps, System.String, System.String) : ToolUp.Reporting.IReportSubscriptionApi
+ToolUp.Reporting.ReportSubscriptionApiHandler.createUnder(ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps, System.String, ToolUp.Platform.ResolvedScope, System.String) : ToolUp.Reporting.IReportSubscriptionApi
 ToolUp.Reporting.ReportSubscriptionApiHandler.withManagementGate(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]], ToolUp.Reporting.IReportSubscriptionApi) : ToolUp.Reporting.IReportSubscriptionApi
 ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps (class)
 ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps..ctor(ToolUp.Reporting.IReportSubscriptionStore, ToolUp.Reporting.ReportProducerRegistry, ToolUp.Platform.IJobScheduler, ToolUp.Platform.JobRetryPolicy, ToolUp.Platform.JobPrecision)
@@ -143,6 +144,7 @@ ToolUp.Reporting.ReportSubscriptionJobDeps.Sink : ToolUp.Platform.INotificationS
 ToolUp.Reporting.ReportSubscriptionJobDeps.Subscriptions : ToolUp.Reporting.IReportSubscriptionStore { get }
 ToolUp.Reporting.ReportSubscriptionJobDeps.Templates : ToolUp.Reporting.IReportTemplateStore+IReportTemplateStore { get }
 ToolUp.Reporting.ReportSubscriptionJobHandler (class)
+ToolUp.Reporting.ReportSubscriptionJobHandler.ScopeNotReMinted : System.String (literal)
 ToolUp.Reporting.ReportSubscriptionJobHandler.create(ToolUp.Reporting.ReportSubscriptionJobDeps) : ToolUp.Platform.IJobHandler
 ToolUp.Reporting.ReportSubscriptionJobHandler.decodePayload(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Reporting.ReportSubscriptionJobHandler+SubscriptionJobPayload]
 ToolUp.Reporting.ReportSubscriptionJobHandler.encodePayload(System.String) : System.String

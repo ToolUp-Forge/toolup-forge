@@ -299,7 +299,9 @@ module ScopeResolution =
 
     /// Record an ALREADY-RESOLVED scope on a context the platform builds for
     /// carried work — a background agent loop running for a job under the
-    /// scope on `JobContext.Scope` (Phase 985). It mints nothing: a
+    /// scope on `JobContext.Scope` (Phase 985), or a chat turn's agent loop
+    /// running on a context built off the request it serves (Phase 990),
+    /// which carries the request's own resolution. It mints nothing: a
     /// `ResolvedScope` can only have come from this module or from the
     /// scheduler's carrier, so every door that reads the context through
     /// `forRequest` still reads only a scope the platform resolved, and an

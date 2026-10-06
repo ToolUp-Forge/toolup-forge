@@ -1589,6 +1589,12 @@
              case, the fact-tier gate and certificate, the run end to end on a
              composed RAG app, and both triggers. -->
         <Compile Include="InProcess\GroundedNarrativeTests.fs" />
+        <!-- Phase 990 — a report subscription's job runs under the scope that
+             created it (and fails closed when that scope cannot be re-minted),
+             a scheduled grounded report end to end under its team's scope, and
+             an assistant chat turn's fact tools reading the request's scope. -->
+        <Compile Include="InProcess\ReportSubscriptionScopeTests.fs" />
+        <Compile Include="InProcess\AssistantFactScopeTests.fs" />
         <!-- Phase 709 — the AI tool-result context budget: the knob and its
              refusal of a nonsensical declaration, byte-identical
              pass-through under the ceiling, the typed elision marker (valid
