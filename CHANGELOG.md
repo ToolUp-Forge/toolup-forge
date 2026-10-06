@@ -13,7 +13,7 @@ same name in one release is reported once, as a signature change. Under this rep
 policy a `breaking` release is a MINOR bump and an `additive` one a PATCH; from 1.0.0 the ordinary table
 applies. Where a release ships a migration note under `docs/migrations/`, it is linked from the section.
 
-## [0.24.0] — unreleased
+## [0.24.1] — unreleased
 
 Migration notes:
 

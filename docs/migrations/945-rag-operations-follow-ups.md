@@ -2,7 +2,7 @@
 
 **Ships in:** ToolUp.Platform.Server (`IEmbeddingProvider.fs`), ToolUp.RAG.Core (`IIngestionQueue`),
 ToolUp.RAG.Server, ToolUp.EmbeddingProviders.OpenAI. Breaking for implementers of `IIngestionQueue`
-only, on the 0.24.0 draft. Everything else is additive.
+only, on the 0.24.1 draft. Everything else is additive.
 
 ## What changes
 

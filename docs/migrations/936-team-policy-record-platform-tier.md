@@ -13,11 +13,11 @@ written before this phase reads back with the same levels on both axes. No migra
 is rewritten. The name is historical, and it is kept on purpose: renaming the blob would mean reading two
 names and writing one under the compare-and-swap, which adds a migration hazard for no gain.
 
-**What breaks, and for whom.** These changes break only against the unreleased 0.24.0 draft. Types move
+**What breaks, and for whom.** These changes break only against the unreleased 0.24.1 draft. Types move
 between assemblies, so code that names them needs a different `open`. The wire contract is unchanged.
 `TeamOutputVisibilityApi` keeps its name, so its route is unchanged too.
 
-| Was (0.24.0 draft) | Now |
+| Was (0.24.1 draft) | Now |
 |---|---|
 | `ToolUp.AI.TeamOutputVisibilityApi`, `ToolUp.AI.TeamOutputVisibilityView` (`ToolUp.AI.Core`) | `ToolUp.Platform.TeamOutputVisibilityApi`, `ToolUp.Platform.TeamOutputVisibilityView` (`ToolUp.Platform.Core`) |
 | `TeamConversationPolicyStore.TeamConversationVisibilitySettings` (+ module: `unrestricted`, `create`, `describeAllowed`) | `ToolUp.Platform.TeamConversationVisibilitySettings` (`ToolUp.Platform.Core`); `resolve` became `TeamPolicySettings.conversationOrUnrestricted` |

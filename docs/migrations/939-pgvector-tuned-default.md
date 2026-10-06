@@ -1,7 +1,7 @@
 # The pgvector store's `create` takes the tuned posture
 
 **Ships in:** ToolUp.VectorStores.Pgvector (`PgvectorVectorStore.create`, `createWithDataSource`,
-`PgvectorTuning`). Breaking, on the 0.24.0 draft: a record field is removed and `create` behaves
+`PgvectorTuning`). Breaking, on the 0.24.1 draft: a record field is removed and `create` behaves
 differently.
 
 ## What changes

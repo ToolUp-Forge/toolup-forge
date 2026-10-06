@@ -3,7 +3,7 @@
 **Ships in:** ToolUp.Reporting.Server (`ReportingCompose.withReportSubscriptions`,
 `ReportSubscriptionApiHandler`), ToolUp.Platform.Server (`IJobScopeReissue`, `JobScopeReissue`,
 `ScopeReissueError`, `CarriedJobScope.owns` / `reissue`, the in-process scheduler and the quota decorator),
-ToolUp.JobSchedulers.Quartz. Breaking, on the 0.24.0 draft.
+ToolUp.JobSchedulers.Quartz. Breaking, on the 0.24.1 draft.
 
 **Affected:** a deployment that composes report subscriptions through `withReportSubscriptions`. A deployment
 that does not compose subscriptions is unaffected.

@@ -70,7 +70,7 @@ accepted form per type is also simpler than a profile branch. v0.23.0's `asInt64
 refused the shape too, so on the algebra path nothing narrows against the last tagged release;
 only a tree built between Phases 845 and 911 accepted it there.
 
-**The STJ path refuses it too (Phase 937, breaking in 0.24.0).** An argument type with no
+**The STJ path refuses it too (Phase 937, breaking in 0.24.1).** An argument type with no
 registered decoder is read by the converter set, and `Int64Converter` / `UInt64Converter` used to
 rebuild a value from `high` and `low` — as they did in v0.23.0. They no longer do: any token other
 than a JSON number or the writer's string is refused, naming the type and both accepted forms in
@@ -106,7 +106,7 @@ unnamed error instead), so the reflective read now accepts exactly what `asInt64
 accept — a digit string, or a number within ±(2^53 − 1). Like the STJ change, this narrows against
 v0.23.0, whose reflective read had no such pass; no SDK writer emits the object form.
 
-**0.24.0 version notes (Phase 937).** Breaking, wire-level only — no public signature moved: the
+**0.24.1 version notes (Phase 937).** Breaking, wire-level only — no public signature moved: the
 STJ `Int64Converter` / `UInt64Converter` and the reflective client response read refuse the Fable
 `Long` object form they accepted in v0.23.0. A number or the string form decodes on both paths
 exactly as before, and both writer oracles Phase 911 pinned stay green.

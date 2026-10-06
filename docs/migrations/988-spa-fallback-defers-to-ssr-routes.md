@@ -3,10 +3,10 @@
 **Ships in:** ToolUp.Platform.Server (`SpaFallbackMiddleware`, new `SpaFallbackPrecedence`),
 ToolUp.PublicRendering (`composePublicRendering` registers it). Additive public surface. Behaviour change for
 deployments that compose `ToolUp.PublicRendering` **and** ship a client bundle (`ServerConfig.PublicPath`
-containing `index.html`), on the 0.24.0 draft.
+containing `index.html`), on the 0.24.1 draft.
 
 **Affected versions:** every release that ships `withPublicRendering` (Phase 80c) on a deployment that also
-serves a SPA bundle. **Upgrade to 0.24.0.** A deployment with no client bundle on disk (a pure SSR site, or
+serves a SPA bundle. **Upgrade to 0.24.1.** A deployment with no client bundle on disk (a pure SSR site, or
 development with Vite serving the client) was never affected, and a SPA deployment that does not compose
 PublicRendering behaves exactly as before.
 

@@ -183,9 +183,9 @@ The shell is the last resort: composing either layer — PublicRendering, or the
 (`OidcSsrSignIn.withInteractiveSignIn` / `OidcSsrSignIn.register`) — registers `SpaFallbackPrecedence.RouterFirst`,
 so the SPA fallback lets the router answer first and serves the shell only to a `GET` nothing answered. A gated page
 therefore returns `401` / `403` (or the sign-in redirect) rather than the shell, even with a client bundle
-shipped. Releases before 0.24.0 answered every extensionless `GET` with the shell once a bundle was present, so
+shipped. Releases before 0.24.1 answered every extensionless `GET` with the shell once a bundle was present, so
 no SSR page was reachable on such a deployment; see
-[the 0.24.0 migration note](../migrations/988-spa-fallback-defers-to-ssr-routes.md). Keep page slugs distinct
+[the 0.24.1 migration note](../migrations/988-spa-fallback-defers-to-ssr-routes.md). Keep page slugs distinct
 from the client router's paths: a slug that names a client route is served by the page handler, not the SPA.
 
 Either layer alone is sufficient, and composing both leaves one registration (`useRouterFirst` is idempotent).
@@ -198,7 +198,7 @@ compose time, whichever order it and `withRAG` ran in.
 ## Security notes
 
 - **The gate is structural, not advisory.** `ClientGated` matches against the principal's *own* resolved scope ids, never a value the caller supplies. A principal cannot request another client's page by guessing the slug.
-- **The gate fails closed.** A page route whose principal could not be resolved (no credentials, a credential the provider rejects, a resolver failure) is judged as anonymous, never as signed in. Releases before 0.24.0 did not resolve the principal on page routes; see [the 0.24.0 migration note](../migrations/989-gated-ssr-fails-closed.md).
+- **The gate fails closed.** A page route whose principal could not be resolved (no credentials, a credential the provider rejects, a resolver failure) is judged as anonymous, never as signed in. Releases before 0.24.1 did not resolve the principal on page routes; see [the 0.24.1 migration note](../migrations/989-gated-ssr-fails-closed.md).
 - **A public page carries no session cookie.** Page routes resolve the principal but are not bound to an anonymous session, so a public page served to an anonymous visitor sets no cookie and stays cacheable by a CDN.
 - **Cache hits re-run the gate.** A gated page cached for a scope is still authorization-checked per request using the stored audience, so a member who loses a role (or a different member in the same scope) is correctly denied on the next hit.
 - **Nothing gated leaks to crawlers.** Sitemap, feeds, and static export emit only `Public` pages.

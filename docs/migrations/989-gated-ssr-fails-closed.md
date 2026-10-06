@@ -2,9 +2,9 @@
 
 **Ships in:** ToolUp.Platform.Server (`ScopeResolutionMiddleware`, the scoped `AccessContext` factory),
 ToolUp.PublicRendering (`AudienceGate`). No public signature changes. Behaviour-breaking for deployments that
-publish audience-gated pages (Phase 86), on the 0.24.0 draft.
+publish audience-gated pages (Phase 86), on the 0.24.1 draft.
 
-**Affected versions:** every release that ships gated SSR, 0.5.22 through 0.23.x. **Upgrade to 0.24.0.** A
+**Affected versions:** every release that ships gated SSR, 0.5.22 through 0.23.x. **Upgrade to 0.24.1.** A
 deployment that publishes no page with an `audience:` other than `public` is unaffected by the security
 change, and needs no action.
 

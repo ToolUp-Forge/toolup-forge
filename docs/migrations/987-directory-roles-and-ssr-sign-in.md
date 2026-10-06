@@ -3,9 +3,9 @@
 **Ships in:** ToolUp.Platform.Core (`AccessContext.TokenRoles`, `AuthenticatedUser.DirectoryRoles`, the
 `ClaimMapping` role, admission and API-grant fields, `InteractiveSignIn`, three config keys), ToolUp.Platform.Server (the scoped `AccessContext` factory),
 ToolUp.PublicRendering (`AudienceGate`, the page handler's sign-in redirect), ToolUp.AuthProviders.Oidc (role and group
-claim projection, the admission gate, `OidcSsrSignIn`). On the 0.24.0 draft, which is already a breaking release.
+claim projection, the admission gate, `OidcSsrSignIn`). On the 0.24.1 draft, which is already a breaking release.
 
-Builds on [the 0.24.0 fail-closed change](989-gated-ssr-fails-closed.md): gated pages resolve the request principal,
+Builds on [the 0.24.1 fail-closed change](989-gated-ssr-fails-closed.md): gated pages resolve the request principal,
 and `ScopeGated` requires a held role. This note covers what Phase 987 adds on top of it, as amended by Phase 993
 before the release: **role mapping grants page audiences by default, and API roles only by an explicit allow-list.**
 
@@ -109,4 +109,4 @@ site carries it; nothing changes for a deployment that does not compose it.
 ## Rollback
 
 Pin the previous release. Unsetting the role claims (and not composing `OidcSsrSignIn`) restores the pre-987
-behaviour on 0.24.0 except for the record-literal changes, which are source-level.
+behaviour on 0.24.1 except for the record-literal changes, which are source-level.
