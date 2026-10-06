@@ -1234,6 +1234,13 @@ module PublicRenderingServerApp =
             let registeredLayoutNames = layouts |> Map.toList |> List.map fst
 
             let publicRenderingServiceConfig (services: IServiceCollection) =
+                // Phase 988 — the page handler owns extensionless GETs, so
+                // the SPA shell fallback must let the router answer first
+                // and serve the shell only where no page (or other route)
+                // did. Without this, a deployment shipping a client bundle
+                // serves the shell for every SSR slug.
+                SpaFallbackPrecedence.useRouterFirst services |> ignore
+
                 services
                     .AddSingleton<MarkdownContentLoader>(
                         System.Func<System.IServiceProvider, MarkdownContentLoader>(fun _sp ->
