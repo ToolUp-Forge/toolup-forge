@@ -50,6 +50,7 @@ open ToolUp.RAG
 open ToolUp.RAG.RAGCompose
 open ToolUp.Reporting
 open ToolUp.Reporting.IReportTemplateStore
+open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.JobSchedulers
 open ToolUp.Platform.JobSchedulers.QuartzScheduler
@@ -986,46 +987,39 @@ let groundedRestampTests =
         }
     ]
 
-/// One scheduler under test: the scheduler, the carrier bound into it (so
-/// the test can read what a dispatch would redeem), and its teardown.
-type private ReissueBinding = {
-    Scheduler: IJobScheduler
-    Carrier: ScopeCarrier
-    Dispose: unit -> unit
-}
+// ── Phase 991.B — the re-issue verb, bound to its contract pack ────
+//
+// `IJobScopeReissueContract` holds what any re-issuing scheduler must do
+// (re-stamp in place for the job's own shard; refuse a cross-shard or
+// anonymous scope and leave the job untouched; report an unknown job). It is
+// bound here three times: the in-process scheduler, the Quartz companion, and
+// the quota decorator over the in-process scheduler, which must forward it.
 
-let private nullHandler =
-    { new IJobHandler with
-        member _.Execute _ = async { return JobResult.Success }
-    }
-
-let private bindCarrier (scheduler: IJobScheduler) =
-    let carrier = ScopeCarrier.ephemeral ()
-    (scheduler :?> IScopeCarrierBinding).BindScopeCarrier carrier
-    scheduler.RegisterHandler("test.reissue", nullHandler)
-    carrier
-
-let private inProcessBinding () =
+let private inProcessScheduler () =
     let blobs = InMemoryBlobStorage() :> IBlobStorage
     let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
-    let scheduler =
-        JobScheduler.create
-            (JobStore.create blobs events)
-            events
-            silentChannel
-            ServerConfig.defaults
-            silentLogger
-            (NoOpActivitySink() :> IActivitySink)
-        :> IJobScheduler
+    JobScheduler.create
+        (JobStore.create blobs events)
+        events
+        silentChannel
+        ServerConfig.defaults
+        silentLogger
+        (NoOpActivitySink() :> IActivitySink)
+
+let private bindInto (scheduler: IJobScheduler) (carrier: ScopeCarrier) =
+    (scheduler :?> IScopeCarrierBinding).BindScopeCarrier carrier
+
+let private inProcessSubject () : IJobScopeReissueContract.ReissueSubject =
+    let scheduler = inProcessScheduler () :> IJobScheduler
 
     {
         Scheduler = scheduler
-        Carrier = bindCarrier scheduler
+        Bind = bindInto scheduler
         Dispose = ignore
     }
 
-let private quartzBinding () =
+let private quartzSubject () : IJobScopeReissueContract.ReissueSubject =
     let blobs = InMemoryBlobStorage() :> IBlobStorage
     let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
@@ -1044,11 +1038,9 @@ let private quartzBinding () =
             silentLogger
         |> Async.RunSynchronously
 
-    let scheduler = companion :> IJobScheduler
-
     {
-        Scheduler = scheduler
-        Carrier = bindCarrier scheduler
+        Scheduler = companion :> IJobScheduler
+        Bind = bindInto companion
         Dispose =
             fun () ->
                 (companion.QuartzScheduler.Shutdown false).AsTask()
@@ -1056,116 +1048,23 @@ let private quartzBinding () =
                 |> Async.RunSynchronously
     }
 
-/// A job scheduled the pre-990 way: the string overload, no token.
-let private anonymousJob (scheduler: IJobScheduler) (scopeId: string) : JobId =
-    let registration: JobRegistration = {
-        ScopeId = scopeId
-        Handler = "test.reissue"
-        Payload = ""
-        Trigger = CronTrigger "0 6 * * 1"
-        Idempotency = None
-        RetryPolicy = JobRetryPolicy.defaults
-        ShardKey = None
-        Precision = JobPrecision.Minute
-        CreatedBy = "operator"
-        Tags = Map [ "source", "test" ]
+let private quotaGatedSubject () : IJobScopeReissueContract.ReissueSubject =
+    let inner = inProcessScheduler () :> IJobScheduler
+
+    {
+        Scheduler =
+            TeamQuotaPolicy.QuotaGatedJobScheduler(inner, ToolUp.Platform.Usage.NoOpTeamQuotaPolicy()) :> IJobScheduler
+        Bind = bindInto inner
+        Dispose = ignore
     }
-
-    match scheduler.Schedule registration |> Async.RunSynchronously with
-    | Ok jobId -> jobId
-    | Error e -> failtestf "schedule failed: %A" e
-
-let private redeemed (binding: ReissueBinding) (scopeId: string) (jobId: JobId) =
-    match binding.Scheduler.Get(scopeId, jobId) |> Async.RunSynchronously with
-    | Some definition -> CarriedJobScope.ofDefinition binding.Carrier definition
-    | None -> failtest "the job disappeared"
-
-let private reissueTestsFor (name: string) (bind: unit -> ReissueBinding) =
-    let using (body: ReissueBinding -> unit) =
-        let binding = bind ()
-
-        try
-            body binding
-        finally
-            binding.Dispose()
-
-    testList $"Phase 991.B — {name} re-issues a job's carried scope, only to a scope that owns its shard" [
-
-        test "an anonymous job re-issued under its shard's resolved scope runs under that scope" {
-            using (fun binding ->
-                let team = newTeam ()
-                let scope = ScopeResolution.ofStorageScope (storageFor team)
-                let jobId = anonymousJob binding.Scheduler team
-
-                Expect.equal (redeemed binding team jobId) ResolvedScope.anonymous "it starts anonymous"
-
-                let reissued =
-                    JobScopeReissue.reissue binding.Scheduler scope team jobId
-                    |> Async.RunSynchronously
-
-                Expect.equal reissued (Ok()) "the re-issue is accepted"
-                Expect.equal (redeemed binding team jobId) scope "and a dispatch now redeems the team's scope"
-
-                match binding.Scheduler.Get(team, jobId) |> Async.RunSynchronously with
-                | Some definition ->
-                    Expect.equal (definition.Tags.TryFind "source") (Some "test") "the caller's tags are kept"
-                | None -> failtest "the job disappeared")
-        }
-
-        test "a cross-shard re-issue is refused, and the job keeps the scope it had" {
-            using (fun binding ->
-                let team = newTeam ()
-                let elsewhere = ScopeResolution.ofStorageScope (storageFor (newTeam ()))
-                let jobId = anonymousJob binding.Scheduler team
-
-                let before = binding.Scheduler.Get(team, jobId) |> Async.RunSynchronously
-
-                match
-                    JobScopeReissue.reissue binding.Scheduler elsewhere team jobId
-                    |> Async.RunSynchronously
-                with
-                | Error(ScopeReissueError.ScopeDoesNotOwnJob(offered, owned)) ->
-                    Expect.equal offered elsewhere.ScopeId "the refusal names the scope offered"
-                    Expect.equal owned team "and the shard it does not own"
-                | other -> failtestf "expected a cross-shard refusal, got %A" other
-
-                Expect.equal
-                    (binding.Scheduler.Get(team, jobId) |> Async.RunSynchronously)
-                    before
-                    "the definition is untouched"
-
-                Expect.equal (redeemed binding team jobId) ResolvedScope.anonymous "and it still runs anonymous")
-        }
-
-        test "the anonymous scope owns no shard, and an unknown job is reported" {
-            using (fun binding ->
-                let team = newTeam ()
-                let scope = ScopeResolution.ofStorageScope (storageFor team)
-                let jobId = anonymousJob binding.Scheduler team
-
-                match
-                    JobScopeReissue.reissue binding.Scheduler ResolvedScope.anonymous team jobId
-                    |> Async.RunSynchronously
-                with
-                | Error(ScopeReissueError.ScopeDoesNotOwnJob _) -> ()
-                | other -> failtestf "expected the anonymous scope to be refused, got %A" other
-
-                let unknown = Guid.NewGuid()
-
-                Expect.equal
-                    (JobScopeReissue.reissue binding.Scheduler scope team unknown
-                     |> Async.RunSynchronously)
-                    (Error(ScopeReissueError.JobNotFound(team, unknown)))
-                    "a job that does not exist is reported, never created")
-        }
-    ]
 
 let reissueTests =
     testList "Phase 991.B — re-issuing a job's carried scope" [
-        reissueTestsFor "InProcessJobScheduler" inProcessBinding
-        reissueTestsFor "QuartzJobScheduler" quartzBinding
+        IJobScopeReissueContract.tests "InProcessJobScheduler" inProcessSubject
+        IJobScopeReissueContract.tests "QuartzJobScheduler" quartzSubject
+        IJobScopeReissueContract.tests "QuotaGatedJobScheduler over InProcessJobScheduler" quotaGatedSubject
 
-        test "a scheduler that does not re-issue says so, and the quota decorator forwards one that does" {
+        test "a scheduler that does not re-issue answers Unsupported, never a silent success" {
             let team = newTeam ()
             let scope = ScopeResolution.ofStorageScope (storageFor team)
 
@@ -1191,21 +1090,7 @@ let reissueTests =
                 (JobScopeReissue.reissue bare scope team (Guid.NewGuid())
                  |> Async.RunSynchronously)
                 (Error ScopeReissueError.Unsupported)
-                "Unsupported, never a silent success"
-
-            let binding = inProcessBinding ()
-            let jobId = anonymousJob binding.Scheduler team
-
-            let gated =
-                TeamQuotaPolicy.QuotaGatedJobScheduler(binding.Scheduler, ToolUp.Platform.Usage.NoOpTeamQuotaPolicy())
-                :> IJobScheduler
-
-            Expect.equal
-                (JobScopeReissue.reissue gated scope team jobId |> Async.RunSynchronously)
-                (Ok())
-                "the decorator forwards the re-issue to the scheduler it wraps"
-
-            Expect.equal (redeemed binding team jobId) scope "which re-stamped the job"
+                "Unsupported"
         }
     ]
 
