@@ -466,7 +466,10 @@ module ReportSubscriptionJobHandler =
                     // Paused. Same reasoning: not an error, nothing to do.
                     | Some subscription when not subscription.Enabled -> return Success
                     | Some subscription ->
-                        let! outcome = runOnce deps subscription
+                        // Phase 985 — the job's resolved scope rides the
+                        // async chain to the producer (GP 7); a producer that
+                        // needs it reads `ReportProducerScope`.
+                        let! outcome = ReportProducerScope.within ctx.Scope (runOnce deps subscription)
 
                         match outcome with
                         | Ok success ->

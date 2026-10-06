@@ -51,6 +51,11 @@ open ToolUp.ArtefactSigning
 type CertificateSubject =
     | AnswerCertificate of messageId: string * citedFactIds: string list
     | FactCertificate of factId: string
+    /// Phase 985 — a published grounded narrative plus the Fact ids it
+    /// cites; the chain is rooted at the narrative (a `NarrativeDocument`
+    /// node) with a `CitesFact` edge to each cited Fact, whose upstream is
+    /// then walked exactly as an answer's is.
+    | NarrativeCertificate of narrativeId: string * citedFactIds: string list
 
 /// One node in a sealed grounding certificate — a provenance-chain node,
 /// projected to structure only. For a **disclosable** fact node `Method`
@@ -539,6 +544,26 @@ module GroundingCertificate =
                 }
 
                 return messageId, chain
+            | NarrativeCertificate(narrativeId, citedFactIds) ->
+                // The answer-side walk, re-rooted: the provenance graph roots
+                // `GetChainForMessage` at a message node, and the narrative is
+                // the same shape of root (something that cites facts) under
+                // its own kind.
+                let! baseChain = graph.GetChainForMessage(scopeId, narrativeId, List.distinct citedFactIds, depth)
+
+                let nodes =
+                    baseChain.Nodes
+                    |> List.map (fun node ->
+                        if node.Id = narrativeId && node.Kind = ConversationMessage then
+                            {
+                                node with
+                                    Kind = NarrativeDocument
+                                    Label = sprintf "narrative: %s" narrativeId
+                            }
+                        else
+                            node)
+
+                return narrativeId, { baseChain with Nodes = nodes }
         }
 
         // Project one provenance node to a certificate node, consulting the

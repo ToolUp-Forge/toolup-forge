@@ -181,6 +181,15 @@ narrative **type-erasure boundary** (see the SDK
 - Markdown degrades to an HTML comment marker; plaintext to
   `[component: name]`; the Feliz client tree to an inert placeholder.
 
+## Model-written narratives — the grounding gate (Phase 985)
+
+A `Metric` span's fact reference is optional, which is right for an authored narrative and wrong
+for a model-written one. A narrative the model writes is published only through the grounded run,
+which refuses it unless every number in its content is a `Metric` span citing a current,
+disclosable Fact (or a declared citable reference) and stating that reference's value — tables,
+cards and component props included. See [`grounded-narratives.md`](grounded-narratives.md) for
+the gate, the run, its two triggers and the reference seam.
+
 ## Determinism + prerender safety
 
 Every renderer is pure and deterministic — no `DateTime.Now`, no

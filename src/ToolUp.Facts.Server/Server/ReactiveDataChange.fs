@@ -309,3 +309,301 @@ module ReactiveDataChange =
         (logger: ILogger)
         : IDataObjectStore =
         ReactiveDataObjectStore(inner, armed, currentScope, react, logger) :> IDataObjectStore
+// ─── Phase 985 — grounded narratives react to data arrival ───────────
+//
+// A registered grounded narrative names the metrics it is written from
+// (`GroundedNarrativeDefinition.DependsOnMetrics`). When a data-object
+// version lands and the invalidation walk above finds current facts of one
+// of those metrics whose inputs changed, the run is ENQUEUED — never run
+// on the writer's thread, because a model call has no business inside a
+// data save. Neither the trigger nor its job names a report: the
+// deployment's registry says which runs exist and what each depends on.
+//
+// **The job waits for the recompute it raced.** A metric whose policy is
+// `Eager` recomputes in its own job, scheduled by the recompute reaction in
+// the same pass; nothing orders the two jobs (GP 12 rule 5). A narrative
+// run that won the race would cite the head the recompute is about to
+// supersede. So the narrative job re-derives the invalidated heads first
+// and, while one it depends on is still an un-recomputed `Eager` head,
+// reports a transient failure and lets the retry policy — data, not a
+// callback — back it off. On its last attempt it runs regardless: a
+// narrative over a superseded fact is caught by the supersession join and
+// marked stale, which is honest; one never written is silent. `OnQuery`
+// heads recompute when the run's own fact reads reach them, and `Manual`
+// heads never recompute, so neither is waited for.
+//
+// **Only a RESOLVED change enqueues a run.** The run's model reads facts
+// through the request-path fact tools, which take only a scope the platform
+// resolved (Phase 797); the job is scheduled under the write's resolved
+// scope and runs under it re-minted (Phase 818/935). A CARRIED change — a
+// boot seed, an import job's write — has no resolved scope to give it, and
+// promoting its string would be the forgery 797 exists to prevent, so it
+// enqueues nothing: the run could only fail.
+//
+// **Zero cost when unused (GP 13).** The reaction does nothing — not even
+// the invalidation walk — unless a `GroundedNarrativeRegistry` holding a
+// run with a metric dependency AND an `IJobScheduler` are composed, and the
+// job handler is registered with the scheduler only when a registry and an
+// `IGroundedNarrativeRun` are.
+
+module GroundedNarrativeTrigger =
+
+    open System.Text.Json
+    open ToolUp.Remoting.Json.SystemTextJson
+
+    /// The job handler name the data-arrival runs are scheduled under.
+    [<Literal>]
+    let HandlerName = "_narratives.grounded-run"
+
+    [<Literal>]
+    let Actor = "grounded-narrative-trigger"
+
+    /// The `GroundedNarrativeRequest.Trigger` a data-arrival run records.
+    [<Literal>]
+    let TriggerName = "data-arrival"
+
+    /// What a narrative job carries: the run, and the invalidation set that
+    /// caused it (so the job can tell whether a recompute is still pending).
+    type GroundedNarrativeJobPayload = {
+        RunKey: string
+        InvalidatedInputs: string list
+    }
+
+    let private jsonOptions = FableConverters.create ()
+
+    let payloadFor (runKey: string) (invalidated: Set<string>) : string =
+        JsonSerializer.Serialize(
+            {
+                RunKey = runKey
+                InvalidatedInputs = Set.toList invalidated
+            },
+            jsonOptions
+        )
+
+    let tryParsePayload (json: string) : GroundedNarrativeJobPayload option =
+        try
+            let parsed =
+                JsonSerializer.Deserialize<GroundedNarrativeJobPayload>(json, jsonOptions)
+
+            if isNull (box parsed) || String.IsNullOrWhiteSpace parsed.RunKey then
+                None
+            elif isNull (box parsed.InvalidatedInputs) then
+                Some { parsed with InvalidatedInputs = [] }
+            else
+                Some parsed
+        with _ ->
+            None
+
+    /// Six attempts, backing off from 30 s to 10 min — about twenty minutes
+    /// for a raced recompute to land before the run proceeds regardless.
+    let retryPolicy: JobRetryPolicy = {
+        JobRetryPolicy.defaults with
+            MaxAttempts = 6
+            MaxBackoff = TimeSpan.FromMinutes 10.0
+    }
+
+    let private sha256Hex (s: string) : string =
+        use sha = System.Security.Cryptography.SHA256.Create()
+
+        sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes s)
+        |> Array.map (sprintf "%02x")
+        |> String.concat ""
+
+    /// The job for one run over one change. Idempotency keys on the run AND
+    /// the change, so a replayed change coalesces while a second, different
+    /// change is never swallowed by the first's job. `ShardKey` is the run,
+    /// so a distributed scheduler serialises one report's runs.
+    let registrationFor (scopeId: string) (runKey: string) (invalidated: Set<string>) : JobRegistration =
+        let changeDigest =
+            (invalidated |> Set.toList |> String.concat "\n" |> sha256Hex).Substring(0, 16)
+
+        {
+            ScopeId = scopeId
+            Handler = HandlerName
+            Payload = payloadFor runKey invalidated
+            Trigger = Trigger.Manual
+            Idempotency =
+                Some {
+                    Key = sprintf "grounded-%s-%s" runKey changeDigest
+                    TtlSeconds = 3600
+                }
+            RetryPolicy = retryPolicy
+            ShardKey = Some runKey
+            Precision = JobPrecision.Minute
+            CreatedBy = Actor
+            Tags = Map.ofList [ "origin", TriggerName; "run", runKey ]
+        }
+
+    /// Does the registry hold any run that reacts to data at all?
+    let reacts (registry: GroundedNarrativeRegistry) : bool =
+        registry.Definitions
+        |> List.exists (fun d -> not (List.isEmpty d.DependsOnMetrics))
+
+    /// The runs a set of invalidated heads touches.
+    let affectedRuns (registry: GroundedNarrativeRegistry) (heads: Fact list) : GroundedNarrativeDefinition list =
+        registry.DependentOn(heads |> List.map _.Metric.Value |> List.distinct)
+
+    /// The data-arrival reaction: enqueue (schedule + fire) one job per run
+    /// whose metrics the change invalidated. Returns the run keys enqueued.
+    let enqueueFor
+        (lineage: ILineageStore)
+        (store: IFactStore)
+        (scheduler: IJobScheduler)
+        (registry: GroundedNarrativeRegistry)
+        (changeScope: DataChangeScope)
+        (changedIds: string list)
+        : Async<string list> =
+        async {
+            match changeScope with
+            | DataChangeScope.Carried _ -> return []
+            | DataChangeScope.Resolved _ when List.isEmpty changedIds || not (reacts registry) -> return []
+            | DataChangeScope.Resolved resolved ->
+                let scopeId = resolved.ScopeId
+                let! invalidated = FactInvalidation.invalidationSet lineage scopeId changedIds
+                let! heads = FactInvalidation.invalidatedHeads store scopeId invalidated
+                let mutable enqueued = []
+
+                for definition in affectedRuns registry heads do
+                    let registration = registrationFor scopeId definition.Key invalidated
+                    let! scheduled = scheduler.Schedule(resolved, registration)
+
+                    match scheduled with
+                    | Ok jobId ->
+                        let! _ = scheduler.TriggerOnce(scopeId, jobId, Actor)
+                        enqueued <- definition.Key :: enqueued
+                    | Error _ -> ()
+
+                return List.rev enqueued
+        }
+
+    /// The reaction over the composed substrate, resolved lazily — the
+    /// shape `ReactiveDataChange.reaction` takes.
+    let reaction
+        (factStore: unit -> IFactStore)
+        (lineage: unit -> ILineageStore)
+        (scheduler: unit -> IJobScheduler option)
+        (registry: unit -> GroundedNarrativeRegistry option)
+        : FactDataChangeReaction =
+        fun changeScope changedIds -> async {
+            match scheduler (), registry () with
+            | Some jobs, Some runs when reacts runs ->
+                let! _ = enqueueFor (lineage ()) (factStore ()) jobs runs changeScope changedIds
+                return ()
+            | _ -> return ()
+        }
+
+    /// Is the reaction armed: a registry with a reacting run, and a
+    /// scheduler to enqueue on? Checked before the decorator reads anything.
+    let armed
+        (scheduler: unit -> IJobScheduler option)
+        (registry: unit -> GroundedNarrativeRegistry option)
+        : unit -> bool =
+        fun () ->
+            (scheduler ()).IsSome
+            && (match registry () with
+                | Some runs -> reacts runs
+                | None -> false)
+
+    /// The job: wait out a raced `Eager` recompute, then run.
+    type GroundedNarrativeJobHandler
+        (
+            store: IFactStore,
+            metrics: Grounding.IMetricRegistry option,
+            registry: GroundedNarrativeRegistry,
+            run: IGroundedNarrativeRun
+        ) =
+        interface IJobHandler with
+            member _.Execute(ctx: JobContext) = async {
+                match tryParsePayload ctx.Payload with
+                | None -> return PermanentFailure "grounded narrative job: unreadable payload"
+                | Some payload ->
+                    match registry.TryResolve payload.RunKey with
+                    | None ->
+                        return PermanentFailure(sprintf "no grounded narrative run '%s' is registered" payload.RunKey)
+                    | Some _ when ctx.Scope.IsAnonymous ->
+                        return
+                            PermanentFailure
+                                "a grounded narrative job must run under a resolved scope; this one runs anonymous (its scheduler could not re-mint the scope it was scheduled under)"
+                    | Some definition ->
+                        let depends = Set.ofList definition.DependsOnMetrics
+
+                        let! pending =
+                            FactInvalidation.invalidatedHeads store ctx.ScopeId (Set.ofList payload.InvalidatedInputs)
+
+                        let racing =
+                            pending
+                            |> List.filter (fun fact ->
+                                depends.Contains fact.Metric.Value
+                                && FactInvalidation.policyFor metrics fact = Grounding.Eager)
+
+                        if not (List.isEmpty racing) && ctx.Attempt < retryPolicy.MaxAttempts then
+                            return
+                                TransientFailure(
+                                    sprintf
+                                        "waiting for %d fact recompute(s) before running '%s'"
+                                        racing.Length
+                                        definition.Key
+                                )
+                        else
+                            let! outcome =
+                                run.Run {
+                                    RunKey = definition.Key
+                                    Scope = ctx.Scope
+                                    Access = None
+                                    Trigger = TriggerName
+                                }
+
+                            match outcome with
+                            | GroundedNarrativePublished _ -> return Success
+                            // A refusal is a decision, recorded on the audit
+                            // trail by the run; another attempt over the same
+                            // facts would refuse again.
+                            | GroundedNarrativeRefused _ ->
+                                return PermanentFailure(GroundedNarrativeOutcome.describe outcome)
+                            // A failure to produce a narrative (a provider
+                            // outage, unparseable model output) may not recur.
+                            | GroundedNarrativeFailed _ ->
+                                return TransientFailure(GroundedNarrativeOutcome.describe outcome)
+            }
+
+    /// Register the job handler with the composed scheduler at startup —
+    /// only when a registry and a run are composed (GP 13).
+    let hostedService (sp: IServiceProvider) : Microsoft.Extensions.Hosting.IHostedService =
+        { new Microsoft.Extensions.Hosting.IHostedService with
+            member _.StartAsync(_ct) =
+                match
+                    sp.GetService(typeof<IJobScheduler>),
+                    sp.GetService(typeof<GroundedNarrativeRegistry>),
+                    sp.GetService(typeof<IGroundedNarrativeRun>)
+                with
+                | (:? IJobScheduler as scheduler),
+                  (:? GroundedNarrativeRegistry as registry),
+                  (:? IGroundedNarrativeRun as run) ->
+                    let store = sp.GetService(typeof<IFactStore>) :?> IFactStore
+
+                    let metrics =
+                        match sp.GetService(typeof<Grounding.IMetricRegistry>) with
+                        | :? Grounding.IMetricRegistry as m -> Some m
+                        | _ -> None
+
+                    scheduler.RegisterHandler(HandlerName, GroundedNarrativeJobHandler(store, metrics, registry, run))
+                | _ -> ()
+
+                System.Threading.Tasks.Task.CompletedTask
+
+            member _.StopAsync(_ct) =
+                System.Threading.Tasks.Task.CompletedTask
+        }
+
+module ReactiveDataChangeComposition =
+    /// Two reactions as one, run in order — the recompute reaction first,
+    /// so an `Eager` recompute is scheduled before a narrative job that
+    /// depends on it.
+    let combine (first: FactDataChangeReaction) (second: FactDataChangeReaction) : FactDataChangeReaction =
+        fun changeScope changedIds -> async {
+            do! first changeScope changedIds
+            do! second changeScope changedIds
+        }
+
+    /// Two arming checks as one: armed when either is.
+    let either (a: unit -> bool) (b: unit -> bool) : unit -> bool = fun () -> a () || b ()

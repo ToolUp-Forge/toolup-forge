@@ -99,6 +99,10 @@
         <Compile Include="Server\AnswerVerifier.fs" />
         <Compile Include="Server\AIDenialRateMonitor.fs" />
         <Compile Include="Server\AIAgentEngine.fs" />
+        <!-- Phase 985 — the grounded narrative run: the agent loop over
+             only the tools passed in, its output through the fact tier's
+             grounding gate, published only when every number is a Fact. -->
+        <Compile Include="Server\GroundedNarrativeRun.fs" />
         <Compile Include="Server\ICitationNormaliser.fs" />
         <!-- Phase 6k - the supervised agent-loop worker. Depends on the
              platform ILogger/Logger only; MUST precede AIAssistantHandler,

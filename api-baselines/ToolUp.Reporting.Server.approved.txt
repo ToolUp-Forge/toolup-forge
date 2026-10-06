@@ -5,6 +5,9 @@
 # still be folded into this file in the same PR.
 ToolUp.Reporting.EntityBackedTemplateStore (class)
 ToolUp.Reporting.EntityBackedTemplateStore.create(ToolUp.Platform.IEntityStore+IEntityStore) : ToolUp.Reporting.IReportTemplateStore+IReportTemplateStore
+ToolUp.Reporting.GroundedNarrativeProducer (class)
+ToolUp.Reporting.GroundedNarrativeProducer.TriggerName : System.String (literal)
+ToolUp.Reporting.GroundedNarrativeProducer.create(System.String, System.String, ToolUp.Platform.IGroundedNarrativeRun, System.String, System.String, System.String) : ToolUp.Reporting.ReportProducer
 ToolUp.Reporting.IReportApi (class)
 ToolUp.Reporting.IReportApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.ReportTemplate]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Reporting.ReportTemplate, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Reporting.ReportTemplate, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Reporting.PlaceholderValue]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Reporting.RenderOutcome, ToolUp.Reporting.RenderRpcError]]])
 ToolUp.Reporting.IReportApi.DeleteTemplate : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
@@ -107,6 +110,9 @@ ToolUp.Reporting.ReportProducerRegistry.Count : System.Int32 { get }
 ToolUp.Reporting.ReportProducerRegistry.Descriptors : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.ReportProducerDescriptor] { get }
 ToolUp.Reporting.ReportProducerRegistry.Register(ToolUp.Reporting.ReportProducer) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
 ToolUp.Reporting.ReportProducerRegistry.TryResolve(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Reporting.ReportProducer]
+ToolUp.Reporting.ReportProducerScope (class)
+ToolUp.Reporting.ReportProducerScope.get() : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ResolvedScope]
+ToolUp.Reporting.ReportProducerScope.within`1(ToolUp.Platform.ResolvedScope, Microsoft.FSharp.Control.FSharpAsync`1[T]) : Microsoft.FSharp.Control.FSharpAsync`1[T]
 ToolUp.Reporting.ReportRenderRequest (class)
 ToolUp.Reporting.ReportRenderRequest..ctor(System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Reporting.PlaceholderValue], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Reporting.ReportRenderRequest.FileNameStem : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }

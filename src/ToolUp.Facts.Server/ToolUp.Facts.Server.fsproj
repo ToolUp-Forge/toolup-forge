@@ -99,6 +99,11 @@
              composition change: a deployment that never exports one pays
              nothing (GP 13). -->
         <Compile Include="Server\CertificateEnvelope.fs" />
+        <!-- Phase 985 — the narrative grounding gate: every number in a
+             model-written narrative must be a current, disclosable Fact
+             reference stating its value. After the certificate files (it
+             certifies a published narrative through the issuer). -->
+        <Compile Include="Server\NarrativeGroundingGate.fs" />
         <!-- Phase 683 — the consuming half of the imported-fact provenance
              case: verify a peer's certificate offline against key material
              held for THAT peer, re-derive the content-addressed id, refuse
