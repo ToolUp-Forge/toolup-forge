@@ -24,7 +24,10 @@ module ToolUp.Platform.Tests.InProcess.GroundedNarrativeTests
 //      case — every one refused before publication and logged, and the
 //      grounded one published, indexed, certified, and marked stale when its
 //      fact is superseded;
-//   D. both triggers: the report producer and the data-arrival reaction.
+//   D. both triggers: the report producer and the data-arrival reaction;
+//   E. who pays (Phase 995): the run's provider resolves under the scope it
+//      carries, so a team's own key funds it, and a scope with no usable key
+//      is a typed, permanent failure.
 
 open System
 open System.Collections.Concurrent
@@ -784,13 +787,14 @@ type private Deployment = {
 }
 
 /// A deployment as one is written: a RAG app with the fact tier composed in
-/// one call, grounded narratives composed over it, booted.
-let private deploy (write: Writer) : Deployment =
+/// one call, grounded narratives composed over it, booted — its AI provider
+/// factory built over the scripted model by `factoryFor`.
+let private deployWith (factoryFor: ScriptedModel -> IAIProviderFactory) (write: Writer) : Deployment =
     let storage = InMemoryBlobStorage() :> IBlobStorage
     let model = ScriptedModel write
 
     let app =
-        RAGServerApp.create (ScriptedFactory(model)) stubProfile constantEmbedder
+        RAGServerApp.create (factoryFor model) stubProfile constantEmbedder
         |> RAGServerApp.withStorage storage
         |> RAGServerApp.withFacts FactsCompose.withFactTier
         |> composeRAG
@@ -850,6 +854,10 @@ let private deploy (write: Writer) : Deployment =
         TeamId = teamId
         Scope = ScopeResolution.ofStorageScope (storageFor teamId)
     }
+
+/// A deployment whose factory hands every request the scripted model.
+let private deploy (write: Writer) : Deployment =
+    deployWith (fun model -> ScriptedFactory(model) :> IAIProviderFactory) write
 
 let private runIn (deployment: Deployment) (scope: ResolvedScope) : GroundedNarrativeOutcome =
     deployment.Services
@@ -1330,5 +1338,327 @@ let triggerTests =
         }
     ]
 
+// ── E. Who pays: the provider resolves under the scope the run carries ─
+//
+// Phase 995. A grounded run is a background job — nobody is signed in — so
+// the provider used to be resolved as the run's own principal, which under a
+// strict bring-your-own-key policy holds no key: every run failed, retried,
+// and published nothing while the team's key sat unused. These cases run the
+// REAL provider factory (`DefaultAIProviderFactory`) over a profile and a
+// secret store, and the data-arrival job over the real run, with a job
+// context that — like a scheduler's — names no team.
+
+let private scriptedVendor = "scripted-vendor"
+
+let private scriptedDescriptor: AIProviderDescriptor = {
+    Id = scriptedVendor
+    DisplayName = "Scripted vendor"
+    SupportedModels = [ "scripted-narrative-model" ]
+    DefaultModel = "scripted-narrative-model"
+    Capabilities = {
+        Streaming = false
+        ToolUse = true
+        Vision = false
+        SupportsPromptCaching = false
+        SupportsTriage = false
+        TriageModelId = None
+        ProviderName = "scripted-narrative"
+        Model = "scripted-narrative-model"
+    }
+}
+
+/// A factory that records the access context every resolve was asked under.
+type private RecordingFactory(inner: IAIProviderFactory) =
+    let seen = ConcurrentQueue<AccessContext>()
+    member _.Seen = List.ofSeq seen
+
+    interface IAIProviderFactory with
+        member _.Available = inner.Available
+        member _.PlatformDescriptors = inner.PlatformDescriptors
+        member _.PlatformDescriptor = inner.PlatformDescriptor
+
+        member _.Resolve access =
+            seen.Enqueue access
+            inner.Resolve access
+
+        member _.TryResolveByLabel(access, label) = inner.TryResolveByLabel(access, label)
+
+        member _.BuildPlatform(providerId, apiKey, model) =
+            inner.BuildPlatform(providerId, apiKey, model)
+
+/// The funding substrate a deployment's factory reads: the real factory
+/// under `policy`, a provider profile and a secret store, and — when
+/// `platformKey` is given — a platform provider the deployment pays for. The
+/// builder records every key a provider was built with.
+type private Funding(policy: AIFallbackPolicy, platformKey: string option) =
+    let keys = ConcurrentQueue<string>()
+    let profiles = BlobProviderProfile.create (InMemoryBlobStorage())
+    let secrets = InMemorySecretStore() :> ISecretStore
+    let mutable recording: RecordingFactory option = None
+
+    /// The keys providers were built with, in order.
+    member _.KeysUsed = List.ofSeq keys
+
+    /// The access contexts the factory was asked to resolve under.
+    member _.Resolutions = recording |> Option.map _.Seen |> Option.defaultValue []
+
+    member _.FactoryFor(model: ScriptedModel) : IAIProviderFactory =
+        let build (key: string) (_model: string) : IAIProvider =
+            keys.Enqueue key
+            model :> IAIProvider
+
+        let platform =
+            platformKey
+            |> Option.map (fun key -> {
+                DefaultAIProviderFactory.AIPlatformProvider.Descriptor = scriptedDescriptor
+                DefaultAIProviderFactory.AIPlatformProvider.Build = build
+                DefaultAIProviderFactory.AIPlatformProvider.BootstrapKeyFromEnv = Some key
+            })
+            |> Option.toList
+
+        let builder: AIProviderBuilder = {
+            Descriptor = scriptedDescriptor
+            Build = build
+        }
+
+        let factory =
+            RecordingFactory(DefaultAIProviderFactory.create [ builder ] profiles secrets policy platform None)
+
+        recording <- Some factory
+        factory :> IAIProviderFactory
+
+    /// Store a team's own key the way the AI settings surface does: an
+    /// entry routed for the assistant surface in the team's profile, its
+    /// secret in the team's container.
+    member _.StoreTeamKey(teamId: string, key: string) =
+        let scope = storageFor teamId
+
+        match
+            secrets.SetSecret(scope.Container, "team-own-key", key)
+            |> Async.RunSynchronously
+        with
+        | Ok() -> ()
+        | Error e -> failtestf "could not store the team's key: %A" e
+
+        let profile = {
+            ProviderProfile.empty () with
+                Entries = [ ProviderEntry.pastedKey "team" scriptedVendor None "team-own-key" ]
+                Routing = [
+                    {
+                        Surface = AIProviderSurface.aiAssistant
+                        Context = None
+                        EntryLabel = "team"
+                    }
+                ]
+        }
+
+        match profiles.Set(scope, profile) |> Async.RunSynchronously with
+        | Ok() -> ()
+        | Error e -> failtestf "could not store the team's profile: %s" e
+
+let private citingWriter: Writer =
+    fun id rendering -> answer $"Acme revenue was [[Revenue|{rendering}|{id}]] in September."
+
+/// The data-arrival job over the deployment's REAL run, under the team's
+/// resolved scope and — as a scheduler's synthesised context may — an access
+/// context that names no team.
+let private narrativeJob (deployment: Deployment) : JobResult =
+    let handler =
+        GroundedNarrativeTrigger.GroundedNarrativeJobHandler(
+            deployment.Store,
+            Some metrics,
+            deployment.Services.GetRequiredService<GroundedNarrativeRegistry>(),
+            deployment.Services.GetRequiredService<IGroundedNarrativeRun>()
+        )
+        :> IJobHandler
+
+    handler.Execute {
+        JobId = Guid.NewGuid()
+        ScopeId = deployment.TeamId
+        AccessContext = AccessContext.unrestricted (AuthenticatedUser "_platform")
+        Attempt = 1
+        Trigger = Trigger.Manual
+        Scope = deployment.Scope
+        TriggerSource = ScheduledManually "_platform"
+        ScheduledAt = DateTime.UtcNow
+        RunningAt = DateTime.UtcNow
+        Payload = GroundedNarrativeTrigger.payloadFor summaryRun.Key Set.empty
+        DeadLetterDestination = None
+    }
+    |> Async.RunSynchronously
+
+let private withRevenueFact (deployment: Deployment) =
+    assertOk deployment.Store deployment.TeamId (assertedDraft "revenue" 1250m Surfaceable)
+    |> ignore
+
+let scopedProviderTests =
+    testList "Phase 995 E — the run's AI provider resolves under the scope it carries" [
+
+        test "strict BYOK: the team's own key, stored at the team scope, funds the data-arrival run, which publishes" {
+            let funding = Funding(StrictBYOK, None)
+            let deployment = deployWith funding.FactoryFor citingWriter
+            funding.StoreTeamKey(deployment.TeamId, "the-team-own-key")
+            withRevenueFact deployment
+
+            Expect.equal (narrativeJob deployment) Success "the job runs the narrative and succeeds"
+            Expect.equal (published deployment).Length 1 "and the narrative is published"
+            Expect.equal funding.KeysUsed [ "the-team-own-key" ] "funded by the team's own key, and only it"
+
+            let access = funding.Resolutions |> Seq.exactlyOne
+            Expect.equal access.TeamId (Some deployment.TeamId) "resolved as a member of the team the run belongs to"
+
+            Expect.equal
+                (AccessContext.configScope access)
+                (Some(storageFor deployment.TeamId))
+                "whose configuration scope is exactly the run's scope"
+
+            Expect.equal access.UserId summaryRun.Principal "the run's own principal stays the actor"
+
+            Expect.equal
+                (narrativeRows deployment |> List.map _.EventType)
+                [ GroundedNarrativeEvents.PublishedType ]
+                "one published row on the audit trail"
+        }
+
+        test
+            "strict BYOK with no key at the scope: a typed permanent failure, no retry, no model call, nothing published" {
+            let funding = Funding(StrictBYOK, None)
+            let deployment = deployWith funding.FactoryFor citingWriter
+            // A key at ANOTHER team's scope must not fund this one.
+            funding.StoreTeamKey("team-" + Guid.NewGuid().ToString "N", "another-team-key")
+            withRevenueFact deployment
+
+            match narrativeJob deployment with
+            | PermanentFailure reason -> Expect.stringContains reason "unfunded" "the job record names the cause"
+            | other -> failtestf "expected a permanent failure (no retries), got %A" other
+
+            match run deployment with
+            | GroundedNarrativeUnfunded reason ->
+                Expect.stringContains reason "No AI provider configured" "the factory's own answer, typed"
+            | other -> failtestf "expected an unfunded outcome, got %s" (GroundedNarrativeOutcome.describe other)
+
+            Expect.isEmpty funding.KeysUsed "no provider was built, not even with the other team's key"
+            Expect.isEmpty deployment.Model.OfferedTools "the model was never called"
+            Expect.isEmpty (published deployment) "nothing was published"
+
+            let rows = narrativeRows deployment
+
+            Expect.equal
+                (rows |> List.map _.EventType)
+                [ GroundedNarrativeEvents.FailedType; GroundedNarrativeEvents.FailedType ]
+                "each attempt is one failed row on the audit trail"
+
+            for row in rows do
+                Expect.stringContains row.Payload "unfunded" "whose outcome says unfunded, not failed"
+        }
+
+        test "platform-only: unchanged, the deployment's platform key funds the run" {
+            let funding = Funding(PlatformOnly, Some "the-platform-key")
+            let deployment = deployWith funding.FactoryFor citingWriter
+            withRevenueFact deployment
+
+            Expect.equal (narrativeJob deployment) Success "the job succeeds"
+            Expect.equal (published deployment).Length 1 "and publishes"
+            Expect.equal funding.KeysUsed [ "the-platform-key" ] "on the platform's key"
+        }
+
+        test "an access context the request names still wins over the carried scope" {
+            let funding = Funding(StrictBYOK, None)
+            let deployment = deployWith funding.FactoryFor citingWriter
+            funding.StoreTeamKey(deployment.TeamId, "the-team-own-key")
+            withRevenueFact deployment
+            let named = AccessContext.unrestricted (AuthenticatedUser "someone-else")
+
+            let outcome =
+                deployment.Services
+                    .GetRequiredService<IGroundedNarrativeRun>()
+                    .Run(
+                        {
+                            RunKey = summaryRun.Key
+                            Scope = deployment.Scope
+                            Access = Some named
+                            Trigger = "test"
+                        }
+                    )
+                |> Async.RunSynchronously
+
+            Expect.equal funding.Resolutions [ named ] "resolved under the named context"
+
+            match outcome with
+            | GroundedNarrativeUnfunded _ -> ()
+            | other ->
+                failtestf
+                    "a named principal with no key of its own is unfunded, got %s"
+                    (GroundedNarrativeOutcome.describe other)
+        }
+
+        test "a report producer reports an unfunded run as its error" {
+            let producer =
+                GroundedNarrativeProducer.create
+                    "grounded-monthly"
+                    "Monthly"
+                    (stubRun (GroundedNarrativeUnfunded "no key") (ConcurrentQueue()))
+                    "monthly-brand-summary"
+                    "monthly-template"
+                    "body"
+
+            match
+                ReportProducerScope.within
+                    (ScopeResolution.ofStorageScope (storageFor "team-producer"))
+                    (producer.Resolve "team-producer" Map.empty)
+                |> Async.RunSynchronously
+            with
+            | Error reason -> Expect.stringContains reason "unfunded" "named as unfunded"
+            | Ok _ -> failtest "an unfunded narrative must not render"
+        }
+
+        test "AccessContext.forConfigScope inverts configScope exactly, and refuses to guess" {
+            let team = storageFor "acme"
+
+            let user = {
+                ScopeId = "u-1"
+                Container = "user-u-1"
+                Persist = true
+            }
+
+            for scope in [ team; user ] do
+                Expect.equal
+                    (AccessContext.forConfigScope "narrator" scope
+                     |> Option.bind AccessContext.configScope)
+                    (Some scope)
+                    $"round trip for {scope.Container}"
+
+            let unprojectable = [
+                {
+                    ScopeId = "claim-1"
+                    Container = "claim-1"
+                    Persist = true
+                }
+                {
+                    ScopeId = "s-1"
+                    Container = "session-s-1"
+                    Persist = false
+                }
+                // A team container that does not name the scope's own id.
+                {
+                    ScopeId = "acme"
+                    Container = "team-other"
+                    Persist = true
+                }
+            ]
+
+            for scope in unprojectable do
+                Expect.isNone
+                    (AccessContext.forConfigScope "narrator" scope)
+                    $"no subject guessed for {scope.Container}"
+        }
+    ]
+
 let tests =
-    testList "Phase 985 — grounded narrative generation" [ pureGateTests; factGateTests; runTests; triggerTests ]
+    testList "Phase 985 — grounded narrative generation" [
+        pureGateTests
+        factGateTests
+        runTests
+        triggerTests
+        scopedProviderTests
+    ]

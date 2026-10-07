@@ -233,7 +233,10 @@ module GroundedNarrativeProducer =
                             Values = Map.ofList [ placeholder, NarrativeValue document ]
                             FileNameStem = None
                         }
+                // A producer `Error` is terminal for the subscription run, so
+                // an unfunded scope (Phase 995) is not retried here either.
                 | GroundedNarrativeRefused _
-                | GroundedNarrativeFailed _ -> return Error(GroundedNarrativeOutcome.describe outcome)
+                | GroundedNarrativeFailed _
+                | GroundedNarrativeUnfunded _ -> return Error(GroundedNarrativeOutcome.describe outcome)
         })
         |> ReportProducer.withDescription "A model-written narrative, published only when every number in it is a Fact."

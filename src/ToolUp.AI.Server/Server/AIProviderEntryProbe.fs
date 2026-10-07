@@ -81,13 +81,12 @@ let private probeInput =
 /// online during a scheduled probe — the same convention the OAuth
 /// refresh audit uses, and nothing on this path reads it for authority
 /// (`configScope` keys a `TeamMember` on the team id alone).
+///
+/// Phase 995 — the projection itself is `AccessContext.forConfigScope`, the
+/// inverse `configScope` now carries beside it, so the probe and a grounded
+/// narrative run answer "whose configuration is this scope?" by one rule.
 let scopeAccessContext (scope: StorageScope) : AccessContext option =
-    if scope.Container.StartsWith "team-" then
-        Some(AccessContext.unrestricted (TeamMember("system", scope.ScopeId)))
-    elif scope.Container.StartsWith "user-" then
-        Some(AccessContext.unrestricted (AuthenticatedUser scope.ScopeId))
-    else
-        None
+    AccessContext.forConfigScope "system" scope
 
 /// Build the probe over an `IAIProviderFactory`.
 ///

@@ -233,7 +233,14 @@ type GroundedNarrativeRequest = {
     /// cite nothing a reader cares about.
     Scope: ResolvedScope
     /// The access context the model provider is resolved under. `None`
-    /// resolves it as the definition's principal.
+    /// (what both triggers pass) resolves it under the scope the run
+    /// CARRIES (Phase 995): a team scope as a member of that team, a user
+    /// scope as that user (`AccessContext.forConfigScope`), so the AI key
+    /// configured at the scope that triggered the run is the key that funds
+    /// it. Only a scope that names no team or user — which holds no AI
+    /// configuration of its own — resolves as the definition's principal.
+    /// Either way the definition's principal stays the actor the narrative
+    /// is read, checked, certified and indexed as.
     Access: AccessContext option
     /// What started the run (`"report-subscription"`, `"data-arrival"`, …),
     /// recorded on the audit event.
@@ -260,6 +267,16 @@ type GroundedNarrativeOutcome =
     /// narrative format. Nothing was published; this is on the audit trail
     /// too.
     | GroundedNarrativeFailed of reason: string
+    /// The run's scope holds no AI provider it may use under the
+    /// deployment's funding policy — no key configured there, a key for a
+    /// provider the deployment does not offer, or a strict bring-your-own-
+    /// key policy with nothing brought (Phase 995). Nothing was generated or
+    /// published. Unlike `GroundedNarrativeFailed` this does not pass by
+    /// waiting: another attempt resolves the same configuration the same
+    /// way, so a trigger treats it as permanent. `reason` says what is
+    /// missing; the failure is on the audit trail as a failed row whose
+    /// outcome is `unfunded`.
+    | GroundedNarrativeUnfunded of reason: string
 
 module GroundedNarrativeOutcome =
     /// One-paragraph description, for a subscription's last-run outcome or
@@ -279,6 +296,7 @@ module GroundedNarrativeOutcome =
             |> String.concat "; "
             |> sprintf "refused, %d ungrounded claim(s): %s" (List.length offences)
         | GroundedNarrativeFailed reason -> sprintf "failed: %s" reason
+        | GroundedNarrativeUnfunded reason -> sprintf "unfunded: no usable AI provider for the run's scope: %s" reason
 
 /// The generation run (seam:GroundedNarrativeRun). Implemented beside the
 /// agent loop; both triggers call it.

@@ -24,6 +24,14 @@ module ToolUp.AI.GroundedNarrativeRun
 // passed IN, not resolved by name, so this package takes no dependency on
 // the fact companion; the gate and the publisher are resolved from DI.
 //
+// **Who pays (Phase 995).** A run is a background job: no one is signed in,
+// so the model provider is resolved under the scope the run CARRIES — a team
+// scope as a member of that team — and the key configured at that scope funds
+// the run, under a strict bring-your-own-key policy as under any other. The
+// definition's principal stays the actor everything else is done as. A scope
+// that holds no usable key is `GroundedNarrativeUnfunded`: a permanent,
+// typed outcome, because waiting does not configure a key.
+//
 // **The format the model writes.** A JSON object
 //
 //     {"sections":[{"id":"summary","paragraphs":["Revenue was [[Revenue|1,250|<fact id>]] ..."]}]}
@@ -237,6 +245,15 @@ type private GroundedNarrativeAuditRow = {
     Detail: string option
 }
 
+/// Why a run has no provider (Phase 995). `ProviderUnfunded`: the factory
+/// ANSWERED that the scope holds no usable provider, which another attempt
+/// would answer the same way. `ProviderUnavailable`: everything that may pass
+/// — nothing composed yet, or the resolution itself threw (a secret store
+/// outage reads as a throw, not an answer).
+type private ProviderShortfall =
+    | ProviderUnfunded of string
+    | ProviderUnavailable of string
+
 type GroundedNarrativeRunner
     (services: IServiceProvider, registry: GroundedNarrativeRegistry, options: GroundedNarrativeRunOptions) =
 
@@ -258,36 +275,70 @@ type GroundedNarrativeRunner
                 ()
     }
 
-    let failed (request: GroundedNarrativeRequest) (reason: string) : Async<GroundedNarrativeOutcome> = async {
-        do!
-            record request.Scope.ScopeId GroundedNarrativeEvents.FailedType {
-                RunKey = request.RunKey
-                Trigger = request.Trigger
-                Outcome = "failed"
-                NarrativeId = None
-                Citations = []
-                Offences = []
-                CertificateDigest = None
-                Detail = Some reason
-            }
+    let failedAs
+        (outcome: string)
+        (result: string -> GroundedNarrativeOutcome)
+        (request: GroundedNarrativeRequest)
+        (reason: string)
+        : Async<GroundedNarrativeOutcome> =
+        async {
+            do!
+                record request.Scope.ScopeId GroundedNarrativeEvents.FailedType {
+                    RunKey = request.RunKey
+                    Trigger = request.Trigger
+                    Outcome = outcome
+                    NarrativeId = None
+                    Citations = []
+                    Offences = []
+                    CertificateDigest = None
+                    Detail = Some reason
+                }
 
-        return GroundedNarrativeFailed reason
-    }
+            return result reason
+        }
 
-    let resolveProvider (access: AccessContext) : Async<Result<IAIProvider, string>> = async {
+    let failed = failedAs "failed" GroundedNarrativeFailed
+
+    /// Phase 995 — the scope holds no provider the funding policy allows.
+    /// The same audit row as any failure, with its own outcome, so a reader
+    /// of the trail can tell "configure a key" from "try again".
+    let unfunded = failedAs "unfunded" GroundedNarrativeUnfunded
+
+    let resolveProvider (access: AccessContext) : Async<Result<IAIProvider, ProviderShortfall>> = async {
         match tryService<IAIProvider> services with
         | Some provider -> return Ok provider
         | None ->
             match tryService<IAIProviderFactory> services with
-            | None -> return Error "no AI provider is composed (neither an IAIProvider nor an IAIProviderFactory)"
+            | None ->
+                return
+                    Error(
+                        ProviderUnavailable
+                            "no AI provider is composed (neither an IAIProvider nor an IAIProviderFactory)"
+                    )
             | Some factory ->
                 try
                     match! factory.Resolve access with
                     | Ok provider -> return Ok provider
-                    | Error err -> return Error(ProviderResolutionError.toMessage err)
+                    | Error err -> return Error(ProviderUnfunded(ProviderResolutionError.toMessage err))
                 with ex ->
-                    return Error ex.Message
+                    return Error(ProviderUnavailable ex.Message)
     }
+
+    /// Phase 995 — the access context the provider is resolved under: the
+    /// request's when it names one; else the scope the run carries, so the
+    /// key configured at the team (or user) scope that triggered the run
+    /// funds it; else — a scope that names no team or user, and so holds no
+    /// AI configuration of its own — the definition's principal.
+    let providerAccess
+        (request: GroundedNarrativeRequest)
+        (definition: GroundedNarrativeDefinition)
+        (scope: StorageScope)
+        : AccessContext =
+        match request.Access with
+        | Some access -> access
+        | None ->
+            AccessContext.forConfigScope definition.Principal scope
+            |> Option.defaultWith (fun () -> AccessContext.unrestricted (AuthenticatedUser definition.Principal))
 
     /// The request context the agent loop and the fact tools read: the run's
     /// resolved scope (carried, never minted) and principal, over a fresh DI
@@ -437,12 +488,9 @@ type GroundedNarrativeRunner
                             request
                             "the run was given the anonymous scope; a grounded run reads facts through the request-path fact tools, which need a scope the platform resolved"
                 | Some scope ->
-                    let access =
-                        request.Access
-                        |> Option.defaultValue (AccessContext.unrestricted (AuthenticatedUser definition.Principal))
-
-                    match! resolveProvider access with
-                    | Error reason -> return! failed request reason
+                    match! resolveProvider (providerAccess request definition scope) with
+                    | Error(ProviderUnfunded reason) -> return! unfunded request reason
+                    | Error(ProviderUnavailable reason) -> return! failed request reason
                     | Ok provider ->
                         match! definition.Project request.Scope.ScopeId with
                         | Error reason -> return! failed request (sprintf "the run's projections failed: %s" reason)
