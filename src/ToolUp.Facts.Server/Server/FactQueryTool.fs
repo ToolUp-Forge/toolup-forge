@@ -20,9 +20,10 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // carrying its fact id, the canonical rendering (`FactRendering.render`
 // under the metric registry's `DisplayFormat`), derived freshness
 // (`Freshness.derive` — never stored), a supersession pointer when a
-// later assertion corrected it, and the method identity — never raw
-// store internals (no evidence hashes, no disclosure classification, no
-// raw value DU).
+// later assertion corrected it, the method identity, and (Phase 994) the
+// content hashes of the inputs it was computed from (`InputHash.named`) —
+// never raw store internals (no value hashes or run tokens, no disclosure
+// classification, no raw value DU).
 //
 // **Disclosure at the door (Phase 525).** Every fact the query returns
 // passes the `IFactDisclosureGate` at the `FactToolResult` surface
@@ -366,6 +367,10 @@ module FactQueryTool =
                             staleSince = staleSince
                             supersededBy = successor |> Option.map _.FactId
                             method = Fact.methodIdentity fact.Method
+                            // Phase 994 — the inputs the fact was computed
+                            // from, by content hash, so a cited number
+                            // reaches its source in one hop.
+                            inputs = InputHash.named fact.Evidence
                         |}
                     })
                     |> Async.Sequential

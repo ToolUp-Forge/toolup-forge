@@ -1266,11 +1266,13 @@ let private orphanSweepTests =
 
             test $"{name}: a live run's staged rows and provenance are never swept" {
                 let w, storage = refusingWorld delegated
-                let live = openStaged w [ population 5 ]
+                // The ended run first: a table takes one open run at a time
+                // (Phase 994), so the live run opens once it has ended.
                 let ended = openStaged w [ population 5 ]
                 storage.Refusing <- true
                 abandon w ended.RunId
                 storage.Refusing <- false
+                let live = openStaged w [ population 5 ]
 
                 let report = sweepOf w
                 Expect.equal report.RunsSwept 1 "only the ended run is swept"

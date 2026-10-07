@@ -165,6 +165,40 @@ runs this way. Every writer honours the provenance, and every decorator passes i
 `IFactTableWriterContract.provenanceTests` and `IFactTableWriterContract.decoratorTests` check both.
 See [the migration note](../migrations/938-run-provenance-in-the-fact-table-writer.md).
 
+## Run inputs, period slices, and one open run per table (Phase 994)
+
+`OpenRun` also takes `FactTableRunOptions`, so a producer that publishes a daily delivery writes
+one run for that day:
+
+- **Inputs.** The content hashes of the files the run was computed from, as `sha256:<hex>` (any
+  `<algorithm>:<lowercase hex>`). Every fact the run commits names them in `Evidence.InputHashes`,
+  so a number reaches its upload in one hop. `query_facts` returns them as `inputs`, and the browse
+  surface's fact detail lists them. Under `Replace`, a cell re-derived from a new input is
+  re-asserted naming it, even when its value did not move.
+- **Period slice.** The half-open period the run replaces. Rows outside it are rejected with the
+  run, the commit withdraws only committed rows inside it, and every other row stands without being
+  rewritten. The change summary counts the slice only, and the watermark digests the whole table
+  after the commit. A committed row the slice would split refuses the run.
+- **One open run.** While a run of a table is open in a scope and within the table's refresh
+  cadence, a second `OpenRun` is refused with `FactTableRunInProgress`, naming the open run.
+
+Every writer and decorator honours the options or refuses them with `FactTableRunOptionsRefused`.
+The default writer honours them over any fact store. The delegate writer refuses them, because it
+mints a table's rows under its current run. `IFactTableWriterContract.runOptionsTests` and
+`exclusivityTests` check them. See [the migration note](../migrations/994-fact-run-inputs-and-periods.md).
+
+**Decision — a concurrent run is refused, not queued.** A queue would have the writer hold a
+producer's call until another run ends. That is state between calls, and a wait no portability rule
+lets an implementation promise. A refusal is data the producer can act on: it names the open run, so
+the producer can retry, or abandon that run if its producer died. A run left open past the table's
+cadence no longer holds the table, so a crashed producer cannot hold it for good. If that stale run
+later commits, the base-sequence check refuses whichever of the two commits second. The claim is a
+blob written before the run's record. On a store with conditional writes (`IConditionalBlobStorage`)
+it is atomic, so concurrent opens admit exactly one run. Elsewhere it holds within the store's
+read-then-write precision, and the commit's sequence check is the backstop. A claim is never
+released. The run's terminal record ends it, so ending a run needs no second write that could race a
+new claim.
+
 ## Delegate facts — a population held as a pointer to a table
 
 The default writer turns every cell into a fact. For a large population that is one stored fact,

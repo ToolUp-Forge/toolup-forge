@@ -671,6 +671,39 @@ let private tableTests =
                 "the trigger the writer stamps is the one the browse surface reads"
         }
 
+        test "one fact names the input its run was computed from (Phase 994)" {
+            let w = world ()
+            let input = "sha256:" + String('c', 64)
+
+            let opened =
+                match
+                    w.Writer.OpenRun(
+                        w.Scope.ScopeId,
+                        skuTable.Id,
+                        options = (FactTableRunOptions.none |> FactTableRunOptions.withInputs [ input ])
+                    )
+                    |> Async.RunSynchronously
+                with
+                | Ok r -> r
+                | Error e -> failtestf "open: %s" (FactTableWriteError.describe e)
+
+            match
+                w.Writer.WriteRows(w.Scope.ScopeId, opened.RunId, [ row "acme" "a1" 10m ])
+                |> Async.RunSynchronously
+            with
+            | Ok _ -> ()
+            | Error e -> failtestf "write: %s" (FactTableWriteError.describe e)
+
+            match w.Writer.Commit(w.Scope.ScopeId, opened.RunId) |> Async.RunSynchronously with
+            | Ok _ -> ()
+            | Error e -> failtestf "commit: %s" (FactTableWriteError.describe e)
+
+            let fact = revenueFacts w |> List.exactlyOne
+            let detail = ok "fact" (FactBrowseHandler.getFact w.Deps w.Scope "u" fact.FactId)
+            Expect.equal detail.RunId (Some opened.RunId) "the run that wrote it"
+            Expect.contains detail.InputHashes input "and the input that run was computed from"
+        }
+
         test "an unknown table or metric column is refused by name" {
             let w = world ()
 

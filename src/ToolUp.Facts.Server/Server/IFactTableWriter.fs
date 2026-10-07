@@ -91,6 +91,15 @@ type FactTableWriteError =
     /// The backing store failed. The run is left open and the commit may
     /// be retried: facts are content-addressed, so a retry is exact.
     | FactTableStorageFailure of detail: string
+    /// Another run of the table is open in the scope (Phase 994): a table
+    /// takes one run at a time per scope. End that run (commit or abandon
+    /// it) or let it pass the table's refresh cadence, then open again.
+    | FactTableRunInProgress of tableId: string * openRunId: string
+    /// The options a run was opened with cannot be honoured (Phase 994): an
+    /// input hash not in the content-hash form, a slice that is not a
+    /// half-open extent or that splits a committed row, or an option the
+    /// writer does not support. Nothing was written.
+    | FactTableRunOptionsRefused of tableId: string * reason: string
 
 /// Rendering for a `FactTableWriteError`.
 module FactTableWriteError =
@@ -136,6 +145,13 @@ module FactTableWriteError =
                 openedAgainst
                 current
         | FactTableStorageFailure detail -> sprintf "fact-table storage failed: %s" detail
+        | FactTableRunInProgress(tableId, openRunId) ->
+            sprintf
+                "fact table '%s' already has an open run '%s' in this scope; commit or abandon it before opening another"
+                tableId
+                openRunId
+        | FactTableRunOptionsRefused(tableId, reason) ->
+            sprintf "a run of fact table '%s' cannot be opened with these options: %s" tableId reason
 
 // ─── Run provenance (Phases 932, 938) ────────────────────────────────
 //
@@ -189,6 +205,115 @@ type FactTableRunProvenance =
     /// the origin did not place. A row under no origin stays `Computed`.
     | ImportedRun of origins: FactTableImportOrigin list
 
+// ─── Run options: inputs and the period slice (Phase 994) ────────────
+//
+// A daily producer publishes one day per run. Two declarations make that
+// cheap and auditable, and both are made when the run is OPENED, so any
+// instance can commit the run (rule 4):
+//
+//  - **Inputs** — the content hashes of the files or objects the run was
+//    computed from. Every fact the run commits names them in its evidence
+//    (`Evidence.InputHashes`, in the `InputHash` form), so a number reaches
+//    the upload it came from in one hop.
+//  - **Period slice** — the half-open extent the run replaces. Its rows
+//    must sit inside it, and the commit withdraws only the table's rows
+//    inside it: every committed row outside the slice stands, unrewritten.
+//    No slice replaces the whole table, as before (GP 11).
+//
+// A run opened with no options, or with `FactTableRunOptions.none`, writes
+// byte-for-byte what it wrote before.
+
+/// What a run declares beyond its table and provenance (Phase 994). Part of
+/// the `IFactTableWriter` contract: every writer honours it or refuses the
+/// run with `FactTableRunOptionsRefused`, and every decorator passes it on
+/// untouched.
+type FactTableRunOptions = {
+    /// The content hashes of the inputs the run was computed from, each in
+    /// the `InputHash` form (`sha256:<64 lowercase hex>`). Every fact the run
+    /// commits, absences included, carries them among its input hashes.
+    /// Empty declares nothing.
+    Inputs: string list
+    /// The period slice the run replaces — usually one period at the
+    /// table's `PeriodGrain`. `None` replaces the whole table.
+    Slice: TemporalExtent option
+}
+
+/// Construction and validation of `FactTableRunOptions`.
+module FactTableRunOptions =
+
+    /// No options: the run replaces the whole table and names no inputs.
+    let none: FactTableRunOptions = { Inputs = []; Slice = None }
+
+    /// Name the inputs the run was computed from.
+    let withInputs (inputs: string list) (options: FactTableRunOptions) : FactTableRunOptions = {
+        options with
+            Inputs = inputs
+    }
+
+    /// Replace only the given period slice.
+    let forSlice (slice: TemporalExtent) (options: FactTableRunOptions) : FactTableRunOptions = {
+        options with
+            Slice = Some slice
+    }
+
+    /// Whether the options declare nothing (`none`, or an omitted argument).
+    let isNone (options: FactTableRunOptions) : bool =
+        List.isEmpty options.Inputs && options.Slice.IsNone
+
+    /// The options as a writer keeps them: each input once, in ordinal
+    /// order — or the reason they cannot be honoured.
+    let normalise (options: FactTableRunOptions) : Result<FactTableRunOptions, string> =
+        let inputs = if isNull (box options.Inputs) then [] else options.Inputs
+
+        match inputs |> List.filter (InputHash.isContentHash >> not) with
+        | bad :: _ ->
+            Error(
+                sprintf
+                    "input '%s' is not a content hash in the <algorithm>:<lowercase hex> form (at least %d hex digits)"
+                    bad
+                    InputHash.MinimumDigits
+            )
+        | [] ->
+            match options.Slice with
+            | Some slice when slice.From >= slice.To ->
+                Error(
+                    sprintf
+                        "the slice %s..%s is not a half-open extent"
+                        (slice.From.ToString "o")
+                        (slice.To.ToString "o")
+                )
+            | slice ->
+                Ok {
+                    Inputs =
+                        inputs
+                        |> List.distinct
+                        |> List.sortWith (fun a b -> String.CompareOrdinal(a, b))
+                    Slice = slice
+                }
+
+    /// Whether a period lies inside a slice.
+    let contains (slice: TemporalExtent) (from: DateTime) (``to``: DateTime) : bool =
+        from >= slice.From && ``to`` <= slice.To
+
+    /// Whether a period overlaps a slice without lying inside it — a
+    /// committed row such a slice would split.
+    let splits (slice: TemporalExtent) (from: DateTime) (``to``: DateTime) : bool =
+        from < slice.To && ``to`` > slice.From && not (contains slice from ``to``)
+
+    /// The draft rewrite the options imply: the inputs join every draft's
+    /// input hashes. Identity when the options name no input.
+    let rewrite (options: FactTableRunOptions) : FactDraft -> FactDraft =
+        match options.Inputs with
+        | [] -> id
+        | inputs ->
+            fun (draft: FactDraft) -> {
+                draft with
+                    Evidence = {
+                        draft.Evidence with
+                            InputHashes = draft.Evidence.InputHashes @ inputs
+                    }
+            }
+
 /// The seam a producer writes a declared fact table through.
 type IFactTableWriter =
     /// Open a run of a declared table in a scope. The run stages rows and
@@ -200,8 +325,18 @@ type IFactTableWriter =
     /// before; `ImportedRun` writes each origin's rows `Imported`, per
     /// `FactTableRunProvenance.rewrite`. A decorator hands it to the writer
     /// it decorates untouched — an omitted provenance stays omitted.
+    ///
+    /// `options` (Phase 994) names the inputs the run was computed from and
+    /// the period slice it replaces (`FactTableRunOptions`); omitted, or
+    /// `FactTableRunOptions.none`, the run replaces the whole table as
+    /// before. A writer that cannot honour them refuses the run with
+    /// `FactTableRunOptionsRefused`; a decorator passes them on untouched.
+    ///
+    /// A table takes ONE open run per scope (Phase 994): while another run
+    /// of it is open, and within the table's refresh cadence, the open is
+    /// refused with `FactTableRunInProgress` naming that run.
     abstract OpenRun:
-        scopeId: string * tableId: string * ?provenance: FactTableRunProvenance ->
+        scopeId: string * tableId: string * ?provenance: FactTableRunProvenance * ?options: FactTableRunOptions ->
             Async<Result<FactTableRunRecord, FactTableWriteError>>
 
     /// Stage a batch of rows on an open run. Rows are validated at commit,
@@ -334,6 +469,30 @@ module FactTableValidation =
                     }))
 
         perRow @ duplicateKeys |> List.sortBy _.Position
+
+    /// The rows of a run whose period lies outside the slice it was opened
+    /// to replace (Phase 994). Empty when the run replaces the whole table.
+    let outsideSlice
+        (table: FactTableDefinition)
+        (slice: TemporalExtent option)
+        (rows: (int * FactTableRow) list)
+        : FactTableRowDefect list =
+        match slice with
+        | None -> []
+        | Some slice ->
+            rows
+            |> List.filter (fun (_, row) -> not (FactTableRunOptions.contains slice row.Period.From row.Period.To))
+            |> List.map (fun (position, row) -> {
+                Position = position
+                Subject = subjectText table row
+                Problem =
+                    sprintf
+                        "the period %s..%s lies outside the run's slice %s..%s"
+                        (row.Period.From.ToString "o")
+                        (row.Period.To.ToString "o")
+                        (slice.From.ToString "o")
+                        (slice.To.ToString "o")
+            })
 
 // ─── Snapshots, digests and change summaries ─────────────────────────
 
@@ -573,6 +732,12 @@ module internal FactTableBlobIo =
     let serialize (value: 'T) : string =
         JsonSerializer.Serialize(value, jsonOptions)
 
+    let deserialize<'T> (name: string) (bytes: byte[]) : Result<'T, FactTableWriteError> =
+        try
+            Ok(JsonSerializer.Deserialize<'T>(Encoding.UTF8.GetString bytes, jsonOptions))
+        with ex ->
+            Error(FactTableStorageFailure(sprintf "'%s' is unreadable: %s" name ex.Message))
+
     let put
         (storage: IBlobStorage)
         (scopeId: string)
@@ -614,6 +779,164 @@ type FactTableHead = {
     /// What that run committed.
     Commit: FactTableCommit
 }
+
+/// The claim a table's open run holds in its scope (Phase 994).
+type internal FactTableRunClaimRecord = {
+    /// The run that claimed the table.
+    RunId: string
+    /// When it claimed it (second precision, UTC).
+    ClaimedAt: DateTime
+}
+
+/// One open run per table and scope (Phase 994), shared by both platform
+/// writers. A run claims its table by writing a claim blob naming it BEFORE
+/// its record exists; the claim is live while the run it names is open and
+/// within the table's refresh cadence (the window `FactTableRun.outcome`
+/// reads as in progress), and for `Grace` after the claim when the run's
+/// record is not written yet. A claim is never released: the run's terminal
+/// record ends it, so ending a run needs no second write that could race a
+/// new claim.
+///
+/// On an `IConditionalBlobStorage` the claim is a create-only or
+/// `IfMatch`-guarded write, so two concurrent opens of one table admit
+/// exactly one. On a store without conditional writes it holds within the
+/// precision of the store's read-then-write — the posture the commit's
+/// base-sequence check already documents — and that check still refuses
+/// the second of two commits.
+module internal FactTableRunClaim =
+
+    /// How long a claim whose run record is not yet written stays live: the
+    /// opening instance writes the record straight after the claim.
+    let Grace = TimeSpan.FromMinutes 1.0
+
+    /// Attempts a conditional claim makes before reporting the winner.
+    [<Literal>]
+    let private Attempts = 4
+
+    /// Whether the run a claim names still holds the table at `now`.
+    let private holds
+        (table: FactTableDefinition)
+        (now: DateTime)
+        (loadRun: string -> Async<Result<FactTableRunRecord option, FactTableWriteError>>)
+        (claim: FactTableRunClaimRecord)
+        : Async<Result<bool, FactTableWriteError>> =
+        async {
+            match! loadRun claim.RunId with
+            | Error e -> return Error e
+            | Ok(Some run) ->
+                return
+                    Ok(
+                        run.Status = FactTableRunStatus.Open
+                        && now - run.OpenedAt <= table.RefreshCadence
+                    )
+            | Ok None -> return Ok(now - claim.ClaimedAt <= Grace)
+        }
+
+    /// Claim `table` in `scopeId` for `runId` at blob `name`, or refuse with
+    /// `FactTableRunInProgress` naming the run that holds it.
+    let acquire
+        (storage: IBlobStorage)
+        (scopeId: string)
+        (name: string)
+        (table: FactTableDefinition)
+        (now: DateTime)
+        (loadRun: string -> Async<Result<FactTableRunRecord option, FactTableWriteError>>)
+        (runId: string)
+        : Async<Result<unit, FactTableWriteError>> =
+        let mine: FactTableRunClaimRecord = { RunId = runId; ClaimedAt = now }
+        let bytes = Encoding.UTF8.GetBytes(FactTableBlobIo.serialize mine)
+
+        let inProgress (holder: FactTableRunClaimRecord) =
+            Error(FactTableRunInProgress(table.Id, holder.RunId))
+
+        match storage with
+        | :? IConditionalBlobStorage as cas ->
+            let rec attempt (remaining: int) = async {
+                let! exists = storage.Exists(scopeId, name)
+
+                let! current = async {
+                    if not exists then
+                        return Ok None
+                    else
+                        match! cas.DownloadWithETag(scopeId, name) with
+                        | Ok(content, etag) ->
+                            return
+                                FactTableBlobIo.deserialize<FactTableRunClaimRecord> name content
+                                |> Result.map (fun claim -> Some(claim, etag))
+                        // Deleted between the probe and the read: absent.
+                        | Error _ when remaining > 1 -> return Ok None
+                        | Error e -> return Error(FactTableStorageFailure(sprintf "read of '%s' failed: %s" name e))
+                }
+
+                match current with
+                | Error e -> return Error e
+                | Ok current ->
+                    let! live = async {
+                        match current with
+                        | None -> return Ok None
+                        | Some(claim, etag) ->
+                            match! holds table now loadRun claim with
+                            | Error e -> return Error e
+                            | Ok true -> return Ok(Some(Choice1Of2 claim))
+                            | Ok false -> return Ok(Some(Choice2Of2 etag))
+                    }
+
+                    match live with
+                    | Error e -> return Error e
+                    | Ok(Some(Choice1Of2 holder)) -> return inProgress holder
+                    | Ok decision ->
+                        let condition =
+                            match decision with
+                            | Some(Choice2Of2 etag) -> IfMatch etag
+                            | _ -> IfAbsent
+
+                        match! cas.UploadWithETag(scopeId, name, bytes, condition) with
+                        | Ok _ -> return Ok()
+                        | Error(ETagMismatch _) when remaining > 1 -> return! attempt (remaining - 1)
+                        | Error(ETagMismatch _) ->
+                            // Lost every race: name whoever holds it now.
+                            match! FactTableBlobIo.tryGet<FactTableRunClaimRecord> storage scopeId name with
+                            | Ok(Some holder) -> return inProgress holder
+                            | Ok None ->
+                                return Error(FactTableStorageFailure(sprintf "the claim '%s' kept moving" name))
+                            | Error e -> return Error e
+                        | Error(ConditionalWriteFailure e) ->
+                            return Error(FactTableStorageFailure(sprintf "write of '%s' failed: %s" name e))
+            }
+
+            attempt Attempts
+        | _ -> async {
+            match! FactTableBlobIo.tryGet<FactTableRunClaimRecord> storage scopeId name with
+            | Error e -> return Error e
+            | Ok current ->
+                let! live = async {
+                    match current with
+                    | None -> return Ok None
+                    | Some claim ->
+                        match! holds table now loadRun claim with
+                        | Error e -> return Error e
+                        | Ok true -> return Ok(Some claim)
+                        | Ok false -> return Ok None
+                }
+
+                match live with
+                | Error e -> return Error e
+                | Ok(Some holder) -> return inProgress holder
+                | Ok None ->
+                    match! storage.Upload(scopeId, name, bytes) with
+                    | Ok _ -> return Ok()
+                    | Error e -> return Error(FactTableStorageFailure(sprintf "write of '%s' failed: %s" name e))
+          }
+
+    /// Give up a claim a failed open made, when it still names `runId`, so
+    /// the table is not held for `Grace` by a run that never existed.
+    let release (storage: IBlobStorage) (scopeId: string) (name: string) (runId: string) : Async<unit> = async {
+        match! FactTableBlobIo.tryGet<FactTableRunClaimRecord> storage scopeId name with
+        | Ok(Some claim) when claim.RunId = runId ->
+            let! _ = storage.Delete(scopeId, name) // best-effort-write: a claim left behind names a run with no record, which holds the table only for Grace
+            ()
+        | _ -> ()
+    }
 
 /// Keeping and applying a run's provenance.
 module FactTableRunProvenance =
@@ -920,7 +1243,10 @@ module FactTableOrphanSweep =
 /// address, so every run is a complete attributable snapshot; `Replace`
 /// leaves it out, so an unchanged cell is an idempotent skip. A row the new
 /// run no longer carries is superseded by an `Absent` fact per cell, so the
-/// table's current population is exactly the latest run.
+/// table's current population is exactly the latest run — or, for a run
+/// opened with a period slice (Phase 994), the latest run inside the slice
+/// and every committed row outside it, unrewritten. A run's declared inputs
+/// join every fact's input hashes.
 ///
 /// **What "atomic" means here.** Validation is all-or-nothing and runs
 /// before the first write: a rejected run writes no fact. The facts of an
@@ -938,9 +1264,11 @@ module FactTableOrphanSweep =
 /// GP 4), under `_fact-tables/`.
 ///
 /// **Distributed-ready**, single producer per table: all state lives in the
-/// backing stores (rule 4). Two runs of one table committing concurrently
-/// are serialised by the base-sequence check — the later one is refused as
-/// `FactTableCommitConflict` — within the precision of the backing blob
+/// backing stores (rule 4). A table takes one open run per scope
+/// (`FactTableRunClaim`, Phase 994). Two runs of one table committing
+/// concurrently — possible only once one has outlived the table's cadence —
+/// are serialised by the base-sequence check: the later one is refused as
+/// `FactTableCommitConflict`, within the precision of the backing blob
 /// store's read-then-write (no compare-and-swap is assumed of it).
 type DefaultFactTableWriter
     (
@@ -965,6 +1293,14 @@ type DefaultFactTableWriter
 
     let snapshotName (tableId: string) (sequence: int64) =
         sprintf "%ssnapshots/%s/%020d.json" root tableId sequence
+
+    // Phase 994 — the claim a table's open run holds, and the options a run
+    // was opened with. The options are staged with the run's rows: only the
+    // commit reads them, and the orphan sweep reclaims them with the rows.
+    let claimName (tableId: string) = sprintf "%sopen/%s.json" root tableId
+
+    let optionsName (runId: string) =
+        sprintf "%soptions.json" (rowsPrefix runId)
 
     let now () =
         let t = clock().ToUniversalTime()
@@ -1081,8 +1417,9 @@ type DefaultFactTableWriter
                 | Error e -> return Error e
         }
 
-        // Offsets are zero-padded, so name order is staging order.
-        return! load (names |> List.sort) []
+        // Offsets are zero-padded, so name order is staging order; the run's
+        // options sit beside its batches and are not rows.
+        return! load (names |> List.filter (fun n -> n <> optionsName runId) |> List.sort) []
     }
 
     let disclosureOf (d: FactTableDisclosure) : Disclosure =
@@ -1095,6 +1432,7 @@ type DefaultFactTableWriter
         (table: FactTableDefinition)
         (runId: string)
         (provenance: FactTableRunProvenance)
+        (options: FactTableRunOptions)
         (watermark: FactTableWatermark)
         (rows: FactTableRow list)
         (removed: FactTableSnapshotRow list)
@@ -1152,7 +1490,8 @@ type DefaultFactTableWriter
                 |> List.map (fun column ->
                     draft row.Subject period column (Absent(sprintf "removed by fact-table run %s" token))))
 
-        present @ absences |> List.map (FactTableRunProvenance.rewrite provenance)
+        present @ absences
+        |> List.map (FactTableRunOptions.rewrite options >> FactTableRunProvenance.rewrite provenance)
 
     let reject
         (scopeId: string)
@@ -1178,38 +1517,76 @@ type DefaultFactTableWriter
 
     interface IFactTableWriter with
 
-        member _.OpenRun(scopeId, tableId, ?provenance) = async {
+        member _.OpenRun(scopeId, tableId, ?provenance, ?options) = async {
             match declared tableId with
             | Error e -> return Error e
             | Ok table ->
-                match! currentSequence scopeId tableId with
-                | Error e -> return Error e
-                | Ok(sequence, _) ->
-                    let run: FactTableRunRecord = {
-                        TableId = table.Id
-                        RunId = Guid.NewGuid().ToString("N")
-                        SchemaVersion = table.SchemaVersion
-                        OpenedAt = now ()
-                        BaseSequence = sequence
-                        StagedRows = 0
-                        Status = FactTableRunStatus.Open
-                    }
+                match FactTableRunOptions.normalise (defaultArg options FactTableRunOptions.none) with
+                | Error reason -> return Error(FactTableRunOptionsRefused(table.Id, reason))
+                | Ok options ->
+                    let runId = Guid.NewGuid().ToString("N")
+                    let openedAt = now ()
 
-                    // The provenance first: a run whose record exists is a
-                    // run, so it is never visible without the provenance it
-                    // was opened with.
+                    // The claim first (Phase 994): one open run per table and
+                    // scope, and the base sequence is read once it is held.
                     match!
-                        FactTableRunProvenance.keep
+                        FactTableRunClaim.acquire
                             storage
                             scopeId
-                            (FactTableRunProvenance.blobName run.RunId)
-                            (defaultArg provenance ComputedRun)
+                            (claimName table.Id)
+                            table
+                            openedAt
+                            (fun id -> FactTableBlobIo.tryGet<FactTableRunRecord> storage scopeId (recordName id))
+                            runId
                     with
                     | Error e -> return Error e
                     | Ok() ->
-                        match! FactTableBlobIo.put storage scopeId (recordName run.RunId) run with
-                        | Error e -> return Error e
-                        | Ok() -> return Ok run
+                        let! opened = async {
+                            match! currentSequence scopeId tableId with
+                            | Error e -> return Error e
+                            | Ok(sequence, _) ->
+                                let run: FactTableRunRecord = {
+                                    TableId = table.Id
+                                    RunId = runId
+                                    SchemaVersion = table.SchemaVersion
+                                    OpenedAt = openedAt
+                                    BaseSequence = sequence
+                                    StagedRows = 0
+                                    Status = FactTableRunStatus.Open
+                                }
+
+                                // The provenance and the options first: a run
+                                // whose record exists is a run, so it is never
+                                // visible without what it was opened with. No
+                                // options, nothing kept (GP 11).
+                                match!
+                                    FactTableRunProvenance.keep
+                                        storage
+                                        scopeId
+                                        (FactTableRunProvenance.blobName run.RunId)
+                                        (defaultArg provenance ComputedRun)
+                                with
+                                | Error e -> return Error e
+                                | Ok() ->
+                                    let! kept =
+                                        if FactTableRunOptions.isNone options then
+                                            async { return Ok() }
+                                        else
+                                            FactTableBlobIo.put storage scopeId (optionsName run.RunId) options
+
+                                    match kept with
+                                    | Error e -> return Error e
+                                    | Ok() ->
+                                        match! FactTableBlobIo.put storage scopeId (recordName run.RunId) run with
+                                        | Error e -> return Error e
+                                        | Ok() -> return Ok run
+                        }
+
+                        match opened with
+                        | Ok run -> return Ok run
+                        | Error e ->
+                            do! FactTableRunClaim.release storage scopeId (claimName table.Id) runId
+                            return Error e
         }
 
         member _.WriteRows(scopeId, runId, rows) = async {
@@ -1257,103 +1634,207 @@ type DefaultFactTableWriter
                                             (FactTableRunProvenance.blobName runId)
                                     with
                                     | Error e -> return Error e
-                                    | Ok provenance -> return Ok(rows, provenance)
+                                    | Ok provenance ->
+                                        match!
+                                            FactTableBlobIo.tryGet<FactTableRunOptions>
+                                                storage
+                                                scopeId
+                                                (optionsName runId)
+                                        with
+                                        | Error e -> return Error e
+                                        | Ok options ->
+                                            return
+                                                Ok(
+                                                    rows,
+                                                    provenance,
+                                                    options |> Option.defaultValue FactTableRunOptions.none
+                                                )
                             }
 
                             match staged with
                             | Error e -> return Error e
-                            | Ok(rows, provenance) ->
-                                match FactTableValidation.defects table (hierarchyOf table) (List.indexed rows) with
+                            | Ok(rows, provenance, options) ->
+                                let defects =
+                                    FactTableValidation.defects table (hierarchyOf table) (List.indexed rows)
+                                    @ FactTableValidation.outsideSlice table options.Slice (List.indexed rows)
+                                    |> List.sortBy _.Position
+
+                                match defects with
                                 | _ :: _ as defects ->
                                     return! reject scopeId table run (FactTableRowsRejected(runId, defects))
                                 | [] ->
-                                    let! previous =
+                                    let! previous = async {
                                         match head with
-                                        | None -> async { return Ok None }
+                                        | None -> return Ok None
                                         | Some h ->
-                                            FactTableBlobIo.tryGet<FactTableSnapshot>
-                                                storage
-                                                scopeId
-                                                (snapshotName table.Id h.Sequence)
+                                            let name = snapshotName table.Id h.Sequence
+
+                                            match! FactTableBlobIo.tryGet<FactTableSnapshot> storage scopeId name with
+                                            | Ok(Some snapshot) -> return Ok(Some snapshot)
+                                            // A head names its snapshot: a missing one is
+                                            // never read as an empty table, which would
+                                            // withdraw nothing and drop every carried row.
+                                            | Ok None ->
+                                                return
+                                                    Error(
+                                                        FactTableStorageFailure(
+                                                            sprintf "the table's current snapshot '%s' is missing" name
+                                                        )
+                                                    )
+                                            | Error e -> return Error e
+                                    }
 
                                     match previous with
                                     | Error e -> return Error e
                                     | Ok previous ->
                                         let next = sequence + 1L
-                                        let snapshot = FactTableSnapshot.ofRows table next rows
-                                        let committedAt = now ()
+                                        let written = FactTableSnapshot.ofRows table next rows
 
-                                        let watermark: FactTableWatermark = {
-                                            TableId = table.Id
-                                            Sequence = next
-                                            CommittedAt = committedAt
-                                            ContentDigest = FactTableSnapshot.digest snapshot
-                                        }
+                                        // Phase 994 — the rows the run replaces: the
+                                        // whole table, or the committed rows inside its
+                                        // slice. A committed row the slice would split
+                                        // refuses the run.
+                                        let inSlice (row: FactTableSnapshotRow) =
+                                            options.Slice
+                                            |> Option.forall (fun slice ->
+                                                FactTableRunOptions.contains slice row.From row.To)
 
-                                        let removed = FactTableSnapshot.removedRows previous snapshot
-                                        let drafts = draftsFor table runId provenance watermark rows removed
+                                        let split =
+                                            match options.Slice, previous with
+                                            | Some slice, Some p ->
+                                                p.Rows
+                                                |> List.filter (fun r -> FactTableRunOptions.splits slice r.From r.To)
+                                            | _ -> []
 
-                                        match! facts.AssertBatch(scopeId, drafts) with
-                                        | Error e ->
-                                            return
-                                                Error(
-                                                    FactTableStorageFailure(
-                                                        sprintf "the fact store refused the run's facts: %s" e
-                                                    )
-                                                )
-                                        | Ok receipt ->
-                                            let commit: FactTableCommit = {
-                                                Watermark = watermark
-                                                RowCount = rows.Length
-                                                FactsWritten = receipt.AssertedCount + receipt.SupersedingCount
-                                                Change = FactTableSnapshot.changes table.Hierarchy previous snapshot
-                                                BatchDigest = receipt.Digest
+                                        match split with
+                                        | first :: _ ->
+                                            let subject: SubjectRef = {
+                                                Hierarchy = table.Hierarchy
+                                                Path = first.Subject
                                             }
 
-                                            let committed = {
-                                                run with
-                                                    Status = FactTableRunStatus.Committed commit
+                                            let reason =
+                                                sprintf
+                                                    "the slice splits %d committed row(s), the first %s at %s; a slice must contain each committed row it overlaps"
+                                                    split.Length
+                                                    (SubjectRef.toString subject)
+                                                    (FactTableSnapshot.periodText first)
+
+                                            return!
+                                                reject scopeId table run (FactTableRunOptionsRefused(table.Id, reason))
+                                        | [] ->
+                                            let replaced =
+                                                previous
+                                                |> Option.map (fun p -> {
+                                                    p with
+                                                        Rows = p.Rows |> List.filter inSlice
+                                                })
+
+                                            let carried =
+                                                previous
+                                                |> Option.map (fun p -> p.Rows |> List.filter (inSlice >> not))
+                                                |> Option.defaultValue []
+
+                                            // The table after the commit: the carried rows
+                                            // and the run's, in canonical order.
+                                            let snapshot = {
+                                                written with
+                                                    Rows =
+                                                        carried @ written.Rows
+                                                        |> List.sortBy (fun r -> r.Subject, r.From, r.To)
                                             }
 
-                                            let newHead: FactTableHead = {
+                                            let committedAt = now ()
+
+                                            let watermark: FactTableWatermark = {
+                                                TableId = table.Id
                                                 Sequence = next
-                                                RunId = runId
-                                                Commit = commit
+                                                CommittedAt = committedAt
+                                                ContentDigest = FactTableSnapshot.digest snapshot
                                             }
 
-                                            match!
-                                                FactTableBlobIo.put
-                                                    storage
-                                                    scopeId
-                                                    (snapshotName table.Id next)
-                                                    snapshot
-                                            with
-                                            | Error e -> return Error e
-                                            | Ok() ->
-                                                // The swap: the table's current run moves here.
+                                            let removed = FactTableSnapshot.removedRows replaced written
+
+                                            let drafts = draftsFor table runId provenance options watermark rows removed
+
+                                            match! facts.AssertBatch(scopeId, drafts) with
+                                            | Error e ->
+                                                return
+                                                    Error(
+                                                        FactTableStorageFailure(
+                                                            sprintf "the fact store refused the run's facts: %s" e
+                                                        )
+                                                    )
+                                            | Ok receipt ->
+                                                let commit: FactTableCommit = {
+                                                    Watermark = watermark
+                                                    RowCount = rows.Length
+                                                    FactsWritten = receipt.AssertedCount + receipt.SupersedingCount
+                                                    Change = FactTableSnapshot.changes table.Hierarchy replaced written
+                                                    BatchDigest = receipt.Digest
+                                                }
+
+                                                let committed = {
+                                                    run with
+                                                        Status = FactTableRunStatus.Committed commit
+                                                }
+
+                                                let newHead: FactTableHead = {
+                                                    Sequence = next
+                                                    RunId = runId
+                                                    Commit = commit
+                                                }
+
                                                 match!
-                                                    FactTableBlobIo.put storage scopeId (headName table.Id) newHead
+                                                    FactTableBlobIo.put
+                                                        storage
+                                                        scopeId
+                                                        (snapshotName table.Id next)
+                                                        snapshot
                                                 with
                                                 | Error e -> return Error e
                                                 | Ok() ->
+                                                    // The swap: the table's current run moves here.
                                                     match!
-                                                        FactTableBlobIo.put storage scopeId (recordName runId) committed
+                                                        FactTableBlobIo.put storage scopeId (headName table.Id) newHead
                                                     with
                                                     | Error e -> return Error e
                                                     | Ok() ->
-                                                        do! endRun scopeId
-
-                                                        do!
-                                                            audit
+                                                        match!
+                                                            FactTableBlobIo.put
+                                                                storage
                                                                 scopeId
-                                                                table
+                                                                (recordName runId)
                                                                 committed
-                                                                FactTableEvents.RunCommittedType
-                                                                "Committed"
-                                                                (Some commit)
-                                                                None
+                                                        with
+                                                        | Error e -> return Error e
+                                                        | Ok() ->
+                                                            // Phase 994 — the superseded snapshot is
+                                                            // read by nothing once the head moved, so
+                                                            // a table keeps one snapshot, not one per
+                                                            // commit. A refused delete leaves bytes
+                                                            // nothing reads; the commit stands.
+                                                            match head with
+                                                            | Some h ->
+                                                                let superseded = snapshotName table.Id h.Sequence
+                                                                let! _ = storage.Delete(scopeId, superseded) // best-effort-write: a surviving superseded snapshot is read by nothing; the head names the current one
 
-                                                        return Ok commit
+                                                                ()
+                                                            | None -> ()
+
+                                                            do! endRun scopeId
+
+                                                            do!
+                                                                audit
+                                                                    scopeId
+                                                                    table
+                                                                    committed
+                                                                    FactTableEvents.RunCommittedType
+                                                                    "Committed"
+                                                                    (Some commit)
+                                                                    None
+
+                                                            return Ok commit
         }
 
         member _.Abandon(scopeId, runId, reason) = async {

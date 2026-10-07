@@ -280,6 +280,33 @@ let egressTests =
 
             Expect.isEmpty (items el "withheld") "nothing withheld"
 
+        testCase
+            "a fact names the inputs it was computed from by content hash, and nothing else of its evidence (Phase 994)"
+        <| fun () ->
+            let _, sp = composedUnder EnabledFactStore None
+            let scope = newScope ()
+            let store = sp.GetRequiredService<IFactStore>()
+            let input = "sha256:" + String('a', 64)
+
+            // A bare value hash and a run token share the list; neither is an input.
+            assertFact
+                store
+                scope
+                (draft "revenue" q2 [ String('b', 64); "sku-daily@3:0123456789abcdef"; input ] 21800m)
+            |> ignore
+
+            let el = executeVia sp scope queryArgs
+
+            match items el "facts" with
+            | [ f ] ->
+                let inputs =
+                    f.GetProperty("inputs").EnumerateArray()
+                    |> Seq.map (fun e -> e.GetString())
+                    |> List.ofSeq
+
+                Expect.equal inputs [ input ] "the content-hash input, and only it"
+            | other -> failtestf "expected exactly one fact, got %d" (List.length other)
+
         testCase "an Internal fact projects to the typed marker — policy ref + canonical refusal, never the value"
         <| fun () ->
             let _, sp = composedUnder EnabledFactStore None

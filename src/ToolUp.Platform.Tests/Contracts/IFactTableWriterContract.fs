@@ -390,11 +390,16 @@ let tests (name: string) (factory: FactTableWriterFactory) =
             let table =
                 skuTable "sku-sales" FactTableHistoryMode.Replace FactTableRequirement.Optional
 
-            let f = fixture [ table ]
+            let now = ref t0
+            let f = fixtureWith (fun () -> now.Value) [ table ]
             let early = ok "open early" (f.Writer.OpenRun(f.ScopeA, table.Id))
 
             ok "stage early" (f.Writer.WriteRows(f.ScopeA, early.RunId, [ row "acme" "a1" 1m "core" ]))
             |> ignore
+
+            // Past the cadence the early run no longer holds the table (Phase
+            // 994), so another run opens and commits before it.
+            now.Value <- t0.AddDays 2.0
 
             runOf f.Writer f.ScopeA table.Id [ [ row "acme" "a1" 2m "core" ] ]
             |> committed "the other run"
@@ -553,6 +558,32 @@ let private bindAll = [ BindAllFactTables DefaultFactTableWriter.Destination ]
 /// The pack itself is bound from the test runner, by its qualified name.
 let defaultWriterFactory: FactTableWriterFactory =
     fun clock tables metrics -> (defaultWorld clock tables metrics bindAll).Fixture
+
+/// The default writer over a fact store the binding builds — how a fact
+/// store companion binds the writer packs (Phase 994): `store` takes the
+/// metric registry and the clock, and the writer keeps its runs in a fresh
+/// in-memory blob store beside it.
+let defaultWriterOver (store: IMetricRegistry -> (unit -> DateTime) -> IFactStore) : FactTableWriterFactory =
+    fun clock tables metrics ->
+        let storage = InMemoryBlobStorage.InMemoryBlobStorage()
+        let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+        let facts = store metrics clock
+
+        let tableRegistry =
+            FactTableRegistry.build
+                (tables
+                 |> List.map (fun t -> {
+                     FactTableRegistration.Module = "sales"
+                     Definition = t
+                 }))
+                bindAll
+
+        {
+            Writer = DefaultFactTableWriter.createWithClock facts storage events tableRegistry (Some metrics) clock
+            Facts = facts
+            ScopeA = newScope ()
+            ScopeB = newScope ()
+        }
 
 let private runEvents (events: IEventStore) (scope: string) : ModuleEvent list =
     events.ReadBySource(scope, FactEvents.SourceModule) |> Async.RunSynchronously
@@ -945,20 +976,410 @@ let provenanceTests (name: string) (factory: FactTableWriterFactory) =
         }
     ]
 
+// ─── Run options and exclusivity, bound to every implementer (Phase 994) ─
+
+/// An input hash in the content-hash form: `sha256:` + 64 copies of `c`.
+let private inputHash (c: char) : string = "sha256:" + String(c, 64)
+
+/// Day `n` of September 2026, as a one-day half-open extent.
+let private day (n: int) : TemporalExtent = {
+    From = DateTime(2026, 9, n, 0, 0, 0, DateTimeKind.Utc)
+    To = DateTime(2026, 9, n + 1, 0, 0, 0, DateTimeKind.Utc)
+    Label = Some(sprintf "2026-09-%02d" n)
+}
+
+/// A two-column table at the `sku` level whose rows are days.
+let private dailyTable (id: string) (history: FactTableHistoryMode) : FactTableDefinition = {
+    skuTable id history FactTableRequirement.Required with
+        PeriodGrain = FactTablePeriodGrain.Day
+}
+
+let private dayRow (n: int) (brand: string) (sku: string) (revenue: decimal) : FactTableRow = {
+    row brand sku revenue "core" with
+        Period = day n
+}
+
+/// The current facts of one cell at one period.
+let private cellAt (facts: IFactStore) (scope: string) (metricId: string) (path: string list) (period: TemporalExtent) =
+    cellFacts facts scope metricId path
+    |> List.filter (fun f -> f.Period.From = period.From && f.Period.To = period.To)
+
+/// The one current fact of a cell at a period.
+let private oneAt (facts: IFactStore) (scope: string) (metricId: string) (path: string list) (period: TemporalExtent) =
+    match cellAt facts scope metricId path period with
+    | [ fact ] -> fact
+    | other -> failtestf "expected one current %s fact at %A %A, got %d" metricId path period.Label other.Length
+
+/// The exclusivity pack: a table takes one open run per scope, whatever
+/// writer holds it.
+let exclusivityTests (name: string) (factory: FactTableWriterFactory) =
+    let fixtureWith (clock: unit -> DateTime) (tables: FactTableDefinition list) = factory clock tables registry
+
+    testList $"IFactTableWriter one open run per table — {name}" [
+
+        test "a second open of a table with an open run is refused, naming the open run" {
+            let table =
+                skuTable "sku-sales" FactTableHistoryMode.Replace FactTableRequirement.Required
+
+            let other =
+                skuTable "sku-stock" FactTableHistoryMode.Replace FactTableRequirement.Required
+
+            let f = fixtureWith (fun () -> t0) [ table; other ]
+
+            let first = ok "open" (f.Writer.OpenRun(f.ScopeA, table.Id))
+
+            match refused "second open" (f.Writer.OpenRun(f.ScopeA, table.Id)) with
+            | FactTableRunInProgress(tableId, openRunId) ->
+                Expect.equal (tableId, openRunId) (table.Id, first.RunId) "names the table and the open run"
+            | e -> failtestf "expected FactTableRunInProgress, got %s" (FactTableWriteError.describe e)
+
+            ok "another table is not held" (f.Writer.OpenRun(f.ScopeA, other.Id)) |> ignore
+            ok "another scope is not held" (f.Writer.OpenRun(f.ScopeB, table.Id)) |> ignore
+
+            Expect.hasLength (ok "runs" (f.Writer.Runs(f.ScopeA, table.Id))) 1 "the refused open left no run behind"
+        }
+
+        test "a run that ends — committed, abandoned or rejected — releases the table" {
+            let table =
+                skuTable "sku-sales" FactTableHistoryMode.Replace FactTableRequirement.Required
+
+            let f = fixtureWith (fun () -> t0) [ table ]
+
+            runOf f.Writer f.ScopeA table.Id [ [ row "acme" "a1" 1m "core" ] ]
+            |> committed "committed"
+            |> ignore
+
+            let abandoned = ok "open after a commit" (f.Writer.OpenRun(f.ScopeA, table.Id))
+
+            ok "abandon" (f.Writer.Abandon(f.ScopeA, abandoned.RunId, "cancelled"))
+            |> ignore
+
+            let rejected = ok "open after an abandon" (f.Writer.OpenRun(f.ScopeA, table.Id))
+
+            ok
+                "stage a bad row"
+                (f.Writer.WriteRows(
+                    f.ScopeA,
+                    rejected.RunId,
+                    [
+                        {
+                            (row "a" "b" 1m "c") with
+                                Subject = [ "a" ]
+                        }
+                    ]
+                ))
+            |> ignore
+
+            refused "reject" (f.Writer.Commit(f.ScopeA, rejected.RunId)) |> ignore
+            ok "open after a rejection" (f.Writer.OpenRun(f.ScopeA, table.Id)) |> ignore
+        }
+
+        test "a run open past the table's cadence no longer holds it" {
+            let table =
+                skuTable "sku-sales" FactTableHistoryMode.Replace FactTableRequirement.Required
+
+            let now = ref t0
+            let f = fixtureWith (fun () -> now.Value) [ table ]
+
+            let stale = ok "open" (f.Writer.OpenRun(f.ScopeA, table.Id))
+
+            now.Value <- t0.AddHours 23.0
+
+            refused "within the cadence" (f.Writer.OpenRun(f.ScopeA, table.Id)) |> ignore
+
+            now.Value <- t0.AddDays 2.0
+            let fresh = ok "past the cadence" (f.Writer.OpenRun(f.ScopeA, table.Id))
+            Expect.notEqual fresh.RunId stale.RunId "a new run holds the table"
+
+            match refused "and holds it" (f.Writer.OpenRun(f.ScopeA, table.Id)) with
+            | FactTableRunInProgress(_, holder) -> Expect.equal holder fresh.RunId "the new run, not the stale one"
+            | e -> failtestf "expected FactTableRunInProgress, got %s" (FactTableWriteError.describe e)
+        }
+
+        test "concurrent opens of one table admit exactly one run" {
+            let table =
+                skuTable "sku-sales" FactTableHistoryMode.Replace FactTableRequirement.Required
+
+            let f = fixtureWith (fun () -> t0) [ table ]
+
+            let outcomes =
+                List.init 8 (fun _ -> f.Writer.OpenRun(f.ScopeA, table.Id))
+                |> Async.Parallel
+                |> Async.RunSynchronously
+                |> List.ofArray
+
+            let opened =
+                outcomes
+                |> List.choose (function
+                    | Ok run -> Some run
+                    | Error _ -> None)
+
+            Expect.hasLength opened 1 "one open run"
+
+            for outcome in outcomes do
+                match outcome with
+                | Ok _ -> ()
+                | Error(FactTableRunInProgress(_, holder)) ->
+                    Expect.equal holder opened.Head.RunId "every refusal names the run that won"
+                | Error e -> failtestf "expected FactTableRunInProgress, got %s" (FactTableWriteError.describe e)
+
+            Expect.hasLength (ok "runs" (f.Writer.Runs(f.ScopeA, table.Id))) 1 "and one run recorded"
+        }
+    ]
+
+/// The run-options pack: a run names the inputs it was computed from and
+/// can replace one period slice, read back through point reads. Bound to
+/// every writer that takes run options.
+let runOptionsTests (name: string) (factory: FactTableWriterFactory) =
+    let fixture (tables: FactTableDefinition list) = factory (fun () -> t0) tables registry
+
+    let openWith (f: FactTableWriterFixture) (scope: string) (tableId: string) (options: FactTableRunOptions) =
+        ok "open" (f.Writer.OpenRun(scope, tableId, options = options))
+
+    let publish (f: FactTableWriterFixture) (scope: string) (tableId: string) options (rows: FactTableRow list) =
+        let run = openWith f scope tableId options
+        ok "write" (f.Writer.WriteRows(scope, run.RunId, rows)) |> ignore
+        ok "commit" (f.Writer.Commit(scope, run.RunId))
+
+    let daily (n: int) (input: char) =
+        FactTableRunOptions.none
+        |> FactTableRunOptions.withInputs [ inputHash input ]
+        |> FactTableRunOptions.forSlice (day n)
+
+    testList $"IFactTableWriter run inputs and period slices — {name}" [
+
+        test "a daily producer publishes one day per run: earlier days survive, and every fact names its input" {
+            let table = dailyTable "sku-daily" FactTableHistoryMode.AppendByRun
+            let f = fixture [ table ]
+
+            let first =
+                publish f f.ScopeA table.Id (daily 1 'a') [ dayRow 1 "acme" "a1" 10m; dayRow 1 "zeta" "z1" 5m ]
+
+            let second = publish f f.ScopeA table.Id (daily 2 'b') [ dayRow 2 "acme" "a1" 11m ]
+
+            let third =
+                publish f f.ScopeA table.Id (daily 3 'c') [ dayRow 3 "acme" "a1" 12m; dayRow 3 "zeta" "z1" 6m ]
+
+            Expect.equal
+                [ first.RowCount; second.RowCount; third.RowCount ]
+                [ 2; 1; 2 ]
+                "each run carries its own day only"
+
+            // Earlier days stand, each naming the input it was computed from.
+            for n, path, value, input in
+                [
+                    1, [ "acme"; "a1" ], 10m, 'a'
+                    1, [ "zeta"; "z1" ], 5m, 'a'
+                    2, [ "acme"; "a1" ], 11m, 'b'
+                    3, [ "acme"; "a1" ], 12m, 'c'
+                    3, [ "zeta"; "z1" ], 6m, 'c'
+                ] do
+                let fact = oneAt f.Facts f.ScopeA "revenue" path (day n)
+                Expect.equal fact.Value (Scalar value) (sprintf "day %d at %A stands" n path)
+
+                Expect.equal
+                    (InputHash.named fact.Evidence)
+                    [ inputHash input ]
+                    (sprintf "day %d at %A names its input" n path)
+
+            Expect.isEmpty
+                (cellAt f.Facts f.ScopeA "revenue" [ "zeta"; "z1" ] (day 2))
+                "a day a run did not carry is not invented"
+
+            Expect.equal third.Change.Removed 0 "a later day withdraws nothing from an earlier one"
+            Expect.equal third.Watermark.Sequence 3L "one commit per day"
+
+            // A concurrent second run of the table is refused, never interleaved.
+            let fourth = openWith f f.ScopeA table.Id (daily 4 'd')
+
+            match refused "a concurrent run" (f.Writer.OpenRun(f.ScopeA, table.Id, options = daily 4 'e')) with
+            | FactTableRunInProgress(_, holder) -> Expect.equal holder fourth.RunId "names the open run"
+            | e -> failtestf "expected FactTableRunInProgress, got %s" (FactTableWriteError.describe e)
+        }
+
+        test "within its slice a run replaces: a row it no longer carries is withdrawn, and the days outside stand" {
+            let table = dailyTable "sku-daily" FactTableHistoryMode.Replace
+            let f = fixture [ table ]
+
+            publish f f.ScopeA table.Id (daily 1 'a') [ dayRow 1 "acme" "a1" 10m; dayRow 1 "zeta" "z1" 5m ]
+            |> ignore
+
+            publish f f.ScopeA table.Id (daily 2 'b') [ dayRow 2 "acme" "a1" 11m; dayRow 2 "zeta" "z1" 7m ]
+            |> ignore
+
+            // Day one re-delivered without zeta.
+            let redelivered =
+                publish f f.ScopeA table.Id (daily 1 'c') [ dayRow 1 "acme" "a1" 10m ]
+
+            Expect.equal redelivered.Change.Removed 1 "the slice's dropped row is removed"
+            Expect.equal redelivered.Change.Unchanged 1 "and its kept row is unchanged"
+            Expect.equal redelivered.Change.New 0 "counted over the slice only"
+
+            match (oneAt f.Facts f.ScopeA "revenue" [ "zeta"; "z1" ] (day 1)).Value with
+            | Absent reason -> Expect.stringContains reason "removed by fact-table run" "withdrawn by the run"
+            | other -> failtestf "expected day one's zeta withdrawn, got %A" other
+
+            Expect.equal
+                (oneAt f.Facts f.ScopeA "revenue" [ "zeta"; "z1" ] (day 2)).Value
+                (Scalar 7m)
+                "the day outside the slice stands"
+
+            let a1 = oneAt f.Facts f.ScopeA "revenue" [ "acme"; "a1" ] (day 1)
+            Expect.equal a1.Value (Scalar 10m) "the kept row's value"
+
+            Expect.equal
+                (InputHash.named a1.Evidence)
+                [ inputHash 'c' ]
+                "re-derived from the new delivery, it names that delivery"
+        }
+
+        test "no options, or none, writes exactly what an unmarked run writes (GP 11)" {
+            let table =
+                skuTable "sku-sales" FactTableHistoryMode.AppendByRun FactTableRequirement.Required
+
+            let f = fixture [ table ]
+            let rows = [ row "acme" "a1" 10m "core"; row "zeta" "z1" 5m "edge" ]
+
+            runOf f.Writer f.ScopeA table.Id [ rows ] |> committed "unmarked" |> ignore
+            publish f f.ScopeB table.Id FactTableRunOptions.none rows |> ignore
+
+            let written (scope: string) = [
+                for metricId in [ "revenue"; "segment" ] do
+                    for path in [ [ "acme"; "a1" ]; [ "zeta"; "z1" ] ] do
+                        for fact in cellFacts f.Facts scope metricId path ->
+                            fact.Value, fact.Method, fact.Evidence.InputHashes.Length
+            ]
+
+            let unmarked = written f.ScopeA
+            Expect.hasLength unmarked 4 "one fact per cell (the comparison below is not vacuous)"
+            Expect.equal (written f.ScopeB) unmarked "the same facts, naming no input"
+
+            for _, _, hashes in unmarked do
+                Expect.equal hashes 2 "a value hash and the run's watermark, and nothing else"
+        }
+
+        test "a row outside the run's slice rejects the run, naming the row, and writes nothing" {
+            let table = dailyTable "sku-daily" FactTableHistoryMode.Replace
+            let f = fixture [ table ]
+
+            let run = openWith f f.ScopeA table.Id (daily 1 'a')
+
+            ok "write" (f.Writer.WriteRows(f.ScopeA, run.RunId, [ dayRow 1 "acme" "a1" 1m; dayRow 2 "acme" "a1" 2m ]))
+            |> ignore
+
+            match refused "commit" (f.Writer.Commit(f.ScopeA, run.RunId)) with
+            | FactTableRowsRejected(_, [ defect ]) ->
+                Expect.equal defect.Position 1 "the second row"
+                Expect.stringContains defect.Problem "outside the run's slice" "says why"
+            | e -> failtestf "expected one rejected row, got %s" (FactTableWriteError.describe e)
+
+            Expect.isEmpty (cellFacts f.Facts f.ScopeA "revenue" [ "acme"; "a1" ]) "nothing written"
+        }
+
+        test "a slice that would split a committed row refuses the run and leaves the table as it was" {
+            let table =
+                skuTable "sku-sales" FactTableHistoryMode.Replace FactTableRequirement.Required
+
+            let f = fixture [ table ]
+
+            runOf f.Writer f.ScopeA table.Id [ [ row "acme" "a1" 10m "core" ] ]
+            |> committed "a monthly row"
+            |> ignore
+
+            let run =
+                openWith f f.ScopeA table.Id (FactTableRunOptions.none |> FactTableRunOptions.forSlice (day 3))
+
+            ok "write" (f.Writer.WriteRows(f.ScopeA, run.RunId, [ dayRow 3 "acme" "a1" 1m ]))
+            |> ignore
+
+            match refused "commit" (f.Writer.Commit(f.ScopeA, run.RunId)) with
+            | FactTableRunOptionsRefused(tableId, reason) ->
+                Expect.equal tableId table.Id "names the table"
+                Expect.stringContains reason "splits 1 committed row" "says why"
+            | e -> failtestf "expected FactTableRunOptionsRefused, got %s" (FactTableWriteError.describe e)
+
+            Expect.equal
+                (valueAt f.Facts f.ScopeA "revenue" [ "acme"; "a1" ])
+                (Some(Scalar 10m))
+                "the committed row stands"
+
+            ok "the refused run released the table" (f.Writer.OpenRun(f.ScopeA, table.Id))
+            |> ignore
+        }
+
+        test "options a writer cannot honour are refused at open, and the table is not held" {
+            let table = dailyTable "sku-daily" FactTableHistoryMode.Replace
+            let f = fixture [ table ]
+
+            let refusedWith (options: FactTableRunOptions) (expected: string) =
+                match refused "open" (f.Writer.OpenRun(f.ScopeA, table.Id, options = options)) with
+                | FactTableRunOptionsRefused(tableId, reason) ->
+                    Expect.equal tableId table.Id "names the table"
+                    Expect.stringContains reason expected "says why"
+                | e -> failtestf "expected FactTableRunOptionsRefused, got %s" (FactTableWriteError.describe e)
+
+            refusedWith
+                (FactTableRunOptions.none |> FactTableRunOptions.withInputs [ String('a', 64) ])
+                "not a content hash"
+
+            refusedWith
+                (FactTableRunOptions.none |> FactTableRunOptions.withInputs [ "sha256:XYZ" ])
+                "not a content hash"
+
+            refusedWith
+                (FactTableRunOptions.none
+                 |> FactTableRunOptions.forSlice { day 2 with To = (day 2).From })
+                "not a half-open extent"
+
+            Expect.isEmpty (ok "runs" (f.Writer.Runs(f.ScopeA, table.Id))) "no run was opened"
+
+            ok "the table is free" (f.Writer.OpenRun(f.ScopeA, table.Id, options = daily 1 'a'))
+            |> ignore
+        }
+    ]
+
+/// What a writer that does not take run options does with them: refuses the
+/// run, by name, before anything is held or written.
+let runOptionsRefusedTests (name: string) (factory: FactTableWriterFactory) =
+    testList $"IFactTableWriter run options refused — {name}" [
+
+        test "a writer that cannot honour run options refuses them and holds nothing" {
+            let table = dailyTable "sku-daily" FactTableHistoryMode.Replace
+            let f = factory (fun () -> t0) [ table ] registry
+
+            let options =
+                FactTableRunOptions.none
+                |> FactTableRunOptions.withInputs [ inputHash 'a' ]
+                |> FactTableRunOptions.forSlice (day 1)
+
+            match refused "open" (f.Writer.OpenRun(f.ScopeA, table.Id, options = options)) with
+            | FactTableRunOptionsRefused(tableId, _) -> Expect.equal tableId table.Id "names the table"
+            | e -> failtestf "expected FactTableRunOptionsRefused, got %s" (FactTableWriteError.describe e)
+
+            ok "none is not an option set" (f.Writer.OpenRun(f.ScopeA, table.Id, options = FactTableRunOptions.none))
+            |> ignore
+        }
+    ]
+
 /// A writer that records the provenance each `OpenRun` is handed — what a
 /// decorator is bound over.
 type private RecordingWriter() =
     let seen =
         System.Collections.Concurrent.ConcurrentQueue<FactTableRunProvenance option>()
 
+    let seenOptions =
+        System.Collections.Concurrent.ConcurrentQueue<FactTableRunOptions option>()
+
     let unused () =
         async.Return(Error(FactTableStorageFailure "the recording writer answers OpenRun only"))
 
     member _.Seen = List.ofSeq seen
+    member _.SeenOptions = List.ofSeq seenOptions
 
     interface IFactTableWriter with
-        member _.OpenRun(_, tableId, ?provenance) = async {
+        member _.OpenRun(_, tableId, ?provenance, ?options) = async {
             seen.Enqueue provenance
+            seenOptions.Enqueue options
 
             return
                 Ok {
@@ -1002,6 +1423,31 @@ let decoratorTests (name: string) (decorate: IFactTableWriter -> IFactTableWrite
                 recorder.Seen
                 [ None; Some ComputedRun; Some imported ]
                 "each provenance reached the inner writer as it was handed over; an omitted one stayed omitted"
+        }
+
+        test "a decorator passes the run options through untouched (Phase 994)" {
+            let recorder = RecordingWriter()
+            let writer = decorate recorder
+
+            let options =
+                FactTableRunOptions.none
+                |> FactTableRunOptions.withInputs [ inputHash 'a' ]
+                |> FactTableRunOptions.forSlice (day 1)
+
+            ok "unmarked" (writer.OpenRun("scope", "sku-sales")) |> ignore
+
+            ok "none" (writer.OpenRun("scope", "sku-sales", options = FactTableRunOptions.none))
+            |> ignore
+
+            ok "declared" (writer.OpenRun("scope", "sku-sales", ComputedRun, options))
+            |> ignore
+
+            Expect.equal
+                recorder.SeenOptions
+                [ None; Some FactTableRunOptions.none; Some options ]
+                "each option set reached the inner writer as it was handed over; an omitted one stayed omitted"
+
+            Expect.equal recorder.Seen [ None; None; Some ComputedRun ] "and the provenance beside it"
         }
     ]
 

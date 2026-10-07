@@ -291,6 +291,8 @@ type internal DelegateTableStore(storage: IBlobStorage) =
         sprintf "%s%010d.json" (this.StagedPrefix runId) offset
 
     member _.HeadName(tableId: string) = sprintf "%shead/%s.json" root tableId
+    /// The claim a table's open run holds (Phase 994).
+    member _.ClaimName(tableId: string) = sprintf "%sopen/%s.json" root tableId
     member _.HeadsPrefix = sprintf "%shead/" root
 
     member _.RowsName (tableId: string) (sequence: int64) =
@@ -1701,10 +1703,10 @@ type DelegateTableWriter
 
     interface IFactTableWriter with
 
-        member _.OpenRun(scopeId, tableId, ?provenance) = async {
+        member _.OpenRun(scopeId, tableId, ?provenance, ?options) = async {
             if not (isDelegated tableId) then
                 match inner with
-                | Some w -> return! w.OpenRun(scopeId, tableId, ?provenance = provenance)
+                | Some w -> return! w.OpenRun(scopeId, tableId, ?provenance = provenance, ?options = options)
                 | None ->
                     match registrations.TryGetTable tableId with
                     | None -> return Error(FactTableUndeclared tableId)
@@ -1713,37 +1715,78 @@ type DelegateTableWriter
                 match registrations.TryGetTable tableId with
                 | None -> return Error(FactTableUndeclared tableId)
                 | Some table ->
-                    match! loadHead scopeId tableId with
-                    | Error e -> return Error e
-                    | Ok head ->
-                        let run: FactTableRunRecord = {
-                            TableId = table.Id
-                            RunId = Guid.NewGuid().ToString("N")
-                            SchemaVersion = table.SchemaVersion
-                            OpenedAt = now ()
-                            BaseSequence =
-                                head.Commits
-                                |> List.tryLast
-                                |> Option.map _.Run.Watermark.Sequence
-                                |> Option.defaultValue 0L
-                            StagedRows = 0
-                            Status = FactTableRunStatus.Open
-                        }
+                    // Phase 994 — a delegated table holds ONE row image per
+                    // committed run and mints every row under the current
+                    // run, so it can neither keep an earlier slice's rows
+                    // under the run that wrote them nor name a run's inputs
+                    // on the rows it carries. It refuses run options rather
+                    // than mint evidence that would be wrong.
+                    match options with
+                    | Some o when not (FactTableRunOptions.isNone o) ->
+                        return
+                            Error(
+                                FactTableRunOptionsRefused(
+                                    table.Id,
+                                    "a delegated table does not take run inputs or a period slice; bind the table to the default writer to use them"
+                                )
+                            )
+                    | _ ->
+                        let runId = Guid.NewGuid().ToString("N")
+                        let openedAt = now ()
 
-                        // The provenance first, as the default writer keeps it:
-                        // a run whose record exists never lacks it.
                         match!
-                            FactTableRunProvenance.keep
+                            FactTableRunClaim.acquire
                                 storage
                                 scopeId
-                                (tables.ProvenanceName run.RunId)
-                                (defaultArg provenance ComputedRun)
+                                (tables.ClaimName table.Id)
+                                table
+                                openedAt
+                                (loadRun scopeId)
+                                runId
                         with
                         | Error e -> return Error e
                         | Ok() ->
-                            match! FactTableBlobIo.put storage scopeId (tables.RecordName run.RunId) run with
-                            | Error e -> return Error e
-                            | Ok() -> return Ok run
+                            let! opened = async {
+                                match! loadHead scopeId tableId with
+                                | Error e -> return Error e
+                                | Ok head ->
+                                    let run: FactTableRunRecord = {
+                                        TableId = table.Id
+                                        RunId = runId
+                                        SchemaVersion = table.SchemaVersion
+                                        OpenedAt = openedAt
+                                        BaseSequence =
+                                            head.Commits
+                                            |> List.tryLast
+                                            |> Option.map _.Run.Watermark.Sequence
+                                            |> Option.defaultValue 0L
+                                        StagedRows = 0
+                                        Status = FactTableRunStatus.Open
+                                    }
+
+                                    // The provenance first, as the default writer keeps it:
+                                    // a run whose record exists never lacks it.
+                                    match!
+                                        FactTableRunProvenance.keep
+                                            storage
+                                            scopeId
+                                            (tables.ProvenanceName run.RunId)
+                                            (defaultArg provenance ComputedRun)
+                                    with
+                                    | Error e -> return Error e
+                                    | Ok() ->
+                                        match!
+                                            FactTableBlobIo.put storage scopeId (tables.RecordName run.RunId) run
+                                        with
+                                        | Error e -> return Error e
+                                        | Ok() -> return Ok run
+                            }
+
+                            match opened with
+                            | Ok run -> return Ok run
+                            | Error e ->
+                                do! FactTableRunClaim.release storage scopeId (tables.ClaimName table.Id) runId
+                                return Error e
         }
 
         member _.WriteRows(scopeId, runId, rows) = async {

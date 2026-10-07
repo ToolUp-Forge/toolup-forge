@@ -1358,6 +1358,9 @@ let private liveTests (conn: string) =
         ()
     }
 
+    let writerFactory =
+        IFactTableWriterContract.defaultWriterOver (fun metrics clock -> store (Some metrics) clock :> IFactStore)
+
     testList "Phase 888 — PostgresFactStore (live)" [
 
         // BOTH contract packs, unmodified — the same packs BlobFactStore binds.
@@ -1372,6 +1375,14 @@ let private liveTests (conn: string) =
 
         // Migrating a blob store into the table (Phase 941).
         migrationLiveTests dataSource
+
+        // The default fact-table writer over the companion (Phase 994): the
+        // writer contract, one open run per table, run provenance, and run
+        // inputs and period slices, unmodified.
+        IFactTableWriterContract.tests "DefaultFactTableWriter over PostgresFactStore" writerFactory
+        IFactTableWriterContract.exclusivityTests "DefaultFactTableWriter over PostgresFactStore" writerFactory
+        IFactTableWriterContract.provenanceTests "DefaultFactTableWriter over PostgresFactStore" writerFactory
+        IFactTableWriterContract.runOptionsTests "DefaultFactTableWriter over PostgresFactStore" writerFactory
 
         testList "PostgresFactStore specifics" [
 

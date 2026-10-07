@@ -861,6 +861,19 @@ ToolUp.Facts.FactTableRunEvent.RunId : System.String { get }
 ToolUp.Facts.FactTableRunEvent.SchemaVersion : System.Int32 { get }
 ToolUp.Facts.FactTableRunEvent.StagedRows : System.Int32 { get }
 ToolUp.Facts.FactTableRunEvent.TableId : System.String { get }
+ToolUp.Facts.FactTableRunOptions (class)
+ToolUp.Facts.FactTableRunOptions..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent])
+ToolUp.Facts.FactTableRunOptions.Inputs : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.FactTableRunOptions.Slice : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent] { get }
+ToolUp.Facts.FactTableRunOptionsModule (class)
+ToolUp.Facts.FactTableRunOptionsModule.contains(ToolUp.Facts.TemporalExtent, System.DateTime, System.DateTime) : System.Boolean
+ToolUp.Facts.FactTableRunOptionsModule.forSlice(ToolUp.Facts.TemporalExtent, ToolUp.Facts.FactTableRunOptions) : ToolUp.Facts.FactTableRunOptions
+ToolUp.Facts.FactTableRunOptionsModule.isNone(ToolUp.Facts.FactTableRunOptions) : System.Boolean
+ToolUp.Facts.FactTableRunOptionsModule.none : ToolUp.Facts.FactTableRunOptions { get }
+ToolUp.Facts.FactTableRunOptionsModule.normalise(ToolUp.Facts.FactTableRunOptions) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactTableRunOptions, System.String]
+ToolUp.Facts.FactTableRunOptionsModule.rewrite(ToolUp.Facts.FactTableRunOptions) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactDraft, ToolUp.Facts.FactDraft]
+ToolUp.Facts.FactTableRunOptionsModule.splits(ToolUp.Facts.TemporalExtent, System.DateTime, System.DateTime) : System.Boolean
+ToolUp.Facts.FactTableRunOptionsModule.withInputs(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Facts.FactTableRunOptions) : ToolUp.Facts.FactTableRunOptions
 ToolUp.Facts.FactTableRunProvenance (class)
 ToolUp.Facts.FactTableRunProvenance.ComputedRun : ToolUp.Facts.FactTableRunProvenance { get }
 ToolUp.Facts.FactTableRunProvenance.IsComputedRun : System.Boolean { get }
@@ -898,12 +911,15 @@ ToolUp.Facts.FactTableSnapshotRow.Subject : Microsoft.FSharp.Collections.FSharpL
 ToolUp.Facts.FactTableSnapshotRow.To : System.DateTime { get }
 ToolUp.Facts.FactTableValidation (class)
 ToolUp.Facts.FactTableValidation.defects(ToolUp.Platform.Grounding.FactTableDefinition, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.SubjectDefinition], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, ToolUp.Facts.FactTableRow]]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableRowDefect]
+ToolUp.Facts.FactTableValidation.outsideSlice(ToolUp.Platform.Grounding.FactTableDefinition, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Int32, ToolUp.Facts.FactTableRow]]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableRowDefect]
 ToolUp.Facts.FactTableValidation.subjectText(ToolUp.Platform.Grounding.FactTableDefinition, ToolUp.Facts.FactTableRow) : System.String
 ToolUp.Facts.FactTableWriteError (class)
 ToolUp.Facts.FactTableWriteError.IsFactTableCommitConflict : System.Boolean { get }
 ToolUp.Facts.FactTableWriteError.IsFactTableNotBoundHere : System.Boolean { get }
 ToolUp.Facts.FactTableWriteError.IsFactTableRowsRejected : System.Boolean { get }
 ToolUp.Facts.FactTableWriteError.IsFactTableRunClosed : System.Boolean { get }
+ToolUp.Facts.FactTableWriteError.IsFactTableRunInProgress : System.Boolean { get }
+ToolUp.Facts.FactTableWriteError.IsFactTableRunOptionsRefused : System.Boolean { get }
 ToolUp.Facts.FactTableWriteError.IsFactTableRunUnknown : System.Boolean { get }
 ToolUp.Facts.FactTableWriteError.IsFactTableStorageFailure : System.Boolean { get }
 ToolUp.Facts.FactTableWriteError.IsFactTableUndeclared : System.Boolean { get }
@@ -922,6 +938,12 @@ ToolUp.Facts.FactTableWriteError+FactTableRowsRejected.runId : System.String { g
 ToolUp.Facts.FactTableWriteError+FactTableRunClosed (class)
 ToolUp.Facts.FactTableWriteError+FactTableRunClosed.runId : System.String { get }
 ToolUp.Facts.FactTableWriteError+FactTableRunClosed.status : System.String { get }
+ToolUp.Facts.FactTableWriteError+FactTableRunInProgress (class)
+ToolUp.Facts.FactTableWriteError+FactTableRunInProgress.openRunId : System.String { get }
+ToolUp.Facts.FactTableWriteError+FactTableRunInProgress.tableId : System.String { get }
+ToolUp.Facts.FactTableWriteError+FactTableRunOptionsRefused (class)
+ToolUp.Facts.FactTableWriteError+FactTableRunOptionsRefused.reason : System.String { get }
+ToolUp.Facts.FactTableWriteError+FactTableRunOptionsRefused.tableId : System.String { get }
 ToolUp.Facts.FactTableWriteError+FactTableRunUnknown (class)
 ToolUp.Facts.FactTableWriteError+FactTableRunUnknown.runId : System.String { get }
 ToolUp.Facts.FactTableWriteError+FactTableStorageFailure (class)
@@ -933,6 +955,8 @@ ToolUp.Facts.FactTableWriteError+Tags.FactTableCommitConflict : System.Int32 (li
 ToolUp.Facts.FactTableWriteError+Tags.FactTableNotBoundHere : System.Int32 (literal)
 ToolUp.Facts.FactTableWriteError+Tags.FactTableRowsRejected : System.Int32 (literal)
 ToolUp.Facts.FactTableWriteError+Tags.FactTableRunClosed : System.Int32 (literal)
+ToolUp.Facts.FactTableWriteError+Tags.FactTableRunInProgress : System.Int32 (literal)
+ToolUp.Facts.FactTableWriteError+Tags.FactTableRunOptionsRefused : System.Int32 (literal)
 ToolUp.Facts.FactTableWriteError+Tags.FactTableRunUnknown : System.Int32 (literal)
 ToolUp.Facts.FactTableWriteError+Tags.FactTableStorageFailure : System.Int32 (literal)
 ToolUp.Facts.FactTableWriteError+Tags.FactTableUndeclared : System.Int32 (literal)
@@ -1096,7 +1120,7 @@ ToolUp.Facts.IFactTableOrphanSweep.SweepOrphans(System.String) : Microsoft.FShar
 ToolUp.Facts.IFactTableWriter (interface)
 ToolUp.Facts.IFactTableWriter.Abandon(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Grounding.FactTableRunRecord, ToolUp.Facts.FactTableWriteError]]
 ToolUp.Facts.IFactTableWriter.Commit(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Grounding.FactTableCommit, ToolUp.Facts.FactTableWriteError]]
-ToolUp.Facts.IFactTableWriter.OpenRun(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactTableRunProvenance]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Grounding.FactTableRunRecord, ToolUp.Facts.FactTableWriteError]]
+ToolUp.Facts.IFactTableWriter.OpenRun(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactTableRunProvenance], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactTableRunOptions]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Grounding.FactTableRunRecord, ToolUp.Facts.FactTableWriteError]]
 ToolUp.Facts.IFactTableWriter.Runs(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableRunRecord], ToolUp.Facts.FactTableWriteError]]
 ToolUp.Facts.IFactTableWriter.Status(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Grounding.FactTableStatus, ToolUp.Facts.FactTableWriteError]]
 ToolUp.Facts.IFactTableWriter.WriteRows(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableRow]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Grounding.FactTableRunRecord, ToolUp.Facts.FactTableWriteError]]

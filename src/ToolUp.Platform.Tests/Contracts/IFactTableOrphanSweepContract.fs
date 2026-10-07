@@ -139,6 +139,10 @@ let private skuSales: FactTableDefinition = {
     Requirement = FactTableRequirement.Optional
 }
 
+/// A second table, so a run of it can stay open beside the first's (a table
+/// takes one open run per scope, Phase 994).
+let private skuStock: FactTableDefinition = { skuSales with Id = "sku-stock" }
+
 let private september: TemporalExtent = {
     From = DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
     To = DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)
@@ -175,14 +179,19 @@ let private atRest (f: FactTableOrphanSweepFixture) : Set<string> =
     |> Async.RunSynchronously
     |> Set.ofList
 
-/// Open an imported run (so it keeps a provenance) and stage `batches`.
-let private openStaged (f: FactTableOrphanSweepFixture) (batches: int list) : FactTableRunRecord =
-    let run = ok "open" (f.Writer.OpenRun(f.Scope, f.TableId, ImportedRun [ origin ]))
+/// Open an imported run of `tableId` (so it keeps a provenance) and stage
+/// `batches`.
+let private openStagedOn (f: FactTableOrphanSweepFixture) (tableId: string) (batches: int list) : FactTableRunRecord =
+    let run = ok "open" (f.Writer.OpenRun(f.Scope, tableId, ImportedRun [ origin ]))
 
     for n in batches do
         ok "write" (f.Writer.WriteRows(f.Scope, run.RunId, rows n)) |> ignore
 
     run
+
+/// Open an imported run of the fixture's table and stage `batches`.
+let private openStaged (f: FactTableOrphanSweepFixture) (batches: int list) : FactTableRunRecord =
+    openStagedOn f f.TableId batches
 
 let private sweep (f: FactTableOrphanSweepFixture) : FactTableOrphanSweepReport =
     ok "sweep" (FactTableOrphanSweep.sweep f.Writer f.Scope)
@@ -197,21 +206,25 @@ let private refusedLeftovers (f: FactTableOrphanSweepFixture) : FactTableRunReco
     f.Storage.Refusing <- true
     ok "abandon" (f.Writer.Abandon(f.Scope, run.RunId, "ended")) |> ignore
     f.Storage.Refusing <- false
-    // What the run added while open, less its record, is what an ended run
-    // must not keep. The record is the one blob still named by the run that
-    // the run ledger reads; every other blob the run added is a leftover.
+    // What the run added while open, less its record and its table's claim,
+    // is what an ended run must not keep. The record is the one blob still
+    // named by the run that the run ledger reads; the claim (Phase 994) is
+    // the table's, kept across runs and ended by the record; every other blob
+    // the run added is a leftover.
     let added = Set.difference staged before
 
-    let record =
+    let kept =
         added
         |> Set.filter (fun name ->
             match (f.Storage :> IBlobStorage).Download(f.Scope, name) |> Async.RunSynchronously with
             | Ok bytes ->
                 let text = Text.Encoding.UTF8.GetString bytes
-                text.Contains "\"StagedRows\"" && text.Contains run.RunId
+
+                (text.Contains "\"StagedRows\"" || text.Contains "\"ClaimedAt\"")
+                && text.Contains run.RunId
             | Error _ -> false)
 
-    run, Set.difference added record
+    run, Set.difference added kept
 
 /// The pack, bound once per implementation.
 let tests (name: string) (factory: FactTableOrphanSweepFactory) =
@@ -245,7 +258,7 @@ let tests (name: string) (factory: FactTableOrphanSweepFactory) =
 
         test "an open run is never touched" {
             let f = factory ()
-            let live = openStaged f [ 3 ]
+            let live = openStagedOn f skuStock.Id [ 3 ]
             let liveBlobs = atRest f
             refusedLeftovers f |> ignore
 
@@ -322,6 +335,10 @@ let private tableRegistry (destination: string) =
             FactTableRegistration.Module = "sales"
             Definition = skuSales
         }
+        {
+            FactTableRegistration.Module = "sales"
+            Definition = skuStock
+        }
     ] [ BindAllFactTables destination ]
 
 let private plant (storage: IBlobStorage) (root: string) (scope: string) (runId: string) =
@@ -364,7 +381,7 @@ let delegateWriterFactory: FactTableOrphanSweepFactory =
         let tables = tableRegistry DelegateFact.Destination
 
         let delegates =
-            match DelegateFacts.resolve tables (Some registry) [ skuSales.Id ] with
+            match DelegateFacts.resolve tables (Some registry) [ skuSales.Id; skuStock.Id ] with
             | Ok ds -> ds
             | Error e -> failtestf "resolve: %s" e
 

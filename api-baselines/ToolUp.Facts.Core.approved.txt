@@ -329,6 +329,10 @@ ToolUp.Facts.FreshnessHistogram (class)
 ToolUp.Facts.FreshnessHistogram..ctor(System.Int32, System.Int32)
 ToolUp.Facts.FreshnessHistogram.FreshCount : System.Int32 { get }
 ToolUp.Facts.FreshnessHistogram.StaleCount : System.Int32 { get }
+ToolUp.Facts.InputHash (class)
+ToolUp.Facts.InputHash.MinimumDigits : System.Int32 (literal)
+ToolUp.Facts.InputHash.isContentHash(System.String) : System.Boolean
+ToolUp.Facts.InputHash.named(ToolUp.Facts.Evidence) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Facts.MethodRef (class)
 ToolUp.Facts.MethodRef.IsComputed : System.Boolean { get }
 ToolUp.Facts.MethodRef.IsHumanAsserted : System.Boolean { get }

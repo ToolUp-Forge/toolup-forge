@@ -383,6 +383,46 @@ module Fact =
     /// D20): its valid time extends beyond its transaction time.
     let isForecast (f: Fact) : bool = f.Period.To > f.AsOf
 
+/// The self-describing form an input's content hash takes in a fact's
+/// `Evidence.InputHashes` (Phase 994): `<algorithm>:<lowercase hex>`, as in
+/// `sha256:9f04…`. A producer names the files or objects a fact was
+/// computed from in this form, so a reader can tell them apart from the
+/// bare value hashes and run tokens that share the list.
+module InputHash =
+
+    /// The fewest hex digits an input hash may carry — a 128-bit digest.
+    [<Literal>]
+    let MinimumDigits = 32
+
+    let private isAlgorithmChar (c: char) =
+        (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
+
+    let private isHexChar (c: char) =
+        (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')
+
+    /// Whether `value` is in the `<algorithm>:<lowercase hex>` form: a
+    /// non-empty lowercase alphanumeric algorithm name, one colon, and an
+    /// even number of lowercase hex digits, at least `MinimumDigits`.
+    let isContentHash (value: string) : bool =
+        if isNull value then
+            false
+        else
+            match value.IndexOf ':' with
+            | colon when colon > 0 ->
+                let algorithm = value.Substring(0, colon)
+                let digest = value.Substring(colon + 1)
+
+                algorithm |> Seq.forall isAlgorithmChar
+                && digest.Length >= MinimumDigits
+                && digest.Length % 2 = 0
+                && digest |> Seq.forall isHexChar
+            | _ -> false
+
+    /// The inputs a fact's evidence names: its input hashes in the content
+    /// hash form, in the order the evidence lists them.
+    let named (evidence: Evidence) : string list =
+        evidence.InputHashes |> List.filter isContentHash
+
 /// Derived freshness of a fact — never a stored mutable flag (law L1 /
 /// plan D2). `Stale` carries the instant the fact went stale (its `AsOf`
 /// plus the freshness window) so a caller can render "as of / stale

@@ -153,6 +153,24 @@ let private registeredTests =
         IFactTableWriterContract.decoratorTests
             "DelegateTableWriter, for a table it does not hold"
             IFactTableWriterContract.delegatePassThrough
+        // Phase 994 - one open run per table over every implementer; run inputs
+        // and period slices over every writer that takes them, and refused by
+        // the delegate writer, which does not.
+        IFactTableWriterContract.exclusivityTests "DefaultFactTableWriter" IFactTableWriterContract.defaultWriterFactory
+        IFactTableWriterContract.exclusivityTests "DelegateTableWriter" IFactTableWriterContract.delegateWriterFactory
+        IFactTableWriterContract.exclusivityTests
+            "notifying decorator over DefaultFactTableWriter"
+            IFactTableWriterContract.notifyingWriterFactory
+        IFactTableWriterContract.exclusivityTests
+            "notifying decorator over DelegateTableWriter"
+            IFactTableWriterContract.notifyingDelegateWriterFactory
+        IFactTableWriterContract.runOptionsTests "DefaultFactTableWriter" IFactTableWriterContract.defaultWriterFactory
+        IFactTableWriterContract.runOptionsTests
+            "notifying decorator over DefaultFactTableWriter"
+            IFactTableWriterContract.notifyingWriterFactory
+        IFactTableWriterContract.runOptionsRefusedTests
+            "DelegateTableWriter"
+            IFactTableWriterContract.delegateWriterFactory
         // Phase 977 - the orphan sweep contract pack over every implementer.
         IFactTableOrphanSweepContract.tests "DefaultFactTableWriter" IFactTableOrphanSweepContract.defaultWriterFactory
         IFactTableOrphanSweepContract.tests "DelegateTableWriter" IFactTableOrphanSweepContract.delegateWriterFactory
