@@ -267,6 +267,17 @@
       the scope the run carries rather than the definition's principal, so
       a team's own key funds that team's reports. Migration recipe:
       `docs/migrations/995-grounded-run-provider-scope.md`.
+
+      Phase 994 rides the same draft slot. `IFactTableWriter.OpenRun` gains
+      an optional `FactTableRunOptions` argument (the inputs a run was
+      computed from, and the period slice it replaces), and
+      `FactTableWriteError` gains two cases (`FactTableRunInProgress`: a
+      table takes one open run per scope; `FactTableRunOptionsRefused`).
+      Breaking for IMPLEMENTORS and decorators of the writer, and for an
+      exhaustive `match` over the error union; additive for callers.
+      `InputHash` (`ToolUp.Facts.Core`) and `FactTableRunOptions`
+      (`ToolUp.Facts.Server`) are new. Migration recipe:
+      `docs/migrations/994-fact-run-inputs-and-periods.md`.
     -->
     <Version>0.25.0</Version>
     <!--
