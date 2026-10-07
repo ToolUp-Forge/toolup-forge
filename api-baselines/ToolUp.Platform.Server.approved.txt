@@ -5107,6 +5107,7 @@ ToolUp.Platform.GroundedNarrativeOutcome (class)
 ToolUp.Platform.GroundedNarrativeOutcome.IsGroundedNarrativeFailed : System.Boolean { get }
 ToolUp.Platform.GroundedNarrativeOutcome.IsGroundedNarrativePublished : System.Boolean { get }
 ToolUp.Platform.GroundedNarrativeOutcome.IsGroundedNarrativeRefused : System.Boolean { get }
+ToolUp.Platform.GroundedNarrativeOutcome.IsGroundedNarrativeUnfunded : System.Boolean { get }
 ToolUp.Platform.GroundedNarrativeOutcome.Tag : System.Int32 { get }
 ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeFailed (class)
 ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeFailed.reason : System.String { get }
@@ -5118,10 +5119,13 @@ ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativePublished.indexed : Mi
 ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativePublished.narrativeId : System.Guid { get }
 ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeRefused (class)
 ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeRefused.offences : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.GroundingOffence] { get }
+ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeUnfunded (class)
+ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeUnfunded.reason : System.String { get }
 ToolUp.Platform.GroundedNarrativeOutcome+Tags (class)
 ToolUp.Platform.GroundedNarrativeOutcome+Tags.GroundedNarrativeFailed : System.Int32 (literal)
 ToolUp.Platform.GroundedNarrativeOutcome+Tags.GroundedNarrativePublished : System.Int32 (literal)
 ToolUp.Platform.GroundedNarrativeOutcome+Tags.GroundedNarrativeRefused : System.Int32 (literal)
+ToolUp.Platform.GroundedNarrativeOutcome+Tags.GroundedNarrativeUnfunded : System.Int32 (literal)
 ToolUp.Platform.GroundedNarrativeOutcomeModule (class)
 ToolUp.Platform.GroundedNarrativeOutcomeModule.describe(ToolUp.Platform.GroundedNarrativeOutcome) : System.String
 ToolUp.Platform.GroundedNarrativeRegistry (class)

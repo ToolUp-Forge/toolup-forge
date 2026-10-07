@@ -487,6 +487,7 @@ ToolUp.Platform.AccessContextModule.claim(ToolUp.Platform.AccessContext) : Micro
 ToolUp.Platform.AccessContextModule.configScope(ToolUp.Platform.AccessContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.StorageScope]
 ToolUp.Platform.AccessContextModule.exposureOf(System.String, ToolUp.Platform.AccessContext) : ToolUp.Platform.ModuleExposure
 ToolUp.Platform.AccessContextModule.flagScope(ToolUp.Platform.AccessContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.FlagScope]
+ToolUp.Platform.AccessContextModule.forConfigScope(System.String, ToolUp.Platform.StorageScope) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AccessContext]
 ToolUp.Platform.AccessContextModule.hasPermission(System.String, ToolUp.Platform.ModulePermission, ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.inTeamScope(ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.isAnonymous(ToolUp.Platform.AccessContext) : System.Boolean

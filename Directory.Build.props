@@ -251,7 +251,24 @@
       already past `v0.22.0` and unpublished. Migration recipe:
       `docs/migrations/797-scope-choke-point.md`.
     -->
-    <Version>0.24.1</Version>
+    <!--
+      0.25.0 (draft) - MINOR. Phase 995 adds a case to the
+      `GroundedNarrativeOutcome` union (`GroundedNarrativeUnfunded`): a
+      grounded narrative run whose scope holds no AI provider the funding
+      policy allows is now a typed, permanent outcome rather than a
+      `GroundedNarrativeFailed` the data-arrival trigger retried. A DU case
+      addition breaks every exhaustive `match` over the union in consumer
+      code, which is Phase 739's class, so the slot advances: `v0.24.1` is
+      tagged and released, and a released version names one contract.
+
+      The same phase adds `AccessContext.forConfigScope` to
+      `ToolUp.Platform.Core` (additive), and changes what a run's
+      `GroundedNarrativeRequest.Access = None` resolves the provider under:
+      the scope the run carries rather than the definition's principal, so
+      a team's own key funds that team's reports. Migration recipe:
+      `docs/migrations/995-grounded-run-provider-scope.md`.
+    -->
+    <Version>0.25.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
       DLL. Non-publishable projects (App composition roots, modules,

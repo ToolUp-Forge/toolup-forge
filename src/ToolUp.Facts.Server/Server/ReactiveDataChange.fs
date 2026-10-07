@@ -564,6 +564,11 @@ module GroundedNarrativeTrigger =
                             // outage, unparseable model output) may not recur.
                             | GroundedNarrativeFailed _ ->
                                 return TransientFailure(GroundedNarrativeOutcome.describe outcome)
+                            // A scope with no usable AI key (Phase 995) has
+                            // none on the next attempt either: retrying would
+                            // spend the backoff and publish nothing.
+                            | GroundedNarrativeUnfunded _ ->
+                                return PermanentFailure(GroundedNarrativeOutcome.describe outcome)
             }
 
     /// Register the job handler with the composed scheduler at startup —

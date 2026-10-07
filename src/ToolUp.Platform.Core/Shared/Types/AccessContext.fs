@@ -246,6 +246,28 @@ module AccessContext =
             }
         | AnonymousSession _ -> None
 
+    /// Phase 995 — the inverse of `configScope`: the access context whose
+    /// `configScope` is exactly `scope`, for work that holds a scope but no
+    /// signed-in principal (a scheduled job, a background run). The
+    /// container prefix carries the subject kind — `configScope` mints
+    /// `team-{id}` and `user-{id}` — so the round trip is exact for both:
+    /// a team scope becomes `TeamMember(memberId, scope.ScopeId)`, a user
+    /// scope `AuthenticatedUser scope.ScopeId`. `memberId` names the actor
+    /// working inside a team scope; nothing on the config path reads it
+    /// for authority (`configScope` keys a `TeamMember` on the team id
+    /// alone). Any other container — a share-token claim's scope, whose
+    /// subject carries a whole claim a `StorageScope` cannot reconstruct,
+    /// or a session — is `None`: guessing a subject would read a DIFFERENT
+    /// scope's configuration and secrets. The context is unrestricted:
+    /// it carries the scope's identity, not any user's module authority.
+    let forConfigScope (memberId: string) (scope: StorageScope) : AccessContext option =
+        if scope.Container = $"team-{scope.ScopeId}" then
+            Some(unrestricted (TeamMember(memberId, scope.ScopeId)))
+        elif scope.Container = $"user-{scope.ScopeId}" then
+            Some(unrestricted (AuthenticatedUser scope.ScopeId))
+        else
+            None
+
     /// Resolve the `FlagScope` the caller writes feature-flag overrides
     /// at. Mirrors `configScope` but targets the flag store's DU-typed
     /// scope (rather than a blob `StorageScope`):
