@@ -1588,6 +1588,7 @@ let private fromEnvTests =
                                 AllowedTenants = []
                                 RequiredRoles = []
                                 ApiRoleGrants = Set.empty
+                                PublicationReaders = []
                             })
                             "both variables reach AuthConfig.ClaimMapping")
 
@@ -1612,6 +1613,7 @@ let private fromEnvTests =
                                 AllowedTenants = []
                                 RequiredRoles = []
                                 ApiRoleGrants = Set.empty
+                                PublicationReaders = []
                             })
                             "a UserId-only mapping is a legitimate configuration")
 
@@ -1654,6 +1656,7 @@ let private fromEnvTests =
                                 AllowedTenants = []
                                 RequiredRoles = []
                                 ApiRoleGrants = Set.empty
+                                PublicationReaders = []
                             })
                             "surrounding whitespace in an env value never reaches the claim lookup")
         ]
@@ -1839,6 +1842,7 @@ module private ClaimMappingFixture =
         TenantId = Some "inner-tenant"
         Roles = []
         DirectoryRoles = []
+        Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
     }
 
     /// The Entra mapping, expressed as a `ClaimMapping`. This IS the
@@ -1853,6 +1857,7 @@ module private ClaimMappingFixture =
         AllowedTenants = []
         RequiredRoles = []
         ApiRoleGrants = Set.empty
+        PublicationReaders = []
     }
 
     let seamMapped (mapping: ClaimMapping) (claims: (string * string) list) =
@@ -1964,6 +1969,7 @@ let private oidcClaimMappingTests =
                         AllowedTenants = []
                         RequiredRoles = []
                         ApiRoleGrants = Set.empty
+                        PublicationReaders = []
                     })
 
             let token =
@@ -2002,6 +2008,7 @@ let private oidcClaimMappingTests =
                         AllowedTenants = []
                         RequiredRoles = []
                         ApiRoleGrants = Set.empty
+                        PublicationReaders = []
                     })
 
             let token = OidcFixture.mintRs256 key [ "sub", box "alice"; "exp", futureExp () ]
@@ -2033,6 +2040,7 @@ let private oidcClaimMappingTests =
                         AllowedTenants = []
                         RequiredRoles = []
                         ApiRoleGrants = Set.empty
+                        PublicationReaders = []
                     })
 
             let token = OidcFixture.mintRs256 key [ "sub", box "alice"; "exp", futureExp () ]
@@ -2070,6 +2078,7 @@ let private oidcClaimMappingTests =
                         AllowedTenants = []
                         RequiredRoles = []
                         ApiRoleGrants = Set.empty
+                        PublicationReaders = []
                     })
 
             let token = OidcFixture.mintRs256 key [ "sub", box "alice"; "exp", futureExp () ]
@@ -2091,6 +2100,7 @@ let private oidcClaimMappingTests =
                 AllowedTenants = []
                 RequiredRoles = []
                 ApiRoleGrants = Set.empty
+                PublicationReaders = []
             }
 
             let cases = [
@@ -2129,6 +2139,7 @@ let private oidcClaimMappingTests =
                         AllowedTenants = []
                         RequiredRoles = []
                         ApiRoleGrants = Set.empty
+                        PublicationReaders = []
                     }
                     [ "oid", "" ]
             with
@@ -2159,6 +2170,7 @@ let private oidcClaimMappingTests =
                             AllowedTenants = []
                             RequiredRoles = []
                             ApiRoleGrants = Set.empty
+                            PublicationReaders = []
                         }
                         [ "oid", value ]
                 with
@@ -2182,6 +2194,7 @@ let private oidcClaimMappingTests =
                             AllowedTenants = []
                             RequiredRoles = []
                             ApiRoleGrants = Set.empty
+                            PublicationReaders = []
                         }
                         [ "oid", value; "tid", value ]
                 with
@@ -2280,6 +2293,7 @@ let private oidcClaimMappingTests =
                             AllowedTenants = []
                             RequiredRoles = []
                             ApiRoleGrants = Set.empty
+                            PublicationReaders = []
                         }
                         claims
                 with
@@ -2309,6 +2323,7 @@ let private oidcClaimMappingTests =
                             AllowedTenants = []
                             RequiredRoles = []
                             ApiRoleGrants = Set.empty
+                            PublicationReaders = []
                         }
                         [ "oid", value ]
                 with

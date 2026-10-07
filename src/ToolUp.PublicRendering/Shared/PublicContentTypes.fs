@@ -50,6 +50,25 @@ module PublishStatus =
         | Published -> "published"
         | Archived -> "archived"
 
+/// Phase 996 — a publication audience: named readers OUTSIDE the app read
+/// one publishing scope's published content, and nothing else.
+///
+/// - `Readers` — directory roles (the identity provider's role or group
+///   claims after the deployment's `ClaimMapping.GroupAliases`, so a page
+///   names a group by its alias and the group's object id stays in
+///   configuration). A principal holding any of them (`AccessContext.
+///   TokenRoles`) is admitted; nothing else admits — not team membership,
+///   not module permissions, not the platform-admin role. Empty admits
+///   nobody.
+/// - `PublishingScope` — the storage scope whose content the page reads
+///   (a team's scope id, say). Fixed per page, or bound by the route: a
+///   page producer that captures the scope from the slug sets it when it
+///   resolves the page. Blank admits nobody.
+type PublicationAudience = {
+    Readers: string list
+    PublishingScope: string
+}
+
 /// Phase 86 — visibility audience of a page: who may see it once it is
 /// `Published`. `Public` (the default, GP 11) is served to anonymous
 /// requests exactly as pre-86; the other cases gate the page behind the
@@ -74,6 +93,12 @@ type PageAudience =
     /// matches `relationship` — the client-portal case (a page for client
     /// X is visible only to X). A non-matching principal → 403.
     | ClientGated of relationship: string
+    /// Phase 996 — readers who are not app users read the publishing
+    /// scope's content (see `PublicationAudience`). Anonymous → 401; a
+    /// principal holding none of the readers → 403, app members and
+    /// platform admins included. The ONLY gated audience a publication
+    /// reader (`PrincipalAdmission.PublicationReader`) may be served.
+    | Publication of PublicationAudience
 
 module PageAudience =
     /// Wire-stable token (admin filters, frontmatter round-trip).
@@ -83,6 +108,7 @@ module PageAudience =
         | PageAudience.Authenticated -> "authenticated"
         | PageAudience.ScopeGated _ -> "scope"
         | PageAudience.ClientGated _ -> "client"
+        | PageAudience.Publication _ -> "publication"
 
     /// Parse an `audience:` frontmatter value. Recognised forms
     /// (case-insensitive on the prefix; values trimmed):
@@ -90,6 +116,12 @@ module PageAudience =
     ///   - `"authenticated"`            → `Authenticated`
     ///   - `"scope:editor,admin"`       → `ScopeGated ["editor"; "admin"]`
     ///   - `"client:acme"`              → `ClientGated "acme"`
+    ///   - `"publication:team-a:readers,board"` →
+    ///     `Publication { PublishingScope = "team-a"; Readers = ["readers"; "board"] }`
+    ///     (the scope up to the first `:`, then the comma-separated readers).
+    ///     A `publication:` value missing its scope or its readers is a
+    ///     publication NOBODY may read — fail-closed, unlike the fail-open
+    ///     rule below, because the author has asked to restrict the page.
     /// Anything unrecognised → `Public` (fail-open to the pre-86 default
     /// per GP 11 — a typo'd `audience:` never silently hides a page; an
     /// operator hiding a page uses `status:` or an explicit recognised
@@ -113,6 +145,24 @@ module PageAudience =
                 |> PageAudience.ScopeGated
             elif lower.StartsWith "client:" then
                 PageAudience.ClientGated(v.Substring(7).Trim())
+            elif lower.StartsWith "publication:" then
+                let rest = v.Substring(12)
+
+                match rest.IndexOf ':' with
+                | -1 ->
+                    PageAudience.Publication {
+                        Readers = []
+                        PublishingScope = rest.Trim()
+                    }
+                | i ->
+                    PageAudience.Publication {
+                        PublishingScope = rest.Substring(0, i).Trim()
+                        Readers =
+                            rest.Substring(i + 1).Split(',')
+                            |> Array.map (fun s -> s.Trim())
+                            |> Array.filter (fun s -> s <> "")
+                            |> Array.toList
+                    }
             else
                 PageAudience.Public
 

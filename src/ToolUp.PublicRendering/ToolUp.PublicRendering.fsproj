@@ -45,6 +45,7 @@
         <Compile Include="Server\RenderCacheImpl.fs" />
         <!-- Phase 86 — page-audience authorization decision (gated SSR). -->
         <Compile Include="Server\AudienceGate.fs" />
+        <Compile Include="Server\PublicationReads.fs" />
         <!-- Phase 91 — RAG-backed cited answer pages (content source over
              IRetrievalPipeline; extractive + grounded, StrictlyGrounded
              refusal, optional synthesis hook). -->

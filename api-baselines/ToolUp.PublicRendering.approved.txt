@@ -523,17 +523,21 @@ ToolUp.PublicRendering.PageAudience.Authenticated : ToolUp.PublicRendering.PageA
 ToolUp.PublicRendering.PageAudience.IsAuthenticated : System.Boolean { get }
 ToolUp.PublicRendering.PageAudience.IsClientGated : System.Boolean { get }
 ToolUp.PublicRendering.PageAudience.IsPublic : System.Boolean { get }
+ToolUp.PublicRendering.PageAudience.IsPublication : System.Boolean { get }
 ToolUp.PublicRendering.PageAudience.IsScopeGated : System.Boolean { get }
 ToolUp.PublicRendering.PageAudience.Public : ToolUp.PublicRendering.PageAudience { get }
 ToolUp.PublicRendering.PageAudience.Tag : System.Int32 { get }
 ToolUp.PublicRendering.PageAudience+ClientGated (class)
 ToolUp.PublicRendering.PageAudience+ClientGated.relationship : System.String { get }
+ToolUp.PublicRendering.PageAudience+Publication (class)
+ToolUp.PublicRendering.PageAudience+Publication.Item : ToolUp.PublicRendering.PublicationAudience { get }
 ToolUp.PublicRendering.PageAudience+ScopeGated (class)
 ToolUp.PublicRendering.PageAudience+ScopeGated.roles : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.PublicRendering.PageAudience+Tags (class)
 ToolUp.PublicRendering.PageAudience+Tags.Authenticated : System.Int32 (literal)
 ToolUp.PublicRendering.PageAudience+Tags.ClientGated : System.Int32 (literal)
 ToolUp.PublicRendering.PageAudience+Tags.Public : System.Int32 (literal)
+ToolUp.PublicRendering.PageAudience+Tags.Publication : System.Int32 (literal)
 ToolUp.PublicRendering.PageAudience+Tags.ScopeGated : System.Int32 (literal)
 ToolUp.PublicRendering.PageAudienceModule (class)
 ToolUp.PublicRendering.PageAudienceModule.parse(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : ToolUp.PublicRendering.PageAudience
@@ -750,6 +754,50 @@ ToolUp.PublicRendering.PublicSiteDef.Hosts : Microsoft.FSharp.Collections.FSharp
 ToolUp.PublicRendering.PublicSiteDef.Layouts : Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.PublicRendering.LayoutName, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.PublicRendering.PublicPage, Giraffe.ViewEngine.HtmlElements+XmlNode]] { get }
 ToolUp.PublicRendering.PublicSiteDef.Name : System.String { get }
 ToolUp.PublicRendering.PublicSiteDef.Redirects : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.Redirect] { get }
+ToolUp.PublicRendering.PublicationAudience (class)
+ToolUp.PublicRendering.PublicationAudience..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String)
+ToolUp.PublicRendering.PublicationAudience.PublishingScope : System.String { get }
+ToolUp.PublicRendering.PublicationAudience.Readers : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.PublicRendering.PublicationAudit (class)
+ToolUp.PublicRendering.PublicationAudit.NarrativeReadType : System.String (literal)
+ToolUp.PublicRendering.PublicationAudit.RefusedType : System.String (literal)
+ToolUp.PublicRendering.PublicationAudit.ServedType : System.String (literal)
+ToolUp.PublicRendering.PublicationAudit.SourceModule : System.String (literal)
+ToolUp.PublicRendering.PublicationAudit.WithheldType : System.String (literal)
+ToolUp.PublicRendering.PublicationAudit.concerns(ToolUp.Platform.AccessContext, ToolUp.PublicRendering.PageAudience) : System.Boolean
+ToolUp.PublicRendering.PublicationAudit.eventsIn(System.IServiceProvider) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore]
+ToolUp.PublicRendering.PublicationAudit.pageRow(ToolUp.Platform.AccessContext, System.String, ToolUp.PublicRendering.PageAudience, ToolUp.PublicRendering.AudienceDecision) : ToolUp.PublicRendering.PublicationAuditRow
+ToolUp.PublicRendering.PublicationAudit.record(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], ToolUp.PublicRendering.PublicationAuditRow) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
+ToolUp.PublicRendering.PublicationAuditRow (class)
+ToolUp.PublicRendering.PublicationAuditRow..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.PublicRendering.PublicationAuditRow.Detail : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.PublicRendering.PublicationAuditRow.NarrativeId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.PublicRendering.PublicationAuditRow.Outcome : System.String { get }
+ToolUp.PublicRendering.PublicationAuditRow.PublishingScope : System.String { get }
+ToolUp.PublicRendering.PublicationAuditRow.ReaderId : System.String { get }
+ToolUp.PublicRendering.PublicationAuditRow.Slug : System.String { get }
+ToolUp.PublicRendering.PublicationNarrative (class)
+ToolUp.PublicRendering.PublicationNarrative.IsNothingPublished : System.Boolean { get }
+ToolUp.PublicRendering.PublicationNarrative.IsRefused : System.Boolean { get }
+ToolUp.PublicRendering.PublicationNarrative.IsServed : System.Boolean { get }
+ToolUp.PublicRendering.PublicationNarrative.IsWithheld : System.Boolean { get }
+ToolUp.PublicRendering.PublicationNarrative.NothingPublished : ToolUp.PublicRendering.PublicationNarrative { get }
+ToolUp.PublicRendering.PublicationNarrative.Tag : System.Int32 { get }
+ToolUp.PublicRendering.PublicationNarrative+Refused (class)
+ToolUp.PublicRendering.PublicationNarrative+Refused.Item : ToolUp.PublicRendering.AudienceDecision { get }
+ToolUp.PublicRendering.PublicationNarrative+Served (class)
+ToolUp.PublicRendering.PublicationNarrative+Served.document : ToolUp.Platform.Narrative.NarrativeDocument { get }
+ToolUp.PublicRendering.PublicationNarrative+Served.id : System.Guid { get }
+ToolUp.PublicRendering.PublicationNarrative+Tags (class)
+ToolUp.PublicRendering.PublicationNarrative+Tags.NothingPublished : System.Int32 (literal)
+ToolUp.PublicRendering.PublicationNarrative+Tags.Refused : System.Int32 (literal)
+ToolUp.PublicRendering.PublicationNarrative+Tags.Served : System.Int32 (literal)
+ToolUp.PublicRendering.PublicationNarrative+Tags.Withheld : System.Int32 (literal)
+ToolUp.PublicRendering.PublicationNarrative+Withheld (class)
+ToolUp.PublicRendering.PublicationNarrative+Withheld.denied : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.PublicRendering.PublicationRead (class)
+ToolUp.PublicRendering.PublicationRead.latestNarrative(ToolUp.Platform.INarrativeStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], ToolUp.PublicRendering.PublicationAudience, System.String, System.String, ToolUp.Platform.AccessContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.PublicRendering.PublicationNarrative]
+ToolUp.PublicRendering.PublicationRead.latestNarrativeIn(System.IServiceProvider, ToolUp.PublicRendering.PublicationAudience, System.String, System.String, ToolUp.Platform.AccessContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.PublicRendering.PublicationNarrative]
 ToolUp.PublicRendering.PublishStatus (class)
 ToolUp.PublicRendering.PublishStatus.Archived : ToolUp.PublicRendering.PublishStatus { get }
 ToolUp.PublicRendering.PublishStatus.Draft : ToolUp.PublicRendering.PublishStatus { get }

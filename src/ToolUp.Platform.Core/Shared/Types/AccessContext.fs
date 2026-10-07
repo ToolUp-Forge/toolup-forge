@@ -66,6 +66,13 @@ type AccessContext = {
     /// `canAccessModule` / `hasPermission`: module RBAC stays SDK-owned, so
     /// a directory role grants page access, never module permissions.
     TokenRoles: string list
+    /// Phase 996 — how the deployment admitted the principal
+    /// (`AuthenticatedUser.Admission`). `Member` for every principal unless
+    /// the deployment maps a publication audience and admitted this one as a
+    /// `PublicationReader`, which confines it to the `Publication` pages whose
+    /// readers it holds. Carried for `AuthenticatedUser` and `TeamMember`
+    /// subjects only (`admissionFor`); `Member` for every other subject.
+    Admission: ToolUp.Platform.Auth.PrincipalAdmission
 }
 
 module AccessContext =
@@ -103,6 +110,7 @@ module AccessContext =
         ModuleExposure = Map.empty
         PlatformRole = None
         TokenRoles = []
+        Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
     }
 
     /// Phase 987 — the `TokenRoles` a context for `subject` carries, given
@@ -112,6 +120,26 @@ module AccessContext =
     /// (`AuthenticatedUser` / `TeamMember`); none for an anonymous session
     /// or a share-token bearer, whose identity no provider asserted. The
     /// one rule every context builder applies.
+    /// Phase 996 — the `Admission` a context for `subject` carries, given
+    /// the admission its identity provider decided: that admission for a
+    /// signed-in human principal (`AuthenticatedUser` / `TeamMember`);
+    /// `Member` for an anonymous session or a share-token bearer, whose
+    /// identity no provider asserted (the same rule as `tokenRolesFor`).
+    let admissionFor
+        (subject: Subject)
+        (providerAdmission: ToolUp.Platform.Auth.PrincipalAdmission)
+        : ToolUp.Platform.Auth.PrincipalAdmission =
+        match subject with
+        | Subject.AuthenticatedUser _
+        | Subject.TeamMember _ -> providerAdmission
+        | _ -> ToolUp.Platform.Auth.PrincipalAdmission.Member
+
+    /// Phase 996 — `true` when the principal was admitted as a publication
+    /// reader only: it is not an app user, and only `Publication` pages whose
+    /// readers it holds may serve it.
+    let isPublicationReader (ctx: AccessContext) : bool =
+        ctx.Admission = ToolUp.Platform.Auth.PrincipalAdmission.PublicationReader
+
     let tokenRolesFor (subject: Subject) (providerRoles: string list) : string list =
         match subject with
         | Subject.AuthenticatedUser _

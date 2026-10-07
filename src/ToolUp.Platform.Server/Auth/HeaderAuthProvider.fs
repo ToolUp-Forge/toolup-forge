@@ -30,6 +30,7 @@ let private extractUser (httpCtx: HttpContext) =
         TenantId = None
         Roles = []
         DirectoryRoles = []
+        Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
     }
 
 /// Authentication provider that extracts user identity from a request header.

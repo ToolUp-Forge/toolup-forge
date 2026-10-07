@@ -728,6 +728,36 @@ section eliminates structurally.
 > `docs/migrations/282-companion-capability.md` ·
 > `docs/migrations/300-composition-capability-sandbox.md`
 
+> **AZ-11 — A publication reader is confined to the publications whose readers
+> it holds; it is never an app user.**
+> *Enablement:* Opt-in (`ClaimMapping.PublicationReaders`); with it empty no
+> principal is ever a publication reader. The OIDC provider refuses to build
+> over a non-empty `PublicationReaders` with an empty `RequiredRoles`, because
+> without a member rule no reader could be told apart from a member.
+> A principal the member rule (`RequiredRoles`) refuses but a
+> publication-reader role admits is admitted as a `PublicationReader`. Surface
+> enforcement refuses it `403 publication_reader_not_admitted` on every `/api`
+> route that does not admit anonymous callers (the API, the assistant, module
+> routes, team management); the page gate refuses it every page audience but
+> `Public` and the `Publication` pages naming one of its roles; search refuses
+> it; its sign-in consumes no pending team invite. A `Publication` page admits
+> its named readers and nobody else, with no bypass for app members or platform
+> administrators, and reads the publishing scope's content on the reader's
+> behalf without handing the reader that scope. Every publication page
+> decision, and every page decision for a reader, is audited with the reader,
+> the publishing scope and the page; the narrative read re-checks disclosure at
+> the narrative-publication surface and withholds a narrative citing a fact
+> that is no longer disclosable.
+> **Evidence:** `src/ToolUp.Platform.Core/Shared/Interfaces/IAuthProvider.fs`
+> (`PrincipalAdmission`) · `src/ToolUp.Platform.Core/Shared/Types/AuthConfig.fs`
+> (`ClaimMapping.PublicationReaders`, `validatePublicationReaders`) ·
+> `src/AuthProviders/Oidc/OidcAuthProvider.fs` (`applyAdmission`, the build
+> refusal) · `src/ToolUp.Platform.Server/Server/SurfaceEnforcementMiddleware.fs`
+> (`evaluateAdmitted`) · `src/ToolUp.PublicRendering/Server/AudienceGate.fs` ·
+> `src/ToolUp.PublicRendering/Server/PublicationReads.fs` ·
+> `src/ToolUp.Platform.Tests/InProcess/GatedSsrTests.fs` (§7) ·
+> `docs/migrations/996-publication-audience.md` (Phase 996)
+
 ---
 
 ## 4. Encryption
@@ -1516,6 +1546,15 @@ Stated plainly so a reviewer does not have to discover them:
   library loaded through a companion and the rest of the application. A defect in
   that library is a defect in the deployment, and no digest changes that.
   ([SC-3](#9-supply-chain))
+- **Without a member rule, every principal the identity provider admits is an
+  app user.** A signed-in principal that belongs to no team resolves to an
+  individual-user subject, which the strict default route requirement
+  (`userOrTeam`) admits — so it reaches every `/api` route that declares nothing
+  narrower, team creation's route included (where the team-creation policy is
+  then the only refusal). Restricting an issuer that serves more people than the
+  application's users therefore needs `ClaimMapping.RequiredRoles`; a
+  publication audience requires it. ([AZ-11](#3-authorisation);
+  `src/ToolUp.Platform.Tests/InProcess/GatedSsrTests.fs`, "recorded posture")
 - **The SDK is pre-1.0.** A minor version bump may carry a breaking change and
   may therefore change a rule. See
   [Ruleset versioning](README.md#ruleset-versioning).

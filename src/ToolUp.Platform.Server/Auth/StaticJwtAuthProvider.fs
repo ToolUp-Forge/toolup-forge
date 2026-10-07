@@ -163,6 +163,7 @@ let private validateToken (config: StaticJwtConfig) (token: string) : Result<Aut
             TenantId = None
             Roles = []
             DirectoryRoles = []
+            Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
         }
     }
 

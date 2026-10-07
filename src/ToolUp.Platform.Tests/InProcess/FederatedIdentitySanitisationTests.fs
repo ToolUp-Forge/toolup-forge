@@ -114,6 +114,7 @@ let private innerUser: AuthenticatedUser = {
     TenantId = Some "inner-tenant"
     Roles = []
     DirectoryRoles = []
+    Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
 }
 
 /// An Entra id token carrying the given claims, in the shape the
@@ -163,6 +164,7 @@ let private claimBoundaryAccepts (claimName: string) (id: string) =
                 AllowedTenants = []
                 RequiredRoles = []
                 ApiRoleGrants = Set.empty
+                PublicationReaders = []
             }
         else
             {
@@ -174,6 +176,7 @@ let private claimBoundaryAccepts (claimName: string) (id: string) =
                 AllowedTenants = []
                 RequiredRoles = []
                 ApiRoleGrants = Set.empty
+                PublicationReaders = []
             }
 
     match claimMapped mapping [ claimName, id ] with
@@ -324,6 +327,7 @@ let parityTests =
                                 AllowedTenants = []
                                 RequiredRoles = []
                                 ApiRoleGrants = Set.empty
+                                PublicationReaders = []
                             }
                             [ "oid", id ]
                     with
@@ -453,6 +457,7 @@ let negativeControlTests =
                 AllowedTenants = []
                 RequiredRoles = []
                 ApiRoleGrants = Set.empty
+                PublicationReaders = []
             }
 
             match claimMapped mapping [ "oid", "entra-object-id"; "tid", "entra-tenant" ] with
@@ -518,6 +523,7 @@ let boundaryDetailTests =
                         AllowedTenants = []
                         RequiredRoles = []
                         ApiRoleGrants = Set.empty
+                        PublicationReaders = []
                     }
                     [ "oid", "../../etc"; "sub", "well-formed-subject" ]
             with
@@ -543,6 +549,7 @@ let boundaryDetailTests =
                         AllowedTenants = []
                         RequiredRoles = []
                         ApiRoleGrants = Set.empty
+                        PublicationReaders = []
                     }
                     [ "oid", "user-1" ]
             with

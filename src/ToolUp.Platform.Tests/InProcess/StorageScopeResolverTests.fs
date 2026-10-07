@@ -26,6 +26,7 @@ let private alice: AuthenticatedUser = {
     TenantId = None
     Roles = []
     DirectoryRoles = []
+    Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
 }
 
 let private freshStorage () =

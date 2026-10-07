@@ -146,6 +146,7 @@ let private authenticatedContext () = async {
         TenantId = None
         Roles = []
         DirectoryRoles = []
+        Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
     }
 
     ctx.Items["ToolUp.User"] <- box user
@@ -168,6 +169,7 @@ let private platformAdminContext () = async {
         TenantId = None
         Roles = []
         DirectoryRoles = []
+        Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
     }
 
     ctx.Items["ToolUp.User"] <- box user

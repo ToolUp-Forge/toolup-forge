@@ -442,7 +442,8 @@ let private pipelinePages =
 /// Team data: `team-a` has members `carol` (holds `editor`), `dave` (holds
 /// only `viewer`) and `erin` (no permissions configured at all). `alice`
 /// and `bob` belong to no team.
-let private startHostWith
+let private startHostWithApi
+    (api: IPublicContentApi)
     (surfaces: SurfaceProfile list)
     (auth: IAuthProvider)
     (configure: IServiceCollection -> unit)
@@ -474,8 +475,6 @@ let private startHostWith
             let! _ = permissionStore.SetMemberPermissions("team-a", "carol", "editor", [ ModulePermission.Read ])
             let! _ = permissionStore.SetMemberPermissions("team-a", "dave", "viewer", [ ModulePermission.Read ])
             ()
-
-        let api = mkApi pipelinePages
 
         let host =
             Host
@@ -520,6 +519,14 @@ let private startHostWith
         do! host.StartAsync() |> Async.AwaitTask
         return host
     }
+
+let private startHostWith
+    (surfaces: SurfaceProfile list)
+    (auth: IAuthProvider)
+    (configure: IServiceCollection -> unit)
+    (extraRoutes: HttpHandler list)
+    : Async<IHost> =
+    startHostWithApi (mkApi pipelinePages) surfaces auth configure extraRoutes
 
 let private startHost (surfaces: SurfaceProfile list) : Async<IHost> =
     startHostWith surfaces (authProvider ()) ignore []
@@ -1226,6 +1233,610 @@ let private signInTests =
         }
     ]
 
+// ─── 7. Phase 996 — a publication audience ───────────────────────────
+//
+// Readers who are NOT app users read one publishing scope's published
+// reports and nothing else. 7a pins the pure parts (admission, the
+// provider's build refusal, the audience decision, the API confinement,
+// the read helper's disclosure re-check and audit); 7b drives real RS256
+// tokens through the composed pipeline — the OIDC provider's admission,
+// the scope-resolution middleware, surface enforcement, the AccessContext
+// factory and the page handler — with a narrative published in the
+// publishing team's scope.
+
+/// The publication mapping of the probe: the app's members hold `app-user`
+/// (the member rule); the board group, named by its alias, reads the board
+/// reports. The group's object id lives here — configuration — only.
+let private publicationMapping = {
+    ClaimMapping.directoryRoles with
+        GroupAliases = Map["7f1c-board", "board-readers"]
+        RequiredRoles = [ "app-user" ]
+        PublicationReaders = [ "board-readers" ]
+}
+
+let private boardAudience: PublicationAudience = {
+    Readers = [ "board-readers" ]
+    PublishingScope = "team-a"
+}
+
+let private otherAudience: PublicationAudience = {
+    Readers = [ "other-readers" ]
+    PublishingScope = "team-b"
+}
+
+let private reportDocument (title: string) (factRef: string option) : ToolUp.Platform.Narrative.NarrativeDocument = {
+    Title = title
+    Subtitle = None
+    Sections = [
+        {
+            Id = "headline"
+            Heading = "Headline"
+            Subheading = None
+            Elements = [
+                ToolUp.Platform.Narrative.Paragraph [ ToolUp.Platform.Narrative.Metric("Revenue", "1,204", factRef) ]
+            ]
+        }
+    ]
+    Provenance = None
+    Lang = None
+    CanonicalUrl = None
+}
+
+/// A disclosure gate denying exactly `denied`, recording every check it is
+/// asked to make.
+let private disclosureDenying
+    (denied: Set<string>)
+    (checks: ResizeArray<string * VectorKnowledgeTypes.FactEgressSurface>)
+    =
+    let verdicts (scopeId: string) (surface: VectorKnowledgeTypes.FactEgressSurface) (ids: string list) =
+        checks.Add((scopeId, surface))
+
+        ids
+        |> List.map (fun id ->
+            id,
+            (if Set.contains id denied then
+                 VectorKnowledgeTypes.FactNotDisclosable "Restricted:board-only"
+             else
+                 VectorKnowledgeTypes.FactDisclosable))
+        |> Map.ofList
+
+    { new VectorKnowledgeTypes.IFactDisclosureGate with
+        member _.Check(scopeId: string, _principal: string, surface, ids) = async {
+            return verdicts scopeId surface ids
+        }
+
+        member _.Check(scope: ResolvedScope, _principal: string, surface, ids) = async {
+            return verdicts scope.ScopeId surface ids
+        }
+    }
+
+let private publicationReader = {
+    AccessContext.unrestricted (AuthenticatedUser "rhea") with
+        TokenRoles = [ "board-readers" ]
+        Admission = PrincipalAdmission.PublicationReader
+}
+
+let private auditJson = JsonSerializerOptions(JsonSerializerDefaults.Web)
+
+let private publicationRows (events: IEventStore) (scopeId: string) = async {
+    let! rows = events.ReadBySource(scopeId, PublicationAudit.SourceModule)
+
+    return
+        rows
+        |> List.map (fun e -> e.EventType, JsonSerializer.Deserialize<PublicationAuditRow>(e.Payload, auditJson))
+}
+
+let private publicationUnitTests =
+    testList "Phase 996 — publication audience (pure)" [
+        testCase "no publication audience configured: every admission is Member, exactly as before"
+        <| fun _ ->
+            Expect.equal AuthenticatedUser.anonymous.Admission PrincipalAdmission.Member "the default user"
+
+            Expect.equal
+                (AccessContext.unrestricted (AuthenticatedUser "u")).Admission
+                PrincipalAdmission.Member
+                "the default context"
+
+            Expect.isEmpty ClaimMapping.none.PublicationReaders "no readers by default"
+            Expect.isEmpty ClaimMapping.directoryRoles.PublicationReaders "nor in the directory mapping"
+
+            // The unchanged 987 gate: a holder is a Member, a non-holder is refused.
+            let gate = {
+                ClaimMapping.directoryRoles with
+                    RequiredRoles = [ "app-user" ]
+            }
+
+            let admit payload =
+                match mapWith gate payload with
+                | Ok u ->
+                    ToolUp.AuthProviders.OidcAuthProvider.applyAdmission gate u
+                    |> Result.map _.Admission
+                | Error(claim, _) -> Error claim
+
+            Expect.equal (admit """{"roles":["app-user"]}""") (Ok PrincipalAdmission.Member) "a holder is a member"
+            Expect.isError (admit """{"groups":["7f1c-board"]}""") "a non-holder is refused, not made a reader"
+
+        testCase "admission — the member rule first, then the publication readers, after aliasing"
+        <| fun _ ->
+            let admit payload =
+                match mapWith publicationMapping payload with
+                | Ok u ->
+                    ToolUp.AuthProviders.OidcAuthProvider.applyAdmission publicationMapping u
+                    |> Result.map _.Admission
+                | Error(claim, _) -> Error claim
+
+            Expect.equal (admit """{"roles":["app-user"]}""") (Ok PrincipalAdmission.Member) "a member"
+
+            Expect.equal
+                (admit """{"groups":["7f1c-board"]}""")
+                (Ok PrincipalAdmission.PublicationReader)
+                "a board member outside the app is a publication reader"
+
+            Expect.equal
+                (admit """{"roles":["app-user"],"groups":["7f1c-board"]}""")
+                (Ok PrincipalAdmission.Member)
+                "an app member who also reads the board reports stays a member"
+
+            Expect.isError (admit """{"roles":["viewer"]}""") "neither: refused"
+
+            let tenanted = {
+                publicationMapping with
+                    TenantIdClaim = Some "tid"
+                    AllowedTenants = [ "t-ours" ]
+            }
+
+            let admitTenanted payload =
+                match mapWith tenanted payload with
+                | Ok u -> ToolUp.AuthProviders.OidcAuthProvider.applyAdmission tenanted u |> Result.isOk
+                | Error _ -> false
+
+            Expect.isFalse
+                (admitTenanted """{"tid":"t-theirs","groups":["7f1c-board"]}""")
+                "the tenant rule binds a reader exactly as it binds a member"
+
+            Expect.isTrue (admitTenanted """{"tid":"t-ours","groups":["7f1c-board"]}""") "an in-tenant reader"
+
+        testCase "a publication audience with no member rule is refused at build"
+        <| fun _ ->
+            let unsafeMapping = {
+                publicationMapping with
+                    RequiredRoles = []
+            }
+
+            match ClaimMapping.validatePublicationReaders unsafeMapping with
+            | Error reason -> Expect.stringContains reason "RequiredRoles" "names the missing member rule"
+            | Ok() -> failtest "every principal would be an app user"
+
+            Expect.equal (ClaimMapping.validatePublicationReaders publicationMapping) (Ok()) "the safe mapping"
+            Expect.equal (ClaimMapping.validatePublicationReaders ClaimMapping.none) (Ok()) "no audience"
+
+            Expect.isError
+                (ClaimMapping.validatePublicationReaders {
+                    publicationMapping with
+                        PublicationReaders = [ "board readers" ]
+                })
+                "a padded role name"
+
+            Expect.throwsT<ArgumentException>
+                (fun () -> oidcProviderWith unsafeMapping |> ignore)
+                "the OIDC provider refuses to build over it"
+
+            // The falsifier: the safe mapping builds.
+            oidcProviderWith publicationMapping |> ignore
+
+        testCase "PageAudience.parse — publication:<scope>:<readers>, fail-closed when incomplete"
+        <| fun _ ->
+            Expect.equal
+                (PageAudience.parse (Some "publication:team-a:board-readers, auditors"))
+                (PageAudience.Publication {
+                    PublishingScope = "team-a"
+                    Readers = [ "board-readers"; "auditors" ]
+                })
+                "scope, then readers"
+
+            Expect.equal
+                (PageAudience.parse (Some "publication:team-a"))
+                (PageAudience.Publication {
+                    PublishingScope = "team-a"
+                    Readers = []
+                })
+                "no readers: a publication nobody may read"
+
+            Expect.equal (PageAudience.token (PageAudience.Publication boardAudience)) "publication" "token"
+
+        testCase "AudienceGate — Publication admits its readers and nobody else"
+        <| fun _ ->
+            let page = PageAudience.Publication boardAudience
+
+            Expect.equal (AudienceGate.evaluate anon page) AudienceDecision.RequireAuthentication "anonymous: 401"
+            Expect.equal (AudienceGate.evaluate publicationReader page) AudienceDecision.Allow "a reader in the group"
+
+            let memberOutside = {
+                AccessContext.unrestricted (TeamMember("carol", "team-a")) with
+                    ModulePermissions = Map[("editor", [ ModulePermission.Read ])]
+                    TokenRoles = [ "app-user" ]
+            }
+
+            Expect.equal
+                (AudienceGate.evaluate memberOutside page)
+                AudienceDecision.Forbidden
+                "an app member of the publishing team, outside the group: 403"
+
+            let admin = {
+                memberOutside with
+                    PlatformRole = Some PlatformRole.PlatformAdmin
+            }
+
+            Expect.equal (AudienceGate.evaluate admin page) AudienceDecision.Forbidden "no platform-admin bypass"
+
+            Expect.equal
+                (AudienceGate.evaluate publicationReader (PageAudience.Publication otherAudience))
+                AudienceDecision.Forbidden
+                "another team's publication: 403"
+
+            Expect.equal
+                (AudienceGate.evaluate
+                    publicationReader
+                    (PageAudience.Publication {
+                        boardAudience with
+                            PublishingScope = " "
+                    }))
+                AudienceDecision.Forbidden
+                "a publication naming no scope admits nobody"
+
+        testCase "AudienceGate — a publication reader is confined to its publications"
+        <| fun _ ->
+            for audience in
+                [
+                    PageAudience.Authenticated
+                    PageAudience.ScopeGated []
+                    PageAudience.ScopeGated [ "board-readers" ]
+                    PageAudience.ClientGated "rhea"
+                ] do
+                Expect.equal
+                    (AudienceGate.evaluate publicationReader audience)
+                    AudienceDecision.Forbidden
+                    $"%A{audience}: 403"
+
+            Expect.equal (AudienceGate.evaluate publicationReader PageAudience.Public) AudienceDecision.Allow "public"
+
+            // The falsifier: the same principal as a member reads them.
+            let asMember = {
+                publicationReader with
+                    Admission = PrincipalAdmission.Member
+            }
+
+            Expect.equal (AudienceGate.evaluate asMember PageAudience.Authenticated) AudienceDecision.Allow "member"
+
+            Expect.equal
+                (AudienceGate.evaluate asMember (PageAudience.ScopeGated [ "board-readers" ]))
+                AudienceDecision.Allow
+                "a member holding the role"
+
+        testCase "SurfaceEnforcement — a reader is refused every route an anonymous caller is"
+        <| fun _ ->
+            let subject = AuthenticatedUser "rhea"
+
+            for requirement in
+                [
+                    SurfaceRequirement.userOrTeam
+                    SurfaceRequirement.teamScoped
+                    SurfaceRequirement.authenticated
+                ] do
+                Expect.equal
+                    (SurfaceEnforcement.SurfaceEnforcement.evaluateAdmitted
+                        subject
+                        PrincipalAdmission.PublicationReader
+                        requirement)
+                    (SurfaceEnforcement.Reject(403, "publication_reader_not_admitted", None))
+                    $"%A{requirement}"
+
+                Expect.equal
+                    (SurfaceEnforcement.SurfaceEnforcement.evaluateAdmitted
+                        subject
+                        PrincipalAdmission.Member
+                        requirement)
+                    (SurfaceEnforcement.SurfaceEnforcement.evaluate subject requirement)
+                    "a member is evaluated exactly as before"
+
+            Expect.equal
+                (SurfaceEnforcement.SurfaceEnforcement.evaluateAdmitted
+                    subject
+                    PrincipalAdmission.PublicationReader
+                    SurfaceRequirement.public_)
+                SurfaceEnforcement.Pass
+                "a public route gives a reader nothing an anonymous caller lacks"
+
+        testCaseAsync "PublicationRead — reads the PUBLISHING scope, audits the read, withholds a now-denied fact"
+        <| async {
+            let store = InMemoryNarrativeStore() :> INarrativeStore
+            let events = ToolUp.Platform.Testing.Fakes.TestEventStore() :> IEventStore
+            let checks = ResizeArray()
+
+            let! _ =
+                store.PublishTagged(
+                    "team-a",
+                    "Board",
+                    None,
+                    reportDocument "Board report team-a" (Some "fact-rev"),
+                    [ "run:board" ]
+                )
+
+            // A narrative in the READER's own scope must never be the one read.
+            let! _ = store.PublishTagged("rhea", "Board", None, reportDocument "Rhea own" None, [ "run:board" ])
+
+            let read gate access =
+                PublicationRead.latestNarrative
+                    store
+                    gate
+                    (Some events)
+                    boardAudience
+                    "reports/latest"
+                    "run:board"
+                    access
+
+            match! read (Some(disclosureDenying Set.empty checks)) publicationReader with
+            | PublicationNarrative.Served(_, doc) ->
+                Expect.equal doc.Title "Board report team-a" "the publishing scope's"
+            | other -> failtestf "expected Served, got %A" other
+
+            Expect.equal
+                (List.ofSeq checks)
+                [ "team-a", VectorKnowledgeTypes.FactNarrativePublication ]
+                "disclosure re-checked at the publication surface, in the publishing scope"
+
+            match! read (Some(disclosureDenying (Set [ "fact-rev" ]) checks)) publicationReader with
+            | PublicationNarrative.Withheld denied ->
+                Expect.equal denied [ "fact-rev", "Restricted:board-only" ] "names the fact and the policy"
+            | other -> failtestf "expected Withheld, got %A" other
+
+            let carol = {
+                AccessContext.unrestricted (TeamMember("carol", "team-a")) with
+                    TokenRoles = [ "app-user" ]
+            }
+
+            match! read None carol with
+            | PublicationNarrative.Refused AudienceDecision.Forbidden -> ()
+            | other -> failtestf "an app member outside the group reads nothing, got %A" other
+
+            let! rows = publicationRows events "team-a"
+
+            let summary =
+                rows
+                |> List.map (fun (t, r) -> t, r.ReaderId, r.PublishingScope, r.Slug, r.Outcome)
+                |> List.sort
+
+            Expect.equal
+                summary
+                (List.sort [
+                    PublicationAudit.NarrativeReadType, "rhea", "team-a", "reports/latest", "read"
+                    PublicationAudit.WithheldType, "rhea", "team-a", "reports/latest", "withheld"
+                ])
+                "every read audited under the publishing scope, with the reader and the page"
+
+            let withheld =
+                rows |> List.find (fun (t, _) -> t = PublicationAudit.WithheldType) |> snd
+
+            let detail = Option.defaultValue "" withheld.Detail
+            Expect.isSome withheld.NarrativeId "names the narrative"
+            Expect.stringContains detail "fact-rev" "names the fact"
+            Expect.isFalse (detail.Contains "1,204") "never the value"
+        }
+    ]
+
+// ─── 7b. the composed pipeline ───────────────────────────────────────
+
+/// The probe's content API: `reports/latest` is the board's publication,
+/// its body the latest narrative the run published in team-a — read through
+/// `PublicationRead`, as a deployment's page producer would; every other
+/// slug is a fixed page.
+let private publicationApi (store: INarrativeStore) (events: IEventStore) : IPublicContentApi =
+    let fixedPages =
+        pipelinePages
+        |> Map.add "other/latest" (mkPage "other/latest" (PageAudience.Publication otherAudience))
+
+    { new IPublicContentApi with
+        member _.GetPage slug = async { return Map.tryFind slug fixedPages }
+        member _.ListPages _ = async { return fixedPages |> Map.toList |> List.map snd }
+
+        member this.ListPagesPublic(now, prefix) =
+            PublicContentApi.defaultListPagesPublic this now prefix
+
+        member _.GetCollection _ = async { return [] }
+
+        member _.GetPageInContext(slug, ctx) = async {
+            match slug with
+            | "reports/latest" ->
+                let shell = mkPage slug (PageAudience.Publication boardAudience)
+
+                match! PublicationRead.latestNarrative store None (Some events) boardAudience slug "run:board" ctx with
+                | PublicationNarrative.Served(_, doc) ->
+                    return
+                        Some {
+                            shell with
+                                Title = doc.Title
+                                Body = ContentBody.Narrative doc
+                        }
+                | _ -> return Some shell
+            | _ -> return Map.tryFind slug fixedPages
+        }
+    }
+
+/// A request with `token` (if any) as a bearer.
+let private sendMethod (client: HttpClient) (verb: HttpMethod) (token: string option) (path: string) = async {
+    use request = new HttpRequestMessage(verb, path)
+
+    token
+    |> Option.iter (fun t -> request.Headers.Add("Authorization", "Bearer " + t))
+
+    use! response = client.SendAsync request |> Async.AwaitTask
+    let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+    return int response.StatusCode, body
+}
+
+/// The non-publication API surface of the probe beside `/api/x`: team
+/// management and the assistant.
+let private appApiRoutes: HttpHandler list = [
+    POST >=> route "/api/TeamApi/CreateTeam" >=> text "team created"
+    POST >=> route "/api/ai/chat" >=> text "assistant"
+]
+
+let private publicationPipelineTests =
+    testList "Phase 996 — a publication audience through the composed pipeline" [
+        testCaseAsync
+            "a reader reads its publication and is refused every other surface; an app member outside the group is refused the publication"
+        <| async {
+            let s = issuer.Force()
+            let store = InMemoryNarrativeStore() :> INarrativeStore
+            let events = ToolUp.Platform.Testing.Fakes.TestEventStore() :> IEventStore
+
+            let! _ =
+                store.PublishTagged("team-a", "Board", None, reportDocument "Board report team-a" None, [ "run:board" ])
+
+            let register (services: IServiceCollection) =
+                services.AddSingleton<IEventStore>(events) |> ignore
+
+            use! host =
+                startHostWithApi
+                    (publicationApi store events)
+                    authenticatedSurface
+                    (oidcProviderWith publicationMapping)
+                    register
+                    appApiRoutes
+
+            use client = host.GetTestClient()
+            let token sub (claims: (string * obj) list) = Some(s.MintTokenFor(sub, claims))
+            // rhea: in the board group, not an app user
+            let rhea = token "rhea" [ "groups", box [| "7f1c-board" |] ]
+            // carol: an app member of team-a (holds `editor`), outside the group
+            let carol = token "carol" [ "roles", box [| "app-user" |] ]
+            // mia: an app user who is also in the board group
+            let mia =
+                token "mia" [ "roles", box [| "app-user" |]; "groups", box [| "7f1c-board" |] ]
+            // nina: neither — the deployment does not admit her at all
+            let nina = token "nina" [ "roles", box [| "viewer" |] ]
+
+            let cells = [
+                "rhea", rhea, HttpMethod.Get, "/reports/latest", 200
+                "rhea", rhea, HttpMethod.Get, "/other/latest", 403
+                "rhea", rhea, HttpMethod.Get, "/members", 403
+                "rhea", rhea, HttpMethod.Get, "/editors", 403
+                "rhea", rhea, HttpMethod.Get, "/client-alice", 403
+                "rhea", rhea, HttpMethod.Get, "/client-team-a", 403
+                "rhea", rhea, HttpMethod.Get, "/open", 200
+                "rhea", rhea, HttpMethod.Get, "/api/x", 403
+                "rhea", rhea, HttpMethod.Post, "/api/TeamApi/CreateTeam", 403
+                "rhea", rhea, HttpMethod.Post, "/api/ai/chat", 403
+                "carol", carol, HttpMethod.Get, "/reports/latest", 403
+                "carol", carol, HttpMethod.Get, "/editors", 200
+                "carol", carol, HttpMethod.Get, "/api/x", 200
+                "carol", carol, HttpMethod.Post, "/api/TeamApi/CreateTeam", 200
+                "carol", carol, HttpMethod.Post, "/api/ai/chat", 200
+                "mia", mia, HttpMethod.Get, "/reports/latest", 200
+                "mia", mia, HttpMethod.Get, "/api/x", 200
+                "nina", nina, HttpMethod.Get, "/reports/latest", 401
+                "nobody", None, HttpMethod.Get, "/reports/latest", 401
+            ]
+
+            let! results =
+                cells
+                |> List.map (fun (label, tok, verb, path, expected) -> async {
+                    let! status, body = sendMethod client verb tok path
+                    return label, verb, path, expected, status, body
+                })
+                |> Async.Sequential
+
+            let! teamRows = publicationRows events "team-a"
+            let! platformRows = publicationRows events "_platform"
+            do! host.StopAsync() |> Async.AwaitTask
+
+            let mismatches =
+                results
+                |> Array.choose (fun (label, verb, path, expected, status, _) ->
+                    if status <> expected then
+                        Some $"{label} {verb} {path}: expected {expected}, got {status}"
+                    else
+                        None)
+
+            Expect.isEmpty mismatches ("mismatched: " + String.concat "; " mismatches)
+
+            for label, _, path, _, status, body in results do
+                if path = "/reports/latest" then
+                    if status = 200 then
+                        Expect.stringContains body "Board report team-a" $"{label}: the publishing team's narrative"
+                    else
+                        Expect.isFalse (body.Contains "Board report") $"{label}: a refused reader sees no report"
+
+                if label = "rhea" && path.StartsWith "/api/" then
+                    Expect.stringContains body "publication_reader_not_admitted" $"{path}: refused as a reader"
+
+            // Audit: every page decision on the publication under the
+            // publishing scope — who, which page; the reader's refusals
+            // elsewhere under `_platform`.
+            let decisions =
+                teamRows
+                |> List.filter (fun (t, _) -> t = PublicationAudit.ServedType || t = PublicationAudit.RefusedType)
+                |> List.map (fun (t, r) -> t, r.ReaderId, r.Slug)
+                |> List.sort
+
+            Expect.equal
+                decisions
+                (List.sort [
+                    PublicationAudit.ServedType, "rhea", "reports/latest"
+                    PublicationAudit.RefusedType, "carol", "reports/latest"
+                    PublicationAudit.ServedType, "mia", "reports/latest"
+                ])
+                "the page decisions on team-a's publication"
+
+            Expect.isTrue
+                (teamRows
+                 |> List.exists (fun (t, r) ->
+                     t = PublicationAudit.NarrativeReadType
+                     && r.ReaderId = "rhea"
+                     && r.NarrativeId.IsSome))
+                "the narrative read, naming the narrative"
+
+            let platformDecisions =
+                platformRows
+                |> List.filter (fun (_, r) -> r.ReaderId = "rhea")
+                |> List.map (fun (t, r) -> t, r.Slug)
+                |> List.sort
+
+            Expect.equal
+                platformDecisions
+                (List.sort [
+                    PublicationAudit.RefusedType, "client-alice"
+                    PublicationAudit.RefusedType, "client-team-a"
+                    PublicationAudit.RefusedType, "editors"
+                    PublicationAudit.RefusedType, "members"
+                    PublicationAudit.ServedType, "open"
+                ])
+                "every page decision for a reader is recorded — its refusals, and the public page it read"
+        }
+
+        testCaseAsync "recorded posture: without a member rule, a signed-in non-member passes userOrTeam on /api"
+        <| async {
+            // Pre-existing, and recorded rather than changed by Phase 996: a
+            // principal the issuer admits who belongs to no team resolves to
+            // `AuthenticatedUser` (UserKind), which the strict default
+            // `userOrTeam` requirement ADMITS. A deployment that must keep
+            // such principals off its API sets a member rule
+            // (`RequiredRoles`) — which a publication audience requires.
+            let s = issuer.Force()
+
+            use! host =
+                startHostWith authenticatedSurface (oidcProviderWith ClaimMapping.directoryRoles) ignore appApiRoutes
+
+            use client = host.GetTestClient()
+            let zoe = Some(s.MintTokenFor("zoe", [ "groups", box [| "7f1c-board" |] ]))
+            let! apiStatus, _ = sendMethod client HttpMethod.Get zoe "/api/x"
+            let! createStatus, _ = sendMethod client HttpMethod.Post zoe "/api/TeamApi/CreateTeam"
+            do! host.StopAsync() |> Async.AwaitTask
+            Expect.equal apiStatus 200 "a signed-in non-member reaches a default /api route"
+            Expect.equal createStatus 200 "and team creation's route (its own policy is the only refusal left)"
+        }
+    ]
+
 let tests =
     testList "GatedSsr (Phase 86)" [
         parseTests
@@ -1236,4 +1847,6 @@ let tests =
         claimMappingTests
         directoryPipelineTests
         signInTests
+        publicationUnitTests
+        publicationPipelineTests
     ]

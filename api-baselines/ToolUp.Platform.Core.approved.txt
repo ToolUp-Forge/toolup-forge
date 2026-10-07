@@ -472,7 +472,8 @@ ToolUp.Platform.AIToolResultBudget+Tags.DefaultResultBudget : System.Int32 (lite
 ToolUp.Platform.AIToolResultBudget+Tags.NoResultBudget : System.Int32 (literal)
 ToolUp.Platform.AIToolResultBudget+Tags.ResultBudgetChars : System.Int32 (literal)
 ToolUp.Platform.AccessContext (class)
-ToolUp.Platform.AccessContext..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Subject, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.AccessContext..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Subject, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.Auth+PrincipalAdmission)
+ToolUp.Platform.AccessContext.Admission : ToolUp.Platform.Auth+PrincipalAdmission { get }
 ToolUp.Platform.AccessContext.ModuleExposure : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure] { get }
 ToolUp.Platform.AccessContext.ModulePermissions : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]] { get }
 ToolUp.Platform.AccessContext.PlatformRole : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole] { get }
@@ -481,6 +482,7 @@ ToolUp.Platform.AccessContext.TeamId : Microsoft.FSharp.Core.FSharpOption`1[Syst
 ToolUp.Platform.AccessContext.TokenRoles : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.AccessContext.UserId : System.String { get }
 ToolUp.Platform.AccessContextModule (class)
+ToolUp.Platform.AccessContextModule.admissionFor(ToolUp.Platform.Subject, ToolUp.Platform.Auth+PrincipalAdmission) : ToolUp.Platform.Auth+PrincipalAdmission
 ToolUp.Platform.AccessContextModule.canAccessModule(System.String, ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.canModifyPlatformConfig(ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.claim(ToolUp.Platform.AccessContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ShareTokenClaim]
@@ -495,6 +497,7 @@ ToolUp.Platform.AccessContextModule.isAuthenticated(ToolUp.Platform.AccessContex
 ToolUp.Platform.AccessContextModule.isClaimBearer(ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.isModuleAvailable(System.String, ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.isModuleExposed(System.String, ToolUp.Platform.AccessContext) : System.Boolean
+ToolUp.Platform.AccessContextModule.isPublicationReader(ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.kindLabel(ToolUp.Platform.AccessContext) : System.String
 ToolUp.Platform.AccessContextModule.tokenRolesFor(ToolUp.Platform.Subject, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.AccessContextModule.unrestricted(ToolUp.Platform.Subject) : ToolUp.Platform.AccessContext
@@ -1951,7 +1954,8 @@ ToolUp.Platform.AuditViewProjection.SummaryMaxLength : System.Int32 (literal)
 ToolUp.Platform.AuditViewProjection.actorFieldNames : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.Auth (class)
 ToolUp.Platform.Auth+AuthenticatedUser (class)
-ToolUp.Platform.Auth+AuthenticatedUser..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.Auth+AuthenticatedUser..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.Auth+PrincipalAdmission)
+ToolUp.Platform.Auth+AuthenticatedUser.Admission : ToolUp.Platform.Auth+PrincipalAdmission { get }
 ToolUp.Platform.Auth+AuthenticatedUser.DirectoryRoles : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.Auth+AuthenticatedUser.DisplayName : System.String { get }
 ToolUp.Platform.Auth+AuthenticatedUser.Email : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -1966,6 +1970,15 @@ ToolUp.Platform.Auth+IAuthProvider (interface)
 ToolUp.Platform.Auth+IAuthProvider.GetUser(ToolUp.Platform.Auth+RequestContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.Auth+AuthenticatedUser]
 ToolUp.Platform.Auth+IAuthProvider.IsCryptographicallyVerified : System.Boolean { get }
 ToolUp.Platform.Auth+IAuthProvider.ValidateRequest(ToolUp.Platform.Auth+RequestContext) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Auth+AuthenticatedUser, System.String]]
+ToolUp.Platform.Auth+PrincipalAdmission (class)
+ToolUp.Platform.Auth+PrincipalAdmission.IsMember : System.Boolean { get }
+ToolUp.Platform.Auth+PrincipalAdmission.IsPublicationReader : System.Boolean { get }
+ToolUp.Platform.Auth+PrincipalAdmission.Member : ToolUp.Platform.Auth+PrincipalAdmission { get }
+ToolUp.Platform.Auth+PrincipalAdmission.PublicationReader : ToolUp.Platform.Auth+PrincipalAdmission { get }
+ToolUp.Platform.Auth+PrincipalAdmission.Tag : System.Int32 { get }
+ToolUp.Platform.Auth+PrincipalAdmission+Tags (class)
+ToolUp.Platform.Auth+PrincipalAdmission+Tags.Member : System.Int32 (literal)
+ToolUp.Platform.Auth+PrincipalAdmission+Tags.PublicationReader : System.Int32 (literal)
 ToolUp.Platform.Auth+RequestContext (class)
 ToolUp.Platform.Auth+RequestContext.Item : System.Object { get }
 ToolUp.Platform.Auth+RequestContext.Tag : System.Int32 { get }
@@ -2574,11 +2587,12 @@ ToolUp.Platform.ClaimBearerConfig..ctor(System.Int32, Microsoft.FSharp.Core.FSha
 ToolUp.Platform.ClaimBearerConfig.DefaultLifetimeDays : System.Int32 { get }
 ToolUp.Platform.ClaimBearerConfig.DefaultUseLimit : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
 ToolUp.Platform.ClaimMapping (class)
-ToolUp.Platform.ClaimMapping..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.String])
+ToolUp.Platform.ClaimMapping..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpSet`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Platform.ClaimMapping.AllowedTenants : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ClaimMapping.ApiRoleGrants : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
 ToolUp.Platform.ClaimMapping.GroupAliases : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.ClaimMapping.GroupsClaim : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ClaimMapping.PublicationReaders : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ClaimMapping.RequiredRoles : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ClaimMapping.RolesClaim : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ClaimMapping.TenantIdClaim : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
@@ -2589,6 +2603,7 @@ ToolUp.Platform.ClaimMappingModule.isEmpty(ToolUp.Platform.ClaimMapping) : Syste
 ToolUp.Platform.ClaimMappingModule.none : ToolUp.Platform.ClaimMapping { get }
 ToolUp.Platform.ClaimMappingModule.reservedApiRoleGrants : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.ClaimMappingModule.validateApiRoleGrants(Microsoft.FSharp.Collections.FSharpSet`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
+ToolUp.Platform.ClaimMappingModule.validatePublicationReaders(ToolUp.Platform.ClaimMapping) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
 ToolUp.Platform.ClassificationLevel (class)
 ToolUp.Platform.ClassificationLevel.Confidential : ToolUp.Platform.ClassificationLevel { get }
 ToolUp.Platform.ClassificationLevel.Financial : ToolUp.Platform.ClassificationLevel { get }

@@ -254,6 +254,15 @@ let registerScopeResolution
                         ToolUp.Platform.Auth.AuthenticatedUser.pageRoles user
                     | _ -> []
 
+                // Phase 996 — the admission the provider decided rides along
+                // under the same rule as the roles: a signed-in human
+                // principal only. `Member` everywhere a publication audience
+                // is not configured.
+                let providerAdmission =
+                    match ctx.Items.TryGetValue "ToolUp.User" with
+                    | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) -> user.Admission
+                    | _ -> ToolUp.Platform.Auth.PrincipalAdmission.Member
+
                 match ctx.Items.TryGetValue "ToolUp.Subject" with
                 | true, (:? Subject as subject) -> {
                     UserId = userId
@@ -263,6 +272,7 @@ let registerScopeResolution
                     ModuleExposure = moduleExposure
                     PlatformRole = platformRole
                     TokenRoles = AccessContext.tokenRolesFor subject providerRoles
+                    Admission = AccessContext.admissionFor subject providerAdmission
                   }
                 | _ -> AccessContext.unrestricted (AnonymousSession "anonymous"))
         .AddHttpContextAccessor()

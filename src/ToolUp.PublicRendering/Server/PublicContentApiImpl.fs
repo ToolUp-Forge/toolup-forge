@@ -178,6 +178,13 @@ type PublicContentApiImpl
 
             match existing with
             | Some page -> return Some page
+            // Phase 996 — a publication reader is not an app user and owns
+            // no scope of its own here: the per-request tiers below read
+            // the PRINCIPAL's scope (tier 2b) or run under its context (tier
+            // 3), and neither is a surface a reader may reach. A reader is
+            // served the shared tiers only — where a `Publication` page
+            // names the scope whose content it reads (`PublicationRead`).
+            | None when AccessContext.isPublicationReader ctx -> return None
             | None ->
                 // Tier 2b (Phase 86) — tenant-scoped overlay. An
                 // authenticated principal's own `StorageScope` is consulted

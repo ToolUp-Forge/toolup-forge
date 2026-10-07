@@ -206,6 +206,7 @@ let private ctx: AccessContext = {
     Subject = AuthenticatedUser "u-1"
     ModulePermissions = Map.empty
     TokenRoles = []
+    Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
     ModuleExposure = Map.empty
     PlatformRole = None
 }

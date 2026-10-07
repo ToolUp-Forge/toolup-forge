@@ -557,7 +557,12 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
 
                                     let mutable pendingExisting = Unchecked.defaultof<obj>
 
-                                    if not (cache.TryGetValue(pendingCacheKey, &pendingExisting)) then
+                                    // Phase 996 — a publication reader is never made an app
+                                    // member: its sign-in consumes no pending invite.
+                                    if
+                                        user.Admission = PrincipalAdmission.Member
+                                        && not (cache.TryGetValue(pendingCacheKey, &pendingExisting))
+                                    then
                                         let pendingOpts = MemoryCacheEntryOptions()
                                         pendingOpts.SlidingExpiration <- Nullable(TimeSpan.FromMinutes 20.0)
                                         cache.Set(pendingCacheKey, true, pendingOpts) |> ignore

@@ -373,6 +373,27 @@ module SurfaceEnforcement =
                 // an attack-surface probe). 403; no hint.
                 Reject(403, "claim_bearer_not_admitted", None)
 
+    /// Phase 996 — `evaluate`, with the principal's admission. A
+    /// `PublicationReader` (admitted to publication pages only, never an app
+    /// user) is refused `403 publication_reader_not_admitted` on every route
+    /// whose requirement does not admit anonymous callers — the API, the
+    /// assistant, module routes, team management. A route that admits
+    /// anonymous callers (`public_`) gives a reader nothing an anonymous
+    /// visitor lacks, so it is evaluated as before. A `Member` is evaluated
+    /// exactly as `evaluate` does, so a deployment with no publication
+    /// audience is unchanged.
+    let evaluateAdmitted
+        (subject: Subject)
+        (admission: ToolUp.Platform.Auth.PrincipalAdmission)
+        (requirement: SurfaceRequirement)
+        : SurfaceEnforcementOutcome =
+        match admission with
+        | ToolUp.Platform.Auth.PrincipalAdmission.PublicationReader when
+            not (requirement.AcceptedSubjects.Contains AnonymousKind)
+            ->
+            Reject(403, "publication_reader_not_admitted", None)
+        | _ -> evaluate subject requirement
+
 /// Auth-observability A2 — emit `SurfaceDenied` to `IAuditLog` when a
 /// request is rejected. Pre-A2 these denials were structurally invisible
 /// (the response body told the client about the denial but no audit row
@@ -553,7 +574,15 @@ type SurfaceEnforcementMiddleware(next: RequestDelegate, registry: SurfaceRequir
                 let requirement =
                     SurfaceRequirementRegistry.resolve registry ctx.Request.Method ctx.Request.Path.Value
 
-                match SurfaceEnforcement.evaluate subject requirement with
+                // Phase 996 — the provider's admission rides on the user
+                // `ScopeResolutionMiddleware` stashed; absent, the request
+                // is a member's (or anonymous), evaluated as before.
+                let admission =
+                    match ctx.Items.TryGetValue "ToolUp.User" with
+                    | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) -> user.Admission
+                    | _ -> ToolUp.Platform.Auth.PrincipalAdmission.Member
+
+                match SurfaceEnforcement.evaluateAdmitted subject admission requirement with
                 | Pass -> do! next.Invoke(ctx)
                 | Reject(statusCode, errorCode, hint) -> do! writeRejection ctx subject statusCode errorCode hint
         }

@@ -218,6 +218,20 @@ type ClaimMapping = {
     /// from a token), and the OIDC provider refuses to build over a refused
     /// set.
     ApiRoleGrants: Set<string>
+    /// Phase 996 — the publication audience: directory roles (after
+    /// `GroupAliases`, so a group is named by its alias and its object id
+    /// stays in configuration) that admit a principal the member rule
+    /// (`RequiredRoles`) refuses — as a `PublicationReader`
+    /// (`AuthenticatedUser.Admission`), never as an app user. Such a reader
+    /// may read the `Publication` pages whose readers it holds and nothing
+    /// else: every `/api` route that does not admit anonymous callers, and
+    /// every other gated page, refuses it. Empty by default (no principal is
+    /// ever a publication reader). Non-empty requires a non-empty
+    /// `RequiredRoles` — without a member rule every admitted principal is an
+    /// app user, so no reader could be confined
+    /// (`ClaimMapping.validatePublicationReaders`; the OIDC provider refuses
+    /// to build over it).
+    PublicationReaders: string list
 }
 
 module ClaimMapping =
@@ -232,6 +246,7 @@ module ClaimMapping =
         AllowedTenants = []
         RequiredRoles = []
         ApiRoleGrants = Set.empty
+        PublicationReaders = []
     }
 
     /// Phase 987 — the conventional directory-role mapping: `roles` and
@@ -257,6 +272,7 @@ module ClaimMapping =
         && mapping.GroupsClaim.IsNone
         && mapping.AllowedTenants.IsEmpty
         && mapping.RequiredRoles.IsEmpty
+        && mapping.PublicationReaders.IsEmpty
 
     /// Phase 993 — the role names an `ApiRoleGrants` set may not carry, and
     /// why: `PlatformAdmin` is resolved server-side (`IPlatformAdminStore`),
@@ -289,6 +305,32 @@ module ClaimMapping =
         match grants |> Seq.tryPick refusal with
         | None -> Ok()
         | Some reason -> Error reason
+
+    /// Phase 996 — `Ok ()` when the publication audience is safe to apply:
+    /// empty, or every entry an exact role name (non-blank, no whitespace or
+    /// control character) AND `RequiredRoles` non-empty. `Error reason`
+    /// otherwise. Without a member rule every principal the issuer admits is
+    /// an app user, so a publication reader could not be told apart from a
+    /// member and nothing would confine it — the build is refused rather
+    /// than silently admitting readers as members. The OIDC provider calls
+    /// this when it is BUILT.
+    let validatePublicationReaders (mapping: ClaimMapping) : Result<unit, string> =
+        let malformed (role: string) =
+            System.String.IsNullOrWhiteSpace role
+            || role
+               |> Seq.exists (fun c -> System.Char.IsWhiteSpace c || System.Char.IsControl c)
+
+        match mapping.PublicationReaders with
+        | [] -> Ok()
+        | readers ->
+            match readers |> List.tryFind malformed with
+            | Some role ->
+                Error
+                    $"PublicationReaders entry '{role}' is not a role name (blank, or carries whitespace or a control character)"
+            | None when mapping.RequiredRoles.IsEmpty ->
+                Error
+                    "PublicationReaders needs a member rule: RequiredRoles is empty, so every principal the issuer admits would be an app user and no publication reader could be confined"
+            | None -> Ok()
 
 /// Declarative configuration for an `IAuthProvider`. Providers read
 /// the fields they care about and ignore the rest — e.g.

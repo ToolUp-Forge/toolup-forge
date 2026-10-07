@@ -437,6 +437,12 @@ let reconstructAccessContext (ctx: HttpContext) : AccessContext =
             | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) ->
                 AccessContext.tokenRolesFor subject (ToolUp.Platform.Auth.AuthenticatedUser.pageRoles user)
             | _ -> []
+        // Phase 996 — the provider's admission, under the same rule.
+        Admission =
+            match ctx.Items.TryGetValue "ToolUp.User" with
+            | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) ->
+                AccessContext.admissionFor subject user.Admission
+            | _ -> ToolUp.Platform.Auth.PrincipalAdmission.Member
         ModuleExposure = moduleExposure
         PlatformRole = platformRole
     }

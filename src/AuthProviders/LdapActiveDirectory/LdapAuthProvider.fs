@@ -298,6 +298,7 @@ let private validate
                                         TenantId = None
                                         Roles = roles
                                         DirectoryRoles = []
+                                        Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
                                     }
 
                                     if config.CacheTtlSeconds > 0 then

@@ -206,6 +206,7 @@ let private accessFor (perms: (string * ModulePermission list) list) = {
     Subject = TeamMember("alice", "t1")
     ModulePermissions = Map.ofList perms
     TokenRoles = []
+    Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
     ModuleExposure = Map.empty
     PlatformRole = None
 }

@@ -40,6 +40,22 @@ module RequestContext =
     /// invoking the case constructor.
     let inline pkg (boxedValue: obj) : RequestContext = RequestContext boxedValue
 
+/// Phase 996 — how the deployment admitted a principal. Every provider and
+/// every path admits a `Member` unless the deployment opts in to a
+/// publication audience (`ClaimMapping.PublicationReaders`): a principal the
+/// member rule (`ClaimMapping.RequiredRoles`) refuses but a publication-reader
+/// role admits is a `PublicationReader`. Such a principal is NOT an app user:
+/// it may read the `Publication` pages whose readers it holds, and every other
+/// surface refuses it (the API, the assistant, module routes, every other
+/// gated page).
+[<RequireQualifiedAccess>]
+type PrincipalAdmission =
+    /// An app user — the only admission that existed before Phase 996, and
+    /// the default everywhere.
+    | Member
+    /// Admitted to publication pages only.
+    | PublicationReader
+
 /// Represents an authenticated user — provider-agnostic.
 /// No provider-specific fields (org_id, org_role, JWT claims) leak into this type.
 type AuthenticatedUser = {
@@ -78,6 +94,11 @@ type AuthenticatedUser = {
     /// without being able to grant API privilege. Empty for every
     /// provider that maps no directory claim.
     DirectoryRoles: string list
+    /// Phase 996 — `Member` unless the deployment's publication audience
+    /// admitted this principal as a `PublicationReader` (see
+    /// `PrincipalAdmission`). Every provider that maps no publication
+    /// audience leaves it `Member`.
+    Admission: PrincipalAdmission
 }
 
 module AuthenticatedUser =
@@ -89,6 +110,7 @@ module AuthenticatedUser =
         TenantId = None
         Roles = []
         DirectoryRoles = []
+        Admission = PrincipalAdmission.Member
     }
 
     let isAnonymous (user: AuthenticatedUser) = user.UserId = "anonymous"

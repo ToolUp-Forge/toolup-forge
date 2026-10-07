@@ -27,6 +27,7 @@ let private teamCtx (userId: string) (teamId: string) : AccessContext = {
     Subject = TeamMember(userId, teamId)
     ModulePermissions = Map.empty
     TokenRoles = []
+    Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
     ModuleExposure = Map.empty
     PlatformRole = None
 }
@@ -37,6 +38,7 @@ let private userCtx (userId: string) (perms: Map<string, ModulePermission list>)
     Subject = AuthenticatedUser userId
     ModulePermissions = perms
     TokenRoles = []
+    Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
     ModuleExposure = Map.empty
     PlatformRole = None
 }

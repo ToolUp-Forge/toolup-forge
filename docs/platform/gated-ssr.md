@@ -138,6 +138,16 @@ A confidential client sets `ClientSecret = Some <secret from your secret store>`
 - The session cookie is `HttpOnly`, `SameSite=Lax` and `Secure` on HTTPS. **Lax rather than the SPA flow's Strict is the point**: the reader arrives by a cross-site navigation (a link in an email), which a `Strict` cookie is withheld from. `Lax` is still withheld from cross-site sub-requests and `POST`s, and mutating `/api` calls stay behind the CSRF middleware.
 - Only a credential-less browser navigation (`GET` / `HEAD` accepting `text/html`) is redirected; an API-style fetch keeps the `401`. A signed-in reader who lacks the role gets `403`, never a redirect, so a sign-in cannot loop. A forged or expired `state`, an IdP error, a failed exchange, a refused token or a nonce mismatch ends on an error page with no session cookie.
 
+## Readers outside the app — a publication audience
+
+A `ScopeGated` page read through a directory role still treats the reader as an app user. It signs them in as an individual user, who reaches every `/api` route that declares nothing narrower (see the security notes), and the page reads the *reader's* scope. A **publication audience** is for readers who must never be app users: a client's board, an external group, readers of one team's reports (Phase 996).
+
+1. **Name who the app's users are, then who the readers are.** `ClaimMapping.RequiredRoles` is the member rule. `ClaimMapping.PublicationReaders` names directory roles, matched after `GroupAliases` so the group's object id stays in configuration. A token the member rule refuses but a reader role admits is admitted as a **publication reader** (`AuthenticatedUser.Admission = PublicationReader`). The provider refuses to build with readers and no member rule.
+2. **Publish the page to them.** `PageAudience.Publication { Readers = [ "report-readers" ]; PublishingScope = "team-<id>" }`, or `audience: publication:team-<id>:report-readers` in frontmatter. Only a holder of a named reader role is admitted. App members, team members and platform admins outside the group get `403`.
+3. **Read the publishing scope, not the reader's.** Build the page body from `PublicationRead.latestNarrativeIn services audience slug tag access`. It reads the latest narrative a run tagged `tag` in `PublishingScope` once the audience admits the reader. It withholds a narrative that cites a fact no longer disclosable at `FactNarrativePublication`, and audits the read.
+
+A publication reader gets `403` on every `/api` route that does not admit anonymous callers (the API, the assistant, module routes, team management). It also gets `403` on every page except `Public` pages and its own publications, and on search. Every decision on a publication page, and every page decision for a reader, is written to the event store under the publishing scope (source module `_publication`): the reader, the scope and the page. The sign-in is the same `OidcSsrSignIn.withInteractiveSignIn`. Migration and the full contract: [`docs/migrations/996-publication-audience.md`](../migrations/996-publication-audience.md).
+
 ## Worked example — gated reports beside a RAG team app
 
 A team app that computes with AI and retrieval can publish what it computes, to an audience, from the same
@@ -202,6 +212,7 @@ compose time, whichever order it and `withRAG` ran in.
 - **A public page carries no session cookie.** Page routes resolve the principal but are not bound to an anonymous session, so a public page served to an anonymous visitor sets no cookie and stays cacheable by a CDN.
 - **Cache hits re-run the gate.** A gated page cached for a scope is still authorization-checked per request using the stored audience, so a member who loses a role (or a different member in the same scope) is correctly denied on the next hit.
 - **Nothing gated leaks to crawlers.** Sitemap, feeds, and static export emit only `Public` pages.
+- **Without a member rule, every principal the issuer admits is an app user.** A signed-in principal in no team resolves to an individual-user subject, and the default `/api` route requirement (`userOrTeam`) admits it, team creation's route included. If your identity provider serves more people than your app's users, set `ClaimMapping.RequiredRoles`. A publication audience requires it, and confines its readers to their publications.
 - **A malformed role claim fails closed.** A role or group claim that is not a string or an array of strings, or a group overage, rejects the token (`401`) rather than signing the reader in with no roles.
 
 ## See also
@@ -210,6 +221,7 @@ compose time, whichever order it and `withRAG` ran in.
 - [`docs/migrations/989-gated-ssr-fails-closed.md`](../migrations/989-gated-ssr-fails-closed.md) — page routes resolve the principal, and `ScopeGated` requires a held role.
 - [`docs/migrations/987-directory-roles-and-ssr-sign-in.md`](../migrations/987-directory-roles-and-ssr-sign-in.md) — `AccessContext.TokenRoles`, the `ClaimMapping` role and admission fields, and interactive sign-in.
 - [`docs/migrations/988-spa-fallback-defers-to-ssr-routes.md`](../migrations/988-spa-fallback-defers-to-ssr-routes.md) — SSR pages and the SPA shell on one deployment.
+- [`docs/migrations/996-publication-audience.md`](../migrations/996-publication-audience.md) — readers outside the app: `PageAudience.Publication`, `ClaimMapping.PublicationReaders`, confinement and the publication audit.
 - [Claim mapping](../companions/auth-providers.md) — the identity half of `ClaimMapping`.
 - [`docs/platform/dynamic-ssr.md`](dynamic-ssr.md) — data-bound content sources (the body of a `ClientGated` analytics page).
 - [`docs/migrations/84-ssr-render-cache.md`](../migrations/84-ssr-render-cache.md) — the render cache gated pages compose with.

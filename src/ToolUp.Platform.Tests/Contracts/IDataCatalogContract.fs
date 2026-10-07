@@ -535,6 +535,7 @@ let tests (name: string) (factory: (string * DataType) list * IDataObjectStore -
                 Subject = TeamMember("partner-x", "team-x")
                 ModulePermissions = Map.ofList [ "Sales", [ ModulePermission.SchemaOnly ] ]
                 TokenRoles = []
+                Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
                 ModuleExposure = Map.empty
                 PlatformRole = None
             }
@@ -550,6 +551,7 @@ let tests (name: string) (factory: (string * DataType) list * IDataObjectStore -
                 Subject = TeamMember("u", "t")
                 ModulePermissions = Map.ofList [ "Sales", [ ModulePermission.SchemaOnly; ModulePermission.Read ] ]
                 TokenRoles = []
+                Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
                 ModuleExposure = Map.empty
                 PlatformRole = None
             }
@@ -565,6 +567,7 @@ let tests (name: string) (factory: (string * DataType) list * IDataObjectStore -
                 Subject = TeamMember("u", "t")
                 ModulePermissions = Map.ofList [ "Sales", [ ModulePermission.Read ] ]
                 TokenRoles = []
+                Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
                 ModuleExposure = Map.empty
                 PlatformRole = None
             }

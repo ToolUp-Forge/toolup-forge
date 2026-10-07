@@ -69,6 +69,17 @@ module AudienceGate =
          |> Option.exists (fun perms -> not (List.isEmpty perms)))
         || List.contains role ctx.TokenRoles
 
+    /// Phase 996 — the `Publication` audience decision (see `evaluate`).
+    let private publication (ctx: AccessContext) (audience: PublicationAudience) : AudienceDecision =
+        if not (AccessContext.isAuthenticated ctx) then
+            AudienceDecision.RequireAuthentication
+        elif System.String.IsNullOrWhiteSpace audience.PublishingScope then
+            AudienceDecision.Forbidden
+        elif audience.Readers |> List.exists (fun r -> List.contains r ctx.TokenRoles) then
+            AudienceDecision.Allow
+        else
+            AudienceDecision.Forbidden
+
     /// Pure authorization decision for a page audience against a resolved
     /// `AccessContext`.
     ///
@@ -86,9 +97,22 @@ module AudienceGate =
     /// - `ClientGated relationship` — anonymous → `RequireAuthentication`;
     ///   platform admin → `Allow`; otherwise `Allow` iff `relationship`
     ///   is one of the principal's own scope ids, else `Forbidden`.
+    ///
+    /// Phase 996:
+    /// - `Publication a` — anonymous → `RequireAuthentication`; `Allow` iff
+    ///   the principal holds one of `a.Readers` as a provider-asserted
+    ///   `TokenRoles` entry and `a.PublishingScope` is not blank, else
+    ///   `Forbidden`. No bypass: neither module permissions, team
+    ///   membership nor the platform-admin role admits — the readers are an
+    ///   explicit audience, and an app member outside it is refused.
+    /// - A publication reader (`AccessContext.isPublicationReader`) is
+    ///   confined: `Public` and the `Publication` pages above only; every
+    ///   other audience is `Forbidden` to it.
     let evaluate (ctx: AccessContext) (audience: PageAudience) : AudienceDecision =
         match audience with
+        | PageAudience.Publication publicationAudience -> publication ctx publicationAudience
         | PageAudience.Public -> AudienceDecision.Allow
+        | _ when AccessContext.isPublicationReader ctx -> AudienceDecision.Forbidden
         | PageAudience.Authenticated ->
             if AccessContext.isAuthenticated ctx then
                 AudienceDecision.Allow

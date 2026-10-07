@@ -58,6 +58,7 @@ let private teamCtx: AccessContext = {
     Subject = TeamMember("u1", "team-1")
     ModulePermissions = Map.empty
     TokenRoles = []
+    Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
     ModuleExposure = Map.empty
     PlatformRole = None
 }

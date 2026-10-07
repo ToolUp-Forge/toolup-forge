@@ -10388,6 +10388,7 @@ ToolUp.Platform.SurfaceEnforcement (class)
 ToolUp.Platform.SurfaceEnforcement.SubjectItemsKey : System.String (literal)
 ToolUp.Platform.SurfaceEnforcement+SurfaceEnforcement (class)
 ToolUp.Platform.SurfaceEnforcement+SurfaceEnforcement.evaluate(ToolUp.Platform.Subject, ToolUp.Platform.SurfaceRequirement) : ToolUp.Platform.SurfaceEnforcement+SurfaceEnforcementOutcome
+ToolUp.Platform.SurfaceEnforcement+SurfaceEnforcement.evaluateAdmitted(ToolUp.Platform.Subject, ToolUp.Platform.Auth+PrincipalAdmission, ToolUp.Platform.SurfaceRequirement) : ToolUp.Platform.SurfaceEnforcement+SurfaceEnforcementOutcome
 ToolUp.Platform.SurfaceEnforcement+SurfaceEnforcementMiddleware (class)
 ToolUp.Platform.SurfaceEnforcement+SurfaceEnforcementMiddleware..ctor(Microsoft.AspNetCore.Http.RequestDelegate, ToolUp.Platform.SurfaceEnforcement+SurfaceRequirementRegistry)
 ToolUp.Platform.SurfaceEnforcement+SurfaceEnforcementMiddleware.InvokeAsync(Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task

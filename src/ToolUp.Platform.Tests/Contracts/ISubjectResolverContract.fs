@@ -44,6 +44,7 @@ let private aUser: AuthenticatedUser = {
     TenantId = None
     Roles = []
     DirectoryRoles = []
+    Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
 }
 
 let private aClaim: ShareTokenClaim = {

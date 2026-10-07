@@ -294,6 +294,12 @@ module SemanticSearchHandler =
                 | _ -> AccessContext.unrestricted (AnonymousSession "anonymous")
 
             match SemanticSearch.classify config rawQuery with
+            // Phase 996 — retrieval runs under the caller's scope, and a
+            // publication reader is not an app user: it reads its
+            // publications and nothing else, so search refuses it.
+            | _ when AccessContext.isPublicationReader accessContext ->
+                ctx.Response.StatusCode <- 403
+                return! ctx.WriteStringAsync "Forbidden"
             | SemanticSearch.EmptyQuery ->
                 return! writeOrNoLayout ctx 200 (renderDoc config layouts SemanticSearch.emptyQueryDoc)
             | SemanticSearch.QueryTooLong maxChars ->

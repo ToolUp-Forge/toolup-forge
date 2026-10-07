@@ -427,6 +427,7 @@ let private userFromPayload (preferOid: bool) (payload: JwtPayload) : Authentica
         TenantId = None
         Roles = []
         DirectoryRoles = []
+        Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
     }
 
 // ─── Claim mapping (post-validation projection) ──────────────────────
@@ -647,6 +648,11 @@ let applyValidatedClaimMapping
 /// or API roles hold at least one of them). `Error reason` otherwise. The reason never echoes the
 /// token's own values. Exposed for the same reason as
 /// `applyValidatedClaimMapping`: conformance packs drive the shipped gate.
+///
+/// Phase 996 — a user who passes the tenant rule and fails `RequiredRoles`
+/// but holds a `PublicationReaders` role is `Ok` with `Admission =
+/// PublicationReader`: admitted to publication pages only. Every other `Ok`
+/// carries the user's admission unchanged (`Member`).
 let applyAdmission (mapping: ClaimMapping) (user: AuthenticatedUser) : Result<AuthenticatedUser, string> =
     let tenantOk =
         match mapping.AllowedTenants with
@@ -669,7 +675,26 @@ let applyAdmission (mapping: ClaimMapping) (user: AuthenticatedUser) : Result<Au
             Result.Ok()
         | _ -> Error "the token carries none of RequiredRoles"
 
-    tenantOk |> Result.bind rolesOk |> Result.map (fun () -> user)
+    // Phase 996 — the publication audience. A principal the member rule
+    // refuses, but who holds a `PublicationReaders` role, is admitted as a
+    // publication reader: never an app user, confined downstream to the
+    // `Publication` pages whose readers it holds. The tenant rule binds it
+    // exactly as it binds a member. With `PublicationReaders` empty this arm
+    // never runs, so admission is unchanged.
+    let holdsAny (roles: string list) =
+        roles
+        |> List.exists (fun r -> List.contains r user.Roles || List.contains r user.DirectoryRoles)
+
+    tenantOk
+    |> Result.bind (fun () ->
+        match rolesOk () with
+        | Result.Ok() -> Result.Ok user
+        | Result.Error _ when holdsAny mapping.PublicationReaders ->
+            Result.Ok {
+                user with
+                    Admission = PrincipalAdmission.PublicationReader
+            }
+        | Result.Error reason -> Result.Error reason)
 
 // ─── Validation pipeline ─────────────────────────────────────────────
 
@@ -954,6 +979,12 @@ let private buildProvider
     match config.ClaimMapping with
     | Some mapping ->
         match ClaimMapping.validateApiRoleGrants mapping.ApiRoleGrants with
+        | Error reason -> invalidArg (nameof config) $"OidcAuthProvider ClaimMapping: {reason}."
+        | Ok() -> ()
+
+        // Phase 996 — a publication audience with no member rule would admit
+        // every principal as an app user: refused at construction.
+        match ClaimMapping.validatePublicationReaders mapping with
         | Error reason -> invalidArg (nameof config) $"OidcAuthProvider ClaimMapping: {reason}."
         | Ok() -> ()
     | None -> ()

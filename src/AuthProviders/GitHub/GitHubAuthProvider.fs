@@ -139,6 +139,7 @@ let private userFromGitHub (ghUser: GitHubUser) (resolvedEmail: string option) :
         TenantId = None
         Roles = []
         DirectoryRoles = []
+        Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
     }
 
 // ─── Validation pipeline ─────────────────────────────────────────────

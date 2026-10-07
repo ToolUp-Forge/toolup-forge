@@ -278,6 +278,19 @@
       `InputHash` (`ToolUp.Facts.Core`) and `FactTableRunOptions`
       (`ToolUp.Facts.Server`) are new. Migration recipe:
       `docs/migrations/994-fact-run-inputs-and-periods.md`.
+
+      Phase 996 rides the same draft slot. A published page can serve a
+      publication audience: `PageAudience.Publication` (readers named by
+      directory role, and the publishing scope the page reads),
+      `ClaimMapping.PublicationReaders` (admits a principal the member rule
+      refuses as a publication reader, confined to its publications), and
+      `PublicationRead` / `PublicationAudit` (the publishing-scope read,
+      disclosure re-check and audit). Breaking for full record literals of
+      `AuthenticatedUser`, `AccessContext` and `ClaimMapping` (each gains a
+      field: `Admission`, `Admission`, `PublicationReaders`) and for an
+      exhaustive `match` over `PageAudience`; behaviour is unchanged until
+      `PublicationReaders` is set. Migration recipe:
+      `docs/migrations/996-publication-audience.md`.
     -->
     <Version>0.25.0</Version>
     <!--

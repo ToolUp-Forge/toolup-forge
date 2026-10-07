@@ -85,6 +85,29 @@ module PublicPageHandler =
         | MissNoLayout
         | MissNotFound
 
+    /// Phase 996 — `AudienceGate.evaluate`, audited. Every decision on a
+    /// `Publication` page, and every decision for a publication reader, is
+    /// written to the publication audit (`PublicationAudit`) with the
+    /// reader's identity, the publishing scope and the slug, and awaited so
+    /// the row exists before the response does. `events = None` (no store
+    /// composed, or the stale-while-revalidate refresh, which serves no
+    /// one) records nothing; every other page decision is exactly
+    /// `evaluate`'s.
+    let private decide
+        (events: IEventStore option)
+        (accessContext: AccessContext)
+        (slug: string)
+        (audience: PageAudience)
+        : Async<AudienceDecision> =
+        async {
+            let decision = AudienceGate.evaluate accessContext audience
+
+            if PublicationAudit.concerns accessContext audience then
+                do! PublicationAudit.record events (PublicationAudit.pageRow accessContext slug audience decision)
+
+            return decision
+        }
+
     /// Resolve a slug through the Phase 83 chain, apply the Phase 89
     /// publish-visibility filter, run the Phase 86 audience authorization
     /// gate, and render the layout to an HTML document. Pure with respect
@@ -96,6 +119,7 @@ module PublicPageHandler =
         (layouts: Map<LayoutName, PublicPage -> XmlNode>)
         (slug: string)
         (accessContext: AccessContext)
+        (events: IEventStore option)
         : Async<RenderOutcome> =
         async {
             let! pageOpt = api.GetPageInContext(slug, accessContext)
@@ -105,7 +129,7 @@ module PublicPageHandler =
 
             match visiblePage with
             | Some page ->
-                match AudienceGate.evaluate accessContext page.Audience with
+                match! decide events accessContext slug page.Audience with
                 | AudienceDecision.RequireAuthentication -> return Unauthorized
                 | AudienceDecision.Forbidden -> return AccessForbidden
                 | AudienceDecision.Allow ->
@@ -253,7 +277,8 @@ module PublicPageHandler =
         (ctx: HttpContext)
         : System.Threading.Tasks.Task<HttpContext option> =
         task {
-            let! outcome = resolveAndRender api layouts slug accessContext
+            let! outcome =
+                resolveAndRender api layouts slug accessContext (PublicationAudit.eventsIn ctx.RequestServices)
 
             match outcome with
             | Rendered(html, _page) ->
@@ -285,7 +310,8 @@ module PublicPageHandler =
         (ctx: HttpContext)
         : System.Threading.Tasks.Task<HttpContext option> =
         task {
-            let! outcome = resolveAndRender api layouts slug accessContext
+            let! outcome =
+                resolveAndRender api layouts slug accessContext (PublicationAudit.eventsIn ctx.RequestServices)
 
             match outcome with
             | Rendered(html, page) ->
@@ -370,7 +396,11 @@ module PublicPageHandler =
                 // members where only one holds the gating role) on every
                 // hit. `Public` entries always `Allow`, so a public cached
                 // page is unaffected.
-                match AudienceGate.evaluate accessContext entry.Audience with
+                let! decision =
+                    decide (PublicationAudit.eventsIn ctx.RequestServices) accessContext slug entry.Audience
+                    |> Async.StartAsTask
+
+                match decision with
                 | AudienceDecision.RequireAuthentication -> return! writeDenied ctx 401 "Unauthorized"
                 | AudienceDecision.Forbidden -> return! writeDenied ctx 403 "Forbidden"
                 | AudienceDecision.Allow ->
@@ -386,7 +416,7 @@ module PublicPageHandler =
                         Async.Start(
                             async {
                                 try
-                                    match! resolveAndRender api layouts slug accessContext with
+                                    match! resolveAndRender api layouts slug accessContext None with
                                     | Rendered(html, page) ->
                                         // Phase 147 — the refresh recomputes the same
                                         // content-stable `Last-Modified` for the page, so
@@ -433,7 +463,8 @@ module PublicPageHandler =
                 // without paying the very resolve we mean to collapse).
                 match settings.DefaultPolicy with
                 | CachePolicy.NoCache ->
-                    let! outcome = resolveAndRender api layouts slug accessContext
+                    let! outcome =
+                        resolveAndRender api layouts slug accessContext (PublicationAudit.eventsIn ctx.RequestServices)
 
                     match outcome with
                     | Rendered(html, page) ->
@@ -532,7 +563,11 @@ module PublicPageHandler =
                     | MissRendered(rendered, policy) ->
                         // Phase 199 / Phase 86 — re-gate per caller against
                         // the produced page's stored audience.
-                        match AudienceGate.evaluate accessContext rendered.Audience with
+                        let! decision =
+                            decide (PublicationAudit.eventsIn ctx.RequestServices) accessContext slug rendered.Audience
+                            |> Async.StartAsTask
+
+                        match decision with
                         | AudienceDecision.RequireAuthentication -> return! writeDenied ctx 401 "Unauthorized"
                         | AudienceDecision.Forbidden -> return! writeDenied ctx 403 "Forbidden"
                         | AudienceDecision.Allow ->
