@@ -54,6 +54,7 @@ let private modeLabel (accessContext: AccessContext) : string =
     | TeamMember _ -> "Team"
     | AuthenticatedUser _ -> "Individual"
     | ClaimBearer _ -> "Claim-bearer"
+    | PublicationReader _ -> "Publication-reader"
 
 /// Build one `ToolSummary` per data-producing module from the
 /// catalog, with scope-correct per-type counts. Empty when no catalog

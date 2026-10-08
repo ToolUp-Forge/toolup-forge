@@ -34,6 +34,9 @@ type OpenFeatureFlagSource(client: FeatureClient) =
         | TeamMember(userId, teamId) -> b.SetTargetingKey(userId).Set("teamId", Value(teamId)) |> ignore
         | AnonymousSession sid -> b.SetTargetingKey(sid) |> ignore
         | ClaimBearer _ -> ()
+        // Phase 1002 — a publication reader is not targeted: it is no app
+        // user and holds no session of the deployment's own.
+        | PublicationReader _ -> ()
 
         b.Build()
 

@@ -81,6 +81,7 @@ module AccessContext =
         | AnonymousSession sessionId -> sessionId
         | AuthenticatedUser userId -> userId
         | TeamMember(userId, _) -> userId
+        | PublicationReader userId -> userId
         | ClaimBearer claim ->
             // §3.0 OQ2 — AttributedHandle when set, else IssuedBy.
             // Synthetic "claim:<tokenId>" form is reserved for later
@@ -125,14 +126,18 @@ module AccessContext =
     /// signed-in human principal (`AuthenticatedUser` / `TeamMember`);
     /// `Member` for an anonymous session or a share-token bearer, whose
     /// identity no provider asserted (the same rule as `tokenRolesFor`).
+    /// Phase 1002 — a `PublicationReader` subject is a publication reader
+    /// whatever the provider admission says: the subject is the authority.
     let admissionFor
         (subject: Subject)
         (providerAdmission: ToolUp.Platform.Auth.PrincipalAdmission)
         : ToolUp.Platform.Auth.PrincipalAdmission =
         match subject with
+        | Subject.PublicationReader _ -> ToolUp.Platform.Auth.PrincipalAdmission.PublicationReader
         | Subject.AuthenticatedUser _
         | Subject.TeamMember _ -> providerAdmission
-        | _ -> ToolUp.Platform.Auth.PrincipalAdmission.Member
+        | Subject.AnonymousSession _
+        | Subject.ClaimBearer _ -> ToolUp.Platform.Auth.PrincipalAdmission.Member
 
     /// Phase 996 — `true` when the principal was admitted as a publication
     /// reader only: it is not an app user, and only `Publication` pages whose
@@ -140,11 +145,15 @@ module AccessContext =
     let isPublicationReader (ctx: AccessContext) : bool =
         ctx.Admission = ToolUp.Platform.Auth.PrincipalAdmission.PublicationReader
 
+    /// Phase 1002 — a `PublicationReader` carries its provider-asserted
+    /// roles: the `Publication` page gate admits it on them.
     let tokenRolesFor (subject: Subject) (providerRoles: string list) : string list =
         match subject with
         | Subject.AuthenticatedUser _
-        | Subject.TeamMember _ -> List.distinct providerRoles
-        | _ -> []
+        | Subject.TeamMember _
+        | Subject.PublicationReader _ -> List.distinct providerRoles
+        | Subject.AnonymousSession _
+        | Subject.ClaimBearer _ -> []
 
     /// True when the subject is `AnonymousSession`. Convenience for
     /// migration of old `match ctx.Mode with | Anonymous -> ...` code.
@@ -154,8 +163,10 @@ module AccessContext =
         | _ -> false
 
     /// True when the subject is anything other than `AnonymousSession`
-    /// (`AuthenticatedUser`, `TeamMember`, `ClaimBearer`). Convenience
-    /// for the negative branch.
+    /// (`AuthenticatedUser`, `TeamMember`, `ClaimBearer`, and — Phase
+    /// 1002 — `PublicationReader`, which is signed in but is not an app
+    /// user: `isPublicationReader` confines it). Convenience for the
+    /// negative branch.
     let isAuthenticated (ctx: AccessContext) = not (isAnonymous ctx)
 
     /// True when the subject is `TeamMember`. Use for handlers that
@@ -190,6 +201,7 @@ module AccessContext =
         | UserKind -> "user"
         | TeamMemberKind -> "team"
         | ClaimBearerKind -> "claim-bearer"
+        | PublicationReaderKind -> "publication-reader"
 
     /// The `ModuleExposure` state of a module for the active team.
     /// A module absent from `ModuleExposure` is `Available` (the
@@ -221,23 +233,29 @@ module AccessContext =
     /// accessible. When populated, the module must be a key in the
     /// map with at least one permission. This is the **permission**
     /// axis; sidebar visibility additionally requires `isModuleExposed`.
+    ///
+    /// Phase 1002 — a publication reader is never an app user, so it can
+    /// access no module, whatever its (empty) permission map would say.
     let canAccessModule (moduleName: string) (ctx: AccessContext) =
-        ctx.ModulePermissions.IsEmpty
-        || (ctx.ModulePermissions
-            |> Map.tryFind moduleName
-            |> Option.map (fun perms -> not (List.isEmpty perms))
-            |> Option.defaultValue false)
+        not (isPublicationReader ctx)
+        && (ctx.ModulePermissions.IsEmpty
+            || (ctx.ModulePermissions
+                |> Map.tryFind moduleName
+                |> Option.map (fun perms -> not (List.isEmpty perms))
+                |> Option.defaultValue false))
 
     /// Check whether the context grants a specific permission on a
     /// module, honouring the Read / Write / Admin hierarchy: `Admin`
     /// satisfies any requirement; `Write` satisfies `Read` or `Write`;
     /// `Read` satisfies only `Read`. Empty map is unrestricted.
+    /// Phase 1002 — a publication reader holds no module permission.
     let hasPermission (moduleName: string) (required: ModulePermission) (ctx: AccessContext) =
-        ctx.ModulePermissions.IsEmpty
-        || (ctx.ModulePermissions
-            |> Map.tryFind moduleName
-            |> Option.map (List.exists (fun granted -> ModulePermission.implies granted required))
-            |> Option.defaultValue false)
+        not (isPublicationReader ctx)
+        && (ctx.ModulePermissions.IsEmpty
+            || (ctx.ModulePermissions
+                |> Map.tryFind moduleName
+                |> Option.map (List.exists (fun granted -> ModulePermission.implies granted required))
+                |> Option.defaultValue false))
 
     /// Resolve the `StorageScope` for persistent per-scope configuration
     /// (AI settings, team profiles, notification preferences, and other
@@ -273,6 +291,8 @@ module AccessContext =
                 Persist = true
             }
         | AnonymousSession _ -> None
+        // Phase 1002 — a publication reader holds no scope of its own.
+        | PublicationReader _ -> None
 
     /// Phase 995 — the inverse of `configScope`: the access context whose
     /// `configScope` is exactly `scope`, for work that holds a scope but no
@@ -314,7 +334,8 @@ module AccessContext =
         | TeamMember(_, teamId) -> Some(FlagScope.Team teamId)
         | AuthenticatedUser userId -> Some(FlagScope.User userId)
         | ClaimBearer _
-        | AnonymousSession _ -> None
+        | AnonymousSession _
+        | PublicationReader _ -> None
 
     /// Whether the context grants platform-wide administrative authority.
     /// Returns `true` only when `PlatformRole = Some PlatformAdmin`. Used

@@ -101,7 +101,9 @@ module NavTree =
     let isVisible (ctx: AccessContext) (node: NavNode) : bool =
         match node.Audience with
         | NavPublic -> true
-        | NavAuthenticated -> AccessContext.isAuthenticated ctx
+        // Phase 1002 — a publication reader is signed in but is not an app
+        // user: members-only navigation is not offered to it.
+        | NavAuthenticated -> AccessContext.isAuthenticated ctx && not (AccessContext.isPublicationReader ctx)
         | NavTeamOnly -> AccessContext.inTeamScope ctx
 
     /// Filter a tree to the nodes visible to `ctx`, recursively. A node

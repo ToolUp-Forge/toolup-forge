@@ -52,7 +52,8 @@ let private ownerFor (accessContext: AccessContext) : ContactOwner =
     // owner is derived — but named rather than wildcarded, so a new
     // Subject shape is a compile error here and not a silent owner.
     | AnonymousSession _
-    | ClaimBearer _ -> ContactOwner.User accessContext.UserId
+    | ClaimBearer _
+    | PublicationReader _ -> ContactOwner.User accessContext.UserId
 
 /// Parse a channel string from the wire into the shipped routing key.
 let private parseChannel (wire: string) : Result<NotificationKind.SinkKind, ExternalContactError> =
@@ -85,6 +86,8 @@ let externalContactApi (ctx: HttpContext) : IExternalContactApi =
         | Some s ->
             match accessContext.Subject with
             | AnonymousSession _ -> return Error "Sign in to use the address book."
+            // Phase 1002 — a publication reader is not an app user.
+            | PublicationReader _ -> return Error "The address book is not available to a publication reader."
             | AuthenticatedUser _
             | TeamMember _
             | ClaimBearer _ ->
@@ -101,6 +104,9 @@ let externalContactApi (ctx: HttpContext) : IExternalContactApi =
             match accessContext.Subject with
             | ClaimBearer _ -> async {
                 return Error "The address book cannot be read with a token credential. Sign in as a team member."
+              }
+            | PublicationReader _ -> async {
+                return Error "The address book is not available to a publication reader."
               }
             | AnonymousSession _
             | AuthenticatedUser _
@@ -134,6 +140,7 @@ let externalContactApi (ctx: HttpContext) : IExternalContactApi =
                 // Already refused by `scoped`; restated so no Subject
                 // shape reaches a write through a fall-through arm.
                 return Error "Sign in to use the address book."
+            | PublicationReader _ -> return Error "The address book is not available to a publication reader."
         })
 
     let toResult (r: Result<'a, ExternalContactError>) : Result<'a, string> =

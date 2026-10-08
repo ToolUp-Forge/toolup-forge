@@ -84,7 +84,13 @@ let private constructorTag =
     | SurfaceProfile.ClaimBearer _ -> "ClaimBearer"
 
 let private requirementLabel (req: SurfaceRequirement) : string =
-    let order = [ AnonymousKind; UserKind; TeamMemberKind; ClaimBearerKind ]
+    let order = [
+        AnonymousKind
+        UserKind
+        TeamMemberKind
+        ClaimBearerKind
+        PublicationReaderKind
+    ]
 
     let label =
         function
@@ -92,6 +98,7 @@ let private requirementLabel (req: SurfaceRequirement) : string =
         | UserKind -> "UserKind"
         | TeamMemberKind -> "TeamMemberKind"
         | ClaimBearerKind -> "ClaimBearerKind"
+        | PublicationReaderKind -> "PublicationReaderKind"
 
     order
     |> List.filter (fun k -> req.AcceptedSubjects.Contains k)

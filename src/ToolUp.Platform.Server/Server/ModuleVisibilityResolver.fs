@@ -31,6 +31,8 @@ let scopesFor (ctx: AccessContext) : FlagScope list =
     | AuthenticatedUser userId -> [ FlagScope.Platform; FlagScope.User userId ]
     | TeamMember(userId, teamId) -> [ FlagScope.Platform; FlagScope.Team teamId; FlagScope.User userId ]
     | ClaimBearer _ -> [ FlagScope.Platform ]
+    // Phase 1002 — a publication reader holds no user or team scope.
+    | PublicationReader _ -> [ FlagScope.Platform ]
 
 /// Read every layer that declares a profile for this caller, in walk
 /// order, and fold them into one resolution.

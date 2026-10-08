@@ -508,6 +508,9 @@ module Visibility =
     let visibleToAuthenticated: SubjectKind -> bool =
         function
         | AnonymousKind -> false
+        // Phase 1002 — a publication reader is signed in but is not an app
+        // user: modules for signed-in users are not offered to it.
+        | PublicationReaderKind -> false
         | UserKind
         | TeamMemberKind
         | ClaimBearerKind -> true

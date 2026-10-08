@@ -74,6 +74,7 @@ let private emitMismatchAudit (ctx: HttpContext) (principalId: string) (asserted
                         | UserKind -> "user"
                         | TeamMemberKind -> "team"
                         | ClaimBearerKind -> "claim"
+                        | PublicationReaderKind -> "publication-reader"
 
                     kind, Some principalId
                 | _ -> "user", Some principalId

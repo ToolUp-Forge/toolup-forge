@@ -151,6 +151,10 @@ module SessionIdentity =
         | Subject.AuthenticatedUser _, _
         | TeamMember _, _ -> None
         | Subject.ClaimBearer _, _ -> None
+        // Phase 1002 — a publication reader's sign-in is a session like a
+        // member's, recorded so it can be listed and revoked.
+        | Subject.PublicationReader userId, Some cred when cred <> "" -> Some(ofCredential userId cred)
+        | Subject.PublicationReader _, _ -> None
 
 // ─── Blob addressing ─────────────────────────────────────────────────
 

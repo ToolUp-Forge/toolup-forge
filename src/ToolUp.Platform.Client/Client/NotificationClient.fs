@@ -207,7 +207,8 @@ let rec private openConnection () =
              | AnonymousKind -> ()
              | UserKind
              | TeamMemberKind
-             | ClaimBearerKind ->
+             | ClaimBearerKind
+             | PublicationReaderKind ->
                  if not state.QueryParamFallbackWarned then
                      state <- {
                          state with

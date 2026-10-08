@@ -52,6 +52,7 @@ let internal subjectFields (subject: Subject) : string * string option =
     | AuthenticatedUser uid -> "user", Some uid
     | TeamMember(uid, _) -> "team", Some uid
     | ClaimBearer claim -> "claim", Some claim.TokenId
+    | PublicationReader uid -> "publication-reader", Some uid
 
 /// SDK-default `IHostActionAuditHook`. Writes a `HostActionDispatched` row
 /// through `IAuditLog` under the action's own scope. `now` is injectable for

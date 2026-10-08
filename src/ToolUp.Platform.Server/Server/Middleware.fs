@@ -130,6 +130,7 @@ module StorageScopeDerivation =
         | Subject.AuthenticatedUser _ -> "AuthenticatedUser"
         | TeamMember _ -> "Team"
         | Subject.ClaimBearer _ -> "ClaimBearer"
+        | Subject.PublicationReader _ -> "PublicationReader"
 
     /// Resolve a subject's persistence flag from the declared
     /// `Surfaces`. Returns `(persist, defaulted)` where `defaulted` is
@@ -167,6 +168,9 @@ module StorageScopeDerivation =
         // semantics) — it is never matched against Surfaces, so it never
         // "defaults".
         | Subject.ClaimBearer _ -> true, false
+        // Phase 1002 — a publication reader holds no scope, so nothing of
+        // it persists; never matched against Surfaces either.
+        | Subject.PublicationReader _ -> false, false
 
     /// Subject kinds for which the fail-closed default has already been
     /// warned this process — so the diagnostic fires once per kind, not
@@ -192,36 +196,59 @@ module StorageScopeDerivation =
                         (DeploymentConfig.surfacesLabel config)
                 )
 
-    /// Derive the storage scope for a subject. `logger` (best-effort)
-    /// receives the one-time fail-closed-default diagnostic when the
-    /// subject's kind is undeclared in `Surfaces` (Phase 246).
-    let fromSubject (logger: ILogger option) (config: ServerConfig) (subject: Subject) : StorageScope =
+    /// Derive the storage scope for a subject, if it holds one. `logger`
+    /// (best-effort) receives the one-time fail-closed-default diagnostic
+    /// when the subject's kind is undeclared in `Surfaces` (Phase 246).
+    ///
+    /// Phase 1002 — `None` for a `PublicationReader`: a reader holds no
+    /// scope of its own (no `user-<id>`, `team-<id>` or session container),
+    /// so the middleware stashes no `StorageScope` for it and every scope
+    /// read fails closed. It reads a publishing scope only through the
+    /// audience gate of a `Publication` page that names its readers.
+    let tryFromSubject (logger: ILogger option) (config: ServerConfig) (subject: Subject) : StorageScope option =
         let persist, defaulted = persistenceFor config.Surfaces subject
 
         if defaulted then
             warnUndeclaredKindOnce logger subject config
 
         match subject with
-        | AnonymousSession sid -> {
-            ScopeId = sid
-            Container = $"session-{sid}"
-            Persist = persist
-          }
-        | Subject.AuthenticatedUser uid -> {
-            ScopeId = uid
-            Container = $"user-{uid}"
-            Persist = persist
-          }
-        | TeamMember(_, tid) -> {
-            ScopeId = tid
-            Container = $"team-{tid}"
-            Persist = persist
-          }
-        | Subject.ClaimBearer claim -> {
-            ScopeId = claim.ScopeId
-            Container = claim.ScopeId
-            Persist = persist
-          }
+        | AnonymousSession sid ->
+            Some {
+                ScopeId = sid
+                Container = $"session-{sid}"
+                Persist = persist
+            }
+        | Subject.AuthenticatedUser uid ->
+            Some {
+                ScopeId = uid
+                Container = $"user-{uid}"
+                Persist = persist
+            }
+        | TeamMember(_, tid) ->
+            Some {
+                ScopeId = tid
+                Container = $"team-{tid}"
+                Persist = persist
+            }
+        | Subject.ClaimBearer claim ->
+            Some {
+                ScopeId = claim.ScopeId
+                Container = claim.ScopeId
+                Persist = persist
+            }
+        | Subject.PublicationReader _ -> None
+
+    /// Derive the storage scope for a subject that holds one. Raises for a
+    /// `PublicationReader` (Phase 1002), which holds none — a caller that
+    /// can meet a reader uses `tryFromSubject`; inventing a container for
+    /// it would hand a non-member a scope of its own.
+    let fromSubject (logger: ILogger option) (config: ServerConfig) (subject: Subject) : StorageScope =
+        match tryFromSubject logger config subject with
+        | Some scope -> scope
+        | None ->
+            invalidArg
+                (nameof subject)
+                "StorageScopeDerivation.fromSubject: a PublicationReader holds no storage scope (use tryFromSubject)"
 
 /// Map a `SubjectResolutionError` back into the legacy
 /// `ScopeResolutionError` shape used by handlers that still read
@@ -429,7 +456,18 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                     ctx.Items["ToolUp.User"] <- box user
                     ctx.Items["ToolUp.UserId"] <- box user.UserId
 
-                    let! resolved = runAsync (resolver.Resolve request)
+                    let! resolvedByResolver = runAsync (resolver.Resolve request)
+
+                    // Phase 1002 — a publication reader's subject does not
+                    // depend on the composed resolver or on the deployment's
+                    // Surfaces: the same rule `DefaultSubjectResolver` applies
+                    // at step 1b, enforced here so a custom resolver can
+                    // neither widen a reader into a member's shape nor drop
+                    // it to an anonymous session.
+                    let resolved =
+                        match SubjectResolution.publicationReader request with
+                        | Some reader -> Ok reader
+                        | None -> resolvedByResolver
 
                     // Resolved once per request, best-effort: feeds the
                     // Phase 246 fail-closed-default diagnostic (Ok path)
@@ -443,8 +481,14 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                     let subject, scopeResult =
                         match resolved with
                         | Ok s ->
-                            let scope = StorageScopeDerivation.fromSubject loggerOpt config s
-                            s, Ok scope
+                            match StorageScopeDerivation.tryFromSubject loggerOpt config s with
+                            | Some scope -> s, Ok scope
+                            // Phase 1002 — a publication reader: no scope is
+                            // stashed, so every scope read fails closed. The
+                            // legacy result says the caller is not an
+                            // authenticated app user; the subject stays the
+                            // reader (never an anonymous fallback).
+                            | None -> s, Error NotAuthenticated
                         | Error err ->
                             let fallback = fallbackAnonymous request
                             let bridged = SubjectResolutionErrorBridge.toScopeError err

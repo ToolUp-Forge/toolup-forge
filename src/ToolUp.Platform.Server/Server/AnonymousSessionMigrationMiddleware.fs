@@ -115,7 +115,10 @@ let private migrationTargetId (subject: Subject) : string option =
     | AuthenticatedUser uid -> Some uid
     | TeamMember(uid, _) -> Some uid
     | AnonymousSession _
-    | ClaimBearer _ -> None
+    | ClaimBearer _
+    // Phase 1002 — a publication reader is not an app user: no anonymous
+    // session's data is ever lifted into it.
+    | PublicationReader _ -> None
 
 let private runAsync (computation: Async<'a>) : System.Threading.Tasks.Task<'a> = Async.StartImmediateAsTask computation
 

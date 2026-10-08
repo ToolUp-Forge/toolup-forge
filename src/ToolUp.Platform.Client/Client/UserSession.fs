@@ -405,7 +405,9 @@ let getUserId () =
         | AnonymousKind -> false
         | UserKind
         | TeamMemberKind
-        | ClaimBearerKind -> true
+        | ClaimBearerKind
+        // Phase 1002 — a publication reader is signed in: its id is its token's.
+        | PublicationReaderKind -> true
 
     let tokenSub =
         if isAuth then
@@ -841,7 +843,8 @@ let identityHeaderPairs () : (string * string)[] =
     | AnonymousKind -> [| userIdHeader, getUserId () |]
     | UserKind
     | TeamMemberKind
-    | ClaimBearerKind ->
+    | ClaimBearerKind
+    | PublicationReaderKind ->
         match getAuthToken () with
         | Some token -> [| "Authorization", $"Bearer {token}" |]
         | None -> [| userIdHeader, getUserId () |]

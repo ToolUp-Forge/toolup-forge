@@ -47,6 +47,13 @@ let private aUser: AuthenticatedUser = {
     Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
 }
 
+/// Phase 1002 — a principal the provider admitted as a publication
+/// reader only.
+let private aReader: AuthenticatedUser = {
+    aUser with
+        Admission = ToolUp.Platform.Auth.PrincipalAdmission.PublicationReader
+}
+
 let private aClaim: ShareTokenClaim = {
     TokenId = "token-1"
     ScopeId = "scope-1"
@@ -320,6 +327,81 @@ let tests (name: string) (factory: ResolverFactory) =
                 | Error(SubjectResolutionError.SubjectResolutionFailed msg) ->
                     Expect.stringContains msg "unreachable" "carries the underlying store failure"
                 | other -> failtestf "expected SubjectResolutionFailed, got %A" other
+            }
+        ]
+
+        // ── Step 1b — Phase 1002: a publication reader resolves ahead of Surfaces ──
+
+        testList "publication reader (step 1b)" [
+            test "a reader resolves to PublicationReader under every named Surfaces list" {
+                // A team pointer AND a role are answered, so a resolver that
+                // consulted the team surface first would mint a TeamMember.
+                let store = teamStoreStub (Some "acme") (Some TeamRole.Owner)
+
+                for surfaces in
+                    [
+                        Surfaces.anonymous
+                        Surfaces.individual
+                        Surfaces.team
+                        Surfaces.multiTeam
+                        Surfaces.anonymousAndIndividual
+                        Surfaces.anonymousAndTeam
+                        Surfaces.teamWithShareTokens
+                        [ SurfaceProfile.individual; SurfaceProfile.team ]
+                    ] do
+                    let resolver = factory surfaces (Some store)
+
+                    match
+                        run resolver {
+                            emptyRequest with
+                                User = Some aReader
+                        }
+                    with
+                    | Ok(Subject.PublicationReader uid) -> Expect.equal uid "user-1" $"%A{surfaces}"
+                    | other -> failtestf "%A: expected PublicationReader, got %A" surfaces other
+            }
+
+            test "a share-token claim still dominates a reader (step 1)" {
+                let resolver = factory Surfaces.team None
+
+                match
+                    run resolver {
+                        emptyRequest with
+                            User = Some aReader
+                            Claim = Some aClaim
+                    }
+                with
+                | Ok(Subject.ClaimBearer c) -> Expect.equal c.TokenId "token-1" "the claim"
+                | other -> failtestf "expected ClaimBearer, got %A" other
+            }
+
+            test "nothing else widens: a teamless MEMBER under team-only Surfaces is still UnsupportedSubject UserKind" {
+                let store = teamStoreStub None None
+
+                for surfaces in [ Surfaces.team; Surfaces.multiTeam; Surfaces.anonymousAndTeam ] do
+                    let resolver = factory surfaces (Some store)
+
+                    match run resolver { emptyRequest with User = Some aUser } with
+                    | Error(SubjectResolutionError.UnsupportedSubject UserKind) -> ()
+                    | other -> failtestf "%A: expected UnsupportedSubject UserKind, got %A" surfaces other
+            }
+
+            test "an anonymous user carrying a reader admission is not a reader" {
+                let resolver = factory Surfaces.anonymousAndTeam None
+
+                let anonymousReader = {
+                    AuthenticatedUser.anonymous with
+                        Admission = ToolUp.Platform.Auth.PrincipalAdmission.PublicationReader
+                }
+
+                match
+                    run resolver {
+                        emptyRequest with
+                            User = Some anonymousReader
+                    }
+                with
+                | Ok(Subject.AnonymousSession _) -> ()
+                | other -> failtestf "expected AnonymousSession, got %A" other
             }
         ]
     ]

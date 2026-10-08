@@ -304,6 +304,8 @@ let auditViewApi (auditLogMode: AuditLogMode) (ctx: HttpContext) : IAuditViewApi
             | _ -> return Error "Team management is not available in this deployment."
         | AuthenticatedUser _
         | ClaimBearer _ -> return Ok()
+        // Phase 1002 — a publication reader is not an app user.
+        | PublicationReader _ -> return Error "The audit trail is not available to a publication reader."
     }
 
     /// Every row in the caller's scope, newest first, in the total order

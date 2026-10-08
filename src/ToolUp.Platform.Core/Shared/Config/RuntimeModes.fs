@@ -274,6 +274,9 @@ module RateLimitPolicy =
         | AuthenticatedUser uid -> sprintf "user:%s" uid
         | TeamMember(_, tid) -> sprintf "team:%s" tid
         | ClaimBearer claim -> sprintf "token:%s" claim.TokenId
+        // Phase 1002 — a publication reader gets a budget of its own,
+        // never a member's or a team's.
+        | PublicationReader uid -> sprintf "reader:%s" uid
 
 /// Phase 66 Stream C.3 (design §3.10 + D21) — per-subject-kind rate
 /// limiting. `Default` applies to any subject kind without a `PerShape`

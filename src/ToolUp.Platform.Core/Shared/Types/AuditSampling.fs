@@ -26,6 +26,8 @@ type AuditSubjectKind =
     | UserAuditKind
     | TeamAuditKind
     | ClaimAuditKind
+    /// Phase 1002 — `ReaderAudit` (a publication reader).
+    | ReaderAuditKind
 
 /// Phase 66 Stream C.2 (design §3.6 + D17) — per-subject-kind audit
 /// sampling. A single central policy on `ServerConfig` (NOT per-sink):
@@ -81,6 +83,9 @@ module AuditSamplingPolicy =
         | UserAuditKind -> policy.User
         | TeamAuditKind -> policy.Team
         | ClaimAuditKind -> policy.Claim
+        // Phase 1002 — a publication reader's trail is never sampled: it is
+        // low-volume and is the record of who read a publication.
+        | ReaderAuditKind -> 1.0
 
     /// Deterministic `Guid` → `[0, 1)` projection. Folds six bytes of
     /// the id into a 48-bit non-negative integer (which fits exactly in

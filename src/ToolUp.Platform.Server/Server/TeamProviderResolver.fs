@@ -58,7 +58,9 @@ let private actingUser (subject: Subject) : string option =
     | TeamMember(userId, _) -> Some userId
     | AuthenticatedUser userId -> Some userId
     | AnonymousSession _
-    | ClaimBearer _ -> None
+    | ClaimBearer _
+    // Phase 1002 — a publication reader acts in no team.
+    | PublicationReader _ -> None
 
 /// Default `ITeamProviderResolver` over an `IProviderProfile` and a
 /// role lookup.

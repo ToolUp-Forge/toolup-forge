@@ -40,6 +40,17 @@ type Subject =
     /// `IPublicFormApi` claim-as-identity pattern (Phase 1 §1.5)
     /// promoted to a first-class subject kind.
     | ClaimBearer of claim: ShareTokenClaim
+    /// Phase 1002 — a principal the identity provider admitted as a
+    /// publication reader only (`PrincipalAdmission.PublicationReader`):
+    /// signed in, but NOT an app user. Resolved ahead of the deployment's
+    /// `Surfaces`, so its admission does not depend on which app subjects
+    /// the deployment serves. It holds no scope of its own — no
+    /// `user-<id>` / `team-<id>` / session container is derived for it —
+    /// and reads only a publishing scope, through the audience gate of a
+    /// `Publication` page that names its readers. Distinct from
+    /// `AuthenticatedUser` (a member) and `AnonymousSession` (a visitor)
+    /// so every exhaustive match must decide what a reader is.
+    | PublicationReader of userId: string
 
 /// Lightweight kind tag for declarative use — `SurfaceRequirement`
 /// admit sets, capability checks, audit attribution, log/metrics
@@ -51,6 +62,10 @@ type SubjectKind =
     | UserKind
     | TeamMemberKind
     | ClaimBearerKind
+    /// Phase 1002 — `Subject.PublicationReader`. No `SurfaceRequirement`
+    /// preset admits it; surface enforcement refuses it on every `/api`
+    /// route that does not admit anonymous callers.
+    | PublicationReaderKind
 
 module Subject =
     /// Project a `Subject` to its lightweight `SubjectKind` tag.
@@ -62,3 +77,4 @@ module Subject =
         | AuthenticatedUser _ -> UserKind
         | TeamMember _ -> TeamMemberKind
         | ClaimBearer _ -> ClaimBearerKind
+        | PublicationReader _ -> PublicationReaderKind

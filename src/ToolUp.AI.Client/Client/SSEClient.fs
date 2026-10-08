@@ -112,7 +112,8 @@ let private openStream (userId: string) (dispatch: AIStreamEvent -> unit) : Even
              | AnonymousKind -> ()
              | UserKind
              | TeamMemberKind
-             | ClaimBearerKind ->
+             | ClaimBearerKind
+             | PublicationReaderKind ->
                  if not queryParamFallbackWarned then
                      queryParamFallbackWarned <- true
 

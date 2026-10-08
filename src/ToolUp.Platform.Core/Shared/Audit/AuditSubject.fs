@@ -66,6 +66,10 @@ type AuditSubject =
     /// `ShareTokenClaim` record carried on `Subject.ClaimBearer`) is
     /// deliberate — sinks query on these four fields directly.
     | ClaimAudit of tokenId: string * attributedHandle: string option * resourceKind: string * resourceId: string
+    /// Phase 1002 — a publication reader (`Subject.PublicationReader`):
+    /// signed in, not an app user. Its own case so a sink never files a
+    /// reader's row under `user`.
+    | ReaderAudit of userId: string
 
 // `AuditSubjectKind` is defined in `Shared/Types/AuditSampling.fs`
 // (compiled before SDK.Shared.fs so `ServerConfig` can carry an
@@ -83,6 +87,7 @@ module AuditSubject =
         | UserAudit _ -> UserAuditKind
         | TeamAudit _ -> TeamAuditKind
         | ClaimAudit _ -> ClaimAuditKind
+        | ReaderAudit _ -> ReaderAuditKind
 
     /// String form of `kind` — what sinks actually emit as a tag value.
     /// Stable across the audit-schema-version envelope bump; do not
@@ -93,6 +98,7 @@ module AuditSubject =
         | UserAuditKind -> "user"
         | TeamAuditKind -> "team"
         | ClaimAuditKind -> "claim"
+        | ReaderAuditKind -> "publication-reader"
 
     /// Construct an `AuditSubject` from the request-side `Subject`. The
     /// canonical bridge — every audit emission site that has a resolved
@@ -103,6 +109,7 @@ module AuditSubject =
         | AuthenticatedUser uid -> UserAudit uid
         | TeamMember(uid, tid) -> TeamAudit(uid, tid)
         | ClaimBearer claim -> ClaimAudit(claim.TokenId, claim.AttributedHandle, claim.ResourceKind, claim.ResourceId)
+        | PublicationReader uid -> ReaderAudit uid
 
     /// Project a `Subject` to the `(kind, id)` pair an audit ROW carries —
     /// the only subject information that reaches a flat payload, and no
@@ -125,6 +132,7 @@ module AuditSubject =
         | AuthenticatedUser uid -> "user", Some uid
         | TeamMember(uid, _) -> "team", Some uid
         | ClaimBearer claim -> "claim", Some claim.TokenId
+        | PublicationReader uid -> "publication-reader", Some uid
 
     /// Sentinel `userId` for `TeamAudit` cases derived from `ScopeId`
     /// alone — see `fromScopeId`. Sinks treat this value as "team event

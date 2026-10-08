@@ -450,6 +450,8 @@ module ProviderScopeChain =
         | AuthenticatedUser userId -> [ ProviderScope.userOwned userId ]
         | ClaimBearer claim -> [ ProviderScope.claimOwned claim.ScopeId ]
         | AnonymousSession _ -> []
+        // Phase 1002 — a publication reader holds no scope of its own.
+        | PublicationReader _ -> []
 
     /// The rung a WRITE targets for a given owner intent, if the
     /// subject can reach it. A team member can reach both rungs

@@ -35,12 +35,18 @@ module RequestViewer =
             | _ -> None
 
         match item "ToolUp.Subject" with
+        // Phase 1002 — a publication reader is no viewer of an app scope:
+        // no team role, ownership or platform-admin standing is looked up
+        // for it, so every requester-audience check is decided for the
+        // least-privileged viewer and every owner check refuses.
+        | Some(:? Subject as subject) when Subject.kind subject = PublicationReaderKind -> None
         | Some(:? Subject as subject) ->
             let fromSubject =
                 match subject with
                 | AnonymousSession sessionId -> sessionId
                 | AuthenticatedUser userId
-                | TeamMember(userId, _) -> userId
+                | TeamMember(userId, _)
+                | PublicationReader userId -> userId
                 | ClaimBearer claim -> claim.AttributedHandle |> Option.defaultValue claim.IssuedBy
 
             Some {

@@ -1539,13 +1539,28 @@ let private publicationUnitTests =
                     (SurfaceEnforcement.SurfaceEnforcement.evaluate subject requirement)
                     "a member is evaluated exactly as before"
 
-            Expect.equal
-                (SurfaceEnforcement.SurfaceEnforcement.evaluateAdmitted
-                    subject
-                    PrincipalAdmission.PublicationReader
-                    SurfaceRequirement.public_)
-                SurfaceEnforcement.Pass
-                "a public route gives a reader nothing an anonymous caller lacks"
+            // Phase 1002 — a route that admits anonymous callers refuses a
+            // reader too: its subject holds no scope, and such a handler
+            // would derive one from the reader's id.
+            for requirement in [ SurfaceRequirement.public_; SurfaceRequirement.anonymousOnly ] do
+                Expect.equal
+                    (SurfaceEnforcement.SurfaceEnforcement.evaluateAdmitted
+                        subject
+                        PrincipalAdmission.PublicationReader
+                        requirement)
+                    (SurfaceEnforcement.Reject(403, "publication_reader_not_admitted", None))
+                    $"%A{requirement}: refused"
+
+            // Phase 1002 — the reader SUBJECT is a reader even with no
+            // admission stashed: the subject is the authority.
+            for requirement in [ SurfaceRequirement.public_; SurfaceRequirement.userOrTeam ] do
+                Expect.equal
+                    (SurfaceEnforcement.SurfaceEnforcement.evaluateAdmitted
+                        (Subject.PublicationReader "rhea")
+                        PrincipalAdmission.Member
+                        requirement)
+                    (SurfaceEnforcement.Reject(403, "publication_reader_not_admitted", None))
+                    $"%A{requirement}: a reader subject is refused"
 
         testCaseAsync "PublicationRead — reads the PUBLISHING scope, audits the read, withholds a now-denied fact"
         <| async {
@@ -1681,160 +1696,327 @@ let private appApiRoutes: HttpHandler list = [
     POST >=> route "/api/ai/chat" >=> text "assistant"
 ]
 
+/// Phase 1002 — the reader subject in isolation: no scope, no module
+/// authority, its admission and roles carried for the page gate.
+let private publicationReaderSubjectTests =
+    testList "Phase 1002 — the PublicationReader subject holds no scope" [
+        testCase "no storage scope under any Surfaces list; fromSubject refuses to invent one"
+        <| fun _ ->
+            let reader = Subject.PublicationReader "rhea"
+
+            for surfaces in
+                [
+                    Surfaces.individual
+                    Surfaces.anonymousAndIndividual
+                    Surfaces.team
+                    Surfaces.multiTeam
+                    Surfaces.anonymousAndTeam
+                ] do
+                let config = {
+                    ServerConfig.defaults with
+                        Surfaces = surfaces
+                }
+
+                Expect.isNone
+                    (Middleware.StorageScopeDerivation.tryFromSubject None config reader)
+                    $"%A{surfaces}: no container for the reader"
+
+                Expect.throwsT<System.ArgumentException>
+                    (fun () -> Middleware.StorageScopeDerivation.fromSubject None config reader |> ignore)
+                    $"%A{surfaces}: fromSubject refuses"
+
+            // The falsifier: the same id as a member under individual
+            // Surfaces gets `user-<id>`.
+            let individual = {
+                ServerConfig.defaults with
+                    Surfaces = Surfaces.individual
+            }
+
+            Expect.equal
+                (Middleware.StorageScopeDerivation.tryFromSubject None individual (AuthenticatedUser "rhea")
+                 |> Option.map _.Container)
+                (Some "user-rhea")
+                "a member gets its own container"
+
+        testCase "the access context: reader admission and roles carried; no module, config or flag scope"
+        <| fun _ ->
+            let reader = Subject.PublicationReader "rhea"
+
+            let ctx = {
+                AccessContext.unrestricted reader with
+                    TokenRoles = AccessContext.tokenRolesFor reader [ "board-readers" ]
+                    Admission = AccessContext.admissionFor reader PrincipalAdmission.Member
+            }
+
+            Expect.isTrue (AccessContext.isPublicationReader ctx) "the subject makes it a reader"
+            Expect.equal ctx.TokenRoles [ "board-readers" ] "its roles ride for the page gate"
+            Expect.isFalse (AccessContext.canAccessModule "reports" ctx) "no module, empty map or not"
+            Expect.isFalse (AccessContext.hasPermission "reports" ModulePermission.Read ctx) "no permission"
+            Expect.isNone (AccessContext.configScope ctx) "no config scope"
+            Expect.isNone (AccessContext.flagScope ctx) "no flag scope"
+            Expect.isFalse (AccessContext.isAnonymous ctx) "never anonymous"
+            Expect.isFalse (AccessContext.inTeamScope ctx) "never a team member"
+
+            Expect.equal
+                (AudienceGate.evaluate ctx (PageAudience.Publication boardAudience))
+                AudienceDecision.Allow
+                "the page gate admits it to its publication"
+
+            Expect.equal
+                (AudienceGate.evaluate ctx PageAudience.Authenticated)
+                AudienceDecision.Forbidden
+                "and nothing else"
+    ]
+
+/// Phase 1002 — a non-`/api`, non-page probe that reports what scope
+/// resolution stashed: the subject's kind and the storage container, or
+/// `none` when no scope was stashed.
+let private scopeProbeRoute: HttpHandler =
+    GET
+    >=> route "/probe/scope"
+    >=> fun next ctx ->
+        let kind =
+            match ctx.Items.TryGetValue "ToolUp.Subject" with
+            | true, (:? Subject as subject) -> $"%A{Subject.kind subject}"
+            | _ -> "unresolved"
+
+        let container =
+            match ctx.Items.TryGetValue "ToolUp.StorageScope" with
+            | true, (:? StorageScope as scope) -> scope.Container
+            | _ -> "none"
+
+        text $"{kind}|{container}" next ctx
+
+/// Phase 1002 — the Surfaces lists the publication scenario runs under:
+/// the two the Phase-996 evidence used, and every named list besides.
+let private publicationSurfaces: (string * SurfaceProfile list) list = [
+    "individual+team", authenticatedSurface
+    "anonymousAndIndividual", Surfaces.anonymousAndIndividual
+    "individual", Surfaces.individual
+    "team", Surfaces.team
+    "multiTeam", Surfaces.multiTeam
+    "anonymousAndTeam", Surfaces.anonymousAndTeam
+]
+
+/// The §7 publication scenario under one Surfaces list. The reader's cells
+/// are the same under every list; the members' depend on the shapes the
+/// deployment serves.
+let private publicationScenario (surfacesLabel: string) (surfaces: SurfaceProfile list) =
+    testCaseAsync
+        $"under {surfacesLabel}: a reader reads its publication and is refused every other surface; a member outside the group is refused the publication"
+    <| async {
+        let s = issuer.Force()
+        let store = InMemoryNarrativeStore() :> INarrativeStore
+        let events = ToolUp.Platform.Testing.Fakes.TestEventStore() :> IEventStore
+
+        let! _ =
+            store.PublishTagged("team-a", "Board", None, reportDocument "Board report team-a" None, [ "run:board" ])
+
+        let register (services: IServiceCollection) =
+            services.AddSingleton<IEventStore>(events) |> ignore
+
+        let config = {
+            ServerConfig.defaults with
+                Surfaces = surfaces
+        }
+
+        let servesTeams = DeploymentConfig.hasTeamScope config
+
+        let servesUsers =
+            surfaces
+            |> List.exists (function
+                | SurfaceProfile.AuthenticatedUser _ -> true
+                | _ -> false)
+
+        use! host =
+            startHostWithApi
+                (publicationApi store events)
+                surfaces
+                (oidcProviderWith publicationMapping)
+                register
+                (scopeProbeRoute :: appApiRoutes)
+
+        use client = host.GetTestClient()
+        let token sub (claims: (string * obj) list) = Some(s.MintTokenFor(sub, claims))
+        // rhea: in the board group, not an app user
+        let rhea = token "rhea" [ "groups", box [| "7f1c-board" |] ]
+        // carol: an app member of team-a (holds `editor`), outside the group
+        let carol = token "carol" [ "roles", box [| "app-user" |] ]
+        // mia: an app user in NO team who is also in the board group
+        let mia =
+            token "mia" [ "roles", box [| "app-user" |]; "groups", box [| "7f1c-board" |] ]
+        // nina: neither — the deployment does not admit her at all
+        let nina = token "nina" [ "roles", box [| "viewer" |] ]
+
+        let readerCells = [
+            "rhea", rhea, HttpMethod.Get, "/reports/latest", 200
+            "rhea", rhea, HttpMethod.Get, "/other/latest", 403
+            "rhea", rhea, HttpMethod.Get, "/members", 403
+            "rhea", rhea, HttpMethod.Get, "/editors", 403
+            "rhea", rhea, HttpMethod.Get, "/client-alice", 403
+            "rhea", rhea, HttpMethod.Get, "/client-team-a", 403
+            "rhea", rhea, HttpMethod.Get, "/open", 200
+            "rhea", rhea, HttpMethod.Get, "/api/x", 403
+            "rhea", rhea, HttpMethod.Post, "/api/TeamApi/CreateTeam", 403
+            "rhea", rhea, HttpMethod.Post, "/api/ai/chat", 403
+            "carol", carol, HttpMethod.Get, "/reports/latest", 403
+            "nina", nina, HttpMethod.Get, "/reports/latest", 401
+            "nobody", None, HttpMethod.Get, "/reports/latest", 401
+        ]
+
+        // carol in her team: a member of team-a, served as one.
+        let teamMemberCells =
+            if servesTeams then
+                [
+                    "carol", carol, HttpMethod.Get, "/editors", 200
+                    "carol", carol, HttpMethod.Get, "/api/x", 200
+                    "carol", carol, HttpMethod.Post, "/api/TeamApi/CreateTeam", 200
+                    "carol", carol, HttpMethod.Post, "/api/ai/chat", 200
+                ]
+            else
+                []
+
+        // mia, an app MEMBER in no team: served as a user where the
+        // deployment serves users; under team-only Surfaces she is NOT
+        // widened by holding the reader role — she resolves
+        // UnsupportedSubject, falls back to anonymous, and is challenged.
+        let teamlessMemberCells =
+            if servesUsers then
+                [
+                    "mia", mia, HttpMethod.Get, "/reports/latest", 200
+                    "mia", mia, HttpMethod.Get, "/api/x", 200
+                ]
+            else
+                [
+                    "mia", mia, HttpMethod.Get, "/reports/latest", 401
+                    "mia", mia, HttpMethod.Get, "/api/x", 401
+                ]
+
+        let cells = readerCells @ teamMemberCells @ teamlessMemberCells
+
+        let! results =
+            cells
+            |> List.map (fun (label, tok, verb, path, expected) -> async {
+                let! status, body = sendMethod client verb tok path
+                return label, verb, path, expected, status, body
+            })
+            |> Async.Sequential
+
+        let! _, rheaScope = sendMethod client HttpMethod.Get rhea "/probe/scope"
+        let! _, miaScope = sendMethod client HttpMethod.Get mia "/probe/scope"
+        let! teamRows = publicationRows events "team-a"
+        let! platformRows = publicationRows events "_platform"
+        do! host.StopAsync() |> Async.AwaitTask
+
+        let mismatches =
+            results
+            |> Array.choose (fun (label, verb, path, expected, status, _) ->
+                if status <> expected then
+                    Some $"{label} {verb} {path}: expected {expected}, got {status}"
+                else
+                    None)
+
+        Expect.isEmpty mismatches ("mismatched: " + String.concat "; " mismatches)
+
+        for label, _, path, _, status, body in results do
+            if path = "/reports/latest" then
+                if status = 200 then
+                    Expect.stringContains body "Board report team-a" $"{label}: the publishing team's narrative"
+                else
+                    Expect.isFalse (body.Contains "Board report") $"{label}: a refused reader sees no report"
+
+            if label = "rhea" && path.StartsWith "/api/" then
+                Expect.stringContains body "publication_reader_not_admitted" $"{path}: refused as a reader"
+
+        // The reader is its own subject and holds no scope of its own: no
+        // `user-<id>` container, no anonymous session.
+        Expect.equal rheaScope "PublicationReaderKind|none" "the reader: its own subject, no scope"
+
+        if servesUsers then
+            Expect.equal miaScope "UserKind|user-mia" "a teamless member where users are served"
+        else
+            Expect.equal
+                miaScope
+                "AnonymousKind|none"
+                "a teamless member under team-only Surfaces: the anonymous fallback, exactly as before"
+
+        // Audit: every page decision on the publication under the
+        // publishing scope — who, which page; the reader's refusals
+        // elsewhere under `_platform`.
+        let decisions =
+            teamRows
+            |> List.filter (fun (t, _) -> t = PublicationAudit.ServedType || t = PublicationAudit.RefusedType)
+            |> List.map (fun (t, r) -> t, r.ReaderId, r.Slug)
+            |> List.sort
+
+        Expect.equal
+            decisions
+            (List.sort [
+                yield PublicationAudit.ServedType, "rhea", "reports/latest"
+                yield PublicationAudit.RefusedType, "carol", "reports/latest"
+                if servesUsers then
+                    yield PublicationAudit.ServedType, "mia", "reports/latest"
+            ])
+            "the page decisions on team-a's publication"
+
+        Expect.isTrue
+            (teamRows
+             |> List.exists (fun (t, r) ->
+                 t = PublicationAudit.NarrativeReadType
+                 && r.ReaderId = "rhea"
+                 && r.NarrativeId.IsSome))
+            "the narrative read, naming the narrative"
+
+        let platformDecisions =
+            platformRows
+            |> List.filter (fun (_, r) -> r.ReaderId = "rhea")
+            |> List.map (fun (t, r) -> t, r.Slug)
+            |> List.sort
+
+        Expect.equal
+            platformDecisions
+            (List.sort [
+                PublicationAudit.RefusedType, "client-alice"
+                PublicationAudit.RefusedType, "client-team-a"
+                PublicationAudit.RefusedType, "editors"
+                PublicationAudit.RefusedType, "members"
+                PublicationAudit.ServedType, "open"
+            ])
+            "every page decision for a reader is recorded — its refusals, and the public page it read"
+    }
+
 let private publicationPipelineTests =
-    testList "Phase 996 — a publication audience through the composed pipeline" [
-        testCaseAsync
-            "a reader reads its publication and is refused every other surface; an app member outside the group is refused the publication"
-        <| async {
-            let s = issuer.Force()
-            let store = InMemoryNarrativeStore() :> INarrativeStore
-            let events = ToolUp.Platform.Testing.Fakes.TestEventStore() :> IEventStore
+    testList "Phase 996 / 1002 — a publication audience through the composed pipeline, under every Surfaces list" [
+        yield!
+            publicationSurfaces
+            |> List.map (fun (label, surfaces) -> publicationScenario label surfaces)
 
-            let! _ =
-                store.PublishTagged("team-a", "Board", None, reportDocument "Board report team-a" None, [ "run:board" ])
+        yield
+            testCaseAsync "recorded posture: without a member rule, a signed-in non-member passes userOrTeam on /api"
+            <| async {
+                // Pre-existing, and recorded rather than changed by Phase 996: a
+                // principal the issuer admits who belongs to no team resolves to
+                // `AuthenticatedUser` (UserKind), which the strict default
+                // `userOrTeam` requirement ADMITS. A deployment that must keep
+                // such principals off its API sets a member rule
+                // (`RequiredRoles`) — which a publication audience requires.
+                let s = issuer.Force()
 
-            let register (services: IServiceCollection) =
-                services.AddSingleton<IEventStore>(events) |> ignore
+                use! host =
+                    startHostWith
+                        authenticatedSurface
+                        (oidcProviderWith ClaimMapping.directoryRoles)
+                        ignore
+                        appApiRoutes
 
-            use! host =
-                startHostWithApi
-                    (publicationApi store events)
-                    authenticatedSurface
-                    (oidcProviderWith publicationMapping)
-                    register
-                    appApiRoutes
-
-            use client = host.GetTestClient()
-            let token sub (claims: (string * obj) list) = Some(s.MintTokenFor(sub, claims))
-            // rhea: in the board group, not an app user
-            let rhea = token "rhea" [ "groups", box [| "7f1c-board" |] ]
-            // carol: an app member of team-a (holds `editor`), outside the group
-            let carol = token "carol" [ "roles", box [| "app-user" |] ]
-            // mia: an app user who is also in the board group
-            let mia =
-                token "mia" [ "roles", box [| "app-user" |]; "groups", box [| "7f1c-board" |] ]
-            // nina: neither — the deployment does not admit her at all
-            let nina = token "nina" [ "roles", box [| "viewer" |] ]
-
-            let cells = [
-                "rhea", rhea, HttpMethod.Get, "/reports/latest", 200
-                "rhea", rhea, HttpMethod.Get, "/other/latest", 403
-                "rhea", rhea, HttpMethod.Get, "/members", 403
-                "rhea", rhea, HttpMethod.Get, "/editors", 403
-                "rhea", rhea, HttpMethod.Get, "/client-alice", 403
-                "rhea", rhea, HttpMethod.Get, "/client-team-a", 403
-                "rhea", rhea, HttpMethod.Get, "/open", 200
-                "rhea", rhea, HttpMethod.Get, "/api/x", 403
-                "rhea", rhea, HttpMethod.Post, "/api/TeamApi/CreateTeam", 403
-                "rhea", rhea, HttpMethod.Post, "/api/ai/chat", 403
-                "carol", carol, HttpMethod.Get, "/reports/latest", 403
-                "carol", carol, HttpMethod.Get, "/editors", 200
-                "carol", carol, HttpMethod.Get, "/api/x", 200
-                "carol", carol, HttpMethod.Post, "/api/TeamApi/CreateTeam", 200
-                "carol", carol, HttpMethod.Post, "/api/ai/chat", 200
-                "mia", mia, HttpMethod.Get, "/reports/latest", 200
-                "mia", mia, HttpMethod.Get, "/api/x", 200
-                "nina", nina, HttpMethod.Get, "/reports/latest", 401
-                "nobody", None, HttpMethod.Get, "/reports/latest", 401
-            ]
-
-            let! results =
-                cells
-                |> List.map (fun (label, tok, verb, path, expected) -> async {
-                    let! status, body = sendMethod client verb tok path
-                    return label, verb, path, expected, status, body
-                })
-                |> Async.Sequential
-
-            let! teamRows = publicationRows events "team-a"
-            let! platformRows = publicationRows events "_platform"
-            do! host.StopAsync() |> Async.AwaitTask
-
-            let mismatches =
-                results
-                |> Array.choose (fun (label, verb, path, expected, status, _) ->
-                    if status <> expected then
-                        Some $"{label} {verb} {path}: expected {expected}, got {status}"
-                    else
-                        None)
-
-            Expect.isEmpty mismatches ("mismatched: " + String.concat "; " mismatches)
-
-            for label, _, path, _, status, body in results do
-                if path = "/reports/latest" then
-                    if status = 200 then
-                        Expect.stringContains body "Board report team-a" $"{label}: the publishing team's narrative"
-                    else
-                        Expect.isFalse (body.Contains "Board report") $"{label}: a refused reader sees no report"
-
-                if label = "rhea" && path.StartsWith "/api/" then
-                    Expect.stringContains body "publication_reader_not_admitted" $"{path}: refused as a reader"
-
-            // Audit: every page decision on the publication under the
-            // publishing scope — who, which page; the reader's refusals
-            // elsewhere under `_platform`.
-            let decisions =
-                teamRows
-                |> List.filter (fun (t, _) -> t = PublicationAudit.ServedType || t = PublicationAudit.RefusedType)
-                |> List.map (fun (t, r) -> t, r.ReaderId, r.Slug)
-                |> List.sort
-
-            Expect.equal
-                decisions
-                (List.sort [
-                    PublicationAudit.ServedType, "rhea", "reports/latest"
-                    PublicationAudit.RefusedType, "carol", "reports/latest"
-                    PublicationAudit.ServedType, "mia", "reports/latest"
-                ])
-                "the page decisions on team-a's publication"
-
-            Expect.isTrue
-                (teamRows
-                 |> List.exists (fun (t, r) ->
-                     t = PublicationAudit.NarrativeReadType
-                     && r.ReaderId = "rhea"
-                     && r.NarrativeId.IsSome))
-                "the narrative read, naming the narrative"
-
-            let platformDecisions =
-                platformRows
-                |> List.filter (fun (_, r) -> r.ReaderId = "rhea")
-                |> List.map (fun (t, r) -> t, r.Slug)
-                |> List.sort
-
-            Expect.equal
-                platformDecisions
-                (List.sort [
-                    PublicationAudit.RefusedType, "client-alice"
-                    PublicationAudit.RefusedType, "client-team-a"
-                    PublicationAudit.RefusedType, "editors"
-                    PublicationAudit.RefusedType, "members"
-                    PublicationAudit.ServedType, "open"
-                ])
-                "every page decision for a reader is recorded — its refusals, and the public page it read"
-        }
-
-        testCaseAsync "recorded posture: without a member rule, a signed-in non-member passes userOrTeam on /api"
-        <| async {
-            // Pre-existing, and recorded rather than changed by Phase 996: a
-            // principal the issuer admits who belongs to no team resolves to
-            // `AuthenticatedUser` (UserKind), which the strict default
-            // `userOrTeam` requirement ADMITS. A deployment that must keep
-            // such principals off its API sets a member rule
-            // (`RequiredRoles`) — which a publication audience requires.
-            let s = issuer.Force()
-
-            use! host =
-                startHostWith authenticatedSurface (oidcProviderWith ClaimMapping.directoryRoles) ignore appApiRoutes
-
-            use client = host.GetTestClient()
-            let zoe = Some(s.MintTokenFor("zoe", [ "groups", box [| "7f1c-board" |] ]))
-            let! apiStatus, _ = sendMethod client HttpMethod.Get zoe "/api/x"
-            let! createStatus, _ = sendMethod client HttpMethod.Post zoe "/api/TeamApi/CreateTeam"
-            do! host.StopAsync() |> Async.AwaitTask
-            Expect.equal apiStatus 200 "a signed-in non-member reaches a default /api route"
-            Expect.equal createStatus 200 "and team creation's route (its own policy is the only refusal left)"
-        }
+                use client = host.GetTestClient()
+                let zoe = Some(s.MintTokenFor("zoe", [ "groups", box [| "7f1c-board" |] ]))
+                let! apiStatus, _ = sendMethod client HttpMethod.Get zoe "/api/x"
+                let! createStatus, _ = sendMethod client HttpMethod.Post zoe "/api/TeamApi/CreateTeam"
+                do! host.StopAsync() |> Async.AwaitTask
+                Expect.equal apiStatus 200 "a signed-in non-member reaches a default /api route"
+                Expect.equal createStatus 200 "and team creation's route (its own policy is the only refusal left)"
+            }
     ]
 
 let tests =
@@ -1848,5 +2030,6 @@ let tests =
         directoryPipelineTests
         signInTests
         publicationUnitTests
+        publicationReaderSubjectTests
         publicationPipelineTests
     ]

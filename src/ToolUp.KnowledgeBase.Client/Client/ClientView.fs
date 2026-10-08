@@ -1092,7 +1092,9 @@ let private AIContextPanel (model: Model) (dispatch: Msg -> unit) =
 
     let body =
         match subjectKind with
-        | AnonymousKind ->
+        // Phase 1002 — a publication reader holds no scope either.
+        | AnonymousKind
+        | PublicationReaderKind ->
             Html.div [
                 prop.className "bg-gray-50 border border-dashed border-gray-300 rounded-lg p-8 text-center"
                 prop.children [

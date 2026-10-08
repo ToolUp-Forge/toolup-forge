@@ -352,6 +352,8 @@ let compositionInspectorApi (ctx: HttpContext) : ICompositionInspectorApi =
             | _ -> return Error "Team management is not available in this deployment."
         | AuthenticatedUser _
         | ClaimBearer _ -> return Ok()
+        // Phase 1002 — a publication reader is not an app user.
+        | PublicationReader _ -> return Error "The composition inspector is not available to a publication reader."
     }
 
     let withGate (f: unit -> Async<Result<'T, string>>) : Async<Result<'T, string>> = async {

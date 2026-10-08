@@ -14,7 +14,14 @@ open ToolUp.Platform.Auth
 //
 //   1. ShareTokenClaim present → `ClaimBearer claim`
 //      (claim presence dominates regardless of any other auth state).
-//   2. Authenticated user (non-anonymous):
+//   1b. Phase 1002 — authenticated user the identity provider admitted
+//      as a publication reader only (`PrincipalAdmission.PublicationReader`)
+//      → `PublicationReader userId`, BEFORE `Surfaces` is consulted. The
+//      reader holds no scope of its own, so whether the deployment serves
+//      individual or team subjects is irrelevant to it
+//      (`SubjectResolution.publicationReader`; the scope middleware applies
+//      the same rule whatever resolver is composed).
+//   2. Authenticated user (non-anonymous, admitted as a member):
 //      a. Deployment supports Team AND user has an active team
 //         → `TeamMember (userId, activeTeamId)`
 //      b. Else if deployment supports AuthenticatedUser
@@ -146,6 +153,25 @@ type SubjectResolutionError =
     /// corruption, etc. Message is operator-visible (logs); must
     /// not leak to clients verbatim.
     | SubjectResolutionFailed of message: string
+
+/// Phase 1002 — the resolution rules every resolver shares.
+module SubjectResolution =
+    /// Step 1b: the `PublicationReader` subject a request resolves to,
+    /// independent of the deployment's `Surfaces` — `Some` when no
+    /// share-token claim is present and the request's user is signed in
+    /// and admitted as a publication reader only; `None` otherwise (the
+    /// request resolves by the other steps). A reader is never resolved
+    /// to `AuthenticatedUser` / `TeamMember` (a member's shapes, which
+    /// carry a scope of their own) nor left to fall back to an anonymous
+    /// session.
+    let publicationReader (request: SubjectResolutionRequest) : Subject option =
+        match request.Claim, request.User with
+        | None, Some user when
+            not (AuthenticatedUser.isAnonymous user)
+            && user.Admission = PrincipalAdmission.PublicationReader
+            ->
+            Some(Subject.PublicationReader user.UserId)
+        | _ -> None
 
 /// Per-request subject resolver. The single seam between request
 /// state (auth, session, share-token claim) and the load-bearing

@@ -372,27 +372,41 @@ module SurfaceEnforcement =
                 // endpoint where presenting a token is a sign of
                 // an attack-surface probe). 403; no hint.
                 Reject(403, "claim_bearer_not_admitted", None)
+            | PublicationReaderKind ->
+                // Phase 1002 — a publication reader is not an app user:
+                // no requirement preset admits it, and it is refused with
+                // the same code `evaluateAdmitted` gives it.
+                Reject(403, "publication_reader_not_admitted", None)
 
     /// Phase 996 — `evaluate`, with the principal's admission. A
     /// `PublicationReader` (admitted to publication pages only, never an app
-    /// user) is refused `403 publication_reader_not_admitted` on every route
-    /// whose requirement does not admit anonymous callers — the API, the
-    /// assistant, module routes, team management. A route that admits
-    /// anonymous callers (`public_`) gives a reader nothing an anonymous
-    /// visitor lacks, so it is evaluated as before. A `Member` is evaluated
-    /// exactly as `evaluate` does, so a deployment with no publication
-    /// audience is unchanged.
+    /// user) is refused `403 publication_reader_not_admitted`. A `Member` is
+    /// evaluated exactly as `evaluate` does, so a deployment with no
+    /// publication audience is unchanged.
+    ///
+    /// Phase 1002 — the reader is its own subject (`PublicationReader`)
+    /// whatever the deployment's Surfaces, and it is refused on EVERY `/api`
+    /// route under every Surfaces list. Phase 996 let it through a route
+    /// that admits anonymous callers; that is closed, because its subject
+    /// holds no scope and such a handler (the anonymous-deployment `/api/`
+    /// bridge, the query-param SSE routes) would fall back to deriving one
+    /// from the reader's user id. A `PublicationReader` subject is treated
+    /// as a reader even when no admission was stashed: the subject is the
+    /// authority.
     let evaluateAdmitted
         (subject: Subject)
         (admission: ToolUp.Platform.Auth.PrincipalAdmission)
         (requirement: SurfaceRequirement)
         : SurfaceEnforcementOutcome =
-        match admission with
-        | ToolUp.Platform.Auth.PrincipalAdmission.PublicationReader when
-            not (requirement.AcceptedSubjects.Contains AnonymousKind)
-            ->
+        let isReader =
+            admission = ToolUp.Platform.Auth.PrincipalAdmission.PublicationReader
+            || Subject.kind subject = PublicationReaderKind
+
+        if not isReader then
+            evaluate subject requirement
+        else
+            // Its pages are server-rendered and need no `/api` call.
             Reject(403, "publication_reader_not_admitted", None)
-        | _ -> evaluate subject requirement
 
 /// Auth-observability A2 — emit `SurfaceDenied` to `IAuditLog` when a
 /// request is rejected. Pre-A2 these denials were structurally invisible
@@ -422,6 +436,7 @@ let private emitDenialAudit
                 | UserKind -> "user"
                 | TeamMemberKind -> "team"
                 | ClaimBearerKind -> "claim"
+                | PublicationReaderKind -> "publication-reader"
 
             let subjectId =
                 match subject with
@@ -429,6 +444,7 @@ let private emitDenialAudit
                 | AuthenticatedUser uid -> Some uid
                 | TeamMember(uid, _) -> Some uid
                 | ClaimBearer claim -> Some claim.TokenId
+                | PublicationReader uid -> Some uid
 
             let correlationId = ToolUp.Remoting.Server.CallContext.correlationId ()
 

@@ -119,6 +119,7 @@ let private buildSubjectTags (subject: AuditSubject) : string =
             (sanitizeTagValue tokenId)
             (sanitizeTagValue resourceKind)
             (sanitizeTagValue resourceId)
+    | ReaderAudit uid -> sprintf ",subject_kind:publication-reader,user_id:%s" (sanitizeTagValue uid)
 
 let private serializeBatch (settings: DatadogLogsSettings) (batch: AuditEnvelope list) : string =
     let entries =

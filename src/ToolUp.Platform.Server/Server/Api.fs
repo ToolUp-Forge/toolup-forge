@@ -269,7 +269,17 @@ module internal ApiSeams =
             | true, (:? Subject as s) -> Some s
             | _ -> None
 
-        let isAnonymousUser = AuthenticatedUser.isAnonymous user
+        // Phase 1002 — a publication reader is not an app user: at the
+        // attribute gate it holds no role, claim or tenant, and
+        // `[<RequiresAuth>]` refuses it exactly as it refuses an
+        // unauthenticated caller (surface enforcement has already refused
+        // it on every route that does not admit anonymous callers).
+        let isReader =
+            match subject with
+            | Some(PublicationReader _) -> true
+            | _ -> false
+
+        let isAnonymousUser = AuthenticatedUser.isAnonymous user || isReader
 
         return
             { new ForgeAuthContext with
@@ -288,7 +298,9 @@ module internal ApiSeams =
                     // the server-resolved source of truth; any other role
                     // string falls through to `user.Roles` (consumer
                     // claim-mapper territory).
-                    if role = "PlatformAdmin" then
+                    if isReader then
+                        false
+                    elif role = "PlatformAdmin" then
                         match ctx.Items.TryGetValue "ToolUp.PlatformRole" with
                         | true, (:? PlatformRole as r) -> r = PlatformRole.PlatformAdmin
                         | _ -> false
@@ -331,6 +343,7 @@ module internal ApiSeams =
                 member _.HasTenant() =
                     match subject with
                     | Some(TeamMember _) -> true
+                    | Some(PublicationReader _) -> false
                     | _ -> user.TenantId.IsSome
 
                 member _.IsAnonymous() = isAnonymousUser
@@ -341,6 +354,7 @@ module internal ApiSeams =
                     | Some(Subject.AuthenticatedUser uid) -> "user:" + uid
                     | Some(TeamMember(uid, tid)) -> "team:" + tid + ":user:" + uid
                     | Some(Subject.ClaimBearer claim) -> "claim:" + claim.ScopeId
+                    | Some(PublicationReader uid) -> "publication-reader:" + uid
                     | None when isAnonymousUser -> "anonymous"
                     | None -> "user:" + user.UserId
             }

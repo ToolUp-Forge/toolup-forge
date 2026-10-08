@@ -134,8 +134,13 @@ type DefaultSubjectResolver
             match request.Claim with
             | Some claim -> return Ok(Subject.ClaimBearer claim)
             | None ->
-                match request.User with
-                | Some user when not (AuthenticatedUser.isAnonymous user) ->
+                match SubjectResolution.publicationReader request, request.User with
+                | Some reader, _ ->
+                    // Step 1b (Phase 1002) — a publication reader resolves
+                    // ahead of Surfaces: it holds no scope of its own, so
+                    // the deployment's subject shapes are irrelevant to it.
+                    return Ok reader
+                | None, Some user when not (AuthenticatedUser.isAnonymous user) ->
                     // Step 2 — authenticated subject.
                     if supportsTeam then
                         let! activeTeamResult = getActiveTeam user.UserId

@@ -63,6 +63,9 @@ let private scopesFor (ctx: AccessContext) : FlagScope list =
         // design §3.4 ("Claim bearer | Not loaded — always Map.empty |
         // Always None"). Platform-scope defaults still apply.
         [ FlagScope.Platform ]
+    // Phase 1002 — a publication reader holds no user or team scope: it
+    // reads the platform defaults, as an anonymous visitor does.
+    | PublicationReader _ -> [ FlagScope.Platform ]
 
 /// First-Some walk over an async sequence of scope reads. Short-
 /// circuits on the first override so missing upper layers don't pay
@@ -91,7 +94,8 @@ let private firstSome (store: IFeatureFlagStore) (key: string) (scopes: FlagScop
 let private isPremium (userClaims: IUserClaims) (ctx: AccessContext) : Async<bool> = async {
     match ctx.Subject with
     | AnonymousSession _
-    | ClaimBearer _ -> return false
+    | ClaimBearer _
+    | PublicationReader _ -> return false
     | AuthenticatedUser userId
     | TeamMember(userId, _) ->
         let! status = userClaims.GetPremiumStatus userId

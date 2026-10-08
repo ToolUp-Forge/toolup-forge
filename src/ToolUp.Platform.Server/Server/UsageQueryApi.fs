@@ -60,6 +60,8 @@ let private ensureReadAllowed (ctx: HttpContext) (accessContext: AccessContext) 
         | _ -> return Error "Team management is not available in this deployment."
     | AuthenticatedUser _
     | ClaimBearer _ -> return Ok()
+    // Phase 1002 — a publication reader is not an app user.
+    | PublicationReader _ -> return Error "Usage metering is not available to a publication reader."
 }
 
 /// Resolve the caller's effective scope. Same idiom as
