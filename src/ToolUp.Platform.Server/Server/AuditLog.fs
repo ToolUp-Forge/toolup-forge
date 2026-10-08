@@ -1973,6 +1973,15 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> ConversationsPurged(fromAuditJson<ConversationsPurgedPayload> j)
     }
+    // Phase 1002 — a publication reader's sign-in audit row (append-only registration).
+    {
+        EventType = "PublicationReaderSignedIn"
+        TryEncode =
+            (function
+            | PublicationReaderSignedIn p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> PublicationReaderSignedIn(fromAuditJson<PublicationReaderSignedInPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

@@ -817,6 +817,9 @@ type AuditEvent =
     /// sibling blob of each purged conversation is gone when this row
     /// is written. Recorded under the swept scope.
     | ConversationsPurged of ConversationsPurgedPayload
+    /// Phase 1002 — a publication reader's sign-in, recorded under
+    /// `_platform` (the reader holds no scope of its own).
+    | PublicationReaderSignedIn of PublicationReaderSignedInPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -1034,3 +1037,4 @@ module AuditEvent =
         | ContactOptInWithdrawn _ -> "ContactOptInWithdrawn"
         | NotificationDeliveryRefused _ -> "NotificationDeliveryRefused"
         | ConversationsPurged _ -> "ConversationsPurged"
+        | PublicationReaderSignedIn _ -> "PublicationReaderSignedIn"

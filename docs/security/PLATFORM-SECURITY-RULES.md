@@ -735,10 +735,19 @@ section eliminates structurally.
 > over a non-empty `PublicationReaders` with an empty `RequiredRoles`, because
 > without a member rule no reader could be told apart from a member.
 > A principal the member rule (`RequiredRoles`) refuses but a
-> publication-reader role admits is admitted as a `PublicationReader`. Surface
-> enforcement refuses it `403 publication_reader_not_admitted` on every `/api`
-> route that does not admit anonymous callers (the API, the assistant, module
-> routes, team management); the page gate refuses it every page audience but
+> publication-reader role admits is admitted as a `PublicationReader`, and
+> resolves to its own subject (`Subject.PublicationReader`) ahead of the
+> deployment's Surfaces: its admission does not depend on which subject shapes
+> the app serves (a team-only deployment admits its readers exactly as an
+> individual one does), and nothing else widens — an app member in no team is
+> still unsupported under team-only Surfaces. The reader holds no scope of its
+> own: no `user-<id>`, team or session container is derived for it, and module
+> access, configuration, flag and viewer scopes give it nothing. Surface
+> enforcement refuses it `403 publication_reader_not_admitted` on EVERY `/api`
+> route, including routes open to anonymous callers (the anonymous-only `/api/`
+> bridge, the query-param SSE routes) — a narrowing of Phase 996, which let it
+> through those, because such a handler would derive a scope from the reader's
+> id; the page gate refuses it every page audience but
 > `Public` and the `Publication` pages naming one of its roles; search refuses
 > it; its sign-in consumes no pending team invite. A `Publication` page admits
 > its named readers and nobody else, with no bypass for app members or platform
@@ -747,7 +756,9 @@ section eliminates structurally.
 > decision, and every page decision for a reader, is audited with the reader,
 > the publishing scope and the page; the narrative read re-checks disclosure at
 > the narrative-publication surface and withholds a narrative citing a fact
-> that is no longer disclosable.
+> that is no longer disclosable. A reader's sign-in is audited once per session
+> window as `PublicationReaderSignedIn` under `_platform` (the reader, the roles
+> it was admitted with, the time), never as a member's login.
 > **Evidence:** `src/ToolUp.Platform.Core/Shared/Interfaces/IAuthProvider.fs`
 > (`PrincipalAdmission`) · `src/ToolUp.Platform.Core/Shared/Types/AuthConfig.fs`
 > (`ClaimMapping.PublicationReaders`, `validatePublicationReaders`) ·
@@ -755,8 +766,18 @@ section eliminates structurally.
 > refusal) · `src/ToolUp.Platform.Server/Server/SurfaceEnforcementMiddleware.fs`
 > (`evaluateAdmitted`) · `src/ToolUp.PublicRendering/Server/AudienceGate.fs` ·
 > `src/ToolUp.PublicRendering/Server/PublicationReads.fs` ·
-> `src/ToolUp.Platform.Tests/InProcess/GatedSsrTests.fs` (§7) ·
-> `docs/migrations/996-publication-audience.md` (Phase 996)
+> `src/ToolUp.Platform.Core/Shared/Types/Subject.fs` (`PublicationReader`) ·
+> `src/ToolUp.Platform.Core/Shared/Interfaces/ISubjectResolver.fs`
+> (`SubjectResolution.publicationReader`, step 1b) ·
+> `src/ToolUp.Platform.Server/Server/Middleware.fs`
+> (`StorageScopeDerivation.tryFromSubject`, the reader sign-in audit) ·
+> `src/ToolUp.Platform.Tests/InProcess/GatedSsrTests.fs` (§7, run under six
+> Surfaces lists; the anonymous-open routes; the reader sign-in row; the reader
+> subject's empty scope) ·
+> `src/ToolUp.Platform.Tests/Contracts/ISubjectResolverContract.fs` (step 1b;
+> the teamless-member pin) ·
+> `docs/migrations/996-publication-audience.md` (Phase 996) ·
+> `docs/migrations/1002-publication-reader-subject.md` (Phase 1002)
 
 ---
 

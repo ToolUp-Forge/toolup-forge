@@ -304,6 +304,28 @@
       also pass on a composed store that DECLARES encryption at rest; the
       default and environment-switch paths are unchanged. Migration recipe:
       `docs/migrations/1001-serverapp-secret-store.md`.
+
+      Phase 1002 rides the same draft slot. BREAKING. A publication reader
+      is its own subject, resolved ahead of the deployment's Surfaces, so a
+      `Publication` page admits its readers whatever subject shapes the app
+      serves, and the reader holds no scope of its own. Closed unions gain a
+      case: `Subject.PublicationReader`, `SubjectKind.PublicationReaderKind`,
+      `AuditSubject.ReaderAudit`, `AuditSubjectKind.ReaderAuditKind` and
+      `AuditEvent.PublicationReaderSignedIn` (with its payload record), which
+      breaks every exhaustive `match` over them in consumer code - the class
+      Phase 995 already advanced this slot for. Additive:
+      `SubjectResolution.publicationReader` and
+      `StorageScopeDerivation.tryFromSubject`. Behaviour:
+      `StorageScopeDerivation.fromSubject` raises for a reader (it holds no
+      scope); `AccessContext.canAccessModule` / `hasPermission` are false for
+      a reader; and surface enforcement now refuses a reader
+      `403 publication_reader_not_admitted` on EVERY `/api` route, including
+      routes open to anonymous callers (the anonymous-only `/api/` bridge
+      and the query-param SSE routes), which Phase 996 let it through - a
+      narrowing. A reader's sign-in is audited as
+      `PublicationReaderSignedIn` under `_platform`, never `UserLoggedIn`.
+      Unchanged for every deployment that sets no `PublicationReaders`.
+      Migration recipe: `docs/migrations/1002-publication-reader-subject.md`.
     -->
     <Version>0.25.0</Version>
     <!--

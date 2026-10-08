@@ -1149,6 +1149,7 @@ ToolUp.Platform.AuditEvent.IsPlatformDocumentDeleted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsPlatformDocumentUploaded : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsPremiumGranted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsPremiumRevoked : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsPublicationReaderSignedIn : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsRateLimitRefused : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsRateLimitWaited : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsRemotingMethodAudited : System.Boolean { get }
@@ -1510,6 +1511,8 @@ ToolUp.Platform.AuditEvent+PremiumRevoked.grantor : System.String { get }
 ToolUp.Platform.AuditEvent+PremiumRevoked.occurredAt : System.DateTimeOffset { get }
 ToolUp.Platform.AuditEvent+PremiumRevoked.reason : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.AuditEvent+PremiumRevoked.subjectUserId : System.String { get }
+ToolUp.Platform.AuditEvent+PublicationReaderSignedIn (class)
+ToolUp.Platform.AuditEvent+PublicationReaderSignedIn.Item : ToolUp.Platform.PublicationReaderSignedInPayload { get }
 ToolUp.Platform.AuditEvent+RateLimitRefused (class)
 ToolUp.Platform.AuditEvent+RateLimitRefused.Item : ToolUp.Platform.RateLimitRefusedPayload { get }
 ToolUp.Platform.AuditEvent+RateLimitWaited (class)
@@ -1705,6 +1708,7 @@ ToolUp.Platform.AuditEvent+Tags.PlatformDocumentDeleted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.PlatformDocumentUploaded : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.PremiumGranted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.PremiumRevoked : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.PublicationReaderSignedIn : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.RateLimitRefused : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.RateLimitWaited : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.RemotingMethodAudited : System.Int32 (literal)
@@ -1891,6 +1895,7 @@ ToolUp.Platform.AuditSourceModule.value : System.String (literal)
 ToolUp.Platform.AuditSubject (class)
 ToolUp.Platform.AuditSubject.IsAnonymousAudit : System.Boolean { get }
 ToolUp.Platform.AuditSubject.IsClaimAudit : System.Boolean { get }
+ToolUp.Platform.AuditSubject.IsReaderAudit : System.Boolean { get }
 ToolUp.Platform.AuditSubject.IsTeamAudit : System.Boolean { get }
 ToolUp.Platform.AuditSubject.IsUserAudit : System.Boolean { get }
 ToolUp.Platform.AuditSubject.Tag : System.Int32 { get }
@@ -1901,9 +1906,12 @@ ToolUp.Platform.AuditSubject+ClaimAudit.attributedHandle : Microsoft.FSharp.Core
 ToolUp.Platform.AuditSubject+ClaimAudit.resourceId : System.String { get }
 ToolUp.Platform.AuditSubject+ClaimAudit.resourceKind : System.String { get }
 ToolUp.Platform.AuditSubject+ClaimAudit.tokenId : System.String { get }
+ToolUp.Platform.AuditSubject+ReaderAudit (class)
+ToolUp.Platform.AuditSubject+ReaderAudit.userId : System.String { get }
 ToolUp.Platform.AuditSubject+Tags (class)
 ToolUp.Platform.AuditSubject+Tags.AnonymousAudit : System.Int32 (literal)
 ToolUp.Platform.AuditSubject+Tags.ClaimAudit : System.Int32 (literal)
+ToolUp.Platform.AuditSubject+Tags.ReaderAudit : System.Int32 (literal)
 ToolUp.Platform.AuditSubject+Tags.TeamAudit : System.Int32 (literal)
 ToolUp.Platform.AuditSubject+Tags.UserAudit : System.Int32 (literal)
 ToolUp.Platform.AuditSubject+TeamAudit (class)
@@ -1916,14 +1924,17 @@ ToolUp.Platform.AuditSubjectKind.AnonymousAuditKind : ToolUp.Platform.AuditSubje
 ToolUp.Platform.AuditSubjectKind.ClaimAuditKind : ToolUp.Platform.AuditSubjectKind { get }
 ToolUp.Platform.AuditSubjectKind.IsAnonymousAuditKind : System.Boolean { get }
 ToolUp.Platform.AuditSubjectKind.IsClaimAuditKind : System.Boolean { get }
+ToolUp.Platform.AuditSubjectKind.IsReaderAuditKind : System.Boolean { get }
 ToolUp.Platform.AuditSubjectKind.IsTeamAuditKind : System.Boolean { get }
 ToolUp.Platform.AuditSubjectKind.IsUserAuditKind : System.Boolean { get }
+ToolUp.Platform.AuditSubjectKind.ReaderAuditKind : ToolUp.Platform.AuditSubjectKind { get }
 ToolUp.Platform.AuditSubjectKind.Tag : System.Int32 { get }
 ToolUp.Platform.AuditSubjectKind.TeamAuditKind : ToolUp.Platform.AuditSubjectKind { get }
 ToolUp.Platform.AuditSubjectKind.UserAuditKind : ToolUp.Platform.AuditSubjectKind { get }
 ToolUp.Platform.AuditSubjectKind+Tags (class)
 ToolUp.Platform.AuditSubjectKind+Tags.AnonymousAuditKind : System.Int32 (literal)
 ToolUp.Platform.AuditSubjectKind+Tags.ClaimAuditKind : System.Int32 (literal)
+ToolUp.Platform.AuditSubjectKind+Tags.ReaderAuditKind : System.Int32 (literal)
 ToolUp.Platform.AuditSubjectKind+Tags.TeamAuditKind : System.Int32 (literal)
 ToolUp.Platform.AuditSubjectKind+Tags.UserAuditKind : System.Int32 (literal)
 ToolUp.Platform.AuditSubjectModule (class)
@@ -10860,6 +10871,13 @@ ToolUp.Platform.PublicRenderingMode+EnabledPublicRendering.root : ToolUp.Platfor
 ToolUp.Platform.PublicRenderingMode+Tags (class)
 ToolUp.Platform.PublicRenderingMode+Tags.EnabledPublicRendering : System.Int32 (literal)
 ToolUp.Platform.PublicRenderingMode+Tags.NoPublicRendering : System.Int32 (literal)
+ToolUp.Platform.PublicationReaderSignedInPayload (class)
+ToolUp.Platform.PublicationReaderSignedInPayload..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.DateTimeOffset)
+ToolUp.Platform.PublicationReaderSignedInPayload.AuthProvider : System.String { get }
+ToolUp.Platform.PublicationReaderSignedInPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Platform.PublicationReaderSignedInPayload.ReaderId : System.String { get }
+ToolUp.Platform.PublicationReaderSignedInPayload.ReaderRoles : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.PublicationReaderSignedInPayload.SubjectKind : System.String { get }
 ToolUp.Platform.PublisherKeyId (class)
 ToolUp.Platform.PublisherKeyId.Tag : System.Int32 { get }
 ToolUp.Platform.PublisherKeyId.id : System.String { get }
@@ -12255,6 +12273,7 @@ ToolUp.Platform.Subject (class)
 ToolUp.Platform.Subject.IsAnonymousSession : System.Boolean { get }
 ToolUp.Platform.Subject.IsAuthenticatedUser : System.Boolean { get }
 ToolUp.Platform.Subject.IsClaimBearer : System.Boolean { get }
+ToolUp.Platform.Subject.IsPublicationReader : System.Boolean { get }
 ToolUp.Platform.Subject.IsTeamMember : System.Boolean { get }
 ToolUp.Platform.Subject.Tag : System.Int32 { get }
 ToolUp.Platform.Subject+AnonymousSession (class)
@@ -12263,10 +12282,13 @@ ToolUp.Platform.Subject+AuthenticatedUser (class)
 ToolUp.Platform.Subject+AuthenticatedUser.userId : System.String { get }
 ToolUp.Platform.Subject+ClaimBearer (class)
 ToolUp.Platform.Subject+ClaimBearer.claim : ToolUp.Platform.ShareTokenClaim { get }
+ToolUp.Platform.Subject+PublicationReader (class)
+ToolUp.Platform.Subject+PublicationReader.userId : System.String { get }
 ToolUp.Platform.Subject+Tags (class)
 ToolUp.Platform.Subject+Tags.AnonymousSession : System.Int32 (literal)
 ToolUp.Platform.Subject+Tags.AuthenticatedUser : System.Int32 (literal)
 ToolUp.Platform.Subject+Tags.ClaimBearer : System.Int32 (literal)
+ToolUp.Platform.Subject+Tags.PublicationReader : System.Int32 (literal)
 ToolUp.Platform.Subject+Tags.TeamMember : System.Int32 (literal)
 ToolUp.Platform.Subject+TeamMember (class)
 ToolUp.Platform.Subject+TeamMember.teamId : System.String { get }
@@ -12276,18 +12298,23 @@ ToolUp.Platform.SubjectKind.AnonymousKind : ToolUp.Platform.SubjectKind { get }
 ToolUp.Platform.SubjectKind.ClaimBearerKind : ToolUp.Platform.SubjectKind { get }
 ToolUp.Platform.SubjectKind.IsAnonymousKind : System.Boolean { get }
 ToolUp.Platform.SubjectKind.IsClaimBearerKind : System.Boolean { get }
+ToolUp.Platform.SubjectKind.IsPublicationReaderKind : System.Boolean { get }
 ToolUp.Platform.SubjectKind.IsTeamMemberKind : System.Boolean { get }
 ToolUp.Platform.SubjectKind.IsUserKind : System.Boolean { get }
+ToolUp.Platform.SubjectKind.PublicationReaderKind : ToolUp.Platform.SubjectKind { get }
 ToolUp.Platform.SubjectKind.Tag : System.Int32 { get }
 ToolUp.Platform.SubjectKind.TeamMemberKind : ToolUp.Platform.SubjectKind { get }
 ToolUp.Platform.SubjectKind.UserKind : ToolUp.Platform.SubjectKind { get }
 ToolUp.Platform.SubjectKind+Tags (class)
 ToolUp.Platform.SubjectKind+Tags.AnonymousKind : System.Int32 (literal)
 ToolUp.Platform.SubjectKind+Tags.ClaimBearerKind : System.Int32 (literal)
+ToolUp.Platform.SubjectKind+Tags.PublicationReaderKind : System.Int32 (literal)
 ToolUp.Platform.SubjectKind+Tags.TeamMemberKind : System.Int32 (literal)
 ToolUp.Platform.SubjectKind+Tags.UserKind : System.Int32 (literal)
 ToolUp.Platform.SubjectModule (class)
 ToolUp.Platform.SubjectModule.kind(ToolUp.Platform.Subject) : ToolUp.Platform.SubjectKind
+ToolUp.Platform.SubjectResolution (class)
+ToolUp.Platform.SubjectResolution.publicationReader(ToolUp.Platform.SubjectResolutionRequest) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Subject]
 ToolUp.Platform.SubjectResolutionError (class)
 ToolUp.Platform.SubjectResolutionError.IsNotTeamMember : System.Boolean { get }
 ToolUp.Platform.SubjectResolutionError.IsSubjectResolutionFailed : System.Boolean { get }

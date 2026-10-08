@@ -1985,6 +1985,143 @@ let private publicationScenario (surfacesLabel: string) (surfaces: SurfaceProfil
             "every page decision for a reader is recorded — its refusals, and the public page it read"
     }
 
+/// Phase 1002 — the anonymous-open `/api` routes a reader is also refused:
+/// `/api/x` (open to anonymous callers on an anonymous-only deployment,
+/// whose `/api/` bridge is `public_`) and the two query-param SSE routes
+/// (`public_` under the default `SseAuthMode = QueryParamFallback`).
+let private anonymousOpenApiRoutes: HttpHandler list = [
+    GET >=> route "/api/notifications" >=> text "notification stream"
+    GET >=> route "/api/ai/events" >=> text "assistant stream"
+]
+
+/// Phase 1002 — an `IAuditLog` that keeps every row it is handed.
+let private recordingAuditLog () =
+    let rows = System.Collections.Concurrent.ConcurrentQueue<string * AuditEvent>()
+
+    let log =
+        { new IAuditLog with
+            member _.Record(scopeId, audit) = async { rows.Enqueue((scopeId, audit)) }
+            member _.GetAuditTrail(_, _, _) = async { return [] }
+        }
+
+    rows, log
+
+let private readerConfinementTests =
+    testList "Phase 1002 — a reader is refused on every /api route, and its sign-in is audited" [
+        testCaseAsync
+            "anonymous-open /api routes refuse a reader: the anonymous-only bridge and the query-param SSE routes"
+        <| async {
+            let s = issuer.Force()
+            let rhea = Some(s.MintTokenFor("rhea", [ "groups", box [| "7f1c-board" |] ]))
+
+            let probe (surfaces: SurfaceProfile list) (paths: string list) = async {
+                use! host = startHostWith surfaces (oidcProviderWith publicationMapping) ignore anonymousOpenApiRoutes
+
+                use client = host.GetTestClient()
+
+                let! results =
+                    paths
+                    |> List.map (fun path -> async {
+                        let! reader = sendMethod client HttpMethod.Get rhea path
+                        let! anonymous = sendMethod client HttpMethod.Get None path
+                        return path, reader, anonymous
+                    })
+                    |> Async.Sequential
+
+                do! host.StopAsync() |> Async.AwaitTask
+                return results
+            }
+
+            let! anonymousOnly = probe Surfaces.anonymous [ "/api/x"; "/api/notifications"; "/api/ai/events" ]
+            let! authenticated = probe authenticatedSurface [ "/api/notifications"; "/api/ai/events" ]
+
+            for label, results in [ "anonymous-only", anonymousOnly; "individual+team", authenticated ] do
+                for path, (readerStatus, readerBody), (anonymousStatus, _) in results do
+                    // The falsifier: the route IS open to an anonymous caller.
+                    Expect.equal anonymousStatus 200 $"{label} {path}: open to an anonymous caller"
+                    Expect.equal readerStatus 403 $"{label} {path}: a reader is refused"
+
+                    Expect.stringContains
+                        readerBody
+                        "publication_reader_not_admitted"
+                        $"{label} {path}: refused as a reader"
+        }
+
+        testCaseAsync "a reader's sign-in writes one PublicationReaderSignedIn row under _platform, and no member login"
+        <| async {
+            let s = issuer.Force()
+            let rows, auditLog = recordingAuditLog ()
+
+            let register (services: IServiceCollection) =
+                services.AddMemoryCache() |> ignore
+                services.AddSingleton<IAuditLog>(auditLog) |> ignore
+
+            use! host =
+                startHostWith Surfaces.team (oidcProviderWith publicationMapping) register anonymousOpenApiRoutes
+
+            use client = host.GetTestClient()
+            let rhea = Some(s.MintTokenFor("rhea", [ "groups", box [| "7f1c-board" |] ]))
+            let carol = Some(s.MintTokenFor("carol", [ "roles", box [| "app-user" |] ]))
+
+            for path in [ "/open"; "/members"; "/open" ] do
+                let! _ = sendMethod client HttpMethod.Get rhea path
+                ()
+
+            // The falsifier: a member's sign-in IS audited by this host.
+            let! _ = sendMethod client HttpMethod.Get carol "/editors"
+
+            // `Record` is fire-and-forget; wait (bounded) for both rows.
+            let rec settle attempt = async {
+                let snapshot = rows.ToArray() |> List.ofArray
+
+                let landed =
+                    snapshot
+                    |> List.exists (function
+                        | _, UserLoggedIn _ -> true
+                        | _ -> false)
+                    && snapshot
+                       |> List.exists (function
+                           | _, PublicationReaderSignedIn _ -> true
+                           | _ -> false)
+
+                if landed || attempt >= 40 then
+                    return snapshot
+                else
+                    do! Async.Sleep 50
+                    return! settle (attempt + 1)
+            }
+
+            let! snapshot = settle 0
+            do! host.StopAsync() |> Async.AwaitTask
+
+            let readerRows =
+                snapshot
+                |> List.choose (function
+                    | scopeId, PublicationReaderSignedIn p -> Some(scopeId, p)
+                    | _ -> None)
+
+            match readerRows with
+            | [ scopeId, row ] ->
+                Expect.equal scopeId "_platform" "recorded under _platform, never a container of its own"
+                Expect.equal row.ReaderId "rhea" "the reader"
+                Expect.equal row.SubjectKind "publication-reader" "the ReaderAudit kind"
+                Expect.contains row.ReaderRoles "board-readers" "the reader role it was admitted with"
+            | other -> failtestf "expected exactly one reader sign-in row, got %A" other
+
+            let logins =
+                snapshot
+                |> List.choose (function
+                    | scopeId, UserLoggedIn p -> Some(scopeId, p.UserId)
+                    | _ -> None)
+
+            Expect.equal logins [ "team-a", "carol" ] "only the member's login; none for the reader"
+
+            Expect.isFalse
+                (snapshot |> List.exists (fun (scopeId, _) -> scopeId.Contains "rhea"))
+                "no row under a scope of the reader's own"
+        }
+    ]
+
 let private publicationPipelineTests =
     testList "Phase 996 / 1002 — a publication audience through the composed pipeline, under every Surfaces list" [
         yield!
@@ -2031,5 +2168,6 @@ let tests =
         signInTests
         publicationUnitTests
         publicationReaderSubjectTests
+        readerConfinementTests
         publicationPipelineTests
     ]

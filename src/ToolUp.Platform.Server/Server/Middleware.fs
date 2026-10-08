@@ -350,6 +350,48 @@ let private observeResolverErrorDowngrade
         with _ ->
             ()
 
+/// Phase 1002 — a publication reader's sign-in audit. The reader holds no
+/// scope, so the member's login audit (which runs where a scope was
+/// derived) never fires for it; this is its counterpart. One
+/// `PublicationReaderSignedIn` row per reader per session window (the same
+/// 20-minute sliding trigger as `UserLoggedIn`, under its own cache key),
+/// recorded under `_platform` with the reader (`ReaderAudit`), the roles it
+/// was admitted with and the time. It writes no scope and no container.
+/// Best-effort: an observability failure never fails the request.
+let internal recordPublicationReaderSignIn
+    (ctx: HttpContext)
+    (authProv: IAuthProvider)
+    (user: AuthenticatedUser)
+    (readerId: string)
+    : unit =
+    try
+        match
+            ctx.RequestServices.GetService(typeof<IMemoryCache>), ctx.RequestServices.GetService(typeof<IAuditLog>)
+        with
+        | (:? IMemoryCache as cache), (:? IAuditLog as auditLog) ->
+            let cacheKey = "audit:reader-login:" + readerId
+            let mutable existing = Unchecked.defaultof<obj>
+
+            if not (cache.TryGetValue(cacheKey, &existing)) then
+                let entryOpts = MemoryCacheEntryOptions()
+                entryOpts.SlidingExpiration <- Nullable(TimeSpan.FromMinutes 20.0)
+                cache.Set(cacheKey, true, entryOpts) |> ignore
+
+                auditLog.Record(
+                    "_platform",
+                    PublicationReaderSignedIn {
+                        SubjectKind = AuditSubject.kindString ReaderAuditKind
+                        ReaderId = readerId
+                        ReaderRoles = AuthenticatedUser.pageRoles user
+                        AuthProvider = authProv.GetType().Name
+                        OccurredAt = DateTimeOffset.UtcNow
+                    }
+                )
+                |> Async.Start
+        | _ -> ()
+    with _ ->
+        ()
+
 /// ASP.NET Core middleware that resolves the per-request `Subject`,
 /// `StorageScope`, and authenticated user, stashing all three on
 /// `HttpContext.Items`. See the module preamble for the full key
@@ -530,6 +572,13 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                     // public page would make it uncacheable downstream.
                     match subject with
                     | AnonymousSession sid when not isPageRoute -> AnonymousSessionBinding.ensureBound ctx sid
+                    | _ -> ()
+
+                    // Phase 1002 — a publication reader's sign-in is audited
+                    // under `_platform`: it holds no scope for the member's
+                    // login audit below to run under.
+                    match subject with
+                    | PublicationReader readerId -> recordPublicationReaderSignIn ctx authProv user readerId
                     | _ -> ()
 
                     match scopeResult with

@@ -25,6 +25,28 @@ type UserLoggedInPayload = {
     AuthProvider: string
 }
 
+/// Phase 1002 — a publication reader's first-seen-this-session sign-in.
+/// The reader holds no scope of its own, so the row is recorded under
+/// `_platform` (never a `user-<id>` container) and is the reader's
+/// counterpart of `UserLoggedIn`, which a reader never emits. Written
+/// once per reader per session window, on the same trigger.
+type PublicationReaderSignedInPayload = {
+    /// Subject kind of the reader's `AuditSubject.ReaderAudit`, from
+    /// `AuditSubject.kindString` — always `"publication-reader"`.
+    SubjectKind: string
+    /// The reader's id (`ReaderAudit userId`).
+    ReaderId: string
+    /// The roles the reader was admitted with and carries to the page
+    /// gate (`AuthenticatedUser.pageRoles`: its directory roles after
+    /// `ClaimMapping.GroupAliases`, plus any API roles) — the roles a
+    /// `Publication` page's readers are matched against.
+    ReaderRoles: string list
+    /// The resolved provider's own kind name, as on `UserLoggedIn`.
+    AuthProvider: string
+    /// When the sign-in was first seen.
+    OccurredAt: DateTimeOffset
+}
+
 type TeamCreatedPayload = {
     UserId: string
     TeamId: string
