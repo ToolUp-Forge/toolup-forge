@@ -1039,6 +1039,13 @@ type ServerApp = {
     /// (the default) leaves the secret store un-decorated. Wired via
     /// `ServerApp.withSecretResilience`.
     SecretResilience: ResilienceMode
+    /// Phase 1001 — the application's own `ISecretStore` (a KMS-backed
+    /// companion, or whatever `SecretStore.fromEnv` selected). `None` (the
+    /// default) composes the raw `FileSecretStore`, unchanged. When set,
+    /// it is the ONE store every preflight validator and internal store
+    /// receives, after `SecretResilience` is applied. Wired via
+    /// `ServerApp.withSecretStore`.
+    SecretStore: Secrets.ISecretStore option
     /// Phase 169 — per-module load outcome, accumulated in `addModule`
     /// order and emitted through `Logger` at `run`. Empty until the first
     /// `addModule`; a stock deployment accumulates only `ModuleRegistered`
@@ -1168,6 +1175,7 @@ module ServerApp =
         ModuleBindingVerifier = None
         StorageResilience = NoResilience
         SecretResilience = NoResilience
+        SecretStore = None
         ModuleLoadOutcomes = []
         ModuleComponentIds = []
         ModuleGrantPolicies = []
@@ -1797,6 +1805,32 @@ module ServerApp =
     let withSecretResilience (policy: TransientFaultPolicy) (app: ServerApp) : ServerApp = {
         app with
             SecretResilience = WithResiliencePolicy policy
+    }
+
+    /// Phase 1001 — supply the deployment's `ISecretStore`. The supplied
+    /// store replaces the SDK's `FileSecretStore` default EVERYWHERE the
+    /// platform reads or writes a secret: the preflight validators, the
+    /// webhook / notification / OAuth / provider-OAuth / data-ingestion
+    /// stores, and the DI-registered `ISecretStore`. `withSecretResilience`
+    /// still applies, wrapping the supplied store (the wrapper forwards the
+    /// store's declared at-rest posture).
+    ///
+    /// This is the one route; the platform never reads
+    /// `TOOLUP_SECRET_STORE` itself. To select a store from the environment,
+    /// pipe `SecretStore.fromEnv logger resolvers` in here. When the
+    /// environment names one backend and the app supplies another, the
+    /// supplied store is the store composed, and the at-rest preflight
+    /// judges what IT declares.
+    ///
+    /// The secret-store preflight validators trust the supplied store's
+    /// DECLARED posture (`ISecretStoreAtRestPosture`): a store declaring
+    /// `EncryptsAtRest` is taken at its word, so a custom store must
+    /// declare it only when it is true. Calling this multiple times keeps
+    /// the last store. Omitting it leaves the default byte-for-byte
+    /// unchanged.
+    let withSecretStore (store: Secrets.ISecretStore) (app: ServerApp) : ServerApp = {
+        app with
+            SecretStore = Some store
     }
 
     /// Phase 9d — override the SDK default per-team compute quota
@@ -3296,6 +3330,7 @@ module ServerApp =
                 app.ScheduledJobs
                 app.StorageResilience
                 app.SecretResilience
+                app.SecretStore
 
         // Phase 801 — the remoting decode edge's coverage, one boot line:
         // how many of the API records this process mounted (every

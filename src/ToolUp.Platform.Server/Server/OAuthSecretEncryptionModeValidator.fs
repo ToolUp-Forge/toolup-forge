@@ -92,7 +92,11 @@ let secretStoreProvidesEncryptionAtRest (store: Secrets.ISecretStore) =
 
     match store with
     | :? EncryptedSecretStore.EncryptedSecretStore as e -> e.ProvidesEncryptionAtRest
-    | _ -> cloudKmsBacked
+    // Phase 1001 — or the composed store DECLARES it encrypts at rest (a
+    // KMS companion supplied through `ServerApp.withSecretStore`, read
+    // through the resilience wrapper, which forwards the declaration).
+    // Additive: FileSecretStore declares plaintext, so it is unchanged.
+    | _ -> cloudKmsBacked || SecretStore.declaresEncryptionAtRest store
 
 /// The remediation menu, identical across every severity this validator
 /// emits — a deployment reading the Warning gets the same three fixes a

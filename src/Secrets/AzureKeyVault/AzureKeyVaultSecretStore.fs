@@ -123,14 +123,14 @@ module private Naming =
 
 // ─── ISecretStore implementation ─────────────────────────────────────
 
-/// Azure Key Vault implementation of `ISecretStore`. One `SecretClient`
-/// per instance; the underlying Azure SDK client is thread-safe and
-/// designed for reuse.
-type AzureKeyVaultSecretStore(config: AzureKeyVaultConfig) =
-    // Validate the vault URL up front. `Uri config.VaultUrl` below throws
-    // a generic UriFormatException on a malformed value; this names the
-    // offending config and the expected shape instead.
-    do
+// ─── Client construction ─────────────────────────────────────────────
+
+module private ClientFactory =
+    /// Validate the vault URL up front and build the production client.
+    /// `Uri config.VaultUrl` throws a generic UriFormatException on a
+    /// malformed value; this names the offending config and the expected
+    /// shape instead.
+    let fromConfig (config: AzureKeyVaultConfig) : SecretClient =
         match Uri.TryCreate(config.VaultUrl, UriKind.Absolute) with
         | true, uri when uri.Scheme = Uri.UriSchemeHttps -> ()
         | _ ->
@@ -140,8 +140,29 @@ type AzureKeyVaultSecretStore(config: AzureKeyVaultConfig) =
                     "AzureKeyVaultConfig.VaultUrl = '%s' is not a valid absolute https:// URL (expected e.g. https://<vault-name>.vault.azure.net/)."
                     config.VaultUrl)
 
-    let credential = DefaultAzureCredential() :> Core.TokenCredential
-    let client = SecretClient(Uri config.VaultUrl, credential)
+        let credential = DefaultAzureCredential() :> Core.TokenCredential
+        SecretClient(Uri config.VaultUrl, credential)
+
+/// Azure Key Vault implementation of `ISecretStore`. One `SecretClient`
+/// per instance; the underlying Azure SDK client is thread-safe and
+/// designed for reuse.
+///
+/// Phase 1001 — the primary constructor takes the `SecretClient` itself,
+/// so a caller can supply one: a deployment that configures its own
+/// credential or `SecretClientOptions`, or a test that boots a
+/// vault-selecting app with no Azure credentials (the Azure SDK's
+/// `SecretClient` has a protected parameterless constructor and virtual
+/// members precisely so it can be substituted). The `AzureKeyVaultConfig`
+/// constructor is unchanged: it validates the URL and builds the client
+/// over `DefaultAzureCredential`, exactly as before. Either way the store
+/// declares the same at-rest posture — the posture is a property of Key
+/// Vault, not of how the client was built.
+type AzureKeyVaultSecretStore(client: SecretClient) =
+    do
+        if isNull (box client) then
+            nullArg "client"
+
+    new(config: AzureKeyVaultConfig) = AzureKeyVaultSecretStore(ClientFactory.fromConfig config)
 
     /// Phase 457 — Key Vault protects secrets with service-managed,
     /// HSM-backed keys; nothing reaches durable media in the clear.
@@ -229,6 +250,13 @@ type AzureKeyVaultSecretStore(config: AzureKeyVaultConfig) =
 /// `GetSecret` / `SetSecret` call as a `RequestFailedException`.
 let create (config: AzureKeyVaultConfig) : ISecretStore =
     AzureKeyVaultSecretStore config :> ISecretStore
+
+/// Phase 1001 — construct an `ISecretStore` over a caller-supplied
+/// `SecretClient` (a custom credential / `SecretClientOptions`, or a test
+/// double). No URL validation happens here: the client already names its
+/// vault.
+let createWithClient (client: SecretClient) : ISecretStore =
+    AzureKeyVaultSecretStore client :> ISecretStore
 
 /// Read the vault URL from `TOOLUP_AZURE_KEY_VAULT_URL` and construct
 /// an `AzureKeyVaultSecretStore`. Returns `None` when the env var is

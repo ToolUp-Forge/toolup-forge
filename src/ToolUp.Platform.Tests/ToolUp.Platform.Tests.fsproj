@@ -2845,6 +2845,8 @@
         <Compile Include="InProcess\ProviderExceptionTests.fs" />
         <!-- Phase 992 — interactive sign-in arms router-first SPA precedence: a bundle-shipped, PublicRendering-free host. -->
         <Compile Include="InProcess\OidcSignInSpaPrecedenceTests.fs" />
+        <!-- Phase 1001 — an app supplies ServerApp its secret store: one store reaches every validator and internal store. -->
+        <Compile Include="InProcess\ServerAppSecretStoreTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />

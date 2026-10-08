@@ -97,7 +97,14 @@ type EncryptedSecretStoreModeValidator(config: ServerConfig, secretStore: Secret
                 (fun () ->
                     not keyAvailable
                     && not config.AcceptPlaintextSecretsWhenAuthRequired
-                    && not (isCloudKmsBacked ()))
+                    && not (isCloudKmsBacked ())
+                    // Phase 1001 — a composed store that DECLARES it
+                    // encrypts at rest (a KMS companion supplied through
+                    // `ServerApp.withSecretStore`, or EncryptedSecretStore
+                    // holding a key) does not depend on the master key.
+                    // Additive: FileSecretStore declares plaintext, so the
+                    // default path is unchanged.
+                    && not (SecretStore.declaresEncryptionAtRest secretStore))
                 (fun () ->
                     let stateDescription =
                         match resolution with

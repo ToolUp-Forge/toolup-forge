@@ -2616,6 +2616,8 @@ let private registeredTests =
         ProviderExceptionTests.tests
         // Phase 992 - interactive sign-in's routes precede the SPA shell without PublicRendering.
         OidcSignInSpaPrecedenceTests.tests
+        // Phase 1001 - an app supplies ServerApp its secret store.
+        ServerAppSecretStoreTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

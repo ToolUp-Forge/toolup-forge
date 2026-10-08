@@ -912,11 +912,25 @@ section eliminates structurally.
 > any non-anonymous deployment is an `Error`. The deployment refuses to start
 > rather than silently persisting long-lived third-party credentials in
 > cleartext.
+> *Trust model (stated at 0.25.0, Phase 1001):* the store judged is the one the
+> deployment COMPOSES — the app's own via `ServerApp.withSecretStore`, else the
+> `FileSecretStore` default, after the resilience decorator, which forwards the
+> inner store's declaration. Beside the master-key and `TOOLUP_SECRET_STORE`
+> checks, a store that DECLARES `EncryptsAtRest` through
+> `ISecretStoreAtRestPosture` passes. The declaration is taken at its word, as
+> the `secret-store-at-rest-posture` validator already takes it: a custom store
+> must declare it only when it is true, and that claim is the supplier's
+> responsibility. The default and environment-switch paths are unchanged.
 > **Evidence:**
 > `src/ToolUp.Platform.Server/Server/OAuthSecretEncryptionModeValidator.fs` ·
 > `src/ToolUp.Platform.Server/Server/EncryptedSecretStoreModeValidator.fs` ·
 > `src/ToolUp.Platform.Server/Server/OAuthFlowValidator.fs` ·
-> `docs/migrations/138-oauth-credential-at-rest.md` (Phase 138)
+> `src/ToolUp.Platform.Server/Server/Infra/SecretStoreFromEnv.fs`
+> (`declaresEncryptionAtRest`) ·
+> `src/ToolUp.Platform.Server/Server/SDK.Server.fs` (`composeSecretStore`) ·
+> `src/ToolUp.Platform.Tests/InProcess/ServerAppSecretStoreTests.fs` ·
+> `docs/migrations/138-oauth-credential-at-rest.md` (Phase 138) ·
+> `docs/migrations/1001-serverapp-secret-store.md` (Phase 1001)
 
 > **EN-7 — Webhook signing secrets are held in the secret store, not in the
 > subscription record, and a rotation propagates across instances without a

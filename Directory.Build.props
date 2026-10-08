@@ -291,6 +291,19 @@
       exhaustive `match` over `PageAudience`; behaviour is unchanged until
       `PublicationReaders` is set. Migration recipe:
       `docs/migrations/996-publication-audience.md`.
+
+      Phase 1001 rides the same draft slot. An app supplies ServerApp its
+      secret store: `ServerApp.withSecretStore` (and the `ServerApp.SecretStore`
+      field), `composeSecretStore` and `SecretStore.declaresEncryptionAtRest`
+      in `ToolUp.Platform.Server`, and an injected-`SecretClient` constructor
+      plus `createWithClient` in `ToolUp.Secrets.AzureKeyVault` (additive).
+      Breaking for a full `ServerApp` record literal (the record gains a
+      field) and for a direct caller of the low-level `compose` (a trailing
+      `secretStore` argument); both are the class this slot already carries.
+      `encrypted-secret-store-mode` and `oauth-secret-encryption-mode` now
+      also pass on a composed store that DECLARES encryption at rest; the
+      default and environment-switch paths are unchanged. Migration recipe:
+      `docs/migrations/1001-serverapp-secret-store.md`.
     -->
     <Version>0.25.0</Version>
     <!--

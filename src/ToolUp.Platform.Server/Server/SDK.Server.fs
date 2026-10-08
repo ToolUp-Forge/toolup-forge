@@ -51,6 +51,28 @@ open ToolUp.Platform.ComposeHealthSmoke
 open ToolUp.Platform.ComposeScopeResolver
 open ToolUp.Platform.ComposeBootstrap
 
+/// Phase 1001 — the secret store a composition runs on, in one place.
+///
+/// `supplied` is the application's own store (`ServerApp.withSecretStore`);
+/// `None` keeps the SDK default, a raw `FileSecretStore`, constructed exactly
+/// as it was before the seam existed. The resilience decorator applies to
+/// either, and it forwards the inner store's `ISecretStoreAtRestPosture`, so
+/// the at-rest preflight reads what the SUPPLIED store declares rather than
+/// what the wrapper is.
+///
+/// `compose` binds this value once and hands that one instance to every
+/// consumer — the preflight validators, the webhook / notification /
+/// OAuth / provider-OAuth / data-ingestion stores and the DI-registered
+/// `ISecretStore` — so the selected store cannot diverge from the store
+/// that is checked.
+let composeSecretStore
+    (supplied: Secrets.ISecretStore option)
+    (secretResilience: ResilienceMode)
+    : Secrets.ISecretStore =
+    supplied
+    |> Option.defaultWith (fun () -> FileSecretStore.FileSecretStore() :> Secrets.ISecretStore)
+    |> applySecretResilience secretResilience
+
 /// Compose a list of pre-built Giraffe HttpHandlers into a Saturn application.
 /// When dataTypes is non-empty, the file management API is auto-injected.
 /// PlatformApi is always auto-injected (provides mode info and team management).
@@ -66,6 +88,14 @@ open ToolUp.Platform.ComposeBootstrap
 /// is constructed here. The supplied instance is what DI hands out for
 /// every `ILogger` resolution — this is the single-substitution-point
 /// contract for logging.
+///
+/// `secretStore` lets the application supply its `ISecretStore` (Phase
+/// 1001 — `ServerApp.withSecretStore`): a KMS-backed companion such as
+/// Azure Key Vault, or whatever `SecretStore.fromEnv` selected. When
+/// `None`, the raw `FileSecretStore` is used, exactly as before. Either
+/// way the result passes through the `secretResilience` decorator and
+/// is the ONE store every preflight validator, internal store and DI
+/// resolution of `ISecretStore` receives (see `composeSecretStore`).
 ///
 /// `blobStorage` lets the application supply a cloud-backed
 /// `IBlobStorage` (Azure / S3 / GCS via the `src/Storage/*` sub-
@@ -133,6 +163,7 @@ let compose
     (scheduledJobDeclarations: ScheduledJobDeclaration list)
     (storageResilience: ResilienceMode)
     (secretResilience: ResilienceMode)
+    (secretStore: Secrets.ISecretStore option)
     =
 
     // Phase 9l — resolve the deployment's distributed-tracing sink.
@@ -264,9 +295,10 @@ let compose
         applyEncryptionDecorator innerBlobStorage encryptionKeyResolver
         |> applyStorageResilience storageResilience
 
-    let secretStore =
-        FileSecretStore.FileSecretStore() :> Secrets.ISecretStore
-        |> applySecretResilience secretResilience
+    // Phase 1001 — the app's own store when it supplied one, else the
+    // FileSecretStore default; resilience applies to either. This single
+    // binding is what every validator and internal store below receives.
+    let secretStore = composeSecretStore secretStore secretResilience
 
     let resolvedLogger =
         logger

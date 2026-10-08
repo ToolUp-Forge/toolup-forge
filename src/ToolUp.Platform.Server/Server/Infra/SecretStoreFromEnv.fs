@@ -86,6 +86,29 @@ let private warnIfPlaintextAtRest (logger: ILogger) (store: ISecretStore) : ISec
 
     store
 
+/// Phase 1001 — does the store DECLARE that it encrypts at rest?
+///
+/// Only the declaration counts (`ISecretStoreAtRestPosture` answering
+/// `EncryptsAtRest`); a store that declares plaintext, unknown, or nothing
+/// at all is `false`. The resilience decorator forwards its inner store's
+/// declaration, so a wrapped store answers as itself.
+///
+/// The secret-store preflight validators use this as an ADDITIONAL way to
+/// pass, beside the master-key / `TOOLUP_SECRET_STORE` checks they already
+/// make: an app that supplies a KMS-backed store through
+/// `ServerApp.withSecretStore` is judged by what that store says, with no
+/// environment spelling required. The trust model is the at-rest posture
+/// validator's: a declaration is taken at its word, so a custom store
+/// must declare `EncryptsAtRest` only when it is true.
+let declaresEncryptionAtRest (store: ISecretStore) : bool =
+    match box store with
+    | :? ISecretStoreAtRestPosture as declared ->
+        match declared.AtRestPosture with
+        | EncryptsAtRest _ -> true
+        | PlaintextAtRest _
+        | UnknownAtRest _ -> false
+    | _ -> false
+
 let fromEnv (logger: ILogger) (cloudResolvers: CloudSecretStoreResolver list) : ISecretStore =
     let masterKey = EncryptedSecretStore.masterKeyFromEnvironment ()
 
