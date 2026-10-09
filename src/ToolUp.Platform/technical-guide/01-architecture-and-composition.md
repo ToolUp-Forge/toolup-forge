@@ -302,7 +302,10 @@ The DI registration and middleware setup are spelled out directly against the ra
 
 ```fsharp
 let builder = WebApplication.CreateBuilder()
-builder.WebHost.UseUrls($"http://0.0.0.0:{serverPort}") |> ignore
+// Phase 1000 — `bindAddress` is SERVER_BIND_ADDRESS / ServerConfig.BindAddress,
+// else loopback 127.0.0.1; forge skips this when Kestrel endpoints or
+// ASPNETCORE_URLS are configured (see ServerBinding).
+builder.WebHost.UseUrls($"http://{bindAddress}:{serverPort}") |> ignore
 
 let services = builder.Services
 services.AddMemoryCache() |> ignore

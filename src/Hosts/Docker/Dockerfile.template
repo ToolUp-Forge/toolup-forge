@@ -75,10 +75,13 @@ RUN chmod 0755 /usr/local/bin/healthcheck.sh
 
 USER app
 
-# `ASPNETCORE_URLS` binds Kestrel to all interfaces on the documented
-# port. Pair with `EXPOSE` so `docker run -P` and orchestrator port
-# discovery both work.
-ENV ASPNETCORE_URLS=http://+:5000
+# `SERVER_BIND_ADDRESS=0.0.0.0` binds Kestrel to all interfaces: since
+# 0.26.0 (Phase 1000) a forge server listens on loopback 127.0.0.1 unless
+# the deployment says otherwise, and its preflight refuses a container left
+# on that default. `SERVER_PORT` (default 5000) still chooses the port.
+# Pair with `EXPOSE` so `docker run -P` and orchestrator port discovery
+# both work.
+ENV SERVER_BIND_ADDRESS=0.0.0.0
 EXPOSE 5000
 
 # HEALTHCHECK consumes Phase 9k's `/health` Liveness probe. The

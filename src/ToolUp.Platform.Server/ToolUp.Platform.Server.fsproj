@@ -54,6 +54,10 @@
         <Compile Include="Server\HttpClientTransport.fs" />
         <Compile Include="Server\JwtCrypto.fs" />
         <Compile Include="Server\Config\ConfigResolution.fs" />
+        <!-- Phase 1000 — the listen-address resolution and its preflight.
+             Before ServerConfigFromEnv.fs, whose SERVER_BIND_ADDRESS read
+             validates through it; ComposeBootstrap.fs applies the plan. -->
+        <Compile Include="Server\ServerBinding.fs" />
         <Compile Include="Server\Config\ServerConfigFromEnv.fs" />
         <Compile Include="Server\DataVocabularyPins.fs" />
         <Compile Include="Server\BlobStorageSignedUrl.fs" />

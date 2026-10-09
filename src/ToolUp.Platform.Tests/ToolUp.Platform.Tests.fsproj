@@ -2847,6 +2847,8 @@
         <Compile Include="InProcess\OidcSignInSpaPrecedenceTests.fs" />
         <!-- Phase 1001 — an app supplies ServerApp its secret store: one store reaches every validator and internal store. -->
         <Compile Include="InProcess\ServerAppSecretStoreTests.fs" />
+        <!-- Phase 1000 — the listen address is configuration: loopback default, precedence, the deployed-posture preflight. -->
+        <Compile Include="InProcess\ServerBindAddressTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />

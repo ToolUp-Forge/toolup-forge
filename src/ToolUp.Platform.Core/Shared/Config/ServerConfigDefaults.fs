@@ -21,6 +21,7 @@ open ToolUp.Platform.Narrative
 module ServerConfig =
     let defaults = {
         Port = 5000
+        BindAddress = None
         PublicPath = "deploy/public"
         Surfaces = Surfaces.anonymous
         ModuleNames = []

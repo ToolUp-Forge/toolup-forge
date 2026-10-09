@@ -2618,6 +2618,8 @@ let private registeredTests =
         OidcSignInSpaPrecedenceTests.tests
         // Phase 1001 - an app supplies ServerApp its secret store.
         ServerAppSecretStoreTests.tests
+        // Phase 1000 - a forge server binds the address it is configured to.
+        ServerBindAddressTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

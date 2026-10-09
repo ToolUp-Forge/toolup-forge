@@ -106,6 +106,8 @@ module PageAmbient =
 
     let serverPort: string = failwith "ambient"
 
+    let bindAddress: string = failwith "ambient"
+
     let resolvedLogger: ILogger = failwith "ambient"
 
     let dataTypes: DataType list = failwith "ambient"

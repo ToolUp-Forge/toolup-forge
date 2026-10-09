@@ -23,6 +23,18 @@ type ServerConfig = {
     /// sides — F# reads it for Kestrel and Vite reads the same name
     /// to set the proxy target.
     Port: int
+    /// Phase 1000 — the address the HTTP listener binds. `None` (the
+    /// default) binds loopback `127.0.0.1`, so a local run is reachable
+    /// only from the machine running it. A deployment that must accept
+    /// traffic from outside its host or container sets `Some "0.0.0.0"`
+    /// (IPv4, all interfaces) or `Some "::"` (all interfaces). Accepts an
+    /// IPv4 / IPv6 literal or `localhost`; anything else fails loud at
+    /// startup. The `SERVER_BIND_ADDRESS` env var overrides this field.
+    /// Configured Kestrel endpoints (`Kestrel__Endpoints__*`) and the
+    /// `urls` host setting (`ASPNETCORE_URLS`) override both, as ASP.NET
+    /// Core documents. A deployed posture (a container, a Kubernetes pod,
+    /// `ReplicaCount > 1`) left on the default loopback refuses to start.
+    BindAddress: string option
     PublicPath: string
     /// Declared subject shapes this deployment supports. Non-empty
     /// list — `SurfaceCoherenceValidator` refuses startup on an empty

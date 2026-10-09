@@ -115,7 +115,9 @@ let composeSecretStore
 /// `INotificationChannel`, including the auto-injected
 /// `/api/notifications` SSE endpoint.
 ///
-/// Reads SERVER_PORT from environment, falling back to config.Port.
+/// Reads SERVER_PORT from environment, falling back to config.Port, and
+/// SERVER_BIND_ADDRESS, falling back to config.BindAddress, then loopback
+/// 127.0.0.1 (Phase 1000; Kestrel endpoints and ASPNETCORE_URLS override).
 /// Optional authProvider overrides the default (HeaderAuthProvider —
 /// spoofable; safe only because the security-class
 /// `HeaderAuthProviderModeValidator` refuses startup in any
@@ -229,7 +231,7 @@ let compose
         | port -> port
 
     // Fail fast on an out-of-range / non-numeric port. Without this the
-    // raw string flows into `UseUrls($"http://0.0.0.0:{serverPort}")` and
+    // raw string flows into `UseUrls($"http://<address>:{serverPort}")` and
     // Kestrel rejects it with an opaque bind-time error far from the
     // actual cause (a typo'd SERVER_PORT env var or an out-of-range
     // ServerConfig.Port). Surfacing it here names the offending value.
@@ -239,6 +241,13 @@ let compose
         failwithf
             "SERVER_PORT / ServerConfig.Port = %s is not a valid TCP port. Expected an integer in 1-65535 (set the SERVER_PORT environment variable or ServerConfig.Port to a valid port)."
             serverPort
+
+    // Phase 1000 — the configured bind address: `SERVER_BIND_ADDRESS`, else
+    // `ServerConfig.BindAddress`; `None` binds the loopback default. Read
+    // here, beside the port, for consumers not using `fromEnv`, and failed
+    // loud by name when it is not an IP literal or `localhost`.
+    let bindAddress =
+        ServerBinding.configuredBindAddress config (ServerBinding.envValue ServerBinding.BindAddressEnvVar)
 
     let culture = CultureInfo "en-GB"
     CultureInfo.DefaultThreadCurrentCulture <- culture
@@ -273,7 +282,11 @@ let compose
     // Phase 16a — host builder shape per `ProcessProfile` (extracted to
     // `ComposeBootstrap.buildHostBuilder`). Exactly one of
     // `webBuilder` / `workerBuilder` is `Some`; the other is `None`.
-    let webBuilder, workerBuilder = buildHostBuilder config serverPort
+    // Phase 1000 — `listenPlan` is where the web builder binds and which
+    // setting decided it (`None` for `WorkerOnly`); the bind-address
+    // preflight below reads it.
+    let webBuilder, workerBuilder, listenPlan =
+        buildHostBuilder config serverPort bindAddress
 
     // ─── Service configuration (previously Saturn's `service_config`) ─────
     let innerBlobStorage =
@@ -1126,6 +1139,18 @@ let compose
         eventStore
         encryptionKeyResolver
         configValidators
+
+    // Phase 1000 — refuse a deployed posture (a container, a Kubernetes pod,
+    // `ReplicaCount > 1`) left listening on the loopback default, and warn
+    // when loopback there was stated explicitly (a sidecar topology).
+    services.AddSingleton<ConfigValidation.IConfigValidator>(
+        ServerBinding.ServerBindsConfiguredAddressValidator(
+            listenPlan,
+            ServerBinding.deployedSignals config ServerBinding.envValue
+        )
+        :> ConfigValidation.IConfigValidator
+    )
+    |> ignore
 
     // Phase 9j — first-party CSP contributors (extracted to
     // `ComposeHealthSmoke.registerFirstPartyCspContributors`).

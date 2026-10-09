@@ -70,6 +70,10 @@ Every major container platform accepts non-root images:
 
 Running as root is a defensive failure mode we choose not to ship as the default. A consumer that needs root (legacy mount, debugging) can flip `USER app` to `USER root` in their copy of the Dockerfile.
 
+## Listen address (Phase 1000)
+
+Since 0.26.0 a forge server listens on loopback `127.0.0.1` unless the deployment says otherwise, so the Dockerfile sets `SERVER_BIND_ADDRESS=0.0.0.0` to accept traffic from outside the container; `SERVER_PORT` (default 5000) still chooses the port. An image that drops that line is refused at startup: the `server-bind-address` preflight reads `DOTNET_RUNNING_IN_CONTAINER=true` (set by the .NET base images), `KUBERNETES_SERVICE_HOST` or `ReplicaCount > 1` as a deployed posture and will not start a deployed server on the loopback default. A configured `Kestrel__Endpoints__*` or `ASPNETCORE_URLS` takes precedence over `SERVER_BIND_ADDRESS`, as ASP.NET Core documents. An explicitly configured loopback (a sidecar proxy in the same pod) starts with a warning. See [`1000-server-bind-address.md`](../../../docs/migrations/1000-server-bind-address.md).
+
 ## Healthcheck
 
 `HEALTHCHECK` in the Dockerfile fires `/usr/local/bin/healthcheck.sh` every 30 seconds (the standard Docker default). The script is a bounded `curl` against the Phase 9k Liveness probe (`/health`) — a 2xx response is healthy, anything else is unhealthy, and `--max-time` caps the total probe duration so a half-open TCP connection does not hang the orchestrator's healthcheck loop.

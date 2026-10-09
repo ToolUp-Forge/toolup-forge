@@ -19,54 +19,71 @@ open ToolUp.Platform.ConfigurePipeline
 // tail). Takes the exact substrate values the inline definition
 // captured and returns the same shape. Zero behaviour change.
 
-/// Phase 16a — construct the builder shape per `ProcessProfile`.
-/// Either a `WebApplicationBuilder` bound to `0.0.0.0:<port>` (with
+/// Phase 1000 — the listen plan for a web builder: its host configuration
+/// (which carries `ASPNETCORE_URLS` as `urls` and the `Kestrel` section), the
+/// configured bind address and the port, resolved in the documented
+/// precedence (`ServerBinding.resolve`).
+let listenPlanFor
+    (b: WebApplicationBuilder)
+    (bindAddress: string option)
+    (serverPort: string)
+    : ServerBinding.ListenPlan =
+    ServerBinding.resolve b.Configuration bindAddress serverPort
+
+/// Phase 1000 — apply a listen plan to a web builder. Forge's own address
+/// (configured or the loopback default) is applied with `UseUrls`; a plan
+/// decided by Kestrel endpoints or the `urls` host setting is left to
+/// ASP.NET Core, which binds those exactly as it documents.
+let applyListenPlan (b: WebApplicationBuilder) (plan: ServerBinding.ListenPlan) : unit =
+    match plan.Source with
+    | ServerBinding.ConfiguredBindAddress
+    | ServerBinding.DefaultLoopback -> b.WebHost.UseUrls(Array.ofList plan.Urls) |> ignore
+    | ServerBinding.KestrelEndpoints
+    | ServerBinding.HostUrls -> ()
+
+/// Phase 16a — construct the builder shape per `ProcessProfile`, with the
+/// listen plan the web builder was bound by (Phase 1000).
+/// Either a `WebApplicationBuilder` bound per its `ListenPlan` — loopback
+/// `127.0.0.1:<port>` unless configuration says otherwise — (with
 /// optional `MaxRequestBodyBytes` Kestrel cap) for HTTP-serving
 /// profiles, or a generic `HostApplicationBuilder` with no Kestrel
-/// listener for `WorkerOnly`. The match is exhaustive — exactly one
-/// of the returned options is `Some`. The caller binds `.Services` off
-/// whichever is populated; the rest of `compose` registers against
-/// `IServiceCollection` without knowing which shape backs it.
+/// listener for `WorkerOnly` (and no plan). The match is exhaustive —
+/// exactly one of the returned builders is `Some`. The caller binds
+/// `.Services` off whichever is populated; the rest of `compose` registers
+/// against `IServiceCollection` without knowing which shape backs it.
 let buildHostBuilder
     (config: ServerConfig)
     (serverPort: string)
-    : WebApplicationBuilder option * HostApplicationBuilder option =
+    (bindAddress: string option)
+    : WebApplicationBuilder option * HostApplicationBuilder option * ServerBinding.ListenPlan option =
     let useHttpPipeline = ProcessProfileGate.shouldRegisterHttpPipeline config
 
-    let webBuilder =
-        if useHttpPipeline then
-            let b = WebApplication.CreateBuilder()
+    if useHttpPipeline then
+        let b = WebApplication.CreateBuilder()
 
-            b.WebHost.UseUrls($"http://0.0.0.0:{serverPort}") |> ignore
+        let plan = listenPlanFor b bindAddress serverPort
+        applyListenPlan b plan
 
-            // Gap audit pass-2 #3 — apply ServerConfig.MaxRequestBodyBytes
-            // to Kestrel so the SDK has a deliberate per-request cap rather
-            // than relying on the framework's 30 MB default. `None` (the SDK
-            // default) leaves Kestrel's 30 MB in place; `Some bytes` stamps
-            // the explicit limit. The MaxRequestBodyBytesValidator warns at
-            // preflight if the chosen cap is unwise for the deployment shape.
-            match config.MaxRequestBodyBytes with
-            | Some bytes ->
-                b.WebHost.ConfigureKestrel(fun opts -> opts.Limits.MaxRequestBodySize <- System.Nullable bytes)
-                |> ignore
-            | None -> ()
+        // Gap audit pass-2 #3 — apply ServerConfig.MaxRequestBodyBytes
+        // to Kestrel so the SDK has a deliberate per-request cap rather
+        // than relying on the framework's 30 MB default. `None` (the SDK
+        // default) leaves Kestrel's 30 MB in place; `Some bytes` stamps
+        // the explicit limit. The MaxRequestBodyBytesValidator warns at
+        // preflight if the chosen cap is unwise for the deployment shape.
+        match config.MaxRequestBodyBytes with
+        | Some bytes ->
+            b.WebHost.ConfigureKestrel(fun opts -> opts.Limits.MaxRequestBodySize <- System.Nullable bytes)
+            |> ignore
+        | None -> ()
 
-            Some b
-        else
-            None
-
-    let workerBuilder =
-        if useHttpPipeline then
-            None
-        else
-            // `ProcessProfile = WorkerOnly`. Generic `IHost` with no
-            // Kestrel listener; only the registered `IHostedService`
-            // set keeps the process alive. `MaxRequestBodyBytes` has
-            // no effect on this branch — there's no inbound HTTP to
-            // cap.
-            Some(Host.CreateApplicationBuilder())
-
-    webBuilder, workerBuilder
+        Some b, None, Some plan
+    else
+        // `ProcessProfile = WorkerOnly`. Generic `IHost` with no
+        // Kestrel listener; only the registered `IHostedService`
+        // set keeps the process alive. `MaxRequestBodyBytes` and the
+        // bind address have no effect on this branch — there's no
+        // inbound HTTP to cap or bind.
+        None, Some(Host.CreateApplicationBuilder()), None
 
 /// Phase 9m — companion config preflight. Runs every registered
 /// `IConfigValidator` in parallel (10s global budget); throws

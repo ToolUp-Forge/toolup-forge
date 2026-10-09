@@ -37,7 +37,9 @@ RUN chmod 0755 /usr/local/bin/healthcheck.sh
 
 USER app
 
-ENV ASPNETCORE_URLS=http://+:5000
+# All interfaces: a forge server listens on loopback unless told otherwise
+# (0.26.0, Phase 1000). SERVER_PORT (default 5000) still chooses the port.
+ENV SERVER_BIND_ADDRESS=0.0.0.0
 EXPOSE 5000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \

@@ -46,7 +46,7 @@ docker build -t myapp:dev .
 The Dockerfile uses a two-stage build:
 
 - **Stage 1** (`mcr.microsoft.com/dotnet/sdk:10.0`) — restores the NuGet graph, then `dotnet publish -c Release` produces `/app/publish/`.
-- **Stage 2** (`mcr.microsoft.com/dotnet/aspnet:10.0`) — copies the publish output, installs `tini` + `curl`, creates a non-root `app` user (uid/gid 10001), exposes port 5000, and wires the `HEALTHCHECK` to `/health`.
+- **Stage 2** (`mcr.microsoft.com/dotnet/aspnet:10.0`) — copies the publish output, installs `tini` + `curl`, creates a non-root `app` user (uid/gid 10001), sets `SERVER_BIND_ADDRESS=0.0.0.0` so the server listens on every interface inside the container (since 0.26.0 the default is loopback, and the startup preflight refuses a container left on it — see `docs/migrations/1000-server-bind-address.md` in the forge repo), exposes port 5000, and wires the `HEALTHCHECK` to `/health`.
 
 ### 3. Run
 

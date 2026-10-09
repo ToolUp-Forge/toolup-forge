@@ -1625,8 +1625,10 @@ ToolUp.Platform.ComposeAuth.registerPlatformAdminStore(Microsoft.Extensions.Depe
 ToolUp.Platform.ComposeAuth.registerPlatformRuntimeConfig(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger) : ToolUp.Platform.IPlatformRuntimeConfigStore
 ToolUp.Platform.ComposeAuth.resolveAuthProvider(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Auth+IAuthProvider]) : ToolUp.Platform.Auth+IAuthProvider
 ToolUp.Platform.ComposeBootstrap (class)
+ToolUp.Platform.ComposeBootstrap.applyListenPlan(Microsoft.AspNetCore.Builder.WebApplicationBuilder, ToolUp.Platform.ServerBinding+ListenPlan) : System.Void
 ToolUp.Platform.ComposeBootstrap.buildAndRunHost(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Builder.WebApplicationBuilder], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.Extensions.Hosting.HostApplicationBuilder], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger, ToolUp.Platform.Metrics.IMetricsSink, ToolUp.Platform.ComposeExtensions, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]]) : ToolUp.Platform.IServerHost
-ToolUp.Platform.ComposeBootstrap.buildHostBuilder(ToolUp.Platform.ServerConfig, System.String) : System.Tuple`2[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Builder.WebApplicationBuilder], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.Extensions.Hosting.HostApplicationBuilder]]
+ToolUp.Platform.ComposeBootstrap.buildHostBuilder(ToolUp.Platform.ServerConfig, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.Tuple`3[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Builder.WebApplicationBuilder], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.Extensions.Hosting.HostApplicationBuilder], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ServerBinding+ListenPlan]]
+ToolUp.Platform.ComposeBootstrap.listenPlanFor(Microsoft.AspNetCore.Builder.WebApplicationBuilder, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String) : ToolUp.Platform.ServerBinding+ListenPlan
 ToolUp.Platform.ComposeBootstrap.registerCspAggregate(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeBootstrap.registerGiraffeDefaults(Microsoft.Extensions.DependencyInjection.IServiceCollection) : System.Void
 ToolUp.Platform.ComposeBootstrap.runConfigPreflight(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.ILogger) : System.Void
@@ -9946,6 +9948,36 @@ ToolUp.Platform.ServerAppModule.withStorageResilience(ToolUp.Platform.TransientF
 ToolUp.Platform.ServerAppModule.withSubjectMigrator(ToolUp.Platform.IAnonymousSessionMigrator, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withTransactionalSink(ToolUp.Platform.INotificationSink, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withUserDirectory(ToolUp.Platform.IUserDirectory, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Platform.ServerBinding (class)
+ToolUp.Platform.ServerBinding.BindAddressEnvVar : System.String (literal)
+ToolUp.Platform.ServerBinding.DefaultBindAddress : System.String (literal)
+ToolUp.Platform.ServerBinding.configuredBindAddress(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.ServerBinding.deployedSignals(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.Platform.ServerBinding.envValue(System.String) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.ServerBinding.isLoopbackUrl(System.String) : System.Boolean
+ToolUp.Platform.ServerBinding.parseBindAddress(System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]
+ToolUp.Platform.ServerBinding.resolve(Microsoft.Extensions.Configuration.IConfiguration, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String) : ToolUp.Platform.ServerBinding+ListenPlan
+ToolUp.Platform.ServerBinding+ListenPlan (class)
+ToolUp.Platform.ServerBinding+ListenPlan..ctor(ToolUp.Platform.ServerBinding+ListenSource, Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Platform.ServerBinding+ListenPlan.Source : ToolUp.Platform.ServerBinding+ListenSource { get }
+ToolUp.Platform.ServerBinding+ListenPlan.Urls : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ServerBinding+ListenSource (class)
+ToolUp.Platform.ServerBinding+ListenSource.ConfiguredBindAddress : ToolUp.Platform.ServerBinding+ListenSource { get }
+ToolUp.Platform.ServerBinding+ListenSource.DefaultLoopback : ToolUp.Platform.ServerBinding+ListenSource { get }
+ToolUp.Platform.ServerBinding+ListenSource.HostUrls : ToolUp.Platform.ServerBinding+ListenSource { get }
+ToolUp.Platform.ServerBinding+ListenSource.IsConfiguredBindAddress : System.Boolean { get }
+ToolUp.Platform.ServerBinding+ListenSource.IsDefaultLoopback : System.Boolean { get }
+ToolUp.Platform.ServerBinding+ListenSource.IsHostUrls : System.Boolean { get }
+ToolUp.Platform.ServerBinding+ListenSource.IsKestrelEndpoints : System.Boolean { get }
+ToolUp.Platform.ServerBinding+ListenSource.KestrelEndpoints : ToolUp.Platform.ServerBinding+ListenSource { get }
+ToolUp.Platform.ServerBinding+ListenSource.Tag : System.Int32 { get }
+ToolUp.Platform.ServerBinding+ListenSource+Tags (class)
+ToolUp.Platform.ServerBinding+ListenSource+Tags.ConfiguredBindAddress : System.Int32 (literal)
+ToolUp.Platform.ServerBinding+ListenSource+Tags.DefaultLoopback : System.Int32 (literal)
+ToolUp.Platform.ServerBinding+ListenSource+Tags.HostUrls : System.Int32 (literal)
+ToolUp.Platform.ServerBinding+ListenSource+Tags.KestrelEndpoints : System.Int32 (literal)
+ToolUp.Platform.ServerBinding+ServerBindsConfiguredAddressValidator (class)
+ToolUp.Platform.ServerBinding+ServerBindsConfiguredAddressValidator..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ServerBinding+ListenPlan], Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.ServerConfigModule (class)
 ToolUp.Platform.ServerConfigModule.fromEnv(ToolUp.Platform.ILogger, ToolUp.Platform.ServerConfigOverrides) : ToolUp.Platform.ServerConfig
 ToolUp.Platform.ServerHost (class)

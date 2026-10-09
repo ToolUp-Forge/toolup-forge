@@ -335,7 +335,51 @@
       Unchanged for every deployment that sets no `PublicationReaders`.
       Migration recipe: `docs/migrations/1002-publication-reader-subject.md`.
     -->
-    <Version>0.25.1</Version>
+    <!--
+      0.26.0 (draft) - MINOR. Phase 1000 changes a default: an unconfigured
+      forge server now listens on loopback 127.0.0.1 instead of every
+      interface, because the host builder no longer hard-codes
+      `UseUrls("http://0.0.0.0:<port>")`. All interfaces is an explicit
+      deployment choice: `SERVER_BIND_ADDRESS=0.0.0.0` or the new
+      `ServerConfig.BindAddress = Some "0.0.0.0"`. A changed default is a
+      behaviour change, so the slot advances past the released `v0.25.1`
+      (there is no draft slot to ride), and MINOR is where the SemVer-on-0.x
+      policy puts it.
+
+      Precedence, first match wins: `Kestrel:Endpoints:*` configuration, then
+      the `urls` host setting (`ASPNETCORE_URLS`, `DOTNET_URLS`, an `urls`
+      key, a launch profile's `applicationUrl`), then `SERVER_BIND_ADDRESS`,
+      then `ServerConfig.BindAddress`, then 127.0.0.1. The first two were
+      silently overridden by the hard-coded `UseUrls` and now take effect as
+      ASP.NET Core documents them, which is a second behaviour change: an
+      `ASPNETCORE_URLS` or `applicationUrl` that disagreed with
+      `SERVER_PORT` used to lose and now wins. The shipped Dockerfile
+      templates move from `ASPNETCORE_URLS=http://+:5000` to
+      `SERVER_BIND_ADDRESS=0.0.0.0`, so `SERVER_PORT` keeps choosing the
+      port inside the image exactly as it did.
+
+      A new preflight, `server-bind-address`, reads the deployed posture
+      from three signals (`DOTNET_RUNNING_IN_CONTAINER=true`, which the .NET
+      container images set; `KUBERNETES_SERVICE_HOST`, present in every
+      Kubernetes pod; `ServerConfig.ReplicaCount > 1`). A deployed server
+      whose every listen URL is loopback is refused (Error) when the
+      loopback is the DEFAULT - the change landed under a deployment that
+      never chose it, and a server nothing can reach must not start looking
+      healthy - and warned (Warning) when loopback was configured
+      EXPLICITLY, because a sidecar proxy sharing the pod's network
+      namespace reaching the server over loopback is a legitimate topology
+      and the operator stated it. Both messages name the signal and the
+      setting that changes it. Local runs, all-interfaces deployments and
+      `WorkerOnly` processes are Ok.
+
+      Surface: `ServerConfig.BindAddress` widens the record's constructor
+      (Core), and `ComposeBootstrap.buildHostBuilder` takes the bind address
+      and returns the listen plan beside the two builders - a retype of the
+      low-level compose helper. Additive: the `ServerBinding` module and
+      `ComposeBootstrap.listenPlanFor` / `applyListenPlan`.
+      Migration recipe: `docs/migrations/1000-server-bind-address.md`.
+    -->
+    <Version>0.26.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
       DLL. Non-publishable projects (App composition roots, modules,

@@ -314,6 +314,19 @@ module ServerConfig =
                     raw
                     defaults.Port
 
+    /// Phase 1000 — `SERVER_BIND_ADDRESS` read inside the `fromEnv` seam,
+    /// beside `SERVER_PORT`, so a `/dev/inspect` config snapshot reflects
+    /// the address the listener binds. An address `parseBindAddress`
+    /// refuses fails loud, naming it. Unset → `defaults.BindAddress`
+    /// (`None`, the loopback default).
+    let private parseBindAddress () : string option =
+        match envVar ServerBinding.BindAddressEnvVar with
+        | None -> defaults.BindAddress
+        | Some raw ->
+            match ServerBinding.parseBindAddress raw with
+            | Ok address -> Some address
+            | Error reason -> failwith reason
+
     /// Phase 71.A.4 — `TOOLUP_PUBLIC_BASE_URL` runtime resolution. Empty
     /// / whitespace is ambiguous → warn + fall back to `None`. A trailing
     /// slash is stripped (idempotent) because token issuers append their
@@ -760,6 +773,7 @@ module ServerConfig =
                 // Phase 71.A.3 / 71.A.4 — Port + PublicBaseUrl now resolve
                 // inside the `fromEnv` seam (were compose-only / unread).
                 Port = parseServerPort ()
+                BindAddress = parseBindAddress ()
                 PublicBaseUrl = parsePublicBaseUrl logger
                 // Phase 71.A.6 — boolean / scalar bundle. Each is additive and
                 // preserves GP 11: unset → the prior `defaults.X` value.

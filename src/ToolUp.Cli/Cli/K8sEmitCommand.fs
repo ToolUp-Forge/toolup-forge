@@ -155,7 +155,7 @@ let SupportedSchemaVersion = 1
 
 /// Container port the shipped Docker image binds
 /// (`templates/platformsdk-docker/Dockerfile.template`:
-/// `ASPNETCORE_URLS=http://+:5000`, `EXPOSE 5000`). Used when the
+/// `SERVER_BIND_ADDRESS=0.0.0.0` on the default port, `EXPOSE 5000`). Used when the
 /// manifest's healthcheck declares no port.
 [<Literal>]
 let DefaultContainerPort = 5000

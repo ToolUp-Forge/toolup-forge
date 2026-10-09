@@ -169,6 +169,24 @@ let tests =
                         "a non-integer SERVER_PORT must fail loud at fromEnv")
             }
 
+            // ── Phase 1000 — BindAddress read inside fromEnv ──
+            test "BindAddress: SERVER_BIND_ADDRESS is read inside the fromEnv seam; unset stays None" {
+                withEnv [ "SERVER_BIND_ADDRESS", Some "0.0.0.0" ] (fun () ->
+                    let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                    Expect.equal cfg.BindAddress (Some "0.0.0.0") "SERVER_BIND_ADDRESS must land on BindAddress")
+
+                withEnv [ "SERVER_BIND_ADDRESS", None ] (fun () ->
+                    let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                    Expect.isNone cfg.BindAddress "unset keeps the loopback default")
+            }
+
+            test "BindAddress: an unparseable SERVER_BIND_ADDRESS fails loud" {
+                withEnv [ "SERVER_BIND_ADDRESS", Some "everywhere" ] (fun () ->
+                    Expect.throws
+                        (fun () -> ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty |> ignore)
+                        "a non-address SERVER_BIND_ADDRESS must fail loud at fromEnv")
+            }
+
             // ── 71.A.4 — PublicBaseUrl runtime resolution ──
             test "PublicBaseUrl: a trailing slash is stripped (idempotent) + warns" {
                 withEnv [ "TOOLUP_PUBLIC_BASE_URL", Some "https://surveys.example.com/" ] (fun () ->
