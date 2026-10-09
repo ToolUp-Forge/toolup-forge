@@ -252,7 +252,15 @@
       `docs/migrations/797-scope-choke-point.md`.
     -->
     <!--
-      0.25.0 (draft) - MINOR. Phase 995 adds a case to the
+      0.25.1 - the release of the 0.25.0 draft below, unchanged in content.
+      The 0.25.0 slot was packed as a draft more than once while Phases 1001
+      and 1002 moved its public surface, so the number 0.25.0 names more than
+      one contract and is never released: a released version names one. Read
+      the 0.25.0 entries as the 0.25.1 contract; a consumer moving from v0.24.1
+      reads every migration they cite.
+    -->
+    <!--
+      0.25.0 (draft, never released - see 0.25.1) - MINOR. Phase 995 adds a case to the
       `GroundedNarrativeOutcome` union (`GroundedNarrativeUnfunded`): a
       grounded narrative run whose scope holds no AI provider the funding
       policy allows is now a typed, permanent outcome rather than a
@@ -327,7 +335,7 @@
       Unchanged for every deployment that sets no `PublicationReaders`.
       Migration recipe: `docs/migrations/1002-publication-reader-subject.md`.
     -->
-    <Version>0.25.0</Version>
+    <Version>0.25.1</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
       DLL. Non-publishable projects (App composition roots, modules,

@@ -2,7 +2,7 @@
 
 **Ships in:** ToolUp.Platform.Server (`ServerApp.withSecretStore`, `ServerApp.SecretStore`, `composeSecretStore`,
 `SecretStore.declaresEncryptionAtRest`; `compose` gains a trailing `secretStore` argument), ToolUp.Secrets.AzureKeyVault
-(`AzureKeyVaultSecretStore(client: SecretClient)`, `createWithClient`). Rides the 0.25.0 draft (Phase 1001).
+(`AzureKeyVaultSecretStore(client: SecretClient)`, `createWithClient`). Ships in 0.25.1 (developed in the 0.25.0 draft) (Phase 1001).
 
 **Affected:** an app that selects a KMS-backed secret store (Azure Key Vault, AWS Secrets Manager, GCP Secret Manager,
 Vault) and today boots only with `TOOLUP_ACCEPT_PLAINTEXT_SECRETS=1`; code that builds `ServerApp` as a full record

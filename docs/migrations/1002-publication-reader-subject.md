@@ -3,7 +3,7 @@
 **Ships in:** ToolUp.Platform.Core (`Subject.PublicationReader`, `SubjectKind.PublicationReaderKind`,
 `AuditSubject.ReaderAudit`, `AuditSubjectKind.ReaderAuditKind`, `AuditEvent.PublicationReaderSignedIn`,
 `SubjectResolution.publicationReader`), ToolUp.Platform.Server (`StorageScopeDerivation.tryFromSubject`,
-`SurfaceEnforcement.evaluateAdmitted`). Breaking, rides the 0.25.0 draft (Phase 1002).
+`SurfaceEnforcement.evaluateAdmitted`). Breaking, ships in 0.25.1 (developed in the 0.25.0 draft) (Phase 1002).
 
 **Affected:**
 - Code that matches exhaustively on `Subject`, `SubjectKind`, `AuditSubject`, `AuditSubjectKind` or `AuditEvent`.

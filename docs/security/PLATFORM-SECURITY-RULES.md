@@ -933,7 +933,7 @@ section eliminates structurally.
 > any non-anonymous deployment is an `Error`. The deployment refuses to start
 > rather than silently persisting long-lived third-party credentials in
 > cleartext.
-> *Trust model (stated at 0.25.0, Phase 1001):* the store judged is the one the
+> *Trust model (stated at 0.25.1, Phase 1001):* the store judged is the one the
 > deployment COMPOSES — the app's own via `ServerApp.withSecretStore`, else the
 > `FileSecretStore` default, after the resilience decorator, which forwards the
 > inner store's declaration. Beside the master-key and `TOOLUP_SECRET_STORE`

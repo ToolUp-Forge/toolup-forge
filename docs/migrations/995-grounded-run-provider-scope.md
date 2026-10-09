@@ -3,7 +3,7 @@
 **Ships in:** ToolUp.Platform.Server (`GroundedNarrativeOutcome.GroundedNarrativeUnfunded`,
 `GroundedNarrativeRequest.Access`), ToolUp.Platform.Core (`AccessContext.forConfigScope`), ToolUp.AI.Server
 (`GroundedNarrativeRunner`), ToolUp.Facts.Server (`GroundedNarrativeTrigger`), ToolUp.Reporting.Server
-(`GroundedNarrativeProducer`). Breaking, MINOR: 0.25.0 (Phase 995).
+(`GroundedNarrativeProducer`). Breaking, MINOR: 0.25.1 (Phase 995; developed in the never-released 0.25.0 draft).
 
 **Affected:** a deployment that composes grounded narratives (`GroundedNarratives.compose`), and any code that
 matches exhaustively on `GroundedNarrativeOutcome`.
@@ -54,5 +54,5 @@ never read. Under platform-only, the platform key funds the run. A named `Access
 
 ## Rollback
 
-Pin 0.24.1. Or keep 0.25.0 and pass the principal's context explicitly, as above. That restores the previous
+Pin 0.24.1. Or keep 0.25.1 and pass the principal's context explicitly, as above. That restores the previous
 resolution for every run.

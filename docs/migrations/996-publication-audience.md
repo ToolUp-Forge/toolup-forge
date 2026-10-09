@@ -3,7 +3,7 @@
 **Ships in:** ToolUp.Platform.Core (`PrincipalAdmission`, `AuthenticatedUser.Admission`,
 `AccessContext.Admission`, `ClaimMapping.PublicationReaders`), ToolUp.AuthProviders.Oidc (`applyAdmission`),
 ToolUp.Platform.Server (`SurfaceEnforcement.evaluateAdmitted`), ToolUp.PublicRendering (`PageAudience.Publication`,
-`PublicationAudience`, `PublicationRead`, `PublicationAudit`). Breaking, rides the 0.25.0 draft (Phase 996).
+`PublicationAudience`, `PublicationRead`, `PublicationAudit`). Breaking, ships in 0.25.1 (developed in the 0.25.0 draft) (Phase 996).
 
 **Affected:** code that builds `AuthenticatedUser`, `AccessContext` or `ClaimMapping` as a full record literal,
 and code that matches exhaustively on `PageAudience`. Behaviour is unchanged until a deployment sets
