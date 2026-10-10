@@ -379,6 +379,28 @@
       `ComposeBootstrap.listenPlanFor` / `applyListenPlan`.
       Migration recipe: `docs/migrations/1000-server-bind-address.md`.
     -->
+    <!--
+      0.26.0 (draft), Phase 1005 rides it - MINOR class, unchanged. A
+      deployment declares a standing report subscription in its composition
+      and names the principal it runs as, never a scope. At startup the
+      deployment's own scope resolver resolves the principal (the new
+      `DeclaredPrincipalResolver`, constructor internal, registered by the
+      platform's scope-resolution composition) and the job is scheduled under
+      that resolution. Every refusal (undeclared or unresolvable principal, a
+      scope that does not persist, a missing template, an invalid
+      subscription) fails the start. Seeding is idempotent and a removed
+      declaration's row is retired through a ledger.
+
+      Additive: `StandingReportSubscription`, `StandingSubscriptionPrincipal`
+      (Reporting.Core); `ReportingCompose.withStandingSubscriptions` /
+      `seedStandingSubscriptions` and their records, `IStandingSubscriptionLedger`,
+      `ReportSubscriptionApiHandler.seedStanding` (Reporting.Server);
+      `DeclaredPrincipalResolver` (Platform.Server). Breaking: the record
+      `SubscriptionRunAudit` gains `RunAs`. Behaviour: saving a subscription
+      with a new cadence now replaces its job (old cron cancelled); it used to
+      keep firing on the old cron.
+      Migration recipe: `docs/migrations/1005-standing-report-subscriptions.md`.
+    -->
     <Version>0.26.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a

@@ -155,6 +155,7 @@ type private World(producers: ReportProducerRegistry) =
 
     let subscriptions = ReportSubscriptionStore.create blobs
     let sink = RecordingSink()
+    let audits = ConcurrentQueue<SubscriptionRunAudit>()
 
     let jobDeps: ReportSubscriptionJobDeps = {
         Subscriptions = subscriptions
@@ -164,7 +165,7 @@ type private World(producers: ReportProducerRegistry) =
         Artefacts = DataObjectStore.DataObjectStore(blobs) :> IDataObjectStore
         AddressBook = addressBook
         Sink = sink
-        Audit = fun _ -> async { return () }
+        Audit = fun audit -> async { audits.Enqueue audit }
         Config = ReportApiConfig.defaults
         RetryPolicy = retryPolicy
         Disclosure = None
@@ -185,6 +186,15 @@ type private World(producers: ReportProducerRegistry) =
     member _.Scheduler = scheduler
     member _.Subscriptions = subscriptions
     member _.Sink = sink
+    member _.Audits = List.ofSeq audits
+
+    /// Phase 1005 — what seeding standing subscriptions needs, over this
+    /// world's substrate and the deployment's blob-backed ledger.
+    member _.StandingDeps: ReportingCompose.StandingSubscriptionDeps = {
+        Api = apiDeps
+        Templates = templates
+        Ledger = ReportSubscriptionStore.standingLedger blobs
+    }
 
     /// The API a request resolved to `scope` manages `scopeId` through.
     member _.ApiUnder (scope: ResolvedScope) (scopeId: string) =
@@ -1094,6 +1104,473 @@ let reissueTests =
         }
     ]
 
+// ── Phase 1005 — a standing subscription runs under its declared principal ──
+//
+// A deployment declares the subscription in its composition and names the
+// principal it runs as; at startup the deployment's own scope resolver (the
+// shipped team resolver here, over a real team store) resolves that
+// principal, and the subscription's job is scheduled under the resolution.
+// These cases prove it fires on its cadence (the scheduler's own tick, not
+// run-now) under the principal's team, that the grounded producer reads that
+// team's Facts and the run is audited as the principal, that seeding is
+// idempotent (re-deploy, change, removal; request-created rows untouched),
+// that every refusal fails the start naming the subscription and what it
+// lacks, and that neither the resolver nor the reporting tier is a way to
+// build a resolved scope from a string.
+
+/// The deployment's team-mode scope resolver over a real team store, and the
+/// platform's declared-principal resolver bound to it (as the platform's
+/// scope-resolution composition binds it).
+let private teamResolution () =
+    let storage = InMemoryBlobStorage() :> IBlobStorage
+
+    let notifications =
+        NotificationChannel.InMemoryNotificationChannel(None) :> INotificationChannel
+
+    let teamStore = TeamManagement.TeamStore(storage, notifications)
+
+    let cache =
+        new Microsoft.Extensions.Caching.Memory.MemoryCache(Microsoft.Extensions.Caching.Memory.MemoryCacheOptions())
+
+    let resolver =
+        new TeamScopeResolver(teamStore, cache, notifications) :> IStorageScopeResolver
+
+    teamStore, DeclaredPrincipalResolver(resolver.Resolve)
+
+/// Make `userId` an owner of a fresh team, active on it; the team's id.
+let private memberOfNewTeam (teamStore: TeamManagement.TeamStore) (userId: string) =
+    let team = newTeam ()
+
+    async {
+        let! _ = teamStore.CreateTeam(team, team + "-name")
+        let! _ = teamStore.AddMember(team, userId, TeamRole.Owner)
+        let! _ = teamStore.SetActiveTeam(userId, team)
+        return ()
+    }
+    |> Async.RunSynchronously
+
+    team
+
+let private principalNamed (name: string) : StandingSubscriptionPrincipal = {
+    Name = name
+    UserId = "svc-" + Guid.NewGuid().ToString "N"
+    DisplayName = $"{name} service principal"
+}
+
+let private standingTo (key: string) (producerKey: string) (principal: string) : StandingReportSubscription = {
+    Key = key
+    DisplayName = "Monday brief"
+    ProducerKey = producerKey
+    TemplateId = templateId
+    Parameters = Map.empty
+    Schedule = "0 6 * * 1"
+    Principal = principal
+    RecipientUserIds = [ "alice" ]
+    Format = Markdown
+}
+
+let private seed
+    (world: World)
+    (resolver: DeclaredPrincipalResolver)
+    (standing: ReportingCompose.StandingSubscriptions)
+    =
+    ReportingCompose.seedStandingSubscriptions (Some resolver) world.StandingDeps standing
+    |> Async.RunSynchronously
+
+let private seeded world resolver standing =
+    match seed world resolver standing with
+    | Ok report -> report
+    | Error refusals -> failtestf "seeding was refused: %A" refusals
+
+/// The jobs backing subscription `id` that can still fire.
+let private liveJobsFor (scheduler: IJobScheduler) (scopeId: string) (id: SubscriptionId) =
+    jobsFor scheduler scopeId id
+    |> List.filter (fun job -> job.Status <> JobStatus.Cancelled)
+
+/// Fire the scheduler's own cadence at the job's next due time, and wait for
+/// the subscription's run to be recorded. Bounded.
+let private tickAndRun (world: World) (scopeId: string) (id: SubscriptionId) =
+    let job =
+        match liveJobsFor world.Scheduler scopeId id with
+        | [ job ] -> job
+        | jobs -> failtestf "expected one live job, got %A" jobs
+
+    let due =
+        job.NextRunAt
+        |> Option.defaultWith (fun () -> failtest "the standing job has no next run")
+
+    world.Scheduler.RunTick(due.AddSeconds 1.0) |> Async.RunSynchronously
+
+    let deadline = DateTime.UtcNow.AddSeconds 60.0
+    let mutable outcome = NeverRun
+
+    while outcome = NeverRun && DateTime.UtcNow < deadline do
+        match world.Subscriptions.Get(scopeId, id) |> Async.RunSynchronously with
+        | Some current when current.LastRun <> NeverRun -> outcome <- current.LastRun
+        | _ -> Thread.Sleep 25
+
+    if outcome = NeverRun then
+        failtest "the standing subscription's run was never recorded"
+
+    outcome
+
+/// Start the composed standing-subscriptions service over `sp`; the refusals
+/// it raised, or none.
+let private startRefusals (world: World) (sp: IServiceProvider) (standing: ReportingCompose.StandingSubscriptions) =
+    let service =
+        ReportingCompose.withStandingSubscriptions standing world.StandingDeps sp
+
+    try
+        service.StartAsync(CancellationToken.None).GetAwaiter().GetResult()
+        []
+    with ReportingCompose.StandingSubscriptionsRefused refusals ->
+        refusals
+
+let private providerWith (resolver: DeclaredPrincipalResolver option) =
+    let services = ServiceCollection()
+
+    match resolver with
+    | Some r -> services.AddSingleton<DeclaredPrincipalResolver>(r) |> ignore
+    | None -> ()
+
+    services.BuildServiceProvider() :> IServiceProvider
+
+let private ledgerOf (world: World) =
+    match world.StandingDeps.Ledger.Read() |> Async.RunSynchronously with
+    | Ok rows -> rows
+    | Error e -> failtestf "ledger unreadable: %s" e
+
+let standingSubscriptionTests =
+    testList "Phase 1005 — a standing subscription runs under its declared principal's scope" [
+
+        test
+            "a declared subscription fires on its cadence, under the team its principal resolves to, audited as the principal" {
+            let seen = ConcurrentQueue()
+            let world = worldWith (probe seen)
+            let teamStore, resolver = teamResolution ()
+            let principal = principalNamed "trading"
+            let team = memberOfNewTeam teamStore principal.UserId
+            let id = StandingReportSubscription.subscriptionId "monday-brief"
+
+            let report =
+                seeded world resolver {
+                    Principals = [ principal ]
+                    Subscriptions = [ standingTo "monday-brief" "test.scope-probe" "trading" ]
+                }
+
+            Expect.equal report.Seeded [ team, id ] "seeded at the team the principal resolves to"
+
+            match liveJobsFor world.Scheduler team id with
+            | [ job ] -> Expect.equal job.Trigger (CronTrigger "0 6 * * 1") "scheduled on the declared cadence"
+            | jobs -> failtestf "expected one job, got %A" jobs
+
+            tickAndRun world team id |> expectSucceeded
+
+            match List.ofSeq seen with
+            | [ Some scope ] ->
+                Expect.isFalse scope.IsAnonymous "never anonymous"
+                Expect.equal scope.ScopeId team "the producer resolved under the principal's team"
+            | other -> failtestf "expected one resolve under a carried scope, got %A" other
+
+            Expect.equal (world.Sink.Sent |> List.map fst) [ team ] "delivered at the team's scope"
+
+            Expect.equal
+                (world.Audits |> List.map (fun a -> a.SubscriptionId, a.RunAs))
+                [ id, principal.UserId ]
+                "the run is audited as the declared principal"
+
+            match world.Subscriptions.Get(team, id) |> Async.RunSynchronously with
+            | Some row -> Expect.equal row.CreatedBy principal.UserId "the row is the principal's"
+            | None -> failtest "the standing row was not stored"
+        }
+
+        test "the grounded producer runs as the principal: it reads the principal's team's Facts, and only those" {
+            let deployment = deploy ()
+            let teamStore, resolver = teamResolution ()
+            let principal = principalNamed "trading"
+            let team = memberOfNewTeam teamStore principal.UserId
+            let other = newTeam ()
+            let fact = assertOk deployment.Store team (revenue 1250m)
+            let _ = assertOk deployment.Store other (revenue 990m)
+            let id = StandingReportSubscription.subscriptionId "brand-summary"
+
+            seeded deployment.World resolver {
+                Principals = [ principal ]
+                Subscriptions = [ standingTo "brand-summary" groundedKey "trading" ]
+            }
+            |> ignore
+
+            tickAndRun deployment.World team id |> expectSucceeded
+
+            Expect.equal
+                (deployment.Model.ToolResults |> List.map factIdsIn)
+                [ [ fact.FactId ] ]
+                "the run's query_facts read the principal's team's Fact, and not the other team's"
+
+            match narrativeRows deployment team with
+            | [ row ] -> Expect.equal row.EventType GroundedNarrativeEvents.PublishedType "published at the team"
+            | rows -> failtestf "expected one grounded-run row at the team, got %A" rows
+
+            Expect.equal (deployment.World.Sink.Sent |> List.map fst) [ team ] "delivered at the team"
+
+            Expect.equal
+                (deployment.World.Audits |> List.map _.RunAs)
+                [ principal.UserId ]
+                "and audited as the principal"
+        }
+
+        test
+            "re-deploying seeds one row and one job; a change updates them; a removal retires them; request rows are untouched" {
+            let seen = ConcurrentQueue()
+            let world = worldWith (probe seen)
+            let teamStore, resolver = teamResolution ()
+            let principal = principalNamed "trading"
+            let team = memberOfNewTeam teamStore principal.UserId
+            let id = StandingReportSubscription.subscriptionId "monday-brief"
+            let declared = standingTo "monday-brief" "test.scope-probe" "trading"
+
+            let requestCreated =
+                createVia (world.ApiUnder (ScopeResolution.ofStorageScope (storageFor team)) team) "test.scope-probe"
+
+            let deployWith subscriptions =
+                seeded world resolver {
+                    Principals = [ principal ]
+                    Subscriptions = subscriptions
+                }
+
+            deployWith [ declared ] |> ignore
+            deployWith [ declared ] |> ignore
+
+            let rows () =
+                world.Subscriptions.List team
+                |> Async.RunSynchronously
+                |> List.map _.Id
+                |> List.sort
+
+            Expect.equal (rows ()) (List.sort [ id; requestCreated.Id ]) "one standing row beside the request's"
+            Expect.equal (liveJobsFor world.Scheduler team id |> List.length) 1 "and one job for it"
+
+            deployWith [
+                {
+                    declared with
+                        Schedule = "30 7 * * 2"
+                        DisplayName = "Tuesday brief"
+                }
+            ]
+            |> ignore
+
+            match world.Subscriptions.Get(team, id) |> Async.RunSynchronously with
+            | Some row ->
+                Expect.equal row.Schedule "30 7 * * 2" "the changed cadence is stored"
+                Expect.equal row.DisplayName "Tuesday brief" "and the changed label"
+            | None -> failtest "the standing row disappeared"
+
+            match liveJobsFor world.Scheduler team id with
+            | [ job ] -> Expect.equal job.Trigger (CronTrigger "30 7 * * 2") "its one live job runs on the new cadence"
+            | jobs -> failtestf "expected one live job, got %A" jobs
+
+            let report = deployWith []
+
+            Expect.equal report.Retired [ team, id ] "the removed declaration's row is retired"
+            Expect.equal (rows ()) [ requestCreated.Id ] "only the request's row remains"
+            Expect.isEmpty (liveJobsFor world.Scheduler team id) "and the standing job cannot fire"
+
+            Expect.equal
+                (liveJobsFor world.Scheduler team requestCreated.Id |> List.map _.Status)
+                [ JobStatus.Active ]
+                "the request's job is untouched"
+
+            Expect.isEmpty (ledgerOf world) "the ledger records nothing standing"
+        }
+
+        test "a principal that now resolves elsewhere has its old row retired as the new one is seeded" {
+            let seen = ConcurrentQueue()
+            let world = worldWith (probe seen)
+            let teamStore, resolver = teamResolution ()
+            let principal = principalNamed "trading"
+            let first = memberOfNewTeam teamStore principal.UserId
+            let id = StandingReportSubscription.subscriptionId "monday-brief"
+
+            let standing: ReportingCompose.StandingSubscriptions = {
+                Principals = [ principal ]
+                Subscriptions = [ standingTo "monday-brief" "test.scope-probe" "trading" ]
+            }
+
+            seeded world resolver standing |> ignore
+            let second = memberOfNewTeam teamStore principal.UserId
+            let report = seeded world resolver standing
+
+            Expect.equal report.Seeded [ second, id ] "seeded at the team it resolves to now"
+            Expect.equal report.Retired [ first, id ] "and retired at the team it left"
+            Expect.isNone (world.Subscriptions.Get(first, id) |> Async.RunSynchronously) "no row stays behind"
+            Expect.isEmpty (liveJobsFor world.Scheduler first id) "nor a job that could fire there"
+        }
+
+        test "an undeclared principal refuses startup, naming the subscription, and seeds nothing" {
+            let world = worldWith (probe (ConcurrentQueue()))
+            let _, resolver = teamResolution ()
+
+            let refusals =
+                startRefusals world (providerWith (Some resolver)) {
+                    Principals = []
+                    Subscriptions = [ standingTo "monday-brief" "test.scope-probe" "nobody" ]
+                }
+
+            Expect.equal
+                refusals
+                [ ReportingCompose.UndeclaredPrincipal("monday-brief", "nobody") ]
+                "refused, naming the subscription and the principal"
+
+            Expect.isEmpty (ledgerOf world) "nothing was seeded"
+        }
+
+        test "an unresolvable principal refuses startup, naming the subscription and the grant it lacks" {
+            let world = worldWith (probe (ConcurrentQueue()))
+            let teamStore, resolver = teamResolution ()
+            let noTeam = principalNamed "orphan"
+            let resolvable = principalNamed "trading"
+            let team = memberOfNewTeam teamStore resolvable.UserId
+
+            let refusals =
+                startRefusals world (providerWith (Some resolver)) {
+                    Principals = [ noTeam; resolvable ]
+                    Subscriptions = [
+                        standingTo "orphan-brief" "test.scope-probe" "orphan"
+                        standingTo "monday-brief" "test.scope-probe" "trading"
+                    ]
+                }
+
+            Expect.equal
+                refusals
+                [
+                    ReportingCompose.PrincipalUnresolved("orphan-brief", "orphan", "an active team")
+                ]
+                "refused, naming the subscription, its principal and the missing grant"
+
+            let message = (ReportingCompose.StandingSubscriptionsRefused refusals).Message
+
+            Expect.stringContains message "orphan-brief" "the start failure names the subscription"
+            Expect.stringContains message "it lacks an active team" "and what it lacks"
+
+            Expect.isEmpty
+                (world.Subscriptions.List team |> Async.RunSynchronously)
+                "and seeds nothing — not even the declaration that would have resolved"
+
+            Expect.isEmpty (ledgerOf world) "the ledger is untouched"
+        }
+
+        test "a principal resolving to a scope that does not persist refuses startup" {
+            let world = worldWith (probe (ConcurrentQueue()))
+
+            let ephemeral =
+                DeclaredPrincipalResolver((AuthenticatedEphemeralScopeResolver() :> IStorageScopeResolver).Resolve)
+
+            let principal = principalNamed "trading"
+
+            let refusals =
+                startRefusals world (providerWith (Some ephemeral)) {
+                    Principals = [ principal ]
+                    Subscriptions = [ standingTo "monday-brief" "test.scope-probe" "trading" ]
+                }
+
+            Expect.equal
+                refusals
+                [
+                    ReportingCompose.PrincipalScopeNotPersistent("monday-brief", "trading", principal.UserId)
+                ]
+                "a session-lived scope is no home for a standing report"
+        }
+
+        test "a template absent at the principal's scope, and an invalid subscription, refuse startup together" {
+            let world = worldWith (probe (ConcurrentQueue()))
+            let teamStore, resolver = teamResolution ()
+            let principal = principalNamed "trading"
+            let team = memberOfNewTeam teamStore principal.UserId
+
+            let refusals =
+                startRefusals world (providerWith (Some resolver)) {
+                    Principals = [ principal ]
+                    Subscriptions = [
+                        {
+                            standingTo "no-template" "test.scope-probe" "trading" with
+                                TemplateId = "absent"
+                        }
+                        {
+                            standingTo "bad-cadence" "test.scope-probe" "trading" with
+                                Schedule = "not a cron"
+                        }
+                    ]
+                }
+
+            match refusals with
+            | [ ReportingCompose.StandingTemplateMissing("no-template", "absent", scope)
+                ReportingCompose.InvalidStandingSubscription("bad-cadence", InvalidSchedule("not a cron", _)) ] ->
+                Expect.equal scope team "the template was looked for at the principal's team"
+            | other -> failtestf "expected both refusals at once, got %A" other
+        }
+
+        test "declared subscriptions with no platform resolver composed refuse startup; none declared needs none" {
+            let world = worldWith (probe (ConcurrentQueue()))
+            let principal = principalNamed "trading"
+
+            Expect.equal
+                (startRefusals world (providerWith None) {
+                    Principals = [ principal ]
+                    Subscriptions = [ standingTo "monday-brief" "test.scope-probe" "trading" ]
+                })
+                [ ReportingCompose.NoPrincipalResolver ]
+                "nothing resolves a principal, so nothing runs"
+
+            Expect.isEmpty
+                (startRefusals world (providerWith None) { Principals = []; Subscriptions = [] })
+                "a deployment declaring nothing starts"
+        }
+
+        test "the declared-principal resolver has no public constructor, and resolves no anonymous principal" {
+            Expect.isEmpty
+                (typeof<DeclaredPrincipalResolver>
+                    .GetConstructors(Reflection.BindingFlags.Public ||| Reflection.BindingFlags.Instance))
+                "only the platform builds one, over the deployment's own resolver"
+
+            let _, resolver = teamResolution ()
+
+            Expect.equal
+                (resolver.Resolve Auth.AuthenticatedUser.anonymous |> Async.RunSynchronously)
+                (Error NotAuthenticated)
+                "declared work never runs anonymous"
+        }
+
+        test "the reporting tier builds no resolved scope: no mint spelling and no resolver construction in its sources" {
+            let src = IO.Path.Combine(ArchitectureFitness.repoRoot (), "src")
+
+            let spellings = [
+                "ResolvedScope." + "ofCarried"
+                "ResolvedScope." + "ofStorageScope"
+                "ScopeResolution." + "ofStorageScope"
+                "ScopeResolution." + "remember"
+                "DeclaredPrincipalResolver" + "("
+            ]
+
+            let found (text: string) = spellings |> List.filter text.Contains
+
+            Expect.equal
+                (found ("x " + String.concat "\n" spellings) |> List.length)
+                (List.length spellings)
+                "every spelling is caught (go-red)"
+
+            for file in
+                [
+                    "ToolUp.Reporting.Server/ReportingCompose.fs"
+                    "ToolUp.Reporting.Server/ReportSubscriptionApiHandler.fs"
+                    "ToolUp.Reporting.Server/ReportSubscriptionJobHandler.fs"
+                    "ToolUp.Reporting.Server/ReportProducerRegistry.fs"
+                ] do
+                let path = IO.Path.Combine(src, file)
+                Expect.isTrue (IO.File.Exists path) (sprintf "%s exists" file)
+                Expect.isEmpty (found (IO.File.ReadAllText path)) (sprintf "%s builds no resolved scope" file)
+        }
+    ]
+
 let tests =
     testList "Phase 990 — report subscriptions run under the scope that created them" [
         carriedScopeTests
@@ -1101,4 +1578,5 @@ let tests =
         defaultCompositionTests
         groundedRestampTests
         reissueTests
+        standingSubscriptionTests
     ]

@@ -3090,6 +3090,8 @@ ToolUp.Platform.DeadTopic (class)
 ToolUp.Platform.DeadTopic..ctor(ToolUp.Platform.EventKind, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentId])
 ToolUp.Platform.DeadTopic.EmittedBy : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentId] { get }
 ToolUp.Platform.DeadTopic.Kind : ToolUp.Platform.EventKind { get }
+ToolUp.Platform.DeclaredPrincipalResolver (class)
+ToolUp.Platform.DeclaredPrincipalResolver.Resolve(ToolUp.Platform.Auth+AuthenticatedUser) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ResolvedScope, ToolUp.Platform.ScopeResolutionError]]
 ToolUp.Platform.DefaultDeployPipeline (class)
 ToolUp.Platform.DefaultDeployPipeline.DeployRecordSealedEventType : System.String (literal)
 ToolUp.Platform.DefaultDeployPipeline.DeployRecordSourceModule : System.String (literal)

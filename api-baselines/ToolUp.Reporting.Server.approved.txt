@@ -34,6 +34,9 @@ ToolUp.Reporting.IReportTemplateStore+IReportTemplateStore.Delete(System.String,
 ToolUp.Reporting.IReportTemplateStore+IReportTemplateStore.Get(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Reporting.ReportTemplate]]
 ToolUp.Reporting.IReportTemplateStore+IReportTemplateStore.List(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.ReportTemplate]]
 ToolUp.Reporting.IReportTemplateStore+IReportTemplateStore.Save(System.String, ToolUp.Platform.EntityTypes+EntityPrincipal, ToolUp.Reporting.ReportTemplate) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Reporting.ReportTemplate, System.String]]
+ToolUp.Reporting.IStandingSubscriptionLedger (interface)
+ToolUp.Reporting.IStandingSubscriptionLedger.Read() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpSet`1[System.Tuple`2[System.String, System.String]], System.String]]
+ToolUp.Reporting.IStandingSubscriptionLedger.Write(Microsoft.FSharp.Collections.FSharpSet`1[System.Tuple`2[System.String, System.String]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Reporting.NarrativeExportBundle (class)
 ToolUp.Reporting.NarrativeExportBundle.create(ToolUp.Reporting.ChartArtifactRenderer, ToolUp.Platform.Narrative.NarrativeDocument) : ToolUp.Reporting.ChartExportBundle
 ToolUp.Reporting.NarrativeExportBundle.createWithDisclosureGate(ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, System.String, ToolUp.Reporting.ChartArtifactRenderer, System.String, ToolUp.Platform.Narrative.NarrativeDocument) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Reporting.ChartExportBundle]
@@ -123,6 +126,7 @@ ToolUp.Reporting.ReportSubscriptionApiHandler.SubscriptionManagementDenied : Sys
 ToolUp.Reporting.ReportSubscriptionApiHandler.SubscriptionScopeNotReissued : System.String (literal)
 ToolUp.Reporting.ReportSubscriptionApiHandler.create(ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps, System.String, System.String) : ToolUp.Reporting.IReportSubscriptionApi
 ToolUp.Reporting.ReportSubscriptionApiHandler.createUnder(ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps, System.String, ToolUp.Platform.ResolvedScope, System.String) : ToolUp.Reporting.IReportSubscriptionApi
+ToolUp.Reporting.ReportSubscriptionApiHandler.seedStanding(ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps, System.String, ToolUp.Platform.ResolvedScope, System.String, ToolUp.Reporting.NewReportSubscription) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Reporting.ReportSubscription, ToolUp.Reporting.SubscriptionError]]
 ToolUp.Reporting.ReportSubscriptionApiHandler.withManagementGate(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]], ToolUp.Reporting.IReportSubscriptionApi) : ToolUp.Reporting.IReportSubscriptionApi
 ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps (class)
 ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps..ctor(ToolUp.Reporting.IReportSubscriptionStore, ToolUp.Reporting.ReportProducerRegistry, ToolUp.Platform.IJobScheduler, ToolUp.Platform.JobRetryPolicy, ToolUp.Platform.JobPrecision)
@@ -154,9 +158,12 @@ ToolUp.Reporting.ReportSubscriptionJobHandler+SubscriptionJobPayload..ctor(Syste
 ToolUp.Reporting.ReportSubscriptionJobHandler+SubscriptionJobPayload.SubscriptionId : System.String { get }
 ToolUp.Reporting.ReportSubscriptionStore (class)
 ToolUp.Reporting.ReportSubscriptionStore.create(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Reporting.IReportSubscriptionStore
+ToolUp.Reporting.ReportSubscriptionStore.standingLedger(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Reporting.IStandingSubscriptionLedger
 ToolUp.Reporting.ReportSubscriptionStore.validate(ToolUp.Reporting.ReportProducerRegistry, System.String, System.String, System.String, System.DateTimeOffset, ToolUp.Reporting.SubscriptionRunOutcome, ToolUp.Reporting.NewReportSubscription) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Reporting.ReportSubscription, ToolUp.Reporting.SubscriptionError]
 ToolUp.Reporting.ReportSubscriptionStore+BlobReportSubscriptionStore (class)
 ToolUp.Reporting.ReportSubscriptionStore+BlobReportSubscriptionStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
+ToolUp.Reporting.ReportSubscriptionStore+BlobStandingSubscriptionLedger (class)
+ToolUp.Reporting.ReportSubscriptionStore+BlobStandingSubscriptionLedger..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
 ToolUp.Reporting.ReportSubscriptionsContributor (class)
 ToolUp.Reporting.ReportSubscriptionsContributor..ctor(ToolUp.Reporting.IReportSubscriptionStore, ToolUp.Reporting.ReportProducerRegistry, System.String)
 ToolUp.Reporting.ReportingAITools (class)
@@ -214,13 +221,14 @@ ToolUp.Reporting.ReportingAITools+ReportingAIToolDepsModule.create(ToolUp.Report
 ToolUp.Reporting.ReportingCompose (class)
 ToolUp.Reporting.ReportingCompose.buildDefaultRegistry() : ToolUp.Reporting.RendererRegistry+RendererRegistry
 ToolUp.Reporting.ReportingCompose.buildRegistryWith(ToolUp.Reporting.ReportingCompose+ReportingComposeOptions) : ToolUp.Reporting.RendererRegistry+RendererRegistry
+ToolUp.Reporting.ReportingCompose.seedStandingSubscriptions(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DeclaredPrincipalResolver], ToolUp.Reporting.ReportingCompose+StandingSubscriptionDeps, ToolUp.Reporting.ReportingCompose+StandingSubscriptions) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Reporting.ReportingCompose+StandingSeedReport, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal]]]
 ToolUp.Reporting.ReportingCompose.subscriptionDiagnostic(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
 ToolUp.Reporting.ReportingCompose.withRenderer(ToolUp.Reporting.IReportRenderer, ToolUp.Reporting.RendererRegistry+RendererRegistry) : ToolUp.Reporting.RendererRegistry+RendererRegistry
 ToolUp.Reporting.ReportingCompose.withReportSubscriptions(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Reporting.ReportSubscriptionJobDeps, ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps) : System.Tuple`2[ToolUp.Platform.IJobHandler, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ResolvedScope, Microsoft.FSharp.Core.FSharpFunc`2[System.String, ToolUp.Reporting.IReportSubscriptionApi]]]]
+ToolUp.Reporting.ReportingCompose.withStandingSubscriptions(ToolUp.Reporting.ReportingCompose+StandingSubscriptions, ToolUp.Reporting.ReportingCompose+StandingSubscriptionDeps, System.IServiceProvider) : Microsoft.Extensions.Hosting.IHostedService
 ToolUp.Reporting.ReportingCompose+ReportSubscriptionsNotComposable (class)
 ToolUp.Reporting.ReportingCompose+ReportSubscriptionsNotComposable..ctor()
 ToolUp.Reporting.ReportingCompose+ReportSubscriptionsNotComposable..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String])
-ToolUp.Reporting.ReportingCompose+ReportSubscriptionsNotComposable..ctor(System.Runtime.Serialization.SerializationInfo, System.Runtime.Serialization.StreamingContext)
 ToolUp.Reporting.ReportingCompose+ReportSubscriptionsNotComposable.missing : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Reporting.ReportingCompose+ReportingComposeOptions (class)
 ToolUp.Reporting.ReportingCompose+ReportingComposeOptions..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.IReportRenderer], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Reporting.ReportComponentResult]], ToolUp.Reporting.IReportRenderer]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Reporting.ReportComponentResult]])
@@ -229,14 +237,92 @@ ToolUp.Reporting.ReportingCompose+ReportingComposeOptions.NarrativeComponents : 
 ToolUp.Reporting.ReportingCompose+ReportingComposeOptions.Renderers : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.IReportRenderer] { get }
 ToolUp.Reporting.ReportingCompose+ReportingComposeOptionsModule (class)
 ToolUp.Reporting.ReportingCompose+ReportingComposeOptionsModule.defaults : ToolUp.Reporting.ReportingCompose+ReportingComposeOptions { get }
+ToolUp.Reporting.ReportingCompose+StandingSeedReport (class)
+ToolUp.Reporting.ReportingCompose+StandingSeedReport..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]])
+ToolUp.Reporting.ReportingCompose+StandingSeedReport.Retired : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.Reporting.ReportingCompose+StandingSeedReport.Seeded : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionDeps (class)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionDeps..ctor(ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps, ToolUp.Reporting.IReportTemplateStore+IReportTemplateStore, ToolUp.Reporting.IStandingSubscriptionLedger)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionDeps.Api : ToolUp.Reporting.ReportSubscriptionApiHandler+ReportSubscriptionApiDeps { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionDeps.Ledger : ToolUp.Reporting.IStandingSubscriptionLedger { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionDeps.Templates : ToolUp.Reporting.IReportTemplateStore+IReportTemplateStore { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal (class)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal.IsDuplicatePrincipal : System.Boolean { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal.IsDuplicateStandingKey : System.Boolean { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal.IsInvalidStandingKey : System.Boolean { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal.IsInvalidStandingSubscription : System.Boolean { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal.IsNoPrincipalResolver : System.Boolean { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal.IsPrincipalScopeNotPersistent : System.Boolean { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal.IsPrincipalUnresolved : System.Boolean { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal.IsStandingLedgerUnavailable : System.Boolean { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal.IsStandingSeedFailed : System.Boolean { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal.IsStandingTemplateMissing : System.Boolean { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal.IsUndeclaredPrincipal : System.Boolean { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal.NoPrincipalResolver : ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal.Tag : System.Int32 { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+DuplicatePrincipal (class)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+DuplicatePrincipal.principal : System.String { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+DuplicateStandingKey (class)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+DuplicateStandingKey.key : System.String { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+InvalidStandingKey (class)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+InvalidStandingKey.key : System.String { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+InvalidStandingKey.reason : System.String { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+InvalidStandingSubscription (class)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+InvalidStandingSubscription.error : ToolUp.Reporting.SubscriptionError { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+InvalidStandingSubscription.subscription : System.String { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+PrincipalScopeNotPersistent (class)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+PrincipalScopeNotPersistent.principal : System.String { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+PrincipalScopeNotPersistent.scopeId : System.String { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+PrincipalScopeNotPersistent.subscription : System.String { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+PrincipalUnresolved (class)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+PrincipalUnresolved.missing : System.String { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+PrincipalUnresolved.principal : System.String { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+PrincipalUnresolved.subscription : System.String { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+StandingLedgerUnavailable (class)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+StandingLedgerUnavailable.reason : System.String { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+StandingSeedFailed (class)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+StandingSeedFailed.reason : System.String { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+StandingSeedFailed.subscription : System.String { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+StandingTemplateMissing (class)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+StandingTemplateMissing.scopeId : System.String { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+StandingTemplateMissing.subscription : System.String { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+StandingTemplateMissing.templateId : System.String { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+Tags (class)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+Tags.DuplicatePrincipal : System.Int32 (literal)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+Tags.DuplicateStandingKey : System.Int32 (literal)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+Tags.InvalidStandingKey : System.Int32 (literal)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+Tags.InvalidStandingSubscription : System.Int32 (literal)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+Tags.NoPrincipalResolver : System.Int32 (literal)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+Tags.PrincipalScopeNotPersistent : System.Int32 (literal)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+Tags.PrincipalUnresolved : System.Int32 (literal)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+Tags.StandingLedgerUnavailable : System.Int32 (literal)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+Tags.StandingSeedFailed : System.Int32 (literal)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+Tags.StandingTemplateMissing : System.Int32 (literal)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+Tags.UndeclaredPrincipal : System.Int32 (literal)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+UndeclaredPrincipal (class)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+UndeclaredPrincipal.principal : System.String { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+UndeclaredPrincipal.subscription : System.String { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusalModule (class)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusalModule.describe(ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal) : System.String
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusalModule.missingGrant(ToolUp.Platform.ScopeResolutionError) : System.String
+ToolUp.Reporting.ReportingCompose+StandingSubscriptions (class)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptions..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.StandingSubscriptionPrincipal], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.StandingReportSubscription])
+ToolUp.Reporting.ReportingCompose+StandingSubscriptions.Principals : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.StandingSubscriptionPrincipal] { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptions.Subscriptions : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.StandingReportSubscription] { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionsRefused (class)
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionsRefused..ctor()
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionsRefused..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal])
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionsRefused.Message : System.String { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionsRefused.refusals : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal] { get }
 ToolUp.Reporting.SubscriptionRunAudit (class)
-ToolUp.Reporting.SubscriptionRunAudit..ctor(System.String, System.String, System.String, ToolUp.Reporting.TemplateFormat, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean)
+ToolUp.Reporting.SubscriptionRunAudit..ctor(System.String, System.String, System.String, System.String, ToolUp.Reporting.TemplateFormat, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean)
 ToolUp.Reporting.SubscriptionRunAudit.Attempt : System.Int32 { get }
 ToolUp.Reporting.SubscriptionRunAudit.DeliveredTo : System.Int32 { get }
 ToolUp.Reporting.SubscriptionRunAudit.Failure : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Reporting.SubscriptionRunAudit.Format : ToolUp.Reporting.TemplateFormat { get }
 ToolUp.Reporting.SubscriptionRunAudit.OutputSize : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
 ToolUp.Reporting.SubscriptionRunAudit.ProducerKey : System.String { get }
+ToolUp.Reporting.SubscriptionRunAudit.RunAs : System.String { get }
 ToolUp.Reporting.SubscriptionRunAudit.ScopeId : System.String { get }
 ToolUp.Reporting.SubscriptionRunAudit.SkippedRecipients : System.Int32 { get }
 ToolUp.Reporting.SubscriptionRunAudit.SubscriptionId : System.String { get }

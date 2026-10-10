@@ -60,6 +60,11 @@ type SubscriptionRunAudit = {
     SubscriptionId: SubscriptionId
     ScopeId: string
     ProducerKey: ReportProducerKey
+    /// Phase 1005 — the principal the run acted as: the subscription's
+    /// `CreatedBy`, which is the creating request's caller for a
+    /// subscription created on a request, and the declared principal's user
+    /// id for a standing one. The artefact is saved as it, too.
+    RunAs: string
     Format: TemplateFormat
     /// `None` on a failed run.
     OutputSize: int option
@@ -509,6 +514,7 @@ module ReportSubscriptionJobHandler =
                                     SubscriptionId = subscription.Id
                                     ScopeId = subscription.ScopeId
                                     ProducerKey = subscription.ProducerKey
+                                    RunAs = subscription.CreatedBy
                                     Format = subscription.Format
                                     OutputSize = Some success.Bytes
                                     DeliveredTo = success.Delivered
@@ -546,6 +552,7 @@ module ReportSubscriptionJobHandler =
                                     SubscriptionId = subscription.Id
                                     ScopeId = subscription.ScopeId
                                     ProducerKey = subscription.ProducerKey
+                                    RunAs = subscription.CreatedBy
                                     Format = subscription.Format
                                     OutputSize = None
                                     DeliveredTo = 0

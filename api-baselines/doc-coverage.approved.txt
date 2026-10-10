@@ -137,7 +137,7 @@ ToolUp.OpenXml.SvgRasterizer.Skia 3/3
 ToolUp.Platform.Build 313/567
 ToolUp.Platform.Client 2848/7011
 ToolUp.Platform.Core 7078/15017
-ToolUp.Platform.Server 6661/12160
+ToolUp.Platform.Server 6663/12162
 ToolUp.Platform.Testing 118/264
 ToolUp.Platform.Transport 44/90
 ToolUp.Platform.UI 71/183
@@ -150,10 +150,10 @@ ToolUp.RAG.StaticCorpus.Server 7/9
 ToolUp.RateLimit.AzureTableStorage 6/10
 ToolUp.RateLimit.Redis 5/9
 ToolUp.Remoting.Generator 97/148
-ToolUp.Reporting.Core 131/362
+ToolUp.Reporting.Core 150/384
 ToolUp.Reporting.Docx 12/31
 ToolUp.Reporting.HtmlPdf 15/31
-ToolUp.Reporting.Server 146/237
+ToolUp.Reporting.Server 180/324
 ToolUp.Reporting.Xlsx 6/11
 ToolUp.Rerankers.Local 9/19
 ToolUp.Scheduling.Core 96/324

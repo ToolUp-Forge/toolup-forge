@@ -293,3 +293,113 @@ module ReportSubscription =
             Ok()
         else
             Error(UnsupportedFormat(requested, declared))
+// ─── Phase 1005 — standing subscriptions, declared in composition ────
+//
+// A `ReportSubscription` is runtime data: a request creates it, and its
+// job carries the scope that request resolved (Phases 990/991). That
+// leaves no way to say, in a deployment's own composition, "this report
+// runs every Monday for the trading team" — someone had to sign in and
+// create it by hand, per scope, after every fresh deployment.
+//
+// A standing subscription is that sentence as data. It names a PRINCIPAL,
+// never a scope: the deployment declares the principal (an identity its
+// scope resolver accepts, as it would accept a signed-in request's), and
+// the server tier resolves that principal through the deployment's own
+// resolver at startup and schedules the job under the resolution. No
+// field here is a scope id, so no declaration can name a shard its
+// principal does not resolve to (Phase 797).
+//
+// The seeding is idempotent: a declaration's row is keyed on its `Key`,
+// so a re-deploy updates the row it seeded before, and a declaration
+// removed from the composition retires its row. Request-created
+// subscriptions are never touched — their ids are minted server-side and
+// can never carry the standing prefix.
+
+/// A principal a deployment declares for standing subscriptions to run as.
+/// The deployment's scope resolver resolves it exactly as it resolves a
+/// request signed in as `UserId`: a team-mode deployment resolves its
+/// active team and checks its membership, a per-user deployment resolves
+/// its own scope. The grants it holds ARE that resolution.
+type StandingSubscriptionPrincipal = {
+    /// The name standing subscriptions refer to it by. Unique within a
+    /// deployment's declarations.
+    Name: string
+    /// The identity the scope resolver resolves — the user id a request
+    /// signed in as this principal would carry.
+    UserId: string
+    /// Label the audit trail and an admin surface show for it.
+    DisplayName: string
+}
+
+/// A report subscription a deployment declares in its composition rather
+/// than creates on a request: run producer `ProducerKey` on `Schedule`, as
+/// principal `Principal`, and deliver to `RecipientUserIds`.
+type StandingReportSubscription = {
+    /// Stable identity across deployments: re-deploying the same key
+    /// updates the row it seeded, never adds one. Letters, digits, `.`,
+    /// `-` and `_` only.
+    Key: string
+    /// Label the subscription is listed and delivered under.
+    DisplayName: string
+    /// The registered producer the subscription renders.
+    ProducerKey: ReportProducerKey
+    /// The template the producer renders. It must exist at the scope the
+    /// principal resolves to, or startup is refused; seeding it there is
+    /// the deployment's job.
+    TemplateId: TemplateId
+    /// The producer's parameter bindings, validated against its declared
+    /// schema at startup.
+    Parameters: Map<string, string>
+    /// Five-field cron expression — the cadence.
+    Schedule: string
+    /// `StandingSubscriptionPrincipal.Name` of the principal the
+    /// subscription runs as.
+    Principal: string
+    /// Users the rendered report is delivered to.
+    RecipientUserIds: string list
+    /// Output format.
+    Format: TemplateFormat
+}
+
+module StandingReportSubscription =
+
+    /// The prefix a standing subscription's id carries. A request-created
+    /// subscription's id is a server-minted GUID in "N" form — hex digits
+    /// only — so it can never carry this prefix.
+    [<Literal>]
+    let IdPrefix = "standing."
+
+    /// The subscription id a declaration's row is stored under — a pure
+    /// function of its key, which is what makes seeding idempotent.
+    let subscriptionId (key: string) : SubscriptionId = IdPrefix + key
+
+    /// `true` for an id seeded from a declaration.
+    let isStanding (id: SubscriptionId) : bool =
+        not (isNull id) && id.StartsWith(IdPrefix, StringComparison.Ordinal)
+
+    /// `Ok` when `key` is a usable declaration key: non-empty, and only
+    /// letters, digits, `.`, `-` and `_` — it becomes part of a storage
+    /// path and a job's idempotency key.
+    let validateKey (key: string) : Result<unit, string> =
+        if String.IsNullOrWhiteSpace key then
+            Error "a standing subscription needs a non-empty key"
+        elif
+            key
+            |> Seq.forall (fun c -> Char.IsLetterOrDigit c || c = '.' || c = '-' || c = '_')
+        then
+            Ok()
+        else
+            Error $"standing subscription key '{key}' may hold only letters, digits, '.', '-' and '_'"
+
+    /// The create/update request a declaration seeds its row with. A
+    /// standing subscription is declared enabled; pausing one is an
+    /// operator's act through the management surface.
+    let toRequest (declaration: StandingReportSubscription) : NewReportSubscription = {
+        DisplayName = declaration.DisplayName
+        ProducerKey = declaration.ProducerKey
+        Parameters = declaration.Parameters
+        Schedule = declaration.Schedule
+        RecipientUserIds = declaration.RecipientUserIds
+        Format = declaration.Format
+        Enabled = true
+    }

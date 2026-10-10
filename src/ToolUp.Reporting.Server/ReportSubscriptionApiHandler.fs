@@ -66,13 +66,18 @@ type ReportSubscriptionApiDeps = {
 }
 
 /// The scheduler job id for a subscription is derived, not stored: the
-/// idempotency key is a pure function of the subscription id, so
-/// re-scheduling an existing subscription returns the existing job
-/// rather than accumulating one job per save. This is the same
+/// idempotency key is a pure function of the subscription id and its
+/// cadence, so re-scheduling an existing subscription returns the existing
+/// job rather than accumulating one job per save. This is the same
 /// mechanism `ScheduledJobDeclaration.registerWith` uses for
 /// compose-time declarations, applied to a runtime-created job.
-let private idempotencyFor (id: SubscriptionId) : IdempotencyKey = {
-    Key = $"report-subscription-{id}"
+///
+/// Phase 1005 — the cadence is part of the key because a scheduled job's
+/// trigger never changes: a scheduler answers an idempotency hit with the
+/// job it already holds, cron and all. A new cadence is therefore a new
+/// job, and `syncJob` cancels the one with the old cadence.
+let private idempotencyFor (id: SubscriptionId) (schedule: string) : IdempotencyKey = {
+    Key = $"report-subscription-{id}@{schedule}"
     TtlSeconds = 60 * 60 * 24 * 365
 }
 
@@ -81,7 +86,7 @@ let private registrationFor (deps: ReportSubscriptionApiDeps) (subscription: Rep
     Handler = ReportSubscription.JobHandlerName
     Payload = ReportSubscriptionJobHandler.encodePayload subscription.Id
     Trigger = CronTrigger subscription.Schedule
-    Idempotency = Some(idempotencyFor subscription.Id)
+    Idempotency = Some(idempotencyFor subscription.Id subscription.Schedule)
     RetryPolicy = deps.RetryPolicy
     ShardKey = Some subscription.Id
     Precision = deps.Precision
@@ -99,6 +104,8 @@ let private registrationFor (deps: ReportSubscriptionApiDeps) (subscription: Rep
 /// a `JobId` on the record: a `JobId` on the subscription would be a
 /// second copy of a fact the scheduler already owns, and the two would
 /// disagree the first time a job was recreated after a store wipe.
+/// A cancelled job backs nothing — a cadence change or a retirement left
+/// it behind — so it is never the answer.
 let private findJob
     (deps: ReportSubscriptionApiDeps)
     (scopeId: string)
@@ -111,6 +118,7 @@ let private findJob
             jobs
             |> List.tryFind (fun job ->
                 job.Handler = ReportSubscription.JobHandlerName
+                && job.Status <> JobStatus.Cancelled
                 && job.Tags.TryFind "subscriptionId" = Some id)
     }
 
@@ -180,11 +188,25 @@ let private syncJob
         let registration = registrationFor deps subscription
         let carried = CarriedJobScope.owns requestScope subscription.ScopeId
 
+        // Phase 1005 — the subscription's live job is kept when it is on the
+        // subscription's cadence, whatever key it was scheduled under. One on
+        // another cadence cannot be re-pointed (a scheduler keeps a job's
+        // trigger), so it is cancelled and the cadence's own job scheduled.
+        let! live = findJob deps subscription.ScopeId subscription.Id
+
         let! scheduled =
-            if carried then
-                deps.Scheduler.Schedule(requestScope, registration)
-            else
-                deps.Scheduler.Schedule registration
+            match live with
+            | Some job when job.Trigger = registration.Trigger -> async { return Result.Ok job.JobId }
+            | _ -> async {
+                match live with
+                | Some stale -> do! deps.Scheduler.Cancel(subscription.ScopeId, stale.JobId)
+                | None -> ()
+
+                if carried then
+                    return! deps.Scheduler.Schedule(requestScope, registration)
+                else
+                    return! deps.Scheduler.Schedule registration
+              }
 
         let! restamped =
             match scheduled with
@@ -204,6 +226,36 @@ let private syncJob
             return Ok()
     }
 
+/// Validate, store, then reconcile the job — the one write path every save
+/// takes, request-created or standing (store first, scheduler second).
+let private saveUnder
+    (deps: ReportSubscriptionApiDeps)
+    (requestScope: ResolvedScope)
+    (scopeId: string)
+    (restamp: bool)
+    (id: SubscriptionId)
+    (createdBy: string)
+    (createdAt: DateTimeOffset)
+    (lastRun: SubscriptionRunOutcome)
+    (request: NewReportSubscription)
+    : Async<Result<ReportSubscription, SubscriptionError>> =
+    async {
+        match ReportSubscriptionStore.validate deps.Producers scopeId id createdBy createdAt lastRun request with
+        | Error e -> return Error e
+        | Ok subscription ->
+            let! stored = deps.Subscriptions.Save(scopeId, subscription)
+
+            match stored with
+            | Result.Error e -> return Error(SubscriptionStorageFailure e)
+            | Result.Ok persisted ->
+                let! synced = syncJob deps requestScope restamp persisted
+
+                return
+                    match synced with
+                    | Ok() -> Ok persisted
+                    | Error e -> Error e
+    }
+
 /// The handler, under `requestScope` (see `createUnder`).
 let private build
     (deps: ReportSubscriptionApiDeps)
@@ -211,30 +263,7 @@ let private build
     (requestScope: ResolvedScope)
     (scopeId: string)
     : IReportSubscriptionApi =
-    let save
-        (restamp: bool)
-        (id: SubscriptionId)
-        (createdBy: string)
-        (createdAt: DateTimeOffset)
-        (lastRun: SubscriptionRunOutcome)
-        (request: NewReportSubscription)
-        =
-        async {
-            match ReportSubscriptionStore.validate deps.Producers scopeId id createdBy createdAt lastRun request with
-            | Error e -> return Error e
-            | Ok subscription ->
-                let! stored = deps.Subscriptions.Save(scopeId, subscription)
-
-                match stored with
-                | Result.Error e -> return Error(SubscriptionStorageFailure e)
-                | Result.Ok persisted ->
-                    let! synced = syncJob deps requestScope restamp persisted
-
-                    return
-                        match synced with
-                        | Ok() -> Ok persisted
-                        | Error e -> Error e
-        }
+    let save = saveUnder deps requestScope scopeId
 
     {
         ListProducers = fun () -> async { return deps.Producers.Descriptors }
@@ -388,6 +417,50 @@ let createUnder
 /// same value the audit trail attributes the subscription's runs to.
 let create (deps: ReportSubscriptionApiDeps) (principal: string) (scopeId: string) : IReportSubscriptionApi =
     build deps principal ResolvedScope.anonymous scopeId
+
+/// Phase 1005 — seed the row a standing declaration stores under, as the
+/// declared principal and under the scope the deployment's resolver resolved
+/// that principal to (`principalScope`). The row is the one keyed `id` at that
+/// scope: absent, it is created and its job scheduled under `principalScope`;
+/// present, it is updated in place; either way its job's carried scope is re-issued
+/// under `principalScope` (Phase 991) — as it is for a job a retirement
+/// cancelled and a re-declaration revives — so a re-deploy re-seals the
+/// scope a restarted ephemeral carrier no longer redeems. An existing row keeps its
+/// creation time, run history and enabled state — a pause is the operator's,
+/// and outlives a re-deploy.
+///
+/// Refused, with nothing written, unless `principalScope` is a resolved
+/// scope: a standing subscription never runs anonymous.
+let seedStanding
+    (deps: ReportSubscriptionApiDeps)
+    (principal: string)
+    (principalScope: ResolvedScope)
+    (id: SubscriptionId)
+    (request: NewReportSubscription)
+    : Async<Result<ReportSubscription, SubscriptionError>> =
+    async {
+        if principalScope.IsAnonymous then
+            return
+                Error(
+                    SubscriptionNotAuthorised
+                        "a standing subscription runs only under the scope its declared principal resolves to, never anonymous"
+                )
+        else
+            let scopeId = principalScope.ScopeId
+            let save = saveUnder deps principalScope scopeId
+            let! existing = deps.Subscriptions.Get(scopeId, id)
+
+            // Always re-issued: the job a row's key recovers — a live one, or
+            // one a retirement cancelled — is sealed afresh under this scope.
+            match existing with
+            | None -> return! save true id principal DateTimeOffset.UtcNow NeverRun request
+            | Some current ->
+                return!
+                    save true id principal current.CreatedAt current.LastRun {
+                        request with
+                            Enabled = current.Enabled
+                    }
+    }
 
 /// Wrap an `IReportSubscriptionApi` so every mutating method also
 /// consults the deployment's management predicate. Reads

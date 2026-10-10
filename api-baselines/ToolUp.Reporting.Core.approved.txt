@@ -282,6 +282,28 @@ ToolUp.Reporting.ReportTemplate.Format : ToolUp.Reporting.TemplateFormat { get }
 ToolUp.Reporting.ReportTemplate.Id : System.String { get }
 ToolUp.Reporting.ReportTemplate.Placeholders : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.PlaceholderSchema] { get }
 ToolUp.Reporting.ReportTemplate.Version : System.Int32 { get }
+ToolUp.Reporting.StandingReportSubscription (class)
+ToolUp.Reporting.StandingReportSubscription..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Reporting.TemplateFormat)
+ToolUp.Reporting.StandingReportSubscription.DisplayName : System.String { get }
+ToolUp.Reporting.StandingReportSubscription.Format : ToolUp.Reporting.TemplateFormat { get }
+ToolUp.Reporting.StandingReportSubscription.Key : System.String { get }
+ToolUp.Reporting.StandingReportSubscription.Parameters : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
+ToolUp.Reporting.StandingReportSubscription.Principal : System.String { get }
+ToolUp.Reporting.StandingReportSubscription.ProducerKey : System.String { get }
+ToolUp.Reporting.StandingReportSubscription.RecipientUserIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Reporting.StandingReportSubscription.Schedule : System.String { get }
+ToolUp.Reporting.StandingReportSubscription.TemplateId : System.String { get }
+ToolUp.Reporting.StandingReportSubscriptionModule (class)
+ToolUp.Reporting.StandingReportSubscriptionModule.IdPrefix : System.String (literal)
+ToolUp.Reporting.StandingReportSubscriptionModule.isStanding(System.String) : System.Boolean
+ToolUp.Reporting.StandingReportSubscriptionModule.subscriptionId(System.String) : System.String
+ToolUp.Reporting.StandingReportSubscriptionModule.toRequest(ToolUp.Reporting.StandingReportSubscription) : ToolUp.Reporting.NewReportSubscription
+ToolUp.Reporting.StandingReportSubscriptionModule.validateKey(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
+ToolUp.Reporting.StandingSubscriptionPrincipal (class)
+ToolUp.Reporting.StandingSubscriptionPrincipal..ctor(System.String, System.String, System.String)
+ToolUp.Reporting.StandingSubscriptionPrincipal.DisplayName : System.String { get }
+ToolUp.Reporting.StandingSubscriptionPrincipal.Name : System.String { get }
+ToolUp.Reporting.StandingSubscriptionPrincipal.UserId : System.String { get }
 ToolUp.Reporting.SubscriptionError (class)
 ToolUp.Reporting.SubscriptionError.IsInvalidParameter : System.Boolean { get }
 ToolUp.Reporting.SubscriptionError.IsInvalidSchedule : System.Boolean { get }

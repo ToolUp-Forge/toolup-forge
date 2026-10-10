@@ -136,12 +136,13 @@ which take only a scope the platform resolved (Phase 797). A run is handed one �
 
 ## The triggers
 
-Both triggers are live, and each runs the narrative under a scope the platform resolved — never one
+Every trigger is live, and each runs the narrative under a scope the platform resolved — never one
 it was told.
 
 | Trigger | Runs under |
 |---|---|
 | Scheduled report | the scope of the request that created the subscription, re-minted by the scheduler on every run |
+| Standing report | the scope the deployment's resolver resolves the subscription's declared principal to, at startup |
 | Data arrival | the scope of the request whose write invalidated the facts |
 
 **Scheduled report.** Register a producer over the run; the narrative fills a template placeholder
@@ -186,7 +187,10 @@ token it was first issued — that is what makes a second submission a no-op —
 `createUnder` re-issues the job's carried scope explicitly, through the scheduler's re-issue verb
 (`JobScopeReissue.reissue`, the `IJobScopeReissue` capability the in-process scheduler and the Quartz
 companion implement and the quota decorator forwards). The job keeps its id, its schedule and its run
-history; only its token changes. The verb takes a `ResolvedScope` — which only the platform's scope
+history; only its token changes. A save that changes the CADENCE is the exception: a scheduler never
+changes a job's cron, so the job on the old cadence is cancelled and one on the new cadence scheduled
+under the same scope (Phase 1005 — before it, the stored schedule changed and the job kept firing on the
+old one). The verb takes a `ResolvedScope` — which only the platform's scope
 resolution mints, never a string — and refuses (`ScopeReissueError.ScopeDoesNotOwnJob`) the anonymous
 scope or a scope resolved for another shard than the job's, before it reads the job. A scheduler that
 cannot re-issue answers `Unsupported`; the save then refuses with
@@ -200,6 +204,73 @@ deployment's ring, or a job first scheduled before subscriptions carried their s
 last-run failure carrying `ReportSubscriptionJobHandler.ScopeNotReMinted`. Save the subscription
 again from a request resolved to the scope it reports on: the save re-stamps the job in place. The
 upgrade is [`docs/migrations/991-scoped-report-subscriptions-by-default.md`](../migrations/991-scoped-report-subscriptions-by-default.md).
+
+### Standing subscriptions — declared, not created
+
+A subscription created on a request needs somebody to sign in and create it, per scope, after every
+fresh deployment. A **standing** subscription is declared in the composition instead (Phase 1005):
+"run report R on cadence C as principal P, and deliver to D". It names a **principal**, never a scope.
+At startup the deployment's own scope resolver — the one every request goes through — resolves that
+principal exactly as it would a request signed in as it, and the subscription's job is scheduled under
+that resolution through the same typed `Schedule` and carrier as a request-created one. In a team-mode
+deployment the principal resolves to its active team, and only while it is a member, so a principal
+names no team it does not belong to. Its run is audited as it: the row's `CreatedBy`, the artefact's
+author and the run audit's `RunAs` are the principal's user id.
+
+```fsharp skip=fragment
+let standing: ReportingCompose.StandingSubscriptions = {
+    Principals = [ { Name = "trading"; UserId = "svc-trading"; DisplayName = "Trading reports" } ]
+    Subscriptions = [ {
+        Key = "daily-trading-summary"
+        DisplayName = "Daily trading summary"
+        ProducerKey = "daily-trading-summary"
+        TemplateId = "trading-summary-template"
+        Parameters = Map.empty
+        Schedule = "0 6 * * 1-5"
+        Principal = "trading"
+        RecipientUserIds = [ "alice"; "bob" ]
+        Format = Markdown
+    } ]
+}
+
+let standingDeps: ReportingCompose.StandingSubscriptionDeps = {
+    Api = apiDeps                                        // the deps withReportSubscriptions was given
+    Templates = templates
+    Ledger = ReportSubscriptionStore.standingLedger blobs
+}
+
+services.AddSingleton<IHostedService>(
+    Func<IServiceProvider, IHostedService>(ReportingCompose.withStandingSubscriptions standing standingDeps))
+```
+
+It sits **alongside** `withReportSubscriptions`, never instead of it: request-created subscriptions are
+served and stored exactly as before, and the job handler that runs both is the one
+`withReportSubscriptions` returns.
+
+**Refused at startup, never at the first tick.** Before anything is written, every declaration is
+checked, and any failure fails the host's start with `StandingSubscriptionsRefused`, naming each
+failing subscription and what it lacks (`StandingSubscriptionRefusal`): a principal the deployment
+does not declare; a principal its resolver does not resolve, with the grant it lacks (an active team,
+membership of a team, an identity the resolver accepts); a principal resolving to a scope whose data
+does not persist; a template absent at the principal's scope; or an invalid subscription (unknown
+producer, cadence, parameters, format, recipients). A deployment not composed through the platform has
+no `DeclaredPrincipalResolver` and refuses any declaration. None of them runs anonymous.
+
+**Seeding the template is the deployment's job.** The declared `TemplateId` must already exist at the
+scope the principal resolves to — save it there (an `IReportTemplateStore.Save` in a startup step, or
+a template store that serves it at every scope) before the standing subscriptions start. Declare the
+template the producer renders: the startup check reads the declaration, and a producer rendering some
+other template fails its run terminally if that template is absent.
+
+**Idempotent.** A declaration's row is keyed on its `Key` (`standing.<key>`) at its principal's scope.
+Re-deploying the same declaration updates that row and re-issues its job's carried scope, never adds
+a second; a changed declaration updates the row (and, for a new cadence, replaces the job); a
+declaration removed from the composition — or whose principal now resolves to another scope — has its
+old row retired, job cancelled and row deleted. The standing-subscription ledger records where rows
+were seeded, so retirement works even when the principal itself is gone. An operator's pause through
+the management API survives a re-deploy. Rows a request created never carry the `standing.` prefix and
+are never touched. Moving a hand-created subscription to a declared one is
+[`docs/migrations/1005-standing-report-subscriptions.md`](../migrations/1005-standing-report-subscriptions.md).
 
 **Data arrival.** Where the fact tier is composed, the reactive data-change hook also enqueues every
 registered run whose `DependsOnMetrics` include the metric of a fact the change invalidated. Only a
@@ -229,6 +300,12 @@ its reason, and the scheduled grounded report runs end to end under its team's s
 of another team's Facts. Its Phase 991 cases compose through `withReportSubscriptions` alone: the
 subscription runs under its creator's scope, a pre-990 (anonymous-token) job is re-stamped in place by
 a save and then reads its team's Fact, and the re-issue verb — on the in-process scheduler and the
-Quartz companion — refuses a cross-shard or anonymous scope and leaves the job as it was.
+Quartz companion — refuses a cross-shard or anonymous scope and leaves the job as it was. Its Phase
+1005 cases seed standing subscriptions over the shipped team resolver: a declared subscription fires on
+its cadence (the scheduler's tick) under its principal's team and is audited as the principal; the
+grounded producer reads that team's Fact and no other; seeding is idempotent across a re-deploy, a
+change, a removal and a principal that moved team, with request-created rows untouched; each refusal
+fails the start naming the subscription and what it lacks; and neither the principal resolver nor the
+reporting tier can build a resolved scope from a string.
 [`AssistantFactScopeTests.fs`](../../src/ToolUp.Platform.Tests/InProcess/AssistantFactScopeTests.fs)
 drives a chat turn whose `query_facts` call reads the requesting team's Fact and no other.

@@ -58,6 +58,22 @@ type IReportSubscriptionStore =
     /// there, and no failure channel exists to say so.
     abstract Delete: scopeId: string * id: SubscriptionId -> Async<unit>
 
+/// Phase 1005 — where standing subscriptions were seeded: each row's
+/// declaration key and the scope its principal resolved to then. Seeding
+/// reads it to retire a row whose declaration was removed — or whose
+/// principal now resolves elsewhere — because the scope such a row lives in
+/// is no longer derivable from the current declarations. Request-created
+/// subscriptions never appear in it.
+type IStandingSubscriptionLedger =
+    /// The seeded rows, as (key, scope id) pairs. Empty before the first
+    /// seeding; `Error` when the ledger exists but cannot be read, which a
+    /// seeding refuses on rather than reading as "nothing to retire". A key
+    /// can stand in two scopes for as long as retiring its old row fails.
+    abstract Read: unit -> Async<Result<Set<string * string>, string>>
+
+    /// Replace the seeded rows.
+    abstract Write: seeded: Set<string * string> -> Async<Result<unit, string>>
+
 module ReportSubscriptionStore =
 
     [<Literal>]
@@ -234,3 +250,58 @@ module ReportSubscriptionStore =
     /// Build the blob-backed store over the deployment's `IBlobStorage`.
     let create (storage: IBlobStorage) : IReportSubscriptionStore =
         BlobReportSubscriptionStore(storage) :> IReportSubscriptionStore
+
+    /// The ledger's blob: beside the per-scope prefixes, never under one.
+    let private standingLedgerBlob =
+        $"{ReportSubscription.StorePrefix}-standing/ledger.json"
+
+    /// Blob-backed standing-subscription ledger: one JSON blob in `_platform`.
+    type BlobStandingSubscriptionLedger(storage: IBlobStorage) =
+
+        interface IStandingSubscriptionLedger with
+
+            member _.Read() = async {
+                let! exists = storage.Exists(PlatformContainer, standingLedgerBlob)
+
+                if not exists then
+                    return Ok Set.empty
+                else
+                    let! downloaded = storage.Download(PlatformContainer, standingLedgerBlob)
+
+                    return
+                        match downloaded with
+                        | Error e -> Error $"the standing-subscription ledger could not be read: {e}"
+                        | Ok bytes ->
+                            // An array of [key, scopeId] pairs: a BCL shape, so the
+                            // ledger reads without the wire converter set.
+                            try
+                                let entries =
+                                    JsonSerializer.Deserialize<string array array>(Encoding.UTF8.GetString bytes)
+
+                                if isNull entries || entries |> Array.exists (fun e -> isNull e || e.Length <> 2) then
+                                    Error "the standing-subscription ledger is not a list of [key, scope] pairs"
+                                else
+                                    Ok(entries |> Array.map (fun e -> e[0], e[1]) |> Set.ofArray)
+                            with ex ->
+                                Error
+                                    $"the standing-subscription ledger is not a ledger this version wrote: {ex.Message}"
+            }
+
+            member _.Write(seeded) = async {
+                let entries =
+                    seeded |> Set.toArray |> Array.map (fun (key, scopeId) -> [| key; scopeId |])
+
+                let! result =
+                    storage.Upload(
+                        PlatformContainer,
+                        standingLedgerBlob,
+                        Encoding.UTF8.GetBytes(JsonSerializer.Serialize entries)
+                    )
+
+                return result |> Result.map ignore
+            }
+
+    /// Build the blob-backed standing-subscription ledger over the
+    /// deployment's `IBlobStorage`.
+    let standingLedger (storage: IBlobStorage) : IStandingSubscriptionLedger =
+        BlobStandingSubscriptionLedger(storage) :> IStandingSubscriptionLedger

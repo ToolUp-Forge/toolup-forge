@@ -295,3 +295,57 @@ module ScopeCarrier =
     /// runs a job anonymous after a restart — a fail closed.
     let ephemeral () : ScopeCarrier =
         ofDataProtection (EphemeralDataProtectionProvider())
+// ─── Phase 1005 — a principal the deployment declared ────────────────
+//
+// Work a deployment DECLARES in its composition — a standing report
+// subscription — has no request to resolve a scope for, and Phase 797
+// forbids building one from a string. What it has is a principal the
+// deployment named: an identity its own scope resolver accepts, exactly as
+// it accepts a request signed in as that identity. This resolver runs that
+// principal through the deployment's resolver and carries the resolution to
+// the scheduled work, where the scheduler's carrier (above) seals it onto
+// the job like any other resolved scope.
+//
+// **Why the type, and why its constructor is internal.** A public
+// "resolve this principal through this resolver" would be a mint from a
+// string by another name: a caller implementing `IStorageScopeResolver` can
+// answer any `StorageScope` it likes. So the resolver this type runs is the
+// deployment's own, bound by the platform's composition (the
+// `IStorageScopeResolver` it registers), and nothing outside the server tier
+// can build one over a resolver of its choosing — the posture
+// `ScopeCarrier` takes towards key material. What a caller CAN choose is
+// the principal, and the deployment's resolver decides what that principal
+// resolves to: a team-mode deployment resolves its active team and checks
+// its membership on every call, so a principal names no shard it is not a
+// member of.
+
+/// Resolves a principal the deployment declared — not a request's — through
+/// the deployment's own scope resolver (Phase 1005). Registered by the
+/// platform's composition; constructed nowhere else.
+[<Sealed>]
+type DeclaredPrincipalResolver
+    internal (resolve: ScopeResolutionRequest -> Async<Result<StorageScope, ScopeResolutionError>>) =
+
+    /// Resolve `principal` as the deployment's scope resolver resolves a
+    /// request signed in as it: no session, no headers. The anonymous
+    /// principal resolves nothing (`NotAuthenticated`) — declared work never
+    /// runs anonymous.
+    member _.Resolve(principal: Auth.AuthenticatedUser) : Async<Result<ResolvedScope, ScopeResolutionError>> = async {
+        if
+            isNull (box principal)
+            || String.IsNullOrWhiteSpace principal.UserId
+            || Auth.AuthenticatedUser.isAnonymous principal
+        then
+            return Error NotAuthenticated
+        else
+            let! resolved =
+                resolve {
+                    User = Some principal
+                    SessionId = None
+                    Headers = Map.empty
+                }
+
+            // The resolver's own output, carried to the work it was resolved
+            // for — the same mint a redeemed job token takes.
+            return resolved |> Result.map ResolvedScope.ofCarried
+    }

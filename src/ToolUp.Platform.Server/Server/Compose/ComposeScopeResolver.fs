@@ -151,6 +151,7 @@ let registerScopeResolution
         .AddSingleton<SurfaceRequirementRegistry>(bridgeRegistry)
         .AddSingleton<ModuleVisibilityRoutes.ModuleRouteRegistry>(moduleRouteRegistry)
         .AddSingleton<IStorageScopeResolver>(scopeResolver)
+        .AddSingleton<DeclaredPrincipalResolver>(DeclaredPrincipalResolver(scopeResolver.Resolve)) // Phase 1005
         .AddSingleton<IAnonymousSessionMigrator>(subjectMigrator)
         .AddScoped<AccessContext>(fun sp ->
             // Read pre-resolved user, scope, and permissions from
