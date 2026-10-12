@@ -739,13 +739,17 @@ type RAGServerApp = {
     /// register an observer here.
     IngestionObservers: IIngestionStatusObserver list
     /// Optional cross-encoder reranker. When `Some`, the retrieval pipeline
-    /// inflates its candidate pool and reorders the top candidates by joint
-    /// (query, document) relevance before MMR / topK truncation. Companion
+    /// inflates its candidate pool and reorders it by joint (query, document)
+    /// relevance before the boosts, MMR and topK truncation. Every returned
+    /// match is reranked: a pool larger than the reranker's `MaxBatchSize`
+    /// is capped at it, and the trace says so (Phase 978). Companion
     /// packages under `src/Rerankers/<Name>/` provide the implementation.
     Reranker: IReranker option
-    /// Enable MMR diversity reranking after retrieval (and rerank, when
-    /// present). Off by default — MMR helps duplicate-heavy corpora and
-    /// hurts fact-extraction queries; opt in per deployment.
+    /// Enable MMR diversity reranking after retrieval (and rerank and the
+    /// boosts, when present). MMR is the last step that orders the result:
+    /// the `Interleaved` merge does not re-sort after it (Phase 978). Off by
+    /// default — MMR helps duplicate-heavy corpora and hurts
+    /// fact-extraction queries; opt in per deployment.
     EnableMmr: bool
     /// MMR `λ` parameter ∈ [0, 1]. Higher = more relevance-weighted, lower
     /// = more diversity-weighted. Ignored when `EnableMmr = false`.
@@ -2603,11 +2607,15 @@ module RAGServerApp =
     /// Register a cross-encoder reranker. Companion packages under
     /// `src/Rerankers/<Name>/` (e.g. `Rerankers/Local/` for the CPU-bound
     /// ONNX reranker) provide implementations. Without one, retrieval
-    /// returns the RRF-fused (or cosine-only) candidate list directly.
+    /// returns the RRF-fused (or cosine-only) candidate list directly. With
+    /// one, the reranker scores every match retrieval returns — a pool
+    /// larger than its `MaxBatchSize` is capped at it — and the boosts then
+    /// nudge on its scale (Phase 978).
     let withReranker (reranker: IReranker) (app: RAGServerApp) : RAGServerApp = { app with Reranker = Some reranker }
 
-    /// Enable MMR diversity reranking after retrieval (and rerank, when
-    /// present). Off by default. Use `withMmrLambda` to tune the
+    /// Enable MMR diversity reranking after retrieval (and rerank and the
+    /// boosts, when present). MMR's order is the order the caller receives
+    /// (Phase 978). Off by default. Use `withMmrLambda` to tune the
     /// relevance/diversity balance.
     let withMmr (app: RAGServerApp) : RAGServerApp = { app with EnableMmr = true }
 
@@ -2915,7 +2923,8 @@ module RAGServerApp =
     /// Choose how multi-scope results combine. `Interleaved` re-ranks by
     /// score regardless of scope (default); `Separate` keeps per-scope
     /// grouping for callers presenting platform vs team knowledge
-    /// separately.
+    /// separately. With MMR enabled the `Interleaved` re-sort is skipped,
+    /// because it would undo the diversity order MMR produced (Phase 978).
     let withMergeStrategy (strategy: MergeStrategy) (app: RAGServerApp) : RAGServerApp = {
         app with
             RetrievalDefaults = {

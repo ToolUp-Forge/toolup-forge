@@ -403,6 +403,40 @@ let private externalPipeline () =
         member _.DeleteByScope _ = async { return () }
     }
 
+// ─── Phase 978 — the retrieval pipeline orders once ──────────────────
+//
+// Phase 866 found three ordering defects that pre-dated it, each pinned red
+// here before the fix: (1) a pool larger than the reranker's batch kept an
+// unreranked tail on the fused scale, and the Interleaved merge sorted
+// across the two; (2) the boosts ran BEFORE the reranker, which replaced
+// every score and so discarded them; (3) the Interleaved merge re-sorted
+// AFTER MMR, undoing the diversity order MMR produced.
+
+/// A reranker scoring each candidate from a fixed table, recording every
+/// candidate it was shown — the contract shape (same set, new scores,
+/// sorted descending, total-order tie-break).
+type private TableReranker(maxBatch: int, scores: Map<string, float>) =
+    let seen = ResizeArray<string>()
+    member _.Seen = List.ofSeq seen
+
+    interface ToolUp.Platform.IReranker.IReranker with
+        member _.Name = "table-reranker"
+        member _.MaxBatchSize = maxBatch
+
+        member _.Rerank _ candidates = async {
+            seen.AddRange(candidates |> List.map _.ChunkId)
+
+            return
+                candidates
+                |> List.map (fun m -> {
+                    m with
+                        Score = scores |> Map.tryFind m.ChunkId |> Option.defaultValue 0.0
+                })
+                |> List.sortBy (fun m -> -m.Score, m.Scope, m.ChunkId)
+        }
+
+let private withContent (content: string) (m: VectorMatch) = { m with Content = content }
+
 let tests =
     testList "Phase 893 — the keyword index is a composition choice" [
 
@@ -919,6 +953,131 @@ let tests =
                         (Some ToolUp.RAG.RetrievalPipeline.RetrievalScoreSpace.Cosine)
                         (Some 0.99))
                     "0.99 is reachable in cosine"
+            }
+        ]
+
+        testList "Phase 978 — the retrieval pipeline orders once" [
+            testAsync "a pool larger than the reranker's batch returns no candidate the reranker did not score" {
+                // Six candidates, a batch of two. The reranker's scale sits far
+                // below the fused [0, 1] one, so a tail left on the fused scale
+                // outranks the reranked head once the Interleaved merge sorts.
+                let tracer = CapturingTracer()
+                let ranked = [ for i in 1..6 -> rankedMatch (sprintf "c%d" i) [] ]
+                let reranker = TableReranker(2, Map.ofList [ "c1", 0.002; "c2", 0.001 ])
+
+                let options = {
+                    noBoosts with
+                        Reranker = Some(reranker :> ToolUp.Platform.IReranker.IReranker)
+                }
+
+                let! matches = retrieveIds (fixedRankPipeline ranked (Some ranked) options tracer)
+                let ids = matches |> List.map _.ChunkId
+
+                Expect.all ids (fun id -> List.contains id reranker.Seen) "every returned chunk was reranked"
+                Expect.equal ids [ "c1"; "c2" ] "the reranked head, in the reranker's order"
+
+                match tracer.Last with
+                | None -> failtest "a trace is emitted"
+                | Some trace -> Expect.contains trace.Stages "Rerank:2/6" "the trace states the cap"
+            }
+
+            testAsync "a boost survives a composed reranker: it breaks the reranker's tie" {
+                let a = rankedMatch "a" []
+                let s = rankedMatch "s" summaryMeta
+                let x = rankedMatch "x" []
+                let ranked = [ a; s; x ]
+                let scores = Map.ofList [ "a", 0.9; "s", 0.9; "x", 0.1 ]
+
+                let rerankedWith (options: ToolUp.RAG.RetrievalPipeline.RetrievalPipelineOptions) =
+                    let options = {
+                        options with
+                            Reranker = Some(TableReranker(32, scores) :> ToolUp.Platform.IReranker.IReranker)
+                    }
+
+                    retrieveIds (fixedRankPipeline ranked (Some ranked) options (CapturingTracer()))
+
+                let! unboosted = rerankedWith noBoosts
+                let! boosted = rerankedWith ToolUp.RAG.RetrievalPipeline.RetrievalPipelineOptions.defaults
+
+                Expect.equal (unboosted |> List.map _.ChunkId) [ "a"; "s"; "x" ] "a reranker tie, broken by id"
+                Expect.equal (boosted |> List.map _.ChunkId) [ "s"; "a"; "x" ] "the summary boost breaks it"
+            }
+
+            testAsync "on the reranker's scale a boost is a nudge of the pool's range, never a tier" {
+                // Logit-like scores spanning 20. The summary scores lowest; a
+                // 0.10 boost is 10 % of the pool's range — 2.0 here — exactly as
+                // it is 10 % of the normalised fused range.
+                let a = rankedMatch "a" []
+                let fillers = [ for i in 1..8 -> rankedMatch (sprintf "f%d" i) [] ]
+                let s = rankedMatch "s" summaryMeta
+                let ranked = a :: fillers @ [ s ]
+
+                let scores =
+                    Map.ofList (
+                        ("a", 10.0)
+                        :: ("s", -10.0)
+                        :: [ for i in 1..8 -> sprintf "f%d" i, 10.0 - float i ]
+                    )
+
+                let options = {
+                    ToolUp.RAG.RetrievalPipeline.RetrievalPipelineOptions.defaults with
+                        Reranker = Some(TableReranker(32, scores) :> ToolUp.Platform.IReranker.IReranker)
+                }
+
+                let! matches = retrieveIds (fixedRankPipeline ranked (Some ranked) options (CapturingTracer()))
+                let ids = matches |> List.map _.ChunkId
+                let summaryScore = (matches |> List.find (fun m -> m.ChunkId = "s")).Score
+
+                Expect.equal (List.head ids) "a" "the reranker's best keeps the lead"
+                Expect.equal (List.last ids) "s" "the summary is nudged, not promoted over far better chunks"
+
+                Expect.floatClose
+                    Accuracy.veryHigh
+                    summaryScore
+                    (-10.0
+                     + ToolUp.RAG.RetrievalPipeline.RetrievalPipelineOptions.defaults.SummaryBoost
+                       * 20.0)
+                    "the reranker's score plus the boost, in units of the pool's range"
+            }
+
+            testAsync "MMR's diversity order is the order the caller receives" {
+                // `a` and `d` are near-duplicates and lead the fused ranking;
+                // `b` is distinct and trails. MMR (λ 0.5) picks `a`, then the
+                // distinct `b` over the duplicate `d`. The Interleaved merge
+                // used to re-sort by score afterwards and put `d` back second.
+                let tracer = CapturingTracer()
+
+                let ranked = [
+                    rankedMatch "a" [] |> withContent "alpha beta gamma"
+                    rankedMatch "d" [] |> withContent "alpha beta gamma"
+                    rankedMatch "b" [] |> withContent "delta epsilon zeta"
+                ]
+
+                let options = {
+                    noBoosts with
+                        EnableMmr = true
+                        MmrLambda = 0.5
+                }
+
+                let! matches = retrieveIds (fixedRankPipeline ranked (Some ranked) options tracer)
+
+                Expect.equal (matches |> List.map _.ChunkId) [ "a"; "b"; "d" ] "MMR's order survives the merge"
+
+                match tracer.Last with
+                | None -> failtest "a trace is emitted"
+                | Some trace -> Expect.contains trace.Stages "FinalOrder:MMR" "the trace names the final ordering step"
+            }
+
+            testAsync "without MMR the trace names the Interleaved merge as the final ordering step" {
+                let tracer = CapturingTracer()
+                let dense = [ rankedMatch "a" []; rankedMatch "b" [] ]
+                let! _ = retrieveIds (fixedRankPipeline dense (Some(List.rev dense)) noBoosts tracer)
+
+                match tracer.Last with
+                | None -> failtest "a trace is emitted"
+                | Some trace ->
+                    Expect.contains trace.Stages "FinalOrder:Interleaved" "the merge orders last"
+                    Expect.equal (List.last trace.Stages) "ScoreSpace:Fused" "the space mark stays last"
             }
         ]
     ]
