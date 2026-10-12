@@ -19,6 +19,9 @@
          content + embedder) and drives HnswVectorStore directly with
          the pre-computed mixed-dim vectors. -->
     <Compile Include="Runner\MixedDimBenchmark.fs" />
+    <!-- Phase 970 - HNSW at representative scale: recall@10 against a
+         flat scan over a BEIR corpus, padded to 500k chunks for latency. -->
+    <Compile Include="Runner\HnswScaleBenchmark.fs" />
     <!-- Phase 886 — the concurrent load harness: N simultaneous callers
          against one composed retrieval pipeline and against the fact
          store, with blob read counts beside every clock. Its gate

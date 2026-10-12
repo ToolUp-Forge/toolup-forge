@@ -172,19 +172,22 @@ The retention window itself is not stored — `Vacuum` takes the cutoff timestam
 
 ## Vector store scale story (Phase 14k)
 
-`IVectorStore` is one interface with a deliberate three-rung capacity
-ladder. Pick the rung by corpus size; the contract (scope isolation,
-`IBlobStorage` persistence, soft-delete tombstones) is identical at
-every rung, so moving up is a `RAGServerApp.withVectorStore` swap with
-no pipeline change.
+`IVectorStore` is one interface with three stores behind it. The
+contract (scope isolation, `IBlobStorage` persistence, soft-delete
+tombstones) is identical for each, so a move is a
+`RAGServerApp.withVectorStore` swap with no pipeline change. The sizes
+below are MEASURED (Phase 970, figures and method in
+[Measured scale](#measured-scale-phase-970) below), not asserted; the
+ladder this table used to show ("in-memory < 50k, HNSW < 1M") was never
+measured, and the HNSW half of it did not survive measurement.
 
-| Rung | Store | Corpus | Mechanism | When |
-|---|---|---|---|---|
-| 1 | `InMemoryVectorStore` (SDK default) | **< ~50k chunks** | linear cosine scan | dev, CI, small single-team deployments. p95 crosses ~50 ms near 50k. |
-| 2 | `ToolUp.VectorStores.Hnsw` companion | **< ~1M chunks** | per-scope `SmallWorld` graph (graph-based ANN, lossy by tunable degree) | multi-year analyst archives; the middle rung before an operational DB dependency. |
-| 3 | external `Pgvector` / `Qdrant` companion | **> ~1M chunks** | bare-metal Postgres / managed ANN service | interface is ready; concrete companions deferred (Phase 14k out-of-scope) until the HNSW ceiling is the bottleneck. |
+| Store | Mechanism | Measured at 512 dims, one query thread | When |
+|---|---|---|---|
+| `InMemoryVectorStore` (SDK default) | linear cosine scan | p50 / p95 **2 / 17 ms at 3k** chunks, **35 / 90 ms at 50k**, **238 / 429 ms at 500k** | every deployment whose per-scope corpus keeps the scan inside its latency budget — about 50k chunks for a 50 ms p50 on the measured machine. |
+| `ToolUp.VectorStores.Hnsw` companion | per-scope `SmallWorld` graph (graph-based ANN, lossy by tunable degree) | at the shipped defaults, graph build **484 s for 3k** chunks and super-linear (1k / 2k / 4k: 43 / 142 / 785 s); query p95 **169 ms at 3k** | no size measured where it beats the flat scan at the shipped defaults — see the trade-off below before choosing it. |
+| `ToolUp.VectorStores.Pgvector` companion | Postgres + pgvector | not measured by this benchmark | durable, multi-replica-safe vectors; the rung above what one process holds. |
 
-HNSW is opt-in (GP 13): a deployment that stays under 50k pulls none
+HNSW is opt-in (GP 13): a deployment that never composes it pulls none
 of the `HNSW.Net` weight. Compose it before `composeWithRAG`:
 
 ```fsharp skip=fragment
@@ -205,33 +208,118 @@ the same scope — text and image chunks never share one `SmallWorld`
 graph. The current defence is `cosineDistance` returning the maximum
 distance (`1.0`) whenever query and corpus vectors disagree on length,
 so a mismatched-dim intruder ranks last and falls outside the top-K
-window — see `HnswVectorStore.fs:137`. Multi-graph parallel fan-out
+window — see `cosineDistance` in `HnswVectorStore.fs`. Multi-graph parallel fan-out
 across a scope's text + image partitions is a future refinement,
 useful only once a real CLIP-side query path exists.
 
-**When to opt into HNSW** (sample-deployment guidance). The SDK's
-default `InMemoryVectorStore` is flat-scan exact-cosine — perfectly
-adequate up to ~50k chunks per scope on commodity hardware. Beyond
-that, flat scan's O(n) per query starts to crowd the request budget:
-flip to HNSW via
-`RAGServerApp.withVectorStore (HnswVectorStore.create blobStorage logger)`
-as shown above. Smaller corpora gain nothing measurable from HNSW —
-the build cost amortises slowly and ANN recall is necessarily ≤ exact.
-A deployment running mixed-dim chunks (e.g., when a future image
-embedder lands) should partition by data type into separate scopes
-until the multi-graph fan-out support arrives.
+**When to opt into HNSW** (sample-deployment guidance). Stay on the
+default `InMemoryVectorStore` while its scan fits the request budget
+(the measured figures are in the table above), and move to the
+Pgvector companion when it does not. On the Phase 970 measurements the
+HNSW companion is not the rung between them: at the shipped defaults it
+answered more slowly than the flat scan at every size measured, its
+graph build grows faster than linearly, and the whole graph is rebuilt
+on the first search after any write. It remains a fit only for a small,
+rarely-written scope that wants its latency at a lowered `efSearch`
+(see the trade-off below), and ANN recall is necessarily ≤ exact. A
+deployment running mixed-dim chunks (e.g., when a future image embedder
+lands) should partition by data type into separate scopes until the
+multi-graph fan-out support arrives.
+
+### Measured scale (Phase 970)
+
+Phase 14k set two bounds for the HNSW companion and deferred both:
+recall@10 within 2 % of a flat scan, and p95 under 50 ms at 500k
+chunks. Phase 970 measured them with the benchmark's `--hnsw-scale`
+mode (`src/ToolUp.RAG.Benchmarks/Runner/HnswScaleBenchmark.fs`):
+the corpus is embedded once with the local embedder and cached beside
+the dataset, optionally padded with deterministic synthetic vectors at
+the corpus's own dimensionality and sparsity, scanned exactly for the
+ground truth, and indexed by one `HnswVectorStore` per `efSearch`.
+Recall is the ann-benchmarks definition: an HNSW result counts when its
+cosine reaches the K-th exact cosine (less 1e-6), so duplicate
+documents tying at the boundary are not misses.
+
+**Machine:** Intel Core i7-8650U (4 cores / 8 threads, 1.9 GHz), 16 GB,
+Windows 11, .NET 10.0.12, Release build — a shared developer machine
+running other builds at the time (CPU about 80 % busy), so absolute
+latencies are pessimistic; the comparisons between rows hold.
+**HNSW parameters:** `M` 16, `ConstructionPruning` (efConstruction)
+200 (the `HNSW.Net` default the store leaves in place),
+`SelectHeuristic` with `ExpandBestSelection` and
+`KeepPrunedConnections` — `HnswParameters.defaults` with only
+`efSearch` varied.
+
+**Real text, local embedder** — 3,000 paragraphs of this repository's
+own Markdown documentation in BEIR format, 300 queries (12-word spans of
+corpus paragraphs), `local-tfidf-v3` at 512 dims (39 non-zero slots per
+vector on average). This is a real-text corpus, not a BEIR dataset; the
+BEIR run is below.
+
+| `efSearch` | recall@10 vs flat | p50 / p95 / p99 | graph build |
+|---|---|---|---|
+| 50 | 0.958 | 7 / 10 / 11 ms | 146 s |
+| 100 | 0.985 | 11 / 16 / 18 ms | 178 s |
+| 200 | 0.996 | 27 / 46 / 61 ms | 222 s |
+| 400 | 0.999 | 87 / 204 / 261 ms | 356 s |
+| **800 (default)** | **1.000** | **108 / 169 / 240 ms** | **484 s** |
+
+The flat scan over the same corpus: p50 / p95 2 / 17 ms.
+
+**Synthetic, shipped defaults** — sparse random unit vectors at 512
+dims, 64 non-zero slots, 300 queries near corpus vectors: recall@10 is
+1.000 at every size, and the graph build and p95 grow as 1k: 43 s /
+89 ms, 2k: 142 s / 170 ms, 4k: 785 s / 449 ms.
+
+**Flat scan at scale** — the real-text corpus padded with synthetic
+vectors at its own sparsity: p50 / p95 35 / 90 ms at 50k chunks,
+238 / 429 ms at 500k.
+
+**The trade-off, stated rather than fudged:**
+
+- **Recall within 2 % of flat scan** is met at `efSearch` ≥ 100 on the
+  real-text corpus; the default 800 gives 1.000.
+- **p95 under 50 ms** is met only at `efSearch` ≤ 200, at 3k chunks.
+  At the shipped default it is not met at any size measured, and the
+  HNSW query is slower than the flat scan at the same size.
+- **500k was not measured for HNSW.** The build at the defaults costs
+  50–200 ms per chunk on one thread and grows faster than linearly, so
+  a 500k-chunk scope is many hours of build, repeated from scratch on
+  the first search after any `Upsert` (which marks the scope's graph
+  stale) while the scope's lock is held. The "< 1M chunks" this table
+  used to claim is withdrawn.
+- **The default `efSearch` (800) is left where it is, deliberately.**
+  Lowering it buys query latency (100–200 met both bounds at 3k chunks
+  here) at a recall cost, but the binding constraint at scale is the
+  build, which `efSearch` does not reach. A deployment that wants the
+  latency passes its own `HnswParameters` to the constructor.
+
+**Reproduce** (Release; a dataset downloads to the BEIR cache on first
+use, its embeddings cache beside it, so reruns embed nothing):
+
+```powershell
+dotnet run -c Release --project src/ToolUp.RAG.Benchmarks -- --hnsw-scale scifact --ef-search 50,100,200,400,800
+dotnet run -c Release --project src/ToolUp.RAG.Benchmarks -- --hnsw-scale scifact --pad-to 500000 --flat-only
+```
+
+The report is JSON beside `--out` (`bench-results.hnsw-scale.json` by
+default), naming the dataset, the embedder, every parameter and the
+machine. **The BEIR SciFact run is not yet recorded here**: the
+measuring machine had no BEIR dataset cached, and fetching one is an
+operator's step. Its figures replace the real-text table when it runs.
 
 **Fidelity audit** lives in
 `src/ToolUp.Platform.Tests/InProcess/HnswFidelityTests.fs`:
 self-retrieval correctness + overlap-vs-exact-cosine floor + a loose
 latency ceiling + the **mixed-dimension defence test** (a 96-dim
 intruder in a 48-dim corpus must never surface in 48-dim query
-results). The strict acceptance bounds — recall@10 within 2 % of flat
-scan, p95 < 50 ms on a 500k representative corpus with `efSearch = 50`
-— remain deferred pending a representative corpus fixture (Phase 14k
-notes this explicitly; the synthetic smoke is the CI-safe stand-in,
-not the perf gate). The multi-dim recall-fidelity test + latency
-benchmark items similarly defer
+results). The recall bound at scale is pinned by an **opt-in** case
+that runs only when `TOOLUP_HNSW_SCALE_CORPUS` names a BEIR-format
+dataset directory (`TOOLUP_HNSW_SCALE_MAX_CHUNKS`, default 3000, and
+`TOOLUP_HNSW_SCALE_MAX_QUERIES`, default 200, cap it): recall@10 at
+the shipped defaults at least 0.98 against a flat scan. Latency is
+reported there, not asserted. The multi-dim recall-fidelity test +
+latency benchmark items defer
 until a corpus pairing text and image embeddings at mismatched dims is
 authored — the eval harness in `ToolUp.RAG.Evaluation` and the
 benchmark orchestrator in `ToolUp.RAG.Benchmarks` are already
@@ -510,6 +598,7 @@ The benchmark adds three concerns the eval project doesn't:
 - **BEIR loader** (`Beir/BeirLoader.fs`). Streams `corpus.jsonl` / `queries.jsonl` line-by-line so FiQA's ~80 MB corpus doesn't peak memory. `replicate` perturbs corpus IDs as `{origId}-rep{k}` for stress-testing HNSW at scale; the production `CachingEmbeddingProvider` collapses identical content to one underlying embedder call so a 10× replication only costs 1× the embedding budget. `toFixture` adapts to the inlined `Fixture` shape with `Title + "\n\n" + Text` concatenation under `Deployment` scope.
 - **Latency aggregation** (`Metrics/LatencyMetrics.fs`). p50 / p95 / p99 / avg / count via nearest-rank percentile. Cheap; the BEIR test sets are 200–650 queries.
 - **Pipeline factory** (`Runner/PipelineFactory.fs`). Branches embedder (`Local` / `OpenAI`) and vector-store (`Flat` / `Hnsw`) from CLI flags. Always wraps with `CachingEmbeddingProvider` + `InMemoryBM25Index` to match production retrieval shape.
+- **HNSW scale mode** (`Runner/HnswScaleBenchmark.fs`, `--hnsw-scale <dataset>`, Phase 970). Drives `HnswVectorStore` directly rather than the pipeline: recall@10 against an exact flat scan plus query latency, per `efSearch`, over a corpus embedded once and cached beside the dataset (`BeirLoader.embeddingCachePath`), optionally padded with synthetic vectors (`--pad-to`). Writes a JSON report beside the CSV. Method and results: [Measured scale](#measured-scale-phase-970).
 
 Reference numbers from the validation runs land here as the production retrieval baseline:
 
@@ -540,7 +629,7 @@ A distributed `IVectorStore` companion (pgvector, Qdrant, Pinecone) is the key p
 - **TF-IDF quality.** `LocalEmbeddingProvider` produces ~512-dim sparse vectors over an evolving vocabulary. It has no semantic understanding — synonyms, paraphrases, and cross-lingual matches are invisible to it. Use it for local dev and CI only; production deployments switch to a neural embedding provider.
 - **Chunk size policy is in modules, not in the SDK.** A module that returns a 50,000-character "chunk" will embed it as-is. Some embedding providers truncate inputs silently; others error. A chunking-helper function (split by token count with overlap, preserve sentence boundaries) is a sensible follow-up but not yet in package.
 - **Cosine is the only similarity.** `InMemoryVectorStore` computes cosine via a dot product of pre-normalised vectors. Use cases that need dot-product (un-normalised) or L2-distance similarity need a different store.
-- **Scale ceiling.** `InMemoryVectorStore` keeps every vector in a `ConcurrentDictionary` and scans all in-scope entries per query. Above ~50,000 chunks the per-query CPU dominates; the SDK's documented scale story is **in-memory < 50k → HNSW < 1M → external (Pgvector / Qdrant)**. The HNSW companion ships at `src/VectorStores/Hnsw/` (`HNSW.Net`, MIT) and is wired in via `RAGServerApp.withVectorStore (HnswVectorStore.create blobStorage logger)` before `RAGServerApp.run`. Each scope owns an independent `SmallWorld<float[], float>` graph — scope isolation is structural, not a post-hoc filter — and the on-disk shape is JSON-of-entries (graph rebuilt lazily on first query) so the persisted blob remains implementation-portable. External companions (Pgvector, Qdrant) are the next rung; the `IVectorStore` contract supports them but no concrete companion ships in this round.
+- **Scale ceiling.** `InMemoryVectorStore` keeps every vector in a `ConcurrentDictionary` and scans all in-scope entries per query. Near 50,000 chunks per scope the scan reaches a 35 ms p50 at 512 dims, measured (see [Measured scale](#measured-scale-phase-970)); past the request budget the next store is the Pgvector companion. The HNSW companion ships at `src/VectorStores/Hnsw/` (`HNSW.Net`, MIT) and is wired in via `RAGServerApp.withVectorStore (HnswVectorStore.create blobStorage logger)` before `RAGServerApp.run`. Each scope owns an independent `SmallWorld<float[], float>` graph — scope isolation is structural, not a post-hoc filter — and the on-disk shape is JSON-of-entries (graph rebuilt lazily on first query) so the persisted blob remains implementation-portable; measured, it does not beat the flat scan at its shipped defaults at any size tried. `ToolUp.VectorStores.Pgvector` (`src/VectorStores/Pgvector/`) is the external store.
 - **`Platform` and `Deployment` scopes have no writer path through the SDK.** They are populated out-of-band by administrators (direct blob edits, maintenance scripts). Runtime writes from modules go exclusively to `Team` scope via the post-save hook.
 - **No retry on embedding failure.** A failed `GenerateEmbedding` in `IngestionBackgroundService.processJob` emits `KnowledgeChunkFailed` and moves on — the job is not re-enqueued. Bulk re-ingestion is the operational remediation.
 - **No auto-vacuum scheduler.** `IVectorStore.Vacuum` is callable but no `BackgroundService` drives it on a timer in this round (Phase 14h). Composing apps invoke `Vacuum` from their own admin / cron path with whatever retention they choose.

@@ -30,6 +30,13 @@ let cacheRoot =
 let private datasetUrl (name: string) =
     sprintf "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/%s.zip" name
 
+/// Phase 970 — where a dataset's embedded vectors are cached, beside the
+/// dataset itself, keyed by the embedder's model id so a changed embedding
+/// function never reads another function's vectors. The HNSW scale
+/// benchmark embeds a corpus once and reads it back on every rerun.
+let embeddingCachePath (name: string) (modelId: string) =
+    Path.Combine(cacheRoot, name, sprintf "embeddings-%s.bin" modelId)
+
 // ─── Download + unpack ───────────────────────────────────────────
 
 /// Download `{name}.zip` if not already cached and extract it. Returns the
@@ -226,11 +233,19 @@ let replicate (n: int) (ds: BeirDataset) : BeirDataset =
 
 // ─── Adapter into the eval project's Fixture shape ──────────────
 
-/// Adapt a `BeirDataset` to the existing `ToolUp.RAG.Evaluation.Fixture`
-/// record. Concatenates `Title + "\n\n" + Text` for each chunk's content
+/// The text a corpus document is indexed under: `Title + "\n\n" + Text`
 /// (BEIR convention: title is a meaningful retrieval signal for SciFact /
-/// NFCorpus / etc.), scopes everything to `VectorScope.Deployment`, and
-/// builds each query's `RelevantChunkIds` set from the qrels at score >= 1.
+/// NFCorpus / etc.), or the bare text when the title is blank.
+let chunkContent (doc: BeirCorpusDoc) : string =
+    if String.IsNullOrWhiteSpace doc.Title then
+        doc.Text
+    else
+        sprintf "%s\n\n%s" doc.Title doc.Text
+
+/// Adapt a `BeirDataset` to the existing `ToolUp.RAG.Evaluation.Fixture`
+/// record. Each chunk's content is `chunkContent`, everything is scoped to
+/// `VectorScope.Deployment`, and each query's `RelevantChunkIds` set is
+/// built from the qrels at score >= 1.
 let toFixture (ds: BeirDataset) : Fixture =
     let qrelsByQuery =
         ds.Qrels
@@ -240,19 +255,12 @@ let toFixture (ds: BeirDataset) : Fixture =
 
     let corpus =
         ds.Corpus
-        |> List.map (fun doc ->
-            let content =
-                if String.IsNullOrWhiteSpace doc.Title then
-                    doc.Text
-                else
-                    sprintf "%s\n\n%s" doc.Title doc.Text
-
-            {
-                ChunkId = doc.Id
-                Content = content
-                Scope = Deployment
-                Metadata = Map.empty
-            })
+        |> List.map (fun doc -> {
+            ChunkId = doc.Id
+            Content = chunkContent doc
+            Scope = Deployment
+            Metadata = Map.empty
+        })
 
     let queries =
         ds.Queries

@@ -11,6 +11,12 @@ open ToolUp.RAG.Benchmarks.ReportWriter
 type private CliArgs = {
     Dataset: string option
     MixedDimFixture: string option
+    HnswScale: string option
+    PadTo: int
+    EfSearch: int list
+    M: int option
+    MaxQueries: int option
+    FlatOnly: bool
     Embedder: EmbedderChoice
     VectorStore: VectorStoreChoice
     RerankerOn: bool
@@ -23,6 +29,12 @@ type private CliArgs = {
 let private defaults: CliArgs = {
     Dataset = None
     MixedDimFixture = None
+    HnswScale = None
+    PadTo = 0
+    EfSearch = []
+    M = None
+    MaxQueries = None
+    FlatOnly = false
     Embedder = Local
     VectorStore = Flat
     RerankerOn = false
@@ -74,6 +86,48 @@ let private parseArgs (argv: string array) : Result<CliArgs, string> =
             }
 
             i <- i + 2
+        | "--hnsw-scale" when i + 1 < argv.Length ->
+            args <- {
+                args with
+                    HnswScale = Some argv[i + 1]
+            }
+
+            i <- i + 2
+        | "--pad-to" when i + 1 < argv.Length ->
+            match Int32.TryParse argv[i + 1] with
+            | true, n when n >= 0 -> args <- { args with PadTo = n }
+            | _ -> setError (sprintf "invalid --pad-to value: %s (expected integer >= 0)" argv[i + 1])
+
+            i <- i + 2
+        | "--ef-search" when i + 1 < argv.Length ->
+            let parsed = argv[i + 1].Split(',') |> Array.map Int32.TryParse
+
+            if parsed |> Array.forall (fun (ok, n) -> ok && n > 0) then
+                args <- {
+                    args with
+                        EfSearch = parsed |> Array.map snd |> List.ofArray
+                }
+            else
+                setError (
+                    sprintf "invalid --ef-search value: %s (expected comma-separated positive integers)" argv[i + 1]
+                )
+
+            i <- i + 2
+        | "--m" when i + 1 < argv.Length ->
+            match Int32.TryParse argv[i + 1] with
+            | true, n when n >= 2 -> args <- { args with M = Some n }
+            | _ -> setError (sprintf "invalid --m value: %s (expected integer >= 2)" argv[i + 1])
+
+            i <- i + 2
+        | "--max-queries" when i + 1 < argv.Length ->
+            match Int32.TryParse argv[i + 1] with
+            | true, n when n > 0 -> args <- { args with MaxQueries = Some n }
+            | _ -> setError (sprintf "invalid --max-queries value: %s (expected positive integer)" argv[i + 1])
+
+            i <- i + 2
+        | "--flat-only" ->
+            args <- { args with FlatOnly = true }
+            i <- i + 1
         | "--embedder" when i + 1 < argv.Length ->
             match parseEmbedder argv[i + 1] with
             | Some e -> args <- { args with Embedder = e }
@@ -120,10 +174,10 @@ let private parseArgs (argv: string array) : Result<CliArgs, string> =
     match error with
     | Some msg -> Error msg
     | None ->
-        match args.Dataset, args.MixedDimFixture with
-        | None, None -> Error "--dataset or --mixed-dim-fixture is required (e.g. --dataset scifact)"
-        | Some _, Some _ -> Error "--dataset and --mixed-dim-fixture are mutually exclusive"
-        | _ -> Ok args
+        match [ args.Dataset; args.MixedDimFixture; args.HnswScale ] |> List.choose id with
+        | [] -> Error "--dataset, --mixed-dim-fixture or --hnsw-scale is required (e.g. --dataset scifact)"
+        | [ _ ] -> Ok args
+        | _ -> Error "--dataset, --mixed-dim-fixture and --hnsw-scale are mutually exclusive"
 
 let private printUsage () =
     eprintfn "ToolUp.RAG.Benchmarks — BEIR retrieval benchmark runner"
@@ -133,6 +187,18 @@ let private printUsage () =
     eprintfn "Required (one of):"
     eprintfn "  --dataset <name>           BEIR dataset id (e.g. scifact, nfcorpus, fiqa)"
     eprintfn "  --mixed-dim-fixture <path> Mixed-dim fixture JSON (Phase 14k WS5 Item 3 — drives HNSW directly)"
+    eprintfn "  --hnsw-scale <name>        HNSW recall@10 vs flat scan + latency on a BEIR dataset (Phase 970),"
+    eprintfn "                             or 'synthetic' for synthetic vectors only. JSON report beside --out."
+    eprintfn ""
+    eprintfn "--hnsw-scale options:"
+
+    eprintfn
+        "  --pad-to <int>             pad the corpus with synthetic vectors to this many chunks (default: no padding)"
+
+    eprintfn "  --ef-search <n[,n...]>     one HNSW build per value (default: the store's default)"
+    eprintfn "  --m <int>                  HNSW neighbour budget (default: the store's default)"
+    eprintfn "  --max-queries <int>        time only the first N queries (default: all)"
+    eprintfn "  --flat-only                time the exact flat scan only; build no HNSW graph"
     eprintfn ""
     eprintfn "Optional:"
     eprintfn "  --embedder local|openai    default: local"
@@ -146,6 +212,7 @@ let private printUsage () =
     eprintfn "Examples:"
     eprintfn "  dotnet run --project src/ToolUp.RAG.Benchmarks -- --dataset scifact"
     eprintfn "  dotnet run --project src/ToolUp.RAG.Benchmarks -- --mixed-dim-fixture fixtures/eval-mixed-dim.json"
+    eprintfn "  dotnet run -c Release --project src/ToolUp.RAG.Benchmarks -- --hnsw-scale scifact --pad-to 500000"
     eprintfn ""
     eprintfn "OpenAI embedder reads OPENAI_API_KEY (or openai-api-key) from env."
     eprintfn "BEIR datasets are downloaded to data/beir/ on first use (override via TOOLUP_BEIR_CACHE)."
@@ -163,6 +230,38 @@ let main argv =
         eprintfn ""
         printUsage ()
         1
+    | Ok args when args.HnswScale.IsSome ->
+        let reportPath =
+            Path.Combine(
+                Path.GetDirectoryName(Path.GetFullPath args.Out),
+                Path.GetFileNameWithoutExtension args.Out + ".hnsw-scale.json"
+            )
+
+        try
+            let report =
+                HnswScaleBenchmark.run {
+                    Dataset = args.HnswScale.Value
+                    PadTo = args.PadTo
+                    EfSearch = args.EfSearch
+                    M = args.M
+                    MaxQueries = args.MaxQueries
+                    FlatOnly = args.FlatOnly
+                    TopK = args.TopK
+                    ReportPath = reportPath
+                }
+                |> Async.RunSynchronously
+
+            printfn
+                "[bench] %d HNSW run(s) over %d chunks; report written to %s"
+                report.Runs.Length
+                report.TotalChunks
+                reportPath
+
+            0
+        with ex ->
+            eprintfn "HNSW scale benchmark failed: %s" ex.Message
+            eprintfn "%s" ex.StackTrace
+            2
     | Ok args ->
         if args.RerankerOn then
             eprintfn "[bench] --reranker on requested but no concrete reranker is wired in v1; ignoring."

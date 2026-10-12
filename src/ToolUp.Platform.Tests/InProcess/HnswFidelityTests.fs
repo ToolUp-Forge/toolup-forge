@@ -16,11 +16,13 @@ open ToolUp.RAG.VectorStores.Hnsw
 
 // ─── Phase 14k WS5 — HNSW recall-fidelity + latency smoke ───────
 //
-// The strict acceptance bound ("HNSW recall@10 within 2% of flat
-// scan on a 500k representative corpus, p95 < 50ms with efSearch=50")
-// is DEFERRED in Phase 14k — it needs a representative corpus fixture
-// and tuned `efSearch`, separate work. What lands here is the
-// CI-safe, dependency-free smoke:
+// The strict acceptance bounds ("HNSW recall@10 within 2% of flat
+// scan; p95 < 50 ms on a 500k representative corpus") were deferred by
+// Phase 14k and measured by Phase 970 with the `--hnsw-scale` benchmark
+// mode; the measured trade-off is in the RAG technical guide's scale
+// story. The recall bound is pinned below by an OPT-IN case that runs
+// only when `TOOLUP_HNSW_SCALE_CORPUS` names a corpus. What runs by
+// default is the CI-safe, dependency-free smoke:
 //
 //   • a hard correctness invariant HNSW must satisfy regardless of
 //     ANN approximation — self-retrieval (an indexed vector queried
@@ -29,7 +31,7 @@ open ToolUp.RAG.VectorStores.Hnsw
 //     catastrophic graph regression without flaking on the inherent
 //     approximate-NN looseness of random high-dim vectors;
 //   • a loose latency ceiling that catches a pathological slowdown
-//     (NOT the 500k/50ms perf gate — that stays deferred).
+//     (NOT the 500k/50ms perf bound — Phase 970 measures that, opt-in).
 //
 // Ground truth is computed in-test by brute-force cosine, so this
 // needs no `InMemoryVectorStore` reference (keeps the test project's
@@ -169,8 +171,8 @@ let tests =
                 // high-dim vectors is a deliberately hard ANN case.
                 // ≥0.5 catches a broken graph without flaking on the
                 // inherent approximate-NN looseness; the strict 2%
-                // acceptance bound needs a representative corpus +
-                // tuned efSearch (deferred per Phase 14k).
+                // acceptance bound needs a representative corpus — the
+                // opt-in Phase 970 case at the end of this list.
                 Expect.isGreaterThan
                     meanOverlap
                     0.5
@@ -382,8 +384,8 @@ let tests =
                 hnswSw.Stop()
                 let hnswMeanMs = hnswSw.Elapsed.TotalMilliseconds / float probes
 
-                // NOT the 500k/<50ms perf gate (deferred — needs a
-                // representative corpus). This only trips on a pathological
+                // NOT the 500k/<50ms perf bound (Phase 970 measures that,
+                // opt-in, with the benchmark). This only trips on a pathological
                 // O(n)-per-query regression: a graph that has degenerated to
                 // a full scan does far more node work than a healthy
                 // O(log n · M) traversal, so its latency lands well above
@@ -402,5 +404,135 @@ let tests =
                     $"HNSW mean query latency {hnswMeanMs:F1} ms over a 10k graph was >100x the {flatMeanMs:F2} ms flat-scan baseline — pathological O(n)-per-query slowdown"
             finally
                 dispose.Dispose()
+        }
+
+        // Phase 970 — the recall bound at representative scale, OPT-IN.
+        // `TOOLUP_HNSW_SCALE_CORPUS` names an extracted BEIR-format dataset
+        // directory (`corpus.jsonl` + `queries.jsonl`, e.g. the `scifact`
+        // directory the benchmark's BEIR cache holds). Unset, the case is
+        // skipped, so the default suite is unchanged in duration: the graph
+        // build alone costs tens of milliseconds per chunk at the shipped
+        // defaults. `TOOLUP_HNSW_SCALE_MAX_CHUNKS` caps the corpus (default
+        // 3000) and `TOOLUP_HNSW_SCALE_MAX_QUERIES` the queries (default 200).
+        //
+        // What it pins: at the SHIPPED `HnswParameters.defaults`, HNSW's
+        // recall@10 against an exact flat scan over the same local-embedder
+        // vectors is at least 0.98 — Phase 14k's "within 2 %". Recall is the
+        // ann-benchmarks definition (a result counts when its cosine reaches
+        // the K-th exact cosine, less 1e-6), so duplicate documents tying at
+        // the boundary are not misses. Latency is reported, not asserted:
+        // the p95 bound is NOT met at the default, and the guide states the
+        // measured trade-off rather than a bound this test would fudge.
+        testAsync "opt-in scale check: recall@10 within 2% of a flat scan on a named corpus (TOOLUP_HNSW_SCALE_CORPUS)" {
+            match Environment.GetEnvironmentVariable "TOOLUP_HNSW_SCALE_CORPUS" with
+            | null
+            | "" -> skiptest "TOOLUP_HNSW_SCALE_CORPUS is unset — the representative-scale check is opt-in"
+            | dir ->
+                let intVar name fallback =
+                    match Int32.TryParse(Environment.GetEnvironmentVariable name) with
+                    | true, n when n > 0 -> n
+                    | _ -> fallback
+
+                let maxChunks = intVar "TOOLUP_HNSW_SCALE_MAX_CHUNKS" 3000
+                let maxQueries = intVar "TOOLUP_HNSW_SCALE_MAX_QUERIES" 200
+
+                let str (e: Text.Json.JsonElement) (name: string) =
+                    match e.TryGetProperty name with
+                    | true, v when v.ValueKind = Text.Json.JsonValueKind.String -> v.GetString()
+                    | _ -> ""
+
+                let readJsonl (file: string) (limit: int) (text: Text.Json.JsonElement -> string) =
+                    File.ReadLines(Path.Combine(dir, file))
+                    |> Seq.filter (String.IsNullOrWhiteSpace >> not)
+                    |> Seq.truncate limit
+                    |> Seq.map (fun line ->
+                        use doc = Text.Json.JsonDocument.Parse line
+                        str doc.RootElement "_id", text doc.RootElement)
+                    |> Seq.toArray
+
+                // The benchmark's indexing convention: title, blank line, text.
+                let corpusDocs =
+                    readJsonl "corpus.jsonl" maxChunks (fun e ->
+                        let title = str e "title"
+                        let text = str e "text"
+
+                        if String.IsNullOrWhiteSpace title then
+                            text
+                        else
+                            title + "\n\n" + text)
+
+                let queryDocs = readJsonl "queries.jsonl" maxQueries (fun e -> str e "text")
+
+                // Corpus first, then queries, as the benchmark embeds them.
+                let embedder = LocalEmbeddingProvider.create ()
+                let! corpusVecs = embedder.GenerateEmbeddings(corpusDocs |> Array.map snd)
+                let! queryVecs = embedder.GenerateEmbeddings(queryDocs |> Array.map snd)
+
+                let unit (v: float32[]) =
+                    let norm = sqrt (Array.sumBy (fun x -> float x * float x) v)
+
+                    if norm = 0.0 then
+                        v
+                    else
+                        v |> Array.map (fun x -> float32 (float x / norm))
+
+                let corpus = Array.map2 (fun (id, _) v -> id, unit v) corpusDocs corpusVecs
+                let store, dispose = newStore ()
+
+                try
+                    let scope = Team "scale"
+
+                    for (id, v) in corpus do
+                        do! store.Upsert scope id v (chunk id)
+
+                    let latencies = ResizeArray<float>()
+                    let recalls = ResizeArray<float>()
+
+                    for qv in queryVecs do
+                        let q = unit qv
+
+                        let topScores =
+                            corpus
+                            |> Array.map (fun (_, v) -> dot q v)
+                            |> Array.sortDescending
+                            |> Array.truncate 10
+
+                        let sw = Stopwatch.StartNew()
+                        let! hits = store.Search [ scope ] q 10
+                        sw.Stop()
+                        latencies.Add sw.Elapsed.TotalMilliseconds
+
+                        if topScores.Length > 0 then
+                            let threshold = float topScores[topScores.Length - 1] - 1e-6
+                            let found = hits |> List.filter (fun h -> h.Score >= threshold) |> List.length
+                            recalls.Add(float (min found topScores.Length) / float topScores.Length)
+
+                    // The first search paid the lazy graph build; it is not a query latency.
+                    let steady = latencies |> Seq.skip 1 |> Seq.sort |> Seq.toArray
+
+                    let p95 =
+                        if steady.Length = 0 then
+                            0.0
+                        else
+                            steady[max 0 (int (ceil (0.95 * float steady.Length)) - 1)]
+
+                    let recall = Seq.average recalls
+
+                    printfn
+                        "[hnsw-scale] %s: %d chunks, %d queries, recall@10 %.4f, p95 %.1f ms (efSearch %d, M %d)"
+                        dir
+                        corpus.Length
+                        queryVecs.Length
+                        recall
+                        p95
+                        HnswVectorStore.HnswParameters.defaults.EfSearch
+                        HnswVectorStore.HnswParameters.defaults.M
+
+                    Expect.isGreaterThanOrEqual
+                        recall
+                        0.98
+                        $"HNSW recall@10 {recall:F4} against a flat scan of {corpus.Length} chunks is more than 2 percent below it at the shipped defaults"
+                finally
+                    dispose.Dispose()
         }
     ]
