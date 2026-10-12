@@ -250,11 +250,28 @@ latencies are pessimistic; the comparisons between rows hold.
 `KeepPrunedConnections` — `HnswParameters.defaults` with only
 `efSearch` varied.
 
+**BEIR SciFact, local embedder** (run 2026-10-12, operator follow-up to
+970.A) — 5,183 documents, the 300 test queries, `local-tfidf-v3` at 512
+dims (88 non-zero slots per vector on average), same machine and load
+as above. Flat scan p50 / p95 / p99 1 / 4 / 5 ms.
+
+| `efSearch` | recall@10 vs flat | p50 / p95 / p99 | graph build |
+|---|---|---|---|
+| 50 | 0.942 | 5 / 7 / 8 ms | 333 s |
+| 100 | 0.988 | 8 / 10 / 12 ms | 316 s |
+| 200 | 0.998 | 18 / 31 / 40 ms | 307 s |
+| 400 | 1.000 | 39 / 52 / 64 ms | 292 s |
+| **800 (default)** | **1.000** | **67 / 74 / 78 ms** | **318 s** |
+
+The build is about 60 ms per document at every `efSearch` (it does not
+read `efSearch`); the five runs took 27 minutes end to end.
+
 **Real text, local embedder** — 3,000 paragraphs of this repository's
 own Markdown documentation in BEIR format, 300 queries (12-word spans of
 corpus paragraphs), `local-tfidf-v3` at 512 dims (39 non-zero slots per
-vector on average). This is a real-text corpus, not a BEIR dataset; the
-BEIR run is below.
+vector on average). This is a real-text corpus, not a BEIR dataset,
+measured before SciFact was fetched; it is kept because it is the
+second corpus the same conclusions hold on.
 
 | `efSearch` | recall@10 vs flat | p50 / p95 / p99 | graph build |
 |---|---|---|---|
@@ -277,11 +294,13 @@ vectors at its own sparsity: p50 / p95 35 / 90 ms at 50k chunks,
 
 **The trade-off, stated rather than fudged:**
 
-- **Recall within 2 % of flat scan** is met at `efSearch` ≥ 100 on the
-  real-text corpus; the default 800 gives 1.000.
-- **p95 under 50 ms** is met only at `efSearch` ≤ 200, at 3k chunks.
-  At the shipped default it is not met at any size measured, and the
-  HNSW query is slower than the flat scan at the same size.
+- **Recall within 2 % of flat scan** is met at `efSearch` ≥ 100 on
+  both corpora (SciFact 0.988, real text 0.985); the default 800 gives
+  1.000.
+- **p95 under 50 ms** is met only at `efSearch` ≤ 200 (SciFact 31 ms at
+  5.2k chunks, real text 46 ms at 3k). At the shipped default it is not
+  met at any size measured (74 ms on SciFact), and the HNSW query is
+  slower than the flat scan at the same size.
 - **500k was not measured for HNSW.** The build at the defaults costs
   50–200 ms per chunk on one thread and grows faster than linearly, so
   a 500k-chunk scope is many hours of build, repeated from scratch on
@@ -304,9 +323,7 @@ dotnet run -c Release --project src/ToolUp.RAG.Benchmarks -- --hnsw-scale scifac
 
 The report is JSON beside `--out` (`bench-results.hnsw-scale.json` by
 default), naming the dataset, the embedder, every parameter and the
-machine. **The BEIR SciFact run is not yet recorded here**: the
-measuring machine had no BEIR dataset cached, and fetching one is an
-operator's step. Its figures replace the real-text table when it runs.
+machine. The SciFact table above is that report's `Runs`, rounded.
 
 **Fidelity audit** lives in
 `src/ToolUp.Platform.Tests/InProcess/HnswFidelityTests.fs`:
