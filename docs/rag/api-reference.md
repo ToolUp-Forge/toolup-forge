@@ -315,6 +315,32 @@ type IRetrievalPipeline =
     abstract Index: VectorScope -> TextChunk -> Async<unit>
 ```
 
+#### The order the default pipeline ranks in
+
+`RetrievalPipeline` (the default `IRetrievalPipeline`) orders a request's candidates once, in one fixed
+sequence:
+
+```text
+fuse → normalise → rerank → boost → MMR → threshold
+```
+
+Each step reads the score space (`RetrievalScoreSpace`) the step before it produced; the returned space is
+recorded on the trace as `ScoreSpace:<space>`, and the step whose order the caller receives as
+`FinalOrder:<step>`.
+
+| Step | What it does | Score space it reads |
+|---|---|---|
+| fuse (`RRF`) | Reciprocal rank fusion of the dense and keyword rankings. Dense-only (`withoutSparseIndex`) skips it and keeps the store's cosine scores. | ranks, not scores |
+| normalise (`Normalise:MinMax`) | Min-max normalises the fused pool onto `[0, 1]`, after the scoping filters (`Filters`, `OriginFilter`). Order-preserving. The cosine path is left as scored. | raw fused |
+| rerank (`Rerank`) | The composed `IReranker` rescores the pool. A pool larger than its `MaxBatchSize` is capped at it, and the trace records `Rerank:<n>/<pool>`. No unreranked tail is kept, and the pool is never split across calls. | `Fused` or `Cosine` in; `Reranked` out |
+| boost (`ActiveModuleBoost`, `SummaryBoost`, `FactNarrativeJoin`) | Additive nudges of `b` × a unit. The unit is `1.0` on `Fused` and `Cosine`, and the reranked pool's range on `Reranked`, so `b` is the same share of the pool everywhere. | the returned space |
+| MMR (`withMmr`) | Diversity reordering. Its relevance term min-max normalises the pool's scores. Its order is final. | the returned space |
+| threshold (`MinScore`) | Applied by `RAGPromptBuilder`. It keeps only scores strictly above the threshold. | the returned space |
+
+Truncation to `TopK` (or `AdaptiveK`) and the merge sit between MMR and the threshold. They reorder nothing
+once MMR has run: the `Interleaved` merge re-sorts by score only when MMR is off, and `Separate` never
+re-sorts. A reranker whose `MaxBatchSize` is below `TopK` therefore returns at most `MaxBatchSize` matches.
+
 ### `IEmbeddingCache`
 
 ```fsharp
@@ -411,12 +437,16 @@ Optional. Default unregistered = no contextual headers prepended.
 
 ```fsharp
 type IReranker =
-    abstract Rerank: query: string -> candidates: VectorMatch list -> topK: int -> Async<VectorMatch list>
+    abstract Name: string
+    abstract MaxBatchSize: int
+    abstract Rerank: query: string -> candidates: VectorMatch list -> Async<VectorMatch list>
 ```
 
 Optional, and not selected by `MergeStrategy` — that knob decides how scopes combine, not which
 stages run. Registering a reranker with `withReranker` is what turns the stage on; the pipeline then
 widens its candidate pool for it and records the reranker's name in `RetrievalTrace.RerankerName`.
+It hands the reranker at most `MaxBatchSize` candidates in one call and returns only candidates the
+reranker scored. See [the order the default pipeline ranks in](#the-order-the-default-pipeline-ranks-in).
 
 ### `IRagTelemetry`
 

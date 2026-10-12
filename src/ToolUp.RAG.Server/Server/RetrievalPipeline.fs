@@ -175,7 +175,8 @@ type RetrievalScoreSpace =
     | Fused
     /// A cross-encoder reranker's own scale (`RAGServerApp.withReranker`).
     /// `IReranker` promises an ordering, not a calibrated scale, so the SDK
-    /// cannot say what range these scores occupy.
+    /// cannot say what range these scores occupy. The boosts read it too
+    /// (Phase 978): each nudges in units of the reranked pool's range.
     | Reranked
 
 module RetrievalScoreSpace =
@@ -272,6 +273,23 @@ let private normaliseWithinPool (pool: VectorMatch list) : VectorMatch list =
 
     pool |> List.map (fun m -> { m with Score = normalise m.Score })
 
+/// Phase 978 — the unit a boost is measured in, so a boost of `b` is the
+/// same nudge in every space. The normalised fused pool spans `[0, 1]`, so
+/// there the unit is `1.0` and `b` is the share of the pool's range Phase 866
+/// made it; on the cosine scale the unit is `1.0` too, where the same
+/// magnitudes are the same kind of nudge. A reranker's scale is uncalibrated,
+/// so there the unit is the reranked pool's own range: `b` lifts a match over
+/// one at most `b` of the range better, and never over one further ahead. A
+/// pool with no spread (one candidate, or every score equal) falls back to
+/// `1.0`, where any positive nudge breaks the tie the same way.
+let private boostUnit (space: RetrievalScoreSpace) (pool: VectorMatch list) : float =
+    match space, pool with
+    | RetrievalScoreSpace.Reranked, _ :: _ ->
+        let scores = pool |> List.map _.Score
+        let range = List.max scores - List.min scores
+        if range > 0.0 then range else 1.0
+    | _ -> 1.0
+
 // ─── Tokenisation for MMR similarity ──────────────────────────────
 
 let private tokenPattern = Regex(@"[\p{L}\p{N}]+", RegexOptions.Compiled)
@@ -307,8 +325,9 @@ let private jaccard (a: Set<string>) (b: Set<string>) =
 ///
 /// Score scales between MMR-out and the input may differ; callers that
 /// truncate by absolute score should not chain MMR with another scoring
-/// stage. The pipeline applies MMR after rerank so the resulting order is
-/// the diversified rerank.
+/// stage. The pipeline applies MMR after the rerank and the boosts, and its
+/// order is the order the caller receives — nothing re-sorts after it
+/// (Phase 978).
 let private applyMmr (lambda: float) (candidates: VectorMatch list) : VectorMatch list =
     if candidates.Length <= 1 then
         candidates
@@ -417,10 +436,17 @@ let private applyMerge (strategy: MergeStrategy) (topK: int) (results: VectorMat
 /// the query intent — a deployment that wants per-call control wraps the
 /// pipeline.
 type RetrievalPipelineOptions = {
-    /// Optional cross-encoder reranker. Applied after RRF fusion, before
-    /// MMR / adaptive-K / topK truncation. `None` skips rerank. The
-    /// candidate pool is inflated when a reranker is present so the
-    /// reranker sees a meaningful working set.
+    /// Optional cross-encoder reranker. Applied after RRF fusion and its
+    /// normalisation, before the boosts, MMR and adaptive-K / topK
+    /// truncation. `None` skips rerank. The candidate pool is inflated when
+    /// a reranker is present so the reranker sees a meaningful working set.
+    ///
+    /// Phase 978 — the reranker scores every candidate the pipeline returns:
+    /// a pool larger than `MaxBatchSize` is capped at it (the trace records
+    /// `Rerank:<n>/<pool>`), so a reranker whose `MaxBatchSize` is below the
+    /// request's `TopK` returns at most `MaxBatchSize` matches. The pool is
+    /// not split across calls, because `IReranker` promises no scale shared
+    /// between calls.
     Reranker: IReranker option
     /// Enable MMR diversity reranking. Off by default — MMR helps for
     /// duplicate-heavy corpora (long documents chunked many times) and
@@ -445,6 +471,12 @@ type RetrievalPipelineOptions = {
     /// and against cosine similarity on the dense-only path, where the same
     /// magnitudes are the same kind of nudge. Before 866 each exceeded the
     /// whole raw fused range (`≈ 0.033`) and sorted matches into tiers.
+    ///
+    /// Phase 978 — the boosts apply AFTER the reranker, when one is
+    /// composed, and there `b` is measured in units of the reranked pool's
+    /// range: the same share of the pool it is on the normalised fused
+    /// scale. Before 978 they ran ahead of the reranker, which replaced
+    /// every boosted score with its own.
     ActiveModuleBoost: float
     /// Score boost applied to chunks marked with `_isSummary = "true"`
     /// (WS4.1). Defaults to `+0.10` — larger than `ActiveModuleBoost`
@@ -1269,21 +1301,73 @@ type RetrievalPipeline
                         normaliseWithinPool filtered
                     | _ -> filtered
 
+                // Stage 2: optional cross-encoder rerank. Phase 978 — the
+                // reranker scores the WHOLE pool the pipeline goes on to
+                // return. A pool larger than one call takes is capped at
+                // `MaxBatchSize`, and the trace says so (`Rerank:<n>/<pool>`).
+                // The pool is not chunked through several calls and merged:
+                // `IReranker` promises an ordering within a call, not a scale
+                // shared across calls. Nor is an unreranked tail kept: its
+                // fused scores share no scale with the reranked head, and the
+                // boosts, MMR, the merge and the `MinScore` gate downstream
+                // would each read across the two.
+                let ordering = ref (if sparse.IsSome then "RRF" else "Dense")
+
+                let! reranked =
+                    match opts.Reranker with
+                    | None -> async.Return filtered
+                    | Some r ->
+                        stages.Add "Rerank"
+                        let cap = max 0 (min filtered.Length r.MaxBatchSize)
+
+                        if cap < filtered.Length then
+                            stages.Add(sprintf "Rerank:%d/%d" cap filtered.Length)
+
+                        ordering.Value <- "Rerank"
+
+                        async {
+                            let sw = System.Diagnostics.Stopwatch.StartNew()
+                            let! reordered = r.Rerank effectiveQuery (List.truncate cap filtered)
+                            sw.Stop()
+                            timings.Add("Rerank", sw.Elapsed.TotalMilliseconds)
+                            return reordered
+                        }
+
+                // Phase 866 — a reranker replaces every score it is handed
+                // with its own, so its space is the one the boosts nudge
+                // within and the caller reads.
+                let returnedSpace =
+                    match opts.Reranker with
+                    | Some _ -> RetrievalScoreSpace.Reranked
+                    | None -> producedSpace
+
+                // Phase 978 — the boosts run AFTER the reranker, on the scale
+                // it returned. Before, they ran ahead of it and a composed
+                // reranker replaced every boosted score with its own, so a
+                // deployment with a reranker got none of the boosts it
+                // configured. `boostScale` keeps a boost of `b` the nudge
+                // Phase 866 made it on the normalised fused scale.
+                let boostScale = boostUnit returnedSpace reranked
+
                 // Optional `ActiveModule` boost: nudge chunks whose
                 // `_originModule` matches the caller's active module up
                 // the ranking. Re-sorts after applying the boost so
                 // downstream stages see a coherent ordering.
                 let moduleBoosted =
                     match request.ActiveModule, opts.ActiveModuleBoost with
-                    | Some _, b when b <= 0.0 -> filtered
-                    | None, _ -> filtered
+                    | Some _, b when b <= 0.0 -> reranked
+                    | None, _ -> reranked
                     | Some moduleName, boost ->
                         stages.Add "ActiveModuleBoost"
+                        ordering.Value <- "ActiveModuleBoost"
 
-                        filtered
+                        reranked
                         |> List.map (fun m ->
                             match m.Metadata.TryFind ChunkMetadata.OriginModuleKey with
-                            | Some value when value = moduleName -> { m with Score = m.Score + boost }
+                            | Some value when value = moduleName -> {
+                                m with
+                                    Score = m.Score + boost * boostScale
+                              }
                             | _ -> m)
                         |> List.sortBy (fun m -> -m.Score, m.Scope, m.ChunkId)
 
@@ -1292,27 +1376,28 @@ type RetrievalPipeline
                 // point and should outrank paragraph chunks for "what is
                 // this about?" queries. Applied after the module boost
                 // so a summary in the matching module gets both nudges.
-                let initial =
+                let boosted =
                     if opts.SummaryBoost <= 0.0 then
                         moduleBoosted
                     else
-                        let mutable boosted = false
+                        let mutable applied = false
 
                         let result =
                             moduleBoosted
                             |> List.map (fun m ->
                                 match m.Metadata.TryFind ChunkMetadata.IsSummaryKey with
                                 | Some "true" ->
-                                    boosted <- true
+                                    applied <- true
 
                                     {
                                         m with
-                                            Score = m.Score + opts.SummaryBoost
+                                            Score = m.Score + opts.SummaryBoost * boostScale
                                     }
                                 | _ -> m)
 
-                        if boosted then
+                        if applied then
                             stages.Add "SummaryBoost"
+                            ordering.Value <- "SummaryBoost"
                             result |> List.sortBy (fun m -> -m.Score, m.Scope, m.ChunkId)
                         else
                             result
@@ -1323,14 +1408,14 @@ type RetrievalPipeline
                 // fact's own narrative context outranks generic similarity.
                 // No resolved facts (the common clause-less path) ⇒ no-op,
                 // byte-identical ordering (GP 11).
-                let initial =
+                let boosted =
                     if Set.isEmpty resolvedFactIds || opts.FactNarrativeJoinBoost <= 0.0 then
-                        initial
+                        boosted
                     else
                         let mutable joined = false
 
                         let result =
-                            initial
+                            boosted
                             |> List.map (fun m ->
                                 match m.Metadata.TryFind ChunkMetadata.FactRefsKey with
                                 | Some csv when csv.Split(',') |> Array.exists resolvedFactIds.Contains ->
@@ -1338,48 +1423,30 @@ type RetrievalPipeline
 
                                     {
                                         m with
-                                            Score = m.Score + opts.FactNarrativeJoinBoost
+                                            Score = m.Score + opts.FactNarrativeJoinBoost * boostScale
                                     }
                                 | _ -> m)
 
                         if joined then
                             stages.Add "FactNarrativeJoin"
+                            ordering.Value <- "FactNarrativeJoin"
                             result |> List.sortBy (fun m -> -m.Score, m.Scope, m.ChunkId)
                         else
                             result
 
-                // Stage 2: optional cross-encoder rerank.
-                let! reranked =
-                    match opts.Reranker with
-                    | None -> async.Return initial
-                    | Some r ->
-                        stages.Add "Rerank"
-                        let cap = min initial.Length r.MaxBatchSize
-                        let head = initial |> List.truncate cap
-
-                        async {
-                            let sw = System.Diagnostics.Stopwatch.StartNew()
-                            let! reorderedHead = r.Rerank effectiveQuery head
-                            sw.Stop()
-                            timings.Add("Rerank", sw.Elapsed.TotalMilliseconds)
-                            // Keep any tail beyond MaxBatchSize at the end —
-                            // they had a lower retrieval rank to begin with,
-                            // and the reranker hasn't seen them.
-                            let tail = initial |> List.skip cap
-                            return reorderedHead @ tail
-                        }
-
-                // Stage 3: optional MMR diversification.
+                // Stage 3: optional MMR diversification — the last step that
+                // orders the pool (Phase 978).
                 let diversified =
                     if opts.EnableMmr then
                         stages.Add "MMR"
+                        ordering.Value <- "MMR"
                         let sw = System.Diagnostics.Stopwatch.StartNew()
-                        let result = applyMmr opts.MmrLambda reranked
+                        let result = applyMmr opts.MmrLambda boosted
                         sw.Stop()
                         timings.Add("MMR", sw.Elapsed.TotalMilliseconds)
                         result
                     else
-                        reranked
+                        boosted
 
                 // Stage 4: adaptive top-K (if hint present) else fixed top-K.
                 let truncated =
@@ -1391,21 +1458,28 @@ type RetrievalPipeline
                         stages.Add "TopK"
                         diversified |> List.truncate request.TopK
 
+                // Phase 978 — MMR's order is the final order. The Interleaved
+                // merge re-sorts by score, which undid the diversity order MMR
+                // had just produced, so when MMR ran the merge only bounds the
+                // result to `TopK`. The trace names the step whose order the
+                // caller receives (`FinalOrder:<step>`).
                 stages.Add "Merge"
                 let mergeSw = System.Diagnostics.Stopwatch.StartNew()
-                let final = applyMerge request.Merge request.TopK truncated
+
+                let final =
+                    match request.Merge with
+                    | Interleaved when not opts.EnableMmr ->
+                        ordering.Value <- "Interleaved"
+                        applyMerge Interleaved request.TopK truncated
+                    | Interleaved -> truncated |> List.truncate request.TopK
+                    | Separate -> applyMerge Separate request.TopK truncated
+
                 mergeSw.Stop()
                 timings.Add("Merge", mergeSw.Elapsed.TotalMilliseconds)
 
                 let rerankerName = opts.Reranker |> Option.map _.Name
 
-                // Phase 866 — a reranker replaces every score it is handed
-                // with its own, so its space is the one the caller reads.
-                let returnedSpace =
-                    match opts.Reranker with
-                    | Some _ -> RetrievalScoreSpace.Reranked
-                    | None -> producedSpace
-
+                stages.Add("FinalOrder:" + ordering.Value)
                 stages.Add(RetrievalScoreSpace.stageMark returnedSpace)
 
                 match telemetry with
