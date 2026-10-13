@@ -401,7 +401,17 @@
       keep firing on the old cron.
       Migration recipe: `docs/migrations/1005-standing-report-subscriptions.md`.
     -->
-    <Version>0.26.0</Version>
+    <!--
+      0.27.0 (draft) - Phase 1007 advances the slot (driver cut via the
+      version ledger, 2026-10-13): v0.26.0 is tagged at f8150db7, and the
+      HNSW companion's `HnswParameters` record gains `ConstructionPruning`
+      and `TombstoneRebuildFraction` - a record widening, breaking for
+      full-literal construction (`HnswParameters.defaults` with-updates keep
+      compiling). MINOR class on the 0.x policy. The companion's write path
+      adds to a built graph instead of rebuilding the scope; see
+      `src/VectorStores/Hnsw/CHANGELOG.md` for the surface detail.
+    -->
+    <Version>0.27.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
       DLL. Non-publishable projects (App composition roots, modules,
