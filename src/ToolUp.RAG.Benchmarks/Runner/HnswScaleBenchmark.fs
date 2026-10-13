@@ -43,9 +43,18 @@ open ToolUp.RAG.Benchmarks.LatencyMetrics
 // overlap would score a tie between two identical vectors — BEIR corpora
 // carry duplicate documents — as a miss although both are exact answers.
 //
+// Phase 1007 adds two axes and one mode. `--build-profile` and
+// `--construction-pruning` sweep the graph build (one store per
+// profile × ConstructionPruning × efSearch), so a build profile's
+// recall cost is measured against its build saving on the same corpus.
+// `--upsert-batches <n>` then times n successive write batches into each
+// BUILT scope — the writes plus the search that applies them to the
+// graph — so the claim that a write into a built scope costs graph work
+// proportional to the batch, not the scope, is a number in the report.
+//
 // The run is opt-in and never part of a test pack: at 500k chunks it holds
-// several GB, and its HNSW graph build alone runs for hours (`--flat-only`
-// skips it). `HnswFidelityTests` pins the
+// several GB, and its HNSW graph build alone runs for hours at the default
+// profile (`--flat-only` skips it). `HnswFidelityTests` pins the
 // outcome behind `TOOLUP_HNSW_SCALE_CORPUS`.
 
 /// The pseudo-dataset that skips BEIR entirely: every chunk and every
@@ -53,6 +62,13 @@ open ToolUp.RAG.Benchmarks.LatencyMetrics
 /// dataset cached; it says nothing about recall on real text.
 [<Literal>]
 let SyntheticDataset = "synthetic"
+
+/// Phase 1007 — the named build profiles the runner can sweep, by the name
+/// the CLI takes.
+let BuildProfiles: (string * HnswVectorStore.HnswParameters) list = [
+    "default", HnswVectorStore.HnswParameters.defaults
+    "fast-build", HnswVectorStore.HnswParameters.fastBuild
+]
 
 type ScaleConfig = {
     /// A BEIR dataset id (`scifact`, `nfcorpus`, `fiqa`, …) or `synthetic`.
@@ -69,6 +85,16 @@ type ScaleConfig = {
     /// Measure the flat scan only and build no HNSW graph — the comparison
     /// rung at sizes whose graph build is too slow to wait for.
     FlatOnly: bool
+    /// Phase 1007 — build profiles (`BuildProfiles` names) to sweep; empty =
+    /// the store's default.
+    BuildProfiles: string list
+    /// Phase 1007 — `ConstructionPruning` values to sweep; empty = the
+    /// profile's own.
+    ConstructionPruning: int list
+    /// Phase 1007 — write batches timed into each built scope; `0` = none.
+    UpsertBatches: int
+    /// Phase 1007 — new chunks per write batch.
+    UpsertBatchSize: int
     /// Where the JSON report is written.
     ReportPath: string
 }
@@ -393,8 +419,21 @@ let private recallOf (exact: (int * float32)[]) (hnswScores: float list) (k: int
 
 // ─── One HNSW pass ────────────────────────────────────────────────
 
+/// Phase 1007 — one timed batch of writes into a built scope: the upserts
+/// and the search after them, which is where the store adds the batch to
+/// the graph.
+type UpsertBatch = {
+    /// Live chunks in the scope before the batch.
+    ScopeChunks: int
+    Writes: int
+    Seconds: float
+    MsPerWrite: float
+}
+
 /// The measured outcome of one `HnswVectorStore` configuration.
 type HnswRun = {
+    /// Phase 1007 — the `BuildProfiles` name the run was built from.
+    Profile: string
     M: int
     EfSearch: int
     LevelLambda: float
@@ -402,7 +441,7 @@ type HnswRun = {
     ExpandBestSelection: bool
     KeepPrunedConnections: bool
     /// `HNSW.Net`'s `ConstructionPruning` — the build-time candidate list,
-    /// its efConstruction. The store leaves it at the library default.
+    /// its efConstruction (`HnswParameters.ConstructionPruning`).
     ConstructionPruning: int
     IngestSeconds: float
     GraphBuildSeconds: float
@@ -416,6 +455,8 @@ type HnswRun = {
     /// JSON serialisation of every entry. A deployment pays it on every
     /// flush interval while the scope is dirty.
     PersistSeconds: float
+    /// Phase 1007 — `--upsert-batches`, in order; empty when not asked for.
+    UpsertBatches: UpsertBatch list
 }
 
 type private SilentLogger() =
@@ -431,8 +472,11 @@ let runHnsw
     (corpus: EmbeddedSet)
     (queries: EmbeddedSet)
     (exact: (int * float32)[][])
+    (profileName: string)
     (parameters: HnswVectorStore.HnswParameters)
     (topK: int)
+    (upsertBatches: int)
+    (upsertBatchSize: int)
     : Async<HnswRun> =
     async {
         let tempDir =
@@ -486,6 +530,39 @@ let runHnsw
                 recalls.Add(recallOf exact[qi] (hits |> List.map _.Score) topK)
 
             let latency = profile (List.ofSeq latencies)
+
+            // Phase 1007 — successive write batches into the built scope.
+            // Each batch is NEW synthetic chunks (indices past the corpus,
+            // at its dimensionality and sparsity), timed with the one search
+            // that follows it, since the store applies pending writes to the
+            // graph at the next search. A batch costs graph work for its
+            // own chunks; a full rebuild would cost `GraphBuildSeconds`.
+            let batches = ResizeArray<UpsertBatch>()
+            let nonZero = EmbeddedSet.meanNonZero corpus
+            let mutable next = EmbeddedSet.count corpus
+
+            for _ in 1..upsertBatches do
+                let before = next
+                let sw = Stopwatch.StartNew()
+
+                for _ in 1..upsertBatchSize do
+                    let id = sprintf "upsert-%07d" next
+
+                    let chunk: TextChunk = { Content = id; Metadata = Map.empty }
+
+                    do! vs.Upsert scope id (syntheticVector next corpus.Dim nonZero) chunk
+                    next <- next + 1
+
+                let! _ = vs.Search [ scope ] (EmbeddedSet.row queries 0) topK
+                sw.Stop()
+
+                batches.Add {
+                    ScopeChunks = before
+                    Writes = upsertBatchSize
+                    Seconds = sw.Elapsed.TotalSeconds
+                    MsPerWrite = sw.Elapsed.TotalMilliseconds / float upsertBatchSize
+                }
+
             // Disposing is the store's final flush: one serialisation and
             // write of the whole scope. A failure there is the store's to log.
             let persist = Stopwatch.StartNew()
@@ -494,13 +571,14 @@ let runHnsw
             persist.Stop()
 
             return {
+                Profile = profileName
                 M = parameters.M
                 EfSearch = parameters.EfSearch
                 LevelLambda = parameters.LevelLambda
                 NeighbourHeuristic = string parameters.NeighbourHeuristic
                 ExpandBestSelection = parameters.ExpandBestSelection
                 KeepPrunedConnections = parameters.KeepPrunedConnections
-                ConstructionPruning = HNSW.Net.SmallWorldParameters().ConstructionPruning
+                ConstructionPruning = parameters.ConstructionPruning
                 IngestSeconds = ingest.Elapsed.TotalSeconds
                 GraphBuildSeconds = build.Elapsed.TotalSeconds
                 RecallAt10 = Seq.average recalls
@@ -510,6 +588,7 @@ let runHnsw
                 P99Ms = int latency.P99
                 AvgMs = latency.Avg
                 PersistSeconds = persist.Elapsed.TotalSeconds
+                UpsertBatches = List.ofSeq batches
             }
         finally
             if not disposed then
@@ -652,42 +731,80 @@ let run (cfg: ScaleConfig) : Async<ScaleReport> = async {
     let flat = profile (List.ofSeq flatLatencies)
     printfn "[hnsw-scale] flat scan p50/p95/p99 %d/%d/%d ms" flat.P50 flat.P95 flat.P99
 
-    let defaults = HnswVectorStore.HnswParameters.defaults
-
-    let baseParams =
-        match cfg.M with
-        | Some m -> {
-            defaults with
-                M = m
-                LevelLambda = 1.0 / log (float m)
-          }
-        | None -> defaults
+    let profiles =
+        match cfg.BuildProfiles with
+        | [] -> [ "default" ]
+        | names -> names
 
     let efs =
-        if cfg.FlatOnly then []
-        elif cfg.EfSearch.IsEmpty then [ baseParams.EfSearch ]
-        else cfg.EfSearch
+        if cfg.FlatOnly then
+            []
+        elif cfg.EfSearch.IsEmpty then
+            [ HnswVectorStore.HnswParameters.defaults.EfSearch ]
+        else
+            cfg.EfSearch
 
     let runs = ResizeArray<HnswRun>()
 
-    for ef in efs do
-        let p = { baseParams with EfSearch = ef }
-        printfn "[hnsw-scale] building HNSW (M=%d, efSearch=%d)…" p.M ef
-        let! r = runHnsw corpus queries exact p cfg.TopK
+    for profileName in profiles do
+        let profileParams =
+            match BuildProfiles |> List.tryFind (fst >> (=) profileName) with
+            | Some(_, p) -> p
+            | None -> invalidArg "BuildProfiles" (sprintf "unknown build profile '%s'" profileName)
 
-        printfn
-            "[hnsw-scale]   ingest %.1f s · graph build %.1f s · recall@%d %.4f · p50/p95/p99 %d/%d/%d ms · persist %.1f s"
-            r.IngestSeconds
-            r.GraphBuildSeconds
-            cfg.TopK
-            r.RecallAt10
-            r.P50Ms
-            r.P95Ms
-            r.P99Ms
-            r.PersistSeconds
+        let baseParams =
+            match cfg.M with
+            | Some m -> {
+                profileParams with
+                    M = m
+                    LevelLambda = 1.0 / log (float m)
+              }
+            | None -> profileParams
 
-        runs.Add r
-        GC.Collect()
+        let pruning =
+            match cfg.ConstructionPruning with
+            | [] -> [ baseParams.ConstructionPruning ]
+            | values -> values
+
+        for cp in pruning do
+            for ef in efs do
+                let p = {
+                    baseParams with
+                        EfSearch = ef
+                        ConstructionPruning = cp
+                }
+
+                printfn
+                    "[hnsw-scale] building HNSW (%s: M=%d, ConstructionPruning=%d, efSearch=%d)…"
+                    profileName
+                    p.M
+                    cp
+                    ef
+
+                let! r = runHnsw corpus queries exact profileName p cfg.TopK cfg.UpsertBatches cfg.UpsertBatchSize
+
+                printfn
+                    "[hnsw-scale]   ingest %.1f s · graph build %.1f s (%.1f ms/chunk) · recall@%d %.4f · p50/p95/p99 %d/%d/%d ms · persist %.1f s"
+                    r.IngestSeconds
+                    r.GraphBuildSeconds
+                    (r.GraphBuildSeconds * 1000.0 / float (EmbeddedSet.count corpus))
+                    cfg.TopK
+                    r.RecallAt10
+                    r.P50Ms
+                    r.P95Ms
+                    r.P99Ms
+                    r.PersistSeconds
+
+                for b in r.UpsertBatches do
+                    printfn
+                        "[hnsw-scale]   upsert batch: %d writes into %d chunks in %.2f s (%.2f ms/write)"
+                        b.Writes
+                        b.ScopeChunks
+                        b.Seconds
+                        b.MsPerWrite
+
+                runs.Add r
+                GC.Collect()
 
     wall.Stop()
 

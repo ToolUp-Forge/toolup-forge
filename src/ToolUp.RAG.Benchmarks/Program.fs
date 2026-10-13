@@ -17,6 +17,10 @@ type private CliArgs = {
     M: int option
     MaxQueries: int option
     FlatOnly: bool
+    BuildProfiles: string list
+    ConstructionPruning: int list
+    UpsertBatches: int
+    UpsertBatchSize: int
     Embedder: EmbedderChoice
     VectorStore: VectorStoreChoice
     RerankerOn: bool
@@ -35,6 +39,10 @@ let private defaults: CliArgs = {
     M = None
     MaxQueries = None
     FlatOnly = false
+    BuildProfiles = []
+    ConstructionPruning = []
+    UpsertBatches = 0
+    UpsertBatchSize = 100
     Embedder = Local
     VectorStore = Flat
     RerankerOn = false
@@ -128,6 +136,49 @@ let private parseArgs (argv: string array) : Result<CliArgs, string> =
         | "--flat-only" ->
             args <- { args with FlatOnly = true }
             i <- i + 1
+        | "--build-profile" when i + 1 < argv.Length ->
+            let names = argv[i + 1].Split(',') |> List.ofArray
+            let known = HnswScaleBenchmark.BuildProfiles |> List.map fst
+
+            match names |> List.filter (fun n -> not (List.contains n known)) with
+            | [] -> args <- { args with BuildProfiles = names }
+            | unknown ->
+                setError (
+                    sprintf
+                        "unknown --build-profile value(s): %s (expected %s)"
+                        (String.Join(",", unknown))
+                        (String.Join("|", known))
+                )
+
+            i <- i + 2
+        | "--construction-pruning" when i + 1 < argv.Length ->
+            let parsed = argv[i + 1].Split(',') |> Array.map Int32.TryParse
+
+            if parsed |> Array.forall (fun (ok, n) -> ok && n > 0) then
+                args <- {
+                    args with
+                        ConstructionPruning = parsed |> Array.map snd |> List.ofArray
+                }
+            else
+                setError (
+                    sprintf
+                        "invalid --construction-pruning value: %s (expected comma-separated positive integers)"
+                        argv[i + 1]
+                )
+
+            i <- i + 2
+        | "--upsert-batches" when i + 1 < argv.Length ->
+            match Int32.TryParse argv[i + 1] with
+            | true, n when n >= 0 -> args <- { args with UpsertBatches = n }
+            | _ -> setError (sprintf "invalid --upsert-batches value: %s (expected integer >= 0)" argv[i + 1])
+
+            i <- i + 2
+        | "--upsert-batch-size" when i + 1 < argv.Length ->
+            match Int32.TryParse argv[i + 1] with
+            | true, n when n > 0 -> args <- { args with UpsertBatchSize = n }
+            | _ -> setError (sprintf "invalid --upsert-batch-size value: %s (expected positive integer)" argv[i + 1])
+
+            i <- i + 2
         | "--embedder" when i + 1 < argv.Length ->
             match parseEmbedder argv[i + 1] with
             | Some e -> args <- { args with Embedder = e }
@@ -199,6 +250,10 @@ let private printUsage () =
     eprintfn "  --m <int>                  HNSW neighbour budget (default: the store's default)"
     eprintfn "  --max-queries <int>        time only the first N queries (default: all)"
     eprintfn "  --flat-only                time the exact flat scan only; build no HNSW graph"
+    eprintfn "  --build-profile <p[,p...]> build profiles to sweep: default|fast-build (Phase 1007; default: default)"
+    eprintfn "  --construction-pruning <n[,n...]>  HNSW efConstruction values to sweep (default: the profile's)"
+    eprintfn "  --upsert-batches <int>     time N write batches into each built scope (Phase 1007; default: 0)"
+    eprintfn "  --upsert-batch-size <int>  new chunks per write batch (default: 100)"
     eprintfn ""
     eprintfn "Optional:"
     eprintfn "  --embedder local|openai    default: local"
@@ -246,6 +301,10 @@ let main argv =
                     M = args.M
                     MaxQueries = args.MaxQueries
                     FlatOnly = args.FlatOnly
+                    BuildProfiles = args.BuildProfiles
+                    ConstructionPruning = args.ConstructionPruning
+                    UpsertBatches = args.UpsertBatches
+                    UpsertBatchSize = args.UpsertBatchSize
                     TopK = args.TopK
                     ReportPath = reportPath
                 }

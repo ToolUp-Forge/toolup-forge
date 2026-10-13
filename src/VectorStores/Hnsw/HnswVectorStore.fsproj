@@ -4,12 +4,18 @@
     <TargetFramework>net10.0</TargetFramework>
     <PackageId>ToolUp.VectorStores.Hnsw</PackageId>
     <AssemblyName>ToolUp.VectorStores.Hnsw</AssemblyName>
-    <Description>HNSW approximate-nearest-neighbour IVectorStore for ToolUp.RAG. Lifts the ~50,000-chunk ceiling of InMemoryVectorStore.</Description>
+    <Description>HNSW approximate-nearest-neighbour IVectorStore for ToolUp.RAG: an in-process graph per scope, kept current incrementally as chunks are written. Measured scale is in the ToolUp.RAG technical guide.</Description>
     <PackageTags>fsharp;sdk;rag;vector-store;hnsw;provider</PackageTags>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="HnswVectorStore.fs" />
     <Compile Include="HnswVectorStoreHealth.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Phase 1007: the test pack reads the graph's internal state
+         (`HnswVectorStore.GraphStats`) to pin incremental writes and the
+         rebuild threshold. -->
+    <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />

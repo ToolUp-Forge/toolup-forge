@@ -45,7 +45,7 @@ type private SilentLogger() =
         member _.Warn _ = ()
         member _.Error(_, _) = ()
 
-let private newStore () =
+let private newStoreWith (parameters: HnswVectorStore.HnswParameters) =
     let tempDir =
         Path.Combine(Path.GetTempPath(), "toolup-hnsw-fidelity-" + Guid.NewGuid().ToString("N"))
 
@@ -53,9 +53,17 @@ let private newStore () =
     let storage = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
 
     let store =
-        new HnswVectorStore.HnswVectorStore(storage, SilentLogger() :> ILogger, flushIntervalMs = 50)
+        new HnswVectorStore.HnswVectorStore(
+            storage,
+            SilentLogger() :> ILogger,
+            flushIntervalMs = 50,
+            parameters = parameters
+        )
 
     store :> IVectorStore, store :> IDisposable
+
+let private newStore () =
+    newStoreWith HnswVectorStore.HnswParameters.defaults
 
 let private chunk i : TextChunk = {
     Content = $"synthetic chunk {i}"
@@ -340,12 +348,21 @@ let tests =
 
         testAsync
             "latency smoke: HNSW stays far below a brute-force flat scan (no pathological O(n)-per-query regression)" {
-            let store, dispose = newStore ()
+            // Phase 1007 — re-sized from 10k vectors at the default profile to
+            // 5k at `HnswParameters.fastBuild`. The old build cost ~9 minutes
+            // of every full gate (539 s measured 2026-09-12, 56 % of the
+            // gate) while asserting nothing about the build: the case pins
+            // the QUERY path, which is the same code under either profile,
+            // and HNSW.Net's build is super-linear in n, so halving n is most
+            // of the saving. The profiles' recall is measured by the
+            // benchmark and pinned for the defaults by the opt-in corpus
+            // case below.
+            let store, dispose = newStoreWith HnswVectorStore.HnswParameters.fastBuild
 
             try
                 let rng = Random 99
                 let dim = 48
-                let n = 10000
+                let n = 5000
                 let scope = Team "lat"
 
                 // Retain the corpus so the assertion can time an in-test
@@ -375,14 +392,18 @@ let tests =
                 flatSw.Stop()
                 let flatMeanMs = flatSw.Elapsed.TotalMilliseconds / float probes
 
-                let hnswSw = Stopwatch.StartNew()
+                let meanSearchMs () = async {
+                    let sw = Stopwatch.StartNew()
 
-                for q in queries do
-                    let! _ = store.Search [ scope ] q 10
-                    ()
+                    for q in queries do
+                        let! _ = store.Search [ scope ] q 10
+                        ()
 
-                hnswSw.Stop()
-                let hnswMeanMs = hnswSw.Elapsed.TotalMilliseconds / float probes
+                    sw.Stop()
+                    return sw.Elapsed.TotalMilliseconds / float probes
+                }
+
+                let! hnswMeanMs = meanSearchMs ()
 
                 // NOT the 500k/<50ms perf bound (Phase 970 measures that,
                 // opt-in, with the benchmark). This only trips on a pathological
@@ -398,10 +419,27 @@ let tests =
                 // O(n) full-scan degeneration. The flat baseline is floored
                 // at 1 ms so a sub-millisecond scan on a fast idle machine
                 // can't drive the ceiling below the old 150 ms.
+                let ceilingMs = max 1.0 flatMeanMs * 100.0
+
                 Expect.isLessThan
                     hnswMeanMs
-                    (max 1.0 flatMeanMs * 100.0)
-                    $"HNSW mean query latency {hnswMeanMs:F1} ms over a 10k graph was >100x the {flatMeanMs:F2} ms flat-scan baseline — pathological O(n)-per-query slowdown"
+                    ceilingMs
+                    $"HNSW mean query latency {hnswMeanMs:F1} ms over a {n}-vector graph was >100x the {flatMeanMs:F2} ms flat-scan baseline — pathological O(n)-per-query slowdown"
+
+                // Phase 1007 — the same bound with a fifth of the graph
+                // RETIRED (deleted, under the default rebuild threshold, so
+                // no rebuild): the search skips retired nodes inside the
+                // traversal, and a filter that degenerated into a scan of the
+                // retired set would land here.
+                for i in 0..5 .. n - 1 do
+                    do! store.DeleteChunk scope (string i)
+
+                let! retiredMeanMs = meanSearchMs ()
+
+                Expect.isLessThan
+                    retiredMeanMs
+                    ceilingMs
+                    $"HNSW mean query latency {retiredMeanMs:F1} ms over a {n}-vector graph with a fifth of its nodes retired was >100x the {flatMeanMs:F2} ms flat-scan baseline — the retired-node filter has degenerated"
             finally
                 dispose.Dispose()
         }

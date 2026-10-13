@@ -104,6 +104,59 @@ let deterministicOrderingContract (storeName: string) (makeStore: unit -> IVecto
             dispose.Dispose()
     }
 
+// ─── Phase 1007 — incremental writes ─────────────────────────────
+//
+// The store keeps a built graph current instead of rebuilding it after
+// every write. These cases read the graph's own bookkeeping through
+// `HnswVectorStore.GraphStats` (internal, `InternalsVisibleTo` this pack):
+// a write must add a node and never move `Builds`; a delete or overwrite
+// must retire a node that then never answers; and the rebuild threshold
+// must fire exactly when retired nodes pass the declared fraction.
+
+let private incrementalScope = Team "incremental"
+
+let private incrementalDim = 16
+
+/// A deterministic unit vector, distinct per index.
+let private unitVector (index: int) : float32 array =
+    let rng = Random(1007 * 7919 + index)
+    let v = Array.init incrementalDim (fun _ -> float32 (rng.NextDouble() - 0.5))
+    let m = sqrt (v |> Array.sumBy (fun x -> x * x))
+    v |> Array.map (fun x -> x / m)
+
+let private chunkIdOf (i: int) = sprintf "c%04d" i
+
+let private newConcreteStore (parameters: HnswVectorStore.HnswParameters) =
+    let tempDir =
+        Path.Combine(Path.GetTempPath(), "toolup-hnsw-1007-" + Guid.NewGuid().ToString("N"))
+
+    Directory.CreateDirectory tempDir |> ignore
+    let storage = LocalFileStorage.LocalFileStorage(tempDir) :> IBlobStorage
+
+    new HnswVectorStore.HnswVectorStore(
+        storage,
+        logger = SilentLogger(),
+        flushIntervalMs = 60000,
+        parameters = parameters
+    ),
+    tempDir
+
+let private upsertRange (store: IVectorStore) (from: int) (count: int) = async {
+    for i in from .. from + count - 1 do
+        do! store.Upsert incrementalScope (chunkIdOf i) (unitVector i) (chunk (chunkIdOf i) "x")
+}
+
+let private statsOf (store: HnswVectorStore.HnswVectorStore) =
+    match store.GraphStats incrementalScope with
+    | Some s -> s
+    | None -> failwith "the scope holds no state"
+
+/// Search with chunk `i`'s own vector and return the hits' chunk ids.
+let private searchFor (store: IVectorStore) (i: int) (topK: int) = async {
+    let! hits = store.Search [ incrementalScope ] (unitVector i) topK
+    return hits |> List.map _.ChunkId
+}
+
 // `testSequenced` paired with `HnswFidelityTests` — HNSW.Net carries
 // shared static state beyond the per-store RNG fix in HnswVectorStore.fs;
 // concurrent HNSW testList execution surfaces intermittent
@@ -233,6 +286,197 @@ let tests =
                     "restored chunk must reappear in search"
             finally
                 dispose.Dispose()
+        }
+
+        testAsync "Phase 1007: a write into a built scope adds to the graph and never rebuilds it" {
+            let store, _ = newConcreteStore HnswVectorStore.HnswParameters.defaults
+            use _ = store
+            let vs = store :> IVectorStore
+            do! upsertRange vs 0 200
+            let! _ = searchFor vs 0 5
+            let built = statsOf store
+            Expect.equal (built.Builds, built.Nodes) (1, 200) "the first search builds the scope once"
+
+            do! upsertRange vs 200 50
+
+            for i in 200..249 do
+                let! hits = searchFor vs i 1
+                Expect.equal hits [ chunkIdOf i ] "a chunk written after the build is its own nearest neighbour"
+
+            let after = statsOf store
+            Expect.equal after.Builds 1 "writes into a built scope must not rebuild it"
+            Expect.equal (after.Nodes, after.Retired) (250, 0) "each write adds exactly one node"
+        }
+
+        testAsync "Phase 1007: a deleted chunk never returns, and topK stays full" {
+            let store, _ = newConcreteStore HnswVectorStore.HnswParameters.defaults
+            use _ = store
+            let vs = store :> IVectorStore
+            do! upsertRange vs 0 200
+            let! _ = searchFor vs 0 5
+            // 30 of 200: under the default 25 % rebuild threshold.
+            let deleted = [ 0..2..58 ]
+
+            for i in deleted do
+                do! vs.DeleteChunk incrementalScope (chunkIdOf i)
+
+            let deletedIds = deleted |> List.map chunkIdOf |> Set.ofList
+
+            for i in deleted do
+                // A deleted chunk's own vector is the query most likely to
+                // surface it.
+                let! hits = searchFor vs i 10
+                Expect.equal hits.Length 10 "topK stays full with retired nodes in the graph"
+
+                Expect.isEmpty
+                    (hits |> List.filter deletedIds.Contains)
+                    "a deleted chunk must never come back from search"
+
+            let stats = statsOf store
+            Expect.equal (stats.Builds, stats.Retired) (1, 30) "a delete retires the node and does not rebuild"
+        }
+
+        testAsync "Phase 1007: an overwrite retires the old vector; a same-vector rewrite keeps its node" {
+            let store, _ = newConcreteStore HnswVectorStore.HnswParameters.defaults
+            use _ = store
+            let vs = store :> IVectorStore
+            do! upsertRange vs 0 100
+            let! _ = searchFor vs 0 5
+
+            // Chunk 5 moves to vector 500.
+            do! vs.Upsert incrementalScope (chunkIdOf 5) (unitVector 500) (chunk "moved" "x")
+            let! atNew = vs.Search [ incrementalScope ] (unitVector 500) 1
+
+            Expect.equal
+                (atNew |> List.map (fun m -> m.ChunkId, m.Content))
+                [ chunkIdOf 5, "moved" ]
+                "found at its new vector"
+
+            let! atOld = searchFor vs 5 1
+            Expect.notEqual atOld [ chunkIdOf 5 ] "the old vector no longer answers for the chunk"
+
+            // Chunk 6 is rewritten with its own vector and new content.
+            do! vs.Upsert incrementalScope (chunkIdOf 6) (unitVector 6) (chunk "same vector" "x")
+            let! rewritten = vs.Search [ incrementalScope ] (unitVector 6) 1
+            Expect.equal (rewritten |> List.map _.Content) [ "same vector" ] "the rewrite's content is served"
+
+            let stats = statsOf store
+
+            Expect.equal
+                (stats.Builds, stats.Nodes, stats.Retired)
+                (1, 101, 1)
+                "the overwrite adds one node and retires one; the same-vector rewrite adds none"
+        }
+
+        testAsync "Phase 1007: a restore revives the chunk's node; a vacuumed chunk stays retired" {
+            let store, _ = newConcreteStore HnswVectorStore.HnswParameters.defaults
+            use _ = store
+            let vs = store :> IVectorStore
+            do! upsertRange vs 0 100
+            let! _ = searchFor vs 0 5
+            do! vs.DeleteChunk incrementalScope (chunkIdOf 7)
+            let! gone = searchFor vs 7 1
+            Expect.notEqual gone [ chunkIdOf 7 ] "deleted"
+            do! vs.RestoreChunk incrementalScope (chunkIdOf 7)
+            let! back = searchFor vs 7 1
+            Expect.equal back [ chunkIdOf 7 ] "restored"
+            let stats = statsOf store
+
+            Expect.equal (stats.Builds, stats.Nodes, stats.Retired) (1, 100, 0) "the node came back; nothing was added"
+
+            do! vs.DeleteChunk incrementalScope (chunkIdOf 8)
+            let! purged = vs.Vacuum incrementalScope DateTimeOffset.MaxValue
+            Expect.equal purged 1 "one tombstone purged"
+            let! afterVacuum = searchFor vs 8 10
+            Expect.isFalse (afterVacuum |> List.contains (chunkIdOf 8)) "a purged chunk never returns"
+            Expect.equal (statsOf store).Retired 1 "the purged chunk's node stays retired until a rebuild"
+        }
+
+        testAsync "Phase 1007: retired nodes past TombstoneRebuildFraction rebuild the scope, and not before" {
+            let parameters = {
+                HnswVectorStore.HnswParameters.defaults with
+                    TombstoneRebuildFraction = 0.1
+            }
+
+            let store, _ = newConcreteStore parameters
+            use _ = store
+            let vs = store :> IVectorStore
+            do! upsertRange vs 0 100
+            let! _ = searchFor vs 0 5
+
+            for i in 0..9 do
+                do! vs.DeleteChunk incrementalScope (chunkIdOf i)
+
+            let! _ = searchFor vs 50 5
+            let atThreshold = statsOf store
+
+            Expect.equal
+                (atThreshold.Builds, atThreshold.Retired)
+                (1, 10)
+                "10 retired of 100 is AT the 0.1 threshold, not past it: no rebuild"
+
+            do! vs.DeleteChunk incrementalScope (chunkIdOf 10)
+            let! hits = searchFor vs 10 5
+            Expect.isFalse (hits |> List.contains (chunkIdOf 10)) "the deleted chunk is gone after the rebuild"
+            let past = statsOf store
+
+            Expect.equal
+                (past.Builds, past.Nodes, past.Retired)
+                (2, 89, 0)
+                "11 retired of 100 passes the threshold: the scope rebuilds over its 89 live chunks"
+        }
+
+        testAsync "Phase 1007: a cold load builds the graph once from the persisted entries" {
+            let store, dir = newConcreteStore HnswVectorStore.HnswParameters.defaults
+            let vs = store :> IVectorStore
+
+            for i in 0..19 do
+                do! vs.Upsert Deployment (chunkIdOf i) (unitVector i) (chunk (chunkIdOf i) "x")
+
+            // Disposing flushes the scope to storage.
+            (store :> IDisposable).Dispose()
+
+            use reloaded =
+                new HnswVectorStore.HnswVectorStore(
+                    LocalFileStorage.LocalFileStorage(dir) :> IBlobStorage,
+                    logger = SilentLogger(),
+                    flushIntervalMs = 60000
+                )
+
+            let! hits = (reloaded :> IVectorStore).Search [ Deployment ] (unitVector 3) 1
+            Expect.equal (hits |> List.map _.ChunkId) [ chunkIdOf 3 ] "the reloaded scope answers"
+
+            match reloaded.GraphStats Deployment with
+            | Some s -> Expect.equal (s.Builds, s.Nodes) (1, 20) "one build over every persisted entry"
+            | None -> failtest "the reloaded scope holds no state"
+        }
+
+        test "Phase 1007: HnswParameters.validate bounds ConstructionPruning and TombstoneRebuildFraction" {
+            let d = HnswVectorStore.HnswParameters.defaults
+            Expect.isOk (HnswVectorStore.HnswParameters.validate d) "defaults are valid"
+
+            Expect.isOk
+                (HnswVectorStore.HnswParameters.validate HnswVectorStore.HnswParameters.fastBuild)
+                "fastBuild is valid"
+
+            for bad in
+                [
+                    { d with ConstructionPruning = 0 }
+                    { d with ConstructionPruning = 2001 }
+                    {
+                        d with
+                            TombstoneRebuildFraction = -0.01
+                    }
+                    {
+                        d with
+                            TombstoneRebuildFraction = 1.01
+                    }
+                    {
+                        d with
+                            TombstoneRebuildFraction = nan
+                    }
+                ] do
+                Expect.isError (HnswVectorStore.HnswParameters.validate bad) (sprintf "%A must be refused" bad)
         }
 
         // Phase 861 — the restart laws: every mutation hydrates a lazily

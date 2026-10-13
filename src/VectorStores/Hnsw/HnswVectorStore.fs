@@ -94,9 +94,10 @@ type private LocalRandomGenerator() =
 //
 // We persist `(chunkId, vector, content, metadata)` per scope as JSON
 // (same on-disk shape as `InMemoryVectorStore`'s index). The HNSW graph
-// itself is rebuilt from this list on first search after staleness —
-// graph build for ~50k entries is sub-second and amortises across the
-// thousands of queries that follow before the next ingest batch.
+// itself is built from this list on the first search after a cold load
+// and kept current incrementally after that (Phase 1007): a write adds
+// its vector to the built graph, and a delete or overwrite retires the
+// old node, so a write never costs a rebuild of the scope.
 //
 // Persisting the JSON (rather than the graph's own binary form) means
 // the on-disk shape is portable between vector-store implementations:
@@ -229,31 +230,105 @@ let private fromJson<'T> (s: string) =
 /// search reads under the same lock to avoid racing a partially-rebuilt
 /// graph. The lock is per-scope, so concurrent searches across scopes
 /// proceed in parallel — scope isolation is structural, not just contractual.
+///
+/// Phase 1007 — the graph is kept current incrementally rather than rebuilt
+/// after every write. HNSW.Net's graph is append-only (a node cannot be
+/// removed), so the scope keeps its own node bookkeeping: the chunk each
+/// node was added for, the node holding each chunk's CURRENT vector, and the
+/// set of RETIRED nodes — a deleted, tombstoned or overwritten chunk's old
+/// node. A search excludes retired nodes inside the graph traversal; a
+/// rebuild drops them. A mutator records only the chunk id as pending, and
+/// the next search applies every pending write before it reads.
 type private ScopeState() =
     let entries = Dictionary<string, IndexEntry>()
     let lockObj = obj ()
+    // `None` = no built graph: the next search builds one from `entries`.
     let mutable graph: SmallWorld<float[], float> option = None
-    let mutable graphIds: string array = Array.empty
-    let mutable graphStale = true
+    // Node id -> the chunk id it was added for, and the item array the graph
+    // holds for it. HNSW.Net's search filter is handed the item, so a retired
+    // node is recognised by reference.
+    let nodeChunkIds = ResizeArray<string>()
+    let nodeItems = ResizeArray<float[]>()
+    // Chunk id -> the node holding its current vector. A tombstoned chunk
+    // keeps its mapping (its node retired), so a restore revives the node.
+    let nodeOf = Dictionary<string, int>()
+    let retired = HashSet<float[]>(HashIdentity.Reference)
+    // Chunk ids written since the graph last reflected them, first-write order.
+    let pending = ResizeArray<string>()
+    let pendingSet = HashSet<string>()
+    let mutable builds = 0
+
+    let resetGraph () =
+        graph <- None
+        nodeChunkIds.Clear()
+        nodeItems.Clear()
+        nodeOf.Clear()
+        retired.Clear()
+        pending.Clear()
+        pendingSet.Clear()
+
+    // Node ids are dense and assigned in insertion order; the bookkeeping
+    // relies on that, so a graph that numbers differently is refused loudly.
+    let recordNodes (nodes: IReadOnlyList<int>) (chunkIds: string array) (items: float[] array) =
+        for i in 0 .. chunkIds.Length - 1 do
+            if nodes[i] <> nodeChunkIds.Count then
+                invalidOp
+                    $"HnswVectorStore: the graph assigned node {nodes[i]} where {nodeChunkIds.Count} was expected."
+
+            nodeChunkIds.Add chunkIds[i]
+            nodeItems.Add items[i]
+            nodeOf[chunkIds[i]] <- nodes[i]
 
     member _.Lock = lockObj
     member _.Entries = entries
     member _.Graph = graph
-    member _.GraphIds = graphIds
-    member _.GraphStale = graphStale
+    member _.IsBuilt = graph.IsSome
+    member _.NodeCount = nodeChunkIds.Count
+    member _.RetiredCount = retired.Count
+    member _.LiveNodeCount = nodeChunkIds.Count - retired.Count
+    member _.Builds = builds
+    member _.Pending = pending :> IReadOnlyList<string>
+    member _.ChunkIdOfNode(node: int) = nodeChunkIds[node]
+    member _.IsRetired(item: float[]) = retired.Contains item
 
-    member _.SetGraph(g: SmallWorld<float[], float>, ids: string array) =
+    /// The node holding `chunkId`'s current vector, with the item the graph
+    /// holds for it, if the graph has one.
+    member _.TryNodeOf(chunkId: string) =
+        match nodeOf.TryGetValue chunkId with
+        | true, n -> Some(n, nodeItems[n])
+        | _ -> None
+
+    /// Install a freshly built graph and the nodes it was built with.
+    member _.SetGraph
+        (g: SmallWorld<float[], float>, nodes: IReadOnlyList<int>, chunkIds: string array, items: float[] array)
+        =
+        resetGraph ()
         graph <- Some g
-        graphIds <- ids
-        graphStale <- false
+        builds <- builds + 1
+        recordNodes nodes chunkIds items
 
-    member _.MarkStale() = graphStale <- true
+    /// Record the nodes the graph just appended for `chunkIds`, in order.
+    member _.AddNodes(nodes: IReadOnlyList<int>, chunkIds: string array, items: float[] array) =
+        recordNodes nodes chunkIds items
 
+    member _.Retire(item: float[]) = retired.Add item |> ignore
+    member _.Revive(item: float[]) = retired.Remove item |> ignore
+    member _.ForgetChunk(chunkId: string) = nodeOf.Remove chunkId |> ignore
+
+    /// Note a write to `chunkId`. Only a built graph needs telling: one not
+    /// built yet reads every entry when it builds.
+    member _.Touch(chunkId: string) =
+        if graph.IsSome && pendingSet.Add chunkId then
+            pending.Add chunkId
+
+    member _.ClearPending() =
+        pending.Clear()
+        pendingSet.Clear()
+
+    /// Drop every entry and the graph; the next search builds afresh.
     member _.Clear() =
         entries.Clear()
-        graph <- None
-        graphIds <- Array.empty
-        graphStale <- true
+        resetGraph ()
 
 // ─── HNSW parameters ──────────────────────────────────────────────
 
@@ -267,8 +342,9 @@ type private ScopeState() =
 ///   knob). HNSW visits up to `EfSearch` graph nodes per query and
 ///   returns the best `topK`; `EfSearch == topK` is the low-recall
 ///   pathology. Bigger is more accurate and slower; the library default
-///   is 50. We default to 200, well above any reasonable `topK`, paired
-///   with the `Heuristic` neighbour-selection variant below.
+///   is 50. We default to 800 — Phase 970 measured it as the setting
+///   that holds recall@10 at 1.000 of the flat scan on BEIR SciFact —
+///   paired with the `Heuristic` neighbour-selection variant below.
 /// * `NeighbourHeuristic` — graph-build neighbour-selection algorithm.
 ///   `SelectHeuristic` (Malkov et al. 2018, §4.1) substantially improves
 ///   connectivity on clustered / heterogeneous corpora over the simple
@@ -277,20 +353,30 @@ type private ScopeState() =
 ///   This is the build-time recall lever — `EfSearch` cannot recover
 ///   recall a poorly-built graph never had.
 /// * `ExpandBestSelection` — consider neighbours of best candidates
-///   during selection; complements `SelectHeuristic`.
+///   during selection; complements `SelectHeuristic`. It is also most of
+///   the build's cost: Phase 1007 measured it at roughly ten times the
+///   distance computations per inserted vector (see `fastBuild`).
 /// * `KeepPrunedConnections` — retain pruned connections as fallback
 ///   edges; raises graph connectivity floor at the cost of slightly
 ///   larger graph memory.
+/// * `ConstructionPruning` — the build-time candidate list
+///   (efConstruction). `200` is HNSW.Net's default, which the store
+///   used implicitly before Phase 1007 exposed it.
+/// * `TombstoneRebuildFraction` — Phase 1007. A write to a scope whose
+///   graph is built adds to the graph; a delete or an overwrite retires
+///   the old node, which a search then skips. When retired nodes exceed
+///   this fraction of the graph, the next search rebuilds it without
+///   them. `0.0` rebuilds after any retirement (the pre-1007 behaviour
+///   for deletes); `1.0` never rebuilds for retirements alone. A cold
+///   load always builds.
 ///
-/// Defaults are tuned for ≥0.95 anchor recall@10 against flat scan on
-/// the mixed-dim smoke fixture (250 text@96 + 250 image@192 random unit
-/// vectors with mismatched-dim entries mapped to max distance — a
-/// deliberately hard ANN graph case where the simple neighbour-selection
-/// heuristic alone underperforms). Latency at 10k vectors stays
-/// comfortably under the smoke ceiling. Tune via the eval harness —
-/// drop `EfSearch` or disable `ExpandBestSelection` for latency-
-/// sensitive deployments; raise `EfSearch` and `M` for higher recall on
-/// harder corpora.
+/// `defaults` is tuned for recall: ≥0.95 anchor recall@10 against flat
+/// scan on the mixed-dim smoke fixture (250 text@96 + 250 image@192
+/// random unit vectors with mismatched-dim entries mapped to max distance
+/// — a deliberately hard ANN graph case where the simple neighbour-
+/// selection heuristic alone underperforms), and recall@10 of 1.000 on
+/// BEIR SciFact (Phase 970). `fastBuild` is the measured cheaper build.
+/// Tune further with `{ HnswParameters.defaults with … }`.
 type HnswParameters = {
     M: int
     LevelLambda: float
@@ -298,6 +384,10 @@ type HnswParameters = {
     NeighbourHeuristic: NeighbourSelectionHeuristic
     ExpandBestSelection: bool
     KeepPrunedConnections: bool
+    /// The build-time candidate list (efConstruction); see the type's notes.
+    ConstructionPruning: int
+    /// The retired-node fraction past which a scope rebuilds; see the type's notes.
+    TombstoneRebuildFraction: float
 }
 
 module HnswParameters =
@@ -308,6 +398,22 @@ module HnswParameters =
         NeighbourHeuristic = NeighbourSelectionHeuristic.SelectHeuristic
         ExpandBestSelection = true
         KeepPrunedConnections = true
+        ConstructionPruning = 200
+        TombstoneRebuildFraction = 0.25
+    }
+
+    /// Phase 1007 — the cheaper build: `defaults` without
+    /// `ExpandBestSelection`. Measured at `efSearch` 800 (RAG technical
+    /// guide, "Measured scale (Phase 1007)"): graph build 9.3 vs 149 ms
+    /// per chunk on BEIR SciFact and 7.9 vs 69 ms on a real-text corpus,
+    /// recall@10 against the flat scan 1.000 on both. `ConstructionPruning`
+    /// 100 and `KeepPrunedConnections = false` were measured too and are
+    /// not part of it: the first bought nothing consistent, the second cut
+    /// recall to about 0.56 on random vectors. `defaults` keeps
+    /// `ExpandBestSelection` because the fidelity fixtures pin its recall.
+    let fastBuild: HnswParameters = {
+        defaults with
+            ExpandBestSelection = false
     }
 
     /// 0.4.3 — bounds-check tunable parameters before the graph is
@@ -331,6 +437,9 @@ module HnswParameters =
     ///                             `> 2000` is well past the recall
     ///                             ceiling on every fixture and just
     ///                             burns query latency.
+    /// * `ConstructionPruning in [1, 2000]` — the same bounds, for the
+    ///                             same reasons, at build time.
+    /// * `TombstoneRebuildFraction in [0, 1]` — a fraction of the graph.
     let validate (p: HnswParameters) : Result<unit, string> =
         if p.M < 2 || p.M > 64 then
             Error(sprintf "HnswParameters.M must be in [2, 64]; got %d." p.M)
@@ -338,6 +447,16 @@ module HnswParameters =
             Error(sprintf "HnswParameters.LevelLambda must be > 0.0; got %f." p.LevelLambda)
         elif p.EfSearch < 1 || p.EfSearch > 2000 then
             Error(sprintf "HnswParameters.EfSearch must be in [1, 2000]; got %d." p.EfSearch)
+        elif p.ConstructionPruning < 1 || p.ConstructionPruning > 2000 then
+            Error(sprintf "HnswParameters.ConstructionPruning must be in [1, 2000]; got %d." p.ConstructionPruning)
+        elif
+            Double.IsNaN p.TombstoneRebuildFraction
+            || p.TombstoneRebuildFraction < 0.0
+            || p.TombstoneRebuildFraction > 1.0
+        then
+            Error(
+                sprintf "HnswParameters.TombstoneRebuildFraction must be in [0, 1]; got %f." p.TombstoneRebuildFraction
+            )
         else
             Ok()
 
@@ -371,20 +490,36 @@ let private isTombstoned (entry: IndexEntry) =
 
 // ─── HnswVectorStore ──────────────────────────────────────────────
 
+/// Phase 1007 — one scope's graph as the store holds it, for the test pack
+/// (`InternalsVisibleTo`). `Builds` counts full builds since the scope's
+/// state was created; an incremental write never moves it.
+type internal HnswGraphStats = {
+    Built: bool
+    Nodes: int
+    Retired: int
+    Builds: int
+}
+
+
 /// Approximate-nearest-neighbour vector store backed by HNSW (Curiosity
 /// fork of Microsoft's HNSW.Net). Per-scope graph — scope isolation is
 /// structural: a query against scope A consults only A's graph, so
 /// cross-scope leakage is impossible by construction.
 ///
 /// Persistence is debounced JSON-on-disk per scope (same shape and cadence
-/// as `InMemoryVectorStore`). The HNSW graph itself is rebuilt lazily from
-/// the persisted entries on first search of a scope after process start
-/// or after a batch of mutations — the build is O(N log N) but dwarfed by
-/// the thousands of queries that follow before the next batch.
+/// as `InMemoryVectorStore`). The HNSW graph itself is built lazily from
+/// the persisted entries on the first search of a scope after process
+/// start, and kept current incrementally after that (Phase 1007): writes
+/// are added to the built graph at the next search, deletes and
+/// overwrites retire the old node, and the scope rebuilds only when
+/// retired nodes pass `HnswParameters.TombstoneRebuildFraction`.
 ///
-/// Suitable for deployments up to ~1M chunks per scope. Above that, an
-/// external companion (pgvector, Qdrant, Pinecone) is the standard next
-/// step — the same `IVectorStore` interface and `composeWithRAG` wiring.
+/// Scale is measured, not assumed — see the RAG technical guide's
+/// "Measured scale" sections (Phases 970 and 1007) for build cost per
+/// chunk, recall and latency by size. Above what a deployment's build
+/// budget allows, an external companion (pgvector, Qdrant, Pinecone) is
+/// the standard next step — the same `IVectorStore` interface and
+/// `composeWithRAG` wiring.
 type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: int, ?parameters: HnswParameters) =
 
     let log =
@@ -428,61 +563,118 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
     let markDirty (scope: VectorScope) =
         lock dirtyLock (fun () -> dirty.Add(scopeToKey scope) |> ignore)
 
+    let newGraph () =
+        let parameters = SmallWorldParameters()
+        parameters.M <- hnswParams.M
+        parameters.LevelLambda <- hnswParams.LevelLambda
+        parameters.EfSearch <- hnswParams.EfSearch
+        parameters.NeighbourHeuristic <- hnswParams.NeighbourHeuristic
+        parameters.ExpandBestSelection <- hnswParams.ExpandBestSelection
+        parameters.KeepPrunedConnections <- hnswParams.KeepPrunedConnections
+        parameters.ConstructionPruning <- hnswParams.ConstructionPruning
+        // HNSW.Net's construction-time distance cache defaults to
+        // `InitialDistanceCacheSize = 1_048_576`, and at that setting a
+        // graph build allocates ~4 GB REGARDLESS of corpus size —
+        // measured 4,096 MB for THREE 4-dim vectors (HNSW 26.4.177,
+        // linux-x64; `DistanceCache.Resize` inside `Graph.Core..ctor`
+        // is the allocation site). Per-scope builds stack, so a test
+        // suite or a multi-tenant ingestion burst OOMs a 16 GB host —
+        // this is what killed the forge CI verify-all job with exit
+        // 143 from 2026-08-06 until this line. Disabling the cache
+        // outright is NOT the fix: `Algorithm4.SelectBestForConnecting`
+        // then recomputes distances combinatorially and a
+        // rebuild-heavy path (upsert → search → rebuild) turns a
+        // sub-second build into minutes of CPU spin. The measured
+        // sweet spot is a SMALL fixed cache — the parameter does not
+        // scale memory the way its name suggests (measured, linux-x64:
+        // n=500@192-dim → default 4.4 GB / 2.2 s, size-4096 0.4 GB /
+        // 0.26 s; n=2000@96-dim → default 5.1 GB / 1.4 s, size-4096
+        // 1.9 GB / 0.67 s; proportional n(n+1)/2 sizing is dominated
+        // on both axes). Determinism is unaffected: same seed + same
+        // data + same cache size → same collision pattern → the same
+        // graph, so the seeded-build guarantees above hold.
+        parameters.InitialDistanceCacheSize <- 4096
+
+        SmallWorld<float[], float>(
+            Func<float[], float[], float>(cosineDistance),
+            LocalRandomGenerator() :> IProvideRandomValues,
+            parameters,
+            threadSafe = true
+        )
+
+    // The item the graph holds for an entry. Entries are stored normalised;
+    // the second normalisation is kept so a build sees exactly the inputs
+    // it saw before Phase 1007 (the seeded-build guarantees above are
+    // byte-level).
+    let graphItem (entry: IndexEntry) = toDoubleArray (normalise entry.Vector)
+
+    let sameItem (a: float[]) (b: float[]) =
+        a.Length = b.Length && Array.forall2 (=) a b
+
     let buildGraph (state: ScopeState) =
         // Caller must hold `state.Lock`.
         let live = state.Entries.Values |> Seq.filter (isTombstoned >> not) |> Seq.toArray
+        let items = live |> Array.map graphItem
+        let graph = newGraph ()
 
-        if live.Length = 0 then
-            state.SetGraph(Unchecked.defaultof<_>, Array.empty)
-        else
-            let vectors = live |> Array.map (fun e -> toDoubleArray (normalise e.Vector))
+        let nodes =
+            if items.Length = 0 then
+                Array.empty :> IReadOnlyList<int>
+            else
+                graph.AddItems(items, null)
 
-            let ids = live |> Array.map _.ChunkId
+        state.SetGraph(graph, nodes, live |> Array.map _.ChunkId, items)
 
-            let parameters = SmallWorldParameters()
-            parameters.M <- hnswParams.M
-            parameters.LevelLambda <- hnswParams.LevelLambda
-            parameters.EfSearch <- hnswParams.EfSearch
-            parameters.NeighbourHeuristic <- hnswParams.NeighbourHeuristic
-            parameters.ExpandBestSelection <- hnswParams.ExpandBestSelection
-            parameters.KeepPrunedConnections <- hnswParams.KeepPrunedConnections
-            // HNSW.Net's construction-time distance cache defaults to
-            // `InitialDistanceCacheSize = 1_048_576`, and at that setting a
-            // graph build allocates ~4 GB REGARDLESS of corpus size —
-            // measured 4,096 MB for THREE 4-dim vectors (HNSW 26.4.177,
-            // linux-x64; `DistanceCache.Resize` inside `Graph.Core..ctor`
-            // is the allocation site). Per-scope builds stack, so a test
-            // suite or a multi-tenant ingestion burst OOMs a 16 GB host —
-            // this is what killed the forge CI verify-all job with exit
-            // 143 from 2026-08-06 until this line. Disabling the cache
-            // outright is NOT the fix: `Algorithm4.SelectBestForConnecting`
-            // then recomputes distances combinatorially and a
-            // rebuild-heavy path (upsert → search → rebuild) turns a
-            // sub-second build into minutes of CPU spin. The measured
-            // sweet spot is a SMALL fixed cache — the parameter does not
-            // scale memory the way its name suggests (measured, linux-x64:
-            // n=500@192-dim → default 4.4 GB / 2.2 s, size-4096 0.4 GB /
-            // 0.26 s; n=2000@96-dim → default 5.1 GB / 1.4 s, size-4096
-            // 1.9 GB / 0.67 s; proportional n(n+1)/2 sizing is dominated
-            // on both axes). Determinism is unaffected: same seed + same
-            // data + same cache size → same collision pattern → the same
-            // graph, so the seeded-build guarantees above hold.
-            parameters.InitialDistanceCacheSize <- 4096
+    /// Phase 1007 — bring a built graph up to date with the writes recorded
+    /// since it last read them. Caller must hold `state.Lock`. Each pending
+    /// chunk is compared with the node holding its vector: a live chunk
+    /// whose vector the graph already holds keeps (or revives) that node; a
+    /// live chunk with a new vector retires the old node and is added; a
+    /// tombstoned chunk retires its node but keeps the mapping, so a restore
+    /// revives it; a purged chunk retires and forgets it. New vectors go to
+    /// the graph in ONE `AddItems` call. Returns false when retired nodes
+    /// have passed the rebuild threshold.
+    let reconcile (state: ScopeState) (graph: SmallWorld<float[], float>) =
+        let addIds = ResizeArray<string>()
+        let addItems = ResizeArray<float[]>()
 
-            let graph =
-                SmallWorld<float[], float>(
-                    Func<float[], float[], float>(cosineDistance),
-                    LocalRandomGenerator() :> IProvideRandomValues,
-                    parameters,
-                    threadSafe = true
-                )
+        for chunkId in state.Pending do
+            match state.Entries.TryGetValue chunkId, state.TryNodeOf chunkId with
+            | (true, entry), current when not (isTombstoned entry) ->
+                let item = graphItem entry
 
-            graph.AddItems(vectors, null) |> ignore
-            state.SetGraph(graph, ids)
+                match current with
+                | Some(_, held) when sameItem held item -> state.Revive held
+                | Some(_, held) ->
+                    state.Retire held
+                    addIds.Add chunkId
+                    addItems.Add item
+                | None ->
+                    addIds.Add chunkId
+                    addItems.Add item
+            | (true, _), Some(_, held) -> state.Retire held
+            | (false, _), Some(_, held) ->
+                state.Retire held
+                state.ForgetChunk chunkId
+            | _, None -> ()
+
+        state.ClearPending()
+
+        if addItems.Count > 0 then
+            let items = addItems.ToArray()
+            let nodes = graph.AddItems(items, null)
+            state.AddNodes(nodes, addIds.ToArray(), items)
+
+        float state.RetiredCount
+        <= hnswParams.TombstoneRebuildFraction * float state.NodeCount
 
     let ensureGraphFresh (state: ScopeState) =
-        if state.GraphStale then
-            buildGraph state
+        // Caller must hold `state.Lock`.
+        match state.Graph with
+        | None -> buildGraph state
+        | Some graph ->
+            if state.Pending.Count > 0 && not (reconcile state graph) then
+                buildGraph state
 
     let persistScope (scopeKey: string) = async {
         match scopes.TryGetValue scopeKey with
@@ -526,6 +718,8 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
                 let entries = fromJson<IndexEntry list> json
                 let state = getOrCreateScope scopeKey
 
+                // `Clear` drops any graph too, so the first search after a
+                // cold load builds one over the loaded entries.
                 lock state.Lock (fun () ->
                     state.Clear()
 
@@ -534,9 +728,7 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
                         // predate upsert-time normalisation.
                         let normalised = { e with Vector = normalise e.Vector }
 
-                        state.Entries[e.ChunkId] <- normalised
-
-                    state.MarkStale())
+                        state.Entries[e.ChunkId] <- normalised)
             with ex ->
                 log.Warn $"[HnswVectorStore] Corrupt index for {scopeKey}: {ex.Message} — starting empty."
         | Error reason ->
@@ -616,6 +808,20 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
 
     do Async.Start(flushLoop, cts.Token)
 
+    /// Phase 1007 — the graph state of `scope` as it stands, without
+    /// applying pending writes; `None` when the store holds no state for it.
+    member internal _.GraphStats(scope: VectorScope) : HnswGraphStats option =
+        match lock scopesLock (fun () -> scopes.TryGetValue(scopeToKey scope)) with
+        | true, state ->
+            lock state.Lock (fun () ->
+                Some {
+                    Built = state.IsBuilt
+                    Nodes = state.NodeCount
+                    Retired = state.RetiredCount
+                    Builds = state.Builds
+                })
+        | _ -> None
+
     /// Phase 963 — the HNSW graph is built and searched in this process's
     /// memory. It persists to blob storage, but each replica searches its
     /// own graph, so the index is per-process for the replica warning.
@@ -644,7 +850,7 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
 
             lock state.Lock (fun () ->
                 state.Entries[chunkId] <- entry
-                state.MarkStale())
+                state.Touch chunkId)
 
             markDirty scope
         }
@@ -669,19 +875,24 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
                         ensureGraphFresh state
 
                         match state.Graph with
-                        | None -> ()
-                        | Some graph when state.GraphIds.Length = 0 -> ()
-                        | Some graph ->
-                            // KNN over the per-scope graph. We over-fetch
-                            // and post-filter tombstones — they are excluded
-                            // at build time but a concurrent delete could
-                            // tombstone a still-graphed chunk before the
-                            // next rebuild lands.
+                        | Some graph when state.LiveNodeCount > 0 ->
+                            // KNN over the per-scope graph. Retired nodes
+                            // (deleted, tombstoned or overwritten chunks)
+                            // are excluded INSIDE the traversal, which keeps
+                            // walking until it has `topK` live answers, so a
+                            // retired node neither returns nor shortens the
+                            // result list.
+                            let filter =
+                                if state.RetiredCount = 0 then
+                                    null
+                                else
+                                    Func<float[], bool>(state.IsRetired >> not)
+
                             let results =
-                                graph.KNNSearch(queryUnit, topK, null, System.Threading.CancellationToken.None)
+                                graph.KNNSearch(queryUnit, topK, filter, System.Threading.CancellationToken.None)
 
                             for r in results do
-                                let chunkId = state.GraphIds[r.Id]
+                                let chunkId = state.ChunkIdOfNode r.Id
 
                                 match state.Entries.TryGetValue chunkId with
                                 | true, entry when not (isTombstoned entry) ->
@@ -694,7 +905,8 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
                                         Scope = scope
                                         Metadata = entry.Metadata
                                     }
-                                | _ -> ())
+                                | _ -> ()
+                        | _ -> ())
 
             // Total-order sort: per-scope KNN results are merged from a
             // ResizeArray whose order depends on scope iteration + graph
@@ -771,7 +983,7 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
                         }
 
                         state.Entries[chunkId] <- stamped
-                        state.MarkStale()
+                        state.Touch chunkId
                         markDirty scope
                     | _ -> ())
         }
@@ -794,7 +1006,7 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
                         }
 
                         state.Entries[chunkId] <- restored
-                        state.MarkStale()
+                        state.Touch chunkId
                         markDirty scope
                     | _ -> ())
         }
@@ -823,9 +1035,7 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
 
                         for cid in toPurge do
                             state.Entries.Remove cid |> ignore
-
-                        if not toPurge.IsEmpty then
-                            state.MarkStale()
+                            state.Touch cid
 
                         toPurge.Length)
 

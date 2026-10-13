@@ -176,15 +176,17 @@ The retention window itself is not stored — `Vacuum` takes the cutoff timestam
 contract (scope isolation, `IBlobStorage` persistence, soft-delete
 tombstones) is identical for each, so a move is a
 `RAGServerApp.withVectorStore` swap with no pipeline change. The sizes
-below are MEASURED (Phase 970, figures and method in
-[Measured scale](#measured-scale-phase-970) below), not asserted; the
-ladder this table used to show ("in-memory < 50k, HNSW < 1M") was never
-measured, and the HNSW half of it did not survive measurement.
+below are MEASURED (Phases 970 and 1007, figures and method in
+[Measured scale](#measured-scale-phase-970) and
+[Measured scale (Phase 1007)](#measured-scale-phase-1007) below), not
+asserted; the ladder this table used to show ("in-memory < 50k, HNSW
+< 1M") was never measured, and the HNSW half of it did not survive
+measurement.
 
 | Store | Mechanism | Measured at 512 dims, one query thread | When |
 |---|---|---|---|
 | `InMemoryVectorStore` (SDK default) | linear cosine scan | p50 / p95 **2 / 17 ms at 3k** chunks, **35 / 90 ms at 50k**, **238 / 429 ms at 500k** | every deployment whose per-scope corpus keeps the scan inside its latency budget — about 50k chunks for a 50 ms p50 on the measured machine. |
-| `ToolUp.VectorStores.Hnsw` companion | per-scope `SmallWorld` graph (graph-based ANN, lossy by tunable degree) | at the shipped defaults, graph build **484 s for 3k** chunks and super-linear (1k / 2k / 4k: 43 / 142 / 785 s); query p95 **169 ms at 3k** | no size measured where it beats the flat scan at the shipped defaults — see the trade-off below before choosing it. |
+| `ToolUp.VectorStores.Hnsw` companion | per-scope `SmallWorld` graph (graph-based ANN, lossy by tunable degree), kept current incrementally (Phase 1007) | graph build **60–150 ms per chunk** at `defaults`, **8–26 ms per chunk** at `fastBuild` (50k chunks in **609 s**); a write into a built scope **10–20 ms** at `fastBuild`; query p95 at `efSearch` 800 **164 ms at 5k, 182 ms at 50k** | no size measured where it beats the flat scan at the shipped `efSearch` — see the trade-offs below before choosing it. |
 | `ToolUp.VectorStores.Pgvector` companion | Postgres + pgvector | not measured by this benchmark | durable, multi-replica-safe vectors; the rung above what one process holds. |
 
 HNSW is opt-in (GP 13): a deployment that never composes it pulls none
@@ -215,13 +217,15 @@ useful only once a real CLIP-side query path exists.
 **When to opt into HNSW** (sample-deployment guidance). Stay on the
 default `InMemoryVectorStore` while its scan fits the request budget
 (the measured figures are in the table above), and move to the
-Pgvector companion when it does not. On the Phase 970 measurements the
-HNSW companion is not the rung between them: at the shipped defaults it
-answered more slowly than the flat scan at every size measured, its
-graph build grows faster than linearly, and the whole graph is rebuilt
-on the first search after any write. It remains a fit only for a small,
-rarely-written scope that wants its latency at a lowered `efSearch`
-(see the trade-off below), and ANN recall is necessarily ≤ exact. A
+Pgvector companion when it does not. On the Phase 970 and 1007
+measurements the HNSW companion is not the rung between them: at the
+shipped `efSearch` it answered more slowly than the flat scan at every
+size measured (up to 100k chunks), and its graph build costs hours
+at 500k. Since Phase 1007 a write no longer rebuilds the graph, so a
+continuously-written scope pays its build once, on the first search
+after a cold load. It fits a scope that wants its latency at a lowered
+`efSearch` (see the trade-offs below) and can afford the build, and ANN
+recall is necessarily ≤ exact. A
 deployment running mixed-dim chunks (e.g., when a future image embedder
 lands) should partition by data type into separate scopes until the
 multi-graph fan-out support arrives.
@@ -306,7 +310,8 @@ vectors at its own sparsity: p50 / p95 35 / 90 ms at 50k chunks,
   a 500k-chunk scope is many hours of build, repeated from scratch on
   the first search after any `Upsert` (which marks the scope's graph
   stale) while the scope's lock is held. The "< 1M chunks" this table
-  used to claim is withdrawn.
+  used to claim is withdrawn. (Phase 1007 removed the rebuild after a
+  write and measured a cheaper build profile — see the next section.)
 - **The default `efSearch` (800) is left where it is, deliberately.**
   Lowering it buys query latency (100–200 met both bounds at 3k chunks
   here) at a recall cost, but the binding constraint at scale is the
@@ -341,6 +346,125 @@ until a corpus pairing text and image embeddings at mismatched dims is
 authored — the eval harness in `ToolUp.RAG.Evaluation` and the
 benchmark orchestrator in `ToolUp.RAG.Benchmarks` are already
 fixture-driven, so the deferral is purely "fixture not yet authored".
+
+### Measured scale (Phase 1007)
+
+Phase 970 found two walls: a write marked the scope's graph stale, so
+the next search rebuilt it from scratch, and the build itself cost
+about 60 ms per document. Phase 1007 removed the first and measured the
+second.
+
+**Writes are incremental.** A write into a scope whose graph is built is
+added to the graph at the next search; a delete, tombstone or overwrite
+retires the chunk's old node, which the search skips inside the graph
+traversal, so `topK` stays full; a restore revives the node; a rewrite
+with the same vector keeps it. The scope rebuilds only on a cold load,
+or when retired nodes exceed `HnswParameters.TombstoneRebuildFraction`
+(default `0.25`) of the graph. `HnswVectorStoreTests` pins each of
+those, reading the graph's own node and build counts.
+
+**Build profiles.** `HnswParameters.fastBuild` is `defaults` with
+`ExpandBestSelection` off; `ConstructionPruning` is now a field too
+(default 200, the value the store used implicitly). Swept with the
+benchmark's `--build-profile` and `--construction-pruning` at the
+shipped `efSearch` (800), with `--upsert-batches 3` timing three
+100-write batches into each built scope (the writes plus the search
+that applies them):
+
+| Corpus | Profile | `ConstructionPruning` | graph build | per chunk | recall@10 vs flat | p50 / p95 ms | one write into the built scope |
+|---|---|---|---|---|---|---|---|
+| SciFact, 5,183 | `fastBuild` | 200 | 48 s | 9.3 ms | 1.000 | 131 / 164 | 15–20 ms |
+| SciFact | `fastBuild` | 100 | 33 s | 6.4 ms | 1.000 | 131 / 173 | 8 ms |
+| SciFact | `defaults` | 200 | 773 s | 149 ms | 0.9997 | 178 / 445 | 250–460 ms |
+| SciFact | `defaults` | 100 | 619 s | 120 ms | 0.999 | 151 / 209 | 136–148 ms |
+| real text, 3,000 | `fastBuild` | 200 | 24 s | 7.9 ms | 1.000 | 135 / 185 | 13–16 ms |
+| real text | `fastBuild` | 100 | 24 s | 7.9 ms | 1.000 | 133 / 205 | 11–15 ms |
+| real text | `defaults` | 200 | 208 s | 69 ms | 1.000 | 93 / 110 | 89–96 ms |
+| real text | `defaults` | 100 | 164 s | 55 ms | 1.000 | 89 / 187 | 104–211 ms |
+
+Same machine as Phase 970, more heavily shared this time: the SciFact
+default build took 773 s against 970's 318 s, and per-run load varied
+across the sweep, so compare rows within one corpus, not absolute
+times. The flat scan over the same corpora: p95 6 ms (SciFact) and
+5 ms (real text).
+
+- **`fastBuild` builds 9–16× faster with no recall cost on either
+  corpus.** `ExpandBestSelection` is most of the build: a probe over 1,000
+  random sparse 512-dimension vectors counted 16,500 distance evaluations per inserted
+  vector with it and 1,350 without. It ships as the named profile.
+- **`ConstructionPruning` 100 did not buy a consistent saving** (6.4
+  against 9.3 ms per chunk on SciFact, none on real text), so neither
+  profile changes it.
+- **`KeepPrunedConnections = false`** builds a further 5× faster, but a
+  probe measured recall@10 0.56 on 3,000 random 48-dimension vectors
+  (1.000 with it on), so it is not offered.
+- **`defaults` keep `ExpandBestSelection`, deliberately.** Its recall is
+  what the mixed-dim fidelity fixture and the opt-in corpus check pin,
+  and switching every composition's build is a behaviour change this
+  measurement does not need. Choose `fastBuild` for a scope where the
+  build is the constraint.
+
+**A write costs graph work for the write, not for the scope.** At
+`fastBuild`, a 100-write batch into a built scope:
+
+| scope size | per write | full rebuild of that scope |
+|---|---|---|
+| 3,000 (real text) | 13–16 ms | 24 s |
+| 5,183 (SciFact) | 15–20 ms | 48 s |
+| 20,000 (SciFact padded) | 17–20 ms | 516 s |
+| 50,000 | 10–11 ms | 609 s |
+| 100,000 | 11–12 ms | 1,221 s |
+
+The per-write cost does not grow with the scope (it moves with machine
+load), while the rebuild a write used to trigger grew with it.
+
+**Scale, and the 500k bound (Phase 14k).** SciFact padded with the 970
+benchmark's synthetic vectors (88 non-zero slots, its own sparsity),
+`fastBuild`, 100 queries:
+
+| chunks | graph build | per chunk | recall@10 | p50 / p95 / p99 at `efSearch` 800 | flat scan p50 / p95 |
+|---|---|---|---|---|---|
+| 5,183 | 48 s | 9.3 ms | 1.000 | 131 / 164 / 186 ms | 2 / 6 ms |
+| 20,000 | 516 s | 25.8 ms | 1.000 | 129 / 142 / 145 ms | 9 / 15 ms |
+| 50,000 | 609 s | 12.2 ms | 0.996 | 151 / 182 / 189 ms | 19 / 24 ms |
+| 100,000 | 1,221 s | 12.2 ms | 0.993 | 146 / 170 / 229 ms | 34 / 39 ms |
+
+The same 50k corpus at a lowered `efSearch` (`fastBuild`, measured
+later under lighter load: flat scan p50 / p95 14 / 18 ms):
+
+| `efSearch` | recall@10 | p50 / p95 / p99 |
+|---|---|---|
+| 100 | 0.969 | 21 / 33 / 42 ms |
+| 200 | 0.982 | 25 / 35 / 37 ms |
+
+- **p95 under 50 ms at 500k is not met, and 500k was not built.** At
+  the shipped `efSearch` the p95 is 164–182 ms from 5k to 100k chunks,
+  already above the bound, and it does not fall as the graph grows.
+  The setting that gets closest is `fastBuild` at `efSearch` 200:
+  p95 35 ms at 50k chunks with recall@10 0.982, inside the 2 % bound
+  (`efSearch` 100 is faster still and falls outside it, 0.969). Whether
+  it holds at 500k is not measured; the query cost rises slowly with
+  the graph, so it is a candidate, not a claim.
+- **The 500k build does not complete in practice on this machine.**
+  Per-chunk cost was flat from 50k to 100k (12.2 ms), so a 500k scope
+  extrapolates to about 1.7 hours of single-threaded build at
+  `fastBuild` (8 to 20 hours or more at the defaults' 60–150 ms per chunk), and its graph holds every
+  vector as 64-bit floats beside the store's own copy — more than the
+  3.4 GB this machine had free. 100k chunks is the largest size built.
+- **Where HNSW stands against the flat scan.** The flat scan's p95
+  grows linearly (39 ms at 100k; 429 ms at 500k, Phase 970) while the
+  graph's barely moves, so the lines cross somewhere between 100k and
+  500k at `efSearch` 800 — but the graph's build there is hours, which
+  misses the build budget this measurement was held to (a scope builds
+  in minutes, not hours). That is why an alternative was probed (the
+  companion README records the decision).
+
+**Reproduce** (Release; the SciFact cache from Phase 970):
+
+```powershell
+dotnet run -c Release --project src/ToolUp.RAG.Benchmarks -- --hnsw-scale scifact --ef-search 800 --build-profile fast-build,default --construction-pruning 200,100 --upsert-batches 3
+dotnet run -c Release --project src/ToolUp.RAG.Benchmarks -- --hnsw-scale scifact --pad-to 100000 --ef-search 800 --build-profile fast-build --max-queries 100 --upsert-batches 3
+```
 
 ## `IEmbeddingCache` + `CachingEmbeddingProvider`
 
