@@ -411,6 +411,23 @@
       adds to a built graph instead of rebuilding the scope; see
       `src/VectorStores/Hnsw/CHANGELOG.md` for the surface detail.
     -->
+    <!--
+      0.27.0 (draft), Phase 1011 rides it - MINOR class, unchanged. The
+      model-execution face carries diagnostic units: a gate and a verdict
+      state a `Unit`, an outcome states `DiagnosticUnits` beside its
+      diagnostics, and a gate whose unit is not its diagnostic's is refused
+      rather than evaluated. Breaking: the records `ModelExecutionGate`,
+      `ModelExecutionGateVerdict`, `ModelExecutionOutcome` (Platform.Core) and
+      `GateSpec`, `GateVerdict`, `FitOutcome`, `ModelArtifact`,
+      `ModelFitWireGate`, `ModelFitArtifactDescriptor` (Platform.Server) gain
+      a member; the unions `ModelExecutionRefusal`, `ModelFitError` and
+      `ExternalFitFailure` gain a `GateUnitMismatch` case; `Gate.evaluate` and
+      `Gate.evaluateAll` take the unit map and return a `Result`. Additive:
+      `ModelExecutionUnits`, `GateUnitMismatch`. A deployment that states no
+      units behaves as before; a stored artifact written before reads as
+      stating none.
+      Migration recipe: `docs/migrations/1011-model-execution-diagnostic-units.md`.
+    -->
     <Version>0.27.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a

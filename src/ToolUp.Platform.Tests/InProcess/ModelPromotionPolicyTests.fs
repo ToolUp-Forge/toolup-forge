@@ -124,6 +124,7 @@ let private register (stack: Stack) (seed: int64) (diagnostics: (string * float)
             ByteLength = 42L
         }
         Diagnostics = Map.ofList diagnostics
+        DiagnosticUnits = Map.empty
         GateVerdicts = []
         DurationMs = 1L
         CostUnits = 0.0

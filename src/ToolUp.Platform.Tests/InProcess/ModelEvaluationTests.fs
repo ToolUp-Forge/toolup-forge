@@ -403,6 +403,7 @@ type private ResolvingProvider(dataObjects: IDataObjectStore) =
                             ByteLength = int64 bytes.Length
                         }
                         Diagnostics = Map [ "coefficient", coefficient ]
+                        DiagnosticUnits = Map.empty
                         GateVerdicts = []
                         DurationMs = 0L
                         CostUnits = 0.0
@@ -786,6 +787,7 @@ let tests =
                     ByteLength = 0L
                 }
                 Diagnostics = Map.empty
+                DiagnosticUnits = Map.empty
                 GateVerdicts = []
                 DurationMs = 0L
                 CostUnits = 0.0

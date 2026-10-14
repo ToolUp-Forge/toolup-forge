@@ -155,6 +155,10 @@ type GateSpec = {
     /// Diagnostic key the gate reads from `FitOutcome.Diagnostics`.
     Name: string
     Threshold: float
+    /// Phase 1011 — the unit `Threshold` is stated in (unit text), or `None`
+    /// where the gate states none. The gate is evaluated only where this is
+    /// the unit the provider reports for the diagnostic (`Gate.evaluate`).
+    Unit: string option
     Direction: GateDirection
 }
 
@@ -165,6 +169,9 @@ type GateSpec = {
 type GateVerdict = {
     Name: string
     Threshold: float
+    /// Phase 1011 — the unit `Threshold` and `Observed` are both in: the
+    /// gate's, which is the diagnostic's wherever a verdict exists.
+    Unit: string option
     Direction: GateDirection
     Observed: float
     /// `true` iff the provider reported the diagnostic and it satisfied
@@ -172,37 +179,86 @@ type GateVerdict = {
     Passed: bool
 }
 
-module Gate =
-    /// Evaluate one gate against a diagnostics map. A missing diagnostic is
-    /// a fail-closed verdict (`Observed = nan`, `Passed = false`) — a gate
-    /// forge cannot confirm is never silently passed (GP 6).
-    let evaluate (diagnostics: Map<string, float>) (spec: GateSpec) : GateVerdict =
-        match Map.tryFind spec.Name diagnostics with
-        | None -> {
-            Name = spec.Name
-            Threshold = spec.Threshold
-            Direction = spec.Direction
-            Observed = nan
-            Passed = false
-          }
-        | Some observed ->
-            let passed =
-                match spec.Direction with
-                | GateDirection.AtLeast -> observed >= spec.Threshold
-                | GateDirection.AtMost -> observed <= spec.Threshold
+/// Phase 1011 — a gate that was NOT evaluated, because its unit is not the
+/// unit the provider reports its diagnostic in. `Unit` is the gate's and
+/// `Reported` the diagnostic's; either is `None` where that side states no
+/// unit. A refusal, not a verdict: a comparison across units is never made,
+/// so there is no `Observed` to record and no `Passed` to decide.
+type GateUnitMismatch = {
+    Name: string
+    Unit: string option
+    Reported: string option
+}
 
-            {
+module Gate =
+    /// Evaluate one gate against a diagnostics map and the units the provider
+    /// reports them in (diagnostic name -> unit text; a diagnostic with no
+    /// entry states no unit).
+    ///
+    /// **The unit rule comes first, and a comparison is never made across
+    /// units.** The gate is evaluated only where its `Unit` and the reported
+    /// unit are the same text or both absent (`ModelExecutionUnits.comparable`);
+    /// otherwise it is refused as a `GateUnitMismatch` and neither value is
+    /// converted. A gate stating no unit against a diagnostic that has one is
+    /// refused too, because a threshold read in a unit nobody stated is a gate
+    /// that can silently pass; so is a gate stating a unit against a
+    /// diagnostic the provider did not report, for which no unit was reported.
+    ///
+    /// Past the unit rule, a missing diagnostic is a fail-closed verdict
+    /// (`Observed = nan`, `Passed = false`) — a gate forge cannot confirm is
+    /// never silently passed (GP 6).
+    let evaluate
+        (diagnostics: Map<string, float>)
+        (units: Map<string, string>)
+        (spec: GateSpec)
+        : Result<GateVerdict, GateUnitMismatch> =
+        let reported = Map.tryFind spec.Name units
+
+        if not (ModelExecutionUnits.comparable spec.Unit reported) then
+            Error {
+                Name = spec.Name
+                Unit = spec.Unit
+                Reported = reported
+            }
+        else
+            let observed, passed =
+                match Map.tryFind spec.Name diagnostics with
+                | None -> nan, false
+                | Some observed ->
+                    let passed =
+                        match spec.Direction with
+                        | GateDirection.AtLeast -> observed >= spec.Threshold
+                        | GateDirection.AtMost -> observed <= spec.Threshold
+
+                    observed, passed
+
+            Ok {
                 Name = spec.Name
                 Threshold = spec.Threshold
+                Unit = spec.Unit
                 Direction = spec.Direction
                 Observed = observed
                 Passed = passed
             }
 
-    /// Evaluate every requested gate against the provider's diagnostics,
-    /// preserving request order.
-    let evaluateAll (diagnostics: Map<string, float>) (specs: GateSpec list) : GateVerdict list =
-        specs |> List.map (evaluate diagnostics)
+    /// Evaluate every requested gate, preserving request order. The first
+    /// gate (in request order) whose unit is not its diagnostic's refuses the
+    /// whole evaluation: an outcome is never recorded carrying a verdict over
+    /// a unit mismatch, nor with that gate quietly left out.
+    let evaluateAll
+        (diagnostics: Map<string, float>)
+        (units: Map<string, string>)
+        (specs: GateSpec list)
+        : Result<GateVerdict list, GateUnitMismatch> =
+        let rec go acc remaining =
+            match remaining with
+            | [] -> Ok(List.rev acc)
+            | spec :: rest ->
+                match evaluate diagnostics units spec with
+                | Ok verdict -> go (verdict :: acc) rest
+                | Error mismatch -> Error mismatch
+
+        go [] specs
 
 /// The composite identity of a fit run (plan D5): everything that makes a
 /// fitted artifact reproducible. Two runs with an equal canonical form are
@@ -304,6 +360,12 @@ type FitOutcome = {
     /// Provider-reported diagnostics (name → float). Forge stores + compares
     /// them; it never interprets them (plan D10).
     Diagnostics: Map<string, float>
+    /// Phase 1011 — the unit each diagnostic is stated in (name → unit
+    /// text), as the provider reports it. A diagnostic with no entry states
+    /// no unit, and a provider that states none returns `Map.empty`. Stating
+    /// a unit interprets nothing: it says what a number measures, and it is
+    /// what `Gate.evaluate` holds a gate's unit to.
+    DiagnosticUnits: Map<string, string>
     /// Forge's typed verdict per requested gate.
     GateVerdicts: GateVerdict list
     /// Provider-reported compute duration (deterministic — NOT wall-clock).
@@ -328,7 +390,8 @@ module FitOutcome =
 /// `ModelFitError` — it is a `GateVerdict` carried in the outcome
 /// (acceptance: a failed gate is a typed, audited verdict, not an
 /// exception, not a judgement). This DU covers only envelope-level
-/// failures: no provider for the kind, or the provider raised.
+/// failures: no provider for the kind, the provider raised, or a requested
+/// gate could not be evaluated because its unit is not its diagnostic's.
 [<RequireQualifiedAccess>]
 type ModelFitError =
     /// No provider is registered for the request's `ProviderKind`. Terminal
@@ -337,6 +400,11 @@ type ModelFitError =
     /// The provider's `Fit` raised. The message is the exception's; the job
     /// layer treats this as retryable (transient).
     | ProviderFailed of kind: string * message: string
+    /// Phase 1011 — a requested gate's unit is not the unit the provider
+    /// reports its diagnostic in, so the gate was not evaluated and no
+    /// outcome is recorded. Terminal — the same request against the same
+    /// provider reports the same units.
+    | GateUnitMismatch of GateUnitMismatch
 
 module ModelFitError =
     /// Human-readable one-line description for logs + job-result messages.
@@ -344,6 +412,12 @@ module ModelFitError =
         function
         | ModelFitError.ProviderNotFound k -> sprintf "no IModelFitProvider registered for kind '%s'" k
         | ModelFitError.ProviderFailed(k, m) -> sprintf "provider '%s' failed: %s" k m
+        | ModelFitError.GateUnitMismatch m ->
+            sprintf
+                "gate '%s' is stated in %s but its diagnostic is reported in %s"
+                m.Name
+                (ModelExecutionUnits.describe m.Unit)
+                (ModelExecutionUnits.describe m.Reported)
 
 // ─── Phase 599 — batch fit submission types ─────────────────────────────
 //

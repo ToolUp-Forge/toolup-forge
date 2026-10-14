@@ -1767,9 +1767,6 @@ type RefusalResidue = {
     BudgetUnit: string
     NotFoundId: string
     ScoreReason: string
-    /// Per verdict of a `gateFailed` refusal, in order, the unit it is
-    /// stated in (§5.4). The platform's verdict record carries no unit.
-    GateFailedUnits: string option list
 }
 
 /// Members of a `fitSubmission` the platform's submission record does
@@ -1784,9 +1781,6 @@ type SubmissionResidue = {
     /// submission record pins by `(datasetId, version)` alone, which
     /// §5.2 declares fully conformant.
     VintageContentRef: SpecContentRef option
-    /// Per gate, in submission order, the unit its threshold is stated in
-    /// (§5.3). The platform's gate record carries no unit.
-    GateUnits: string option list
 }
 
 /// Members of a `submissionReceipt` the platform's receipt record does
@@ -1810,16 +1804,15 @@ type ReceiptResidue = {
 /// its format, plus timing and cost. What forge's own registry retains
 /// for a given outcome is a separate question from what this face can
 /// express — the residue was only ever about the latter.)_
+///
+/// _(Phase 1011 removed `DiagnosticUnits` and `GateVerdictUnits`: the
+/// outcome record carries its diagnostics' units beside them and each
+/// verdict carries its unit, as the gate and submission records do, so the
+/// units the corpus states are no longer a gap on any family.)_
 type OutcomeResidue = {
     /// The outcome record keys the vintage as a composed string, which
     /// cannot express a content ref.
     VintageContentRef: SpecContentRef option
-    /// The unit each diagnostic is stated in (§5.4). The outcome record's
-    /// diagnostics are bare numbers.
-    DiagnosticUnits: (string * string) list
-    /// Per verdict, in order, the unit it is stated in (§5.4). The
-    /// platform's verdict record carries no unit.
-    GateVerdictUnits: string option list
 }
 
 type QueryResidue = {
@@ -1905,26 +1898,19 @@ module Bridge =
     /// `policyRefused`); it was kept as a named list so that the next
     /// class registered against the specification would land here first.
     ///
-    /// **`gateUnitMismatch`** is that class (Phase 1010): registered after
-    /// version 1 for §5.3's gate rule, and the platform's DU has no case
-    /// for it — nor do its gate records carry the units the rule compares.
-    /// The class still round-trips through the specification model here;
-    /// what is recorded is that the platform's face cannot express it.
-    let unmappedRefusalClasses: string list = [ "gateUnitMismatch" ]
+    /// **`gateUnitMismatch`** was that class: registered after version 1
+    /// for §5.3's gate rule, declared here by Phase 1010 when the platform's
+    /// DU had no case for it, and closed by Phase 1011, which gave the DU
+    /// the case and the gate, verdict and outcome records the units the rule
+    /// compares. Empty again, and still a named list for the next class.
+    let unmappedRefusalClasses: string list = []
 
     let emptyRefusalResidue = {
         UnknownProviderKnown = []
         BudgetUnit = ""
         NotFoundId = ""
         ScoreReason = ""
-        GateFailedUnits = []
     }
-
-    /// The unit a residue records at a position, or none. Positional
-    /// rather than zipped, so a residue built for a document that states
-    /// no units reads as stating none.
-    let private unitAt (units: string option list) (index: int) =
-        List.tryItem index units |> Option.flatten
 
     let toRefusal (r: SpecRefusal) : (ModelExecutionRefusal * RefusalResidue) option =
         match r with
@@ -1995,20 +1981,17 @@ module Bridge =
                     |> List.map (fun v -> {
                         Name = v.Name
                         Threshold = v.Threshold
+                        Unit = v.Unit
                         Direction = ofWireDirection v.Direction
                         Observed = v.Observed
                         Passed = v.Passed
                     })
                 ),
-                {
-                    emptyRefusalResidue with
-                        GateFailedUnits = verdicts |> List.map _.Unit
-                }
+                emptyRefusalResidue
             )
         | PolicyRefused rule -> Some(ModelExecutionRefusal.PolicyRefused rule, emptyRefusalResidue)
-        // A carry gap, declared in `unmappedRefusalClasses`: the DU has no
-        // case for it.
-        | GateUnitMismatch _ -> None
+        | GateUnitMismatch(name, unit, reported) ->
+            Some(ModelExecutionRefusal.GateUnitMismatch(name, unit, reported), emptyRefusalResidue)
         // Unmapped on purpose: §5.7.2 rule 2 says a reader treats an
         // unregistered class AS `unspecified`, so the platform's DU is
         // right not to have a case for it. It is not a carry gap — it is
@@ -2042,10 +2025,10 @@ module Bridge =
         | ModelExecutionRefusal.GateFailed verdicts ->
             GateFailed(
                 verdicts
-                |> List.mapi (fun i v -> {
+                |> List.map (fun v -> {
                     Name = v.Name
                     Threshold = v.Threshold
-                    Unit = unitAt r.GateFailedUnits i
+                    Unit = v.Unit
                     Direction = toWireDirection v.Direction
                     Observed = v.Observed
                     Passed = v.Passed
@@ -2054,6 +2037,7 @@ module Bridge =
         | ModelExecutionRefusal.PolicyRefused rule -> PolicyRefused rule
         | ModelExecutionRefusal.StorageFailure reason -> StorageFailure reason
         | ModelExecutionRefusal.Unexpected message -> Unspecified message
+        | ModelExecutionRefusal.GateUnitMismatch(name, unit, reported) -> GateUnitMismatch(name, unit, reported)
     // ── fit submission ───────────────────────────────────────────────
 
     let toSubmission (s: SpecFitSubmission) : ModelExecutionFitSubmission * SubmissionResidue =
@@ -2075,6 +2059,7 @@ module Bridge =
                 |> List.map (fun g -> {
                     Name = g.Name
                     Threshold = g.Threshold
+                    Unit = g.Unit
                     Direction = ofWireDirection g.Direction
                 })
             SubmitterClass =
@@ -2085,7 +2070,6 @@ module Bridge =
 
         let residue: SubmissionResidue = {
             VintageContentRef = s.Vintage.ContentRef
-            GateUnits = s.Gates |> List.map _.Unit
         }
 
         forge, residue
@@ -2103,10 +2087,10 @@ module Bridge =
         Seed = f.Seed
         Gates =
             f.Gates
-            |> List.mapi (fun i g -> {
+            |> List.map (fun g -> {
                 Name = g.Name
                 Threshold = g.Threshold
-                Unit = unitAt r.GateUnits i
+                Unit = g.Unit
                 Direction = toWireDirection g.Direction
             })
         SubmitterClass = SubmitterClass.label f.SubmitterClass
@@ -2200,11 +2184,13 @@ module Bridge =
             }
             Cost = o.Cost |> Option.map (fun c -> { Unit = c.Unit; Amount = c.Amount })
             Diagnostics = Map.ofList o.Diagnostics
+            DiagnosticUnits = Map.ofList o.DiagnosticUnits
             GateVerdicts =
                 o.GateVerdicts
                 |> List.map (fun v -> {
                     Name = v.Name
                     Threshold = v.Threshold
+                    Unit = v.Unit
                     Direction = ofWireDirection v.Direction
                     Observed = v.Observed
                     Passed = v.Passed
@@ -2216,8 +2202,6 @@ module Bridge =
 
         let residue: OutcomeResidue = {
             VintageContentRef = o.CompositeKey.Vintage.ContentRef
-            DiagnosticUnits = o.DiagnosticUnits
-            GateVerdictUnits = o.GateVerdicts |> List.map _.Unit
         }
 
         forge, residue
@@ -2248,13 +2232,13 @@ module Bridge =
             // A map's keys are data and the encoder sorts them, so the
             // list order recovered here is not load-bearing.
             Diagnostics = f.Diagnostics |> Map.toList
-            DiagnosticUnits = r.DiagnosticUnits
+            DiagnosticUnits = f.DiagnosticUnits |> Map.toList
             GateVerdicts =
                 f.GateVerdicts
-                |> List.mapi (fun i v -> {
+                |> List.map (fun v -> {
                     Name = v.Name
                     Threshold = v.Threshold
-                    Unit = unitAt r.GateVerdictUnits i
+                    Unit = v.Unit
                     Direction = toWireDirection v.Direction
                     Observed = v.Observed
                     Passed = v.Passed
@@ -2976,6 +2960,7 @@ let private carryGapTests =
                     "ProviderVersion"
                     "Artifact"
                     "Diagnostics"
+                    "DiagnosticUnits"
                     "GateVerdicts"
                     "Status"
                     "Timing"
@@ -3001,6 +2986,20 @@ let private carryGapTests =
                 "the timing record moved"
 
             Expect.equal (recordFieldNames<ModelExecutionCost> ()) [ "Unit"; "Amount" ] "the cost record moved"
+        }
+
+        test "the gate and verdict records carry the unit the gate rule compares" {
+            // Phase 1011 widened both, so each is pinned: a unit dropped from
+            // either would put §5.3's units back in a residue, or nowhere.
+            Expect.equal
+                (recordFieldNames<ModelExecutionGate> ())
+                [ "Name"; "Threshold"; "Unit"; "Direction" ]
+                "the gate record moved — re-derive the submission bridge against the specification's gate"
+
+            Expect.equal
+                (recordFieldNames<ModelExecutionGateVerdict> ())
+                [ "Name"; "Threshold"; "Unit"; "Direction"; "Observed"; "Passed" ]
+                "the verdict record moved — re-derive the outcome and refusal bridges against the specification's gateVerdict"
         }
 
         test "the receipt, query, page, score-request and dataset-version records are the ones the bridge maps" {
@@ -3054,13 +3053,13 @@ let private carryGapTests =
                     "PolicyRefused"
                     "StorageFailure"
                     "Unexpected"
+                    "GateUnitMismatch"
                 ])
                 "the refusal DU moved — re-derive Bridge.unmappedRefusalClasses against §5.7.1"
 
-            Expect.equal
+            Expect.isEmpty
                 Bridge.unmappedRefusalClasses
-                [ "gateUnitMismatch" ]
-                "the declared gap is exactly the class registered after version 1 (Phase 1010); any other entry is a class the DU stopped covering"
+                "every registered class has a case (Phase 1011 closed gateUnitMismatch); an entry here is a class the DU stopped covering"
         }
 
         test "every class the specification registers is expressed by the platform's DU or declared as a gap" {

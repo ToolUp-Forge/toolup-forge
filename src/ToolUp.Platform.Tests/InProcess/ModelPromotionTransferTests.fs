@@ -158,10 +158,12 @@ let private promotedArtifact: PromotedArtifact = {
             ByteLength = 4096L
         }
         Diagnostics = Map [ "holdout-r2", 0.71 ]
+        DiagnosticUnits = Map.empty
         GateVerdicts = [
             {
                 Name = "holdout-r2"
                 Threshold = 0.6
+                Unit = None
                 Direction = GateDirection.AtLeast
                 Observed = 0.71
                 Passed = true
@@ -198,6 +200,7 @@ let private heldArtifact (contentHash: string) (status: ModelArtifactStatus) : M
         ByteLength = 4096L
     }
     Diagnostics = Map.empty
+    DiagnosticUnits = Map.empty
     GateVerdicts = []
     Status = status
     Annotations = Map.empty

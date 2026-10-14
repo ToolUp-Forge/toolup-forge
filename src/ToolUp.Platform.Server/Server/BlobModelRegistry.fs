@@ -54,6 +54,11 @@ type private StoredModelArtifact = {
     CompositeKey: FitCompositeKey
     ArtifactRef: ArtifactRef
     Diagnostics: Map<string, float>
+    /// Phase 1011 — like `Attachments`, a blob written before this field
+    /// existed deserialises it as `null`; `toArtifact` reads that as the
+    /// empty map (the record stated no units, because none could be stated).
+    /// Its verdicts' `Unit` reads as `None` for the same reason.
+    DiagnosticUnits: Map<string, string>
     GateVerdicts: GateVerdict list
     Status: string
     Annotations: Map<string, string>
@@ -138,6 +143,12 @@ type BlobModelRegistry
                 else
                     stored.Attachments
 
+            let diagnosticUnits =
+                if isNull (box stored.DiagnosticUnits) then
+                    Map.empty
+                else
+                    stored.DiagnosticUnits
+
             let corrupt = attachments |> List.tryFind (ProvenanceAttachment.hashVerified >> not)
 
             match ModelArtifactStatus.parse stored.Status with
@@ -162,6 +173,7 @@ type BlobModelRegistry
                         ScopeId = dobj.ScopeId
                         ArtifactRef = stored.ArtifactRef
                         Diagnostics = stored.Diagnostics
+                        DiagnosticUnits = diagnosticUnits
                         GateVerdicts = stored.GateVerdicts
                         Status = status
                         Annotations = stored.Annotations
@@ -182,6 +194,7 @@ type BlobModelRegistry
         CompositeKey = artifact.CompositeKey
         ArtifactRef = artifact.ArtifactRef
         Diagnostics = artifact.Diagnostics
+        DiagnosticUnits = artifact.DiagnosticUnits
         GateVerdicts = artifact.GateVerdicts
         Status = ModelArtifactStatus.name status
         Annotations = artifact.Annotations
@@ -294,6 +307,7 @@ type BlobModelRegistry
                     CompositeKey = outcome.CompositeKey
                     ArtifactRef = outcome.ArtifactRef
                     Diagnostics = outcome.Diagnostics
+                    DiagnosticUnits = outcome.DiagnosticUnits
                     GateVerdicts = outcome.GateVerdicts
                     Status = ModelArtifactStatus.name status
                     Annotations = annotations

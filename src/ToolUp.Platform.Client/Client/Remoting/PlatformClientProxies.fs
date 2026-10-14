@@ -618,6 +618,7 @@ module PlatformClientProxies =
             JsonEncode.record [
                 "Name", JsonEncode.string value.Name
                 "Threshold", JsonEncode.float value.Threshold
+                "Unit", (JsonEncode.option JsonEncode.string) value.Unit
                 "Direction", JsonEncode.string value.Direction
             ]
 
@@ -3269,15 +3270,17 @@ module PlatformClientProxies =
 
     /// Generated JSON decoder for `ModelExecutionGateVerdict` — members by name, cases by case name, read off the type's own shape.
     let decodeModelExecutionGateVerdict: JsonDecoder<ModelExecutionGateVerdict> =
-        JsonDecode.succeed (fun name threshold direction observed passed -> ({
+        JsonDecode.succeed (fun name threshold unit direction observed passed -> ({
             Name = name
             Threshold = threshold
+            Unit = unit
             Direction = direction
             Observed = observed
             Passed = passed
         }: ModelExecutionGateVerdict))
         |> JsonDecode.apply (JsonDecode.field "Name" JsonDecode.asString)
         |> JsonDecode.apply (JsonDecode.field "Threshold" JsonDecode.asFloat)
+        |> JsonDecode.apply (JsonDecode.optionalField "Unit" JsonDecode.asString)
         |> JsonDecode.apply (JsonDecode.field "Direction" JsonDecode.asString)
         |> JsonDecode.apply (JsonDecode.field "Observed" JsonDecode.asFloat)
         |> JsonDecode.apply (JsonDecode.field "Passed" JsonDecode.asBool)
@@ -3314,6 +3317,15 @@ module PlatformClientProxies =
             | "PolicyRefused" -> Some(JsonDecode.payload (JsonDecode.asString |> JsonDecode.map ModelExecutionRefusal.PolicyRefused))
             | "StorageFailure" -> Some(JsonDecode.payload (JsonDecode.asString |> JsonDecode.map ModelExecutionRefusal.StorageFailure))
             | "Unexpected" -> Some(JsonDecode.payload (JsonDecode.asString |> JsonDecode.map ModelExecutionRefusal.Unexpected))
+            | "GateUnitMismatch" ->
+                Some(
+                    JsonDecode.fields
+                        3
+                        (JsonDecode.succeed (fun name unit reported -> ModelExecutionRefusal.GateUnitMismatch(name, unit, reported))
+                         |> JsonDecode.apply (JsonDecode.index 0 JsonDecode.asString)
+                         |> JsonDecode.apply (JsonDecode.index 1 (JsonDecode.option JsonDecode.asString))
+                         |> JsonDecode.apply (JsonDecode.index 2 (JsonDecode.option JsonDecode.asString)))
+                )
             | _ -> None)
 
     /// Generated JSON decoder for `ModelExecutionReceipt` — members by name, cases by case name, read off the type's own shape.
@@ -3364,7 +3376,7 @@ module PlatformClientProxies =
 
     /// Generated JSON decoder for `ModelExecutionOutcome` — members by name, cases by case name, read off the type's own shape.
     let decodeModelExecutionOutcome: JsonDecoder<ModelExecutionOutcome> =
-        JsonDecode.succeed (fun compositeKeyHash specHash datasetVersion seed providerId providerVersion artifact diagnostics gateVerdicts status timing cost annotations registeredAt -> ({
+        JsonDecode.succeed (fun compositeKeyHash specHash datasetVersion seed providerId providerVersion artifact diagnostics diagnosticUnits gateVerdicts status timing cost annotations registeredAt -> ({
             CompositeKeyHash = compositeKeyHash
             SpecHash = specHash
             DatasetVersion = datasetVersion
@@ -3373,6 +3385,7 @@ module PlatformClientProxies =
             ProviderVersion = providerVersion
             Artifact = artifact
             Diagnostics = diagnostics
+            DiagnosticUnits = diagnosticUnits
             GateVerdicts = gateVerdicts
             Status = status
             Timing = timing
@@ -3388,6 +3401,7 @@ module PlatformClientProxies =
         |> JsonDecode.apply (JsonDecode.field "ProviderVersion" JsonDecode.asString)
         |> JsonDecode.apply (JsonDecode.optionalField "Artifact" decodeModelExecutionArtifactRef)
         |> JsonDecode.apply (JsonDecode.field "Diagnostics" (JsonDecode.asMap JsonDecode.Key.string JsonDecode.asFloat))
+        |> JsonDecode.apply (JsonDecode.field "DiagnosticUnits" (JsonDecode.asMap JsonDecode.Key.string JsonDecode.asString))
         |> JsonDecode.apply (JsonDecode.field "GateVerdicts" (JsonDecode.list decodeModelExecutionGateVerdict))
         |> JsonDecode.apply (JsonDecode.field "Status" JsonDecode.asString)
         |> JsonDecode.apply (JsonDecode.field "Timing" decodeModelExecutionTiming)

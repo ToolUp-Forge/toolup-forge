@@ -78,10 +78,12 @@ let private outcomeFor (specHash: string) (seed: int64) : ModelExecutionOutcome 
             Format = None
         }
     Diagnostics = Map.ofList [ "holdout-r2", 0.71 ]
+    DiagnosticUnits = Map.empty
     GateVerdicts = [
         {
             Name = "holdout-r2"
             Threshold = 0.6
+            Unit = None
             Direction = "AtLeast"
             Observed = 0.71
             Passed = true
@@ -2373,6 +2375,7 @@ type private MemoryModelRegistry(initial: (string * ModelArtifactStatus) list) =
             ByteLength = 1L
         }
         Diagnostics = Map.empty
+        DiagnosticUnits = Map.empty
         GateVerdicts = []
         Status = status
         Annotations = Map.empty

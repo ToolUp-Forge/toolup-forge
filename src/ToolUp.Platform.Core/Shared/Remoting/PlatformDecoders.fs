@@ -2595,18 +2595,20 @@ module PlatformDecoders =
 
     /// Generated decoder for `ModelExecutionGateVerdict` — one combinator per field or case, read off the type's own shape.
     let modelExecutionGateVerdict: Decoder<ModelExecutionGateVerdict> =
-        Decode.succeed (fun name threshold direction observed passed -> ({
+        Decode.succeed (fun name threshold unit direction observed passed -> ({
             Name = name
             Threshold = threshold
+            Unit = unit
             Direction = direction
             Observed = observed
             Passed = passed
         }: ModelExecutionGateVerdict))
         |> Decode.apply (Decode.field "Name" 0 Decode.asString)
         |> Decode.apply (Decode.field "Threshold" 1 Decode.asFloat)
-        |> Decode.apply (Decode.field "Direction" 2 Decode.asString)
-        |> Decode.apply (Decode.field "Observed" 3 Decode.asFloat)
-        |> Decode.apply (Decode.field "Passed" 4 Decode.asBool)
+        |> Decode.apply (Decode.field "Unit" 2 (Decode.option Decode.asString))
+        |> Decode.apply (Decode.field "Direction" 3 Decode.asString)
+        |> Decode.apply (Decode.field "Observed" 4 Decode.asFloat)
+        |> Decode.apply (Decode.field "Passed" 5 Decode.asBool)
 
     /// Generated decoder for `ModelExecutionRefusal` — one combinator per field or case, read off the type's own shape.
     let modelExecutionRefusal: Decoder<ModelExecutionRefusal> =
@@ -2640,6 +2642,15 @@ module PlatformDecoders =
             | 12 -> Some(Decode.payload (Decode.asString |> Decode.map ModelExecutionRefusal.PolicyRefused))
             | 13 -> Some(Decode.payload (Decode.asString |> Decode.map ModelExecutionRefusal.StorageFailure))
             | 14 -> Some(Decode.payload (Decode.asString |> Decode.map ModelExecutionRefusal.Unexpected))
+            | 15 ->
+                Some(
+                    Decode.fields
+                        3
+                        (Decode.succeed (fun name unit reported -> ModelExecutionRefusal.GateUnitMismatch(name, unit, reported))
+                         |> Decode.apply (Decode.field "name" 0 Decode.asString)
+                         |> Decode.apply (Decode.field "unit" 1 (Decode.option Decode.asString))
+                         |> Decode.apply (Decode.field "reported" 2 (Decode.option Decode.asString)))
+                )
             | _ -> None)
 
     /// Generated decoder for `ModelExecutionReceipt` — one combinator per field or case, read off the type's own shape.
@@ -2690,7 +2701,7 @@ module PlatformDecoders =
 
     /// Generated decoder for `ModelExecutionOutcome` — one combinator per field or case, read off the type's own shape.
     let modelExecutionOutcome: Decoder<ModelExecutionOutcome> =
-        Decode.succeed (fun compositeKeyHash specHash datasetVersion seed providerId providerVersion artifact diagnostics gateVerdicts status timing cost annotations registeredAt -> ({
+        Decode.succeed (fun compositeKeyHash specHash datasetVersion seed providerId providerVersion artifact diagnostics diagnosticUnits gateVerdicts status timing cost annotations registeredAt -> ({
             CompositeKeyHash = compositeKeyHash
             SpecHash = specHash
             DatasetVersion = datasetVersion
@@ -2699,6 +2710,7 @@ module PlatformDecoders =
             ProviderVersion = providerVersion
             Artifact = artifact
             Diagnostics = diagnostics
+            DiagnosticUnits = diagnosticUnits
             GateVerdicts = gateVerdicts
             Status = status
             Timing = timing
@@ -2714,12 +2726,13 @@ module PlatformDecoders =
         |> Decode.apply (Decode.field "ProviderVersion" 5 Decode.asString)
         |> Decode.apply (Decode.field "Artifact" 6 (Decode.option modelExecutionArtifactRef))
         |> Decode.apply (Decode.field "Diagnostics" 7 (Decode.asMap Decode.asString Decode.asFloat))
-        |> Decode.apply (Decode.field "GateVerdicts" 8 (Decode.list modelExecutionGateVerdict))
-        |> Decode.apply (Decode.field "Status" 9 Decode.asString)
-        |> Decode.apply (Decode.field "Timing" 10 modelExecutionTiming)
-        |> Decode.apply (Decode.field "Cost" 11 (Decode.option modelExecutionCost))
-        |> Decode.apply (Decode.field "Annotations" 12 (Decode.asMap Decode.asString Decode.asString))
-        |> Decode.apply (Decode.field "RegisteredAt" 13 Decode.asDateTimeOffset)
+        |> Decode.apply (Decode.field "DiagnosticUnits" 8 (Decode.asMap Decode.asString Decode.asString))
+        |> Decode.apply (Decode.field "GateVerdicts" 9 (Decode.list modelExecutionGateVerdict))
+        |> Decode.apply (Decode.field "Status" 10 Decode.asString)
+        |> Decode.apply (Decode.field "Timing" 11 modelExecutionTiming)
+        |> Decode.apply (Decode.field "Cost" 12 (Decode.option modelExecutionCost))
+        |> Decode.apply (Decode.field "Annotations" 13 (Decode.asMap Decode.asString Decode.asString))
+        |> Decode.apply (Decode.field "RegisteredAt" 14 Decode.asDateTimeOffset)
 
     /// Generated decoder for `ModelExecutionOutcomePage` — one combinator per field or case, read off the type's own shape.
     let modelExecutionOutcomePage: Decoder<ModelExecutionOutcomePage> =

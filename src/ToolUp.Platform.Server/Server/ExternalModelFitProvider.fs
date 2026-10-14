@@ -90,6 +90,12 @@ type ModelFitWireGate = {
     /// report a diagnostic under this name; it evaluates nothing.
     Name: string
     Threshold: float
+    /// Phase 1011 — the unit `Threshold` is stated in, as unit text, or
+    /// `None` where the gate states none. Written as `"unit"` only when the
+    /// gate states one, so a unit-free payload keeps exactly its bytes. The
+    /// worker evaluates nothing with it; it is carried so the worker can
+    /// report its diagnostic in the unit the gate was stated in.
+    Unit: string option
     /// `"AtLeast"` | `"AtMost"` — `GateDirection.name`.
     Direction: string
 }
@@ -178,6 +184,12 @@ type ModelFitArtifactDescriptor = {
     /// Diagnostics the worker measured, name → value. Forge stores and
     /// compares them; it never interprets them (plan D10).
     Diagnostics: Map<string, float>
+    /// Phase 1011 — the unit each diagnostic is stated in, name → unit
+    /// text, as `"diagnosticUnits"`. Optional on the wire and written only
+    /// when non-empty, so a worker that states no units, and every
+    /// descriptor written before units could be stated, reads as stating
+    /// none. Every key must name a member of `Diagnostics`.
+    DiagnosticUnits: Map<string, string>
     /// Worker-reported compute duration. A self-report, like every other
     /// `FitOutcome.DurationMs` — never this process's wall clock, which
     /// would fold queue latency into the fit.
@@ -223,6 +235,11 @@ module ModelFitWorkSpec =
         writer.WriteStartObject()
         writer.WriteString("name", gate.Name)
         writer.WriteNumber("threshold", gate.Threshold)
+
+        match gate.Unit with
+        | Some unit -> writer.WriteString("unit", unit)
+        | None -> ()
+
         writer.WriteString("direction", gate.Direction)
         writer.WriteEndObject()
 
@@ -291,6 +308,9 @@ module ModelFitWorkSpec =
                 writer.WriteNumber(key, value)
 
             writer.WriteEndObject()
+
+            if not descriptor.DiagnosticUnits.IsEmpty then
+                writeStringMap writer "diagnosticUnits" descriptor.DiagnosticUnits
 
             writer.WriteNumber("durationMs", descriptor.DurationMs)
             writer.WriteNumber("costUnits", descriptor.CostUnits)
@@ -399,6 +419,14 @@ module ModelFitWorkSpec =
             |> allOk
             |> Result.map Map.ofList
 
+    /// An optional string member: absent or `null` is `None`.
+    let private readOptionalString (element: JsonElement) (name: string) : Result<string option, string> =
+        match element.TryGetProperty name with
+        | false, _ -> Ok None
+        | true, value when value.ValueKind = JsonValueKind.Null -> Ok None
+        | true, value when value.ValueKind = JsonValueKind.String -> Ok(Some(value.GetString()))
+        | true, _ -> Error $"field '%s{name}' is not a string"
+
     let private readGates (element: JsonElement) : Result<ModelFitWireGate list, string> =
         match element.TryGetProperty "gates" with
         | false, _ -> Ok []
@@ -414,14 +442,16 @@ module ModelFitWorkSpec =
                         requireString gate "name", requireNumber gate "threshold", requireString gate "direction"
                     with
                     | Ok name, Ok threshold, Ok direction ->
-                        match GateDirection.parse direction with
-                        | Some _ ->
+                        match GateDirection.parse direction, readOptionalString gate "unit" with
+                        | _, Error e -> Error $"in 'gates': %s{e}"
+                        | Some _, Ok unit ->
                             Ok {
                                 ModelFitWireGate.Name = name
                                 ModelFitWireGate.Threshold = threshold
+                                ModelFitWireGate.Unit = unit
                                 ModelFitWireGate.Direction = direction
                             }
-                        | None ->
+                        | None, Ok _ ->
                             Error $"gate '%s{name}' has direction '%s{direction}'; expected one of AtLeast, AtMost"
                     | Error e, _, _
                     | _, Error e, _
@@ -555,22 +585,34 @@ module ModelFitWorkSpec =
                 else
                     match
                         readNumberMap root "diagnostics",
+                        readStringMap root "diagnosticUnits",
                         requireInt64 root "durationMs",
                         requireNumber root "costUnits"
                     with
-                    | Ok diagnostics, Ok durationMs, Ok costUnits ->
-                        Ok {
-                            ModelFitArtifactDescriptor.Envelope = envelope
-                            ModelFitArtifactDescriptor.ArtifactId = artifactId
-                            ModelFitArtifactDescriptor.ContentHash = contentHash
-                            ModelFitArtifactDescriptor.ByteLength = byteLength
-                            ModelFitArtifactDescriptor.Diagnostics = diagnostics
-                            ModelFitArtifactDescriptor.DurationMs = durationMs
-                            ModelFitArtifactDescriptor.CostUnits = costUnits
-                        }
-                    | Error e, _, _
-                    | _, Error e, _
-                    | _, _, Error e -> Error e
+                    | Ok diagnostics, Ok diagnosticUnits, Ok durationMs, Ok costUnits ->
+                        // Phase 1011 — a unit for a diagnostic the worker did
+                        // not report says nothing about anything it measured.
+                        match
+                            diagnosticUnits
+                            |> Map.tryFindKey (fun name _ -> not (diagnostics.ContainsKey name))
+                        with
+                        | Some orphan ->
+                            Error $"field 'diagnosticUnits' names '%s{orphan}', which is not a member of 'diagnostics'"
+                        | None ->
+                            Ok {
+                                ModelFitArtifactDescriptor.Envelope = envelope
+                                ModelFitArtifactDescriptor.ArtifactId = artifactId
+                                ModelFitArtifactDescriptor.ContentHash = contentHash
+                                ModelFitArtifactDescriptor.ByteLength = byteLength
+                                ModelFitArtifactDescriptor.Diagnostics = diagnostics
+                                ModelFitArtifactDescriptor.DiagnosticUnits = diagnosticUnits
+                                ModelFitArtifactDescriptor.DurationMs = durationMs
+                                ModelFitArtifactDescriptor.CostUnits = costUnits
+                            }
+                    | Error e, _, _, _
+                    | _, Error e, _, _
+                    | _, _, Error e, _
+                    | _, _, _, Error e -> Error e
             | Error e, _, _, _
             | _, Error e, _, _
             | _, _, Error e, _
@@ -596,6 +638,7 @@ module ModelFitWorkSpec =
                     {
                         ModelFitWireGate.Name = gate.Name
                         ModelFitWireGate.Threshold = gate.Threshold
+                        ModelFitWireGate.Unit = gate.Unit
                         ModelFitWireGate.Direction = GateDirection.name gate.Direction
                     }
             ]
@@ -648,6 +691,11 @@ type ExternalFitFailure =
     /// The worker succeeded and returned a result reference that is not a
     /// readable `modelfit/v1` artifact descriptor.
     | MalformedArtifact of reason: string
+    /// Phase 1011 — the worker reported a requested gate's diagnostic in
+    /// another unit than the gate was stated in (or one side stated none),
+    /// so the gate was not evaluated and no outcome is produced. Terminal —
+    /// the worker reports the units it reports.
+    | GateUnitMismatch of GateUnitMismatch
 
 [<RequireQualifiedAccess>]
 module ExternalFitFailure =
@@ -681,6 +729,8 @@ module ExternalFitFailure =
                 budget
         | ExternalFitFailure.MalformedArtifact reason ->
             sprintf "the worker reported success but its artifact descriptor is unreadable: %s" reason
+        | ExternalFitFailure.GateUnitMismatch mismatch ->
+            ModelFitError.describe (ModelFitError.GateUnitMismatch mismatch)
 
     /// `true` when re-submitting the identical request could plausibly
     /// succeed. Read straight off the backend's own flag where there is
@@ -696,7 +746,8 @@ module ExternalFitFailure =
         | ExternalFitFailure.ScopeMismatch _
         | ExternalFitFailure.DatasetUnavailable _
         | ExternalFitFailure.Cancelled
-        | ExternalFitFailure.MalformedArtifact _ -> false
+        | ExternalFitFailure.MalformedArtifact _
+        | ExternalFitFailure.GateUnitMismatch _ -> false
 
 /// The exception `IModelFitProvider.Fit` raises when an external fit
 /// fails.
@@ -1076,31 +1127,50 @@ type ExternalModelFitProvider
                 | _ -> return! wait handle deadline
     }
 
-    let toOutcome (request: FitRequest) (resultRef: string) : Result<FitOutcome, ExternalFitFailure> =
+    /// The outcome a worker's descriptor describes. With `evaluateGates`,
+    /// the request's gates are evaluated here (449.C) and a unit mismatch is
+    /// refused; without it the verdicts are left empty for the fit envelope,
+    /// which owns them and evaluates them itself — evaluating twice on that
+    /// path would decide one question in two places.
+    let toOutcome
+        (evaluateGates: bool)
+        (request: FitRequest)
+        (resultRef: string)
+        : Result<FitOutcome, ExternalFitFailure> =
         match ModelFitWorkSpec.parseDescriptor resultRef with
         | Error reason -> Error(ExternalFitFailure.MalformedArtifact reason)
         | Ok descriptor ->
-            Ok {
-                CompositeKey =
-                    FitCompositeKey.compute
-                        request.SpecRef.SpecHash
-                        (DatasetVersionRef.key request.DatasetVersion)
-                        request.Seed
-                        options.Kind
-                        options.ProviderVersion
-                ArtifactRef = {
-                    ArtifactId = descriptor.ArtifactId
-                    ContentHash = descriptor.ContentHash
-                    ByteLength = descriptor.ByteLength
+            let verdicts =
+                if evaluateGates then
+                    Gate.evaluateAll descriptor.Diagnostics descriptor.DiagnosticUnits request.Gates
+                else
+                    Ok []
+
+            match verdicts with
+            | Error mismatch -> Error(ExternalFitFailure.GateUnitMismatch mismatch)
+            | Ok verdicts ->
+                Ok {
+                    CompositeKey =
+                        FitCompositeKey.compute
+                            request.SpecRef.SpecHash
+                            (DatasetVersionRef.key request.DatasetVersion)
+                            request.Seed
+                            options.Kind
+                            options.ProviderVersion
+                    ArtifactRef = {
+                        ArtifactId = descriptor.ArtifactId
+                        ContentHash = descriptor.ContentHash
+                        ByteLength = descriptor.ByteLength
+                    }
+                    Diagnostics = descriptor.Diagnostics
+                    DiagnosticUnits = descriptor.DiagnosticUnits
+                    // 449.C — evaluated against the request's gates, from the
+                    // worker's diagnostics. A gate whose diagnostic the worker
+                    // did not report fails closed.
+                    GateVerdicts = verdicts
+                    DurationMs = descriptor.DurationMs
+                    CostUnits = descriptor.CostUnits
                 }
-                Diagnostics = descriptor.Diagnostics
-                // 449.C — evaluated HERE, against the request's gates, from
-                // the worker's diagnostics. A gate whose diagnostic the
-                // worker did not report fails closed.
-                GateVerdicts = Gate.evaluateAll descriptor.Diagnostics request.Gates
-                DurationMs = descriptor.DurationMs
-                CostUnits = descriptor.CostUnits
-            }
 
     /// The minimum composition: no handle store (so no push path — every
     /// fit resolves by poll) and no logger.
@@ -1121,8 +1191,11 @@ type ExternalModelFitProvider
 
     /// Run one fit on the external worker, reporting a typed failure
     /// rather than raising. The surface a caller composing this provider
-    /// directly should use; `IModelFitProvider.Fit` wraps it.
-    member _.FitExternally(request: FitRequest) : Async<Result<FitOutcome, ExternalFitFailure>> = async {
+    /// directly should use; it evaluates the request's gates itself.
+    member this.FitExternally(request: FitRequest) : Async<Result<FitOutcome, ExternalFitFailure>> =
+        this.Settle(request, true)
+
+    member private _.Settle(request: FitRequest, evaluateGates: bool) : Async<Result<FitOutcome, ExternalFitFailure>> = async {
         if not (List.contains ModelFitWorkSpec.Kind options.AcceptedEnvelopes) then
             // Refused before the payload is built, let alone submitted.
             return Error(ExternalFitFailure.EnvelopeUnsupported(ModelFitWorkSpec.Kind, options.AcceptedEnvelopes))
@@ -1188,7 +1261,7 @@ type ExternalModelFitProvider
                     | Error failure -> return Error failure
                     | Ok(ExternalOutcome.Succeeded resultRef) ->
                         do! report (Some 1.0) "external fit complete"
-                        return toOutcome request resultRef
+                        return toOutcome evaluateGates request resultRef
                     | Ok(ExternalOutcome.Failed error) -> return Error(ExternalFitFailure.WorkerFailed error)
                     | Ok ExternalOutcome.Cancelled -> return Error ExternalFitFailure.Cancelled
                     | Ok other ->
@@ -1208,7 +1281,11 @@ type ExternalModelFitProvider
         member _.DeclareGates() = options.DeclaredGates
 
         member this.Fit(request: FitRequest) = async {
-            let! result = this.FitExternally request
+            // The envelope owns the verdicts and evaluates them, units
+            // first, so a unit mismatch is refused there as a terminal
+            // `ModelFitError.GateUnitMismatch` rather than raised here as a
+            // retryable provider failure.
+            let! result = this.Settle(request, false)
 
             match result with
             | Ok outcome -> return outcome

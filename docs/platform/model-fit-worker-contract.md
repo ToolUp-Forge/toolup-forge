@@ -75,6 +75,10 @@ The submit request's shape (URLs, field names, auth header) is your service's bu
 
 `direction` is `"AtLeast"` or `"AtMost"` — no other value is valid, and an unrecognised one is refused rather than guessed at.
 
+A gate may also carry `"unit"`, the unit its threshold is stated in, as unit text (for example `"kg"`, `"m/s"`, or `"1"` for
+a dimensionless ratio). The member is present only when the gate states a unit, so a payload whose gates state none is
+exactly the payload it was before units existed. It tells you which unit to report that diagnostic in (§4).
+
 ### Refusing an envelope you do not speak
 
 A worker declares which envelope versions it accepts. If a deployment points a `modelfit/v1` platform at a worker that only accepts `modelfit/v2`, the submission is **refused before the payload leaves the platform** — you will never see it. That check is deployment-side configuration (`ExternalFitOptions.AcceptedEnvelopes`), so tell your operator what your worker accepts.
@@ -130,12 +134,20 @@ When the fit finishes, the result you return is a **JSON artifact descriptor**, 
 | `contentHash` | **Lowercase** hex SHA-256 of the artifact bytes, exactly 64 characters. Uppercase is refused rather than normalised: the digest is carried as text, so two casings would name one artifact. |
 | `byteLength` | Artifact size in bytes. Non-negative. |
 | `diagnostics` | A flat object of `name → number`. This is where every measurement goes. |
+| `diagnosticUnits` | Optional. A flat object of `name → unit text`, stating the unit a diagnostic is in. Every key must name a member of `diagnostics`; a unit for a diagnostic you did not report makes the descriptor malformed. Omit it, or any entry, for a diagnostic that has no unit. |
 | `durationMs` | Your own compute duration, as an integer. Report *your* time, not elapsed wall-clock since submission — the platform must not have queue latency folded into a fit's cost. |
 | `costUnits` | Your own cost self-report. `0` is a fine answer. |
 
 **You do not evaluate the gates, and you must not return verdicts.** The platform thresholds `diagnostics` against the `gates` it sent, and it does so on its own side for a reason that has nothing to do with distrusting your arithmetic: a gate is the deployment's acceptance criterion, and a worker grading its own homework makes the criterion unfalsifiable.
 
 The corollary is the one to remember: **a gate whose diagnostic you did not report fails closed.** If the request asked for a gate on `auc` and your `diagnostics` has no `auc` key, that gate fails, with no observed value invented for it. Silence is never a pass. Report every diagnostic the `gates` array names, or expect the fit to be reported as gate-failing.
+
+**A gate is never compared across units.** The platform evaluates a gate only where its `unit` and the unit you state
+for its diagnostic in `diagnosticUnits` are the same text, or neither states one. Units are compared by text and never
+converted, so `g` and `kg` are different units. Otherwise the gate is not evaluated and the fit is refused, with nothing
+registered: a gate stating no unit against a diagnostic you stated one for, a gate stating a unit against a diagnostic
+you stated none for, and a gate stating a unit against a diagnostic you did not report. So report each gated diagnostic
+in the unit its gate states, and state no unit for a diagnostic whose gates state none.
 
 If the artifact descriptor cannot be read, the fit is refused as **malformed** even though your worker reported success. This is the most common integration mistake: a worker written against the generic external-compute prose returns a bare blob key (`"blob://fits/glm-4242.bin"`) because a `resultRef` is documented there as "a blob key, an artefact URI, a content hash". For `modelfit/v1` it is the descriptor above. A fit's outcome is irreducibly more than one string — an artifact needs a hash and a length to be checkable at all, and the gates cannot be evaluated without diagnostics.
 

@@ -933,10 +933,12 @@ let private referenceOutcome: ModelExecutionOutcome = {
             Format = None
         }
     Diagnostics = Map.ofList [ "aic", 812.5; "holdout-r2", 0.71; "vif-max", 3.25 ]
+    DiagnosticUnits = Map.empty
     GateVerdicts = [
         {
             Name = "vif-max"
             Threshold = 5.0
+            Unit = None
             Direction = "AtMost"
             Observed = 3.25
             Passed = true
@@ -944,6 +946,7 @@ let private referenceOutcome: ModelExecutionOutcome = {
         {
             Name = "holdout-r2"
             Threshold = 0.6
+            Unit = None
             Direction = "AtLeast"
             Observed = 0.71
             Passed = true
@@ -1237,10 +1240,12 @@ let referencePromotedArtifact: PromotedArtifact = {
             ByteLength = 4096L
         }
         Diagnostics = Map [ "aic", 812.5; "holdout-r2", 0.71; "vif-max", 3.25 ]
+        DiagnosticUnits = Map.empty
         GateVerdicts = [
             {
                 Name = "vif-max"
                 Threshold = 5.0
+                Unit = None
                 Direction = GateDirection.AtMost
                 Observed = 3.25
                 Passed = true
@@ -1248,6 +1253,7 @@ let referencePromotedArtifact: PromotedArtifact = {
             {
                 Name = "holdout-r2"
                 Threshold = 0.6
+                Unit = None
                 Direction = GateDirection.AtLeast
                 Observed = 0.71
                 Passed = true
@@ -1489,6 +1495,7 @@ let modelExecutionStateFor (vectorId: string) : ModelExecutionVectorState =
                         ByteLength = 4096L
                     }
                     Diagnostics = Map.empty
+                    DiagnosticUnits = Map.empty
                     GateVerdicts = []
                     Status = ModelArtifactStatus.Fitted
                     Annotations = Map.empty

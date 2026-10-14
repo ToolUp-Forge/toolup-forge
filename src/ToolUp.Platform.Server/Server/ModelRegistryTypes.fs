@@ -449,6 +449,10 @@ type ModelArtifact = {
     /// Provider-reported diagnostics carried from the fit. Forge stores +
     /// compares; it never interprets them (plan D10).
     Diagnostics: Map<string, float>
+    /// Phase 1011 — the unit each diagnostic is stated in (name → unit
+    /// text), carried from the fit. Empty where the provider stated none,
+    /// which is every artifact registered before units could be stated.
+    DiagnosticUnits: Map<string, string>
     /// Forge's gate verdicts carried from the fit.
     GateVerdicts: GateVerdict list
     /// Current lifecycle state. The only field a transition changes.

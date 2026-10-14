@@ -58,6 +58,13 @@ open System
 type ModelExecutionGate = {
     Name: string
     Threshold: float
+    /// Phase 1011 — the unit `Threshold` is stated in, as unit text (the
+    /// specification's canonical text of an admitted unit), or `None` where
+    /// the gate states none. Compared with the unit the provider reports for
+    /// the diagnostic by TEXT, never converted: a gate is evaluated only where
+    /// the two are the same text or both absent, and is otherwise refused as
+    /// `GateUnitMismatch`.
+    Unit: string option
     Direction: string
 }
 
@@ -65,6 +72,10 @@ type ModelExecutionGate = {
 type ModelExecutionGateVerdict = {
     Name: string
     Threshold: float
+    /// Phase 1011 — the unit both `Threshold` and `Observed` are in: the
+    /// gate's unit, for a verdict exists only where it equals the
+    /// diagnostic's.
+    Unit: string option
     Direction: string
     Observed: float
     Passed: bool
@@ -205,6 +216,31 @@ type ModelExecutionRefusal =
     /// An unmapped server-side exception, surfaced as data — the
     /// contract-proven "no bare exception on the wire" backstop.
     | Unexpected of message: string
+    /// Phase 1011 — a gate's unit is not the unit the provider reports the
+    /// diagnostic it reads in, so the gate was not evaluated: a comparison is
+    /// never made across units, and neither value is converted. `unit` is the
+    /// gate's and `reported` the diagnostic's; either is `None` where that side
+    /// states no unit — a gate stating none against a diagnostic that has one
+    /// is refused too, because a threshold read in a unit nobody stated can
+    /// silently pass.
+    ///
+    /// Declared LAST so the cases before it keep their positions on the
+    /// positional wire.
+    | GateUnitMismatch of name: string * unit: string option * reported: string option
+
+/// Phase 1011 — the one rule every gate-evaluating path applies to units.
+module ModelExecutionUnits =
+    /// A gate may be evaluated only where its unit and the unit reported for
+    /// its diagnostic are the same text, or both absent. Text equality is the
+    /// whole comparison: two texts name one unit exactly when they are
+    /// byte-identical, and nothing is converted.
+    let comparable (gateUnit: string option) (reported: string option) : bool = gateUnit = reported
+
+    /// A unit for a human-readable message: the text, or `no unit`.
+    let describe (unit: string option) : string =
+        match unit with
+        | Some text -> $"'{text}'"
+        | None -> "no unit"
 
 module ModelExecutionRefusal =
     /// Bound rather than inlined: F# interpolation holes cannot contain a
@@ -244,6 +280,8 @@ module ModelExecutionRefusal =
         | ModelExecutionRefusal.PolicyRefused rule -> $"refused by policy rule '{rule}'"
         | ModelExecutionRefusal.StorageFailure r -> $"storage failure: {r}"
         | ModelExecutionRefusal.Unexpected m -> $"unexpected server failure: {m}"
+        | ModelExecutionRefusal.GateUnitMismatch(name, unit, reported) ->
+            $"gate '{name}' is stated in {ModelExecutionUnits.describe unit} but its diagnostic is reported in {ModelExecutionUnits.describe reported}"
 
 /// One enqueued item's job reference — the poll handle for its fit run.
 ///
@@ -321,6 +359,12 @@ type ModelExecutionOutcome = {
     /// an absent artifact from a malformed one.
     Artifact: ModelExecutionArtifactRef option
     Diagnostics: Map<string, float>
+    /// Phase 1011 — the unit each diagnostic is stated in, as unit text,
+    /// keyed by the diagnostic's name. A diagnostic with no entry states no
+    /// unit, so an outcome whose provider states none carries the empty map.
+    /// Beside `Diagnostics` rather than inside it: the values keep their type,
+    /// and stating a unit interprets nothing.
+    DiagnosticUnits: Map<string, string>
     GateVerdicts: ModelExecutionGateVerdict list
     /// Lifecycle status as its stable case-name string
     /// (`ModelArtifactStatus.name`).

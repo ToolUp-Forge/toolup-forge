@@ -152,6 +152,7 @@ let private artifactOf (providerId: string) (status: ModelArtifactStatus) : Mode
             ByteLength = 16L
         }
         Diagnostics = Map.empty
+        DiagnosticUnits = Map.empty
         GateVerdicts = []
         Status = status
         Annotations = Map.empty

@@ -4466,6 +4466,7 @@ ToolUp.Platform.ExternalFitFailure.Cancelled : ToolUp.Platform.ExternalFitFailur
 ToolUp.Platform.ExternalFitFailure.IsCancelled : System.Boolean { get }
 ToolUp.Platform.ExternalFitFailure.IsDatasetUnavailable : System.Boolean { get }
 ToolUp.Platform.ExternalFitFailure.IsEnvelopeUnsupported : System.Boolean { get }
+ToolUp.Platform.ExternalFitFailure.IsGateUnitMismatch : System.Boolean { get }
 ToolUp.Platform.ExternalFitFailure.IsMalformedArtifact : System.Boolean { get }
 ToolUp.Platform.ExternalFitFailure.IsScopeMismatch : System.Boolean { get }
 ToolUp.Platform.ExternalFitFailure.IsSubmitRefused : System.Boolean { get }
@@ -4477,6 +4478,8 @@ ToolUp.Platform.ExternalFitFailure+DatasetUnavailable.Item : ToolUp.Platform.Dat
 ToolUp.Platform.ExternalFitFailure+EnvelopeUnsupported (class)
 ToolUp.Platform.ExternalFitFailure+EnvelopeUnsupported.accepted : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ExternalFitFailure+EnvelopeUnsupported.requested : System.String { get }
+ToolUp.Platform.ExternalFitFailure+GateUnitMismatch (class)
+ToolUp.Platform.ExternalFitFailure+GateUnitMismatch.Item : ToolUp.Platform.GateUnitMismatch { get }
 ToolUp.Platform.ExternalFitFailure+MalformedArtifact (class)
 ToolUp.Platform.ExternalFitFailure+MalformedArtifact.reason : System.String { get }
 ToolUp.Platform.ExternalFitFailure+ScopeMismatch (class)
@@ -4488,6 +4491,7 @@ ToolUp.Platform.ExternalFitFailure+Tags (class)
 ToolUp.Platform.ExternalFitFailure+Tags.Cancelled : System.Int32 (literal)
 ToolUp.Platform.ExternalFitFailure+Tags.DatasetUnavailable : System.Int32 (literal)
 ToolUp.Platform.ExternalFitFailure+Tags.EnvelopeUnsupported : System.Int32 (literal)
+ToolUp.Platform.ExternalFitFailure+Tags.GateUnitMismatch : System.Int32 (literal)
 ToolUp.Platform.ExternalFitFailure+Tags.MalformedArtifact : System.Int32 (literal)
 ToolUp.Platform.ExternalFitFailure+Tags.ScopeMismatch : System.Int32 (literal)
 ToolUp.Platform.ExternalFitFailure+Tags.SubmitRefused : System.Int32 (literal)
@@ -4732,10 +4736,11 @@ ToolUp.Platform.FitEnqueueRefusal+TriggerRefused.reason : System.String { get }
 ToolUp.Platform.FitEnqueueRefusalModule (class)
 ToolUp.Platform.FitEnqueueRefusalModule.describe(ToolUp.Platform.FitEnqueueRefusal) : System.String
 ToolUp.Platform.FitOutcome (class)
-ToolUp.Platform.FitOutcome..ctor(ToolUp.Platform.FitCompositeKey, ToolUp.Platform.ArtifactRef, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GateVerdict], System.Int64, System.Double)
+ToolUp.Platform.FitOutcome..ctor(ToolUp.Platform.FitCompositeKey, ToolUp.Platform.ArtifactRef, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GateVerdict], System.Int64, System.Double)
 ToolUp.Platform.FitOutcome.ArtifactRef : ToolUp.Platform.ArtifactRef { get }
 ToolUp.Platform.FitOutcome.CompositeKey : ToolUp.Platform.FitCompositeKey { get }
 ToolUp.Platform.FitOutcome.CostUnits : System.Double { get }
+ToolUp.Platform.FitOutcome.DiagnosticUnits : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.FitOutcome.Diagnostics : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double] { get }
 ToolUp.Platform.FitOutcome.DurationMs : System.Int64 { get }
 ToolUp.Platform.FitOutcome.GateVerdicts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GateVerdict] { get }
@@ -4820,8 +4825,8 @@ ToolUp.Platform.ForwardedHeadersTrustValidator+Cidr.parseAll(Microsoft.FSharp.Co
 ToolUp.Platform.ForwardedHeadersTrustValidator+ForwardedHeadersTrustValidator (class)
 ToolUp.Platform.ForwardedHeadersTrustValidator+ForwardedHeadersTrustValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.Gate (class)
-ToolUp.Platform.Gate.evaluate(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], ToolUp.Platform.GateSpec) : ToolUp.Platform.GateVerdict
-ToolUp.Platform.Gate.evaluateAll(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GateSpec]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GateVerdict]
+ToolUp.Platform.Gate.evaluate(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.GateSpec) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.GateVerdict, ToolUp.Platform.GateUnitMismatch]
+ToolUp.Platform.Gate.evaluateAll(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GateSpec]) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GateVerdict], ToolUp.Platform.GateUnitMismatch]
 ToolUp.Platform.GateDirection (class)
 ToolUp.Platform.GateDirection.AtLeast : ToolUp.Platform.GateDirection { get }
 ToolUp.Platform.GateDirection.AtMost : ToolUp.Platform.GateDirection { get }
@@ -4835,17 +4840,24 @@ ToolUp.Platform.GateDirectionModule (class)
 ToolUp.Platform.GateDirectionModule.name(ToolUp.Platform.GateDirection) : System.String
 ToolUp.Platform.GateDirectionModule.parse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GateDirection]
 ToolUp.Platform.GateSpec (class)
-ToolUp.Platform.GateSpec..ctor(System.String, System.Double, ToolUp.Platform.GateDirection)
+ToolUp.Platform.GateSpec..ctor(System.String, System.Double, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.GateDirection)
 ToolUp.Platform.GateSpec.Direction : ToolUp.Platform.GateDirection { get }
 ToolUp.Platform.GateSpec.Name : System.String { get }
 ToolUp.Platform.GateSpec.Threshold : System.Double { get }
+ToolUp.Platform.GateSpec.Unit : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.GateUnitMismatch (class)
+ToolUp.Platform.GateUnitMismatch..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.GateUnitMismatch.Name : System.String { get }
+ToolUp.Platform.GateUnitMismatch.Reported : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.GateUnitMismatch.Unit : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.GateVerdict (class)
-ToolUp.Platform.GateVerdict..ctor(System.String, System.Double, ToolUp.Platform.GateDirection, System.Double, System.Boolean)
+ToolUp.Platform.GateVerdict..ctor(System.String, System.Double, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.GateDirection, System.Double, System.Boolean)
 ToolUp.Platform.GateVerdict.Direction : ToolUp.Platform.GateDirection { get }
 ToolUp.Platform.GateVerdict.Name : System.String { get }
 ToolUp.Platform.GateVerdict.Observed : System.Double { get }
 ToolUp.Platform.GateVerdict.Passed : System.Boolean { get }
 ToolUp.Platform.GateVerdict.Threshold : System.Double { get }
+ToolUp.Platform.GateVerdict.Unit : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.GoogleIdentityCspValidator (class)
 ToolUp.Platform.GoogleIdentityCspValidator+GoogleIdentityCspValidator (class)
 ToolUp.Platform.GoogleIdentityCspValidator+GoogleIdentityCspValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
@@ -7256,11 +7268,12 @@ ToolUp.Platform.MigrationStatusStore.teamPrefix(System.String) : System.String
 ToolUp.Platform.MigrationStatusStore+BlobMigrationStatusStore (class)
 ToolUp.Platform.MigrationStatusStore+BlobMigrationStatusStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
 ToolUp.Platform.ModelArtifact (class)
-ToolUp.Platform.ModelArtifact..ctor(ToolUp.Platform.FitCompositeKey, System.String, ToolUp.Platform.ArtifactRef, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GateVerdict], ToolUp.Platform.ModelArtifactStatus, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceAttachment], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelArtifactSignature], System.String, System.DateTimeOffset, System.Int32)
+ToolUp.Platform.ModelArtifact..ctor(ToolUp.Platform.FitCompositeKey, System.String, ToolUp.Platform.ArtifactRef, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GateVerdict], ToolUp.Platform.ModelArtifactStatus, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceAttachment], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModelArtifactSignature], System.String, System.DateTimeOffset, System.Int32)
 ToolUp.Platform.ModelArtifact.Annotations : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.ModelArtifact.ArtifactRef : ToolUp.Platform.ArtifactRef { get }
 ToolUp.Platform.ModelArtifact.Attachments : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ProvenanceAttachment] { get }
 ToolUp.Platform.ModelArtifact.CompositeKey : ToolUp.Platform.FitCompositeKey { get }
+ToolUp.Platform.ModelArtifact.DiagnosticUnits : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.ModelArtifact.Diagnostics : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double] { get }
 ToolUp.Platform.ModelArtifact.GateVerdicts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GateVerdict] { get }
 ToolUp.Platform.ModelArtifact.Notes : System.String { get }
@@ -7347,11 +7360,12 @@ ToolUp.Platform.ModelExecutionDepsValidator (class)
 ToolUp.Platform.ModelExecutionDepsValidator+ModelExecutionDepsValidator (class)
 ToolUp.Platform.ModelExecutionDepsValidator+ModelExecutionDepsValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.ModelFitArtifactDescriptor (class)
-ToolUp.Platform.ModelFitArtifactDescriptor..ctor(System.String, System.String, System.String, System.Int64, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], System.Int64, System.Double)
+ToolUp.Platform.ModelFitArtifactDescriptor..ctor(System.String, System.String, System.String, System.Int64, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], System.Int64, System.Double)
 ToolUp.Platform.ModelFitArtifactDescriptor.ArtifactId : System.String { get }
 ToolUp.Platform.ModelFitArtifactDescriptor.ByteLength : System.Int64 { get }
 ToolUp.Platform.ModelFitArtifactDescriptor.ContentHash : System.String { get }
 ToolUp.Platform.ModelFitArtifactDescriptor.CostUnits : System.Double { get }
+ToolUp.Platform.ModelFitArtifactDescriptor.DiagnosticUnits : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String] { get }
 ToolUp.Platform.ModelFitArtifactDescriptor.Diagnostics : Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Double] { get }
 ToolUp.Platform.ModelFitArtifactDescriptor.DurationMs : System.Int64 { get }
 ToolUp.Platform.ModelFitArtifactDescriptor.Envelope : System.String { get }
@@ -7370,15 +7384,19 @@ ToolUp.Platform.ModelFitEnvelope.runFit(ToolUp.Platform.ModelFitProviderRegistry
 ToolUp.Platform.ModelFitEnvelope.serialiseRequest(ToolUp.Platform.FitRequest) : System.String
 ToolUp.Platform.ModelFitEnvelope.tryParseRequest(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.FitRequest, System.String]
 ToolUp.Platform.ModelFitError (class)
+ToolUp.Platform.ModelFitError.IsGateUnitMismatch : System.Boolean { get }
 ToolUp.Platform.ModelFitError.IsProviderFailed : System.Boolean { get }
 ToolUp.Platform.ModelFitError.IsProviderNotFound : System.Boolean { get }
 ToolUp.Platform.ModelFitError.Tag : System.Int32 { get }
+ToolUp.Platform.ModelFitError+GateUnitMismatch (class)
+ToolUp.Platform.ModelFitError+GateUnitMismatch.Item : ToolUp.Platform.GateUnitMismatch { get }
 ToolUp.Platform.ModelFitError+ProviderFailed (class)
 ToolUp.Platform.ModelFitError+ProviderFailed.kind : System.String { get }
 ToolUp.Platform.ModelFitError+ProviderFailed.message : System.String { get }
 ToolUp.Platform.ModelFitError+ProviderNotFound (class)
 ToolUp.Platform.ModelFitError+ProviderNotFound.kind : System.String { get }
 ToolUp.Platform.ModelFitError+Tags (class)
+ToolUp.Platform.ModelFitError+Tags.GateUnitMismatch : System.Int32 (literal)
 ToolUp.Platform.ModelFitError+Tags.ProviderFailed : System.Int32 (literal)
 ToolUp.Platform.ModelFitError+Tags.ProviderNotFound : System.Int32 (literal)
 ToolUp.Platform.ModelFitErrorModule (class)
@@ -7397,10 +7415,11 @@ ToolUp.Platform.ModelFitProviderRegistry.Kinds : Microsoft.FSharp.Collections.FS
 ToolUp.Platform.ModelFitProviderRegistry.Providers : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IModelFitProvider] { get }
 ToolUp.Platform.ModelFitProviderRegistry.TryResolve(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IModelFitProvider]
 ToolUp.Platform.ModelFitWireGate (class)
-ToolUp.Platform.ModelFitWireGate..ctor(System.String, System.Double, System.String)
+ToolUp.Platform.ModelFitWireGate..ctor(System.String, System.Double, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String)
 ToolUp.Platform.ModelFitWireGate.Direction : System.String { get }
 ToolUp.Platform.ModelFitWireGate.Name : System.String { get }
 ToolUp.Platform.ModelFitWireGate.Threshold : System.Double { get }
+ToolUp.Platform.ModelFitWireGate.Unit : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.ModelFitWorkPayload (class)
 ToolUp.Platform.ModelFitWorkPayload..ctor(System.String, System.String, System.String, System.String, System.String, ToolUp.Platform.DatasetContentRef, System.Int64, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModelFitWireGate], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String])
 ToolUp.Platform.ModelFitWorkPayload.DatasetParquetRef : ToolUp.Platform.DatasetContentRef { get }

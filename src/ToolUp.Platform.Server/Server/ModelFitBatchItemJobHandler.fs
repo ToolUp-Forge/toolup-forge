@@ -39,6 +39,11 @@ type ModelFitBatchItemJobHandler
                 | Error(ModelFitError.ProviderFailed(k, m)) ->
                     logger.Warn $"ModelFitBatchItemJobHandler: provider '{k}' failed (batch {item.BatchId}) — {m}"
                     return TransientFailure(ModelFitError.describe (ModelFitError.ProviderFailed(k, m)))
+                | Error(ModelFitError.GateUnitMismatch _ as refused) ->
+                    // Phase 1011 — terminal, and nothing is registered: an
+                    // outcome never carries a verdict over a unit mismatch.
+                    logger.Warn $"ModelFitBatchItemJobHandler: {ModelFitError.describe refused} (batch {item.BatchId})"
+                    return PermanentFailure(ModelFitError.describe refused)
                 | Ok outcome ->
                     let annotations =
                         Map [

@@ -89,6 +89,7 @@ let private mapEnqueueRefusal (e: FitEnqueueRefusal) : ModelExecutionRefusal =
 let private toWireGateVerdict (v: GateVerdict) : ModelExecutionGateVerdict = {
     Name = v.Name
     Threshold = v.Threshold
+    Unit = v.Unit
     Direction = GateDirection.name v.Direction
     Observed = v.Observed
     Passed = v.Passed
@@ -128,6 +129,7 @@ let private toWireOutcome (a: ModelArtifact) : ModelExecutionOutcome = {
     }
     Cost = None
     Diagnostics = a.Diagnostics
+    DiagnosticUnits = a.DiagnosticUnits
     GateVerdicts = a.GateVerdicts |> List.map toWireGateVerdict
     Status = ModelArtifactStatus.name a.Status
     Annotations = a.Annotations
@@ -162,6 +164,9 @@ let private toFitRequest (scopeId: string) (s: ModelExecutionFitSubmission) : Re
                 Ok {
                     Name = g.Name
                     Threshold = g.Threshold
+                    // Phase 1011 — carried as stated; the envelope holds it
+                    // to the unit the provider reports (`Gate.evaluate`).
+                    Unit = g.Unit
                     Direction = d
                 }
             | None -> Error $"gate '{g.Name}' has unknown direction '{g.Direction}' (expected AtLeast/AtMost)")

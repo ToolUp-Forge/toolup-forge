@@ -93,6 +93,10 @@ module ReferenceModelFitProvider =
                 ByteLength = int64 artifactHash.Length
             }
             Diagnostics = diagnostics
+            // Phase 1011 — `mean` and `abs_mean` are bare numbers derived
+            // from a hash, and the provider states no unit for them, so a
+            // gate on either is evaluated only where it states none too.
+            DiagnosticUnits = Map.empty
             GateVerdicts = []
             DurationMs = 0L
             CostUnits = 0.0

@@ -93,45 +93,51 @@ module ModelFitEnvelope =
                 | Ok providerOutcome ->
                     // Forge owns the composite key + gate verdicts — overwrite
                     // whatever the provider set so identity + gate outcome are
-                    // authoritative regardless of provider behaviour.
-                    let verdicts = Gate.evaluateAll providerOutcome.Diagnostics request.Gates
+                    // authoritative regardless of provider behaviour. Phase
+                    // 1011: a gate whose unit is not its diagnostic's is not
+                    // evaluated, and no outcome is produced to carry a verdict
+                    // over it.
+                    match
+                        Gate.evaluateAll providerOutcome.Diagnostics providerOutcome.DiagnosticUnits request.Gates
+                    with
+                    | Error mismatch -> return Error(ModelFitError.GateUnitMismatch mismatch)
+                    | Ok verdicts ->
+                        let outcome = {
+                            providerOutcome with
+                                CompositeKey = key
+                                GateVerdicts = verdicts
+                        }
 
-                    let outcome = {
-                        providerOutcome with
-                            CompositeKey = key
-                            GateVerdicts = verdicts
-                    }
+                        let failed = verdicts |> List.filter (fun v -> not v.Passed)
 
-                    let failed = verdicts |> List.filter (fun v -> not v.Passed)
-
-                    do!
-                        audit.Record(
-                            request.ScopeId,
-                            ModelFitCompleted {
-                                CompositeKeyHash = key.Hash
-                                ProviderId = key.ProviderId
-                                ProviderVersion = key.ProviderVersion
-                                DiagnosticCount = Map.count providerOutcome.Diagnostics
-                                GatesEvaluated = List.length verdicts
-                                GatesFailed = List.length failed
-                                ArtifactHash = outcome.ArtifactRef.ContentHash
-                                ScopeId = request.ScopeId
-                            }
-                        )
-
-                    if not (List.isEmpty failed) then
                         do!
                             audit.Record(
                                 request.ScopeId,
-                                ModelFitGateFailed {
+                                ModelFitCompleted {
                                     CompositeKeyHash = key.Hash
                                     ProviderId = key.ProviderId
-                                    FailedGates = failed |> List.map (fun v -> v.Name)
+                                    ProviderVersion = key.ProviderVersion
+                                    DiagnosticCount = Map.count providerOutcome.Diagnostics
+                                    GatesEvaluated = List.length verdicts
+                                    GatesFailed = List.length failed
+                                    ArtifactHash = outcome.ArtifactRef.ContentHash
                                     ScopeId = request.ScopeId
                                 }
                             )
 
-                    return Ok outcome
+                        if not (List.isEmpty failed) then
+                            do!
+                                audit.Record(
+                                    request.ScopeId,
+                                    ModelFitGateFailed {
+                                        CompositeKeyHash = key.Hash
+                                        ProviderId = key.ProviderId
+                                        FailedGates = failed |> List.map (fun v -> v.Name)
+                                        ScopeId = request.ScopeId
+                                    }
+                                )
+
+                        return Ok outcome
         }
 
 /// `IJobHandler` bound to `_platform.modelfit.run`. Deserialises a
@@ -155,6 +161,11 @@ type ModelFitJobHandler(registry: ModelFitProviderRegistry, audit: IAuditLog, lo
                 | Error(ModelFitError.ProviderFailed(k, m)) ->
                     logger.Warn $"ModelFitJobHandler: provider '{k}' failed — {m}"
                     return TransientFailure(ModelFitError.describe (ModelFitError.ProviderFailed(k, m)))
+                | Error(ModelFitError.GateUnitMismatch _ as refused) ->
+                    // Terminal: the same request against the same provider
+                    // reports the same units, so a retry cannot succeed.
+                    logger.Warn $"ModelFitJobHandler: {ModelFitError.describe refused}"
+                    return PermanentFailure(ModelFitError.describe refused)
         }
 
 module ModelFitJobHandler =

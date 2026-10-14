@@ -78,6 +78,7 @@ let tests =
                     {
                         Name = "mean"
                         Threshold = 0.0
+                        Unit = None
                         Direction = GateDirection.AtLeast
                     }
                 ]
@@ -118,6 +119,7 @@ let tests =
                 {
                     Name = "mean"
                     Threshold = 0.0
+                    Unit = None
                     Direction = GateDirection.AtLeast
                 }
             ]
@@ -157,21 +159,25 @@ let tests =
                 {
                     Name = "mean"
                     Threshold = observed - 0.1
+                    Unit = None
                     Direction = GateDirection.AtLeast
                 } // passes
                 {
                     Name = "mean"
                     Threshold = observed + 0.1
+                    Unit = None
                     Direction = GateDirection.AtLeast
                 } // fails
                 {
                     Name = "mean"
                     Threshold = observed + 0.1
+                    Unit = None
                     Direction = GateDirection.AtMost
                 } // passes
                 {
                     Name = "mean"
                     Threshold = observed - 0.1
+                    Unit = None
                     Direction = GateDirection.AtMost
                 } // fails
             ]
@@ -193,6 +199,7 @@ let tests =
                 {
                     Name = "mean"
                     Threshold = -1.0
+                    Unit = None
                     Direction = GateDirection.AtMost
                 }
             ]
@@ -228,6 +235,7 @@ let tests =
                 {
                     Name = "mean"
                     Threshold = -1.0
+                    Unit = None
                     Direction = GateDirection.AtLeast
                 }
             ] // always passes
@@ -249,6 +257,7 @@ let tests =
                 {
                     Name = "not-a-real-diagnostic"
                     Threshold = 0.0
+                    Unit = None
                     Direction = GateDirection.AtLeast
                 }
             ]

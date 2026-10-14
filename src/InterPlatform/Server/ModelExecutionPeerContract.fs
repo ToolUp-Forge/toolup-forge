@@ -1025,6 +1025,10 @@ module ModelExecutionPeerContract =
         // papered over.
         ArtifactId = o.Artifact |> Option.map _.ArtifactId |> Option.defaultValue ""
         ArtifactContentHash = o.Artifact |> Option.map _.ContentHash |> Option.defaultValue ""
+        // Phase 1011 — the outcome's `DiagnosticUnits` and its verdicts'
+        // units do not cross at this profile version, for the reason the
+        // artifact's optionality does not: widening the profile's records is
+        // a profile-version change, not a projection detail.
         Diagnostics = o.Diagnostics
         GateVerdicts =
             o.GateVerdicts
@@ -1069,6 +1073,10 @@ module ModelExecutionPeerContract =
             |> List.map (fun g -> {
                 Name = g.Name
                 Threshold = g.Threshold
+                // Phase 1011 — the federation profile's gate carries no
+                // unit at this version, so a peer's gate states none and is
+                // evaluated only against a diagnostic that states none.
+                Unit = None
                 Direction = g.Direction
             })
         // Phase 451 — the peer's own declaration, tolerant of an older

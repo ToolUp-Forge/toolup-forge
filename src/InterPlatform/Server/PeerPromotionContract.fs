@@ -379,6 +379,12 @@ module PeerPromotion =
                             Map.empty
                         else
                             transfer.Diagnostics
+                    // Phase 1011 — this profile's transfer carries no units
+                    // at its version, so the received artifact states none,
+                    // and neither do its verdicts below: both sides of the
+                    // gate rule read as absent, which is what they are.
+                    // Carrying units is a profile-version change.
+                    DiagnosticUnits = Map.empty
                     GateVerdicts =
                         (if isNull (box transfer.GateVerdicts) then
                              []
@@ -387,6 +393,7 @@ module PeerPromotion =
                         |> List.map (fun v -> {
                             Name = v.Name
                             Threshold = v.Threshold
+                            Unit = None
                             // An unrecognised direction label reads as
                             // `AtMost` — the STRICTER of the two, since a
                             // gate is a bound and a bound this receiver

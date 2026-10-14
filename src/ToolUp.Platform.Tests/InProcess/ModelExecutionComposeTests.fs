@@ -306,6 +306,7 @@ let tests =
                     ByteLength = 4L
                 }
                 Diagnostics = Map.empty
+                DiagnosticUnits = Map.empty
                 GateVerdicts = []
                 DurationMs = 0L
                 CostUnits = 0.0

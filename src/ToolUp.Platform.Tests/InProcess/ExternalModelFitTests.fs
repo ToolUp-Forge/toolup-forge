@@ -131,6 +131,7 @@ let private goodDescriptor: ModelFitArtifactDescriptor = {
     ModelFitArtifactDescriptor.ContentHash = String.replicate 64 "a"
     ModelFitArtifactDescriptor.ByteLength = 20480L
     ModelFitArtifactDescriptor.Diagnostics = Map [ "rmse", 0.25; "converged", 1.0 ]
+    ModelFitArtifactDescriptor.DiagnosticUnits = Map.empty
     ModelFitArtifactDescriptor.DurationMs = 91_000L
     ModelFitArtifactDescriptor.CostUnits = 4.5
 }
@@ -502,6 +503,7 @@ let private conventionTests =
                     {
                         Name = "rmse"
                         Threshold = 0.5
+                        Unit = None
                         Direction = GateDirection.AtMost
                     }
                 ]
@@ -543,11 +545,13 @@ let private conventionTests =
                     {
                         Name = "rmse"
                         Threshold = 0.5
+                        Unit = None
                         Direction = GateDirection.AtMost
                     }
                     {
                         Name = "converged"
                         Threshold = 1.0
+                        Unit = None
                         Direction = GateDirection.AtLeast
                     }
                 ]
@@ -603,6 +607,75 @@ let private conventionTests =
             | Ok _ -> failtest "a v9 descriptor must not be read as v1"
             | Error e ->
                 Expect.stringContains e "modelfit/v9" "the refusal names the envelope the worker answered under"
+
+        testCase "Phase 1011 — a gate's unit is written only when it states one, and survives the parser"
+        <| fun _ ->
+            let contentRef = {
+                ScopeId = "scope-fit"
+                DatasetId = "observations"
+                Version = 3
+                ContentHash = "deadbeef"
+                Format = "parquet"
+                RowCount = 1200L
+            }
+
+            let request =
+                requestFor "scope-fit" 3 [
+                    {
+                        Name = "rmse"
+                        Threshold = 0.5
+                        Unit = Some "kg"
+                        Direction = GateDirection.AtMost
+                    }
+                    {
+                        Name = "converged"
+                        Threshold = 1.0
+                        Unit = None
+                        Direction = GateDirection.AtLeast
+                    }
+                ]
+
+            let original = ModelFitWorkSpec.ofRequest contentRef Map.empty request
+            let text = ModelFitWorkSpec.renderPayload original
+
+            Expect.stringContains
+                text
+                """"gates":[{"name":"rmse","threshold":0.5,"unit":"kg","direction":"AtMost"},{"name":"converged","threshold":1,"direction":"AtLeast"}]"""
+                "a stated unit is written between threshold and direction; an absent one is not written at all"
+
+            match ModelFitWorkSpec.parsePayload text with
+            | Error e -> failtestf "the payload must parse; got %s" e
+            | Ok parsed -> Expect.equal parsed original "the units survive the round trip"
+
+        testCase "Phase 1011 — a descriptor's diagnostic units round-trip, and a unit-free one keeps its bytes"
+        <| fun _ ->
+            let withUnits = {
+                goodDescriptor with
+                    ModelFitArtifactDescriptor.DiagnosticUnits = Map [ "rmse", "kg" ]
+            }
+
+            let text = ModelFitWorkSpec.renderDescriptor withUnits
+
+            Expect.stringContains text """"diagnosticUnits":{"rmse":"kg"}""" "the units ride beside the diagnostics"
+
+            match ModelFitWorkSpec.parseDescriptor text with
+            | Error e -> failtestf "the descriptor must parse; got %s" e
+            | Ok parsed -> Expect.equal parsed withUnits "every unit survives the round trip"
+
+            Expect.isFalse
+                ((ModelFitWorkSpec.renderDescriptor goodDescriptor).Contains "diagnosticUnits")
+                "a descriptor stating no units is written exactly as before units could be stated"
+
+        testCase "Phase 1011 — a unit for a diagnostic the worker did not report is refused by name"
+        <| fun _ ->
+            let orphan = {
+                goodDescriptor with
+                    ModelFitArtifactDescriptor.DiagnosticUnits = Map [ "mae", "kg" ]
+            }
+
+            match ModelFitWorkSpec.parseDescriptor (ModelFitWorkSpec.renderDescriptor orphan) with
+            | Ok _ -> failtest "a unit naming no reported diagnostic must not be read"
+            | Error e -> Expect.stringContains e "'mae'" "the refusal names the orphaned unit"
     ]
 
 // ── 450.A — envelope-version refusal ─────────────────────────────────────
@@ -743,11 +816,13 @@ let private endToEndTests =
                 {
                     Name = "rmse"
                     Threshold = 0.5
+                    Unit = None
                     Direction = GateDirection.AtMost
                 }
                 {
                     Name = "auc"
                     Threshold = 0.9
+                    Unit = None
                     Direction = GateDirection.AtLeast
                 }
             ]
@@ -929,6 +1004,89 @@ let private endToEndTests =
                     (ExternalFitFailure.isRetriable (ExternalFitFailure.MalformedArtifact reason))
                     "and is terminal — a worker defect is not fixed by re-running the fit"
             | Error other -> failtestf "expected MalformedArtifact; got %A" other
+        }
+    ]
+
+// ── Phase 1011 — the gate rule against a worker's reported units ─────────
+
+/// Run one fit against a stub worker that reports `rmse` in kilograms.
+let private fitAgainstKilograms (gateUnit: string option) = async {
+    let! datasets, version = seededDatasets "scope-fit"
+
+    let handles = InMemoryExternalHandleStore() :> IExternalHandleStore
+    let registry = ExternalFitCompletionRegistry()
+
+    use ingress =
+        startIngress handles (ExternalFitCompletionSink registry :> IExternalCompletionSink)
+
+    let descriptor = {
+        goodDescriptor with
+            ModelFitArtifactDescriptor.DiagnosticUnits = Map [ "rmse", "kg" ]
+    }
+
+    use worker = startWorker (fun () -> ModelFitWorkSpec.renderDescriptor descriptor) 1
+
+    let dispatcher =
+        HttpComputeDispatcher.createTyped
+            (configFor worker ingress.BaseUrl)
+            (SilentSecretStore() :> ISecretStore)
+            sharedHttpClient.Value
+            (RecordingLogger() :> ILogger)
+
+    let provider =
+        ExternalModelFitProvider(
+            dispatcher :> IExternalComputeDispatcher,
+            datasets,
+            registry,
+            options,
+            Some handles,
+            None
+        )
+
+    let gate = {
+        Name = "rmse"
+        Threshold = 0.5
+        Unit = gateUnit
+        Direction = GateDirection.AtMost
+    }
+
+    return! provider.FitExternally(requestFor "scope-fit" version.Version [ gate ])
+}
+
+let private unitRuleTests =
+    testList "Phase 1011 — the external provider holds a gate to its diagnostic's unit" [
+        testCaseAsync "a gate stated in the worker's unit is evaluated, and the outcome keeps the units"
+        <| async {
+            match! fitAgainstKilograms (Some "kg") with
+            | Error e -> failtestf "the fit must complete; got %s" (ExternalFitFailure.describe e)
+            | Ok outcome ->
+                Expect.equal outcome.DiagnosticUnits (Map [ "rmse", "kg" ]) "the worker's units are carried"
+
+                match outcome.GateVerdicts with
+                | [ rmse ] ->
+                    Expect.equal rmse.Unit (Some "kg") "the verdict states the unit it compared in"
+                    Expect.isTrue rmse.Passed "0.25 kg <= 0.5 kg"
+                | other -> failtestf "expected one verdict; got %A" other
+        }
+
+        testCaseAsync "a gate in another unit, or in none, is refused rather than evaluated"
+        <| async {
+            for gateUnit in [ Some "g"; None ] do
+                match! fitAgainstKilograms gateUnit with
+                | Error(ExternalFitFailure.GateUnitMismatch mismatch) ->
+                    Expect.equal
+                        mismatch
+                        {
+                            Name = "rmse"
+                            Unit = gateUnit
+                            Reported = Some "kg"
+                        }
+                        "the refusal names the gate, its unit and the unit reported"
+
+                    Expect.isFalse
+                        (ExternalFitFailure.isRetriable (ExternalFitFailure.GateUnitMismatch mismatch))
+                        "and is terminal — the worker reports the units it reports"
+                | other -> failtestf "a %A gate against a kg diagnostic must be refused; got %A" gateUnit other
         }
     ]
 
@@ -1165,5 +1323,6 @@ let tests =
         envelopeRefusalTests
         endToEndTests
         failureMapTests
+        unitRuleTests
         compositionTests
     ]

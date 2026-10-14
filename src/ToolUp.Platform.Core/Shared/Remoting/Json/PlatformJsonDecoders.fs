@@ -840,13 +840,15 @@ module PlatformJsonDecoders =
 
     /// Generated JSON decoder for `ModelExecutionGate` — members by name, cases by case name, read off the type's own shape.
     let modelExecutionGate: JsonDecoder<ModelExecutionGate> =
-        JsonDecode.succeed (fun name threshold direction -> ({
+        JsonDecode.succeed (fun name threshold unit direction -> ({
             Name = name
             Threshold = threshold
+            Unit = unit
             Direction = direction
         }: ModelExecutionGate))
         |> JsonDecode.apply (JsonDecode.field "Name" JsonDecode.asString)
         |> JsonDecode.apply (JsonDecode.field "Threshold" JsonDecode.asFloat)
+        |> JsonDecode.apply (JsonDecode.optionalField "Unit" JsonDecode.asString)
         |> JsonDecode.apply (JsonDecode.field "Direction" JsonDecode.asString)
 
     /// Generated JSON decoder for `SubmitterClass` — members by name, cases by case name, read off the type's own shape.

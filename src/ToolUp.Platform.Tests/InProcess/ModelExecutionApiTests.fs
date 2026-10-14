@@ -60,7 +60,29 @@ type private Fixture = {
     Providers: ModelFitProviderRegistry
 }
 
-let private freshFixture () : Fixture =
+/// Phase 1011 — the reference provider under another kind, stating that its
+/// `mean` diagnostic is dimensionless (`1`, the canonical text of the unit
+/// with no factors). Everything else is the reference provider's own.
+type private UnitStatingProvider() =
+    let inner = ReferenceModelFitProvider.create ()
+
+    static member Kind = "unit-stating"
+
+    interface IModelFitProvider with
+        member _.Kind = UnitStatingProvider.Kind
+        member _.ProviderVersion = inner.ProviderVersion
+        member _.DeclareGates() = inner.DeclareGates()
+
+        member _.Fit request = async {
+            let! outcome = inner.Fit request
+
+            return {
+                outcome with
+                    DiagnosticUnits = Map [ "mean", "1" ]
+            }
+        }
+
+let private freshFixtureWith (fitProviders: IModelFitProvider list) : Fixture =
     let root =
         Path.Combine(Path.GetTempPath(), "toolup-modelexec-tests-" + Guid.NewGuid().ToString("N"))
 
@@ -79,7 +101,7 @@ let private freshFixture () : Fixture =
         JobScheduler.create jobStore eventStore silentChannel ServerConfig.defaults silentLogger (NoOpActivitySink())
         :> IJobScheduler
 
-    let providers = ModelFitProviderRegistry [ ReferenceModelFitProvider.create () ]
+    let providers = ModelFitProviderRegistry fitProviders
     let registry = BlobModelRegistry.create dataObjects (audit :> IAuditLog)
     let datasets = BlobDatasetStore.create dataObjects
 
@@ -96,6 +118,9 @@ let private freshFixture () : Fixture =
         Audit = audit
         Providers = providers
     }
+
+let private freshFixture () : Fixture =
+    freshFixtureWith [ ReferenceModelFitProvider.create () ]
 
 /// An `HttpContext` carrying the fixture's substrate + the caller's
 /// resolved `AccessContext` (user-scope subject — the write gate passes,
@@ -190,6 +215,7 @@ let private submission (seed: int64) : ModelExecutionFitSubmission = {
         {
             Name = "mean"
             Threshold = 0.0
+            Unit = None
             Direction = "AtLeast"
         }
     ]
@@ -208,6 +234,7 @@ let private gateFailingSubmission (seed: int64) : ModelExecutionFitSubmission = 
             {
                 Name = "mean"
                 Threshold = 1e9
+                Unit = None
                 Direction = "AtLeast"
             }
         ]
@@ -272,8 +299,234 @@ let private okv (label: string) =
     | Ok v -> v
     | Error e -> failtestf "%s refused: %s" label (ModelExecutionRefusal.describe e)
 
+// ── Phase 1011 — the gate rule, and the units on the wire ────────────────
+
+let private gateIn (unit: string option) : GateSpec = {
+    Name = "rmse"
+    Threshold = 2.0
+    Unit = unit
+    Direction = GateDirection.AtMost
+}
+
+let private unitTests =
+    testList "Phase 1011 — diagnostic units" [
+        test "a gate is evaluated only in its diagnostic's unit, and never across units" {
+            let diagnostics = Map [ "rmse", 1.5 ]
+            let inKilograms = Map [ "rmse", "kg" ]
+
+            match Gate.evaluate diagnostics inKilograms (gateIn (Some "kg")) with
+            | Ok verdict ->
+                Expect.isTrue verdict.Passed "1.5 kg <= 2 kg"
+                Expect.equal verdict.Unit (Some "kg") "the verdict states the unit it was compared in"
+            | Error m -> failtestf "same unit must evaluate; got %A" m
+
+            match Gate.evaluate diagnostics Map.empty (gateIn None) with
+            | Ok verdict -> Expect.equal verdict.Unit None "both absent is the path every gate took before units"
+            | Error m -> failtestf "both absent must evaluate; got %A" m
+
+            // The falsifier the rule exists for: 2 g against 1.5 kg would
+            // pass numerically while being wrong by a factor of a thousand.
+            for gateUnit, reported, units in
+                [
+                    Some "g", Some "kg", inKilograms
+                    None, Some "kg", inKilograms
+                    Some "kg", None, Map.empty
+                ] do
+                Expect.equal
+                    (Gate.evaluate diagnostics units (gateIn gateUnit))
+                    (Error {
+                        Name = "rmse"
+                        Unit = gateUnit
+                        Reported = reported
+                    })
+                    $"a {gateUnit} gate against a {reported} diagnostic is refused, never evaluated"
+
+            Expect.equal
+                (Gate.evaluate Map.empty Map.empty (gateIn (Some "kg")))
+                (Error {
+                    Name = "rmse"
+                    Unit = Some "kg"
+                    Reported = None
+                })
+                "a unit stated for a diagnostic nobody reported is refused too — no unit was reported for it"
+        }
+
+        testCaseAsync "the envelope refuses a unit mismatch by name and produces no outcome to register"
+        <| async {
+            let providers =
+                ModelFitProviderRegistry [ UnitStatingProvider() :> IModelFitProvider ]
+
+            let request: FitRequest = {
+                ScopeId = "op-1011"
+                DatasetVersion = {
+                    ScopeId = "op-1011"
+                    DatasetId = "input"
+                    Version = 1
+                }
+                SpecRef = ModelSpecRef.ofPayload "{}"
+                ProviderKind = UnitStatingProvider.Kind
+                Seed = 7L
+                Gates = [
+                    {
+                        Name = "mean"
+                        Threshold = 0.0
+                        Unit = None
+                        Direction = GateDirection.AtLeast
+                    }
+                ]
+                SubmitterClass = SubmitterClass.Human
+            }
+
+            match! ModelFitEnvelope.runFit providers (RecordingAuditLog() :> IAuditLog) request with
+            | Error(ModelFitError.GateUnitMismatch mismatch) ->
+                Expect.equal
+                    mismatch
+                    {
+                        Name = "mean"
+                        Unit = None
+                        Reported = Some "1"
+                    }
+                    "a gate stating no unit against a dimensionless diagnostic is refused, naming both sides"
+            | other -> failtestf "expected GateUnitMismatch; got %A" other
+
+            let stated = {
+                request with
+                    Gates = [
+                        {
+                            Name = "mean"
+                            Threshold = 0.0
+                            Unit = Some "1"
+                            Direction = GateDirection.AtLeast
+                        }
+                    ]
+            }
+
+            match! ModelFitEnvelope.runFit providers (RecordingAuditLog() :> IAuditLog) stated with
+            | Ok outcome ->
+                Expect.equal outcome.DiagnosticUnits (Map [ "mean", "1" ]) "the provider's units are kept"
+                Expect.equal (outcome.GateVerdicts |> List.map _.Unit) [ Some "1" ] "and the verdict's"
+            | Error e ->
+                failtestf "the same gate stated in the diagnostic's unit must evaluate: %s" (ModelFitError.describe e)
+        }
+
+        testCaseAsync "a unit-bearing outcome keeps its units through registration, storage and the wire"
+        <| async {
+            let fixture = freshFixtureWith [ UnitStatingProvider() :> IModelFitProvider ]
+            let! _ = seedInput fixture "op-1011"
+
+            let api =
+                ModelExecutionApiHandler.modelExecutionApi (ctxFor fixture "op-1011" false)
+
+            let unitSubmission = {
+                submission 1011L with
+                    SpecHash = "units-hash-1011"
+                    ProviderKind = UnitStatingProvider.Kind
+                    Gates = [
+                        {
+                            Name = "mean"
+                            Threshold = 0.0
+                            Unit = Some "1"
+                            Direction = "AtLeast"
+                        }
+                    ]
+            }
+
+            let! receipt = api.SubmitFit unitSubmission
+            Expect.isEmpty (okv "submit" receipt).EnqueueFailures "the submission is accepted"
+
+            do! awaitOutcomes fixture "op-1011" "single/units-hash-1011/1011" 1
+
+            let query: ModelExecutionOutcomeQuery = {
+                SpecHashes = [ "units-hash-1011" ]
+                DatasetVersions = []
+                Statuses = []
+                BatchId = None
+            }
+
+            let! page = api.QueryOutcomes(query, None, 10)
+            let outcome = (okv "query" page).Outcomes |> List.exactlyOne
+
+            Expect.equal outcome.DiagnosticUnits (Map [ "mean", "1" ]) "the diagnostic's unit crossed storage"
+
+            Expect.equal
+                (outcome.GateVerdicts |> List.map (fun v -> v.Unit, v.Passed))
+                [ Some "1", true ]
+                "and the verdict states the unit it compared in"
+
+            let! fetched = api.GetOutcome outcome.CompositeKeyHash
+
+            Expect.equal (okv "get" fetched) outcome "a re-read is the same document"
+        }
+
+        testCaseAsync "a record stored before units could be stated reads back as stating none"
+        <| async {
+            let root =
+                Path.Combine(Path.GetTempPath(), "toolup-modelexec-units-" + Guid.NewGuid().ToString("N"))
+
+            Directory.CreateDirectory root |> ignore
+            let blob = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+
+            let registry =
+                BlobModelRegistry.create (DataObjectStore(blob)) (RecordingAuditLog() :> IAuditLog)
+
+            let key =
+                FitCompositeKey.compute "pre-units" "op-1011/input@v1" 1L "reference" "1.0.0"
+
+            let outcome: FitOutcome = {
+                CompositeKey = key
+                ArtifactRef = {
+                    ArtifactId = key.Hash
+                    ContentHash = "content-" + key.Hash
+                    ByteLength = 1L
+                }
+                Diagnostics = Map [ "mean", 0.5 ]
+                DiagnosticUnits = Map [ "mean", "1" ]
+                GateVerdicts = [
+                    {
+                        Name = "mean"
+                        Threshold = 0.0
+                        Unit = Some "1"
+                        Direction = GateDirection.AtLeast
+                        Observed = 0.5
+                        Passed = true
+                    }
+                ]
+                DurationMs = 0L
+                CostUnits = 0.0
+            }
+
+            match! registry.Register("op-1011", outcome, "test", Map.empty, "") with
+            | Error e -> failtestf "registration must succeed: %A" e
+            | Ok _ -> ()
+
+            // Rewrite the stored record into the shape every record written
+            // before Phase 1011 has: no `DiagnosticUnits`, no verdict `Unit`.
+            let mutable rewritten = 0
+
+            for file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories) do
+                let text = File.ReadAllText file
+
+                if text.Contains "\"DiagnosticUnits\"" then
+                    let legacy =
+                        text.Replace("\"DiagnosticUnits\":{\"mean\":\"1\"},", "").Replace("\"Unit\":\"1\",", "")
+
+                    Expect.isFalse (legacy.Contains "Unit") "the rewrite removed every unit member"
+                    File.WriteAllText(file, legacy)
+                    rewritten <- rewritten + 1
+
+            Expect.equal rewritten 1 "exactly the one stored record was rewritten"
+
+            match! registry.Get("op-1011", key.Hash) with
+            | Error e -> failtestf "a record without units must still read: %A" e
+            | Ok artifact ->
+                Expect.equal artifact.DiagnosticUnits Map.empty "an absent unit map reads as the empty map, never null"
+                Expect.equal (artifact.GateVerdicts |> List.map _.Unit) [ None ] "and an absent verdict unit as none"
+        }
+    ]
+
 let tests =
     testList "ModelExecutionApi" [
+        unitTests
         testCaseAsync "end-to-end: resolve → submit → dispatch → poll outcomes → score → resolve output"
         <| async {
             let fixture = freshFixture ()
@@ -453,6 +706,7 @@ let tests =
                             {
                                 Name = "mean"
                                 Threshold = 0.0
+                                Unit = None
                                 Direction = "Sideways"
                             }
                         ]

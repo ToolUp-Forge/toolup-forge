@@ -102,10 +102,12 @@ let private outcome (specHash: string) (datasetVersion: string) (seed: int64) : 
             ByteLength = 128L
         }
         Diagnostics = Map [ "mean", 0.5; "abs_mean", 0.1 ]
+        DiagnosticUnits = Map.empty
         GateVerdicts = [
             {
                 Name = "mean"
                 Threshold = 0.0
+                Unit = None
                 Direction = GateDirection.AtLeast
                 Observed = 0.5
                 Passed = true
