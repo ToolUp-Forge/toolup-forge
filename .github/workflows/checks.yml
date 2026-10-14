@@ -558,7 +558,7 @@ jobs:
           # `Pin.manifestDigest` in
           # src/ToolUp.Platform.Tests/Conformance/ModelExecutionSpecConformance.fs,
           # in one reviewed commit, after reading the corpus diff.
-          ref: 5035c959780d64031e3fd171b8af4d4dc9b5127c
+          ref: 7ba0cd2368fe01206b07abb61ae1cfaba9b6bcbb
           path: .model-execution-corpus
           persist-credentials: false
 

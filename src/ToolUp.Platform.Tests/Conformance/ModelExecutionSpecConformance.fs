@@ -112,12 +112,12 @@ module Pin =
     /// The corpus revision this harness is certified against. CI checks
     /// the corpus out at exactly this revision. Bumping it is a
     /// deliberate commit with a diff review — never an incidental edit.
-    let commit = "5035c959780d64031e3fd171b8af4d4dc9b5127c"
+    let commit = "7ba0cd2368fe01206b07abb61ae1cfaba9b6bcbb"
 
     /// SHA-256 over the corpus manifest's bytes. See the header: this is
     /// the value that moves whenever anything in the corpus moves.
     let manifestDigest =
-        "094b709a2139bb1b039dc739ad9070f96f997b2ab4475578f4c4a637eaa3ce66"
+        "900d1a3c5f5ebd2c2512a02c412202452aac9ad924ff734ea98752a047fc7f7c"
 
     /// The specification this harness certifies against, as the corpus
     /// names itself. Used to identify a corpus by content rather than by
@@ -492,15 +492,20 @@ type SpecResolvedVintage = {
     IsLatest: bool
 }
 
+/// `Unit` is a late member (§3.1 rule 5): `None` is encoded by omission,
+/// never as `null`.
 type SpecGate = {
     Name: string
     Threshold: float
+    Unit: string option
     Direction: string
 }
 
+/// `Unit` is a late member, as on `SpecGate`.
 type SpecGateVerdict = {
     Name: string
     Threshold: float
+    Unit: string option
     Direction: string
     Observed: float
     Passed: bool
@@ -526,6 +531,9 @@ type SpecRefusal =
     | ScoreRefused of reason: string * detail: string
     | StorageFailure of reason: string
     | Unspecified of message: string
+    /// Registered after version 1 (§5.7.1), so its members are declared
+    /// from its first day: an absent unit is `null`, not omitted.
+    | GateUnitMismatch of name: string * unit: string option * reported: string option
     | UnrecognisedClass of className: string * message: string
 
 type SpecFitSubmission = {
@@ -583,6 +591,8 @@ type SpecFitOutcome = {
     CompositeKey: SpecCompositeKey
     ArtifactRef: SpecArtifactRef option
     Diagnostics: (string * float) list
+    /// A late member (§3.1 rule 5): an empty list is encoded by omission.
+    DiagnosticUnits: (string * string) list
     GateVerdicts: SpecGateVerdict list
     Status: string
     Timing: SpecTiming
@@ -684,6 +694,239 @@ module Registry =
                 isLexical algorithm
                 && hex |> Seq.forall (fun c -> (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))
 
+// ─── Unit text (§3.5) ────────────────────────────────────────────────
+
+/// §3.5 — is a string the canonical text of an admitted unit? Written
+/// from the specification's grammar, vocabulary and canonical-text rules,
+/// so the corpus's unit vectors are checked by a reader of this harness's
+/// own rather than taken on trust. Units are compared by text and never
+/// converted, so nothing here relates one unit to another.
+[<RequireQualifiedAccess>]
+module UnitText =
+
+    /// Space-separated, as §3.5's vocabulary table writes them.
+    let private words (text: string) = text.Split ' ' |> List.ofArray
+
+    /// The admitted atoms, and whether each takes a prefix.
+    let private atoms =
+        dict [
+            for a in words "m g s A K mol cd rad sr Hz N Pa J W C V F Ohm S Wb T H lm lx Bq Gy Sv kat L t bar" ->
+                a, true
+            for a in words "min h d wk a % [ppm] [ppb] [in_i] [ft_i] [yd_i] [mi_i] [lb_av] [oz_av]" -> a, false
+        ]
+
+    /// `da` ahead of `d`, so the longer prefix is tried first.
+    let private prefixes = words "da Y Z E P T G M k h d c m u n p f a z y"
+
+    /// UCUM arbitrary units that share a currency's shape and are not
+    /// currencies.
+    let private notCurrencies =
+        set [ "[CFU]"; "[PFU]"; "[FFU]"; "[BAU]"; "[PNU]"; "[FEU]"; "[ELU]" ]
+
+    let private alias (token: string) = if token = "l" then "L" else token
+
+    /// An ISO 4217 alphabetic code in brackets. The shape is checked, not
+    /// membership of the current list.
+    let private isCurrency (token: string) =
+        token.Length = 5
+        && token[0] = '['
+        && token[4] = ']'
+        && token.Substring(1, 3) |> Seq.forall (fun c -> c >= 'A' && c <= 'Z')
+        && not (notCurrencies.Contains token)
+
+    /// A token as `(atom, prefix)`: a whole atom first, and prefix and
+    /// atom only when it is not one. A prefix on an atom that takes none
+    /// is not admitted.
+    let private atomOf (token: string) : (string * string) option =
+        let whole = alias token
+
+        if atoms.ContainsKey whole || isCurrency token then
+            Some(whole, "")
+        else
+            prefixes
+            |> List.filter (fun prefix ->
+                token.StartsWith(prefix, StringComparison.Ordinal)
+                && token.Length > prefix.Length)
+            |> List.tryPick (fun prefix ->
+                let rest = alias (token.Substring prefix.Length)
+
+                match atoms.TryGetValue rest with
+                | true, takesPrefix -> Some(if takesPrefix then Some(rest, prefix) else None)
+                | _ when isCurrency rest -> Some(Some(rest, prefix))
+                | _ -> None)
+            |> Option.flatten
+
+    exception private NotAUnit of string
+
+    let private fail message = raise (NotAUnit message)
+
+    let private add (acc: Map<string * string, int64>) key e =
+        acc |> Map.add key ((acc |> Map.tryFind key |> Option.defaultValue 0L) + e)
+
+    /// The unit's factors, `(atom, prefix) -> exponent`, merged. `.` and
+    /// `/` are left-associative with equal precedence, so a sign applies
+    /// to the one component that follows it.
+    let private parse (text: string) : Map<string * string, int64> =
+        let mutable pos = 0
+
+        let at i =
+            if i < text.Length then Some text[i] else None
+
+        let rec term (closing: char option) : Map<string * string, int64> =
+            let mutable acc = Map.empty
+            let mutable sign = 1L
+
+            if at pos = Some '/' then
+                sign <- -1L
+                pos <- pos + 1
+
+            let mutable fin = false
+
+            while not fin do
+                for KeyValue(k, e) in componentAt () do
+                    acc <- add acc k (sign * e)
+
+                if pos = text.Length || (closing.IsSome && at pos = closing) then
+                    fin <- true
+                else
+                    match at pos with
+                    | Some '.' -> sign <- 1L
+                    | Some '/' -> sign <- -1L
+                    | Some c -> fail $"unexpected '{c}' at {pos}"
+                    | None -> ()
+
+                    pos <- pos + 1
+
+            acc
+
+        and componentAt () : Map<string * string, int64> =
+            match at pos with
+            | Some '(' ->
+                pos <- pos + 1
+                let inner = term (Some ')')
+
+                if at pos <> Some ')' then
+                    fail $"unclosed '(' at {pos}"
+
+                pos <- pos + 1
+                inner
+            | Some c when Char.IsAsciiDigit c ->
+                // The factor `1` is the only number read; `10*3` and
+                // `1000` are consumed whole so they are refused whole.
+                let start = pos
+
+                while (match at pos with
+                       | Some d -> Char.IsAsciiDigit d || d = '*' || d = '^'
+                       | None -> false) do
+                    pos <- pos + 1
+
+                if text.Substring(start, pos - start) <> "1" then
+                    fail $"a numeric factor at {start}"
+
+                Map.empty
+            | _ ->
+                let start = pos
+                let mutable scanning = true
+
+                while scanning && pos < text.Length do
+                    match text[pos] with
+                    | '[' ->
+                        match text.IndexOf(']', pos) with
+                        | -1 -> fail $"unclosed '[' at {pos}"
+                        | close -> pos <- close + 1
+                    | c when Char.IsAsciiLetter c || c = '%' -> pos <- pos + 1
+                    | _ -> scanning <- false
+
+                let token = text.Substring(start, pos - start)
+
+                if token = "" then
+                    fail $"expected a unit at {pos}"
+
+                let atom =
+                    match atomOf token with
+                    | Some a -> a
+                    | None -> fail $"'{token}' is not an admitted unit"
+
+                let expStart = pos
+
+                if at pos = Some '+' || at pos = Some '-' then
+                    pos <- pos + 1
+
+                let digitsStart = pos
+
+                while (match at pos with
+                       | Some d -> Char.IsAsciiDigit d
+                       | None -> false) do
+                    pos <- pos + 1
+
+                let e =
+                    if pos = expStart then
+                        1L
+                    elif pos = digitsStart then
+                        fail $"a sign with no exponent at {expStart}"
+                    else
+                        match
+                            Int64.TryParse(
+                                text.Substring(expStart, pos - expStart),
+                                NumberStyles.AllowLeadingSign,
+                                CultureInfo.InvariantCulture
+                            )
+                        with
+                        | true, v when abs v <= 2147483647L -> v
+                        | _ -> fail $"exponent out of range at {expStart}"
+
+                // An exponent of zero removes its atom.
+                if e = 0L then Map.empty else Map.ofList [ atom, e ]
+
+        if text.Length = 0 then
+            fail "empty"
+
+        let factors = term None
+
+        if pos <> text.Length then
+            fail $"unexpected '{text[pos]}' at {pos}"
+
+        factors
+
+    /// The one canonical text of a unit's factors: ordered by atom then
+    /// prefix, ordinally; positive exponents first joined by `.`, then
+    /// each negative one as `/` and the factor; `1` when there are none.
+    let private render (factors: Map<string * string, int64>) =
+        let ordered =
+            factors
+            |> Map.toList
+            |> List.filter (fun (_, e) -> e <> 0L)
+            |> List.sortWith (fun ((a1, p1), _) ((a2, p2), _) ->
+                match Canonical.ordinal a1 a2 with
+                | 0 -> Canonical.ordinal p1 p2
+                | c -> c)
+
+        let token ((atom, prefix), e: int64) =
+            prefix + atom + (if abs e = 1L then "" else string (abs e))
+
+        let up = ordered |> List.filter (fun (_, e) -> e > 0L) |> List.map token
+        let down = ordered |> List.filter (fun (_, e) -> e < 0L) |> List.map token
+
+        if List.isEmpty up && List.isEmpty down then
+            "1"
+        else
+            String.Join(".", up) + String.Join("", down |> List.map (fun t -> "/" + t))
+
+    /// Why a text is not canonical unit text, or `None` when it is.
+    let violation (text: string) : string option =
+        let parsed =
+            try
+                Ok(parse text)
+            with NotAUnit why ->
+                Error why
+
+        match parsed with
+        | Error why -> Some $"'{text}' is not a unit: {why}"
+        | Ok factors ->
+            match render factors with
+            | canonical when canonical = text -> None
+            | canonical -> Some $"'{text}' is not canonical unit text; the unit is written '{canonical}'"
+
 // ─── Encoding back to canonical bytes (§3 + §5 declaration order) ────
 
 [<RequireQualifiedAccess>]
@@ -700,6 +943,13 @@ module Encode =
 
     let private jInstant (v: DateTimeOffset) =
         JStr(v.ToString("yyyy-MM-ddTHH:mm:sszzz", CultureInfo.InvariantCulture))
+
+    /// §3.1 rule 5 — a late member is omitted when it carries nothing,
+    /// never encoded as `null` or `{}`.
+    let private late (name: string) (value: J option) =
+        match value with
+        | Some v -> [ name, v ]
+        | None -> []
 
     let contentRef (c: SpecContentRef) =
         JRec [
@@ -726,6 +976,7 @@ module Encode =
         JRec [
             "name", JStr g.Name
             "threshold", jReal g.Threshold
+            yield! late "unit" (g.Unit |> Option.map JStr)
             "direction", JStr g.Direction
         ]
 
@@ -733,6 +984,7 @@ module Encode =
         JRec [
             "name", JStr v.Name
             "threshold", jReal v.Threshold
+            yield! late "unit" (v.Unit |> Option.map JStr)
             "direction", JStr v.Direction
             "observed", jReal v.Observed
             "passed", JBool v.Passed
@@ -764,6 +1016,8 @@ module Encode =
         | ScoreRefused(reason, detail) -> tagged "scoreRefused" [ "reason", JStr reason; "detail", JStr detail ]
         | StorageFailure reason -> tagged "storageFailure" [ "reason", JStr reason ]
         | Unspecified message -> tagged "unspecified" [ "message", JStr message ]
+        | GateUnitMismatch(name, unit, reported) ->
+            tagged "gateUnitMismatch" [ "name", JStr name; "unit", jOpt JStr unit; "reported", jOpt JStr reported ]
         | UnrecognisedClass(cls, message) ->
             // Never emitted by a conformant party — §5.7.2 rule 4. It
             // exists so a decoded unknown class is a value, and encoding
@@ -815,6 +1069,12 @@ module Encode =
             "compositeKey", compositeKey o.CompositeKey
             "artifactRef", jOpt artifactRef o.ArtifactRef
             "diagnostics", JMap(o.Diagnostics |> List.map (fun (k, v) -> k, jReal v))
+            yield!
+                late
+                    "diagnosticUnits"
+                    (match o.DiagnosticUnits with
+                     | [] -> None
+                     | units -> Some(JMap(units |> List.map (fun (k, u) -> k, JStr u))))
             "gateVerdicts", JArr(o.GateVerdicts |> List.map gateVerdict)
             "status", JStr o.Status
             "timing", timing o.Timing
@@ -973,6 +1233,18 @@ module Decode =
         let v = prop e name
         if isNull' v then None else Some(read v)
 
+    /// §3.1 rule 5 — a late member is omitted when it carries nothing,
+    /// and a reader treats one that is omitted, or that arrives as `null`,
+    /// as carrying nothing.
+    let private late (e: JsonElement) (name: string) (read: JsonElement -> 'a) =
+        match e.TryGetProperty name with
+        | true, v when not (isNull' v) -> Some(read v)
+        | _ -> None
+
+    /// A late member's value read as a string, or `malformed`.
+    let private lateStr name (v: JsonElement) =
+        (expect JsonValueKind.String name v).GetString()
+
     let private strList e name =
         (expect JsonValueKind.Array name (prop e name)).EnumerateArray()
         |> Seq.map _.GetString()
@@ -1027,15 +1299,25 @@ module Decode =
                 "submission-gate-direction-unknown"
                 (InvalidSubmission $"gate direction '{direction}' is not one of {Registry.gateDirections}")
 
+        let unit = late e "unit" (lateStr "unit")
+
+        // §7.9 `submission-gate-unit-invalid` — a threshold in a unit
+        // nobody can read is a threshold nobody can compare against.
+        match unit |> Option.bind UnitText.violation with
+        | Some why -> refuse "submission-gate-unit-invalid" (InvalidSubmission $"gate unit: {why} (§3.5)")
+        | None -> ()
+
         {
             Name = str e "name"
             Threshold = real e "threshold"
+            Unit = unit
             Direction = direction
         }
 
     let private gateVerdict (e: JsonElement) : SpecGateVerdict = {
         Name = str e "name"
         Threshold = real e "threshold"
+        Unit = late e "unit" (lateStr "unit")
         Direction = str e "direction"
         Observed = real e "observed"
         Passed = boolOf e "passed"
@@ -1125,6 +1407,8 @@ module Decode =
         | "scoreRefused" -> ScoreRefused(str e "reason", str e "detail")
         | "storageFailure" -> StorageFailure(str e "reason")
         | "unspecified" -> Unspecified(str e "message")
+        | "gateUnitMismatch" ->
+            GateUnitMismatch(str e "name", optional e "unit" _.GetString(), optional e "reported" _.GetString())
         | unknown ->
             // §5.7.2 rule 2 — a reader MUST NOT fail on an unrecognised
             // class. It reads it as `unspecified`, keeps whatever
@@ -1188,12 +1472,66 @@ module Decode =
                 (InvalidSubmission
                     $"compositeKeyHash '{declared}' is not a recomputation over the outcome's own compositeKey (which addresses '{recomputed}')")
 
+        let diagnostics = mapOf e "diagnostics" _.GetDouble()
+
+        let diagnosticUnits =
+            late e "diagnosticUnits" (fun v ->
+                (expect JsonValueKind.Object "diagnosticUnits" v).EnumerateObject()
+                |> Seq.map (fun p -> p.Name, lateStr $"diagnosticUnits.{p.Name}" p.Value)
+                |> List.ofSeq)
+            |> Option.defaultValue []
+
+        let gateVerdicts = array e "gateVerdicts" gateVerdict
+
+        // §7.9 `outcome-diagnostic-unit-invalid` — every unit the outcome
+        // states, on a diagnostic or on a verdict, is canonical unit text.
+        // Refused rather than normalised: two texts for one unit would give
+        // one outcome two encodings.
+        let stated =
+            (diagnosticUnits |> List.map snd)
+            @ (gateVerdicts |> List.choose (fun (v: SpecGateVerdict) -> v.Unit))
+
+        match stated |> List.tryPick UnitText.violation with
+        | Some why -> refuse "outcome-diagnostic-unit-invalid" (InvalidSubmission $"{why} (§3.5)")
+        | None -> ()
+
+        // §7.9 `outcome-diagnostic-unit-orphan` — a unit for a diagnostic
+        // the outcome does not carry is a statement about nothing.
+        let names = diagnostics |> List.map fst |> set
+
+        match diagnosticUnits |> List.tryFind (fun (name, _) -> not (names.Contains name)) with
+        | Some(name, _) ->
+            refuse
+                "outcome-diagnostic-unit-orphan"
+                (InvalidSubmission $"diagnosticUnits names '{name}', which is not a member of diagnostics (§5.4)")
+        | None -> ()
+
+        // §7.9 `outcome-gate-unit-mismatch` — §5.3's gate rule: a verdict
+        // is stated in its diagnostic's unit, absent counting as a value.
+        // The comparison a mismatched verdict records is one no executor
+        // may make, so an outcome carrying it is never stored.
+        let units = dict diagnosticUnits
+
+        let reportedFor name =
+            match units.TryGetValue name with
+            | true, u -> Some u
+            | _ -> None
+
+        match gateVerdicts |> List.tryFind (fun v -> v.Unit <> reportedFor v.Name) with
+        | Some v ->
+            refuse
+                "outcome-gate-unit-mismatch"
+                (InvalidSubmission
+                    $"the verdict on '{v.Name}' is stated in {v.Unit} where its diagnostic is in {reportedFor v.Name} (§5.3)")
+        | None -> ()
+
         {
             CompositeKeyHash = declared
             CompositeKey = key
             ArtifactRef = optional e "artifactRef" artifactRef
-            Diagnostics = mapOf e "diagnostics" _.GetDouble()
-            GateVerdicts = array e "gateVerdicts" gateVerdict
+            Diagnostics = diagnostics
+            DiagnosticUnits = diagnosticUnits
+            GateVerdicts = gateVerdicts
             Status = str e "status"
             Timing = timing (expect JsonValueKind.Object "timing" (prop e "timing"))
             Cost = optional e "cost" cost
@@ -1429,6 +1767,9 @@ type RefusalResidue = {
     BudgetUnit: string
     NotFoundId: string
     ScoreReason: string
+    /// Per verdict of a `gateFailed` refusal, in order, the unit it is
+    /// stated in (§5.4). The platform's verdict record carries no unit.
+    GateFailedUnits: string option list
 }
 
 /// Members of a `fitSubmission` the platform's submission record does
@@ -1443,6 +1784,9 @@ type SubmissionResidue = {
     /// submission record pins by `(datasetId, version)` alone, which
     /// §5.2 declares fully conformant.
     VintageContentRef: SpecContentRef option
+    /// Per gate, in submission order, the unit its threshold is stated in
+    /// (§5.3). The platform's gate record carries no unit.
+    GateUnits: string option list
 }
 
 /// Members of a `submissionReceipt` the platform's receipt record does
@@ -1470,6 +1814,12 @@ type OutcomeResidue = {
     /// The outcome record keys the vintage as a composed string, which
     /// cannot express a content ref.
     VintageContentRef: SpecContentRef option
+    /// The unit each diagnostic is stated in (§5.4). The outcome record's
+    /// diagnostics are bare numbers.
+    DiagnosticUnits: (string * string) list
+    /// Per verdict, in order, the unit it is stated in (§5.4). The
+    /// platform's verdict record carries no unit.
+    GateVerdictUnits: string option list
 }
 
 type QueryResidue = {
@@ -1532,6 +1882,7 @@ module Bridge =
         | ScoreRefused _ -> "scoreRefused"
         | StorageFailure _ -> "storageFailure"
         | Unspecified _ -> "unspecified"
+        | GateUnitMismatch _ -> "gateUnitMismatch"
         | UnrecognisedClass(cls, _) -> cls
 
     let parseDatasetKey (key: string) =
@@ -1549,21 +1900,31 @@ module Bridge =
     /// added, this pin fails and its author decides deliberately whether
     /// the gap is closed.
     ///
-    /// **Empty since Phase 640**, which added the four that were missing
+    /// Phase 640 emptied it, adding the four that were missing
     /// (`envelopeVersionMismatch`, `unknownDocumentKind`, `gateFailed`,
-    /// `policyRefused`). Kept rather than deleted, and kept as a list
-    /// rather than folded into a boolean: the next class registered
-    /// against the specification lands here first, and a named, empty
-    /// inventory is the thing that makes its arrival a decision instead of
-    /// an omission.
-    let unmappedRefusalClasses: string list = []
+    /// `policyRefused`); it was kept as a named list so that the next
+    /// class registered against the specification would land here first.
+    ///
+    /// **`gateUnitMismatch`** is that class (Phase 1010): registered after
+    /// version 1 for §5.3's gate rule, and the platform's DU has no case
+    /// for it — nor do its gate records carry the units the rule compares.
+    /// The class still round-trips through the specification model here;
+    /// what is recorded is that the platform's face cannot express it.
+    let unmappedRefusalClasses: string list = [ "gateUnitMismatch" ]
 
     let emptyRefusalResidue = {
         UnknownProviderKnown = []
         BudgetUnit = ""
         NotFoundId = ""
         ScoreReason = ""
+        GateFailedUnits = []
     }
+
+    /// The unit a residue records at a position, or none. Positional
+    /// rather than zipped, so a residue built for a document that states
+    /// no units reads as stating none.
+    let private unitAt (units: string option list) (index: int) =
+        List.tryItem index units |> Option.flatten
 
     let toRefusal (r: SpecRefusal) : (ModelExecutionRefusal * RefusalResidue) option =
         match r with
@@ -1639,13 +2000,19 @@ module Bridge =
                         Passed = v.Passed
                     })
                 ),
-                emptyRefusalResidue
+                {
+                    emptyRefusalResidue with
+                        GateFailedUnits = verdicts |> List.map _.Unit
+                }
             )
         | PolicyRefused rule -> Some(ModelExecutionRefusal.PolicyRefused rule, emptyRefusalResidue)
-        // The one case that stays unmapped, and stays unmapped on purpose:
-        // §5.7.2 rule 2 says a reader treats an unregistered class AS
-        // `unspecified`, so the platform's DU is right not to have a case
-        // for it. It is not a carry gap — it is the extension rule working.
+        // A carry gap, declared in `unmappedRefusalClasses`: the DU has no
+        // case for it.
+        | GateUnitMismatch _ -> None
+        // Unmapped on purpose: §5.7.2 rule 2 says a reader treats an
+        // unregistered class AS `unspecified`, so the platform's DU is
+        // right not to have a case for it. It is not a carry gap — it is
+        // the extension rule working.
         | UnrecognisedClass _ -> None
 
     let ofRefusal (f: ModelExecutionRefusal) (r: RefusalResidue) : SpecRefusal =
@@ -1675,9 +2042,10 @@ module Bridge =
         | ModelExecutionRefusal.GateFailed verdicts ->
             GateFailed(
                 verdicts
-                |> List.map (fun v -> {
+                |> List.mapi (fun i v -> {
                     Name = v.Name
                     Threshold = v.Threshold
+                    Unit = unitAt r.GateFailedUnits i
                     Direction = toWireDirection v.Direction
                     Observed = v.Observed
                     Passed = v.Passed
@@ -1715,12 +2083,9 @@ module Bridge =
                 | None -> failwithf "submitter class '%s' is not one the platform models" s.SubmitterClass
         }
 
-        // Annotated because `OutcomeResidue` now has the same single
-        // member, and unannotated record inference takes the last one
-        // declared. Two residues converging on one field is a sign the
-        // inventory shrank, not that either is redundant.
         let residue: SubmissionResidue = {
             VintageContentRef = s.Vintage.ContentRef
+            GateUnits = s.Gates |> List.map _.Unit
         }
 
         forge, residue
@@ -1738,9 +2103,10 @@ module Bridge =
         Seed = f.Seed
         Gates =
             f.Gates
-            |> List.map (fun g -> {
+            |> List.mapi (fun i g -> {
                 Name = g.Name
                 Threshold = g.Threshold
+                Unit = unitAt r.GateUnits i
                 Direction = toWireDirection g.Direction
             })
         SubmitterClass = SubmitterClass.label f.SubmitterClass
@@ -1850,6 +2216,8 @@ module Bridge =
 
         let residue: OutcomeResidue = {
             VintageContentRef = o.CompositeKey.Vintage.ContentRef
+            DiagnosticUnits = o.DiagnosticUnits
+            GateVerdictUnits = o.GateVerdicts |> List.map _.Unit
         }
 
         forge, residue
@@ -1880,11 +2248,13 @@ module Bridge =
             // A map's keys are data and the encoder sorts them, so the
             // list order recovered here is not load-bearing.
             Diagnostics = f.Diagnostics |> Map.toList
+            DiagnosticUnits = r.DiagnosticUnits
             GateVerdicts =
                 f.GateVerdicts
-                |> List.map (fun v -> {
+                |> List.mapi (fun i v -> {
                     Name = v.Name
                     Threshold = v.Threshold
+                    Unit = unitAt r.GateVerdictUnits i
                     Direction = toWireDirection v.Direction
                     Observed = v.Observed
                     Passed = v.Passed
@@ -2687,12 +3057,13 @@ let private carryGapTests =
                 ])
                 "the refusal DU moved — re-derive Bridge.unmappedRefusalClasses against §5.7.1"
 
-            Expect.isEmpty
+            Expect.equal
                 Bridge.unmappedRefusalClasses
-                "Phase 640 closed the last of them; a re-appearance is a class the DU stopped covering"
+                [ "gateUnitMismatch" ]
+                "the declared gap is exactly the class registered after version 1 (Phase 1010); any other entry is a class the DU stopped covering"
         }
 
-        test "every class the specification registers is one the platform's DU can express" {
+        test "every class the specification registers is expressed by the platform's DU or declared as a gap" {
             // The pin above is over the DU's own case names, which are the
             // platform's words. This one is over the SPECIFICATION's, via
             // the bridge — so a class registered against §5.7.1 that the
@@ -2719,12 +3090,25 @@ let private carryGapTests =
                 ScoreRefused("not-approved", "d")
                 StorageFailure "r"
                 Unspecified "m"
+                GateUnitMismatch("rmse", Some "g", Some "kg")
             ]
 
             for r in registered do
-                Expect.isSome
-                    (Bridge.toRefusal r)
-                    $"'{Bridge.refusalClassName r}' is registered by §5.7.1 and the platform's DU cannot express it"
+                let cls = Bridge.refusalClassName r
+
+                if List.contains cls Bridge.unmappedRefusalClasses then
+                    Expect.isNone (Bridge.toRefusal r) $"'{cls}' is declared as a gap and must not be silently mapped"
+                else
+                    Expect.isSome
+                        (Bridge.toRefusal r)
+                        $"'{cls}' is registered by §5.7.1 and the platform's DU cannot express it"
+
+            // A declared gap names a registered class, never a stale one.
+            for cls in Bridge.unmappedRefusalClasses do
+                Expect.contains
+                    (registered |> List.map Bridge.refusalClassName)
+                    cls
+                    $"'{cls}' is declared as a gap but is not a registered class"
         }
     ]
 
@@ -2782,6 +3166,45 @@ let private nonVacuityTests =
                 |> Encoding.UTF8.GetBytes
 
             Expect.isOk (Decode.envelope repaired) "the reject arm must distinguish the defect from the document"
+
+            // 4. The same for §5.3's gate rule: the verdict restated in its
+            //    diagnostic's unit stops being refused.
+            let agreed =
+                Encoding.UTF8
+                    .GetString(Corpus.bytes "fit-outcome/reject-gate-unit-mismatch.json")
+                    .Replace("\"unit\":\"g\"", "\"unit\":\"kg\"")
+                |> Encoding.UTF8.GetBytes
+
+            Expect.isOk (Decode.envelope agreed) "the gate-unit arm must distinguish the mismatch from the document"
+        }
+
+        test "the unit reader accepts canonical unit text and names the canonical text of what is not (§3.5)" {
+            // The unit reject vectors pass for a reader that refuses
+            // everything; this is what rules that reader out, and it uses
+            // the specification's own worked examples.
+            for text in
+                [
+                    "1"
+                    "kg"
+                    "c[GBP]"
+                    "kg.m/s2"
+                    "/min"
+                    "k[GBP]"
+                    "mL"
+                    "[in_i]2"
+                    "N.m"
+                    "mg/dL"
+                ] do
+                Expect.isNone (UnitText.violation text) $"'{text}' is canonical unit text"
+
+            for text, written in [ "s-1", "/s"; "m.kg", "kg.m"; "m.m", "m2"; "ml", "mL"; "kg/(m.s2)", "kg/m/s2" ] do
+                Expect.stringContains
+                    (defaultArg (UnitText.violation text) "")
+                    $"'{written}'"
+                    $"'{text}' parses and is not canonical; its unit is written '{written}'"
+
+            for text in [ "kg m"; "kilogram"; "kmin"; "10*3"; "Cel"; "[CFU]"; "{beats}/min"; "" ] do
+                Expect.isSome (UnitText.violation text) $"'{text}' is not unit text"
         }
     ]
 
