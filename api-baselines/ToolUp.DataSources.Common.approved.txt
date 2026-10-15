@@ -21,6 +21,7 @@ ToolUp.DataSources.Common.CredentialJson.parseObject(System.String, System.Strin
 ToolUp.DataSources.Common.CredentialJson.tryFind(Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.DataSources.Common.Credentials (class)
 ToolUp.DataSources.Common.Credentials.resolve(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Secrets+ISecretStore], ToolUp.Platform.DataSourceCallContext) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]]
+ToolUp.DataSources.Common.Credentials.resolveDeclared(ToolUp.Platform.IDataSource, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Secrets+ISecretStore], ToolUp.Platform.DataSourceCallContext) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.IngestionError]]
 ToolUp.DataSources.Common.Credentials.resolveOptional(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Secrets+ISecretStore], ToolUp.Platform.DataSourceCallContext) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[System.String]]
 ToolUp.DataSources.Common.Csv (class)
 ToolUp.DataSources.Common.Csv.NullDistinguishingPayloadFormat : System.Int32 (literal)

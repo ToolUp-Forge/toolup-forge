@@ -350,6 +350,12 @@ module SnowflakeDataSource =
         interface IDeclaresPayloadFormat with
             member _.PayloadFormat = PayloadFormat.Csv
 
+        // Phase 1017 — OPTIONAL: key-pair auth with a `private_key_file`
+        // needs no stored secret; password auth refuses its absence itself
+        // (`CredentialMissing`).
+        interface IDeclaresCredentialNeed with
+            member _.CredentialNeed = CredentialNeed.Optional
+
         interface IDataSource with
             member _.Kind = Kind
 

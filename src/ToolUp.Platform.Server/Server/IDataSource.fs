@@ -40,7 +40,9 @@ type DataSourceCallContext = {
     /// connectors that just need a credential string don't have to
     /// re-touch `ISecretStore` per call. `None` when the ingestor's
     /// pre-resolution missed (the connector may still attempt its
-    /// own resolution, or fail with `CredentialMissing`).
+    /// own resolution, or fail with `CredentialMissing`), and always
+    /// `None` for a connector declaring `CredentialNeed.NoCredential`,
+    /// whose store is never read (Phase 1017).
     Credential: string option
 }
 
@@ -158,6 +160,58 @@ module PayloadFormat =
         match box source with
         | :? IDeclaresPayloadFormat as declared -> declared.PayloadFormat
         | _ -> PayloadFormat.Csv
+
+// ─── CredentialNeed — whether a connector takes a credential (Phase 1017) ───
+//
+// `DataIngestor` used to read `ISecretStore` for EVERY connector before
+// `Connect`, so a connector that reads no credential (the file connectors
+// read the stored file through `IBlobStorage`) still failed when the
+// selected secret store was unreachable: one vault outage stopped all
+// ingestion, including sources that would have read nothing from it. The
+// need is now a declared fact of the connector, on the
+// `IDeclaresPayloadFormat` pattern and for the same reason — a companion
+// interface, because a new abstract member on `IDataSource` would break
+// every implementation. The default lives in ONE reader,
+// `CredentialNeed.declaredBy`: a connector that declares nothing is
+// `Optional`, which is exactly what the ingestor did before the type
+// existed, so no existing connector changes meaning.
+
+/// Phase 1017 — whether a connector consults the credential stored under
+/// `DataSourceConfig.CredentialKey`.
+[<RequireQualifiedAccess>]
+type CredentialNeed =
+    /// The connector never consults a credential. The ingestor does not
+    /// read the secret store, and `DataSourceCallContext.Credential` is
+    /// `None`.
+    | NoCredential
+    /// The connector cannot run without one. The ingestor reads the store,
+    /// and a missing or blank secret fails the run as `CredentialMissing`
+    /// before `Connect`.
+    | Required
+    /// The connector may use one: its need depends on the configuration
+    /// (an ambient provider chain, a key file, an out-of-band escape hatch).
+    /// The ingestor reads the store and `None` is permitted. The answer for
+    /// a connector that declares nothing.
+    | Optional
+
+/// Phase 1017 — implemented alongside `IDataSource` by a connector that
+/// declares its credential need. Optional by design: a connector that does
+/// not implement it is read as `CredentialNeed.Optional` (see
+/// `CredentialNeed.declaredBy`).
+type IDeclaresCredentialNeed =
+    /// Whether this connector takes a credential. A constant of the
+    /// connector, not a per-call answer.
+    abstract CredentialNeed: CredentialNeed
+
+/// Phase 1017 — reading a connector's declared credential need.
+module CredentialNeed =
+
+    /// The need a connector declares — its `IDeclaresCredentialNeed`
+    /// answer, or `Optional` for a connector that declares nothing.
+    let declaredBy (source: IDataSource) : CredentialNeed =
+        match box source with
+        | :? IDeclaresCredentialNeed as declared -> declared.CredentialNeed
+        | _ -> CredentialNeed.Optional
 
 // ─── IngestedPayload — the schema an ingested payload carries (Phase 832) ───
 //

@@ -428,6 +428,21 @@
       stating none.
       Migration recipe: `docs/migrations/1011-model-execution-diagnostic-units.md`.
     -->
+    <!--
+      0.27.0 (draft), Phase 1017 rides it - additive. A connector declares
+      whether it takes a credential (`CredentialNeed`: `NoCredential` /
+      `Required` / `Optional`, through `IDeclaresCredentialNeed`), and the
+      `DataIngestor` reads the secret store only when it does: a NONE
+      connector is never asked, and a REQUIRED one with no secret fails as
+      `CredentialMissing` before `Connect`. Undeclared reads as `Optional`,
+      the previous behaviour. The CSV, Excel, Parquet and in-memory sources
+      declare NONE, so file ingest no longer depends on the secret store;
+      every other shipped connector declares OPTIONAL with its reason.
+      Additive: `CredentialNeed`, `IDeclaresCredentialNeed`,
+      `CredentialNeed.declaredBy` (Platform.Server);
+      `Credentials.resolveDeclared` (DataSources.Common).
+      Migration recipe: `docs/migrations/1017-connector-credential-need.md`.
+    -->
     <Version>0.27.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a

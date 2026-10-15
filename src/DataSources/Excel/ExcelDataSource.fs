@@ -530,6 +530,12 @@ type private ExcelDataSourceImpl(storage: IBlobStorage) =
     interface IDeclaresPayloadFormat with
         member _.PayloadFormat = PayloadFormat.Csv
 
+    // Phase 1017 — reads the stored workbook through `IBlobStorage` and
+    // never consults a credential, so the ingestor does not read the secret
+    // store.
+    interface IDeclaresCredentialNeed with
+        member _.CredentialNeed = CredentialNeed.NoCredential
+
     interface IDataSource with
         member _.Kind = Kind
 

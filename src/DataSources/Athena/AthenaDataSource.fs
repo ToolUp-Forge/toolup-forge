@@ -330,6 +330,11 @@ type private AthenaDataSourceImpl(secretStore: ISecretStore option) =
     interface IDeclaresPayloadFormat with
         member _.PayloadFormat = PayloadFormat.Csv
 
+    // Phase 1017 — OPTIONAL: with no stored access-key triple the client
+    // falls back to the AWS default credential chain.
+    interface IDeclaresCredentialNeed with
+        member _.CredentialNeed = CredentialNeed.Optional
+
     interface IDataSource with
         member _.Kind = Kind
 

@@ -563,6 +563,11 @@ type private ParquetDataSourceImpl(storage: IBlobStorage) =
     interface IDeclaresPayloadFormat with
         member _.PayloadFormat = PayloadFormat.Csv
 
+    // Phase 1017 — reads the stored file through `IBlobStorage` and never
+    // consults a credential, so the ingestor does not read the secret store.
+    interface IDeclaresCredentialNeed with
+        member _.CredentialNeed = CredentialNeed.NoCredential
+
     // Phase 837 — the native bytes, unconverted. Called by the ingestor only
     // when the deployment composed the Parquet payload reader. The file is
     // decoded once through the reader's own path before its bytes are

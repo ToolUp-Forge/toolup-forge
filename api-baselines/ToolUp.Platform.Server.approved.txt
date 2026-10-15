@@ -2761,6 +2761,20 @@ ToolUp.Platform.CountersignatureSubject.SubjectId : System.String { get }
 ToolUp.Platform.CountersignatureSubjectModule (class)
 ToolUp.Platform.CountersignatureSubjectModule.create(System.String, System.String, System.String) : ToolUp.Platform.CountersignatureSubject
 ToolUp.Platform.CountersignatureSubjectModule.ofCanonicalBytes(System.String, System.String, System.Byte[]) : ToolUp.Platform.CountersignatureSubject
+ToolUp.Platform.CredentialNeed (class)
+ToolUp.Platform.CredentialNeed.IsNoCredential : System.Boolean { get }
+ToolUp.Platform.CredentialNeed.IsOptional : System.Boolean { get }
+ToolUp.Platform.CredentialNeed.IsRequired : System.Boolean { get }
+ToolUp.Platform.CredentialNeed.NoCredential : ToolUp.Platform.CredentialNeed { get }
+ToolUp.Platform.CredentialNeed.Optional : ToolUp.Platform.CredentialNeed { get }
+ToolUp.Platform.CredentialNeed.Required : ToolUp.Platform.CredentialNeed { get }
+ToolUp.Platform.CredentialNeed.Tag : System.Int32 { get }
+ToolUp.Platform.CredentialNeed+Tags (class)
+ToolUp.Platform.CredentialNeed+Tags.NoCredential : System.Int32 (literal)
+ToolUp.Platform.CredentialNeed+Tags.Optional : System.Int32 (literal)
+ToolUp.Platform.CredentialNeed+Tags.Required : System.Int32 (literal)
+ToolUp.Platform.CredentialNeedModule (class)
+ToolUp.Platform.CredentialNeedModule.declaredBy(ToolUp.Platform.IDataSource) : ToolUp.Platform.CredentialNeed
 ToolUp.Platform.CronExpression (class)
 ToolUp.Platform.CronExpression.isDue(ToolUp.Platform.CronExpression+CronExpression, System.DateTime) : System.Boolean
 ToolUp.Platform.CronExpression.nextRunAfter(ToolUp.Platform.CronExpression+CronExpression, System.DateTime) : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime]
@@ -5679,6 +5693,8 @@ ToolUp.Platform.IDatasetStore.GetLatest(System.String, System.String) : Microsof
 ToolUp.Platform.IDatasetStore.GetVersion(System.String, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetVersion, ToolUp.Platform.DatasetError]]
 ToolUp.Platform.IDatasetStore.ListVersions(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetVersion]]
 ToolUp.Platform.IDatasetStore.ReadPage(System.String, System.String, System.Int32, ToolUp.Platform.DatasetPageQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetPage, ToolUp.Platform.DatasetError]]
+ToolUp.Platform.IDeclaresCredentialNeed (interface)
+ToolUp.Platform.IDeclaresCredentialNeed.CredentialNeed : ToolUp.Platform.CredentialNeed { get }
 ToolUp.Platform.IDeclaresPayloadFormat (interface)
 ToolUp.Platform.IDeclaresPayloadFormat.PayloadFormat : ToolUp.Platform.PayloadFormat { get }
 ToolUp.Platform.IDeployPipeline (interface)

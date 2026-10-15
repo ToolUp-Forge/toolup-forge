@@ -469,4 +469,11 @@ let create
       // stored payload says so.
       interface IDeclaresPayloadFormat with
           member _.PayloadFormat = PayloadFormat.Json
+      // Phase 1017 — OPTIONAL: the refresh token normally lives in the
+      // OAuth substrate's own slot (`{flowName}-refresh-{id}`), which this
+      // connector reads itself; the ingestor's read of
+      // `Config.CredentialKey` serves only the escape hatch for a token
+      // provisioned out of band (see `readRefreshToken`).
+      interface IDeclaresCredentialNeed with
+          member _.CredentialNeed = CredentialNeed.Optional
     }

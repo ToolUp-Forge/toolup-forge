@@ -402,6 +402,11 @@ type private RedshiftDataSourceImpl(secretStore: ISecretStore option) =
     interface IDeclaresPayloadFormat with
         member _.PayloadFormat = PayloadFormat.Csv
 
+    // Phase 1017 — OPTIONAL: with no stored credential the connector falls
+    // back to the AWS default credential chain.
+    interface IDeclaresCredentialNeed with
+        member _.CredentialNeed = CredentialNeed.Optional
+
     interface IDataSource with
         member _.Kind = Kind
 

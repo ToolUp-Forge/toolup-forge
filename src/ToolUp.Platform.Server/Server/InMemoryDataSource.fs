@@ -44,6 +44,11 @@ type InMemoryDataSource() =
     member this.SeedText(sourceId: DataSourceId, table: string, text: string) =
         this.Seed(sourceId, table, Encoding.UTF8.GetBytes text)
 
+    // Phase 1017 — no credential: the ingestor does not read the secret
+    // store for this source.
+    interface IDeclaresCredentialNeed with
+        member _.CredentialNeed = CredentialNeed.NoCredential
+
     interface IDataSource with
         member _.Kind = "InMemory"
 

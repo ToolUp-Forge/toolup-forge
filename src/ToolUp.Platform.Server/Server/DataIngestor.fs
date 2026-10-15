@@ -111,7 +111,8 @@ let private nativeEmission (readers: IPayloadReader list) (connector: IDataSourc
 //
 // Default `IDataIngestor` implementation. Resolves the config + the
 // matching connector + the credential (via `ISecretStore` thunk
-// pattern), runs `Connect → GetSchema → Query`, persists the schema as its own
+// pattern, only when the connector's declared `CredentialNeed` says it
+// takes one — Phase 1017), runs `Connect → GetSchema → Query`, persists the schema as its own
 // content-addressed object (Phase 832), writes the resulting bytes
 // through `IDataObjectStore.Save` with `Versioned` policy so each
 // refresh creates a new version while preserving history (Phase 7's
@@ -167,6 +168,30 @@ type DataIngestor
         with ex ->
             logger.Warn $"[DataIngestor] failed to write {eventType} event for run {run.RunId}: {ex.Message}"
     }
+
+    // Phase 1017 — step 3, read per the connector's declared
+    // `CredentialNeed`. NONE never touches the secret store, so a store
+    // outage cannot fail a source that reads no credential; OPTIONAL (and
+    // an undeclared connector) reads it with `None` permitted, as before;
+    // REQUIRED turns a missing or blank secret into `CredentialMissing`
+    // naming the key, which the caller reports before `Connect` runs.
+    let resolveCredential
+        scopeId
+        (config: DataSourceConfig)
+        (connector: IDataSource)
+        : Async<Result<string option, IngestionError>> =
+        async {
+            match CredentialNeed.declaredBy connector with
+            | CredentialNeed.NoCredential -> return Ok None
+            | CredentialNeed.Optional ->
+                let! credential = secretStore.GetSecret(scopeId, config.CredentialKey)
+                return Ok credential
+            | CredentialNeed.Required ->
+                match! secretStore.GetSecret(scopeId, config.CredentialKey) with
+                | Some credential when not (String.IsNullOrWhiteSpace credential) -> return Ok(Some credential)
+                | Some _
+                | None -> return Error(CredentialMissing config.CredentialKey)
+        }
 
     let runFailed scopeId sourceId table runId startedAt err jobId : IngestionRun = {
         RunId = runId
@@ -320,20 +345,27 @@ type DataIngestor
                         | Some emitter -> emitter.QueryNative(ctx, sql)
                         | None -> connector.Query(ctx, sql)
 
-                    // 3. Resolve credential. `None` is permitted at this
-                    // stage — connectors that don't need a credential
-                    // (in-memory fakes) will not consult `ctx.Credential`.
-                    let! credential = secretStore.GetSecret(scopeId, config.CredentialKey)
+                    // 3. Resolve credential, as the connector declares it
+                    // needs one (Phase 1017): a NONE connector's store is
+                    // never read, and `ctx.Credential` is `None`.
+                    let! credential = resolveCredential scopeId config connector
 
                     let ctx: DataSourceCallContext = {
                         ScopeId = scopeId
                         Config = config
-                        Credential = credential
+                        Credential = credential |> Result.defaultValue None
                     }
 
-                    // 4. Probe the source. Connect failures terminate before
-                    // any persistence side-effect.
-                    match! connector.Connect ctx with
+                    // 4. Probe the source. A REQUIRED credential that is
+                    // missing fails here without `Connect` being called;
+                    // either failure terminates before any persistence
+                    // side-effect.
+                    let probe =
+                        match credential with
+                        | Error err -> async { return Error err }
+                        | Ok _ -> connector.Connect ctx
+
+                    match! probe with
                     | Error err ->
                         let run = runFailed scopeId sourceId table runId startedAt err None
                         do! recordRun run

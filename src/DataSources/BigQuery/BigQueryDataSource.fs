@@ -184,6 +184,12 @@ type private BigQueryDataSourceImpl(secretStore: ISecretStore option) =
     interface IDeclaresPayloadFormat with
         member _.PayloadFormat = PayloadFormat.Csv
 
+    // Phase 1017 — OPTIONAL: the service-account JSON is read only when
+    // `use_default_credentials` is off; on, the client takes Google
+    // application-default credentials and no secret is consulted.
+    interface IDeclaresCredentialNeed with
+        member _.CredentialNeed = CredentialNeed.Optional
+
     interface IDataSource with
         member _.Kind = Kind
 

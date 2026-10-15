@@ -219,6 +219,12 @@ type private SqlDataSourceImpl(kind: string, secretStore: ISecretStore option) =
     interface IDeclaresPayloadFormat with
         member _.PayloadFormat = PayloadFormat.Csv
 
+    // Phase 1017 — OPTIONAL: `ConnectionScope` may carry the whole
+    // connection string (integrated security or an inline password), and
+    // then there is no secret to resolve.
+    interface IDeclaresCredentialNeed with
+        member _.CredentialNeed = CredentialNeed.Optional
+
     interface IDataSource with
         member _.Kind = kind
 

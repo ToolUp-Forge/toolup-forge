@@ -164,7 +164,8 @@ module ConnectionScope =
 ///
 /// The shipped `DataIngestor` pre-resolves the credential and hands it
 /// through `DataSourceCallContext.Credential`, so the common path
-/// costs nothing. A connector constructed with an `ISecretStore`
+/// costs nothing — unless the connector declares
+/// `CredentialNeed.NoCredential`, when nothing is read (Phase 1017). A connector constructed with an `ISecretStore`
 /// still re-reads on every call when the context carries none — that
 /// is what makes rotation take effect without reconstructing the
 /// connector (the `ClaudeAIProvider` thunk pattern).
@@ -206,6 +207,28 @@ module Credentials =
             | Ok value -> Some value
             | Error _ -> None
     }
+
+    /// Phase 1017 — resolve as `source` declares its `CredentialNeed`,
+    /// the same rule the shipped `DataIngestor` applies: `NoCredential`
+    /// is `Ok None` without touching the store (or `ctx.Credential`),
+    /// `Required` is `resolve` (`CredentialMissing` when absent), and
+    /// `Optional` — the answer for a connector that declares nothing — is
+    /// `resolveOptional`.
+    let resolveDeclared
+        (source: IDataSource)
+        (secretStore: ISecretStore option)
+        (ctx: DataSourceCallContext)
+        : Async<Result<string option, IngestionError>> =
+        async {
+            match CredentialNeed.declaredBy source with
+            | CredentialNeed.NoCredential -> return Ok None
+            | CredentialNeed.Required ->
+                let! resolved = resolve secretStore ctx
+                return resolved |> Result.map Some
+            | CredentialNeed.Optional ->
+                let! resolved = resolveOptional secretStore ctx
+                return Ok resolved
+        }
 
 /// SQL identifier safety for the connectors that build catalogue
 /// queries by hand.

@@ -334,6 +334,12 @@ module SynapseDataSource =
         interface IDeclaresPayloadFormat with
             member _.PayloadFormat = PayloadFormat.Csv
 
+        // Phase 1017 — OPTIONAL: `sql-login` and `aad-token` read the stored
+        // secret (and refuse its absence themselves); `aad-default` takes
+        // `DefaultAzureCredential` and consults none.
+        interface IDeclaresCredentialNeed with
+            member _.CredentialNeed = CredentialNeed.Optional
+
         interface IDataSource with
             member _.Kind = Kind
 
