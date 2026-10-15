@@ -61,6 +61,8 @@
         <!-- Phase 128 — the IHttpTransport seam's contract pack. -->
         <Compile Include="Contracts\IHttpTransportContract.fs" />
         <Compile Include="Contracts\IDeclaresPayloadFormatContract.fs" />
+        <!-- Phase 1017 - the IDeclaresCredentialNeed pack. -->
+        <Compile Include="Contracts\IDeclaresCredentialNeedContract.fs" />
         <!-- Phase 836 - the IDataSource null-and-type fidelity pack. -->
         <Compile Include="Contracts\DataSourceFidelityContract.fs" />
         <Compile Include="Contracts\IOAuthStateStoreContract.fs" />

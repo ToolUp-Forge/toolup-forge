@@ -24,7 +24,8 @@ open ToolUp.DataSources.Tests.Support
 // ─── Phase 834 / 1017 — every shipped connector declares what it is ───
 //
 // Binds the `IDeclaresPayloadFormat` pack and the Phase 1017
-// `IDeclaresCredentialNeed` laws to each connector this project ships.
+// `IDeclaresCredentialNeed` pack to each connector this project ships,
+// and pins what `DataIngestor` does with each credential need.
 // Both declarations are constants of the connector, so the factories
 // construct without credentials, a network or a seeded file — the same
 // constructors the connectors' own "instance Kind" tests use. All nine
@@ -57,58 +58,14 @@ let private gaTransport: GoogleAnalyticsDataSource.GoogleAnalyticsTransport = {
     RunReport = fun _ -> async { return Error(SourceUnreachable "not called") }
 }
 
-/// Every shipped connector, with the credential need its own comment
-/// justifies. A connector added to the family is added here.
-let private shippedConnectors: (string * CredentialNeed * (unit -> IDataSource)) list = [
-    "AthenaDataSource", CredentialNeed.Optional, AthenaDataSource.createWithDefaultCredentials
-    "BigQueryDataSource", CredentialNeed.Optional, BigQueryDataSource.createWithDefaultCredentials
-    "RedshiftDataSource", CredentialNeed.Optional, RedshiftDataSource.createWithDefaultCredentials
-    "SnowflakeDataSource", CredentialNeed.Optional, SnowflakeDataSource.createWithKeyFile
-    "SqlDataSource", CredentialNeed.Optional, SqlDataSource.createWithoutSecrets
-    "SynapseDataSource", CredentialNeed.Optional, SynapseDataSource.createWithDefaultCredentials
-    "GoogleAnalyticsDataSource",
-    CredentialNeed.Optional,
-    (fun () ->
-        GoogleAnalyticsDataSource.create
-            unreachableVault
-            gaTransport
-            None
-            GoogleAnalyticsDataSource.GoogleAnalyticsSourceConfig.standard)
-    "InMemoryDataSource", CredentialNeed.NoCredential, (fun () -> InMemoryDataSource.create () :> IDataSource)
-    "CsvDataSource", CredentialNeed.NoCredential, (fun () -> CsvDataSource.create (blobs ()))
-    "ExcelDataSource", CredentialNeed.NoCredential, (fun () -> ExcelDataSource.create (blobs ()))
-    "ParquetDataSource", CredentialNeed.NoCredential, (fun () -> ParquetDataSource.create (blobs ()))
-]
-
-/// The Phase 1017 laws for one connector: the need is declared
-/// EXPLICITLY (an `Optional` assertion over the undeclared default would
-/// pass vacuously), `CredentialNeed.declaredBy` answers what the
-/// interface says, and the answer is stable across calls and instances.
-let private credentialNeedLaws (name: string) (expected: CredentialNeed) (factory: unit -> IDataSource) =
-    let declaration (source: IDataSource) =
-        match box source with
-        | :? IDeclaresCredentialNeed as declared -> Some declared.CredentialNeed
-        | _ -> None
-
-    testList $"{name} — IDeclaresCredentialNeed" [
-        test "declares its credential need explicitly, not by the Optional default" {
-            let source = factory ()
-            Expect.isSome (declaration source) $"'{source.Kind}' must implement IDeclaresCredentialNeed"
-        }
-
-        test "declares the need the binding expects, and declaredBy agrees" {
-            let source = factory ()
-            Expect.equal (declaration source) (Some expected) "declared need"
-            Expect.equal (CredentialNeed.declaredBy source) expected "declaredBy agrees"
-        }
-
-        test "the declaration is stable across calls and instances" {
-            let source = factory ()
-            let first = CredentialNeed.declaredBy source
-            Expect.equal (CredentialNeed.declaredBy source) first "same instance, second call"
-            Expect.equal (CredentialNeed.declaredBy (factory ())) first "a fresh instance"
-        }
-    ]
+/// The Google Analytics connector, constructed without a network: its
+/// transport is never called by a declaration read.
+let private googleAnalytics () =
+    GoogleAnalyticsDataSource.create
+        unreachableVault
+        gaTransport
+        None
+        GoogleAnalyticsDataSource.GoogleAnalyticsSourceConfig.standard
 
 /// A connector that delegates everything to `inner` and declares
 /// `need` (or nothing, for `None`), recording whether `Connect` was
@@ -351,8 +308,30 @@ let tests =
             IDeclaresPayloadFormatContract.tests "ParquetDataSource" PayloadFormat.Csv (fun () ->
                 ParquetDataSource.create (blobs ()))
         ]
+        // Each connector's own comment names the reason for its answer.
         testList "IDeclaresCredentialNeed bindings" [
-            for name, need, factory in shippedConnectors -> credentialNeedLaws name need factory
+            IDeclaresCredentialNeedContract.tests "AthenaDataSource" CredentialNeed.Optional (fun () ->
+                AthenaDataSource.createWithDefaultCredentials ())
+            IDeclaresCredentialNeedContract.tests "BigQueryDataSource" CredentialNeed.Optional (fun () ->
+                BigQueryDataSource.createWithDefaultCredentials ())
+            IDeclaresCredentialNeedContract.tests "RedshiftDataSource" CredentialNeed.Optional (fun () ->
+                RedshiftDataSource.createWithDefaultCredentials ())
+            IDeclaresCredentialNeedContract.tests "SnowflakeDataSource" CredentialNeed.Optional (fun () ->
+                SnowflakeDataSource.createWithKeyFile ())
+            IDeclaresCredentialNeedContract.tests "SqlDataSource" CredentialNeed.Optional (fun () ->
+                SqlDataSource.createWithoutSecrets ())
+            IDeclaresCredentialNeedContract.tests "SynapseDataSource" CredentialNeed.Optional (fun () ->
+                SynapseDataSource.createWithDefaultCredentials ())
+            IDeclaresCredentialNeedContract.tests "GoogleAnalyticsDataSource" CredentialNeed.Optional (fun () ->
+                googleAnalytics ())
+            IDeclaresCredentialNeedContract.tests "InMemoryDataSource" CredentialNeed.NoCredential (fun () ->
+                InMemoryDataSource.create () :> IDataSource)
+            IDeclaresCredentialNeedContract.tests "CsvDataSource" CredentialNeed.NoCredential (fun () ->
+                CsvDataSource.create (blobs ()))
+            IDeclaresCredentialNeedContract.tests "ExcelDataSource" CredentialNeed.NoCredential (fun () ->
+                ExcelDataSource.create (blobs ()))
+            IDeclaresCredentialNeedContract.tests "ParquetDataSource" CredentialNeed.NoCredential (fun () ->
+                ParquetDataSource.create (blobs ()))
         ]
         ingestorTests
         resolveDeclaredTests
