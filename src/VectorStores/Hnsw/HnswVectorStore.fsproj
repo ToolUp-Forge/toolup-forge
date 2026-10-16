@@ -30,7 +30,8 @@
          version carrying published untrusted-payload DoS advisories (3 high,
          6 moderate). Transitive pinning is not enabled repo-wide, so the
          floor is lifted with an explicit reference to the CPM-pinned
-         version. Not used directly by this companion's own source. -->
+         version (3.1.12 since GHSA-qhrr-8q5h-9q3h, fixed in 3.1.9). Not used
+         directly by this companion's own source. -->
     <PackageReference Include="MessagePack" />
   </ItemGroup>
 </Project>

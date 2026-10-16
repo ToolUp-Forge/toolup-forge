@@ -194,13 +194,15 @@
     <PackageVersion Include="Markdig" Version="1.2.0" />
     <PackageVersion Include="Mathnet.Numerics" Version="5.0" />
     <PackageVersion Include="Mathnet.Numerics.FSharp" Version="5.0" />
-    <!-- 3.1.8 — 3.1.4 carried 9 published advisories (3 high, 6 moderate:
+    <!-- 3.1.12 — 3.1.4 carried 9 published advisories (3 high, 6 moderate:
          GHSA-382j-8mxh-c7x2 / -hv8m-jj95-wg3x / -vh6j-jc39-fggf and six
          moderates), all untrusted-payload DoS in the low-level reader.
-         Patched in 3.1.7; 3.1.8 is the current 3.1.x. -->
-    <PackageVersion Include="MessagePack" Version="3.1.8" />
-    <PackageVersion Include="MessagePack.Annotations" Version="3.1.8" />
-    <PackageVersion Include="MessagePackAnalyzer" Version="3.1.8" />
+         Patched in 3.1.7. GHSA-qhrr-8q5h-9q3h (moderate, 2026-10-15: nested
+         arrays can exceed buffer length limits) is patched in 3.1.9; 3.1.12 is
+         the current 3.1.x. -->
+    <PackageVersion Include="MessagePack" Version="3.1.12" />
+    <PackageVersion Include="MessagePack.Annotations" Version="3.1.12" />
+    <PackageVersion Include="MessagePackAnalyzer" Version="3.1.12" />
     <!-- Phase 18 — TestServer harness for the InterPlatform peer-substrate
          buyer->seller worked example (in ToolUp.Platform.Tests). Pinned to
          the installed ASP.NET Core runtime (10.0.8). -->

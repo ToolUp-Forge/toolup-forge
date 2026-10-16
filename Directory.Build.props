@@ -443,7 +443,17 @@
       `Credentials.resolveDeclared` (DataSources.Common).
       Migration recipe: `docs/migrations/1017-connector-credential-need.md`.
     -->
-    <Version>0.27.0</Version>
+    <!--
+      0.27.1 - advances PATCH (v0.27.0 is tagged at 099ebbdd): MessagePack
+      3.1.8 -> 3.1.12 (with MessagePack.Annotations and MessagePackAnalyzer)
+      for GHSA-qhrr-8q5h-9q3h (moderate, 2026-10-15: nested arrays can exceed
+      buffer length limits; patched in 3.1.9). Consumers reach it through
+      ToolUp.VectorStores.Hnsw (directly and via HNSW) and
+      ToolUp.RAG.StaticCorpus.Core, and a consumer that treats NU1902 as an
+      error cannot restore 0.27.0. A dependency-floor raise: no public
+      surface moves.
+    -->
+    <Version>0.27.1</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
       DLL. Non-publishable projects (App composition roots, modules,
