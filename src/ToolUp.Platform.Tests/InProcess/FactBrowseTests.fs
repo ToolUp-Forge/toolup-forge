@@ -22,16 +22,30 @@ module ToolUp.Platform.Tests.InProcess.FactBrowseTests
 //   6. **The shared names and the composition.** The link names other
 //      companions use match their producers, and a composition without
 //      the fact store is unchanged by `withFactBrowse`.
+//
+// ─── Phase 1018 — the composed demo ──────────────────────────────────
+//
+//   7. **All four at once.** One composed app holds the whole
+//      `grounding-scale-fact-tables` criterion as a single scenario, so
+//      the criterion has an oracle rather than four lists a judge would
+//      have to conjoin on its behalf.
 
 open System
 open System.Text.Json
+open System.Text.RegularExpressions
+open System.Threading
 open Expecto
+open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
+open ToolUp.Platform.AI
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
 open ToolUp.Platform.StorageScopeResolver
 open ToolUp.Platform.VectorKnowledgeTypes
+open ToolUp.AI
+open ToolUp.AI.AnswerVerifier
+open ToolUp.AI.AIToolRegistry
 open ToolUp.Facts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 
@@ -851,6 +865,444 @@ let private compositionTests =
         }
     ]
 
+// ─── Phase 1018 — the composed demo ──────────────────────────────────
+//
+// `grounding-scale-fact-tables` is a CONJUNCTIVE criterion: in a composed
+// app with a module that declares a fact table over a seeded large
+// population, a refresh is one audited run, AND the assistant answers a
+// top-k population question quoting minted facts verbatim, AND the client
+// shows the run and its change summary — WITHOUT the population reaching
+// model context.
+//
+// Each conjunct already had a test and the conjunction had none, so a
+// judge wired over the four lists would have gone green over a demo
+// nobody ran. The last conjunct had no coverage on this surface at all:
+// "the population never reaches the model" was asserted only over a
+// 250-subject point-fact population (`PopulationQueryToolTests`' Phase
+// 703 list), never over a fact table.
+//
+// This list is the demo: one app, one population, one run, one question.
+
+/// Large enough that the withholding is a claim about the ranking's bound
+/// rather than about the page ceiling.
+let private demoPopulationSize = 100_000
+
+/// The bound. Ten of the hundred thousand reach the model.
+let private demoTopK = 10
+
+/// Values ascend strictly with the row index, so the top-k is exactly the
+/// last k rows, and sit offset clear of every count the scenario states,
+/// so no quoted rendering can coincide with one.
+let private demoValue (i: int) : decimal = decimal (1_000_000 + i)
+
+let private demoSubject (i: int) : string = sprintf "sku-%06d" i
+
+let private demoRow (i: int) : FactTableRow =
+    row (sprintf "brand-%02d" (i % 10)) (demoSubject i) (demoValue i)
+
+/// Phase 889 — the declaring module's table bound to the DELEGATE
+/// destination, so the population is held as rows and only a quoted row
+/// becomes a fact.
+let private demoTables: IFactTableRegistry =
+    FactTableRegistry.build [
+        {
+            FactTableRegistration.Module = "sales"
+            Definition = skuTable
+        }
+    ] [ BindFactTable(skuTable.Id, DelegateFact.Destination) ]
+
+type private DemoApp = {
+    App: ServerApp
+    Services: IServiceProvider
+    Store: IFactStore
+    Writer: IFactTableWriter
+    Events: IEventStore
+    ScopeId: string
+    Scope: ResolvedScope
+}
+
+/// ONE composed app: the fact store with 887's writer seam over it, the
+/// table held as a delegate (889), and the browse surface mounted over
+/// both (895). Every handle the test reads afterwards is resolved out of
+/// that container, so no part of the scenario is wired by hand.
+let private composeDemo () : DemoApp =
+    let app =
+        {
+            ServerApp.empty with
+                Config = {
+                    ServerConfig.defaults with
+                        FactStore = EnabledFactStore
+                }
+        }
+        |> FactsCompose.withFactStore
+        |> FactsCompose.withFactTableWriter
+        |> FactsCompose.withDelegateFacts [ skuTable.Id ]
+        |> FactBrowseHandler.withFactBrowse
+
+    let services = ServiceCollection() :> IServiceCollection
+    services.AddSingleton<IBlobStorage>(InMemoryBlobStorage()) |> ignore
+
+    services.AddSingleton<IEventStore>(InMemoryEventStore.InMemoryEventStore())
+    |> ignore
+
+    services.AddSingleton<IMetricRegistry>(registry) |> ignore
+    services.AddSingleton<IFactTableRegistry>(demoTables) |> ignore
+
+    match app.Extensions.ServiceConfig with
+    | Some configure -> configure services |> ignore
+    | None -> failtest "the composed fact tier must register its services"
+
+    let built = services.BuildServiceProvider() :> IServiceProvider
+    let scopeId = newScope ()
+
+    {
+        App = app
+        Services = built
+        Store = built.GetRequiredService<IFactStore>()
+        Writer = built.GetRequiredService<IFactTableWriter>()
+        Events = built.GetRequiredService<IEventStore>()
+        ScopeId = scopeId
+        Scope = resolved scopeId
+    }
+
+/// The request context the mounted surfaces take their scope and principal
+/// from — the two items the scope-resolution middleware seeds.
+let private demoContext (d: DemoApp) : HttpContext =
+    let ctx = DefaultHttpContext()
+    ctx.RequestServices <- d.Services
+
+    let scope: StorageScope = {
+        ScopeId = d.ScopeId
+        Container = "container-" + d.ScopeId
+        Persist = true
+    }
+
+    ctx.Items["ToolUp.StorageScope"] <- box scope
+    ScopeResolution.remember ctx scope |> ignore
+    ctx.Items["ToolUp.UserId"] <- box "demo-user"
+    ctx :> HttpContext
+
+/// Open, stage and commit ONE run over the whole population.
+let private refresh (d: DemoApp) (rows: FactTableRow list) : string * FactTableCommit =
+    let opened =
+        match d.Writer.OpenRun(d.ScopeId, skuTable.Id) |> Async.RunSynchronously with
+        | Ok r -> r
+        | Error e -> failtestf "open: %s" (FactTableWriteError.describe e)
+
+    for batch in rows |> List.chunkBySize 10_000 do
+        match d.Writer.WriteRows(d.ScopeId, opened.RunId, batch) |> Async.RunSynchronously with
+        | Ok _ -> ()
+        | Error e -> failtestf "write: %s" (FactTableWriteError.describe e)
+
+    match d.Writer.Commit(d.ScopeId, opened.RunId) |> Async.RunSynchronously with
+    | Ok commit -> opened.RunId, commit
+    | Error e -> failtestf "commit: %s" (FactTableWriteError.describe e)
+
+/// A fake provider that asks the population tool once and then answers
+/// from the tool result alone — never from any wider context. It records
+/// every byte it was ever handed, so the test can audit model context, and
+/// the `(factId, rendering)` pairs it quoted, so the fidelity assertion is
+/// made against what the model actually read.
+type private FactTableAskingProvider(argsJson: string) =
+    let mutable turns = 0
+    let mutable quoted: (string * string) list = []
+    let seen = ResizeArray<string>()
+
+    /// Every byte of context this provider was ever given.
+    member _.ModelContext = String.concat "\n" (List.ofSeq seen)
+
+    /// The ranking's `(factId, rendering)` pairs, in the order returned.
+    member _.Quoted = quoted
+
+    member _.Turns = turns
+
+    interface IAIProvider with
+        member _.Capabilities = {
+            Streaming = false
+            ToolUse = true
+            Vision = false
+            SupportsPromptCaching = false
+            SupportsTriage = false
+            TriageModelId = None
+            ProviderName = "test-fact-table"
+            Model = "test-fact-table-model"
+        }
+
+        member _.SendMessage(messages, _tools, systemPrompt, _onStream, _retryPolicy) = async {
+            turns <- turns + 1
+            seen.Add(defaultArg systemPrompt "")
+
+            for m in messages do
+                seen.Add m.Content
+
+                for tr in m.ToolResults do
+                    seen.Add tr.Content
+
+            if turns = 1 then
+                return
+                    Ok {
+                        Content = ""
+                        ToolCalls = [
+                            {
+                                Id = Guid.NewGuid().ToString()
+                                Name = "query_metric_population"
+                                Arguments = argsJson
+                            }
+                        ]
+                        StopReason = "tool_use"
+                        Usage = None
+                    }
+            else
+                // Quote the returned renderings VERBATIM and state no
+                // other number, so the fidelity gate's verdict is about
+                // the whole answer rather than one sentence of it.
+                let toolResult =
+                    messages
+                    |> List.collect _.ToolResults
+                    |> List.tryLast
+                    |> Option.map _.Content
+                    |> Option.defaultValue "{}"
+
+                let root = (JsonDocument.Parse toolResult).RootElement
+
+                quoted <-
+                    root.GetProperty("ranked").EnumerateArray()
+                    |> Seq.map (fun entry ->
+                        entry.GetProperty("factId").GetString(), entry.GetProperty("rendering").GetString())
+                    |> List.ofSeq
+
+                return
+                    Ok {
+                        Content =
+                            "The highest revenue in the table, best first, reads: "
+                            + (quoted |> List.map snd |> String.concat ", ")
+                            + " — each quoted exactly as the ranking returned it."
+                        ToolCalls = []
+                        StopReason = "end_turn"
+                        Usage = None
+                    }
+        }
+
+        member this.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) =
+            IAIProviderDefaults.sendStructuredViaFallback
+                (this :> IAIProvider)
+                messages
+                tools
+                systemPrompt
+                schema
+                retryPolicy
+
+/// Subject ids are the honest withholding probe: unlike a value, a subject
+/// id cannot coincide with a summary statistic the model was legitimately
+/// told.
+let private demoSubjectPattern = Regex(@"sku-\d{6}", RegexOptions.CultureInvariant)
+
+let private composedDemoTests =
+    testList "the composed demo — one app, one population, one run, one question" [
+
+        testCaseAsync
+            "a declared table over a 100,000-subject population refreshes as one audited run, answers a top-k question quoting minted facts verbatim, and shows that run to the client with the population withheld"
+        <| async {
+            let d = composeDemo ()
+            let client = FactBrowseHandler.factBrowseApi (demoContext d)
+
+            // ── The declaration, before anything has run ──────────────
+            match ok "tables" (client.ListTables()) with
+            | [ t ] ->
+                Expect.equal t.TableId skuTable.Id "the module's declared table"
+                Expect.equal t.Module "sales" "its declaring module"
+                Expect.equal t.Freshness "never-refreshed" "nothing has refreshed it"
+            | other -> failtestf "expected the one declared table, got %A" other
+
+            Expect.equal (ok "runs" (client.ListRuns(skuTable.Id, 0, 10))).TotalRuns 0 "and it has no run history"
+
+            // ── ONE refresh over the whole population ─────────────────
+            let runId, commit = refresh d [ for i in 1..demoPopulationSize -> demoRow i ]
+
+            Expect.equal commit.RowCount demoPopulationSize "the run holds the whole population"
+
+            Expect.equal commit.FactsWritten 0 "and mints no fact — the table is held, not expanded into the fact tier"
+
+            // ── One refresh, ONE audited run ──────────────────────────
+            let! committed = d.Events.ReadByType(d.ScopeId, FactTableEvents.RunCommittedType)
+
+            Expect.equal committed.Length 1 "one refresh, one audit record — not one per subject"
+
+            let! factTierAudit = d.Events.ReadBySource(d.ScopeId, FactEvents.SourceModule)
+
+            Expect.equal
+                (factTierAudit |> List.map _.EventType |> List.sort)
+                (FactTableEvents.RunCommittedType
+                 :: (skuTable.Columns |> List.map (fun _ -> FactEvents.AssertedType))
+                 |> List.sort)
+                (sprintf
+                    "the whole fact-tier audit of the %d-row refresh is the run record plus one delegate record per declared column — bounded by the DECLARATION, never by the population"
+                    demoPopulationSize)
+
+            Expect.equal
+                (ok "runs" (client.ListRuns(skuTable.Id, 0, 10))).TotalRuns
+                1
+                "the run count advanced by exactly one"
+
+            // ── The top-k question, through the composed tool set ─────
+            let tools = AIToolRegistry()
+
+            tools.RegisterAll(d.App.AITools |> List.map (fun (def, exec) -> createTool def exec))
+
+            let provider =
+                FactTableAskingProvider(
+                    sprintf """{"metric":"revenue","subject_hierarchy":"products","top_k":%d}""" demoTopK
+                )
+
+            let streamed = ResizeArray<AIStreamEvent>()
+
+            let onEvent (evt: AIStreamEvent) =
+                lock streamed (fun () -> streamed.Add evt)
+
+            let! answered =
+                AIAgentEngine.runAgentLoopWithInput
+                    (provider :> IAIProvider)
+                    tools
+                    (ClientToolDispatch.ClientToolDispatchRegistry())
+                    (demoContext d)
+                    (Guid.NewGuid())
+                    (Guid.NewGuid())
+                    AISurface.FullPage
+                    None
+                    None
+                    CancellationToken.None
+                    [
+                        AIProviderMessage.text "user" "Which skus had the highest revenue last month?"
+                    ]
+                    ModelInput.empty
+                    onEvent
+
+            let captured = lock streamed (fun () -> streamed.ToArray() |> Array.toList)
+
+            Expect.equal
+                (captured
+                 |> List.choose (function
+                     | ToolCallStarted(_, name, _) -> Some name
+                     | _ -> None))
+                [ "query_metric_population" ]
+                "the population question was answered by exactly one tool call, not a hundred thousand point reads"
+
+            Expect.equal provider.Turns 2 "one tool turn, one answer turn"
+
+            // ── The quoted numbers are minted facts, byte for byte ────
+            let quoted = provider.Quoted
+            Expect.equal quoted.Length demoTopK "the model was handed the bound, not the population"
+
+            let displayFormat =
+                registry.TryGetMetric "revenue"
+                |> Option.map _.DisplayFormat
+                |> Option.defaultWith (fun () -> failtest "the metric must be registered")
+
+            for factId, rendering in quoted do
+                let stored =
+                    d.Store.Get(d.Scope, factId)
+                    |> Async.RunSynchronously
+                    |> Option.defaultWith (fun () -> failtestf "the quoted fact %s is minted and stored" factId)
+
+                Expect.equal
+                    rendering
+                    (FactRendering.render displayFormat stored.Value)
+                    "the rendering the model quoted is the stored fact's, byte for byte"
+
+            let answer =
+                answered
+                |> List.filter (fun m -> m.Role = "assistant" && not (String.IsNullOrWhiteSpace m.Content))
+                |> List.tryLast
+                |> Option.map _.Content
+                |> Option.defaultWith (fun () -> failtest "the agent loop produced no assistant answer")
+
+            let scoped: ScopedFact list =
+                quoted
+                |> List.map (fun (factId, rendering) -> {
+                    FactId = factId
+                    Rendering = rendering
+                    Metric = "revenue"
+                })
+
+            // Phase 889's numeric-fidelity gate, over the delegated mints.
+            let verdict = NumericFidelity.verify answer scoped (Some registry) "Annotate"
+
+            Expect.equal verdict.Verified demoTopK "every number the answer states is verified against a minted fact"
+
+            Expect.equal verdict.Unmatched 0 "and it states no number the fact tier did not mint"
+
+            Expect.equal
+                (verdict.Numbers |> List.choose _.MatchedFactId)
+                (quoted |> List.map fst)
+                "each quoted number carries its fact id, in the order the ranking returned them"
+
+            // ── THE POINT: the population was withheld ────────────────
+            let context = provider.ModelContext
+
+            let mentioned = demoSubjectPattern.Matches context |> Seq.map _.Value |> Set.ofSeq
+
+            Expect.isLessThanOrEqual
+                mentioned.Count
+                demoTopK
+                "the subjects reaching model context are bounded by the effective top-k"
+
+            Expect.equal
+                (Set.toList mentioned)
+                ([ demoPopulationSize - demoTopK + 1 .. demoPopulationSize ]
+                 |> List.map demoSubject
+                 |> List.sort)
+                "and they are exactly the returned top-k, not an arbitrary ten"
+
+            Expect.equal
+                (demoPopulationSize - mentioned.Count)
+                (demoPopulationSize - demoTopK)
+                (sprintf
+                    "the other %d of the %d subjects never reached the model"
+                    (demoPopulationSize - demoTopK)
+                    demoPopulationSize)
+
+            Expect.stringContains context "\"truncated\":true" "and the model was told its ranking was bounded"
+
+            Expect.stringContains
+                context
+                (sprintf "\"subjectCount\":%d" demoPopulationSize)
+                "so it could state the population size it never saw"
+
+            // ── The client shows THAT run, with its change summary ────
+            let latest = (ok "runs" (client.ListRuns(skuTable.Id, 0, 10))).Runs.Head
+            Expect.equal latest.RunId runId "the run the client shows is the run the refresh opened"
+            Expect.equal latest.Outcome "succeeded" "committed"
+            Expect.equal latest.RowsWritten (Some demoPopulationSize) "the rows it wrote"
+
+            match latest.Change with
+            | Some c ->
+                Expect.equal
+                    (c.New, c.Changed, c.Unchanged, c.Removed)
+                    (demoPopulationSize, 0, 0, 0)
+                    "its change summary against the table's previous standing"
+            | None -> failtest "a committed run carries its change summary"
+
+            // The binding that makes this ONE scenario rather than two
+            // asserted side by side: the run the client is showing is the
+            // run the quoted facts were minted under.
+            let topFactId, _ = List.head quoted
+
+            let topStored =
+                d.Store.Get(d.Scope, topFactId)
+                |> Async.RunSynchronously
+                |> Option.defaultWith (fun () -> failtest "the leading quoted fact is stored")
+
+            Expect.equal
+                topStored.Evidence.TriggerRef
+                (Some(DelegateMint.triggerRef skuTable.Id latest.RunId))
+                "the quoted fact names the run the client is showing"
+
+            let listed = ok "tables" (client.ListTables()) |> List.head
+            Expect.equal listed.RowCount (Some demoPopulationSize) "the table's standing is that run's row count"
+            Expect.isSome listed.LastRefreshedAt "and it reads as refreshed"
+        }
+    ]
+
 /// Every Phase 895 server case.
 let tests =
     testList "Phase 895 — fact browse surface" [
@@ -860,4 +1312,5 @@ let tests =
         tableTests
         notificationTests
         compositionTests
+        composedDemoTests
     ]
