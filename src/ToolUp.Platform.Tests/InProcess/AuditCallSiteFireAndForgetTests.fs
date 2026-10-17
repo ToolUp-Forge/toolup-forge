@@ -20,9 +20,9 @@ module ToolUp.Platform.Tests.InProcess.AuditCallSiteFireAndForgetTests
 //     TERMINATES THE HOST, so this arm can only go red in a child process.
 //   * `TaskShaped` — the write fails behind a task boundary
 //     (`Async.AwaitTask`); started bare it is an unobserved task exception.
-//   * `Synchronous` — the write throws before an `Async` exists. The sites
-//     pass the write delayed (`async { return! … }`), so this lands inside
-//     the catch too; started bare it failed the request, or the host.
+//   * `Synchronous` — the write throws before an `Async` exists. Each site
+//     evaluates the write eagerly, as before, inside a `try` whose `with`
+//     hands the throw to the same warner; unguarded it failed the request.
 //
 // For every arm: the caller's outcome equals the control's, no unobserved
 // task exception carries the arm's marker, and exactly one log entry names

@@ -857,20 +857,20 @@ let private callback (flowName: string) : HttpHandler =
                                                                 (Background.requestLogger ctx)
                                                                 ctx
 
-                                                        async {
-                                                            return!
-                                                                auditLog.Record(
-                                                                    entry.ScopeId,
-                                                                    OAuthConnected {
-                                                                        UserId = entry.UserId
-                                                                        ScopeId = entry.ScopeId
-                                                                        FlowName = flowName
-                                                                        DataSourceId = entry.DataSourceId
-                                                                        ConnectedAt = connectedAt
-                                                                    }
-                                                                )
-                                                        }
-                                                        |> Background.startAudit warn "OAuthConnected audit"
+                                                        try
+                                                            auditLog.Record(
+                                                                entry.ScopeId,
+                                                                OAuthConnected {
+                                                                    UserId = entry.UserId
+                                                                    ScopeId = entry.ScopeId
+                                                                    FlowName = flowName
+                                                                    DataSourceId = entry.DataSourceId
+                                                                    ConnectedAt = connectedAt
+                                                                }
+                                                            )
+                                                            |> Background.startAudit warn "OAuthConnected audit"
+                                                        with ex ->
+                                                            warn "OAuthConnected audit" ex
                                                     | None -> ()
 
                                                     logger.Info

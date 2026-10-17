@@ -112,8 +112,12 @@ let private recordAudit (ctx: HttpContext) (auditLog: IAuditLog option) : string
     fun scopeId audit ->
         match auditLog with
         | Some a ->
-            async { return! a.Record(scopeId, audit) }
-            |> Background.startAudit warn (sprintf "%s audit" (AuditEvent.eventTypeName audit))
+            let what = sprintf "%s audit" (AuditEvent.eventTypeName audit)
+
+            try
+                a.Record(scopeId, audit) |> Background.startAudit warn what
+            with ex ->
+                warn what ex
         | None -> ()
 
 // ─── PlatformInfoApi — mode + auth posture (1 method) ───────────────

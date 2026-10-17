@@ -51,8 +51,11 @@ let private consentHandler: HttpHandler =
                 let warn =
                     Background.writeFailureWarner "ConsentApiHandler" (Background.requestLogger ctx) ctx
 
-                async { return! auditLog.Record(PlatformScope, AuditEvent.ConsentRecorded ev) }
-                |> Background.startAudit warn "ConsentRecorded audit"
+                try
+                    auditLog.Record(PlatformScope, AuditEvent.ConsentRecorded ev)
+                    |> Background.startAudit warn "ConsentRecorded audit"
+                with ex ->
+                    warn "ConsentRecorded audit" ex
             | _ -> ()
 
             ctx.Response.StatusCode <- 204

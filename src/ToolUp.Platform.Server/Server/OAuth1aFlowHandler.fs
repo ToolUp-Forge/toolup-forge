@@ -249,20 +249,20 @@ let private callback (flowName: string) : HttpHandler =
                                                 (Background.requestLogger ctx)
                                                 ctx
 
-                                        async {
-                                            return!
-                                                auditLog.Record(
-                                                    state.ScopeId,
-                                                    OAuth1aConnected {
-                                                        UserId = state.UserId
-                                                        ScopeId = state.ScopeId
-                                                        FlowName = flowName
-                                                        ResourceId = state.ResourceId
-                                                        ConnectedAt = DateTime.UtcNow
-                                                    }
-                                                )
-                                        }
-                                        |> Background.startAudit warn "OAuth1aConnected audit"
+                                        try
+                                            auditLog.Record(
+                                                state.ScopeId,
+                                                OAuth1aConnected {
+                                                    UserId = state.UserId
+                                                    ScopeId = state.ScopeId
+                                                    FlowName = flowName
+                                                    ResourceId = state.ResourceId
+                                                    ConnectedAt = DateTime.UtcNow
+                                                }
+                                            )
+                                            |> Background.startAudit warn "OAuth1aConnected audit"
+                                        with ex ->
+                                            warn "OAuth1aConnected audit" ex
                                     | None -> ()
 
                                     return! respondRedirect ctx "/?oauth1a=connected"

@@ -350,20 +350,20 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
                                         (Background.requestLogger ctx)
                                         ctx
 
-                                async {
-                                    return!
-                                        auditLog.Record(
-                                            scopeId,
-                                            OAuthDisconnected {
-                                                UserId = accessContext.UserId
-                                                ScopeId = scopeId
-                                                FlowName = meta.FlowName
-                                                DataSourceId = sourceId
-                                                UpstreamRevoked = upstreamRevoked
-                                            }
-                                        )
-                                }
-                                |> Background.startAudit warn "OAuthDisconnected audit"
+                                try
+                                    auditLog.Record(
+                                        scopeId,
+                                        OAuthDisconnected {
+                                            UserId = accessContext.UserId
+                                            ScopeId = scopeId
+                                            FlowName = meta.FlowName
+                                            DataSourceId = sourceId
+                                            UpstreamRevoked = upstreamRevoked
+                                        }
+                                    )
+                                    |> Background.startAudit warn "OAuthDisconnected audit"
+                                with ex ->
+                                    warn "OAuthDisconnected audit" ex
                             | _ -> ()
 
                             // Suppress unused-binding warning when

@@ -176,20 +176,20 @@ let internal completeConnectObserved
                         // change.
                         match auditLog with
                         | Some log ->
-                            async {
-                                return!
-                                    log.Record(
-                                        scope.ScopeId,
-                                        OAuthConnected {
-                                            UserId = userId
-                                            ScopeId = scope.ScopeId
-                                            FlowName = flow.Name
-                                            DataSourceId = OAuthCorrelationKey.render correlation
-                                            ConnectedAt = connectedAt
-                                        }
-                                    )
-                            }
-                            |> Background.startAudit warn "OAuthConnected audit"
+                            try
+                                log.Record(
+                                    scope.ScopeId,
+                                    OAuthConnected {
+                                        UserId = userId
+                                        ScopeId = scope.ScopeId
+                                        FlowName = flow.Name
+                                        DataSourceId = OAuthCorrelationKey.render correlation
+                                        ConnectedAt = connectedAt
+                                    }
+                                )
+                                |> Background.startAudit warn "OAuthConnected audit"
+                            with ex ->
+                                warn "OAuthConnected audit" ex
                         | None -> ()
 
                         return Ok()

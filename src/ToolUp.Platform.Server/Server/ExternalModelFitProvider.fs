@@ -1255,10 +1255,13 @@ type ExternalModelFitProvider
 
                             // Phase 1026 — observed: a backend whose Cancel throws
                             // is a Warning, never an unhandled exception.
-                            async { return! dispatcher.Cancel handle }
-                            |> Background.startAudit
-                                (Background.writeFailureLogger "ExternalModelFitProvider" logger "" "the cancelled fit")
-                                "backend cancellation")
+                            let warn =
+                                Background.writeFailureLogger "ExternalModelFitProvider" logger "" "the cancelled fit"
+
+                            try
+                                dispatcher.Cancel handle |> Background.startAudit warn "backend cancellation"
+                            with ex ->
+                                warn "backend cancellation" ex)
 
                     let! settled = wait handle deadline
 

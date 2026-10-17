@@ -195,8 +195,10 @@ let private emitDenial (ctx: HttpContext) (errorCode: string) (description: stri
             CorrelationId = ToolUp.Remoting.Server.CallContext.correlationId ()
         }
 
-        async { return! hook.RecordDenial row }
-        |> Background.startAudit warn "AuthorizationDenied audit"
+        try
+            hook.RecordDenial row |> Background.startAudit warn "AuthorizationDenied audit"
+        with ex ->
+            warn "AuthorizationDenied audit" ex
     | _ -> ()
 
 /// Phase 9d attribution — one `api.requests` usage record per admitted
@@ -233,8 +235,10 @@ let private meterRequest (ctx: HttpContext) (principal: ServiceAccountPrincipal)
             Timestamp = DateTime.UtcNow
         }
 
-        async { return! usageLog.Record row }
-        |> Background.startAudit warn "api.requests usage"
+        try
+            usageLog.Record row |> Background.startAudit warn "api.requests usage"
+        with ex ->
+            warn "api.requests usage" ex
     | _ -> ()
 
 /// Build the `ShareTokenClaim` a validated principal presents to the

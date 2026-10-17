@@ -163,10 +163,10 @@ let internal writeFailureWarner (source: string) (logger: ILogger option) (ctx: 
 /// Under `Async.Catch` neither escapes: the failure is handed to `warn`
 /// with the write's name, the caller never waits on the write and never
 /// changes because of it. A write that throws synchronously, before an
-/// `Async` exists, is caught too when the caller passes it delayed —
-/// `async { return! log.Record(scope, event) }` (Phase 1026) — with any
-/// value read from the request bound before, while the request is live;
-/// otherwise it is the caller's `try ... with ex -> warn what ex`.
+/// `Async` exists, is the caller's `try ... with ex -> warn what ex`. The
+/// write is evaluated there, eagerly, not delayed into the started async:
+/// a sink's synchronous prefix (an enqueue, a buffer append) then runs in
+/// the caller's order, as it did under the bare start (Phase 1026).
 let internal startAudit (warn: string -> exn -> unit) (what: string) (work: Async<unit>) : unit =
     async {
         match! Async.Catch work with

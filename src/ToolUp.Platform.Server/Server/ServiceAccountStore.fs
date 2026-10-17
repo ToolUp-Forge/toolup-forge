@@ -214,8 +214,12 @@ type BlobServiceAccountStore(storage: IBlobStorage, audit: IAuditLog option, log
     let recordAudit (scopeId: string) (event: AuditEvent) =
         match audit with
         | Some a ->
-            async { return! a.Record(scopeId, event) }
-            |> Background.startAudit auditWarn (sprintf "%s audit" (AuditEvent.eventTypeName event))
+            let what = sprintf "%s audit" (AuditEvent.eventTypeName event)
+
+            try
+                a.Record(scopeId, event) |> Background.startAudit auditWarn what
+            with ex ->
+                auditWarn what ex
         | None -> ()
 
     /// Read an account and REFUSE a scope mismatch rather than returning

@@ -164,8 +164,10 @@ let private emitShareTokenDenial (ctx: HttpContext) (errorCode: string) (descrip
             CorrelationId = ToolUp.Remoting.Server.CallContext.correlationId ()
         }
 
-        async { return! hook.RecordDenial row }
-        |> Background.startAudit warn "AuthorizationDenied audit"
+        try
+            hook.RecordDenial row |> Background.startAudit warn "AuthorizationDenied audit"
+        with ex ->
+            warn "AuthorizationDenied audit" ex
     | _ -> ()
 
 /// ASP.NET Core middleware that validates an inbound share-token and

@@ -642,10 +642,14 @@ type PerScopeKeyResolver
                                 AcknowledgedAt = DateTimeOffset.UtcNow
                             }
 
-                        async { return! log.Record(scopeId, row) }
-                        |> Background.startAudit
-                            (Background.writeFailureLogger "PerScopeKeyResolver" logger "" "the key eviction")
-                            "EncryptionKeyDestroyAcknowledged audit"
+                        let warn =
+                            Background.writeFailureLogger "PerScopeKeyResolver" logger "" "the key eviction"
+
+                        try
+                            log.Record(scopeId, row)
+                            |> Background.startAudit warn "EncryptionKeyDestroyAcknowledged audit"
+                        with ex ->
+                            warn "EncryptionKeyDestroyAcknowledged audit" ex
                     // A pre-Phase-22b payload (bare scopeId) carries
                     // none of the acknowledgement's fields. Evict —
                     // done above — and skip the record rather than

@@ -206,8 +206,12 @@ module private ConsentAudit =
                 }
 
             // Fire-and-forget — never block / fail the consent write.
-            async { return! log.Record(scopeId, event) }
-            |> Background.startAudit warn (sprintf "%s audit" kind)
+            let what = sprintf "%s audit" kind
+
+            try
+                log.Record(scopeId, event) |> Background.startAudit warn what
+            with ex ->
+                warn what ex
 
 // ─── Withdrawal helper (shared by both impls) ─────────────────────
 

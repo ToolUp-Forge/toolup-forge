@@ -1132,6 +1132,14 @@ module VerifiedCompositionProfile =
         : Async<unit> =
         auditLog.Record(scopeId, AuditEvent.CompositionCapabilityRefused(refusalPayload profile denial))
 
+    /// Phase 1026 — the warning a failed refusal audit write is logged as.
+    let private refusalWarn =
+        Background.writeFailureLogger
+            "BootVerificationPreflight"
+            (Some(ConsoleLogger.ConsoleLogger() :> ILogger))
+            ""
+            "the refusal"
+
     /// The deny observer that puts a refusal on the audit path.
     ///
     /// Fire-and-forget, matching `IAuditLog.Record`'s own best-effort
@@ -1146,16 +1154,12 @@ module VerifiedCompositionProfile =
         (scopeId: string)
         (profile: CompositionProfile)
         : CapabilityDenial -> unit =
-        let warn =
-            Background.writeFailureLogger
-                "BootVerificationPreflight"
-                (Some(ConsoleLogger.ConsoleLogger() :> ILogger))
-                ""
-                "the refusal"
-
         fun denial ->
-            async { return! recordRefusal auditLog scopeId profile denial }
-            |> Background.startAudit warn "CompositionCapabilityRefused audit"
+            try
+                recordRefusal auditLog scopeId profile denial
+                |> Background.startAudit refusalWarn "CompositionCapabilityRefused audit"
+            with ex ->
+                refusalWarn "CompositionCapabilityRefused audit" ex
 
     /// Resolve the capability gate a composition runs under.
     ///

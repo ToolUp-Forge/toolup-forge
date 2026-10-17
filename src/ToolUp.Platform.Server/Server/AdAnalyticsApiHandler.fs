@@ -384,8 +384,13 @@ let private impressionHandler: HttpHandler =
                     else
                         match ctx.RequestServices.GetService(typeof<IAuditLog>) with
                         | :? IAuditLog as auditLog ->
-                            async { return! auditLog.Record(PlatformScope, AuditEvent.AdImpressionRecorded ev) }
-                            |> Background.startAudit (auditWarner ctx) "AdImpressionRecorded audit"
+                            let warn = auditWarner ctx
+
+                            try
+                                auditLog.Record(PlatformScope, AuditEvent.AdImpressionRecorded ev)
+                                |> Background.startAudit warn "AdImpressionRecorded audit"
+                            with ex ->
+                                warn "AdImpressionRecorded audit" ex
                         | _ -> ()
 
                         ctx.Response.StatusCode <- 204
@@ -427,8 +432,13 @@ let private clickHandler: HttpHandler =
                     else
                         match ctx.RequestServices.GetService(typeof<IAuditLog>) with
                         | :? IAuditLog as auditLog ->
-                            async { return! auditLog.Record(PlatformScope, AuditEvent.AdClickRecorded ev) }
-                            |> Background.startAudit (auditWarner ctx) "AdClickRecorded audit"
+                            let warn = auditWarner ctx
+
+                            try
+                                auditLog.Record(PlatformScope, AuditEvent.AdClickRecorded ev)
+                                |> Background.startAudit warn "AdClickRecorded audit"
+                            with ex ->
+                                warn "AdClickRecorded audit" ex
                         | _ -> ()
 
                         ctx.Response.StatusCode <- 204

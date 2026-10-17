@@ -228,24 +228,24 @@ type AnonymousSessionMigrationMiddleware(next: RequestDelegate) =
                                                 (Background.requestLogger ctx)
                                                 ctx
 
-                                        async {
-                                            return!
-                                                auditLog.Record(
-                                                    scopeId,
-                                                    AnonymousSessionMigrated {
-                                                        AnonymousSessionId = sid
-                                                        TargetUserId = uid
-                                                        Outcome = outcome
-                                                        ItemsMigrated = summary.ItemsMigrated
-                                                        BytesMigrated = summary.BytesMigrated
-                                                        Modules = summary.Modules
-                                                        FailedItems = failedItems
-                                                        Error = error
-                                                        OccurredAt = DateTimeOffset.UtcNow
-                                                    }
-                                                )
-                                        }
-                                        |> Background.startAudit warn "AnonymousSessionMigrated audit"
+                                        try
+                                            auditLog.Record(
+                                                scopeId,
+                                                AnonymousSessionMigrated {
+                                                    AnonymousSessionId = sid
+                                                    TargetUserId = uid
+                                                    Outcome = outcome
+                                                    ItemsMigrated = summary.ItemsMigrated
+                                                    BytesMigrated = summary.BytesMigrated
+                                                    Modules = summary.Modules
+                                                    FailedItems = failedItems
+                                                    Error = error
+                                                    OccurredAt = DateTimeOffset.UtcNow
+                                                }
+                                            )
+                                            |> Background.startAudit warn "AnonymousSessionMigrated audit"
+                                        with ex ->
+                                            warn "AnonymousSessionMigrated audit" ex
                                     | _ -> ()
 
                                 match result with

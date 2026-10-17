@@ -1245,17 +1245,17 @@ let private announceStoreReset
         let warn =
             Background.writeFailureLogger "FileManagement" (Some logger) "" "the request"
 
-        async {
-            return!
-                auditLog.Record(
-                    scope.ScopeId,
-                    SessionStoreReset {
-                        Container = scope.Container
-                        Reason = SessionStoreResetReasonEvicted
-                    }
-                )
-        }
-        |> Background.startAudit warn "SessionStoreReset audit"
+        try
+            auditLog.Record(
+                scope.ScopeId,
+                SessionStoreReset {
+                    Container = scope.Container
+                    Reason = SessionStoreResetReasonEvicted
+                }
+            )
+            |> Background.startAudit warn "SessionStoreReset audit"
+        with ex ->
+            warn "SessionStoreReset audit" ex
     | None -> ()
 
     match runtime.NotificationChannel with
@@ -1442,8 +1442,12 @@ let fileManagementApi (ctx: HttpContext) : FileManagementApi =
     let recordAudit (event: AuditEvent) =
         match auditLog with
         | Some a ->
-            async { return! a.Record(scopeId, event) }
-            |> Background.startAudit auditWarn (sprintf "%s audit" (AuditEvent.eventTypeName event))
+            let what = sprintf "%s audit" (AuditEvent.eventTypeName event)
+
+            try
+                a.Record(scopeId, event) |> Background.startAudit auditWarn what
+            with ex ->
+                auditWarn what ex
         | None -> ()
 
     // Owner / Admin write gate for `ResetDataStore` — same shape as

@@ -98,8 +98,13 @@ let private emitMismatchAudit (ctx: HttpContext) (principalId: string) (asserted
                 ReaderRoles = None
             }
 
-        async { return! auditLog.Record("_platform", row) }
-        |> Background.startAudit (Background.writeFailureWarner "SseScopeResolution" logger ctx) "SurfaceDenied audit"
+        let warn = Background.writeFailureWarner "SseScopeResolution" logger ctx
+
+        try
+            auditLog.Record("_platform", row)
+            |> Background.startAudit warn "SurfaceDenied audit"
+        with ex ->
+            warn "SurfaceDenied audit" ex
     | _ -> ()
 
 /// Resolve the subscriber scope for an SSE connect.

@@ -185,8 +185,12 @@ let private recordAudit (ctx: HttpContext) (event: AuditEvent) : unit =
 
     resolveAuditLog ctx
     |> Option.iter (fun log ->
-        async { return! log.Record(PlatformAdsConfigScope, event) }
-        |> Background.startAudit warn (sprintf "%s audit" (AuditEvent.eventTypeName event)))
+        let what = sprintf "%s audit" (AuditEvent.eventTypeName event)
+
+        try
+            log.Record(PlatformAdsConfigScope, event) |> Background.startAudit warn what
+        with ex ->
+            warn what ex)
 
 let private withSubstrate
     (ctx: HttpContext)

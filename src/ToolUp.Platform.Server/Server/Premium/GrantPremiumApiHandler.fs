@@ -107,14 +107,13 @@ let private grantHandler (userId: string) : HttpHandler =
 
                 resolveAuditLog ctx
                 |> Option.iter (fun auditLog ->
-                    async {
-                        return!
-                            auditLog.Record(
-                                PlatformScope,
-                                AuditEvent.PremiumGranted(userId, grantor, reason, occurredAt)
-                            )
-                    }
-                    |> Background.startAudit (auditWarner ctx) "PremiumGranted audit")
+                    let warn = auditWarner ctx
+
+                    try
+                        auditLog.Record(PlatformScope, AuditEvent.PremiumGranted(userId, grantor, reason, occurredAt))
+                        |> Background.startAudit warn "PremiumGranted audit"
+                    with ex ->
+                        warn "PremiumGranted audit" ex)
 
                 ctx.Response.StatusCode <- 204
                 return! next ctx
@@ -139,16 +138,16 @@ let private revokeHandler (userId: string) : HttpHandler =
             | Ok() ->
                 resolveAuditLog ctx
                 |> Option.iter (fun auditLog ->
-                    let revokedAt = DateTimeOffset.UtcNow
+                    let warn = auditWarner ctx
 
-                    async {
-                        return!
-                            auditLog.Record(
-                                PlatformScope,
-                                AuditEvent.PremiumRevoked(userId, grantor, reason, revokedAt)
-                            )
-                    }
-                    |> Background.startAudit (auditWarner ctx) "PremiumRevoked audit")
+                    try
+                        auditLog.Record(
+                            PlatformScope,
+                            AuditEvent.PremiumRevoked(userId, grantor, reason, DateTimeOffset.UtcNow)
+                        )
+                        |> Background.startAudit warn "PremiumRevoked audit"
+                    with ex ->
+                        warn "PremiumRevoked audit" ex)
 
                 ctx.Response.StatusCode <- 204
                 return! next ctx
