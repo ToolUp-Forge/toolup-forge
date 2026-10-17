@@ -482,6 +482,15 @@
       rollup horizon, and the per-refusal `SurfaceDenied` row stays unbounded
       because each refusal is a fact the trail must hold. Migration recipe:
       `docs/migrations/1006-reader-refusal-audit.md`.
+
+      Rides this draft, additive (Platform.Server): Phase 1025 adds a
+      `WebhookDispatcherService.StopAsync` override, which cancels in-flight
+      subscription fan-outs and waits for them at shutdown. Behaviour, no
+      surface change: a store write the conversation and result stores, or the
+      webhook fan-out, start fire-and-forget can no longer terminate the host.
+      A failed write is logged (Warning; the fan-out at Error) and the
+      caller's result stands. A lineage store's `Error` result, previously
+      dropped silently, now warns too.
     -->
     <Version>0.28.0</Version>
     <!--
