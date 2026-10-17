@@ -2622,6 +2622,8 @@ let private registeredTests =
         ServerBindAddressTests.tests
         // Phase 1024 - a fire-and-forget audit write never faults unobserved.
         AuditFireAndForgetTests.tests
+        // Phase 1025 - a store write started fire-and-forget cannot kill the host.
+        StoreFireAndForgetTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

@@ -44,14 +44,12 @@ let buildDataObjectStoreAndCatalog
 
     dataObjectStore, dataCatalog
 
-/// Phase 8 / 8a / 53 — construct the optional state-store values
-/// (`IResultStore`, `ILineageStore`, `IConversationStore`) per the
-/// matching `ServerConfig` modes. The unset defaults return `None`;
-/// downstream `registerOptionalStores` skips registration for any
-/// `None` so DI resolution returns `null` and consumers must handle
-/// absence explicitly. Lineage is constructed before result so the
-/// persistent result variant can pick it up for auto-emit.
-let buildOptionalStoreValues
+/// Phase 1025 — `buildOptionalStoreValues` with the logger the result and
+/// conversation stores warn through when an event or lineage write they
+/// start fire-and-forget fails. `compose` calls this one; the public
+/// signature below is kept for its existing callers.
+let internal buildOptionalStoreValuesLogged
+    (logger: ILogger)
     (config: ServerConfig)
     (eventStore: IEventStore)
     (dataObjectStore: IDataObjectStore)
@@ -65,25 +63,31 @@ let buildOptionalStoreValues
     let resultStore: IResultStore option =
         match config.ResultStore with
         | NoResultStore -> None
-        | InMemoryResultStore ->
-            Some(ResultStore.InMemoryResultStore(eventStore = eventStore, ?lineageStore = lineageStore) :> _)
+        | InMemoryResultStore -> Some(ResultStore.InMemoryResultStore(Some eventStore, lineageStore, logger) :> _)
         | PersistentResultStore ->
-            Some(
-                ResultStore.PersistentResultStore(
-                    dataObjectStore,
-                    eventStore = eventStore,
-                    ?lineageStore = lineageStore
-                )
-                :> _
-            )
+            Some(ResultStore.PersistentResultStore(dataObjectStore, Some eventStore, lineageStore, logger) :> _)
 
     let conversationStore: IConversationStore option =
         match config.ConversationStore with
         | NoConversationStore -> None
         | EnabledConversationStore _ ->
-            Some(ConversationStore.PersistentConversationStore(dataObjectStore, eventStore = eventStore) :> _)
+            Some(ConversationStore.PersistentConversationStore(dataObjectStore, Some eventStore, logger) :> _)
 
     lineageStore, resultStore, conversationStore
+
+/// Phase 8 / 8a / 53 — construct the optional state-store values
+/// (`IResultStore`, `ILineageStore`, `IConversationStore`) per the
+/// matching `ServerConfig` modes. The unset defaults return `None`;
+/// downstream `registerOptionalStores` skips registration for any
+/// `None` so DI resolution returns `null` and consumers must handle
+/// absence explicitly. Lineage is constructed before result so the
+/// persistent result variant can pick it up for auto-emit.
+let buildOptionalStoreValues
+    (config: ServerConfig)
+    (eventStore: IEventStore)
+    (dataObjectStore: IDataObjectStore)
+    : ILineageStore option * IResultStore option * IConversationStore option =
+    buildOptionalStoreValuesLogged (ConsoleLogger.ConsoleLogger() :> ILogger) config eventStore dataObjectStore
 
 /// Phase 19 — register the entity-store substrate when
 /// `ServerConfig.EntityStore = EnabledEntityStore`. Constructs the

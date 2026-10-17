@@ -89,3 +89,60 @@ let start (drain: DrainSet) (logger: ILogger) (label: string) (work: Async<unit>
         }
 
         drain.Track(Async.StartAsTask(guarded, cancellationToken = drain.Token))
+
+/// Phase 1006 / 1024 / 1025 — the warning a failed fire-and-forget write is
+/// logged as, without a request in hand. It names the source, the write,
+/// where it failed (`onWhat`, e.g. `" on GET /x"`, or `""`), the exception
+/// type seen through an async boundary's wrapper, and what the failure did
+/// NOT change (`unaffected`, e.g. `"the response"`). A logger that itself
+/// throws is ignored. `SurfaceEnforcement.writeFailureWarner` is the
+/// request-bound face of this one formatter.
+let internal writeFailureLogger
+    (source: string)
+    (logger: ILogger option)
+    (onWhat: string)
+    (unaffected: string)
+    : string -> exn -> unit =
+    fun what ex ->
+        // The cause, not the `AggregateException` an `Async.AwaitTask`
+        // boundary wraps it in (Phase 972).
+        let cause = ToolUp.Platform.ProviderExceptions.unwrap ex
+
+        try
+            logger
+            |> Option.iter (fun log ->
+                log.Warn(
+                    sprintf
+                        "%s: the %s write failed%s (%s: %s); %s is unaffected."
+                        source
+                        what
+                        onWhat
+                        (cause.GetType().Name)
+                        cause.Message
+                        unaffected
+                ))
+        with _ ->
+            ()
+
+/// Phase 1006 / 1024 — start a write without awaiting it, observing its
+/// failure. The ONE helper for this shape: the surface denial trail, every
+/// fire-and-forget write in `ScopeResolutionMiddleware` (Middleware.fs), and
+/// the conversation and result stores' event and lineage writes (Phase 1025)
+/// go through it. Service-lifetime work with a stop to drain for uses
+/// `start` above instead.
+///
+/// A bare `Async.Start` of a write that fails is not merely untidy. A
+/// failure inside plain async code is rethrown on a thread-pool thread and
+/// terminates the host process; a failure behind a task boundary
+/// (`Async.AwaitTask`) surfaces as an unobserved task exception instead.
+/// Under `Async.Catch` neither escapes: the failure is handed to `warn`
+/// with the write's name, the caller never waits on the write and never
+/// changes because of it. A write that throws synchronously, before an
+/// `Async` exists, is the caller's `try ... with ex -> warn what ex`.
+let internal startAudit (warn: string -> exn -> unit) (what: string) (work: Async<unit>) : unit =
+    async {
+        match! Async.Catch work with
+        | Choice1Of2() -> ()
+        | Choice2Of2 ex -> warn what ex
+    }
+    |> Async.Start

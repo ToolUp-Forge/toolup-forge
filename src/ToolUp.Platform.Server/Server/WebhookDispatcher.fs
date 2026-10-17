@@ -344,7 +344,7 @@ let private deliverOnce
 /// Orleans Reminders, EventGrid) is the Phase 9c migration path.
 ///
 /// **There is no mutual exclusion around DELIVERY or RETRY, and that is
-/// intended.** `ExecuteAsync` dequeues an event and `Async.Start`s its
+/// intended.** `ExecuteAsync` dequeues an event and starts its
 /// fan-out without awaiting, so deliveries to independent subscriptions
 /// never head-of-line-block each other and a subscription whose endpoint
 /// is timing out through its whole retry ladder cannot stall the queue
@@ -452,6 +452,14 @@ type WebhookDispatcherService
     /// belongs where the losing caller has nothing left to do.
     let withFailureStateLease (sub: WebhookSubscription) (body: unit -> Async<'T>) : Async<'T> =
         DistributedLock.withLease failureStateLock (failureStateLockId sub) failureStateLeaseTtl (fun _lease -> body ())
+
+    /// Phase 1025 — every event fan-out in flight. Each is started through
+    /// `Background.start`, so a fan-out that throws (the registry's
+    /// `ListSubscriptions` store IO failing is the observed instance) is
+    /// logged and that one event's fan-out is lost, rather than taking the
+    /// host down; `StopAsync` cancels the set and waits for it within the
+    /// host's shutdown window.
+    let fanOuts = Background.DrainSet()
 
     let queue =
         Channel.CreateBounded<DispatchTask>(
@@ -995,12 +1003,41 @@ type WebhookDispatcherService
     override _.ExecuteAsync(stoppingToken: CancellationToken) =
         // Fire each task without awaiting; deliveries to independent
         // subscriptions shouldn't head-of-line-block each other. The retry
-        // loop's own Async.Sleep handles pacing.
+        // loop's own Async.Sleep handles pacing. Phase 1025 — through
+        // `Background.start` under `fanOuts`, never a bare `Async.Start`.
         runDequeueLoop
             logger
             queue.Reader
-            (fun (task: DispatchTask) -> Async.Start(dispatchToScope task.Event, stoppingToken))
+            (fun (task: DispatchTask) ->
+                Background.start
+                    fanOuts
+                    logger
+                    $"[WebhookDispatcher] event=dispatch_unhandled eventId={task.Event.Id} eventType={task.Event.EventType} scope={task.Event.ScopeId}: this event's fan-out failed and is lost"
+                    (dispatchToScope task.Event))
             stoppingToken
+
+    member private _.StopBase(cancellationToken: CancellationToken) = base.StopAsync cancellationToken
+
+    /// Phase 1025 — cancel, then drain, as `InProcessJobScheduler` does
+    /// (Phase 869). Every fan-out in flight observes cancellation through
+    /// its async context (a retry ladder's `Async.Sleep` ends at once), the
+    /// dequeue loop stops, and the stop then waits for the fan-outs to end
+    /// within the host's shutdown window. One that outlives the window is
+    /// reported, never waited on past it.
+    override this.StopAsync(cancellationToken: CancellationToken) =
+        task {
+            fanOuts.Cancel()
+            do! this.StopBase cancellationToken
+            let! drained = fanOuts.WaitAsync cancellationToken
+
+            if not drained then
+                logger.Warn(
+                    sprintf
+                        "[WebhookDispatcher] event=fan_outs_undrained_at_shutdown count=%d — the host's shutdown window closed before these cancelled fan-outs ended"
+                        fanOuts.Count
+                )
+        }
+        :> Tasks.Task
 
 // ─── Convenience constructor ─────────────────────────────────────
 

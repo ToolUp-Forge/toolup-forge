@@ -513,53 +513,15 @@ let internal requestLogger (ctx: HttpContext) : ILogger option =
 /// and path (never the query string) and the exception type, seen through
 /// an async boundary's wrapper. Built while
 /// the request is live (see `requestLogger`); the response is unaffected
-/// either way, and a logger that itself throws is ignored.
+/// either way, and a logger that itself throws is ignored. The formatting
+/// is `Background.writeFailureLogger`'s (Phase 1025), shared with the
+/// stores that have no request in hand.
 let internal writeFailureWarner (source: string) (logger: ILogger option) (ctx: HttpContext) : string -> exn -> unit =
-    let route = sprintf "%s %s" ctx.Request.Method (string ctx.Request.Path)
-
-    fun what ex ->
-        // The cause, not the `AggregateException` an `Async.AwaitTask`
-        // boundary wraps it in (Phase 972).
-        let cause = ToolUp.Platform.ProviderExceptions.unwrap ex
-
-        try
-            logger
-            |> Option.iter (fun log ->
-                log.Warn(
-                    sprintf
-                        "%s: the %s write failed on %s (%s: %s); the response is unaffected."
-                        source
-                        what
-                        route
-                        (cause.GetType().Name)
-                        cause.Message
-                ))
-        with _ ->
-            ()
+    let route = sprintf " on %s %s" ctx.Request.Method (string ctx.Request.Path)
+    Background.writeFailureLogger source logger route "the response"
 
 let private auditFailureWarner (ctx: HttpContext) : string -> exn -> unit =
     writeFailureWarner "SurfaceEnforcementMiddleware" (requestLogger ctx) ctx
-
-/// Phase 1006 / 1024 — start a request-bound write without awaiting it,
-/// observing its failure. The ONE helper for this shape: the surface
-/// denial trail here and every fire-and-forget write in
-/// `ScopeResolutionMiddleware` (Middleware.fs) go through it.
-///
-/// A bare `Async.Start` of a write that fails is not merely untidy. A
-/// failure inside plain async code is rethrown on a thread-pool thread and
-/// terminates the host process; a failure behind a task boundary
-/// (`Async.AwaitTask`) surfaces as an unobserved task exception instead.
-/// Under `Async.Catch` neither escapes: the failure is handed to `warn`
-/// with the write's name, the response never waits on the write and never
-/// changes because of it. A write that throws synchronously, before an
-/// `Async` exists, is the caller's `try ... with ex -> warn what ex`.
-let internal startAudit (warn: string -> exn -> unit) (what: string) (work: Async<unit>) : unit =
-    async {
-        match! Async.Catch work with
-        | Choice1Of2() -> ()
-        | Choice2Of2 ex -> warn what ex
-    }
-    |> Async.Start
 
 /// Auth-observability A2 — emit `SurfaceDenied` to `IAuditLog` when a
 /// request is rejected. Pre-A2 these denials were structurally invisible
@@ -623,7 +585,7 @@ let private emitDenialAudit
                     ReaderRoles = readerEnrichment |> Option.map snd
                 }
             )
-            |> startAudit warn "SurfaceDenied audit"
+            |> Background.startAudit warn "SurfaceDenied audit"
         | _ -> ()
     with ex ->
         warn "SurfaceDenied audit" ex
@@ -659,7 +621,7 @@ let private emitAuthDenial
                 ScopeId = scopeId
                 CorrelationId = ToolUp.Remoting.Server.CallContext.correlationId ()
             }
-            |> startAudit warn "AuthorizationDenied audit"
+            |> Background.startAudit warn "AuthorizationDenied audit"
         | _ -> ()
     with ex ->
         warn "AuthorizationDenied audit" ex

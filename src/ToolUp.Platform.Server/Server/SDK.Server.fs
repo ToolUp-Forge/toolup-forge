@@ -639,7 +639,7 @@ let compose
     // registration so DI resolution returns `null` and consumers must
     // handle absence explicitly.
     let lineageStore, resultStore, conversationStore =
-        buildOptionalStoreValues config eventStore dataObjectStore
+        buildOptionalStoreValuesLogged resolvedLogger config eventStore dataObjectStore
 
     // Phase 22 — register the encryption resolver as a singleton when
     // the deployment opted in (extracted to

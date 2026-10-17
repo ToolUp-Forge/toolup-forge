@@ -138,9 +138,34 @@ module private Events =
     let private serialize (value: 'T) : string =
         JsonSerializer.Serialize(value, options)
 
-    /// Best-effort: callers `Async.Start` this. Any failure is the
-    /// `IEventStore`'s problem to log; we don't surface it back to
-    /// the result-save path.
+    /// Phase 1025 — the write a failed `AnalysisCompleted` emission's
+    /// warning names.
+    let analysisCompletedWrite (scopeId: string) (moduleName: string) (objectId: string) (version: int) =
+        sprintf
+            "AnalysisCompleted event (scope %s, module %s, object %s, version %d)"
+            scopeId
+            moduleName
+            objectId
+            version
+
+    /// Phase 1025 — the write a failed lineage link's warning names: every
+    /// field the link was made of, so an operator can re-record a lost link
+    /// by hand from the log line alone. Lineage feeds provenance, and a
+    /// missing link is otherwise invisible in the graph.
+    let lineageWrite (scopeId: string) (link: LineageLink) =
+        sprintf
+            "lineage link (scope %s, %s -> %s, module %s, type %A, link %O, at %s)"
+            scopeId
+            link.FromObjectId
+            link.ToObjectId
+            link.ModuleName
+            link.LinkType
+            link.LinkId
+            (link.Timestamp.ToString "O")
+
+    /// Best-effort: callers start this through `Background.startAudit`
+    /// (Phase 1025), so a failing `IEventStore` loses the one event and is
+    /// logged, never surfaced to the result-save path.
     let recordAnalysisCompleted
         (eventStore: IEventStore option)
         (scopeId: string)
@@ -174,7 +199,14 @@ module private Events =
 
     /// Emit one `LineageLink` per input. No-op when
     /// `lineageStore = None`.
+    ///
+    /// Phase 1025 — each link is recorded on its own: a link the store
+    /// refuses (an `Error` result, which this used to drop silently) or
+    /// throws on is handed to `warn` under `lineageWrite`'s name, and the
+    /// remaining links are still recorded. The loss is bounded to the
+    /// failed links and each is reconstructable from its warning.
     let recordLineage
+        (warn: string -> exn -> unit)
         (lineageStore: ILineageStore option)
         (scopeId: string)
         (moduleName: string)
@@ -195,8 +227,15 @@ module private Events =
                         Timestamp = DateTime.UtcNow
                     }
 
-                    let! _ = store.Record(scopeId, link)
-                    ()
+                    try
+                        match! store.Record(scopeId, link) with
+                        | Ok() -> ()
+                        | Error reason ->
+                            warn
+                                (lineageWrite scopeId link)
+                                (InvalidOperationException(sprintf "ILineageStore.Record refused the link: %s" reason))
+                    with ex ->
+                        warn (lineageWrite scopeId link) ex
         }
 
 // ─── In-memory implementation ───────────────────────────────────
@@ -211,11 +250,25 @@ type private InMemoryResultEntry = {
     Lock: obj
 }
 
-type InMemoryResultStore(?eventStore: IEventStore, ?lineageStore: ILineageStore) =
+/// Phase 1025 — the `AnalysisCompleted` event and the lineage links a save
+/// emits are started through `Background.startAudit` with `warn`: a failing
+/// event or lineage store loses those writes and logs a Warning naming each,
+/// and never takes the host down or changes the save's result. The internal
+/// primary constructor carries the logger composition hands it; the public
+/// one logs to the SDK's default `ConsoleLogger`.
+type InMemoryResultStore internal (eventStore: IEventStore option, lineageStore: ILineageStore option, logger: ILogger)
+    =
     let entries = ConcurrentDictionary<string * string, InMemoryResultEntry>()
+
+    let warn =
+        Background.writeFailureLogger "InMemoryResultStore" (Some logger) "" "the save's result"
 
     let getOrCreate (scopeId, objectId) =
         entries.GetOrAdd((scopeId, objectId), (fun _ -> { Versions = []; Lock = obj () }))
+
+    /// The public constructor: the default `ConsoleLogger` (see the type's doc).
+    new(?eventStore: IEventStore, ?lineageStore: ILineageStore) =
+        InMemoryResultStore(eventStore, lineageStore, ConsoleLogger.ConsoleLogger() :> ILogger)
 
     interface IResultStore with
         member _.SaveResult(scopeId, moduleName, resultType, content, createdBy, inputs) = async {
@@ -242,13 +295,13 @@ type InMemoryResultStore(?eventStore: IEventStore, ?lineageStore: ILineageStore)
                     obj)
 
             // Best-effort event + lineage emission. Fire-and-forget
-            // so a slow event store doesn't block the caller; errors
-            // are logged inside the respective stores.
+            // so a slow event store doesn't block the caller; a failure
+            // is logged under the write's name (Phase 1025).
             Events.recordAnalysisCompleted eventStore scopeId moduleName objectId dataObject.Version createdBy
-            |> Async.Start
+            |> Background.startAudit warn (Events.analysisCompletedWrite scopeId moduleName objectId dataObject.Version)
 
-            Events.recordLineage lineageStore scopeId moduleName objectId inputs
-            |> Async.Start
+            Events.recordLineage warn lineageStore scopeId moduleName objectId inputs
+            |> Background.startAudit warn (sprintf "lineage links into %s (scope %s)" objectId scopeId)
 
             return Ok dataObject
         }
@@ -339,7 +392,23 @@ type InMemoryResultStore(?eventStore: IEventStore, ?lineageStore: ILineageStore)
 /// `LineageLink` events on every successful save. Stateless between
 /// calls — every method derives its result from the parameters +
 /// `IDataObjectStore`.
-type PersistentResultStore(objectStore: IDataObjectStore, ?eventStore: IEventStore, ?lineageStore: ILineageStore) =
+/// Phase 1025 — the `AnalysisCompleted` event and the lineage links a save
+/// emits are started through `Background.startAudit` with `warn`: a failing
+/// event or lineage store loses those writes and logs a Warning naming each,
+/// and never takes the host down or changes the save's result. The internal
+/// primary constructor carries the logger composition hands it; the public
+/// one logs to the SDK's default `ConsoleLogger`.
+type PersistentResultStore
+    internal
+    (objectStore: IDataObjectStore, eventStore: IEventStore option, lineageStore: ILineageStore option, logger: ILogger)
+    =
+
+    let warn =
+        Background.writeFailureLogger "PersistentResultStore" (Some logger) "" "the save's result"
+
+    /// The public constructor: the default `ConsoleLogger` (see the type's doc).
+    new(objectStore: IDataObjectStore, ?eventStore: IEventStore, ?lineageStore: ILineageStore) =
+        PersistentResultStore(objectStore, eventStore, lineageStore, ConsoleLogger.ConsoleLogger() :> ILogger)
 
     interface IResultStore with
         member _.SaveResult(scopeId, moduleName, resultType, content, createdBy, inputs) = async {
@@ -354,10 +423,12 @@ type PersistentResultStore(objectStore: IDataObjectStore, ?eventStore: IEventSto
             | Error err -> return Error err
             | Ok dataObject ->
                 Events.recordAnalysisCompleted eventStore scopeId moduleName objectId dataObject.Version createdBy
-                |> Async.Start
+                |> Background.startAudit
+                    warn
+                    (Events.analysisCompletedWrite scopeId moduleName objectId dataObject.Version)
 
-                Events.recordLineage lineageStore scopeId moduleName objectId inputs
-                |> Async.Start
+                Events.recordLineage warn lineageStore scopeId moduleName objectId inputs
+                |> Background.startAudit warn (sprintf "lineage links into %s (scope %s)" objectId scopeId)
 
                 return Ok dataObject
         }

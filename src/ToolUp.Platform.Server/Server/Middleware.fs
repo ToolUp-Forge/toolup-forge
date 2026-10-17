@@ -346,7 +346,7 @@ let private observeResolverErrorDowngrade
                         OccurredAt = DateTimeOffset.UtcNow
                     }
                 )
-                |> startAudit warn "scope-downgrade audit"
+                |> Background.startAudit warn "scope-downgrade audit"
             | _ -> ()
         with ex ->
             warn "scope-downgrade audit" ex
@@ -390,7 +390,7 @@ let internal recordPublicationReaderSignIn
                         OccurredAt = DateTimeOffset.UtcNow
                     }
                 )
-                |> startAudit warn "reader sign-in audit"
+                |> Background.startAudit warn "reader sign-in audit"
         | _ -> ()
     with ex ->
         warn "reader sign-in audit" ex
@@ -641,7 +641,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                                 AuthProvider = authProv.GetType().Name
                                             }
                                         )
-                                        |> startAudit warn "login audit"
+                                        |> Background.startAudit warn "login audit"
                                     with ex ->
                                         warn "login audit" ex
 
@@ -686,7 +686,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                                     auditLog
                                                     user
                                                 |> Async.Ignore
-                                                |> startAudit warn "invite consumption"
+                                                |> Background.startAudit warn "invite consumption"
                                             with ex ->
                                                 warn "invite consumption" ex
                                         | _ -> ()
@@ -809,7 +809,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                                         consentStore
                                                         verifier
                                                         auditLog
-                                                        (startAudit warn "grant-consent trust-denial audit")
+                                                        (Background.startAudit warn "grant-consent trust-denial audit")
                                                         DateTimeOffset.UtcNow
                                                         subject
                                                         party
@@ -924,7 +924,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                     OccurredAt = DateTimeOffset.UtcNow
                                 }
                             )
-                            |> startAudit warn "scope-resolution-failure audit"
+                            |> Background.startAudit warn "scope-resolution-failure audit"
                         | _ -> ()
                     with writeEx ->
                         warn "scope-resolution-failure audit" writeEx

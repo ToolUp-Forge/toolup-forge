@@ -208,6 +208,28 @@ module private PredicateEval =
 
 module private Events =
 
+    /// Phase 1025 — the write a failed emission's warning names: the event
+    /// type and the ids that locate it, never content. An erasure's names
+    /// the subject id, the policy and the count, exactly what its own event
+    /// record and the erasure report already carry, so the evidence line
+    /// re-leaks nothing that was erased.
+    let startedWrite (scopeId: string) (conv: Conversation) =
+        sprintf "ConversationStarted event (scope %s, conversation %s)" scopeId conv.ConversationId
+
+    let turnAppendedWrite (scopeId: string) (conversationId: ConversationId) (turn: ConversationTurn) =
+        sprintf "ConversationTurnAppended event (scope %s, conversation %s, turn %s)" scopeId conversationId turn.TurnId
+
+    let completedWrite (scopeId: string) (conversationId: ConversationId) =
+        sprintf "ConversationCompleted event (scope %s, conversation %s)" scopeId conversationId
+
+    let erasedWrite (scopeId: string) (subjectUserId: string) (policy: ErasurePolicy) (count: int) =
+        sprintf
+            "ConversationErased event (scope %s, subject %s, policy %A, %d conversation(s))"
+            scopeId
+            subjectUserId
+            policy
+            count
+
     let private write
         (eventStore: IEventStore option)
         (scopeId: string)
@@ -345,14 +367,26 @@ type private InMemoryConversationEntry = {
 /// In-process conversation store. Stateful between calls — documented
 /// dev-only exception to Rule 4. Use `PersistentConversationStore`
 /// for production deployments.
-type InMemoryConversationStore(?eventStore: IEventStore) =
+/// Phase 1025 — every event this store emits is started through
+/// `Background.startAudit` with `warn`: a failing `IEventStore` (a cloud
+/// store's 503, a full disk) loses that one event and logs a Warning naming
+/// it, and never takes the host down. The internal primary constructor
+/// carries the logger composition hands it; the public one logs to the
+/// SDK's default `ConsoleLogger`, so a hand-built store is never silent.
+type InMemoryConversationStore internal (eventStore: IEventStore option, logger: ILogger) =
     let entries =
         ConcurrentDictionary<string * ConversationId, InMemoryConversationEntry>()
+
+    let warn =
+        Background.writeFailureLogger "InMemoryConversationStore" (Some logger) "" "the caller's result"
 
     let tryGet (scopeId, conversationId) =
         match entries.TryGetValue((scopeId, conversationId)) with
         | true, e -> Some e
         | _ -> None
+
+    /// The public constructor: the default `ConsoleLogger` (see the type's doc).
+    new(?eventStore: IEventStore) = InMemoryConversationStore(eventStore, ConsoleLogger.ConsoleLogger() :> ILogger)
 
     interface IConversationStore with
 
@@ -436,7 +470,9 @@ type InMemoryConversationStore(?eventStore: IEventStore) =
                 let added = entries.TryAdd((scopeId, conv.ConversationId), entry)
 
                 if added then
-                    Events.started eventStore scopeId conv |> Async.Start
+                    Events.started eventStore scopeId conv
+                    |> Background.startAudit warn (Events.startedWrite scopeId conv)
+
                     return Ok()
                 else
                     // Idempotent: re-`BeginConversation` of an
@@ -454,7 +490,9 @@ type InMemoryConversationStore(?eventStore: IEventStore) =
                 | Some entry ->
                     lock entry.Lock (fun () -> entry.Turns <- entry.Turns @ [ turn ])
 
-                    Events.turnAppended eventStore scopeId conversationId turn |> Async.Start
+                    Events.turnAppended eventStore scopeId conversationId turn
+                    |> Background.startAudit warn (Events.turnAppendedWrite scopeId conversationId turn)
+
                     return Ok()
         }
 
@@ -478,7 +516,7 @@ type InMemoryConversationStore(?eventStore: IEventStore) =
                     | ConversationStatus.Active -> ()
                     | _ ->
                         Events.completed eventStore scopeId conversationId applied turnCount
-                        |> Async.Start
+                        |> Background.startAudit warn (Events.completedWrite scopeId conversationId)
 
                     return Ok()
                 | Error e -> return Error e
@@ -551,7 +589,7 @@ type InMemoryConversationStore(?eventStore: IEventStore) =
                                     })
 
                     Events.erased eventStore scopeId subjectUserId policy matchedIds.Length
-                    |> Async.Start
+                    |> Background.startAudit warn (Events.erasedWrite scopeId subjectUserId policy matchedIds.Length)
 
                     return
                         Ok {
@@ -575,7 +613,17 @@ type InMemoryConversationStore(?eventStore: IEventStore) =
 /// `kind`, `conversationId`) is carried on the `DataObject.Metadata`
 /// map so `IDataObjectStore.Erase` matches by subject without
 /// content scans.
-type PersistentConversationStore(objectStore: IDataObjectStore, ?eventStore: IEventStore) =
+/// Phase 1025 — every event this store emits is started through
+/// `Background.startAudit` with `warn`: a failing `IEventStore` (a cloud
+/// store's 503, a full disk) loses that one event and logs a Warning naming
+/// it, and never takes the host down. The internal primary constructor
+/// carries the logger composition hands it; the public one logs to the
+/// SDK's default `ConsoleLogger`, so a hand-built store is never silent.
+type PersistentConversationStore
+    internal (objectStore: IDataObjectStore, eventStore: IEventStore option, logger: ILogger) =
+
+    let warn =
+        Background.writeFailureLogger "PersistentConversationStore" (Some logger) "" "the caller's result"
 
     let readManifest
         (scopeId: string)
@@ -693,6 +741,10 @@ type PersistentConversationStore(objectStore: IDataObjectStore, ?eventStore: IEv
                 |> Array.toList
         }
 
+    /// The public constructor: the default `ConsoleLogger` (see the type's doc).
+    new(objectStore: IDataObjectStore, ?eventStore: IEventStore) =
+        PersistentConversationStore(objectStore, eventStore, ConsoleLogger.ConsoleLogger() :> ILogger)
+
     interface IConversationStore with
 
         // Reader
@@ -792,7 +844,9 @@ type PersistentConversationStore(objectStore: IDataObjectStore, ?eventStore: IEv
 
                 match writeResult with
                 | Ok() ->
-                    Events.started eventStore scopeId conv |> Async.Start
+                    Events.started eventStore scopeId conv
+                    |> Background.startAudit warn (Events.startedWrite scopeId conv)
+
                     return Ok()
                 | Error e -> return Error e
         }
@@ -827,7 +881,9 @@ type PersistentConversationStore(objectStore: IDataObjectStore, ?eventStore: IEv
                         | Error e -> return Error e
                         | Ok() ->
                             Events.turnAppended eventStore scopeId conversationId turnWithCanonicalId
-                            |> Async.Start
+                            |> Background.startAudit
+                                warn
+                                (Events.turnAppendedWrite scopeId conversationId turnWithCanonicalId)
 
                             return Ok()
         }
@@ -850,7 +906,7 @@ type PersistentConversationStore(objectStore: IDataObjectStore, ?eventStore: IEv
                         | ConversationStatus.Active -> ()
                         | _ ->
                             Events.completed eventStore scopeId conversationId status manifest.TurnIds.Length
-                            |> Async.Start
+                            |> Background.startAudit warn (Events.completedWrite scopeId conversationId)
 
                         return Ok()
                     | Error e -> return Error e
@@ -1070,7 +1126,8 @@ type PersistentConversationStore(objectStore: IDataObjectStore, ?eventStore: IEv
                                 )
                             )
                     else
-                        Events.erased eventStore scopeId subjectUserId policy count |> Async.Start
+                        Events.erased eventStore scopeId subjectUserId policy count
+                        |> Background.startAudit warn (Events.erasedWrite scopeId subjectUserId policy count)
 
                         return
                             Ok {

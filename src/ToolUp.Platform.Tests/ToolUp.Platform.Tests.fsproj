@@ -2853,6 +2853,8 @@
         <Compile Include="InProcess\ServerBindAddressTests.fs" />
         <!-- Phase 1024 - a fire-and-forget audit write never faults unobserved. -->
         <Compile Include="InProcess\AuditFireAndForgetTests.fs" />
+        <!-- Phase 1025 - a store write started fire-and-forget cannot kill the host. -->
+        <Compile Include="InProcess\StoreFireAndForgetTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />
