@@ -12368,13 +12368,15 @@ ToolUp.Platform.SubmitterClassModule.label(ToolUp.Platform.SubmitterClass) : Sys
 ToolUp.Platform.SubmitterClassModule.ofLabelOrHuman(System.String) : ToolUp.Platform.SubmitterClass
 ToolUp.Platform.SubmitterClassModule.parse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SubmitterClass]
 ToolUp.Platform.SurfaceDeniedPayload (class)
-ToolUp.Platform.SurfaceDeniedPayload..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTimeOffset)
+ToolUp.Platform.SurfaceDeniedPayload..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTimeOffset, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]])
 ToolUp.Platform.SurfaceDeniedPayload.CorrelationId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.SurfaceDeniedPayload.DenialCode : System.String { get }
 ToolUp.Platform.SurfaceDeniedPayload.Hint : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.SurfaceDeniedPayload.Method : System.String { get }
 ToolUp.Platform.SurfaceDeniedPayload.OccurredAt : System.DateTimeOffset { get }
 ToolUp.Platform.SurfaceDeniedPayload.Path : System.String { get }
+ToolUp.Platform.SurfaceDeniedPayload.ReaderRoles : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
+ToolUp.Platform.SurfaceDeniedPayload.RouteClass : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.SurfaceDeniedPayload.SubjectId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.SurfaceDeniedPayload.SubjectKind : System.String { get }
 ToolUp.Platform.SurfaceProfile (class)

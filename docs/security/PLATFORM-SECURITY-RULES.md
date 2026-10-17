@@ -759,12 +759,36 @@ section eliminates structurally.
 > that is no longer disclosable. A reader's sign-in is audited once per session
 > window as `PublicationReaderSignedIn` under `_platform` (the reader, the roles
 > it was admitted with, the time), never as a member's login.
+> **Every refusal of a reader, page or `/api`, is audited.** A page refusal is
+> written with the page decisions above. An `/api` refusal writes one
+> `SurfaceDenied` row under `_platform` per refusal: subject kind
+> `publication-reader`, the reader's id, the method, the path (never the query
+> string), the denial code `publication_reader_not_admitted`, the route class it
+> was refused on (`RouteClass`: `sse`, `upload`, `assistant`,
+> `team-management`, `anonymous-open`, `module` or `api`) and the roles it was
+> admitted with (`ReaderRoles`). No request body, query string or header value
+> reaches the row; a multipart body is recognised as an upload by its declared
+> media type, and only the class name is recorded. The publishing scope is not
+> recorded on an `/api` refusal, because it is never known there: the reader
+> holds no scope, and an `/api` route names none. The same refusal also feeds
+> the default `IAuthAuditHook`, which writes a coalesced `AuthorizationDenied`
+> row: the first refusal per route per reader in a 60-second window, then one
+> summary row whose `DedupCount` is the number it suppressed, so a probe yields
+> bounded volume with an accurate total. A failed audit write never changes the
+> response: the refusal is still `403`, and the failure is logged. The two
+> reader fields are absent on every other subject's row, which stays
+> byte-identical to its earlier form.
 > **Evidence:** `src/ToolUp.Platform.Core/Shared/Interfaces/IAuthProvider.fs`
 > (`PrincipalAdmission`) · `src/ToolUp.Platform.Core/Shared/Types/AuthConfig.fs`
 > (`ClaimMapping.PublicationReaders`, `validatePublicationReaders`) ·
 > `src/AuthProviders/Oidc/OidcAuthProvider.fs` (`applyAdmission`, the build
 > refusal) · `src/ToolUp.Platform.Server/Server/SurfaceEnforcementMiddleware.fs`
-> (`evaluateAdmitted`) · `src/ToolUp.PublicRendering/Server/AudienceGate.fs` ·
+> (`evaluateAdmitted`, `isPublicationReader`, `ReaderRouteClass`, the refusal
+> audit) · `src/ToolUp.Platform.Core/Shared/Audit/AccessAuditPayloads.fs`
+> (`SurfaceDeniedPayload.RouteClass` / `ReaderRoles`) ·
+> `src/ToolUp.Platform.Server/Server/AuditLog.fs` (the `SurfaceDenied` codec) ·
+> `src/ToolUp.Platform.Server/Server/AuthAuditHook.fs` (the coalescing window) ·
+> `src/ToolUp.PublicRendering/Server/AudienceGate.fs` ·
 > `src/ToolUp.PublicRendering/Server/PublicationReads.fs` ·
 > `src/ToolUp.Platform.Core/Shared/Types/Subject.fs` (`PublicationReader`) ·
 > `src/ToolUp.Platform.Core/Shared/Interfaces/ISubjectResolver.fs`
@@ -773,11 +797,13 @@ section eliminates structurally.
 > (`StorageScopeDerivation.tryFromSubject`, the reader sign-in audit) ·
 > `src/ToolUp.Platform.Tests/InProcess/GatedSsrTests.fs` (§7, run under six
 > Surfaces lists; the anonymous-open routes; the reader sign-in row; the reader
-> subject's empty scope) ·
+> subject's empty scope; Phase 1006's refusal rows per route class, their
+> coalescing, a member's row and a failing audit sink) ·
 > `src/ToolUp.Platform.Tests/Contracts/ISubjectResolverContract.fs` (step 1b;
 > the teamless-member pin) ·
 > `docs/migrations/996-publication-audience.md` (Phase 996) ·
-> `docs/migrations/1002-publication-reader-subject.md` (Phase 1002)
+> `docs/migrations/1002-publication-reader-subject.md` (Phase 1002) ·
+> `docs/migrations/1006-reader-refusal-audit.md` (Phase 1006)
 
 ---
 

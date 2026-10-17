@@ -90,6 +90,10 @@ let private emitMismatchAudit (ctx: HttpContext) (principalId: string) (asserted
                     Hint = Some(sprintf "asserted=%s" assertedId)
                     CorrelationId = ToolUp.Remoting.Server.CallContext.correlationId ()
                     OccurredAt = DateTimeOffset.UtcNow
+                    // Phase 1006 — the reader enrichment belongs to surface
+                    // enforcement's refusal row, not this mismatch row.
+                    RouteClass = None
+                    ReaderRoles = None
                 }
             )
             |> Async.Start

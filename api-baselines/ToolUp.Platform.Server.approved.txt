@@ -10460,9 +10460,19 @@ ToolUp.Platform.SurfaceCoherenceValidator+SurfaceCoherenceValidator (class)
 ToolUp.Platform.SurfaceCoherenceValidator+SurfaceCoherenceValidator..ctor(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Auth+IAuthProvider], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.SurfaceRequirement]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Tuple`2[System.String, System.String], ToolUp.Platform.SurfaceRequirement]], System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
 ToolUp.Platform.SurfaceEnforcement (class)
 ToolUp.Platform.SurfaceEnforcement.SubjectItemsKey : System.String (literal)
+ToolUp.Platform.SurfaceEnforcement+ReaderRouteClass (class)
+ToolUp.Platform.SurfaceEnforcement+ReaderRouteClass.AnonymousOpen : System.String (literal)
+ToolUp.Platform.SurfaceEnforcement+ReaderRouteClass.Api : System.String (literal)
+ToolUp.Platform.SurfaceEnforcement+ReaderRouteClass.Assistant : System.String (literal)
+ToolUp.Platform.SurfaceEnforcement+ReaderRouteClass.Module : System.String (literal)
+ToolUp.Platform.SurfaceEnforcement+ReaderRouteClass.Sse : System.String (literal)
+ToolUp.Platform.SurfaceEnforcement+ReaderRouteClass.TeamManagement : System.String (literal)
+ToolUp.Platform.SurfaceEnforcement+ReaderRouteClass.Upload : System.String (literal)
+ToolUp.Platform.SurfaceEnforcement+ReaderRouteClass.classify(ToolUp.Platform.SurfaceEnforcement+SurfaceRequirementRegistry, System.String, System.String, System.String) : System.String
 ToolUp.Platform.SurfaceEnforcement+SurfaceEnforcement (class)
 ToolUp.Platform.SurfaceEnforcement+SurfaceEnforcement.evaluate(ToolUp.Platform.Subject, ToolUp.Platform.SurfaceRequirement) : ToolUp.Platform.SurfaceEnforcement+SurfaceEnforcementOutcome
 ToolUp.Platform.SurfaceEnforcement+SurfaceEnforcement.evaluateAdmitted(ToolUp.Platform.Subject, ToolUp.Platform.Auth+PrincipalAdmission, ToolUp.Platform.SurfaceRequirement) : ToolUp.Platform.SurfaceEnforcement+SurfaceEnforcementOutcome
+ToolUp.Platform.SurfaceEnforcement+SurfaceEnforcement.isPublicationReader(ToolUp.Platform.Subject, ToolUp.Platform.Auth+PrincipalAdmission) : System.Boolean
 ToolUp.Platform.SurfaceEnforcement+SurfaceEnforcementMiddleware (class)
 ToolUp.Platform.SurfaceEnforcement+SurfaceEnforcementMiddleware..ctor(Microsoft.AspNetCore.Http.RequestDelegate, ToolUp.Platform.SurfaceEnforcement+SurfaceRequirementRegistry)
 ToolUp.Platform.SurfaceEnforcement+SurfaceEnforcementMiddleware.InvokeAsync(Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task

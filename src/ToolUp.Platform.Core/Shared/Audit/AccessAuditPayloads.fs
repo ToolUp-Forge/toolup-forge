@@ -265,6 +265,17 @@ type SurfaceDeniedPayload = {
     /// dispatcher's per-request generator).
     CorrelationId: string option
     OccurredAt: DateTimeOffset
+    /// Phase 1006 — the class of route a publication reader was refused
+    /// on: `sse`, `upload`, `assistant`, `team-management`,
+    /// `anonymous-open`, `module` or `api`
+    /// (`SurfaceEnforcement.ReaderRouteClass`). `None` for every other
+    /// subject. The codec omits the field when it is `None`, so a
+    /// non-reader row is byte-identical to its pre-1006 form.
+    RouteClass: string option
+    /// Phase 1006 — the roles the publication reader was admitted with
+    /// (`AuthenticatedUser.pageRoles`). `None` for every other subject,
+    /// and omitted by the codec when `None`.
+    ReaderRoles: string list option
 }
 
 /// Phase 120 — the uniform structured authorization-denial row written by

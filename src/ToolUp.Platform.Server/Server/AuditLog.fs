@@ -41,6 +41,20 @@ let private toAuditJson (value: 'T) =
 let private fromAuditJson<'T> (json: string) =
     JsonSerializer.Deserialize<'T>(json, auditJsonOptions)
 
+// Phase 1006 — a publication reader's `SurfaceDenied` row carries two
+// optional fields (`RouteClass`, `ReaderRoles`) that are `None` for every
+// other subject. They are omitted from the row when `None`, so a
+// non-reader row stays byte-identical to its pre-1006 form; decoding a row
+// without them yields `None`.
+let private encodeSurfaceDenied (payload: SurfaceDeniedPayload) =
+    let node = JsonSerializer.SerializeToNode(payload, auditJsonOptions).AsObject()
+
+    for field in [ "RouteClass"; "ReaderRoles" ] do
+        if isNull node[field] then
+            node.Remove field |> ignore
+
+    node.ToJsonString auditJsonOptions
+
 // Phase 62 — `PremiumGranted` / `PremiumRevoked` are tuple-shaped DU
 // cases; the serialised form is an anonymous record on the write
 // path. This typed alias round-trips it back to a tuple.
@@ -1011,7 +1025,7 @@ let internal auditEventCodecs: AuditEventCodec list = [
         EventType = "SurfaceDenied"
         TryEncode =
             (function
-            | SurfaceDenied p -> Some(toAuditJson p)
+            | SurfaceDenied p -> Some(encodeSurfaceDenied p)
             | _ -> None)
         Decode = fun j -> SurfaceDenied(fromAuditJson<SurfaceDeniedPayload> j)
     }

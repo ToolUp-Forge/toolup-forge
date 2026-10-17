@@ -453,7 +453,37 @@
       error cannot restore 0.27.0. A dependency-floor raise: no public
       surface moves.
     -->
-    <Version>0.27.1</Version>
+    <!--
+      0.28.0 (draft) - advances MINOR over the untagged 0.27.1 (which carried
+      only the MessagePack raise above, and rides along). Phase 1006: a
+      publication reader's `/api` refusal was already audited - every refusal
+      writes a `SurfaceDenied` row under `_platform` naming the reader, and
+      the default `IAuthAuditHook` writes a coalesced `AuthorizationDenied`
+      row - and that row now also names the route CLASS it was refused on
+      (`ReaderRouteClass`: sse, upload, assistant, team-management,
+      anonymous-open, module, api) and the roles it was admitted with.
+      `SurfaceDeniedPayload` gains `RouteClass: string option` and
+      `ReaderRoles: string list option` (Platform.Core), `None` for every
+      other subject and omitted from the row then, so a non-reader row is
+      byte-identical to its pre-1006 form and a pre-1006 row decodes. The
+      record gaining fields breaks a full-literal construction of
+      `SurfaceDeniedPayload` (FS0764: its constructor is retyped), which is
+      the class that advances this slot. What does NOT break: the wire (a
+      non-reader row is byte-identical), decoding a pre-1006 row (both fields
+      read as `None`), and the `AuthorizationDenied` stream (unchanged). Additive (Platform.Server):
+      `SurfaceEnforcement.ReaderRouteClass` (the class literals and
+      `classify`) and `SurfaceEnforcement.isPublicationReader`. Behaviour: a
+      failed audit write on the denial path (thrown, or failing after it
+      started) is now logged as a warning and the refusal stands; it was
+      swallowed silently. The rate limit is the existing one: the default
+      `IAuthAuditHook` coalesces a reader's refusals per route over a
+      60-second window into one leading row and one counted summary row
+      (`DedupCount`). That window stays: it bounds a probing burst, not the
+      rollup horizon, and the per-refusal `SurfaceDenied` row stays unbounded
+      because each refusal is a fact the trail must hold. Migration recipe:
+      `docs/migrations/1006-reader-refusal-audit.md`.
+    -->
+    <Version>0.28.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
       DLL. Non-publishable projects (App composition roots, modules,

@@ -2122,6 +2122,395 @@ let private readerConfinementTests =
         }
     ]
 
+/// Phase 1006 — a request a reader probes the API with, carrying content in
+/// the three places an audit row must never copy from: a query string, a
+/// header value and a body. `multipart` declares an upload.
+let private probeRequest
+    (client: HttpClient)
+    (token: string option)
+    (verb: HttpMethod)
+    (path: string)
+    (multipart: bool)
+    =
+    async {
+        use request = new HttpRequestMessage(verb, path + "?probe=s3cr3t-query")
+
+        token
+        |> Option.iter (fun t -> request.Headers.Add("Authorization", "Bearer " + t))
+
+        request.Headers.Add("X-Probe", "s3cr3t-header")
+
+        if verb = HttpMethod.Post then
+            if multipart then
+                let form = new MultipartFormDataContent()
+                form.Add(new StringContent("s3cr3t-body"), "file", "probe.txt")
+                request.Content <- form
+            else
+                request.Content <- new StringContent("{\"probe\":\"s3cr3t-body\"}", Encoding.UTF8, "application/json")
+
+        use! response = client.SendAsync request |> Async.AwaitTask
+        let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+        return int response.StatusCode, body
+    }
+
+/// Wait (bounded) until the recorded rows satisfy `landed` — `Record` is
+/// fire-and-forget.
+let private settleRows
+    (rows: System.Collections.Concurrent.ConcurrentQueue<string * AuditEvent>)
+    (landed: (string * AuditEvent) list -> bool)
+    =
+    let rec go attempt = async {
+        let snapshot = rows.ToArray() |> List.ofArray
+
+        if landed snapshot || attempt >= 60 then
+            return snapshot
+        else
+            do! Async.Sleep 50
+            return! go (attempt + 1)
+    }
+
+    go 0
+
+let private surfaceDenials (snapshot: (string * AuditEvent) list) =
+    snapshot
+    |> List.choose (function
+        | scopeId, SurfaceDenied p -> Some(scopeId, p)
+        | _ -> None)
+
+let private authorizationDenials (snapshot: (string * AuditEvent) list) =
+    snapshot
+    |> List.choose (function
+        | _, AuthorizationDenied p -> Some p
+        | _ -> None)
+
+/// The route classes a reader is refused on through the composed host, each
+/// with the request that reaches it. `module` is not reachable here (the
+/// probe host declares no module prefix); the classifier test covers it.
+let private readerProbes: (string * HttpMethod * string * bool) list = [
+    SurfaceEnforcement.ReaderRouteClass.Api, HttpMethod.Get, "/api/x", false
+    SurfaceEnforcement.ReaderRouteClass.Assistant, HttpMethod.Post, "/api/ai/chat", false
+    SurfaceEnforcement.ReaderRouteClass.TeamManagement, HttpMethod.Post, "/api/TeamApi/CreateTeam", false
+    SurfaceEnforcement.ReaderRouteClass.Upload, HttpMethod.Post, "/api/files/put", true
+    SurfaceEnforcement.ReaderRouteClass.Sse, HttpMethod.Get, "/api/notifications", false
+    SurfaceEnforcement.ReaderRouteClass.AnonymousOpen, HttpMethod.Get, "/api/csrf-token", false
+]
+
+/// Phase 1006 — an `IAuditLog` whose every write throws before returning.
+let private throwingAuditLog =
+    { new IAuditLog with
+        member _.Record(_, _) = failwith "audit sink unavailable"
+        member _.GetAuditTrail(_, _, _) = async { return [] }
+    }
+
+/// Phase 1006 — an `IAuthAuditHook` whose write fails asynchronously.
+let private failingAuthAuditHook =
+    { new IAuthAuditHook with
+        member _.RecordDenial _ = async { return failwith "denial trail unavailable" }
+    }
+
+/// Phase 1006 — a logger that keeps its warnings.
+let private warningLogger () =
+    let warnings = System.Collections.Concurrent.ConcurrentQueue<string>()
+
+    let log =
+        { new ILogger with
+            member _.Debug _ = ()
+            member _.Info _ = ()
+            member _.Warn message = warnings.Enqueue message
+            member _.Error(_, _) = ()
+        }
+
+    warnings, log
+
+let private readerRefusalAuditTests =
+    testList "Phase 1006 — a reader's /api refusals are audited" [
+        testCase "the route classifier: each class, most specific first"
+        <| fun _ ->
+            let registry =
+                SurfaceEnforcement.SurfaceRequirementRegistry.fromServerConfig {
+                    ServerConfig.defaults with
+                        Surfaces = authenticatedSurface
+                }
+                |> SurfaceEnforcement.SurfaceRequirementRegistry.merge [
+                    "/api/reports/", SurfaceRequirement.userOrTeam
+                ] []
+
+            let classify = SurfaceEnforcement.ReaderRouteClass.classify registry
+
+            let cases = [
+                "GET", "/api/notifications", null, SurfaceEnforcement.ReaderRouteClass.Sse
+                "GET", "/api/ai/events", null, SurfaceEnforcement.ReaderRouteClass.Sse
+                "POST", "/api/ai/events", null, SurfaceEnforcement.ReaderRouteClass.Assistant
+                "POST",
+                "/api/reports/upload",
+                "multipart/form-data; boundary=x",
+                SurfaceEnforcement.ReaderRouteClass.Upload
+                "POST", "/api/ai/chat", "application/json", SurfaceEnforcement.ReaderRouteClass.Assistant
+                "POST", "/api/TeamApi/AddTeamMember", null, SurfaceEnforcement.ReaderRouteClass.TeamManagement
+                "GET", "/api/csrf-token", null, SurfaceEnforcement.ReaderRouteClass.AnonymousOpen
+                "POST", "/api/reports/Run", null, SurfaceEnforcement.ReaderRouteClass.Module
+                "GET", "/api/x", null, SurfaceEnforcement.ReaderRouteClass.Api
+            ]
+
+            for httpMethod, path, contentType, expected in cases do
+                Expect.equal (classify httpMethod path contentType) expected $"{httpMethod} {path}"
+
+            // The anonymous-only `/api/` bridge makes every other route open.
+            let anonymousOnly =
+                SurfaceEnforcement.SurfaceRequirementRegistry.fromServerConfig {
+                    ServerConfig.defaults with
+                        Surfaces = Surfaces.anonymous
+                }
+
+            Expect.equal
+                (SurfaceEnforcement.ReaderRouteClass.classify anonymousOnly "GET" "/api/x" null)
+                SurfaceEnforcement.ReaderRouteClass.AnonymousOpen
+                "the anonymous-only bridge"
+
+        testCase
+            "codec: a non-reader SurfaceDenied row is byte-identical to its pre-1006 form, and a legacy row decodes"
+        <| fun _ ->
+            let row = {
+                Method = "POST"
+                Path = "/api/TeamApi/AddTeamMember"
+                SubjectKind = "user"
+                SubjectId = Some "zoe"
+                DenialCode = "team_required"
+                Hint = Some "select_team"
+                CorrelationId = None
+                OccurredAt = DateTimeOffset(2026, 10, 17, 0, 0, 0, TimeSpan.Zero)
+                RouteClass = None
+                ReaderRoles = None
+            }
+
+            let legacy =
+                "{\"Method\":\"POST\",\"Path\":\"/api/TeamApi/AddTeamMember\",\"SubjectKind\":\"user\",\"SubjectId\":\"zoe\",\"DenialCode\":\"team_required\",\"Hint\":\"select_team\",\"CorrelationId\":null,\"OccurredAt\":\"2026-10-17T00:00:00+00:00\"}"
+
+            Expect.equal (AuditLog.serialiseAuditEvent (SurfaceDenied row)) legacy "no reader fields on a member's row"
+
+            Expect.equal
+                (AuditLog.tryDecodeAuditEvent "SurfaceDenied" legacy)
+                (Ok(SurfaceDenied row))
+                "a pre-1006 row decodes with both fields absent"
+
+            let reader = {
+                row with
+                    SubjectKind = "publication-reader"
+                    SubjectId = Some "rhea"
+                    DenialCode = "publication_reader_not_admitted"
+                    Hint = None
+                    RouteClass = Some SurfaceEnforcement.ReaderRouteClass.TeamManagement
+                    ReaderRoles = Some [ "board-readers" ]
+            }
+
+            let readerJson = AuditLog.serialiseAuditEvent (SurfaceDenied reader)
+
+            Expect.stringContains readerJson "\"RouteClass\":\"team-management\"" "the reader's class"
+            Expect.stringContains readerJson "\"ReaderRoles\":[\"board-readers\"]" "the reader's roles"
+
+            Expect.equal
+                (AuditLog.tryDecodeAuditEvent "SurfaceDenied" readerJson)
+                (Ok(SurfaceDenied reader))
+                "the reader row round-trips"
+
+        testCaseAsync
+            "a reader refused on each route class writes one SurfaceDenied row naming the class, and no request content"
+        <| async {
+            let s = issuer.Force()
+            let rows, auditLog = recordingAuditLog ()
+
+            let register (services: IServiceCollection) =
+                services.AddMemoryCache() |> ignore
+                services.AddSingleton<IAuditLog>(auditLog) |> ignore
+
+            use! host = startHostWith authenticatedSurface (oidcProviderWith publicationMapping) register []
+            use client = host.GetTestClient()
+            let rhea = Some(s.MintTokenFor("rhea", [ "groups", box [| "7f1c-board" |] ]))
+
+            for routeClass, verb, path, multipart in readerProbes do
+                let! status, body = probeRequest client rhea verb path multipart
+                Expect.equal status 403 $"{routeClass} {path}: refused"
+                Expect.stringContains body "publication_reader_not_admitted" $"{routeClass} {path}: as a reader"
+
+            let! snapshot = settleRows rows (fun snapshot -> (surfaceDenials snapshot).Length >= readerProbes.Length)
+
+            do! host.StopAsync() |> Async.AwaitTask
+
+            let denials = surfaceDenials snapshot
+
+            Expect.equal denials.Length readerProbes.Length "exactly one SurfaceDenied row per refusal"
+
+            for routeClass, verb, path, _ in readerProbes do
+                // Matched on the route, not the exact path, so a row that
+                // copied the query string is caught by the content check.
+                match
+                    denials
+                    |> List.filter (fun (_, p) -> p.Method = verb.Method && p.Path.StartsWith path)
+                with
+                | [ scopeId, row ] ->
+                    let json = AuditLog.serialiseAuditEvent (SurfaceDenied row)
+
+                    Expect.isFalse (json.Contains "s3cr3t") $"{path}: no query, header or body content: {json}"
+                    Expect.isFalse (json.Contains "probe=") $"{path}: no query string: {json}"
+                    Expect.equal row.Path path $"{path}: the path alone"
+                    Expect.equal scopeId "_platform" $"{path}: under _platform"
+                    Expect.equal row.SubjectKind "publication-reader" $"{path}: the reader kind"
+                    Expect.equal row.SubjectId (Some "rhea") $"{path}: the reader"
+                    Expect.equal row.DenialCode "publication_reader_not_admitted" $"{path}: the code"
+                    Expect.equal row.RouteClass (Some routeClass) $"{path}: the route class"
+                    Expect.equal row.ReaderRoles (Some [ "board-readers" ]) $"{path}: the roles it was admitted with"
+                | other -> failtestf "%s: expected one SurfaceDenied row, got %A" path other
+        }
+
+        testCaseAsync
+            "repeated refusals inside the window: one row each, coalesced into one AuthorizationDenied plus a counted summary"
+        <| async {
+            let s = issuer.Force()
+            let rows, auditLog = recordingAuditLog ()
+            let now = ref (DateTimeOffset(2026, 10, 17, 9, 0, 0, TimeSpan.Zero))
+
+            let hook =
+                ToolUp.Platform.AuthAuditHook.AuthAuditHook(
+                    auditLog,
+                    silentLogger,
+                    TimeSpan.FromSeconds 60.0,
+                    fun () -> now.Value
+                )
+                :> IAuthAuditHook
+
+            let register (services: IServiceCollection) =
+                services.AddMemoryCache() |> ignore
+                services.AddSingleton<IAuditLog>(auditLog) |> ignore
+                services.AddSingleton<IAuthAuditHook>(hook) |> ignore
+
+            use! host = startHostWith authenticatedSurface (oidcProviderWith publicationMapping) register []
+            use client = host.GetTestClient()
+            let rhea = Some(s.MintTokenFor("rhea", [ "groups", box [| "7f1c-board" |] ]))
+
+            // Five refusals inside one window, then one after it closes.
+            for _ in 1..5 do
+                let! status, _ = probeRequest client rhea HttpMethod.Post "/api/ai/chat" false
+                Expect.equal status 403 "refused inside the window"
+
+            now.Value <- now.Value + TimeSpan.FromSeconds 61.0
+            let! status, _ = probeRequest client rhea HttpMethod.Post "/api/ai/chat" false
+            Expect.equal status 403 "refused after the window"
+
+            let! snapshot =
+                settleRows rows (fun snapshot ->
+                    (surfaceDenials snapshot).Length >= 6
+                    && (authorizationDenials snapshot |> List.sumBy _.DedupCount) >= 6)
+
+            do! host.StopAsync() |> Async.AwaitTask
+
+            Expect.equal (surfaceDenials snapshot).Length 6 "every refusal writes its SurfaceDenied row"
+
+            let coalesced = authorizationDenials snapshot
+
+            Expect.equal
+                (coalesced |> List.map _.DedupCount |> List.sort)
+                [ 1; 1; 4 ]
+                "the window's leading row, its counted summary of the four it suppressed, and the next window's leading row"
+
+            for row in coalesced do
+                Expect.equal row.SubjectKind "publication-reader" "the reader kind"
+                Expect.equal row.SubjectId (Some "rhea") "the reader"
+                Expect.equal row.Route "POST /api/ai/chat" "method and path, no query"
+                Expect.equal row.ScopeId None "the reader holds no scope"
+        }
+
+        testCaseAsync "an app member's 403 writes no reader kind, class or roles"
+        <| async {
+            let s = issuer.Force()
+            let rows, auditLog = recordingAuditLog ()
+
+            let register (services: IServiceCollection) =
+                services.AddMemoryCache() |> ignore
+                services.AddSingleton<IAuditLog>(auditLog) |> ignore
+
+            use! host = startHostWith authenticatedSurface (oidcProviderWith publicationMapping) register []
+            use client = host.GetTestClient()
+            // A member in no team: `AddTeamMember` is `teamScoped`.
+            let zoe = Some(s.MintTokenFor("zoe", [ "roles", box [| "app-user" |] ]))
+
+            let! status, body = probeRequest client zoe HttpMethod.Post "/api/TeamApi/AddTeamMember" false
+            // The falsifier: the member IS refused, so a row is written.
+            Expect.equal status 403 "the member is refused"
+            Expect.stringContains body "team_required" "as a member"
+
+            let! snapshot = settleRows rows (fun snapshot -> not (List.isEmpty (surfaceDenials snapshot)))
+            do! host.StopAsync() |> Async.AwaitTask
+
+            match surfaceDenials snapshot with
+            | [ _, row ] ->
+                Expect.equal row.SubjectKind "user" "the member's kind"
+                Expect.equal row.RouteClass None "no route class"
+                Expect.equal row.ReaderRoles None "no reader roles"
+            | other -> failtestf "expected one SurfaceDenied row, got %A" other
+
+            Expect.isFalse
+                (snapshot
+                 |> List.exists (fun (_, e) -> (AuditLog.serialiseAuditEvent e).Contains "publication-reader"))
+                "no row names a reader"
+        }
+
+        testCaseAsync
+            "a failing audit write, synchronous or asynchronous, still refuses with the same 403 and is logged"
+        <| async {
+            let s = issuer.Force()
+            let rhea = Some(s.MintTokenFor("rhea", [ "groups", box [| "7f1c-board" |] ]))
+
+            // A sink that throws on `Record`, and a denial trail whose write
+            // fails after it has been started.
+            let arms: (string * string * (IServiceCollection -> unit)) list = [
+                "synchronous",
+                "SurfaceDenied audit write failed",
+                fun services -> services.AddSingleton<IAuditLog>(throwingAuditLog) |> ignore
+                "asynchronous",
+                "AuthorizationDenied audit write failed",
+                fun services ->
+                    let _, auditLog = recordingAuditLog ()
+                    services.AddSingleton<IAuditLog>(auditLog) |> ignore
+                    services.AddSingleton<IAuthAuditHook>(failingAuthAuditHook) |> ignore
+            ]
+
+            for label, expectedWarning, arm in arms do
+                let warnings, logger = warningLogger ()
+
+                let register (services: IServiceCollection) =
+                    services.AddMemoryCache() |> ignore
+                    arm services
+                    services.AddSingleton<ILogger>(logger) |> ignore
+
+                use! host = startHostWith authenticatedSurface (oidcProviderWith publicationMapping) register []
+                use client = host.GetTestClient()
+
+                let! status, body = probeRequest client rhea HttpMethod.Get "/api/x" false
+
+                Expect.equal status 403 $"{label}: still refused"
+                Expect.stringContains body "publication_reader_not_admitted" $"{label}: with the same code"
+
+                let rec settle attempt = async {
+                    let logged = warnings.ToArray() |> List.ofArray
+
+                    if logged |> List.exists (fun w -> w.Contains expectedWarning) || attempt >= 60 then
+                        return logged
+                    else
+                        do! Async.Sleep 50
+                        return! settle (attempt + 1)
+                }
+
+                let! logged = settle 0
+                do! host.StopAsync() |> Async.AwaitTask
+
+                match logged |> List.filter (fun w -> w.Contains expectedWarning) with
+                | [ warning ] ->
+                    Expect.stringContains warning "GET /api/x" $"{label}: names the route"
+                    Expect.isFalse (warning.Contains "s3cr3t") $"{label}: no request content"
+                | other -> failtestf "%s: expected one logged audit failure, got %A" label other
+        }
+    ]
+
 let private publicationPipelineTests =
     testList "Phase 996 / 1002 — a publication audience through the composed pipeline, under every Surfaces list" [
         yield!
@@ -2169,5 +2558,6 @@ let tests =
         publicationUnitTests
         publicationReaderSubjectTests
         readerConfinementTests
+        readerRefusalAuditTests
         publicationPipelineTests
     ]

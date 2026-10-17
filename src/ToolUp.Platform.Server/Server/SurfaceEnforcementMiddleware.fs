@@ -177,6 +177,12 @@ module SurfaceRequirementRegistry =
     let sdkBuiltInRouteOverrides: ((string * string) * SurfaceRequirement) list =
         sdkTeamApiCrudOverrides
 
+    /// The SDK's two server-sent-event routes (both `GET`): the assistant's
+    /// stream and the notification stream. One list for the
+    /// `QueryParamFallback` carve-out below and for Phase 1006's reader
+    /// route class.
+    let internal sseRoutes: string list = [ "/api/ai/events"; "/api/notifications" ]
+
     /// Build a registry from the legacy `ServerConfig` carve-out
     /// fields (`Surfaces`, `PeerRoutePrefixes`, `SseAuthMode`). Used
     /// by `SDK.Server.fs` during the Phase 66 A.6 → B.4 transition
@@ -218,10 +224,7 @@ module SurfaceRequirementRegistry =
 
         let exactSse =
             match config.SseAuthMode with
-            | QueryParamFallback -> [
-                ("GET", "/api/ai/events"), SurfaceRequirement.public_
-                ("GET", "/api/notifications"), SurfaceRequirement.public_
-              ]
+            | QueryParamFallback -> sseRoutes |> List.map (fun p -> ("GET", p), SurfaceRequirement.public_)
             | CookieRequired -> []
 
         let peerPrefixBridge =
@@ -323,6 +326,87 @@ module SurfaceRequirementRegistry =
             | Some(_, req) -> req
             | None -> strictDefault
 
+/// Phase 1006 — the class of `/api` route a publication reader was refused
+/// on, recorded on its `SurfaceDenied` row (`RouteClass`). A reader is
+/// refused every `/api` route, so the class is what tells a probe of the
+/// assistant from one of team management or an upload. It is derived from
+/// what the gate already knows — the method, the path, the resolved
+/// requirement and the registry's module prefixes — and from whether the
+/// request declares a multipart body. Only the class name is recorded: no
+/// query string, header value or body reaches the row.
+module ReaderRouteClass =
+    /// One of the SDK's server-sent-event routes (`GET /api/ai/events`,
+    /// `GET /api/notifications`).
+    [<Literal>]
+    let Sse = "sse"
+
+    /// A request declaring a `multipart/form-data` body, on any route.
+    [<Literal>]
+    let Upload = "upload"
+
+    /// The assistant's API (`/api/ai/`).
+    [<Literal>]
+    let Assistant = "assistant"
+
+    /// The SDK's team-management API (`/api/TeamApi/`).
+    [<Literal>]
+    let TeamManagement = "team-management"
+
+    /// A route whose requirement admits anonymous callers (the CSRF token,
+    /// a peer prefix, the anonymous-only `/api/` bridge).
+    [<Literal>]
+    let AnonymousOpen = "anonymous-open"
+
+    /// A route under a module's declared prefix.
+    [<Literal>]
+    let Module = "module"
+
+    /// Any other `/api` route (the strict default).
+    [<Literal>]
+    let Api = "api"
+
+    /// Classify a refused `/api` request. The first matching class wins, in
+    /// the order the literals above are declared, most specific first.
+    /// `contentType` is read only to ask whether the body is multipart; its
+    /// value is never returned.
+    let classify
+        (registry: SurfaceRequirementRegistry)
+        (httpMethod: string)
+        (path: string)
+        (contentType: string)
+        : string =
+        let pathLower =
+            match path with
+            | null -> ""
+            | p -> p.ToLowerInvariant()
+
+        let under (prefix: string) =
+            pathLower.StartsWith(prefix, StringComparison.Ordinal)
+
+        let isMultipart =
+            not (isNull contentType)
+            && contentType.TrimStart().StartsWith("multipart/form-data", StringComparison.OrdinalIgnoreCase)
+
+        if
+            String.Equals(httpMethod, "GET", StringComparison.OrdinalIgnoreCase)
+            && SurfaceRequirementRegistry.sseRoutes |> List.contains pathLower
+        then
+            Sse
+        elif isMultipart then
+            Upload
+        elif under "/api/ai/" then
+            Assistant
+        elif under "/api/teamapi/" then
+            TeamManagement
+        elif
+            (SurfaceRequirementRegistry.resolve registry httpMethod pathLower).AcceptedSubjects.Contains AnonymousKind
+        then
+            AnonymousOpen
+        elif registry.ModulePrefixes |> List.exists (fun (prefix, _) -> under prefix) then
+            Module
+        else
+            Api
+
 /// Outcome of evaluating a `SurfaceRequirement` against the resolved
 /// `Subject`. The middleware translates these into HTTP responses;
 /// also surfaced as a pure function for unit-testing the matrix
@@ -378,6 +462,14 @@ module SurfaceEnforcement =
                 // the same code `evaluateAdmitted` gives it.
                 Reject(403, "publication_reader_not_admitted", None)
 
+    /// Phase 1006 — whether the request is a publication reader's: its
+    /// admission says so, or its subject does (the subject is the authority
+    /// when no admission was stashed). The one predicate the gate and the
+    /// refusal audit share.
+    let isPublicationReader (subject: Subject) (admission: ToolUp.Platform.Auth.PrincipalAdmission) : bool =
+        admission = ToolUp.Platform.Auth.PrincipalAdmission.PublicationReader
+        || Subject.kind subject = PublicationReaderKind
+
     /// Phase 996 — `evaluate`, with the principal's admission. A
     /// `PublicationReader` (admitted to publication pages only, never an app
     /// user) is refused `403 publication_reader_not_admitted`. A `Member` is
@@ -398,15 +490,53 @@ module SurfaceEnforcement =
         (admission: ToolUp.Platform.Auth.PrincipalAdmission)
         (requirement: SurfaceRequirement)
         : SurfaceEnforcementOutcome =
-        let isReader =
-            admission = ToolUp.Platform.Auth.PrincipalAdmission.PublicationReader
-            || Subject.kind subject = PublicationReaderKind
-
-        if not isReader then
+        if not (isPublicationReader subject admission) then
             evaluate subject requirement
         else
             // Its pages are server-rendered and need no `/api` call.
             Reject(403, "publication_reader_not_admitted", None)
+
+/// Phase 1006 — the warning to log when an audit write on the denial path
+/// fails, naming the method and path (never the query string). Resolved
+/// while the request is live: an asynchronous failure arrives after the
+/// response, when the request's services are already disposed. The
+/// response is unaffected either way.
+let private auditFailureWarner (ctx: HttpContext) : string -> exn -> unit =
+    let logger =
+        try
+            match ctx.RequestServices.GetService(typeof<ILogger>) with
+            | :? ILogger as log -> Some log
+            | _ -> None
+        with _ ->
+            None
+
+    let route = sprintf "%s %s" ctx.Request.Method (string ctx.Request.Path)
+
+    fun what ex ->
+        try
+            logger
+            |> Option.iter (fun log ->
+                log.Warn(
+                    sprintf
+                        "SurfaceEnforcementMiddleware: the %s audit write failed on %s (the refusal stands): %s"
+                        what
+                        route
+                        ex.Message
+                ))
+        with _ ->
+            ()
+
+/// Phase 1006 — start an audit write without awaiting it, observing its
+/// failure. An audit write that fails asynchronously is logged rather than
+/// left to surface as an unobserved exception; the response never waits on
+/// it and never changes because of it.
+let private startAudit (warn: string -> exn -> unit) (what: string) (work: Async<unit>) : unit =
+    async {
+        match! Async.Catch work with
+        | Choice1Of2() -> ()
+        | Choice2Of2 ex -> warn what ex
+    }
+    |> Async.Start
 
 /// Auth-observability A2 — emit `SurfaceDenied` to `IAuditLog` when a
 /// request is rejected. Pre-A2 these denials were structurally invisible
@@ -420,12 +550,19 @@ module SurfaceEnforcement =
 ///
 /// Skips emission for CSRF denials — `CsrfMiddleware` is upstream of
 /// this and emits its own observability when wired.
+///
+/// Phase 1006 — a publication reader's row also carries the route class it
+/// was refused on and the roles it was admitted with (`readerEnrichment`);
+/// both are `None` for every other subject, and the codec then writes the
+/// row byte-identical to its pre-1006 form. A failed write is logged and
+/// the refusal stands.
 let private emitDenialAudit
     (ctx: HttpContext)
+    (warn: string -> exn -> unit)
     (subject: Subject)
-    (statusCode: int)
     (errorCode: string)
     (hint: string option)
+    (readerEnrichment: (string * string list) option)
     : unit =
     try
         match ctx.RequestServices.GetService(typeof<IAuditLog>) with
@@ -459,19 +596,26 @@ let private emitDenialAudit
                     Hint = hint
                     CorrelationId = correlationId
                     OccurredAt = DateTimeOffset.UtcNow
+                    RouteClass = readerEnrichment |> Option.map fst
+                    ReaderRoles = readerEnrichment |> Option.map snd
                 }
             )
-            |> Async.Start
+            |> startAudit warn "SurfaceDenied"
         | _ -> ()
-    with _ ->
-        ()
+    with ex ->
+        warn "SurfaceDenied" ex
 
 /// Phase 120 — emit the uniform `AuthorizationDenied` row via
 /// `IAuthAuditHook` alongside the legacy `SurfaceDenied` row. The hook
 /// coalesces probing bursts (the per-`(route, subject)` flood guard) and
 /// feeds the generic `/dev/auth-denials` rollup. Best-effort: a missing
 /// hook or a hook failure never stalls the response.
-let private emitAuthDenial (ctx: HttpContext) (subject: Subject) (errorCode: string) : unit =
+let private emitAuthDenial
+    (ctx: HttpContext)
+    (warn: string -> exn -> unit)
+    (subject: Subject)
+    (errorCode: string)
+    : unit =
     try
         match ctx.RequestServices.GetService(typeof<IAuthAuditHook>) with
         | :? IAuthAuditHook as hook ->
@@ -492,10 +636,10 @@ let private emitAuthDenial (ctx: HttpContext) (subject: Subject) (errorCode: str
                 ScopeId = scopeId
                 CorrelationId = ToolUp.Remoting.Server.CallContext.correlationId ()
             }
-            |> Async.Start
+            |> startAudit warn "AuthorizationDenied"
         | _ -> ()
-    with _ ->
-        ()
+    with ex ->
+        warn "AuthorizationDenied" ex
 
 let private writeRejection
     (ctx: HttpContext)
@@ -503,14 +647,16 @@ let private writeRejection
     (statusCode: int)
     (errorCode: string)
     (hint: string option)
+    (readerEnrichment: (string * string list) option)
     =
     task {
         // Phase A2 — emit the audit row BEFORE we write the body so the
         // event order in the audit trail matches the wire-order observable
         // from the client.
-        emitDenialAudit ctx subject statusCode errorCode hint
+        let warn = auditFailureWarner ctx
+        emitDenialAudit ctx warn subject errorCode hint readerEnrichment
         // Phase 120 — uniform structured denial row alongside SurfaceDenied.
-        emitAuthDenial ctx subject errorCode
+        emitAuthDenial ctx warn subject errorCode
 
         ctx.Response.StatusCode <- statusCode
         ctx.Response.ContentType <- "application/json"
@@ -593,13 +739,36 @@ type SurfaceEnforcementMiddleware(next: RequestDelegate, registry: SurfaceRequir
                 // Phase 996 — the provider's admission rides on the user
                 // `ScopeResolutionMiddleware` stashed; absent, the request
                 // is a member's (or anonymous), evaluated as before.
-                let admission =
+                let user =
                     match ctx.Items.TryGetValue "ToolUp.User" with
-                    | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) -> user.Admission
-                    | _ -> ToolUp.Platform.Auth.PrincipalAdmission.Member
+                    | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) -> Some user
+                    | _ -> None
+
+                let admission =
+                    user
+                    |> Option.map _.Admission
+                    |> Option.defaultValue ToolUp.Platform.Auth.PrincipalAdmission.Member
 
                 match SurfaceEnforcement.evaluateAdmitted subject admission requirement with
                 | Pass -> do! next.Invoke(ctx)
-                | Reject(statusCode, errorCode, hint) -> do! writeRejection ctx subject statusCode errorCode hint
+                | Reject(statusCode, errorCode, hint) ->
+                    // Phase 1006 — a reader's refusal row names the route
+                    // class and the roles it was admitted with.
+                    let readerEnrichment =
+                        if SurfaceEnforcement.isPublicationReader subject admission then
+                            Some(
+                                ReaderRouteClass.classify
+                                    registry
+                                    ctx.Request.Method
+                                    ctx.Request.Path.Value
+                                    ctx.Request.ContentType,
+                                user
+                                |> Option.map ToolUp.Platform.Auth.AuthenticatedUser.pageRoles
+                                |> Option.defaultValue []
+                            )
+                        else
+                            None
+
+                    do! writeRejection ctx subject statusCode errorCode hint readerEnrichment
         }
         :> System.Threading.Tasks.Task
