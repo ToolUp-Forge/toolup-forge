@@ -177,25 +177,29 @@ let private writeUnauthorized (ctx: HttpContext) (errorCode: string) (descriptio
 /// tokens shows up in the `/dev/auth-denials` rollup keyed by route.
 /// Best-effort; a hook failure never affects the response.
 let private emitDenial (ctx: HttpContext) (errorCode: string) (description: string) : unit =
-    try
-        match ctx.RequestServices.GetService(typeof<IAuthAuditHook>) with
-        | :? IAuthAuditHook as hook ->
-            hook.RecordDenial {
-                Route = sprintf "%s %s" ctx.Request.Method (string ctx.Request.Path)
-                // A rejected token resolves to no principal — attribute
-                // the denial to an anonymous probe. There is no PII to
-                // leak and no scope to name.
-                Subject = AnonymousSession "anonymous"
-                Requirement = ShareTokenDenialRequirement
-                Verdict = errorCode
-                Reason = description
-                ScopeId = None
-                CorrelationId = ToolUp.Remoting.Server.CallContext.correlationId ()
-            }
-            |> Async.Start
-        | _ -> ()
-    with _ ->
-        ()
+    match ctx.RequestServices.GetService(typeof<IAuthAuditHook>) with
+    | :? IAuthAuditHook as hook ->
+        let warn =
+            Background.writeFailureWarner "ServiceAccountTokenHandler" (Background.requestLogger ctx) ctx
+
+        let row: AuthDenial = {
+            Route = sprintf "%s %s" ctx.Request.Method (string ctx.Request.Path)
+            // A rejected token resolves to no principal — attribute
+            // the denial to an anonymous probe. There is no PII to
+            // leak and no scope to name.
+            Subject = AnonymousSession "anonymous"
+            Requirement = ShareTokenDenialRequirement
+            Verdict = errorCode
+            Reason = description
+            ScopeId = None
+            CorrelationId = ToolUp.Remoting.Server.CallContext.correlationId ()
+        }
+
+        try
+            hook.RecordDenial row |> Background.startAudit warn "AuthorizationDenied audit"
+        with ex ->
+            warn "AuthorizationDenied audit" ex
+    | _ -> ()
 
 /// Phase 9d attribution — one `api.requests` usage record per admitted
 /// service-account request, so machine traffic is visible PER ACCOUNT
@@ -210,28 +214,32 @@ let private emitDenial (ctx: HttpContext) (errorCode: string) (description: stri
 /// composed pays nothing (GP 13), and a metering failure never affects
 /// the request.
 let private meterRequest (ctx: HttpContext) (principal: ServiceAccountPrincipal) : unit =
-    try
-        match ctx.RequestServices.GetService(typeof<IUsageLog>) with
-        | :? IUsageLog as usageLog ->
-            usageLog.Record {
-                RecordId = Guid.NewGuid()
-                ScopeId = principal.ScopeId
-                ResourceKind = ResourceKinds.apiRequests
-                Quantity = 1M
-                Unit = "requests"
-                Origin = None
-                Metadata =
-                    Map.ofList [
-                        "serviceAccountId", principal.AccountId
-                        "serviceAccountName", principal.DisplayName
-                        "tokenId", principal.TokenId
-                    ]
-                Timestamp = DateTime.UtcNow
-            }
-            |> Async.Start
-        | _ -> ()
-    with _ ->
-        ()
+    match ctx.RequestServices.GetService(typeof<IUsageLog>) with
+    | :? IUsageLog as usageLog ->
+        let warn =
+            Background.writeFailureWarner "ServiceAccountTokenHandler" (Background.requestLogger ctx) ctx
+
+        let row: UsageRecord = {
+            RecordId = Guid.NewGuid()
+            ScopeId = principal.ScopeId
+            ResourceKind = ResourceKinds.apiRequests
+            Quantity = 1M
+            Unit = "requests"
+            Origin = None
+            Metadata =
+                Map.ofList [
+                    "serviceAccountId", principal.AccountId
+                    "serviceAccountName", principal.DisplayName
+                    "tokenId", principal.TokenId
+                ]
+            Timestamp = DateTime.UtcNow
+        }
+
+        try
+            usageLog.Record row |> Background.startAudit warn "api.requests usage"
+        with ex ->
+            warn "api.requests usage" ex
+    | _ -> ()
 
 /// Build the `ShareTokenClaim` a validated principal presents to the
 /// subject resolver.

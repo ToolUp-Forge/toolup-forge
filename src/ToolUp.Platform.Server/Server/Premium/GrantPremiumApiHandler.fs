@@ -35,6 +35,11 @@ let private resolveAuditLog (ctx: HttpContext) : IAuditLog option =
     | :? IAuditLog as svc -> Some svc
     | _ -> None
 
+/// Phase 1026 — the warning a failed grant / revoke audit write is logged
+/// as, built while the request is live.
+let private auditWarner (ctx: HttpContext) =
+    Background.writeFailureWarner "GrantPremiumApiHandler" (Background.requestLogger ctx) ctx
+
 let private resolvePlatformAdminStore (ctx: HttpContext) : IPlatformAdminStore option =
     match ctx.RequestServices.GetService(typeof<IPlatformAdminStore>) with
     | :? IPlatformAdminStore as s -> Some s
@@ -102,8 +107,13 @@ let private grantHandler (userId: string) : HttpHandler =
 
                 resolveAuditLog ctx
                 |> Option.iter (fun auditLog ->
-                    auditLog.Record(PlatformScope, AuditEvent.PremiumGranted(userId, grantor, reason, occurredAt))
-                    |> Async.Start)
+                    let warn = auditWarner ctx
+
+                    try
+                        auditLog.Record(PlatformScope, AuditEvent.PremiumGranted(userId, grantor, reason, occurredAt))
+                        |> Background.startAudit warn "PremiumGranted audit"
+                    with ex ->
+                        warn "PremiumGranted audit" ex)
 
                 ctx.Response.StatusCode <- 204
                 return! next ctx
@@ -128,11 +138,16 @@ let private revokeHandler (userId: string) : HttpHandler =
             | Ok() ->
                 resolveAuditLog ctx
                 |> Option.iter (fun auditLog ->
-                    auditLog.Record(
-                        PlatformScope,
-                        AuditEvent.PremiumRevoked(userId, grantor, reason, DateTimeOffset.UtcNow)
-                    )
-                    |> Async.Start)
+                    let warn = auditWarner ctx
+
+                    try
+                        auditLog.Record(
+                            PlatformScope,
+                            AuditEvent.PremiumRevoked(userId, grantor, reason, DateTimeOffset.UtcNow)
+                        )
+                        |> Background.startAudit warn "PremiumRevoked audit"
+                    with ex ->
+                        warn "PremiumRevoked audit" ex)
 
                 ctx.Response.StatusCode <- 204
                 return! next ctx

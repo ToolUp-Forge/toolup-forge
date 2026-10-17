@@ -38,68 +38,74 @@ type SseScopeResult =
 let mismatchDenialCode = "sse_userid_principal_mismatch"
 
 /// Emit the principal/param-mismatch audit row + Warn. Best-effort and
-/// fire-and-forget — observability must not stall or fail the connect.
+/// fire-and-forget — observability must not stall or fail the connect: the
+/// row is started through `Background.startAudit` (Phase 1026), so a
+/// failing sink is a Warning, never a failed connect or a crashed host.
 /// Mirrors `SurfaceEnforcementMiddleware.emitDenialAudit`: a
 /// `SurfaceDenied` row on scope `_platform` with a distinct
 /// `DenialCode`. Phase 120's generic authz-denial hook will consume
 /// this event as one of its inputs; a dedicated `AuditEvent` case can
 /// land there if the mismatch row needs richer structure.
 let private emitMismatchAudit (ctx: HttpContext) (principalId: string) (assertedId: string) : unit =
-    try
-        match ctx.RequestServices.GetService(typeof<ILogger>) with
-        | :? ILogger as logger ->
-            logger.Warn(
-                sprintf
-                    "SSE connect on %s carried ?userId=%s but the validated principal is %s — param ignored, principal wins. Repeated mismatches from one source are probing."
-                    (string ctx.Request.Path)
-                    assertedId
-                    principalId
-            )
-        | _ -> ()
+    let logger = Background.requestLogger ctx
 
-        match ctx.RequestServices.GetService(typeof<IAuditLog>) with
-        | :? IAuditLog as auditLog ->
-            // Subject kind/id vocabulary matches SurfaceEnforcementMiddleware
-            // so operator dashboards aggregate both through one query shape.
-            // `"ToolUp.Subject"` is set by the scope-resolution middleware
-            // (same key RateLimiting reads); when absent — defensive, a
-            // resolved principal implies a resolved subject — fall back to
-            // the principal id with kind "user".
-            let subjectKind, subjectId =
-                match ctx.Items.TryGetValue "ToolUp.Subject" with
-                | true, (:? Subject as subject) ->
-                    let kind =
-                        match Subject.kind subject with
-                        | AnonymousKind -> "anonymous"
-                        | UserKind -> "user"
-                        | TeamMemberKind -> "team"
-                        | ClaimBearerKind -> "claim"
-                        | PublicationReaderKind -> "publication-reader"
+    match logger with
+    | Some log ->
+        log.Warn(
+            sprintf
+                "SSE connect on %s carried ?userId=%s but the validated principal is %s — param ignored, principal wins. Repeated mismatches from one source are probing."
+                (string ctx.Request.Path)
+                assertedId
+                principalId
+        )
+    | None -> ()
 
-                    kind, Some principalId
-                | _ -> "user", Some principalId
+    match ctx.RequestServices.GetService(typeof<IAuditLog>) with
+    | :? IAuditLog as auditLog ->
+        // Subject kind/id vocabulary matches SurfaceEnforcementMiddleware
+        // so operator dashboards aggregate both through one query shape.
+        // `"ToolUp.Subject"` is set by the scope-resolution middleware
+        // (same key RateLimiting reads); when absent — defensive, a
+        // resolved principal implies a resolved subject — fall back to
+        // the principal id with kind "user".
+        let subjectKind, subjectId =
+            match ctx.Items.TryGetValue "ToolUp.Subject" with
+            | true, (:? Subject as subject) ->
+                let kind =
+                    match Subject.kind subject with
+                    | AnonymousKind -> "anonymous"
+                    | UserKind -> "user"
+                    | TeamMemberKind -> "team"
+                    | ClaimBearerKind -> "claim"
+                    | PublicationReaderKind -> "publication-reader"
 
-            auditLog.Record(
-                "_platform",
-                SurfaceDenied {
-                    Method = ctx.Request.Method
-                    Path = string ctx.Request.Path
-                    SubjectKind = subjectKind
-                    SubjectId = subjectId
-                    DenialCode = mismatchDenialCode
-                    Hint = Some(sprintf "asserted=%s" assertedId)
-                    CorrelationId = ToolUp.Remoting.Server.CallContext.correlationId ()
-                    OccurredAt = DateTimeOffset.UtcNow
-                    // Phase 1006 — the reader enrichment belongs to surface
-                    // enforcement's refusal row, not this mismatch row.
-                    RouteClass = None
-                    ReaderRoles = None
-                }
-            )
-            |> Async.Start
-        | _ -> ()
-    with _ ->
-        ()
+                kind, Some principalId
+            | _ -> "user", Some principalId
+
+        let row =
+            SurfaceDenied {
+                Method = ctx.Request.Method
+                Path = string ctx.Request.Path
+                SubjectKind = subjectKind
+                SubjectId = subjectId
+                DenialCode = mismatchDenialCode
+                Hint = Some(sprintf "asserted=%s" assertedId)
+                CorrelationId = ToolUp.Remoting.Server.CallContext.correlationId ()
+                OccurredAt = DateTimeOffset.UtcNow
+                // Phase 1006 — the reader enrichment belongs to surface
+                // enforcement's refusal row, not this mismatch row.
+                RouteClass = None
+                ReaderRoles = None
+            }
+
+        let warn = Background.writeFailureWarner "SseScopeResolution" logger ctx
+
+        try
+            auditLog.Record("_platform", row)
+            |> Background.startAudit warn "SurfaceDenied audit"
+        with ex ->
+            warn "SurfaceDenied audit" ex
+    | _ -> ()
 
 /// Resolve the subscriber scope for an SSE connect.
 ///

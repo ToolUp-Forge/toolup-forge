@@ -378,6 +378,13 @@ type TransactionalDispatcher
 
     do validateSinkRegistration sinks
 
+    /// Phase 1026 — every delivery and every gap-audit row the drain loop
+    /// starts. Each is started through `Background.start`, so a sink or an
+    /// `IAuditLog` that throws is logged at `Error` and never takes the
+    /// host down; `StopAsync` cancels the set and waits for it within the
+    /// host's shutdown window.
+    let deliveries = Background.DrainSet()
+
     /// Bounded queue. Drop-write on overflow keeps `Publish` non-
     /// blocking even when the dispatcher is saturated; the audit
     /// trail will show a gap (no `NotificationSent` for the dropped
@@ -437,9 +444,9 @@ type TransactionalDispatcher
 
     /// Async loop draining the queue. Runs until the
     /// `BackgroundService` cancellation token fires on shutdown.
-    /// Each task fans out via `Async.Start` so a slow vendor call
-    /// doesn't block sibling envelopes; `runDelivery` carries its
-    /// own try/catch.
+    /// Each task fans out through `Background.start` under `deliveries`
+    /// so a slow vendor call doesn't block sibling envelopes, and a throw
+    /// from the sink or the audit write (Phase 1026) is caught and logged.
     member private _.DrainQueue(cancellationToken: CancellationToken) = async {
         try
             while not cancellationToken.IsCancellationRequested do
@@ -451,10 +458,11 @@ type TransactionalDispatcher
                     while queue.Reader.TryRead(&task) do
                         match Map.tryFind task.SinkKind sinksByKind with
                         | Some sink ->
-                            Async.Start(
-                                runDelivery sink configStore auditLog retry logger activitySink task.Envelope,
-                                cancellationToken
-                            )
+                            Background.start
+                                deliveries
+                                logger
+                                $"%s{LogPrefix} delivery_unhandled kind=%s{task.SinkKind} scope=%s{task.Envelope.ScopeId} envelopeId=%O{task.Envelope.Id}: this delivery failed outside its own handling"
+                                (runDelivery sink configStore auditLog retry logger activitySink task.Envelope)
                         | None ->
                             logger.Warn
                                 $"%s{LogPrefix} sink_disappeared kind=%s{task.SinkKind} scope=%s{task.Envelope.ScopeId} envelopeId=%O{task.Envelope.Id} — envelope dropped"
@@ -467,22 +475,26 @@ type TransactionalDispatcher
                             // helper used by every other audit emission below.
                             let recipientUserIds, correlationId = auditFieldsOf task.Envelope.Notification
 
-                            Async.Start(
-                                auditLog.Record(
-                                    task.Envelope.ScopeId,
-                                    NotificationDeliveryFailed {
-                                        UserId = SystemActorId
-                                        ScopeId = task.Envelope.ScopeId
-                                        NotificationKind = task.SinkKind
-                                        Provider = "<unregistered>"
-                                        RecipientUserIds = recipientUserIds
-                                        Error = "sink_unregistered"
-                                        Attempts = 0
-                                        CorrelationId = correlationId
-                                    }
-                                ),
-                                cancellationToken
-                            )
+                            Background.start
+                                deliveries
+                                logger
+                                $"%s{LogPrefix} audit_write_failed eventType=NotificationDeliveryFailed scope=%s{task.Envelope.ScopeId} envelopeId=%O{task.Envelope.Id}: the sink_unregistered row is lost"
+                                (async {
+                                    return!
+                                        auditLog.Record(
+                                            task.Envelope.ScopeId,
+                                            NotificationDeliveryFailed {
+                                                UserId = SystemActorId
+                                                ScopeId = task.Envelope.ScopeId
+                                                NotificationKind = task.SinkKind
+                                                Provider = "<unregistered>"
+                                                RecipientUserIds = recipientUserIds
+                                                Error = "sink_unregistered"
+                                                Attempts = 0
+                                                CorrelationId = correlationId
+                                            }
+                                        )
+                                })
         with
         | :? OperationCanceledException -> ()
         | ex -> logger.Error($"%s{LogPrefix} drain_loop_failed: %s{ex.GetType().Name}: %s{ex.Message}", Some ex)
@@ -493,15 +505,33 @@ type TransactionalDispatcher
         // body explicitly so cancellation flows.
         Async.StartAsTask(this.DrainQueue stoppingToken, cancellationToken = stoppingToken) :> Task
 
+    member private _.StopBase(cancellationToken: CancellationToken) = base.StopAsync cancellationToken
+
+    /// Complete the writer so the drain loop exits its outer
+    /// `WaitToReadAsync` after the next pump, cancel the deliveries in
+    /// flight (Phase 1026 — the stopping token used to reach them through
+    /// `Async.Start`; the drain set's token does now), stop the loop, then
+    /// wait for the deliveries to end within the host's shutdown window.
+    /// One that outlives the window is reported, never waited on past it.
+    /// F#'s `task { }` builder cannot carry a `base.X` call across the
+    /// closure, hence `StopBase`.
     override this.StopAsync(cancellationToken: CancellationToken) =
-        // Complete the writer so the drain loop exits its outer
-        // `WaitToReadAsync` after the next pump, then defer to the
-        // base implementation. F#'s `task { }` builder can't carry a
-        // `base.X` call across the closure; doing the side-effect
-        // directly and chaining the base task keeps the `base`
-        // reference in the override's direct scope.
         queue.Writer.TryComplete() |> ignore
-        base.StopAsync(cancellationToken)
+        deliveries.Cancel()
+
+        task {
+            do! this.StopBase cancellationToken
+            let! drained = deliveries.WaitAsync cancellationToken
+
+            if not drained then
+                logger.Warn(
+                    sprintf
+                        "%s deliveries_undrained_at_shutdown count=%d — the host's shutdown window closed before these cancelled deliveries ended"
+                        LogPrefix
+                        deliveries.Count
+                )
+        }
+        :> Task
 
 /// `INotificationChannel` decorator that intercepts transactional
 /// kinds at `Publish` time and routes them to a

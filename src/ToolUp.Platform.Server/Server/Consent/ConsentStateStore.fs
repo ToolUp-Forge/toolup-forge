@@ -167,9 +167,9 @@ type IConsentStateStore =
 // open-vocabulary `RemotingMethodAudited` row with a
 // `Kind = "Custom:ConsentGranted"` / `"Custom:ConsentWithdrawn"`
 // discriminator — the same `Custom:<name>` convention the
-// `[<Audit "Custom:...">]` dispatcher path emits. Fire-and-forget per
-// the `IAuditLog` contract: a failed audit write never fails the
-// consent write (rule 3).
+// `[<Audit "Custom:...">]` dispatcher path emits. Fire-and-forget, and
+// observed (Phase 1026): a failed audit write is a Warning naming it, and
+// never fails the consent write (rule 3) or the host.
 
 module private ConsentAudit =
     [<Literal>]
@@ -178,7 +178,13 @@ module private ConsentAudit =
     let private categoryList (cs: Set<ConsentCategory>) : string =
         cs |> Set.toList |> List.map string |> String.concat ","
 
-    let emit (auditLog: IAuditLog option) (scopeId: string) (kind: string) (record: ConsentRecord) : unit =
+    let emit
+        (warn: string -> exn -> unit)
+        (auditLog: IAuditLog option)
+        (scopeId: string)
+        (kind: string)
+        (record: ConsentRecord)
+        : unit =
         match auditLog with
         | None -> ()
         | Some log ->
@@ -200,7 +206,12 @@ module private ConsentAudit =
                 }
 
             // Fire-and-forget — never block / fail the consent write.
-            log.Record(scopeId, event) |> Async.Start
+            let what = sprintf "%s audit" kind
+
+            try
+                log.Record(scopeId, event) |> Background.startAudit warn what
+            with ex ->
+                warn what ex
 
 // ─── Withdrawal helper (shared by both impls) ─────────────────────
 
@@ -225,9 +236,19 @@ module private Withdrawal =
 /// `EntityBackedConsentStateStore`. Scope isolation is enforced by the
 /// composite key (rule 4 / GP 4): a read for `(scopeA, subject)` can
 /// never observe `(scopeB, subject)`.
-type InMemoryConsentStateStore(?auditLog: IAuditLog) =
+/// Phase 1026 — the consent audit rows are started through
+/// `Background.startAudit`: a failing `IAuditLog` loses that one row and
+/// logs a Warning naming it, never failing the write or the host. The
+/// internal primary constructor carries the logger; the public one logs
+/// to the SDK's default `ConsoleLogger`, so the store is never silent.
+type InMemoryConsentStateStore internal (auditLog: IAuditLog option, logger: ILogger) =
     let store = ConcurrentDictionary<string * string, ConsentRecord>()
-    let auditLog = auditLog
+
+    let warn =
+        Background.writeFailureLogger "InMemoryConsentStateStore" (Some logger) "" "the consent write"
+
+    /// The public constructor: the default `ConsoleLogger` (see the type's doc).
+    new(?auditLog: IAuditLog) = InMemoryConsentStateStore(auditLog, ConsoleLogger.ConsoleLogger() :> ILogger)
 
     interface IConsentStateStore with
         member _.Upsert(scopeId, record) = async {
@@ -246,7 +267,7 @@ type InMemoryConsentStateStore(?auditLog: IAuditLog) =
             }
 
             store[key] <- stored
-            ConsentAudit.emit auditLog scopeId "Custom:ConsentGranted" stored
+            ConsentAudit.emit warn auditLog scopeId "Custom:ConsentGranted" stored
             return Ok stored
         }
 
@@ -265,7 +286,7 @@ type InMemoryConsentStateStore(?auditLog: IAuditLog) =
                     |> fun r -> { r with Version = prev.Version + 1 }
 
                 store[(scopeId, subject)] <- withdrawn
-                ConsentAudit.emit auditLog scopeId "Custom:ConsentWithdrawn" withdrawn
+                ConsentAudit.emit warn auditLog scopeId "Custom:ConsentWithdrawn" withdrawn
                 return Ok withdrawn
             | _ -> return Error(sprintf "No consent record for subject %s in scope %s" subject scopeId)
         }
@@ -279,8 +300,18 @@ type InMemoryConsentStateStore(?auditLog: IAuditLog) =
 /// cache. Requires the `ConsentRecord.registration` entity type to be
 /// registered with the entity store (the compose path prepends it when
 /// `ServerConfig.ConsentStateStore = EntityBackedConsentStateStore`).
-type EntityBackedConsentStateStore(entityStore: IEntityStore, ?auditLog: IAuditLog) =
-    let auditLog = auditLog
+/// Phase 1026 — the consent audit rows are started through
+/// `Background.startAudit`: a failing `IAuditLog` loses that one row and
+/// logs a Warning naming it, never failing the write or the host. The
+/// internal primary constructor carries the logger; the public one logs
+/// to the SDK's default `ConsoleLogger`, so the store is never silent.
+type EntityBackedConsentStateStore internal (entityStore: IEntityStore, auditLog: IAuditLog option, logger: ILogger) =
+    let warn =
+        Background.writeFailureLogger "EntityBackedConsentStateStore" (Some logger) "" "the consent write"
+
+    /// The public constructor: the default `ConsoleLogger` (see the type's doc).
+    new(entityStore: IEntityStore, ?auditLog: IAuditLog) =
+        EntityBackedConsentStateStore(entityStore, auditLog, ConsoleLogger.ConsoleLogger() :> ILogger)
 
     interface IConsentStateStore with
         member _.Upsert(scopeId, record) = async {
@@ -295,7 +326,7 @@ type EntityBackedConsentStateStore(entityStore: IEntityStore, ?auditLog: IAuditL
             match result with
             | Ok ref ->
                 let stored = { toSave with Version = ref.Version }
-                ConsentAudit.emit auditLog scopeId "Custom:ConsentGranted" stored
+                ConsentAudit.emit warn auditLog scopeId "Custom:ConsentGranted" stored
                 return Ok stored
             | Error e -> return Error(EntityError.message e)
         }
@@ -320,7 +351,7 @@ type EntityBackedConsentStateStore(entityStore: IEntityStore, ?auditLog: IAuditL
                 match saved with
                 | Ok ref ->
                     let stored = { withdrawn with Version = ref.Version }
-                    ConsentAudit.emit auditLog scopeId "Custom:ConsentWithdrawn" stored
+                    ConsentAudit.emit warn auditLog scopeId "Custom:ConsentWithdrawn" stored
                     return Ok stored
                 | Error e -> return Error(EntityError.message e)
         }

@@ -1253,7 +1253,15 @@ type ExternalModelFitProvider
                             warn
                                 $"[external-model-fit] event=fit_cancelled handle=%O{handle.HandleId} — lodging a cancellation with backend '%s{handle.Backend}'."
 
-                            Async.Start(dispatcher.Cancel handle))
+                            // Phase 1026 — observed: a backend whose Cancel throws
+                            // is a Warning, never an unhandled exception.
+                            let warn =
+                                Background.writeFailureLogger "ExternalModelFitProvider" logger "" "the cancelled fit"
+
+                            try
+                                dispatcher.Cancel handle |> Background.startAudit warn "backend cancellation"
+                            with ex ->
+                                warn "backend cancellation" ex)
 
                     let! settled = wait handle deadline
 

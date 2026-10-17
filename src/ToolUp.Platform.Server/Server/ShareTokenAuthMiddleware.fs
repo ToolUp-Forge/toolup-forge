@@ -146,25 +146,29 @@ let internal classifyError (err: ShareTokenError) : string * string =
 /// error code as the verdict, so an enumeration of guessed tokens shows
 /// up in the `/dev/auth-denials` rollup keyed by route. Best-effort.
 let private emitShareTokenDenial (ctx: HttpContext) (errorCode: string) (description: string) : unit =
-    try
-        match ctx.RequestServices.GetService(typeof<IAuthAuditHook>) with
-        | :? IAuthAuditHook as hook ->
-            hook.RecordDenial {
-                Route = sprintf "%s %s" ctx.Request.Method (string ctx.Request.Path)
-                // A rejected token never resolves to a subject — attribute
-                // the denial to an anonymous probe (no PII to leak).
-                Subject = AnonymousSession "anonymous"
-                Requirement = ShareTokenDenialRequirement
-                Verdict = errorCode
-                Reason = description
-                // No caller scope on a failed token — written under `_platform`.
-                ScopeId = None
-                CorrelationId = ToolUp.Remoting.Server.CallContext.correlationId ()
-            }
-            |> Async.Start
-        | _ -> ()
-    with _ ->
-        ()
+    match ctx.RequestServices.GetService(typeof<IAuthAuditHook>) with
+    | :? IAuthAuditHook as hook ->
+        let warn =
+            Background.writeFailureWarner "ShareTokenAuthMiddleware" (Background.requestLogger ctx) ctx
+
+        let row: AuthDenial = {
+            Route = sprintf "%s %s" ctx.Request.Method (string ctx.Request.Path)
+            // A rejected token never resolves to a subject — attribute
+            // the denial to an anonymous probe (no PII to leak).
+            Subject = AnonymousSession "anonymous"
+            Requirement = ShareTokenDenialRequirement
+            Verdict = errorCode
+            Reason = description
+            // No caller scope on a failed token — written under `_platform`.
+            ScopeId = None
+            CorrelationId = ToolUp.Remoting.Server.CallContext.correlationId ()
+        }
+
+        try
+            hook.RecordDenial row |> Background.startAudit warn "AuthorizationDenied audit"
+        with ex ->
+            warn "AuthorizationDenied audit" ex
+    | _ -> ()
 
 /// ASP.NET Core middleware that validates an inbound share-token and
 /// stashes the resolved `ShareTokenClaim` on `HttpContext.Items`. See

@@ -312,7 +312,7 @@ let private observeResolverErrorDowngrade
     | Some(caseLabel, detail) ->
         let methodName = ctx.Request.Method
         let pathStr = string ctx.Request.Path
-        let warn = writeFailureWarner "ScopeResolutionMiddleware" logger ctx
+        let warn = Background.writeFailureWarner "ScopeResolutionMiddleware" logger ctx
 
         try
             match logger with
@@ -365,7 +365,8 @@ let internal recordPublicationReaderSignIn
     (user: AuthenticatedUser)
     (readerId: string)
     : unit =
-    let warn = writeFailureWarner "ScopeResolutionMiddleware" (requestLogger ctx) ctx
+    let warn =
+        Background.writeFailureWarner "ScopeResolutionMiddleware" (Background.requestLogger ctx) ctx
 
     try
         match
@@ -526,7 +527,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                     // Phase 1024 — every fire-and-forget write below is
                     // started through `startAudit` with this warner, built
                     // while the request is live.
-                    let warn = writeFailureWarner "ScopeResolutionMiddleware" loggerOpt ctx
+                    let warn = Background.writeFailureWarner "ScopeResolutionMiddleware" loggerOpt ctx
 
                     let subject, scopeResult =
                         match resolved with
@@ -882,7 +883,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                     let methodName = ctx.Request.Method
                     let pathStr = string ctx.Request.Path
 
-                    let logger = requestLogger ctx
+                    let logger = Background.requestLogger ctx
 
                     try
                         logger
@@ -899,7 +900,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                     with _ ->
                         ()
 
-                    let warn = writeFailureWarner "ScopeResolutionMiddleware" logger ctx
+                    let warn = Background.writeFailureWarner "ScopeResolutionMiddleware" logger ctx
 
                     try
                         match ctx.RequestServices.GetService(typeof<IAuditLog>) with

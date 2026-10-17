@@ -142,10 +142,10 @@ let private shouldWarn (key: string) : bool =
 /// suppresses a log line.
 let resetObservabilityState () = lastWarned.Clear()
 
-let private resolveLogger (ctx: HttpContext) : ILogger option =
-    match ctx.RequestServices.GetService(typeof<ILogger>) with
-    | :? ILogger as l -> Some l
-    | _ -> None
+/// Phase 1026 — the warning a failed impression / click audit write is
+/// logged as, built while the request is live.
+let private auditWarner (ctx: HttpContext) =
+    Background.writeFailureWarner "AdAnalyticsApiHandler" (Background.requestLogger ctx) ctx
 
 let private resolveMetrics (ctx: HttpContext) : IMetricsSink option =
     match ctx.RequestServices.GetService(typeof<IMetricsSink>) with
@@ -196,7 +196,7 @@ let private rateGate
                 // address-keyed suppressor would emit one line per
                 // distinct client — the flood it exists to prevent.
                 if shouldWarn (sprintf "store-failure|%s" endpoint) then
-                    resolveLogger ctx
+                    Background.requestLogger ctx
                     |> Option.iter (fun l ->
                         l.Warn(
                             sprintf
@@ -237,7 +237,7 @@ let private recordParseDrop (ctx: HttpContext) (endpoint: string) (error: HttpBo
     let ip = clientIp ctx
 
     if shouldWarn (sprintf "parse-drop|%s|%s" endpoint ip) then
-        resolveLogger ctx
+        Background.requestLogger ctx
         |> Option.iter (fun l ->
             l.Warn(
                 sprintf
@@ -384,8 +384,13 @@ let private impressionHandler: HttpHandler =
                     else
                         match ctx.RequestServices.GetService(typeof<IAuditLog>) with
                         | :? IAuditLog as auditLog ->
-                            auditLog.Record(PlatformScope, AuditEvent.AdImpressionRecorded ev)
-                            |> Async.Start
+                            let warn = auditWarner ctx
+
+                            try
+                                auditLog.Record(PlatformScope, AuditEvent.AdImpressionRecorded ev)
+                                |> Background.startAudit warn "AdImpressionRecorded audit"
+                            with ex ->
+                                warn "AdImpressionRecorded audit" ex
                         | _ -> ()
 
                         ctx.Response.StatusCode <- 204
@@ -427,7 +432,13 @@ let private clickHandler: HttpHandler =
                     else
                         match ctx.RequestServices.GetService(typeof<IAuditLog>) with
                         | :? IAuditLog as auditLog ->
-                            auditLog.Record(PlatformScope, AuditEvent.AdClickRecorded ev) |> Async.Start
+                            let warn = auditWarner ctx
+
+                            try
+                                auditLog.Record(PlatformScope, AuditEvent.AdClickRecorded ev)
+                                |> Background.startAudit warn "AdClickRecorded audit"
+                            with ex ->
+                                warn "AdClickRecorded audit" ex
                         | _ -> ()
 
                         ctx.Response.StatusCode <- 204

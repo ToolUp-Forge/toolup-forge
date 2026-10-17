@@ -2626,6 +2626,8 @@ let private registeredTests =
         StoreFireAndForgetTests.tests
         // Phase 1027 - a lineage link survives a lineage-store outage.
         LineageDurabilityTests.tests
+        // Phase 1026 - every fire-and-forget audit record is caught at its call site.
+        AuditCallSiteFireAndForgetTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

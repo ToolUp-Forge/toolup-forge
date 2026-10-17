@@ -177,9 +177,20 @@ let private tryDeserialise<'T> (body: string) : 'T option =
     | Ok value -> Some value
     | Error _ -> None
 
+/// Phase 1026 — observed: a failing sink is a Warning naming the write,
+/// never a failed admin request or a crashed host.
 let private recordAudit (ctx: HttpContext) (event: AuditEvent) : unit =
+    let warn =
+        Background.writeFailureWarner "AdUnitConfigApi" (Background.requestLogger ctx) ctx
+
     resolveAuditLog ctx
-    |> Option.iter (fun log -> log.Record(PlatformAdsConfigScope, event) |> Async.Start)
+    |> Option.iter (fun log ->
+        let what = sprintf "%s audit" (AuditEvent.eventTypeName event)
+
+        try
+            log.Record(PlatformAdsConfigScope, event) |> Background.startAudit warn what
+        with ex ->
+            warn what ex)
 
 let private withSubstrate
     (ctx: HttpContext)

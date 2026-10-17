@@ -623,30 +623,33 @@ type PerScopeKeyResolver
                     // dispatched by the handler itself, and an audit
                     // write goes to blob storage — blocking the
                     // publisher on it would make one slow replica's
-                    // storage the publisher's latency. `IAuditLog.Record`
-                    // swallows its own failures; the try/with guards the
-                    // dispatch itself so a throw can never escape into
-                    // the channel.
+                    // storage the publisher's latency. Started through
+                    // `Background.startAudit` (Phase 1026): a throw, at the
+                    // call or inside the write, is a Warning to the
+                    // resolver's logger and never escapes into the channel
+                    // or the host.
                     match decoded, auditLog with
                     | Some e, Some log ->
+                        let row =
+                            EncryptionKeyDestroyAcknowledged {
+                                UserId = e.RequestedBy
+                                ScopeId = e.ScopeId
+                                KeyId = e.KeyId
+                                Resolver = ResolverName
+                                AcknowledgedBy = replicaId
+                                OriginReplicaId = e.OriginReplicaId
+                                RequestedAt = e.RequestedAt
+                                AcknowledgedAt = DateTimeOffset.UtcNow
+                            }
+
+                        let warn =
+                            Background.writeFailureLogger "PerScopeKeyResolver" logger "" "the key eviction"
+
                         try
-                            Async.Start(
-                                log.Record(
-                                    scopeId,
-                                    EncryptionKeyDestroyAcknowledged {
-                                        UserId = e.RequestedBy
-                                        ScopeId = e.ScopeId
-                                        KeyId = e.KeyId
-                                        Resolver = ResolverName
-                                        AcknowledgedBy = replicaId
-                                        OriginReplicaId = e.OriginReplicaId
-                                        RequestedAt = e.RequestedAt
-                                        AcknowledgedAt = DateTimeOffset.UtcNow
-                                    }
-                                )
-                            )
-                        with _ ->
-                            ()
+                            log.Record(scopeId, row)
+                            |> Background.startAudit warn "EncryptionKeyDestroyAcknowledged audit"
+                        with ex ->
+                            warn "EncryptionKeyDestroyAcknowledged audit" ex
                     // A pre-Phase-22b payload (bare scopeId) carries
                     // none of the acknowledgement's fields. Evict —
                     // done above — and skip the record rather than

@@ -101,13 +101,24 @@ let private resolvePlatformAdminStore (ctx: HttpContext) =
 /// Fire-and-forget audit emission. Phase 9 — audit events for team
 /// CRUD / permission changes are emitted from the handler (not from
 /// the store) because the actor's `userId` lives in the request
-/// context. Emission failures never cascade — `IAuditLog.Record`
-/// swallows its own writes so audit gaps don't fail primary state
-/// changes.
-let private recordAudit (auditLog: IAuditLog option) (scopeId: string) (audit: AuditEvent) =
-    match auditLog with
-    | Some a -> a.Record(scopeId, audit) |> Async.Start
-    | None -> ()
+/// context. Emission failures never cascade: the write is started
+/// through `Background.startAudit` (Phase 1026), so a failing sink is a
+/// Warning naming the write and never fails a primary state change or
+/// the host. The warning is built from `ctx` while the request is live.
+let private recordAudit (ctx: HttpContext) (auditLog: IAuditLog option) : string -> AuditEvent -> unit =
+    let warn =
+        Background.writeFailureWarner "PlatformApiHandler" (Background.requestLogger ctx) ctx
+
+    fun scopeId audit ->
+        match auditLog with
+        | Some a ->
+            let what = sprintf "%s audit" (AuditEvent.eventTypeName audit)
+
+            try
+                a.Record(scopeId, audit) |> Background.startAudit warn what
+            with ex ->
+                warn what ex
+        | None -> ()
 
 // ─── PlatformInfoApi — mode + auth posture (1 method) ───────────────
 
@@ -150,7 +161,7 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
     let teamStore = resolveTeamStore ctx
     let auditLog = resolveAuditLog ctx
     let userId = resolveUserId ctx
-    let audit = recordAudit auditLog
+    let audit = recordAudit ctx auditLog
 
     // Phase 5f — resolve the admin-gate at request time (the store is
     // a singleton; resolving inside the helper matches the pattern
@@ -850,7 +861,7 @@ let permissionApiHandler (_config: ServerConfig) =
         let permStore = resolvePermissionStore ctx
         let auditLog = resolveAuditLog ctx
         let userId = resolveUserId ctx
-        let audit = recordAudit auditLog
+        let audit = recordAudit ctx auditLog
 
         {
             GetTeamPermissions =

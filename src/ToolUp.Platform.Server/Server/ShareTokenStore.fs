@@ -469,13 +469,21 @@ type BlobShareTokenStore(storage: IBlobStorage, secretStore: ISecretStore, audit
                 return Error ShareTokenError.NotFound
     }
 
+    // Phase 1026 — fire-and-forget, and observed: a failing sink loses that
+    // one row and logs a Warning naming it, never blocking the primary
+    // operation or crashing the host.
+    let auditWarn =
+        Background.writeFailureLogger "BlobShareTokenStore" (Some logger) "" "the operation"
+
     let recordAudit (scopeId: string) (event: AuditEvent) =
         match audit with
         | Some a ->
-            // Fire-and-forget; audit failure must never block the
-            // primary operation. `IAuditLog.Record` itself logs at
-            // Warn on internal errors.
-            Async.Start(a.Record(scopeId, event))
+            let what = sprintf "%s audit" (AuditEvent.eventTypeName event)
+
+            try
+                a.Record(scopeId, event) |> Background.startAudit auditWarn what
+            with ex ->
+                auditWarn what ex
         | None -> ()
 
     interface IShareTokenStore with

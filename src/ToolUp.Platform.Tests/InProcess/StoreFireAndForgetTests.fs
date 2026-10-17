@@ -514,7 +514,7 @@ let private textPins =
             ctx.Request.QueryString <- QueryString "?secret=1"
 
             let warn =
-                SurfaceEnforcement.writeFailureWarner "ScopeResolutionMiddleware" (Some logger) ctx
+                Background.writeFailureWarner "ScopeResolutionMiddleware" (Some logger) ctx
 
             warn "scope-downgrade audit" (AggregateException(StoreDownException "sink down"))
 

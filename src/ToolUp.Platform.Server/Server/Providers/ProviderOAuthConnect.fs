@@ -101,15 +101,14 @@ let bindEntry
                 UpdatedAt = connectedAt
         }
 
-/// Persist a completed Authorization Code exchange as an
-/// `OAuthConnected` `ProviderEntry`.
-///
-/// Order is deliberate: the refresh token is written FIRST, then the
-/// profile. A crash between the two leaves an orphan secret (harmless
-/// — nothing references it) rather than an entry pointing at a
-/// credential that was never stored (which resolves as a broken
-/// provider on the next chat turn).
-let completeConnect
+/// Phase 1026 — `completeConnect` with the warning a failed
+/// `OAuthConnected` audit write is logged as. The write is started through
+/// `Background.startAudit`, so a failing sink is that Warning and never a
+/// failed connect or a crashed host. The OAuth callback passes its
+/// request-bound warner; the public `completeConnect` logs to the SDK's
+/// default `ConsoleLogger`.
+let internal completeConnectObserved
+    (warn: string -> exn -> unit)
     (providerProfile: IProviderProfile)
     (secretStore: ISecretStore)
     (auditLog: IAuditLog option)
@@ -177,21 +176,59 @@ let completeConnect
                         // change.
                         match auditLog with
                         | Some log ->
-                            log.Record(
-                                scope.ScopeId,
-                                OAuthConnected {
-                                    UserId = userId
-                                    ScopeId = scope.ScopeId
-                                    FlowName = flow.Name
-                                    DataSourceId = OAuthCorrelationKey.render correlation
-                                    ConnectedAt = connectedAt
-                                }
-                            )
-                            |> Async.Start
+                            try
+                                log.Record(
+                                    scope.ScopeId,
+                                    OAuthConnected {
+                                        UserId = userId
+                                        ScopeId = scope.ScopeId
+                                        FlowName = flow.Name
+                                        DataSourceId = OAuthCorrelationKey.render correlation
+                                        ConnectedAt = connectedAt
+                                    }
+                                )
+                                |> Background.startAudit warn "OAuthConnected audit"
+                            with ex ->
+                                warn "OAuthConnected audit" ex
                         | None -> ()
 
                         return Ok()
     }
+
+/// Persist a completed Authorization Code exchange as an
+/// `OAuthConnected` `ProviderEntry`.
+///
+/// Order is deliberate: the refresh token is written FIRST, then the
+/// profile. A crash between the two leaves an orphan secret (harmless
+/// — nothing references it) rather than an entry pointing at a
+/// credential that was never stored (which resolves as a broken
+/// provider on the next chat turn).
+let completeConnect
+    (providerProfile: IProviderProfile)
+    (secretStore: ISecretStore)
+    (auditLog: IAuditLog option)
+    (scope: StorageScope)
+    (userId: string)
+    (flow: IProviderOAuthFlow)
+    (correlation: OAuthCorrelationKey)
+    (credentials: OAuthCredentials)
+    (connectedAt: DateTime)
+    : Async<Result<unit, string>> =
+    completeConnectObserved
+        (Background.writeFailureLogger
+            "ProviderOAuthConnect"
+            (Some(ConsoleLogger.ConsoleLogger() :> ILogger))
+            ""
+            "the connect")
+        providerProfile
+        secretStore
+        auditLog
+        scope
+        userId
+        flow
+        correlation
+        credentials
+        connectedAt
 
 /// Classify a refresh-path `OAuthError`. `NetworkError` is the only
 /// case that may recover on its own; everything else needs either an

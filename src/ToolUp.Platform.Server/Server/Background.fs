@@ -18,6 +18,7 @@ open System
 open System.Collections.Concurrent
 open System.Threading
 open System.Threading.Tasks
+open Microsoft.AspNetCore.Http
 
 /// The work one service has started through `start` and not yet seen end.
 /// Each service owns its own set: its `StopAsync` decides, in its own order,
@@ -95,7 +96,7 @@ let start (drain: DrainSet) (logger: ILogger) (label: string) (work: Async<unit>
 /// where it failed (`onWhat`, e.g. `" on GET /x"`, or `""`), the exception
 /// type seen through an async boundary's wrapper, and what the failure did
 /// NOT change (`unaffected`, e.g. `"the response"`). A logger that itself
-/// throws is ignored. `SurfaceEnforcement.writeFailureWarner` is the
+/// throws is ignored. `writeFailureWarner` below is the
 /// request-bound face of this one formatter.
 let internal writeFailureLogger
     (source: string)
@@ -124,12 +125,36 @@ let internal writeFailureLogger
         with _ ->
             ()
 
+/// Phase 1006 / 1024 — the request's `ILogger`, resolved while the request
+/// is live: an asynchronous write failure arrives after the response, when
+/// the request's services are already disposed. `None` when none is
+/// composed, or when resolving it throws.
+let internal requestLogger (ctx: HttpContext) : ILogger option =
+    try
+        match ctx.RequestServices.GetService(typeof<ILogger>) with
+        | :? ILogger as log -> Some log
+        | _ -> None
+    with _ ->
+        None
+
+/// Phase 1006 / 1024 — the warning to log when a fire-and-forget write
+/// started on a request fails. It names the source, the write, the method
+/// and path (never the query string) and the exception type, seen through
+/// an async boundary's wrapper. Built while
+/// the request is live (see `requestLogger`); the response is unaffected
+/// either way, and a logger that itself throws is ignored. The formatting
+/// is `writeFailureLogger`'s (Phase 1025), shared with the
+/// stores that have no request in hand.
+let internal writeFailureWarner (source: string) (logger: ILogger option) (ctx: HttpContext) : string -> exn -> unit =
+    let route = sprintf " on %s %s" ctx.Request.Method (string ctx.Request.Path)
+    writeFailureLogger source logger route "the response"
+
 /// Phase 1006 / 1024 — start a write without awaiting it, observing its
 /// failure. The ONE helper for this shape: the surface denial trail, every
-/// fire-and-forget write in `ScopeResolutionMiddleware` (Middleware.fs), and
+/// fire-and-forget write in `ScopeResolutionMiddleware` (Middleware.fs),
 /// the conversation and result stores' event and lineage writes (Phase 1025)
-/// go through it. Service-lifetime work with a stop to drain for uses
-/// `start` above instead.
+/// and every request-bound audit record (Phase 1026) go through it.
+/// Service-lifetime work with a stop to drain for uses `start` above instead.
 ///
 /// A bare `Async.Start` of a write that fails is not merely untidy. A
 /// failure inside plain async code is rethrown on a thread-pool thread and
@@ -138,7 +163,10 @@ let internal writeFailureLogger
 /// Under `Async.Catch` neither escapes: the failure is handed to `warn`
 /// with the write's name, the caller never waits on the write and never
 /// changes because of it. A write that throws synchronously, before an
-/// `Async` exists, is the caller's `try ... with ex -> warn what ex`.
+/// `Async` exists, is the caller's `try ... with ex -> warn what ex`. The
+/// write is evaluated there, eagerly, not delayed into the started async:
+/// a sink's synchronous prefix (an enqueue, a buffer append) then runs in
+/// the caller's order, as it did under the bare start (Phase 1026).
 let internal startAudit (warn: string -> exn -> unit) (what: string) (work: Async<unit>) : unit =
     async {
         match! Async.Catch work with
