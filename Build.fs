@@ -4798,12 +4798,20 @@ let main args =
             |> CreateProcess.redirectOutput
             |> Proc.run
 
-        let runCheckedIn label exe args dir =
+        // `diagnose` reads a failed step's captured output and returns an
+        // account to print beside it ("" for none) — the restore steps use
+        // it to say which ToolUp id missed and why (Phase 1004).
+        let runCheckedInWith (diagnose: string -> string) label exe args dir =
             Trace.tracefn "▶ VerifyPublishedPackages: %s — %s %s" label exe (String.concat " " args)
             let r = runIn exe args dir
 
             if r.ExitCode <> 0 then
-                printfn "%s" (r.Result.Output + r.Result.Error)
+                let output = r.Result.Output + r.Result.Error
+                printfn "%s" output
+
+                match diagnose output with
+                | "" -> ()
+                | account -> printfn "%s" account
 
                 failwithf
                     "VerifyPublishedPackages: %s failed — `%s %s` exited %d in %s. This is the fresh-machine probe: the packages restored from nuget.org do not %s. Read the captured output above; it is a consumer's first experience of this release."
@@ -4813,6 +4821,8 @@ let main args =
                     r.ExitCode
                     dir
                     label
+
+        let runCheckedIn = runCheckedInWith (fun _ -> "")
 
         // ── 1. Which version ─────────────────────────────────────────
         //
@@ -4876,37 +4886,79 @@ let main args =
         use http =
             new System.Net.Http.HttpClient(Timeout = System.TimeSpan.FromSeconds 30.0)
 
-        let awaitIndexed (packageId: string) =
-            let url = PublishedSmoke.flatContainerIndexUrl packageId
-            let started = System.DateTime.UtcNow
-            let mutable lastBody = ""
-            let mutable served = false
+        let fetchIndex (packageId: string) =
+            try
+                http.GetStringAsync(PublishedSmoke.flatContainerIndexUrl packageId).GetAwaiter().GetResult()
+            with e ->
+                // A transient 404 IS the expected pre-index answer
+                // and the storage layer returns it as a throwing
+                // status, so this is a poll result, not a failure.
+                sprintf "(request failed: %s)" e.Message
 
-            while not served && System.DateTime.UtcNow - started < timeout do
-                lastBody <-
-                    try
-                        http.GetStringAsync(url).GetAwaiter().GetResult()
-                    with e ->
-                        // A transient 404 IS the expected pre-index answer
-                        // and the storage layer returns it as a throwing
-                        // status, so this is a poll result, not a failure.
-                        sprintf "(request failed: %s)" e.Message
+        // The CLOSURE the restore resolves, not only the ids the probe
+        // names (Phase 1004): a restore pulls the probes' transitive
+        // `ToolUp.*` dependencies at this version too, and nuget.org
+        // indexes each push independently. `v0.25.1` failed NU1102 on
+        // `ToolUp.Feliz.AgGrid`, `v0.26.0` on `ToolUp.Platform.Transport`
+        // — neither a probe id, both fine minutes later. One deadline over
+        // the whole set, so the budget is the same as before however many
+        // packages it covers.
+        let awaited = PublishedSmoke.awaitedIdsIn repoRoot
 
-                served <- PublishedSmoke.indexServes version lastBody
+        Trace.tracefn
+            "▶ VerifyPublishedPackages: awaiting %d package(s) at %s — every lockstep package the release publishes (the %d probe ids and their closure)"
+            (List.length awaited)
+            version
+            (List.length PublishedSmoke.probeIds)
 
-                if not served then
-                    Trace.tracefn "  … %s %s not indexed yet; waiting" packageId version
-                    System.Threading.Thread.Sleep(System.TimeSpan.FromSeconds 30.0)
+        let started = System.DateTime.UtcNow
+        let mutable pending = awaited
+        let mutable lastBodies = Map.empty
 
-            if not served then
-                failwith (
-                    PublishedSmoke.indexTimeoutReport packageId version (System.DateTime.UtcNow - started) lastBody
-                )
+        while not pending.IsEmpty && System.DateTime.UtcNow - started < timeout do
+            let bodies = pending |> List.map (fun id -> id, fetchIndex id)
+            lastBodies <- bodies |> List.fold (fun m (id, body) -> Map.add id body m) lastBodies
+            let stillPending = PublishedSmoke.stillPending version bodies
 
-            Trace.tracefn "▶ VerifyPublishedPackages: nuget.org serves %s %s" packageId version
+            for id in pending |> List.except stillPending do
+                Trace.tracefn "▶ VerifyPublishedPackages: nuget.org serves %s %s" id version
 
-        for packageId in PublishedSmoke.probeIds do
-            awaitIndexed packageId
+            pending <- stillPending
+
+            if not pending.IsEmpty then
+                Trace.tracefn
+                    "  … %d package(s) not indexed yet at %s (%s); waiting"
+                    (List.length pending)
+                    version
+                    (String.concat ", " pending)
+
+                System.Threading.Thread.Sleep(System.TimeSpan.FromSeconds 30.0)
+
+        if not pending.IsEmpty then
+            failwith (
+                PublishedSmoke.indexTimeoutReports
+                    version
+                    (List.length awaited)
+                    (System.DateTime.UtcNow - started)
+                    (pending
+                     |> List.map (fun id -> id, Map.tryFind id lastBodies |> Option.defaultValue ""))
+            )
+
+        // A restore that still misses a `ToolUp.*` id after the wait says
+        // which, and whether the index serves it NOW — which separates
+        // indexing lag from a package the release never pushed.
+        let diagnoseRestore (output: string) =
+            match PublishedSmoke.restoreMisses output with
+            | [] -> ""
+            | misses ->
+                PublishedSmoke.restoreMissReport
+                    version
+                    awaited
+                    (misses
+                     |> List.map (fun id -> id, PublishedSmoke.indexServes version (fetchIndex id)))
+
+        let runRestoreIn label dir =
+            runCheckedInWith diagnoseRestore label "dotnet" [ "restore"; "--nologo" ] dir
 
         // ── 4. Scaffold OUTSIDE the repository ───────────────────────
         //
@@ -4946,7 +4998,7 @@ let main args =
         let dllDir =
             writeProbe "dll" (PublishedSmoke.dllProbeProject version) PublishedSmoke.dllProbeNamespaces
 
-        runCheckedIn "restore the published packages" "dotnet" [ "restore"; "--nologo" ] dllDir
+        runRestoreIn "restore the published packages" dllDir
         runCheckedIn "build against the published packages" "dotnet" [ "build"; "--no-restore"; "--nologo" ] dllDir
 
         // ── 6. Fable tier: the packed SOURCE, not the DLL ────────────
@@ -4975,7 +5027,7 @@ let main args =
         File.Copy(toolManifestSource, Path.Combine(fableDir, ".config", "dotnet-tools.json"))
 
         runCheckedIn "restore the Fable tool" "dotnet" [ "tool"; "restore" ] fableDir
-        runCheckedIn "restore the published client tier" "dotnet" [ "restore"; "--nologo" ] fableDir
+        runRestoreIn "restore the published client tier" fableDir
 
         runCheckedIn "transpile the packed fable/ sources" "dotnet" [ "fable"; "-o"; "output"; "--noCache" ] fableDir
 
