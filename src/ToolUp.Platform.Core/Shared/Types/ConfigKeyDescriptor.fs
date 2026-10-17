@@ -417,6 +417,9 @@ module Names =
     let lineage = "TOOLUP_LINEAGE"
 
     [<Literal>]
+    let lineageDurability = "TOOLUP_LINEAGE_DURABILITY"
+
+    [<Literal>]
     let dataIngestion = "TOOLUP_DATA_INGESTION"
 
     [<Literal>]
@@ -1679,6 +1682,15 @@ let all: ConfigKeyDescriptor list = [
     {
         EnvVar = Names.lineage
         Description = "Enables the lineage store recording dataset and derivation provenance."
+        Type = EnumKey enabledDisabledChoices
+        Default = Some "disabled"
+        IsSecret = false
+        Category = "Data, ingestion & compliance"
+    }
+    {
+        EnvVar = Names.lineageDurability
+        Description =
+            "Enables durable lineage, so a lineage link the store fails to record is retried until recorded or dead-lettered instead of logged and dropped."
         Type = EnumKey enabledDisabledChoices
         Default = Some "disabled"
         IsSecret = false
@@ -3053,6 +3065,7 @@ let manifestBindable: Set<string> =
         Names.initialTeamName
         Names.jobScheduler
         Names.lineage
+        Names.lineageDurability
         Names.logFormat
         Names.logLevel
         Names.mappingDryRunBlock

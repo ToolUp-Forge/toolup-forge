@@ -48,24 +48,46 @@ let buildDataObjectStoreAndCatalog
 /// conversation stores warn through when an event or lineage write they
 /// start fire-and-forget fails. `compose` calls this one; the public
 /// signature below is kept for its existing callers.
+///
+/// Phase 1027 — with `LineageDurability = EnabledDurableLineage`, a lineage
+/// store, a result store and `blobStorage`, also the `LineageOutbox` the
+/// result store stages its links in (`registerLineageOutbox` puts it in DI
+/// and starts its relay). Enabled without the lineage store or a result
+/// store, it logs a Warning and builds nothing: links stay log-and-drop.
 let internal buildOptionalStoreValuesLogged
     (logger: ILogger)
     (config: ServerConfig)
     (eventStore: IEventStore)
     (dataObjectStore: IDataObjectStore)
-    : ILineageStore option * IResultStore option * IConversationStore option =
+    (blobStorage: IBlobStorage option)
+    : ILineageStore option * IResultStore option * IConversationStore option * ResultStore.LineageOutbox option =
 
     let lineageStore: ILineageStore option =
         match config.Lineage with
         | NoLineageStore -> None
         | EnabledLineageStore -> Some(LineageStore.EventStoreLineageStore(eventStore) :> _)
 
+    let lineageOutbox =
+        match config.LineageDurability, lineageStore, config.ResultStore, blobStorage with
+        | NoDurableLineage, _, _, _ -> None
+        | EnabledDurableLineage, Some lineage, (InMemoryResultStore | PersistentResultStore), Some blobs ->
+            Some(ResultStore.LineageOutbox(blobs, lineage, dataObjectStore, logger))
+        | EnabledDurableLineage, _, _, _ ->
+            logger.Warn
+                "[LineageOutbox] LineageDurability = EnabledDurableLineage needs Lineage = EnabledLineageStore and a ResultStore - durable lineage NOT enabled; lineage links stay log-and-drop."
+
+            None
+
     let resultStore: IResultStore option =
         match config.ResultStore with
         | NoResultStore -> None
-        | InMemoryResultStore -> Some(ResultStore.InMemoryResultStore(Some eventStore, lineageStore, logger) :> _)
+        | InMemoryResultStore ->
+            Some(ResultStore.InMemoryResultStore(Some eventStore, lineageStore, logger, lineageOutbox) :> _)
         | PersistentResultStore ->
-            Some(ResultStore.PersistentResultStore(dataObjectStore, Some eventStore, lineageStore, logger) :> _)
+            Some(
+                ResultStore.PersistentResultStore(dataObjectStore, Some eventStore, lineageStore, logger, lineageOutbox)
+                :> _
+            )
 
     let conversationStore: IConversationStore option =
         match config.ConversationStore with
@@ -73,7 +95,7 @@ let internal buildOptionalStoreValuesLogged
         | EnabledConversationStore _ ->
             Some(ConversationStore.PersistentConversationStore(dataObjectStore, Some eventStore, logger) :> _)
 
-    lineageStore, resultStore, conversationStore
+    lineageStore, resultStore, conversationStore, lineageOutbox
 
 /// Phase 8 / 8a / 53 — construct the optional state-store values
 /// (`IResultStore`, `ILineageStore`, `IConversationStore`) per the
@@ -87,7 +109,10 @@ let buildOptionalStoreValues
     (eventStore: IEventStore)
     (dataObjectStore: IDataObjectStore)
     : ILineageStore option * IResultStore option * IConversationStore option =
-    buildOptionalStoreValuesLogged (ConsoleLogger.ConsoleLogger() :> ILogger) config eventStore dataObjectStore
+    let lineageStore, resultStore, conversationStore, _ =
+        buildOptionalStoreValuesLogged (ConsoleLogger.ConsoleLogger() :> ILogger) config eventStore dataObjectStore None
+
+    lineageStore, resultStore, conversationStore
 
 /// Phase 19 — register the entity-store substrate when
 /// `ServerConfig.EntityStore = EnabledEntityStore`. Constructs the
@@ -274,6 +299,51 @@ let registerEntityOutbox (services: IServiceCollection) (config: ServerConfig) (
             services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
                 new EntityOutboxRelayService.EntityOutboxRelayService(
                     sp.GetRequiredService<EntityOutbox.OutboxEntityStore>(),
+                    resolvedLogger
+                )
+                :> Microsoft.Extensions.Hosting.IHostedService)
+            |> ignore
+
+/// Phase 1027 — register the lineage outbox (its read surface: pending and
+/// dead-letter counts, the dead letters themselves) and its relay drain.
+/// No-op when `buildOptionalStoreValuesLogged` built none. The relay rides
+/// the `EntityOutboxRelaySubsystem` gate beside the entity-outbox relay, so
+/// a process profile that skips that subsystem skips lineage durability.
+let internal registerLineageOutbox
+    (services: IServiceCollection)
+    (config: ServerConfig)
+    (outbox: ResultStore.LineageOutbox option)
+    (resolvedLogger: ILogger)
+    : unit =
+    match outbox with
+    | None -> ()
+    | Some outbox ->
+        services.AddSingleton<ResultStore.LineageOutbox>(outbox) |> ignore
+
+        // The `/dev/inspect` panel: what is staged and what dead-lettered.
+        services.AddSingleton<IDevDiagnosticsContributor>(
+            { new IDevDiagnosticsContributor with
+                member _.Contribute() = async {
+                    let! pending = outbox.PendingCount()
+                    let! deadLettered = outbox.DeadLetterCount()
+
+                    return
+                        "Lineage durability",
+                        box {|
+                            Pending = pending
+                            DeadLettered = deadLettered
+                        |}
+                }
+            }
+        )
+        |> ignore
+
+        if ProcessProfileGate.shouldRegisterBackgroundService config EntityOutboxRelaySubsystem then
+            services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun _ ->
+                new EntityOutboxRelayService.OutboxRelayService(
+                    "LineageOutbox",
+                    outbox.RelayOnce,
+                    outbox.PendingCount,
                     resolvedLogger
                 )
                 :> Microsoft.Extensions.Hosting.IHostedService)

@@ -163,6 +163,7 @@ Each selects a payload-free DU case; unset → the prior `defaults.X`. Binary to
 |---|---|---|---|
 | `TOOLUP_RESULT_STORE` | `ResultStore` | `no` / `inmemory` / `persistent` | Selects the result store backing long-running job output retrieval. |
 | `TOOLUP_LINEAGE` | `Lineage` | binary | Enables the lineage store recording dataset and derivation provenance. |
+| `TOOLUP_LINEAGE_DURABILITY` | `LineageDurability` | binary | Enables durable lineage, so a lineage link the store fails to record is retried until recorded or dead-lettered instead of logged and dropped. |
 | `TOOLUP_DATA_INGESTION` | `DataIngestion` | binary | Enables the data-ingestion pipeline (IDataIngestor plus the background ingestion service). |
 | `TOOLUP_OAUTH_REFRESHER` | `OAuthRefresher` | binary | Enables the background OAuth token refresher for stored data-source credentials. |
 | `TOOLUP_ENTITY_STORE` | `EntityStore` | binary | Enables the IEntityStore substrate (registered entity types and persistence). |

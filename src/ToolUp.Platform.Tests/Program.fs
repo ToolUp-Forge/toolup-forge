@@ -2624,6 +2624,8 @@ let private registeredTests =
         AuditFireAndForgetTests.tests
         // Phase 1025 - a store write started fire-and-forget cannot kill the host.
         StoreFireAndForgetTests.tests
+        // Phase 1027 - a lineage link survives a lineage-store outage.
+        LineageDurabilityTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

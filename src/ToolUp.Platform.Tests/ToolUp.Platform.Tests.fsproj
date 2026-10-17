@@ -2855,6 +2855,8 @@
         <Compile Include="InProcess\AuditFireAndForgetTests.fs" />
         <!-- Phase 1025 - a store write started fire-and-forget cannot kill the host. -->
         <Compile Include="InProcess\StoreFireAndForgetTests.fs" />
+        <!-- Phase 1027 - a lineage link survives a lineage-store outage. -->
+        <Compile Include="InProcess\LineageDurabilityTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />

@@ -9,11 +9,17 @@ namespace ToolUp.Platform
 // `ReadByType` and walk the resulting edge list in memory.
 //
 // **Optional registration.** `compose` only registers
-// `ILineageStore` when `ServerConfig.Lineage = EnabledLineageStore`.
-// `PersistentResultStore` checks DI for `ILineageStore` at
-// construction time and either auto-emits links on `SaveResult`
-// (when present) or silently ignores the `inputs` parameter (when
-// absent).
+// `ILineageStore` when `ServerConfig.Lineage = EnabledLineageStore`,
+// and hands the same instance to the result store it builds, which
+// auto-emits links on `SaveResult` when it has one and ignores the
+// `inputs` parameter when it does not.
+//
+// **Durability (Phase 1027).** With `ServerConfig.LineageDurability =
+// EnabledDurableLineage`, a link `Record` fails on is staged and retried
+// by `ResultStore.LineageOutbox` until recorded or dead-lettered. A
+// retry deduplicates through `GetAncestors` by `LinkId`, so an
+// implementation needs no idempotent `Record` of its own; it must return
+// every recorded link into an object among that object's ancestor edges.
 //
 // **Phase 9c portability.** Identity by value (`Guid` link ids,
 // string object ids). Async at every method. No callbacks.
@@ -35,11 +41,11 @@ module LineageSourceModule =
 /// `ServerConfig.Lineage = EnabledLineageStore`.
 type ILineageStore =
     /// Persist a single `LineageLink` as a `ModuleEvent` in the
-    /// underlying `IEventStore`. Best-effort: returns `Error` when
-    /// the event-store write fails, but callers (typically
-    /// `PersistentResultStore`) treat the error as non-fatal so a
-    /// failed lineage write doesn't roll back a successful
-    /// `SaveResult`.
+    /// underlying `IEventStore`. Returns `Error` when the event-store
+    /// write fails. The result stores treat the error as non-fatal, so
+    /// a failed lineage write never rolls back a successful
+    /// `SaveResult`: the link is logged and dropped, or, with durable
+    /// lineage on, staged and retried (Phase 1027).
     abstract Record: scopeId: string * link: LineageLink -> Async<Result<unit, string>>
 
     /// Walk lineage backwards from `objectId`. Returns a graph

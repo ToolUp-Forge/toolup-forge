@@ -337,6 +337,13 @@ module FormsServerApp =
             Base = ServerApp.withEntityOutbox enabled app.Base
     }
 
+    /// Phase 1027 — opt into durable lineage. Delegates to
+    /// `ServerApp.withDurableLineage`.
+    let withDurableLineage (enabled: bool) (app: FormsServerApp) : FormsServerApp = {
+        app with
+            Base = ServerApp.withDurableLineage enabled app.Base
+    }
+
     let withPreMiddleware (f: IApplicationBuilder -> IApplicationBuilder) (app: FormsServerApp) : FormsServerApp = {
         app with
             Base = ServerApp.withPreMiddleware f app.Base

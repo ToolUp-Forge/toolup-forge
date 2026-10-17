@@ -862,6 +862,13 @@ module AIServerApp =
             Base = ServerApp.withEntityOutbox enabled app.Base
     }
 
+    /// Phase 1027 — opt into durable lineage. Delegates to
+    /// `ServerApp.withDurableLineage`.
+    let withDurableLineage (enabled: bool) (app: AIServerApp) : AIServerApp = {
+        app with
+            Base = ServerApp.withDurableLineage enabled app.Base
+    }
+
     let withExtensions (e: ComposeExtensions) (app: AIServerApp) : AIServerApp = {
         app with
             Base = ServerApp.withExtensions e app.Base

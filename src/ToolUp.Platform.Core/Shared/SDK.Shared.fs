@@ -208,6 +208,13 @@ type ServerConfig = {
     /// `IEventStore` and auto-emit lineage links from
     /// `PersistentResultStore`.
     Lineage: LineageStoreMode
+    /// Phase 1027 — durable lineage selection. Default:
+    /// `NoDurableLineage` — a lineage link the store fails to record is
+    /// logged and dropped. Enable with `EnabledDurableLineage` (requires
+    /// `Lineage = EnabledLineageStore` and a result store) to stage links
+    /// in the lineage outbox and retry them until recorded or
+    /// dead-lettered. Env: `TOOLUP_LINEAGE_DURABILITY`.
+    LineageDurability: LineageDurabilityMode
     /// Job-scheduler selection. Default: `NoJobScheduler`
     /// — no `IJobScheduler` is registered, no scheduler tick runs,
     /// no `_platform/jobs/` blob layout is touched. Enable with

@@ -2131,6 +2131,25 @@ module ServerApp =
             }
     }
 
+    /// Phase 1027 — opt into durable lineage. Default: off, where a
+    /// lineage link the store fails to record is logged with everything
+    /// needed to re-record it by hand, and dropped (Phase 1025). When
+    /// enabled (requires `Lineage = EnabledLineageStore` and a result
+    /// store), a result save's links are staged in the lineage outbox
+    /// (the Phase 599 write-ahead shape) and the relay retries them —
+    /// at least once, deduplicated by link id — until each is recorded or
+    /// becomes a durable dead letter readable from the DI-registered
+    /// `ResultStore.LineageOutbox`. Independent of `withEntityOutbox`; the
+    /// two relays share the `EntityOutboxRelaySubsystem` gate, so a
+    /// process profile that skips that subsystem skips both.
+    let withDurableLineage (enabled: bool) (app: ServerApp) : ServerApp = {
+        app with
+            Config = {
+                app.Config with
+                    LineageDurability = if enabled then EnabledDurableLineage else NoDurableLineage
+            }
+    }
+
     /// Phase 177 — opt into the deployment-readiness scorecard. Flips
     /// `ServerConfig.DeploymentReadiness` to `EnabledReadinessReport` so
     /// `compose` mounts the Platform-Admin-gated `IDeploymentReadinessApi`

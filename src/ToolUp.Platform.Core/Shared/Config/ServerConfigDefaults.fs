@@ -44,6 +44,7 @@ module ServerConfig =
         RateLimit = RateLimitConfig.none
         ResultStore = NoResultStore
         Lineage = NoLineageStore
+        LineageDurability = NoDurableLineage
         JobScheduler = NoJobScheduler
         // Phase 321 — no progress fan-out; `ctx.Progress` is the no-op
         // reporter and nothing is published or persisted (GP 13).

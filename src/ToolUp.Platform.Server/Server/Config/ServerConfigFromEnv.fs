@@ -827,6 +827,13 @@ module ServerConfig =
                         NoLineageStore
                         EnabledLineageStore
                         defaults.Lineage
+                LineageDurability =
+                    parseEnabledDisabled
+                        logger
+                        ConfigKeys.Names.lineageDurability
+                        NoDurableLineage
+                        EnabledDurableLineage
+                        defaults.LineageDurability
                 DataIngestion =
                     parseEnabledDisabled
                         logger

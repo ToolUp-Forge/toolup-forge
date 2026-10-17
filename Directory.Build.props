@@ -491,6 +491,20 @@
       A failed write is logged (Warning; the fan-out at Error) and the
       caller's result stands. A lineage store's `Error` result, previously
       dropped silently, now warns too.
+
+      Rides this draft, in the class it already carries (a record gaining a
+      field): Phase 1027 adds durable lineage, off by default.
+      `ServerConfig.LineageDurability: LineageDurabilityMode` (Platform.Core,
+      env `TOOLUP_LINEAGE_DURABILITY`) retypes the `ServerConfig` constructor
+      (FS0764 for a full literal; `ServerConfig.defaults with` is unaffected).
+      Additive (Platform.Server): `ServerApp.withDurableLineage`,
+      `ResultStore.LineageOutbox` / `LineageIntent` / `LineageDeadLetter` /
+      `LineageOutboxDefaults`, and `EntityOutboxRelayService.OutboxRelayService`,
+      the generic drain both outbox relays now run on. Additive (AI.Server,
+      Forms.Server): the `withDurableLineage` twins. Off is byte-identical to
+      Phase 1025. On, a result's lineage links are staged and retried,
+      deduplicated by link id, until recorded or dead-lettered. Migration
+      recipe: `docs/migrations/1027-durable-lineage.md`.
     -->
     <Version>0.28.0</Version>
     <!--

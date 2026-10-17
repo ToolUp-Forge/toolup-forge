@@ -253,6 +253,7 @@ ToolUp.AI.AICompose+AIServerAppModule.withConfig(ToolUp.Platform.ServerConfig, T
 ToolUp.AI.AICompose+AIServerAppModule.withConfigValidator(ToolUp.Platform.ConfigValidation+IConfigValidator, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withCspContributor(ToolUp.Platform.ICspContributor, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withDenialRateAlert(ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
+ToolUp.AI.AICompose+AIServerAppModule.withDurableLineage(System.Boolean, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withEncryptedBlobStorage(ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withEntityOutbox(System.Boolean, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withEntity`1(ToolUp.Platform.EntityTypes+EntityRegistration`1[T], ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp

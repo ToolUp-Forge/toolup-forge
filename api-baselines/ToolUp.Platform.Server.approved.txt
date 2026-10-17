@@ -4037,6 +4037,9 @@ ToolUp.Platform.EntityOutboxRelayService (class)
 ToolUp.Platform.EntityOutboxRelayService+EntityOutboxRelayService (class)
 ToolUp.Platform.EntityOutboxRelayService+EntityOutboxRelayService..ctor(ToolUp.Platform.EntityOutbox+OutboxEntityStore, ToolUp.Platform.ILogger)
 ToolUp.Platform.EntityOutboxRelayService+EntityOutboxRelayService.ExecuteAsync(System.Threading.CancellationToken) : System.Threading.Tasks.Task
+ToolUp.Platform.EntityOutboxRelayService+OutboxRelayService (class)
+ToolUp.Platform.EntityOutboxRelayService+OutboxRelayService..ctor(System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]], ToolUp.Platform.ILogger)
+ToolUp.Platform.EntityOutboxRelayService+OutboxRelayService.ExecuteAsync(System.Threading.CancellationToken) : System.Threading.Tasks.Task
 ToolUp.Platform.EntityQueryExecutor (class)
 ToolUp.Platform.EntityQueryExecutor.execute`1(ToolUp.Platform.EntityQueryExecutor+ExecutorContext, ToolUp.Platform.EntityQueryTypes+EntityQuery`1[T]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[T]]
 ToolUp.Platform.EntityQueryExecutor+ExecutorContext (class)
@@ -9267,6 +9270,31 @@ ToolUp.Platform.ResultObjectId.modulePrefix(System.String) : System.String
 ToolUp.Platform.ResultStore (class)
 ToolUp.Platform.ResultStore+InMemoryResultStore (class)
 ToolUp.Platform.ResultStore+InMemoryResultStore..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILineageStore])
+ToolUp.Platform.ResultStore+LineageDeadLetter (class)
+ToolUp.Platform.ResultStore+LineageDeadLetter..ctor(ToolUp.Platform.ResultStore+LineageIntent, System.String, System.DateTime)
+ToolUp.Platform.ResultStore+LineageDeadLetter.DeadLetteredAt : System.DateTime { get }
+ToolUp.Platform.ResultStore+LineageDeadLetter.Intent : ToolUp.Platform.ResultStore+LineageIntent { get }
+ToolUp.Platform.ResultStore+LineageDeadLetter.LastError : System.String { get }
+ToolUp.Platform.ResultStore+LineageIntent (class)
+ToolUp.Platform.ResultStore+LineageIntent..ctor(System.Guid, System.String, System.String, System.Int32, System.DateTime, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LineageLink], System.Int32, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.ResultStore+LineageIntent.Attempts : System.Int32 { get }
+ToolUp.Platform.ResultStore+LineageIntent.CreatedAt : System.DateTime { get }
+ToolUp.Platform.ResultStore+LineageIntent.IntentId : System.Guid { get }
+ToolUp.Platform.ResultStore+LineageIntent.LastError : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ResultStore+LineageIntent.Links : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.LineageLink] { get }
+ToolUp.Platform.ResultStore+LineageIntent.MinVersionAfterSave : System.Int32 { get }
+ToolUp.Platform.ResultStore+LineageIntent.NextAttemptAt : System.DateTime { get }
+ToolUp.Platform.ResultStore+LineageIntent.ScopeId : System.String { get }
+ToolUp.Platform.ResultStore+LineageIntent.ToObjectId : System.String { get }
+ToolUp.Platform.ResultStore+LineageOutbox (class)
+ToolUp.Platform.ResultStore+LineageOutbox..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILineageStore, ToolUp.Platform.IDataObjectStore, ToolUp.Platform.ILogger)
+ToolUp.Platform.ResultStore+LineageOutbox..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILineageStore, ToolUp.Platform.IDataObjectStore, ToolUp.Platform.ILogger, ToolUp.Platform.Transport.RetryPolicy, System.TimeSpan, System.TimeSpan)
+ToolUp.Platform.ResultStore+LineageOutbox.DeadLetterCount() : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
+ToolUp.Platform.ResultStore+LineageOutbox.DeadLetters() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ResultStore+LineageDeadLetter]]
+ToolUp.Platform.ResultStore+LineageOutbox.PendingCount() : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
+ToolUp.Platform.ResultStore+LineageOutbox.RelayOnce(System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
+ToolUp.Platform.ResultStore+LineageOutboxDefaults (class)
+ToolUp.Platform.ResultStore+LineageOutboxDefaults.retryPolicy : ToolUp.Platform.Transport.RetryPolicy { get }
 ToolUp.Platform.ResultStore+PersistentResultStore (class)
 ToolUp.Platform.ResultStore+PersistentResultStore..ctor(ToolUp.Platform.IDataObjectStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILineageStore])
 ToolUp.Platform.RevintageError (class)
@@ -9943,6 +9971,7 @@ ToolUp.Platform.ServerAppModule.withDataObjectOrphanSweep(ToolUp.Platform.DataOb
 ToolUp.Platform.ServerAppModule.withDeploymentReadiness(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withDeploymentVerification(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withDeploymentVerificationEvidence(ToolUp.Platform.IDeploymentVerificationEvidence, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Platform.ServerAppModule.withDurableLineage(System.Boolean, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withEncryptedBlobStorage(ToolUp.Platform.BlobEncryption+IBlobEncryptionKeyResolver, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withEntityGraphProjection(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withEntityOutbox(System.Boolean, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp

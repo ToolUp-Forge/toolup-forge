@@ -14,7 +14,7 @@ ToolUp.AI.McpHost 144/247
 ToolUp.AI.SampleClientTool.Client 1/2
 ToolUp.AI.SampleClientTool.Core 4/12
 ToolUp.AI.SampleClientTool.Server 3/4
-ToolUp.AI.Server 688/1103
+ToolUp.AI.Server 689/1104
 ToolUp.AI.UiAwareness.Client 6/8
 ToolUp.AI.UiAwareness.Core 6/7
 ToolUp.AI.UiAwareness.Server 6/9
@@ -98,7 +98,7 @@ ToolUp.Facts.Shared 159/183
 ToolUp.FeatureFlagProviders.OpenFeature 5/9
 ToolUp.Forms.Client 4/19
 ToolUp.Forms.Core 169/533
-ToolUp.Forms.Server 62/135
+ToolUp.Forms.Server 63/136
 ToolUp.Graph.AGE 47/75
 ToolUp.Graph.Core 39/133
 ToolUp.Graph.InMemory 6/14
@@ -136,8 +136,8 @@ ToolUp.OpenXml.Spreadsheet 45/141
 ToolUp.OpenXml.SvgRasterizer.Skia 3/3
 ToolUp.Platform.Build 313/567
 ToolUp.Platform.Client 2848/7011
-ToolUp.Platform.Core 7087/15031
-ToolUp.Platform.Server 6696/12208
+ToolUp.Platform.Core 7091/15042
+ToolUp.Platform.Server 6714/12237
 ToolUp.Platform.Testing 118/264
 ToolUp.Platform.Transport 44/90
 ToolUp.Platform.UI 71/183

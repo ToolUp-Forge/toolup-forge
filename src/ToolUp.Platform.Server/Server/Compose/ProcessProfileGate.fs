@@ -54,6 +54,9 @@ type BackgroundSubsystem =
     /// Phase 599 — entity-outbox relay: publishes the staged events of
     /// version-witnessed entity saves and discards never-committed
     /// intents. Same wildcard-arm profile as the audit fallback replay.
+    /// Phase 1027 — it also gates the lineage-outbox relay (durable
+    /// lineage): a profile that skips this subsystem retries no staged
+    /// lineage link either.
     | EntityOutboxRelaySubsystem
     /// Phase 10a — one-shot startup sweep upgrading stored objects
     /// whose stamped schema version lags what their module declares.

@@ -69,6 +69,22 @@ type LineageStoreMode =
     /// `IEventStore`. Auto-emit on `SaveResult` activates.
     | EnabledLineageStore
 
+/// Phase 1027 — durable lineage: whether a result save's lineage links
+/// survive a lineage-store outage. Default off — a link the store fails to
+/// record is logged at Warning, with every field needed to re-record it by
+/// hand, and dropped (Phase 1025). When enabled (requires
+/// `Lineage = EnabledLineageStore` and a result store), the links ride a
+/// write-ahead intent in the Phase 599 outbox shape and the relay retries
+/// them, deduplicated by link id, until they are recorded or become a
+/// durable, readable dead letter. Independent of `EntityOutbox`; its relay
+/// shares the `EntityOutboxRelaySubsystem` gate. Env:
+/// `TOOLUP_LINEAGE_DURABILITY`.
+type LineageDurabilityMode =
+    /// Log and drop a link the store fails to record. Default.
+    | NoDurableLineage
+    /// `LineageOutbox` registered in DI + its relay drain running.
+    | EnabledDurableLineage
+
 /// Selects whether `compose` registers the share-token substrate.
 /// Default: `NoShareTokenStore` — no `IShareTokenStore`
 /// in DI, no `_platform/share-tokens/` blob layout, no signing-key

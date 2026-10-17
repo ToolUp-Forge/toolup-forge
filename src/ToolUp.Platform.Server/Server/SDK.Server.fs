@@ -638,8 +638,8 @@ let compose
     // unset modes; downstream `registerOptionalStores` skips
     // registration so DI resolution returns `null` and consumers must
     // handle absence explicitly.
-    let lineageStore, resultStore, conversationStore =
-        buildOptionalStoreValuesLogged resolvedLogger config eventStore dataObjectStore
+    let lineageStore, resultStore, conversationStore, lineageOutbox =
+        buildOptionalStoreValuesLogged resolvedLogger config eventStore dataObjectStore (Some resolvedBlobStorage)
 
     // Phase 22 — register the encryption resolver as a singleton when
     // the deployment opted in (extracted to
@@ -759,6 +759,11 @@ let compose
     // to `ComposeStores.registerEntityOutbox`). No-op unless
     // `EntityOutbox = EnabledEntityOutbox` with the entity store on.
     registerEntityOutbox services config resolvedLogger
+
+    // Phase 1027 — durable lineage: the lineage outbox + its relay drain
+    // (`ComposeStores.registerLineageOutbox`). No-op unless
+    // `LineageDurability = EnabledDurableLineage` built an outbox.
+    registerLineageOutbox services config lineageOutbox resolvedLogger
 
     // Phase 161 — time-series substrate. Conditional on
     // `ServerConfig.TimeSeriesStore`; `NoTimeSeriesStore` (default) skips

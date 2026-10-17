@@ -653,7 +653,7 @@ let private buildProcessProfile (config: ServerConfig) : ProcessProfileSummary =
             TransactionalDispatcherSubsystem, "Transactional dispatcher"
             AuditReplicatorSubsystem, "Audit replicator"
             AuditFallbackReplaySubsystem, "Audit fallback replay"
-            EntityOutboxRelaySubsystem, "Entity-outbox relay"
+            EntityOutboxRelaySubsystem, "Outbox relays (entity, lineage)"
             UsageBatchFlusherSubsystem, "Usage batch flusher"
             HealthStateTrackerSubsystem, "Health-state tracker"
             AlertRuleEngineSubsystem, "Alert-rule engine"
