@@ -1237,14 +1237,25 @@ let private announceStoreReset
     =
     match runtime.AuditLog with
     | Some auditLog ->
-        auditLog.Record(
-            scope.ScopeId,
-            SessionStoreReset {
-                Container = scope.Container
-                Reason = SessionStoreResetReasonEvicted
-            }
-        )
-        |> Async.Start
+        // No configured logger falls back to the console, as the hooks do.
+        let logger =
+            runtime.PostSaveHooksLogger
+            |> Option.defaultWith (fun () -> ConsoleLogger.ConsoleLogger() :> ILogger)
+
+        let warn =
+            Background.writeFailureLogger "FileManagement" (Some logger) "" "the request"
+
+        async {
+            return!
+                auditLog.Record(
+                    scope.ScopeId,
+                    SessionStoreReset {
+                        Container = scope.Container
+                        Reason = SessionStoreResetReasonEvicted
+                    }
+                )
+        }
+        |> Background.startAudit warn "SessionStoreReset audit"
     | None -> ()
 
     match runtime.NotificationChannel with
@@ -1417,17 +1428,22 @@ let fileManagementApi (ctx: HttpContext) : FileManagementApi =
         | Some s -> s.Container
         | None -> scopeId
 
-    // Audit log is best-effort: emission is fire-and-forget via `Async.Start`
-    // and `EventStoreAuditLog.Record` swallows write failures itself, so a
-    // missing or failing `IAuditLog` never blocks file operations.
+    // Audit log is best-effort: emission is fire-and-forget through
+    // `Background.startAudit` (Phase 1026), so a missing or failing
+    // `IAuditLog` never blocks file operations — a failure is a Warning.
     let auditLog =
         match ctx.RequestServices.GetService(typeof<IAuditLog>) with
         | :? IAuditLog as a -> Some a
         | _ -> None
 
+    let auditWarn =
+        Background.writeFailureWarner "FileManagement" (Background.requestLogger ctx) ctx
+
     let recordAudit (event: AuditEvent) =
         match auditLog with
-        | Some a -> a.Record(scopeId, event) |> Async.Start
+        | Some a ->
+            async { return! a.Record(scopeId, event) }
+            |> Background.startAudit auditWarn (sprintf "%s audit" (AuditEvent.eventTypeName event))
         | None -> ()
 
     // Owner / Admin write gate for `ResetDataStore` — same shape as

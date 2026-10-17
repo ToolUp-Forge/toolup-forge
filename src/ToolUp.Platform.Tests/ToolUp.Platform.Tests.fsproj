@@ -2855,6 +2855,8 @@
         <Compile Include="InProcess\AuditFireAndForgetTests.fs" />
         <!-- Phase 1025 - a store write started fire-and-forget cannot kill the host. -->
         <Compile Include="InProcess\StoreFireAndForgetTests.fs" />
+        <!-- Phase 1026 - every fire-and-forget audit record is caught at its call site. -->
+        <Compile Include="InProcess\AuditCallSiteFireAndForgetTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />

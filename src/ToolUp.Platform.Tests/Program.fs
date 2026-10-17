@@ -2624,6 +2624,8 @@ let private registeredTests =
         AuditFireAndForgetTests.tests
         // Phase 1025 - a store write started fire-and-forget cannot kill the host.
         StoreFireAndForgetTests.tests
+        // Phase 1026 - every fire-and-forget audit record is caught at its call site.
+        AuditCallSiteFireAndForgetTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

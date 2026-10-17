@@ -46,10 +46,13 @@ let private consentHandler: HttpHandler =
         | Ok ev ->
             match ctx.RequestServices.GetService(typeof<IAuditLog>) with
             | :? IAuditLog as auditLog ->
-                // Audit emission is fire-and-forget per the `IAuditLog`
-                // contract — failure to record does not fail the client
-                // capture.
-                auditLog.Record(PlatformScope, AuditEvent.ConsentRecorded ev) |> Async.Start
+                // Audit emission is fire-and-forget, and observed: a failure
+                // to record is a Warning and never fails the client capture.
+                let warn =
+                    Background.writeFailureWarner "ConsentApiHandler" (Background.requestLogger ctx) ctx
+
+                async { return! auditLog.Record(PlatformScope, AuditEvent.ConsentRecorded ev) }
+                |> Background.startAudit warn "ConsentRecorded audit"
             | _ -> ()
 
             ctx.Response.StatusCode <- 204

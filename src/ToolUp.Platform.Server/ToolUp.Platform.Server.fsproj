@@ -224,6 +224,12 @@
              before WhatsAppSendPolicyFilter.fs, which consults it. -->
         <Compile Include="Server\IWhatsAppTemplateRegistry.fs" />
         <Compile Include="Server\WhatsAppTemplateRegistry.fs" />
+        <!-- Phase 869 - fire-and-forget starts that catch, log and are drained
+             at stop, and (Phase 1006 / 1024 / 1026) the observed start of a
+             fire-and-forget write with its warning. Depends only on Core
+             (ILogger, ProviderExceptions) and ASP.NET Core's HttpContext; before
+             its first user (Phase 1026: the SSE mismatch audit below). -->
+        <Compile Include="Server\Background.fs" />
         <!-- Phase 117 — shared SSE scope resolution. One resolution path
              (principal-wins + SseAuthMode-gated fallback + mismatch audit)
              consumed by both NotificationHandler below and
@@ -411,10 +417,6 @@
              SchemaOnlyAccessAttempted audit. Compiled after AuditLog
              so it can reference IAuditLog as the audit sink. -->
         <Compile Include="Server\SchemaOnlyGuard.fs" />
-        <!-- Phase 869 - fire-and-forget starts that catch, log and are drained
-             at stop. Depends only on Core (ILogger); before its first user
-             (Phase 1025: the result store's event and lineage writes). -->
-        <Compile Include="Server\Background.fs" />
         <Compile Include="Server\IResultStore.fs" />
         <!-- Phase 447 — declarative seed / fixture-data pack contract
              (ISeedPack + SeedContext + SeedReport). Sits after the store

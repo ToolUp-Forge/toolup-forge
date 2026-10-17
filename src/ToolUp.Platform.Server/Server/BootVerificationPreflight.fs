@@ -1138,12 +1138,24 @@ module VerifiedCompositionProfile =
     /// contract: a refusal is already fail-closed by the time this runs,
     /// and blocking the refusing call site on an audit write would make
     /// the security control's cost depend on the audit backend's latency.
+    /// Observed (Phase 1026): started through `Background.startAudit`, so a
+    /// sink that throws is a Warning to the console and never kills the
+    /// host. The refusal itself is unaffected either way.
     let auditingObserver
         (auditLog: IAuditLog)
         (scopeId: string)
         (profile: CompositionProfile)
         : CapabilityDenial -> unit =
-        fun denial -> recordRefusal auditLog scopeId profile denial |> Async.Start
+        let warn =
+            Background.writeFailureLogger
+                "BootVerificationPreflight"
+                (Some(ConsoleLogger.ConsoleLogger() :> ILogger))
+                ""
+                "the refusal"
+
+        fun denial ->
+            async { return! recordRefusal auditLog scopeId profile denial }
+            |> Background.startAudit warn "CompositionCapabilityRefused audit"
 
     /// Resolve the capability gate a composition runs under.
     ///

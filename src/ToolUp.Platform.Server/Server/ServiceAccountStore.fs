@@ -205,13 +205,17 @@ let private listUnder<'T> (storage: IBlobStorage) (logger: ILogger) (prefix: str
 /// account record.
 type BlobServiceAccountStore(storage: IBlobStorage, audit: IAuditLog option, logger: ILogger) =
 
+    // Phase 1026 — fire-and-forget, and observed: a failing sink loses that
+    // one row and logs a Warning naming it, never blocking the primary
+    // operation or crashing the host.
+    let auditWarn =
+        Background.writeFailureLogger "BlobServiceAccountStore" (Some logger) "" "the operation"
+
     let recordAudit (scopeId: string) (event: AuditEvent) =
         match audit with
         | Some a ->
-            // Fire-and-forget; audit failure must never block the
-            // primary operation. `IAuditLog.Record` itself logs at Warn
-            // on internal errors.
-            Async.Start(a.Record(scopeId, event))
+            async { return! a.Record(scopeId, event) }
+            |> Background.startAudit auditWarn (sprintf "%s audit" (AuditEvent.eventTypeName event))
         | None -> ()
 
     /// Read an account and REFUSE a scope mismatch rather than returning

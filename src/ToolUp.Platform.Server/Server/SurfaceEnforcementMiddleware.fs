@@ -496,32 +496,8 @@ module SurfaceEnforcement =
             // Its pages are server-rendered and need no `/api` call.
             Reject(403, "publication_reader_not_admitted", None)
 
-/// Phase 1006 / 1024 — the request's `ILogger`, resolved while the request
-/// is live: an asynchronous write failure arrives after the response, when
-/// the request's services are already disposed. `None` when none is
-/// composed, or when resolving it throws.
-let internal requestLogger (ctx: HttpContext) : ILogger option =
-    try
-        match ctx.RequestServices.GetService(typeof<ILogger>) with
-        | :? ILogger as log -> Some log
-        | _ -> None
-    with _ ->
-        None
-
-/// Phase 1006 / 1024 — the warning to log when a fire-and-forget write
-/// started on a request fails. It names the source, the write, the method
-/// and path (never the query string) and the exception type, seen through
-/// an async boundary's wrapper. Built while
-/// the request is live (see `requestLogger`); the response is unaffected
-/// either way, and a logger that itself throws is ignored. The formatting
-/// is `Background.writeFailureLogger`'s (Phase 1025), shared with the
-/// stores that have no request in hand.
-let internal writeFailureWarner (source: string) (logger: ILogger option) (ctx: HttpContext) : string -> exn -> unit =
-    let route = sprintf " on %s %s" ctx.Request.Method (string ctx.Request.Path)
-    Background.writeFailureLogger source logger route "the response"
-
 let private auditFailureWarner (ctx: HttpContext) : string -> exn -> unit =
-    writeFailureWarner "SurfaceEnforcementMiddleware" (requestLogger ctx) ctx
+    Background.writeFailureWarner "SurfaceEnforcementMiddleware" (Background.requestLogger ctx) ctx
 
 /// Auth-observability A2 — emit `SurfaceDenied` to `IAuditLog` when a
 /// request is rejected. Pre-A2 these denials were structurally invisible

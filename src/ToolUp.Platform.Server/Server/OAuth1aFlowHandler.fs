@@ -243,17 +243,26 @@ let private callback (flowName: string) : HttpHandler =
                                     // Best-effort audit (GP 6).
                                     match tryGetService<IAuditLog> ctx with
                                     | Some auditLog ->
-                                        auditLog.Record(
-                                            state.ScopeId,
-                                            OAuth1aConnected {
-                                                UserId = state.UserId
-                                                ScopeId = state.ScopeId
-                                                FlowName = flowName
-                                                ResourceId = state.ResourceId
-                                                ConnectedAt = DateTime.UtcNow
-                                            }
-                                        )
-                                        |> Async.Start
+                                        let warn =
+                                            Background.writeFailureWarner
+                                                "OAuth1aFlowHandler"
+                                                (Background.requestLogger ctx)
+                                                ctx
+
+                                        async {
+                                            return!
+                                                auditLog.Record(
+                                                    state.ScopeId,
+                                                    OAuth1aConnected {
+                                                        UserId = state.UserId
+                                                        ScopeId = state.ScopeId
+                                                        FlowName = flowName
+                                                        ResourceId = state.ResourceId
+                                                        ConnectedAt = DateTime.UtcNow
+                                                    }
+                                                )
+                                        }
+                                        |> Background.startAudit warn "OAuth1aConnected audit"
                                     | None -> ()
 
                                     return! respondRedirect ctx "/?oauth1a=connected"

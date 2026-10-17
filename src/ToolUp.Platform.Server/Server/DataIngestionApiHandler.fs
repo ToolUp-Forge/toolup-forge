@@ -344,17 +344,26 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
                             // best-effort revocation outcome.
                             match ctx.RequestServices.GetService(typeof<IAuditLog>) with
                             | :? IAuditLog as auditLog ->
-                                auditLog.Record(
-                                    scopeId,
-                                    OAuthDisconnected {
-                                        UserId = accessContext.UserId
-                                        ScopeId = scopeId
-                                        FlowName = meta.FlowName
-                                        DataSourceId = sourceId
-                                        UpstreamRevoked = upstreamRevoked
-                                    }
-                                )
-                                |> Async.Start
+                                let warn =
+                                    Background.writeFailureWarner
+                                        "DataIngestionApiHandler"
+                                        (Background.requestLogger ctx)
+                                        ctx
+
+                                async {
+                                    return!
+                                        auditLog.Record(
+                                            scopeId,
+                                            OAuthDisconnected {
+                                                UserId = accessContext.UserId
+                                                ScopeId = scopeId
+                                                FlowName = meta.FlowName
+                                                DataSourceId = sourceId
+                                                UpstreamRevoked = upstreamRevoked
+                                            }
+                                        )
+                                }
+                                |> Background.startAudit warn "OAuthDisconnected audit"
                             | _ -> ()
 
                             // Suppress unused-binding warning when

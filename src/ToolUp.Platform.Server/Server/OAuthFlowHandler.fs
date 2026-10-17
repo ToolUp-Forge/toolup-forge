@@ -533,7 +533,8 @@ let private providerCallbackTail
                     let connectedAt = DateTime.UtcNow
 
                     let! bound =
-                        ProviderOAuthConnect.completeConnect
+                        ProviderOAuthConnect.completeConnectObserved
+                            (Background.writeFailureWarner "OAuthFlowHandler" (Background.requestLogger ctx) ctx)
                             providerProfile
                             secretStore
                             (tryGetService<IAuditLog> ctx)
@@ -845,24 +846,31 @@ let private callback (flowName: string) : HttpHandler =
                                                     | None -> ()
 
                                                     // Step 10 — audit.
-                                                    // Fire-and-forget;
-                                                    // Record is best-
-                                                    // effort and
-                                                    // swallows its own
-                                                    // failures.
+                                                    // Fire-and-forget,
+                                                    // observed: a failed
+                                                    // write is a Warning.
                                                     match tryGetService<IAuditLog> ctx with
                                                     | Some auditLog ->
-                                                        auditLog.Record(
-                                                            entry.ScopeId,
-                                                            OAuthConnected {
-                                                                UserId = entry.UserId
-                                                                ScopeId = entry.ScopeId
-                                                                FlowName = flowName
-                                                                DataSourceId = entry.DataSourceId
-                                                                ConnectedAt = connectedAt
-                                                            }
-                                                        )
-                                                        |> Async.Start
+                                                        let warn =
+                                                            Background.writeFailureWarner
+                                                                "OAuthFlowHandler"
+                                                                (Background.requestLogger ctx)
+                                                                ctx
+
+                                                        async {
+                                                            return!
+                                                                auditLog.Record(
+                                                                    entry.ScopeId,
+                                                                    OAuthConnected {
+                                                                        UserId = entry.UserId
+                                                                        ScopeId = entry.ScopeId
+                                                                        FlowName = flowName
+                                                                        DataSourceId = entry.DataSourceId
+                                                                        ConnectedAt = connectedAt
+                                                                    }
+                                                                )
+                                                        }
+                                                        |> Background.startAudit warn "OAuthConnected audit"
                                                     | None -> ()
 
                                                     logger.Info
