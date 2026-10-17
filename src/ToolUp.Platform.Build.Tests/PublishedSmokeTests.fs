@@ -126,6 +126,179 @@ let tests =
             }
         ]
 
+        // ── Phase 1004 — the wait awaits the closure, not the names ──
+        //
+        // `v0.25.1` failed NU1102 on `ToolUp.Feliz.AgGrid` and `v0.26.0`
+        // on `ToolUp.Platform.Transport`: dependency-only packages the
+        // restore resolves transitively and the wait never polled. The
+        // red-once direction for these cases is the old set — awaiting
+        // `PublishedSmoke.probeIds` alone fails every "includes" case.
+        testList "awaited closure" [
+            let expected = [
+                "ToolUp.Feliz.AgGrid"
+                "ToolUp.Platform.Client"
+                "ToolUp.Platform.Core"
+                "ToolUp.Platform.Transport"
+                "ToolUp.Stripe.Server"
+                "ToolUp.Workflow.Core"
+            ]
+
+            let independent = [ "ToolUp.Stripe.Server"; "toolup.workflow.core" ]
+
+            let awaited =
+                PublishedSmoke.awaitedIds expected independent [ "ToolUp.Platform.Core"; "ToolUp.Platform.Client" ]
+
+            test "a dependency-only lockstep package is awaited" {
+                Expect.contains awaited "ToolUp.Feliz.AgGrid" "the v0.25.1 miss"
+                Expect.contains awaited "ToolUp.Platform.Transport" "the v0.26.0 miss"
+            }
+
+            test "an independently versioned package is NOT awaited" {
+                // It is pushed at its own number, so the index never
+                // serves it at the release version: awaiting it would
+                // time out on a healthy release.
+                Expect.isFalse (List.contains "ToolUp.Stripe.Server" awaited) "own <Version>"
+                Expect.isFalse (List.contains "ToolUp.Workflow.Core" awaited) "matched case-insensitively"
+            }
+
+            test "the probe ids come first, each id once" {
+                Expect.equal
+                    awaited
+                    [
+                        "ToolUp.Platform.Core"
+                        "ToolUp.Platform.Client"
+                        "ToolUp.Feliz.AgGrid"
+                        "ToolUp.Platform.Transport"
+                    ]
+                    "probes in probe order, then the rest of the lockstep set, deduplicated"
+            }
+
+            test "the awaited set is never smaller than the probe set" {
+                Expect.contains
+                    (PublishedSmoke.awaitedIds [] [ "ToolUp.Platform.Core" ] [ "ToolUp.Platform.Core" ])
+                    "ToolUp.Platform.Core"
+                    "a probe id survives even an exclusion naming it"
+            }
+
+            test "declaresOwnVersion reads the element, not a comment about it" {
+                Expect.isTrue
+                    (PublishedSmoke.declaresOwnVersion "<PropertyGroup><Version>0.2.0</Version></PropertyGroup>")
+                    "a declared <Version>"
+
+                Expect.isFalse
+                    (PublishedSmoke.declaresOwnVersion "<PropertyGroup><PackageId>X</PackageId></PropertyGroup>")
+                    "no <Version>"
+
+                Expect.isFalse
+                    (PublishedSmoke.declaresOwnVersion
+                        "<!-- per-package <Version> overrides live here --><PropertyGroup />")
+                    "a comment naming the element declares nothing"
+            }
+
+            // ── And the SHIPPED tree, not only fixtures ──────────────
+            test "the tree's awaited set covers the two recorded misses and every probe" {
+                match repoRoot with
+                | None -> failtest "could not locate the repo root — this test would otherwise be vacuously green"
+                | Some root ->
+                    let shipped = PublishedSmoke.awaitedIdsIn root
+                    Expect.contains shipped "ToolUp.Feliz.AgGrid" "reached through ToolUp.Platform.Client"
+                    Expect.contains shipped "ToolUp.Platform.Transport" "reached through ToolUp.Platform.Server"
+
+                    for id in PublishedSmoke.probeIds do
+                        Expect.contains shipped id "every probe id is awaited"
+            }
+
+            test "the tree's awaited set excludes every independently versioned package" {
+                match repoRoot with
+                | None -> failtest "could not locate the repo root — this test would otherwise be vacuously green"
+                | Some root ->
+                    let independents = PublishedSmoke.independentlyVersionedIn root
+                    // Non-empty today (Stripe / Workflow / Experiments /
+                    // Webhooks / OpenFeature): an empty answer would make
+                    // the exclusion unfalsifiable here.
+                    Expect.contains independents "ToolUp.Stripe.Server" "a known own-<Version> package"
+                    let shipped = PublishedSmoke.awaitedIdsIn root
+
+                    for id in independents do
+                        Expect.isFalse (List.contains id shipped) (sprintf "%s carries its own <Version>" id)
+            }
+        ]
+
+        // ── Phase 1004 — a restore that still misses says why ────────
+        testList "restore misses" [
+            // The v0.26.0 attempt-3 log, verbatim in shape.
+            let nu1102 =
+                String.concat "\n" [
+                    "/tmp/tu-pubsmoke/dll/Probe.fsproj : error NU1102: Unable to find package ToolUp.Platform.Transport with version (>= 0.26.0)"
+                    "/tmp/tu-pubsmoke/dll/Probe.fsproj : error NU1102:   - Found 2 version(s) in nuget.org [ Nearest version: 0.25.1 ]"
+                    "/tmp/tu-pubsmoke/dll/Probe.fsproj : error NU1102:   - Found 0 version(s) in /usr/share/dotnet/sdk/10.0.401/FSharp/library-packs"
+                ]
+
+            test "an NU1102 line names its ToolUp id once" {
+                Expect.equal (PublishedSmoke.restoreMisses nu1102) [ "ToolUp.Platform.Transport" ] "the id, once"
+            }
+
+            test "NU1101 counts, a third-party id does not, and the trailing period is not the id" {
+                let output =
+                    String.concat "\n" [
+                        "error NU1101: Unable to find package ToolUp.Brand.New. No packages exist with this id in source(s): nuget.org"
+                        "error NU1102: Unable to find package Fable.Core with version (>= 9.0.0)"
+                    ]
+
+                Expect.equal (PublishedSmoke.restoreMisses output) [ "ToolUp.Brand.New" ] "only the ToolUp id"
+            }
+
+            test "a clean or empty output names nothing" {
+                Expect.isEmpty (PublishedSmoke.restoreMisses "") "empty"
+                Expect.isEmpty (PublishedSmoke.restoreMisses "Restore complete (1.2s)") "clean"
+            }
+
+            test "the report separates indexing lag from a package nobody pushed" {
+                let awaited = [ "ToolUp.Platform.Transport" ]
+
+                let lag =
+                    PublishedSmoke.restoreMissReport "0.26.0" awaited [ "ToolUp.Platform.Transport", true ]
+
+                Expect.stringContains lag "ToolUp.Platform.Transport 0.26.0" "names the id and version"
+                Expect.stringContains lag "indexing lag" "awaited + served now is lag"
+
+                let neverPushed =
+                    PublishedSmoke.restoreMissReport "0.26.0" awaited [ "ToolUp.Brand.New", false ]
+
+                Expect.stringContains neverPushed "nothing published it" "unawaited + unserved is a release defect"
+                Expect.isFalse (neverPushed.Contains "indexing lag") "and is not read as lag"
+
+                let gateDefect =
+                    PublishedSmoke.restoreMissReport "0.26.0" awaited [ "ToolUp.Brand.New", true ]
+
+                Expect.stringContains gateDefect "awaitedIds" "unawaited + served names the gate's own set"
+            }
+
+            test "stillPending keeps exactly the ids whose index does not serve the version" {
+                let bodies = [
+                    "ToolUp.A", index [ "0.26.0" ]
+                    "ToolUp.B", index [ "0.25.1" ]
+                    "ToolUp.C", blobNotFound
+                ]
+
+                Expect.equal (PublishedSmoke.stillPending "0.26.0" bodies) [ "ToolUp.B"; "ToolUp.C" ] "B and C pending"
+                Expect.isEmpty (PublishedSmoke.stillPending "0.26.0" [ "ToolUp.A", index [ "0.26.0" ] ]) "A served"
+            }
+
+            test "the timeout report names every pending id with its own last body" {
+                let message =
+                    PublishedSmoke.indexTimeoutReports "0.26.0" 150 (TimeSpan.FromMinutes 20.0) [
+                        "ToolUp.B", index [ "0.25.1" ]
+                        "ToolUp.C", blobNotFound
+                    ]
+
+                Expect.stringContains message "2 of the 150 awaited" "the count against the set"
+                Expect.stringContains message "ToolUp.B 0.26.0" "the first id"
+                Expect.stringContains message "ToolUp.C 0.26.0" "the second id"
+                Expect.stringContains message "BlobNotFound" "each id's own body"
+            }
+        ]
+
         // ── Which version the probe is about ─────────────────────────
         testList "versionUnderTest" [
             let props =

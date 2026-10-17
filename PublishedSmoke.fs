@@ -93,6 +93,73 @@ let unpublishedProbeReport (unpublished: string list) =
         (List.length unpublished)
         (String.concat ", " unpublished)
 
+// ─── What the wait awaits: the closure, not the names (Phase 1004) ───
+
+let private ownVersionPattern = Regex(@"<Version>\s*[^<\s]", RegexOptions.Compiled)
+
+/// Does this project file declare a `<Version>` of its own?
+///
+/// A project that does is versioned INDEPENDENTLY of the release: it is
+/// packed and pushed at its own number (`--skip-duplicate` makes the push
+/// a no-op once that number exists), so nuget.org will never serve it at
+/// the version under test and awaiting it would time out on a healthy
+/// release. Comments are blanked first, because a comment that explains
+/// the override convention mentions the element without declaring it.
+let declaresOwnVersion (fsprojText: string) =
+    ownVersionPattern.IsMatch(SdkManifest.blankComments fsprojText)
+
+/// The package ids the index wait must see served before anything is
+/// restored, in wait order: the probe ids first, then every other
+/// LOCKSTEP package the release publishes. `expectedIds` is
+/// `SdkManifest.expected` — the computed packable set, never a list —
+/// and `independentlyVersioned` the ids whose project declares its own
+/// `<Version>`.
+///
+/// **Why not only the probe ids.** A restore resolves the probes'
+/// TRANSITIVE `ToolUp.*` dependencies at the same version, and nuget.org
+/// indexes each push independently, minutes apart. Awaiting only the
+/// names the probe declares let the restore outrun the index on a
+/// dependency-only package: `v0.25.1` failed NU1102 on
+/// `ToolUp.Feliz.AgGrid` (reached through `ToolUp.Platform.Client`) and
+/// `v0.26.0` on `ToolUp.Platform.Transport` (reached through
+/// `ToolUp.Platform.Server`). Both releases were fine; a re-run passed.
+///
+/// **Why the whole lockstep set rather than the closure read from the
+/// nuspecs.** The lockstep set is a superset of every closure a probe can
+/// reach at this version, it is computable offline from the tree that was
+/// tagged, and it cannot be wrong in the direction that matters — a
+/// missing nuspec edge would silently shrink a nuspec-derived set back
+/// into the race. The cost is polling packages no probe needs, which is
+/// a wait, never a red.
+///
+/// Probe ids are kept even if the set would drop one, so the awaited set
+/// is never smaller than the probe set it replaces. Case-insensitive, as
+/// NuGet ids are.
+let awaitedIds (expectedIds: string seq) (independentlyVersioned: string seq) (probes: string seq) : string list =
+    let independent =
+        independentlyVersioned
+        |> Seq.map (fun (id: string) -> id.ToLowerInvariant())
+        |> Set.ofSeq
+
+    let lockstep =
+        expectedIds
+        |> Seq.filter (fun id -> not (independent.Contains(id.ToLowerInvariant())))
+
+    Seq.append probes lockstep
+    |> Seq.distinctBy (fun id -> id.ToLowerInvariant())
+    |> List.ofSeq
+
+/// The published ids under `root` whose project declares its own
+/// `<Version>`. A text read, like `SdkManifest.discover` that it rides on.
+let independentlyVersionedIn (root: string) : string list =
+    SdkManifest.discover root
+    |> List.filter (fun p -> declaresOwnVersion (IO.File.ReadAllText(IO.Path.Combine(root, p.ProjectPath))))
+    |> List.map _.PackageId
+
+/// `awaitedIds` over the tree at `root` — the one call the target makes.
+let awaitedIdsIn (root: string) =
+    awaitedIds (SdkManifest.expected root) (independentlyVersionedIn root) probeIds
+
 // ─── Which version the probe is about ────────────────────────────────
 
 let private versionTagPattern =
@@ -194,6 +261,93 @@ let indexTimeoutReport (packageId: string) (version: string) (waited: TimeSpan) 
             (if isNull lastBody then "" else lastBody).Replace("\r", "").Replace("\n", " ")
 
          if b.Length > 400 then b.Substring(0, 400) + "…" else b)
+
+/// The awaited ids an index round did NOT see served, in input order.
+/// `bodies` pairs each polled id with the body its index returned.
+let stillPending (version: string) (bodies: (string * string) list) : string list =
+    bodies
+    |> List.filter (fun (_, body) -> not (indexServes version body))
+    |> List.map fst
+
+/// The timeout failure over every id still pending when the budget ran
+/// out — one `indexTimeoutReport` per id, so each says what its own index
+/// last returned, under a line saying how many of the awaited set it is.
+let indexTimeoutReports (version: string) (awaitedCount: int) (waited: TimeSpan) (pending: (string * string) list) =
+    let header =
+        sprintf
+            "VerifyPublishedPackages: %d of the %d awaited package(s) were not served at %s when the wait ran out:"
+            (List.length pending)
+            awaitedCount
+            version
+
+    header
+    :: (pending
+        |> List.map (fun (id, body) -> "  - " + indexTimeoutReport id version waited body))
+    |> String.concat Environment.NewLine
+
+// ─── A restore that still misses a ToolUp package ────────────────────
+
+let private restoreMissPattern =
+    Regex(
+        @"\b(?<code>NU110[12]):\s*Unable to find package\s+(?<id>ToolUp(?:\.[A-Za-z0-9_\-]+)+)",
+        RegexOptions.Compiled
+    )
+
+/// The `ToolUp.*` ids a failed restore's output reports as unresolvable
+/// (`NU1101` no such id, `NU1102` no such version), deduplicated
+/// case-insensitively, in first-seen order. Other ids are not this gate's
+/// question: a third-party miss is the restore's own message to read.
+let restoreMisses (restoreOutput: string) : string list =
+    if String.IsNullOrEmpty restoreOutput then
+        []
+    else
+        restoreMissPattern.Matches restoreOutput
+        |> Seq.map (fun m -> m.Groups["id"].Value)
+        |> Seq.distinctBy (fun id -> id.ToLowerInvariant())
+        |> List.ofSeq
+
+/// What a restore miss MEANS, decided per id from two facts observed at
+/// the moment of failure: was the id in the awaited set, and does the
+/// index serve it now. Each pairing names a different defect, which is the
+/// point — "re-run it" is the remedy for only one of them.
+///
+/// - awaited, served now: the wait saw it, the restore did not — the
+///   restore's own resolution path (registration, CDN) lagged the flat
+///   container. Indexing lag; the release is fine.
+/// - awaited, NOT served: the wait cannot have passed with it pending, so
+///   it stopped being served between the two — the same lag in reverse,
+///   recorded rather than guessed at.
+/// - not awaited, served now: the awaited set is incomplete — the gate's
+///   defect, not the release's.
+/// - not awaited, NOT served: nothing pushed it at this version — the
+///   release never published it, or it is independently versioned and a
+///   lockstep package depends on it at the wrong number.
+let restoreMissReport (version: string) (awaited: string list) (misses: (string * bool) list) =
+    let awaitedSet =
+        awaited |> List.map (fun (id: string) -> id.ToLowerInvariant()) |> Set.ofList
+
+    let describe (id: string, servedNow: bool) =
+        let wasAwaited = awaitedSet.Contains(id.ToLowerInvariant())
+
+        let reading =
+            match wasAwaited, servedNow with
+            | true, true ->
+                "awaited, and the index serves it NOW: indexing lag between the flat container the wait polls and the path the restore resolves through. The release is fine; re-run the job."
+            | true, false ->
+                "awaited, and the index does NOT serve it now: it was served when the wait passed and is not served at the moment of failure — index lag in reverse. Re-run the job, and read the index if it repeats."
+            | false, true ->
+                "NOT in the awaited set, and the index serves it now: the restore outran a package the wait did not know to wait for — a defect in `PublishedSmoke.awaitedIds`, not in the release."
+            | false, false ->
+                "NOT in the awaited set, and the index does NOT serve it: nothing published it at this version. Either the release never pushed it, or it is independently versioned and a lockstep package depends on it at the release version."
+
+        sprintf "  - %s %s: %s" id version reading
+
+    sprintf
+        "VerifyPublishedPackages: the restore could not resolve %d ToolUp package(s) at %s:%s%s"
+        (List.length misses)
+        version
+        Environment.NewLine
+        (misses |> List.map describe |> String.concat Environment.NewLine)
 
 // ─── The "fresh machine" invariant ───────────────────────────────────
 
