@@ -312,6 +312,7 @@ let private observeResolverErrorDowngrade
     | Some(caseLabel, detail) ->
         let methodName = ctx.Request.Method
         let pathStr = string ctx.Request.Path
+        let warn = writeFailureWarner "ScopeResolutionMiddleware" logger ctx
 
         try
             match logger with
@@ -345,10 +346,10 @@ let private observeResolverErrorDowngrade
                         OccurredAt = DateTimeOffset.UtcNow
                     }
                 )
-                |> Async.Start
+                |> startAudit warn "scope-downgrade audit"
             | _ -> ()
-        with _ ->
-            ()
+        with ex ->
+            warn "scope-downgrade audit" ex
 
 /// Phase 1002 — a publication reader's sign-in audit. The reader holds no
 /// scope, so the member's login audit (which runs where a scope was
@@ -364,6 +365,8 @@ let internal recordPublicationReaderSignIn
     (user: AuthenticatedUser)
     (readerId: string)
     : unit =
+    let warn = writeFailureWarner "ScopeResolutionMiddleware" (requestLogger ctx) ctx
+
     try
         match
             ctx.RequestServices.GetService(typeof<IMemoryCache>), ctx.RequestServices.GetService(typeof<IAuditLog>)
@@ -387,10 +390,10 @@ let internal recordPublicationReaderSignIn
                         OccurredAt = DateTimeOffset.UtcNow
                     }
                 )
-                |> Async.Start
+                |> startAudit warn "reader sign-in audit"
         | _ -> ()
-    with _ ->
-        ()
+    with ex ->
+        warn "reader sign-in audit" ex
 
 /// ASP.NET Core middleware that resolves the per-request `Subject`,
 /// `StorageScope`, and authenticated user, stashing all three on
@@ -520,6 +523,11 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                         | :? ILogger as l -> Some l
                         | _ -> None
 
+                    // Phase 1024 — every fire-and-forget write below is
+                    // started through `startAudit` with this warner, built
+                    // while the request is live.
+                    let warn = writeFailureWarner "ScopeResolutionMiddleware" loggerOpt ctx
+
                     let subject, scopeResult =
                         match resolved with
                         | Ok s ->
@@ -619,18 +627,23 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                     entryOpts.SlidingExpiration <- Nullable(TimeSpan.FromMinutes 20.0)
                                     cache.Set(cacheKey, true, entryOpts) |> ignore
 
-                                    // Fire-and-forget — `Record` is
-                                    // contractually best-effort and
-                                    // swallows its own failures, so
-                                    // there's no value in awaiting.
-                                    auditLog.Record(
-                                        scope.ScopeId,
-                                        UserLoggedIn {
-                                            UserId = user.UserId
-                                            AuthProvider = authProv.GetType().Name
-                                        }
-                                    )
-                                    |> Async.Start
+                                    // Phase 1024 — fire-and-forget, but
+                                    // observed: `Record` is contractually
+                                    // best-effort, yet a sink that breaks
+                                    // the contract must not kill the host
+                                    // or (thrown synchronously) fall
+                                    // through to the anonymous fallback.
+                                    try
+                                        auditLog.Record(
+                                            scope.ScopeId,
+                                            UserLoggedIn {
+                                                UserId = user.UserId
+                                                AuthProvider = authProv.GetType().Name
+                                            }
+                                        )
+                                        |> startAudit warn "login audit"
+                                    with ex ->
+                                        warn "login audit" ex
 
                                     // Phase 3d — pending-invite-by-email
                                     // consumption. Fires on the same
@@ -666,13 +679,16 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                             ctx.RequestServices.GetService(typeof<ITeamStore>)
                                         with
                                         | Some _, (:? IPendingInviteStore as pendingStore), (:? ITeamStore as teamStore) ->
-                                            ToolUp.Platform.Teams.TeamInvitationHandler.tryConsumePendingForUser
-                                                pendingStore
-                                                teamStore
-                                                auditLog
-                                                user
-                                            |> Async.Ignore
-                                            |> Async.Start
+                                            try
+                                                ToolUp.Platform.Teams.TeamInvitationHandler.tryConsumePendingForUser
+                                                    pendingStore
+                                                    teamStore
+                                                    auditLog
+                                                    user
+                                                |> Async.Ignore
+                                                |> startAudit warn "invite consumption"
+                                            with ex ->
+                                                warn "invite consumption" ex
                                         | _ -> ()
                             | _ -> ()
 
@@ -793,7 +809,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                                         consentStore
                                                         verifier
                                                         auditLog
-                                                        Async.Start
+                                                        (startAudit warn "grant-consent trust-denial audit")
                                                         DateTimeOffset.UtcNow
                                                         subject
                                                         party
@@ -866,9 +882,11 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                     let methodName = ctx.Request.Method
                     let pathStr = string ctx.Request.Path
 
+                    let logger = requestLogger ctx
+
                     try
-                        match ctx.RequestServices.GetService(typeof<ILogger>) with
-                        | :? ILogger as log ->
+                        logger
+                        |> Option.iter (fun log ->
                             log.Error(
                                 sprintf
                                     "ScopeResolutionMiddleware swallowed %s on %s %s — request fell through to anonymous: %s"
@@ -877,10 +895,11 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                     pathStr
                                     ex.Message,
                                 Some ex
-                            )
-                        | _ -> ()
+                            ))
                     with _ ->
                         ()
+
+                    let warn = writeFailureWarner "ScopeResolutionMiddleware" logger ctx
 
                     try
                         match ctx.RequestServices.GetService(typeof<IAuditLog>) with
@@ -905,10 +924,10 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                                     OccurredAt = DateTimeOffset.UtcNow
                                 }
                             )
-                            |> Async.Start
+                            |> startAudit warn "scope-resolution-failure audit"
                         | _ -> ()
-                    with _ ->
-                        ()
+                    with writeEx ->
+                        warn "scope-resolution-failure audit" writeEx
 
                 do! next.Invoke(ctx)
             finally

@@ -496,41 +496,64 @@ module SurfaceEnforcement =
             // Its pages are server-rendered and need no `/api` call.
             Reject(403, "publication_reader_not_admitted", None)
 
-/// Phase 1006 — the warning to log when an audit write on the denial path
-/// fails, naming the method and path (never the query string). Resolved
-/// while the request is live: an asynchronous failure arrives after the
-/// response, when the request's services are already disposed. The
-/// response is unaffected either way.
-let private auditFailureWarner (ctx: HttpContext) : string -> exn -> unit =
-    let logger =
-        try
-            match ctx.RequestServices.GetService(typeof<ILogger>) with
-            | :? ILogger as log -> Some log
-            | _ -> None
-        with _ ->
-            None
+/// Phase 1006 / 1024 — the request's `ILogger`, resolved while the request
+/// is live: an asynchronous write failure arrives after the response, when
+/// the request's services are already disposed. `None` when none is
+/// composed, or when resolving it throws.
+let internal requestLogger (ctx: HttpContext) : ILogger option =
+    try
+        match ctx.RequestServices.GetService(typeof<ILogger>) with
+        | :? ILogger as log -> Some log
+        | _ -> None
+    with _ ->
+        None
 
+/// Phase 1006 / 1024 — the warning to log when a fire-and-forget write
+/// started on a request fails. It names the source, the write, the method
+/// and path (never the query string) and the exception type, seen through
+/// an async boundary's wrapper. Built while
+/// the request is live (see `requestLogger`); the response is unaffected
+/// either way, and a logger that itself throws is ignored.
+let internal writeFailureWarner (source: string) (logger: ILogger option) (ctx: HttpContext) : string -> exn -> unit =
     let route = sprintf "%s %s" ctx.Request.Method (string ctx.Request.Path)
 
     fun what ex ->
+        // The cause, not the `AggregateException` an `Async.AwaitTask`
+        // boundary wraps it in (Phase 972).
+        let cause = ToolUp.Platform.ProviderExceptions.unwrap ex
+
         try
             logger
             |> Option.iter (fun log ->
                 log.Warn(
                     sprintf
-                        "SurfaceEnforcementMiddleware: the %s audit write failed on %s (the refusal stands): %s"
+                        "%s: the %s write failed on %s (%s: %s); the response is unaffected."
+                        source
                         what
                         route
-                        ex.Message
+                        (cause.GetType().Name)
+                        cause.Message
                 ))
         with _ ->
             ()
 
-/// Phase 1006 — start an audit write without awaiting it, observing its
-/// failure. An audit write that fails asynchronously is logged rather than
-/// left to surface as an unobserved exception; the response never waits on
-/// it and never changes because of it.
-let private startAudit (warn: string -> exn -> unit) (what: string) (work: Async<unit>) : unit =
+let private auditFailureWarner (ctx: HttpContext) : string -> exn -> unit =
+    writeFailureWarner "SurfaceEnforcementMiddleware" (requestLogger ctx) ctx
+
+/// Phase 1006 / 1024 — start a request-bound write without awaiting it,
+/// observing its failure. The ONE helper for this shape: the surface
+/// denial trail here and every fire-and-forget write in
+/// `ScopeResolutionMiddleware` (Middleware.fs) go through it.
+///
+/// A bare `Async.Start` of a write that fails is not merely untidy. A
+/// failure inside plain async code is rethrown on a thread-pool thread and
+/// terminates the host process; a failure behind a task boundary
+/// (`Async.AwaitTask`) surfaces as an unobserved task exception instead.
+/// Under `Async.Catch` neither escapes: the failure is handed to `warn`
+/// with the write's name, the response never waits on the write and never
+/// changes because of it. A write that throws synchronously, before an
+/// `Async` exists, is the caller's `try ... with ex -> warn what ex`.
+let internal startAudit (warn: string -> exn -> unit) (what: string) (work: Async<unit>) : unit =
     async {
         match! Async.Catch work with
         | Choice1Of2() -> ()
@@ -600,10 +623,10 @@ let private emitDenialAudit
                     ReaderRoles = readerEnrichment |> Option.map snd
                 }
             )
-            |> startAudit warn "SurfaceDenied"
+            |> startAudit warn "SurfaceDenied audit"
         | _ -> ()
     with ex ->
-        warn "SurfaceDenied" ex
+        warn "SurfaceDenied audit" ex
 
 /// Phase 120 — emit the uniform `AuthorizationDenied` row via
 /// `IAuthAuditHook` alongside the legacy `SurfaceDenied` row. The hook
@@ -636,10 +659,10 @@ let private emitAuthDenial
                 ScopeId = scopeId
                 CorrelationId = ToolUp.Remoting.Server.CallContext.correlationId ()
             }
-            |> startAudit warn "AuthorizationDenied"
+            |> startAudit warn "AuthorizationDenied audit"
         | _ -> ()
     with ex ->
-        warn "AuthorizationDenied" ex
+        warn "AuthorizationDenied audit" ex
 
 let private writeRejection
     (ctx: HttpContext)
