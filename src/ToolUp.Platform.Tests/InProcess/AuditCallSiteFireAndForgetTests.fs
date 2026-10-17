@@ -739,7 +739,14 @@ let private guard =
                 |> List.filter (fun a -> not (File.Exists(Path.Combine(root, a.File))))
                 |> List.map (fun a -> sprintf "%s — the admitted file does not exist" a.File)
 
-            Expect.isEmpty (findings @ missing) "every bare Async.Start is admitted, and every admission is live"
+            match findings @ missing with
+            | [] -> ()
+            | refused ->
+                failtestf
+                    "every bare Async.Start is admitted, and every admission is live:%s%s"
+                    Environment.NewLine
+                    (String.concat Environment.NewLine refused)
+
             Expect.equal seen admitted.Length "the scan saw exactly the admitted calls (it is not vacuous)"
         }
 
