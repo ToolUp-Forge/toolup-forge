@@ -2166,6 +2166,32 @@ module ServerApp =
             }
     }
 
+    /// Phase 771 — register the holder the boot observation of the
+    /// hardening baseline is kept in, so `run` probes the composed pipeline
+    /// and the verification report renders what it found. `TryAdd`, so the
+    /// route and a declared policy share one holder.
+    let private registerHostingBaselineRecord (app: ServerApp) : ServerApp =
+        let register (services: IServiceCollection) =
+            Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAddSingleton<
+                HostingBaselineRecord
+             >(
+                services,
+                HostingBaselineRecord()
+            )
+
+            services
+
+        {
+            app with
+                Extensions = {
+                    app.Extensions with
+                        ServiceConfig =
+                            match app.Extensions.ServiceConfig with
+                            | None -> Some register
+                            | Some existing -> Some(fun s -> register (existing s))
+                }
+        }
+
     /// Phase 686 — mount the Platform-Admin-gated deployment
     /// verification report. Flips `ServerConfig.DeploymentVerification`
     /// to `EnabledDeploymentVerification` so `compose` mounts
@@ -2186,13 +2212,20 @@ module ServerApp =
     /// The `--verify-deployment` CI entry point does NOT require this
     /// call: it needs no route, so a deployment can run the report in CI
     /// without exposing it on the wire at all.
-    let withDeploymentVerification (app: ServerApp) : ServerApp = {
-        app with
-            Config = {
-                app.Config with
-                    DeploymentVerification = EnabledDeploymentVerification
-            }
-    }
+    ///
+    /// Phase 771 — mounting the route also asks `run` to observe the
+    /// hardening baseline on the composed pipeline before it serves (two
+    /// probe requests through the pipeline, at boot only), so the report's
+    /// hardening-baseline section has something to say. Informational: with
+    /// no `withHostingBaselinePolicy` it refuses nothing.
+    let withDeploymentVerification (app: ServerApp) : ServerApp =
+        registerHostingBaselineRecord {
+            app with
+                Config = {
+                    app.Config with
+                        DeploymentVerification = EnabledDeploymentVerification
+                }
+        }
 
     /// Phase 686 — register the evidence the deployment verification
     /// report composes.
@@ -2293,6 +2326,42 @@ module ServerApp =
                 Extensions = {
                     app.Extensions with
                         ServiceConfig = serviceConfig
+                }
+        }
+
+    /// Phase 771 — declare the hardening-baseline floor this deployment is
+    /// judged against.
+    ///
+    /// `run` observes the baseline on the composed pipeline after `compose`
+    /// returns and before it serves — a probe through the pipeline for the
+    /// header, CORS and forwarded-scheme controls, the container for the
+    /// rest — and judges it against `policy`. Under
+    /// `CompositionProfile.Verified`, a control the floor names that was
+    /// observed off refuses the start with
+    /// `CompositionProfileRefusal.HostingBaselineBelowFloor`; under
+    /// `Standard` the floor only marks the report's rows (GP 11). The config
+    /// preflight runs inside `compose`, so its refusals win first.
+    ///
+    /// ```fsharp
+    /// app
+    /// |> ServerApp.withHostingBaselinePolicy (
+    ///     HostingBaselinePolicy.verified [ HostingControl.StrictTransportSecurity; HostingControl.ContentSecurityPolicy ]
+    /// )
+    /// |> ServerApp.run
+    /// ```
+    let withHostingBaselinePolicy (policy: HostingBaselinePolicy) (app: ServerApp) : ServerApp =
+        let register (services: IServiceCollection) =
+            services.AddSingleton<HostingBaselinePolicy>(policy) |> ignore
+            services
+
+        registerHostingBaselineRecord {
+            app with
+                Extensions = {
+                    app.Extensions with
+                        ServiceConfig =
+                            match app.Extensions.ServiceConfig with
+                            | None -> Some register
+                            | Some existing -> Some(fun s -> register (existing s))
                 }
         }
 
@@ -3395,5 +3464,11 @@ module ServerApp =
                         RemotingDecoderFacet.inspectServedArguments CompositionProfile.Standard
                     )
                 ))
+
+        // Phase 771 — the hardening baseline, observed on the composed
+        // pipeline after composition and before serving. A no-op unless the
+        // verification route is mounted or a policy is declared (GP 13);
+        // throws the Phase 657 refusal when a verified floor is not met.
+        HostingBaseline.atBoot host config |> ignore
 
         host.RunBlocking()

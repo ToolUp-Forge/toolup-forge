@@ -1669,6 +1669,8 @@
         <Compile Include="Contracts\ISeamAuthorityEvidenceContract.fs" />
         <Compile Include="Contracts\IEvidenceChainEvidenceContract.fs" />
         <Compile Include="Contracts\IEgressEvidenceContract.fs" />
+        <!-- Phase 771 — the hardening-baseline evidence facet's contract pack. -->
+        <Compile Include="Contracts\IHostingBaselineEvidenceContract.fs" />
         <!-- Phase 686 — the one-command deployment verification report: the
              full/bare/seeded-failure probes over the composed five sections,
              the outcome + exit-code + canonical-form folds, the CLI flag, and
@@ -1680,6 +1682,10 @@
              the handler (deny before the socket, permit byte-identical, the audit row), the
              ambient component carrier, the DI-named client and the report's eleventh section. -->
         <Compile Include="InProcess\EgressPolicyTests.fs" />
+        <!-- Phase 771 — the hardening baseline: each control observed on and off,
+             the floor under both profiles, the refusal, the report section, and the
+             probe driven through a real composed pipeline. -->
+        <Compile Include="InProcess\HostingBaselineTests.fs" />
         <!-- Phase 63 — StaticCorpus MessagePack round-trip + determinism
              (63.B/63.G) and the IRetrievalPipeline contract (63.H). -->
         <Compile Include="RAG\StaticCorpusContract.fs" />

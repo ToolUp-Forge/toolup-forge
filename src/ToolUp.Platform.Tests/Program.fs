@@ -1355,6 +1355,11 @@ let private registeredTests =
         // component carrier, the DI-named client, and the report's eleventh
         // section.
         EgressPolicyTests.tests
+        // Phase 771 — the hardening baseline: each control observed on and
+        // off, the floor under both profiles, the Phase 657 refusal, the
+        // report's thirteenth section, and the probe through a real
+        // composed pipeline.
+        HostingBaselineTests.tests
         // Phase 63 — StaticCorpus MessagePack round-trip + determinism.
         StaticCorpusContract.tests
         // Phase 502 — RetrievalRequest.Filters parity pack (both pipelines).

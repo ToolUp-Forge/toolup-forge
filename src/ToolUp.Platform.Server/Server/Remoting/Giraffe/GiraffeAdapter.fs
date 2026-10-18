@@ -2289,8 +2289,11 @@ module RemotingBatch =
     /// The response of one element. Records the `OnStarting` / `OnCompleted`
     /// callbacks the pipeline registers and runs them as a server would, so
     /// middleware that stamps headers or defers work at response time
-    /// behaves as it does for a call that arrived alone.
-    type private ElementResponseFeature() =
+    /// behaves as it does for a call that arrived alone. Internal rather
+    /// than private because the Phase 771 hardening-baseline probe drives a
+    /// request through the composed pipeline the same way and reads the
+    /// same callbacks (`HostingBaseline.probe`).
+    type internal ElementResponseFeature() =
         inherit HttpResponseFeature()
         let starting = Stack<Func<obj, Task> * obj>()
         let completed = Stack<Func<obj, Task> * obj>()

@@ -542,6 +542,106 @@ type IEvidenceChainEvidence =
     /// empty".
     abstract EvidenceChain: (unit -> Async<Result<EvidenceChain, EvidenceChainError>>) option
 
+// ─── Phase 771 — the hardening baseline, mirrored ────────────────────
+//
+// The observation itself (the probe through the composed pipeline, the
+// DI reads, the floor) lives in `HostingBaseline.fs`, which compiles
+// after `BootVerificationPreflight.fs` because its policy names a
+// `CompositionProfile`. These are the tier-neutral shapes the report
+// reads, for the reason every mirror above gives: the substrate compiles
+// after the route-handler table that mounts this report.
+
+/// One hardening-baseline control's state as observed on the composed
+/// pipeline at boot (Phase 771). Never read from `ServerConfig`: a control
+/// configured on and observed off is `HostingUnenforced`, which is the
+/// case this section exists to make visible.
+[<RequireQualifiedAccess>]
+type HostingControlState =
+    /// Observed on. `detail` quotes what was observed — the header value,
+    /// the scheme the pipeline resolved — rather than the conclusion.
+    | Enforced of detail: string
+    /// Observed off, or absent from the composition. `detail` names what
+    /// was looked for and what was found instead.
+    | Unenforced of detail: string
+    /// The control does not apply to the shape observed — HSTS on a
+    /// loopback-only binding, forwarded-headers trust where TLS terminates
+    /// at this listener. Never counts as enforced or as unenforced.
+    | NotApplicable of reason: string
+
+/// The baseline's overall verdict (Phase 771) — the three-state
+/// vocabulary Phase 693 established.
+[<RequireQualifiedAccess>]
+type HostingBaselineVerdict =
+    /// Every applicable control was observed on.
+    | Enforced
+    /// One or more applicable controls were observed off, and nothing
+    /// refuses the start over it: the standard profile, or a control the
+    /// declared floor does not name.
+    | Unenforced
+    /// Under the verified composition profile, a control the declared floor
+    /// names was observed off. The start is refused through the Phase 657
+    /// profile refusal; a report that still renders it says so.
+    | Refused
+
+/// One control's row in the hardening-baseline section. Prefixed field
+/// names for the Phase 431 inference reason recorded on
+/// `ComponentSeamAuthority`.
+type HostingControlRecord = {
+    /// The control's stable label (`HostingControl.label`).
+    HostingControlId: string
+    /// Whether the declared floor names this control.
+    HostingInFloor: bool
+    /// What was observed.
+    HostingObserved: HostingControlState
+}
+
+/// The hardening baseline (Phase 771), mirrored.
+type HostingBaselineIntegrity = {
+    /// `CompositionProfile.label` of the declared policy — `"standard"`
+    /// when the deployment declared none.
+    HostingProfile: string
+    HostingVerdict: HostingBaselineVerdict
+    /// The listen URLs the binding-dependent controls were judged against,
+    /// as the host configuration resolves them (`ServerBinding.resolve`).
+    HostingBinding: string list
+    /// Every control in the closed list, in its declared order.
+    HostingControls: HostingControlRecord list
+}
+
+/// Phase 771 — the thirteenth section's source.
+///
+/// A standalone sibling interface for the reason Phase 693 recorded when it
+/// cut the first: an abstract member added to a shipped F# interface is a
+/// source break. Resolved by type test, so an evidence value that never
+/// heard of the baseline still compiles and the section reads `NotComposed`
+/// (GP 11). A VALUE: the baseline is what the pipeline did at boot, observed
+/// once, and re-probing at report time would answer a different question.
+type IHostingBaselineEvidence =
+    /// The hardening baseline observed at boot. `None` when this evidence
+    /// value carries nothing about it.
+    abstract HostingBaseline: HostingBaselineIntegrity option
+
+/// Phase 771 — where the boot observation is kept for the report.
+///
+/// The composition root observes the baseline AFTER the container is built
+/// (the probe needs the composed pipeline), so it cannot hand the result
+/// over as a registration the way it hands over evidence. It records it
+/// here instead, and `DeploymentVerificationReport.resolveEvidence`
+/// overlays it at report time — the shape Phase 770's `SeamReachObserver`
+/// set. Registered only when something will read it (the verification
+/// route, or a declared policy), so a deployment that asks for neither
+/// pays nothing (GP 13).
+[<Sealed>]
+type HostingBaselineRecord() =
+    [<VolatileField>]
+    let mutable observed: HostingBaselineIntegrity option = None
+
+    /// Keep the boot observation. A second call replaces the first.
+    member _.Record(integrity: HostingBaselineIntegrity) : unit = observed <- Some integrity
+
+    /// The observation, when one was made.
+    member _.Current: HostingBaselineIntegrity option = observed
+
 [<RequireQualifiedAccess>]
 module DeploymentVerificationEvidence =
 
@@ -603,6 +703,16 @@ module DeploymentVerificationEvidence =
         | :? IEgressEvidence as source -> source.Egress
         | _ -> None
 
+    /// Phase 771 — read the hardening-baseline member off an evidence
+    /// value that carries one. `None` for any evidence that does not
+    /// implement the sibling interface, which is every value built before
+    /// this phase. The same single-read-path discipline `seamAuthorityOf`
+    /// established.
+    let hostingBaselineOf (evidence: IDeploymentVerificationEvidence) : HostingBaselineIntegrity option =
+        match box evidence with
+        | :? IHostingBaselineEvidence as source -> source.HostingBaseline
+        | _ -> None
+
     /// Evidence naming nothing — every section reads `NotComposed`.
     /// Behaviourally identical to registering no evidence at all; useful
     /// where a value is required rather than an option.
@@ -628,6 +738,9 @@ module DeploymentVerificationEvidence =
 
           interface IEgressEvidence with
               member _.Egress = None
+
+          interface IHostingBaselineEvidence with
+              member _.HostingBaseline = None
         }
 
     /// Evidence naming whichever sources the composition root holds. Each
@@ -660,6 +773,9 @@ module DeploymentVerificationEvidence =
 
           interface IEgressEvidence with
               member _.Egress = None
+
+          interface IHostingBaselineEvidence with
+              member _.HostingBaseline = None
         }
 
     /// Replace the grounding-continuity member, preserving every other
@@ -682,6 +798,7 @@ module DeploymentVerificationEvidence =
         let remotingDecoders = remotingDecodersOf evidence
         let remotingArgumentDecoders = remotingArgumentDecodersOf evidence
         let egress = egressOf evidence
+        let hostingBaseline = hostingBaselineOf evidence
 
         { new IDeploymentVerificationEvidence with
             member _.BootSeal = evidence.BootSeal
@@ -704,6 +821,9 @@ module DeploymentVerificationEvidence =
 
           interface IEgressEvidence with
               member _.Egress = egress
+
+          interface IHostingBaselineEvidence with
+              member _.HostingBaseline = hostingBaseline
         }
 
     /// Phase 693 — supply the seam-authority posture, preserving every
@@ -724,6 +844,7 @@ module DeploymentVerificationEvidence =
         let remotingDecoders = remotingDecodersOf evidence
         let remotingArgumentDecoders = remotingArgumentDecodersOf evidence
         let egress = egressOf evidence
+        let hostingBaseline = hostingBaselineOf evidence
 
         { new IDeploymentVerificationEvidence with
             member _.BootSeal = evidence.BootSeal
@@ -746,6 +867,9 @@ module DeploymentVerificationEvidence =
 
           interface IEgressEvidence with
               member _.Egress = egress
+
+          interface IHostingBaselineEvidence with
+              member _.HostingBaseline = hostingBaseline
         }
 
     /// Phase 770 — overlay the runtime-observed reach onto the
@@ -801,6 +925,7 @@ module DeploymentVerificationEvidence =
         let remotingDecoders = remotingDecodersOf evidence
         let remotingArgumentDecoders = remotingArgumentDecodersOf evidence
         let egress = egressOf evidence
+        let hostingBaseline = hostingBaselineOf evidence
 
         { new IDeploymentVerificationEvidence with
             member _.BootSeal = evidence.BootSeal
@@ -823,6 +948,9 @@ module DeploymentVerificationEvidence =
 
           interface IEgressEvidence with
               member _.Egress = egress
+
+          interface IHostingBaselineEvidence with
+              member _.HostingBaseline = hostingBaseline
         }
 
     /// Phase 785 — supply the remoting-decoder facet, preserving every
@@ -841,6 +969,7 @@ module DeploymentVerificationEvidence =
         let evidenceChain = evidenceChainOf evidence
         let remotingArgumentDecoders = remotingArgumentDecodersOf evidence
         let egress = egressOf evidence
+        let hostingBaseline = hostingBaselineOf evidence
 
         { new IDeploymentVerificationEvidence with
             member _.BootSeal = evidence.BootSeal
@@ -863,6 +992,9 @@ module DeploymentVerificationEvidence =
 
           interface IEgressEvidence with
               member _.Egress = egress
+
+          interface IHostingBaselineEvidence with
+              member _.HostingBaseline = hostingBaseline
         }
 
     /// Phase 842 — supply the remoting-ARGUMENT-decoder facet, preserving
@@ -878,6 +1010,93 @@ module DeploymentVerificationEvidence =
         let seamAuthority = seamAuthorityOf evidence
         let evidenceChain = evidenceChainOf evidence
         let remotingDecoders = remotingDecodersOf evidence
+        let egress = egressOf evidence
+        let hostingBaseline = hostingBaselineOf evidence
+
+        { new IDeploymentVerificationEvidence with
+            member _.BootSeal = evidence.BootSeal
+            member _.GroundingContinuity = evidence.GroundingContinuity
+            member _.Ledger = evidence.Ledger
+            member _.Certificates = evidence.Certificates
+            member _.AnswerJoins = evidence.AnswerJoins
+
+          interface ISeamAuthorityEvidence with
+              member _.SeamAuthority = seamAuthority
+
+          interface IEvidenceChainEvidence with
+              member _.EvidenceChain = evidenceChain
+
+          interface IRemotingDecoderEvidence with
+              member _.RemotingDecoders = remotingDecoders
+
+          interface IRemotingArgumentDecoderEvidence with
+              member _.RemotingArgumentDecoders = remotingArgumentDecoders
+
+          interface IEgressEvidence with
+              member _.Egress = egress
+
+          interface IHostingBaselineEvidence with
+              member _.HostingBaseline = hostingBaseline
+        }
+
+    /// Phase 772 — supply the outbound-egress posture, preserving every
+    /// other source.
+    ///
+    /// A wither rather than a sixth argument to `create`, for the reason
+    /// `withSeamAuthority`, `withEvidenceChain` and `withRemotingDecoders`
+    /// are: widening that function's parameter list retypes it, which the
+    /// public-API approval gate reads as a REMOVAL of the five-argument
+    /// form and which breaks every existing call.
+    let withEgress
+        (egress: EgressIntegrity option)
+        (evidence: IDeploymentVerificationEvidence)
+        : IDeploymentVerificationEvidence =
+        let seamAuthority = seamAuthorityOf evidence
+        let evidenceChain = evidenceChainOf evidence
+        let remotingDecoders = remotingDecodersOf evidence
+        let remotingArgumentDecoders = remotingArgumentDecodersOf evidence
+        let hostingBaseline = hostingBaselineOf evidence
+
+        { new IDeploymentVerificationEvidence with
+            member _.BootSeal = evidence.BootSeal
+            member _.GroundingContinuity = evidence.GroundingContinuity
+            member _.Ledger = evidence.Ledger
+            member _.Certificates = evidence.Certificates
+            member _.AnswerJoins = evidence.AnswerJoins
+
+          interface ISeamAuthorityEvidence with
+              member _.SeamAuthority = seamAuthority
+
+          interface IEvidenceChainEvidence with
+              member _.EvidenceChain = evidenceChain
+
+          interface IRemotingDecoderEvidence with
+              member _.RemotingDecoders = remotingDecoders
+
+          interface IRemotingArgumentDecoderEvidence with
+              member _.RemotingArgumentDecoders = remotingArgumentDecoders
+
+          interface IEgressEvidence with
+              member _.Egress = egress
+
+          interface IHostingBaselineEvidence with
+              member _.HostingBaseline = hostingBaseline
+        }
+
+    /// Phase 771 — supply the hardening baseline, preserving every other
+    /// source. A wither rather than an argument to `create`, for the reason
+    /// every wither above gives. A composition root normally never calls
+    /// this: the baseline is observed after the container is built and
+    /// reaches the report through `HostingBaselineRecord`. A test, or a
+    /// root that observed the baseline itself, supplies it here.
+    let withHostingBaseline
+        (hostingBaseline: HostingBaselineIntegrity option)
+        (evidence: IDeploymentVerificationEvidence)
+        : IDeploymentVerificationEvidence =
+        let seamAuthority = seamAuthorityOf evidence
+        let evidenceChain = evidenceChainOf evidence
+        let remotingDecoders = remotingDecodersOf evidence
+        let remotingArgumentDecoders = remotingArgumentDecodersOf evidence
         let egress = egressOf evidence
 
         { new IDeploymentVerificationEvidence with
@@ -901,46 +1120,9 @@ module DeploymentVerificationEvidence =
 
           interface IEgressEvidence with
               member _.Egress = egress
-        }
 
-    /// Phase 772 — supply the outbound-egress posture, preserving every
-    /// other source.
-    ///
-    /// A wither rather than a sixth argument to `create`, for the reason
-    /// `withSeamAuthority`, `withEvidenceChain` and `withRemotingDecoders`
-    /// are: widening that function's parameter list retypes it, which the
-    /// public-API approval gate reads as a REMOVAL of the five-argument
-    /// form and which breaks every existing call.
-    let withEgress
-        (egress: EgressIntegrity option)
-        (evidence: IDeploymentVerificationEvidence)
-        : IDeploymentVerificationEvidence =
-        let seamAuthority = seamAuthorityOf evidence
-        let evidenceChain = evidenceChainOf evidence
-        let remotingDecoders = remotingDecodersOf evidence
-        let remotingArgumentDecoders = remotingArgumentDecodersOf evidence
-
-        { new IDeploymentVerificationEvidence with
-            member _.BootSeal = evidence.BootSeal
-            member _.GroundingContinuity = evidence.GroundingContinuity
-            member _.Ledger = evidence.Ledger
-            member _.Certificates = evidence.Certificates
-            member _.AnswerJoins = evidence.AnswerJoins
-
-          interface ISeamAuthorityEvidence with
-              member _.SeamAuthority = seamAuthority
-
-          interface IEvidenceChainEvidence with
-              member _.EvidenceChain = evidenceChain
-
-          interface IRemotingDecoderEvidence with
-              member _.RemotingDecoders = remotingDecoders
-
-          interface IRemotingArgumentDecoderEvidence with
-              member _.RemotingArgumentDecoders = remotingArgumentDecoders
-
-          interface IEgressEvidence with
-              member _.Egress = egress
+          interface IHostingBaselineEvidence with
+              member _.HostingBaseline = hostingBaseline
         }
 
 /// Phase 686 — gather the sections, fold them into the report, and
@@ -987,6 +1169,17 @@ module DeploymentVerificationReport =
     /// property of THIS deployment's section and not of the SDK.
     [<Literal>]
     let private RuntimeConfinementFinding = "runtime seam confinement:"
+
+    /// Phase 771 — the not-proved statement the hardening-baseline section
+    /// carries as data, by its stable id.
+    [<Literal>]
+    let HostingBaselineNotProvedId = "hardening-baseline-is-presence-not-adequacy"
+
+    /// Phase 771 — the statement itself. A literal so a test, a dashboard
+    /// and the docs quote one sentence rather than three near-copies.
+    [<Literal>]
+    let HostingBaselineNotProvedStatement =
+        "The hardening baseline proves header presence, not policy adequacy. It observes that each control is on in the composed pipeline at boot: a Content-Security-Policy header is sent, HSTS is sent, the cookie Secure flag follows a proxied HTTPS request. Whether that CSP actually blocks the scripts that matter, whether the HSTS max-age is long enough, whether a rate limit is tight enough, and anything a route sets or overrides per request are outside it."
 
     let private section id title verdict findings : ReportSection = {
         Id = id
@@ -2431,6 +2624,121 @@ module DeploymentVerificationReport =
                 ))
                 (missetLines @ activeLines)
 
+    // ─── Phase 771 — the thirteenth section: the hardening baseline ──────
+
+    /// One finding line per control, in the closed list's order, then the
+    /// binding the binding-dependent controls were judged against.
+    let private hostingFindings (integrity: HostingBaselineIntegrity) : string list =
+        let row (record: HostingControlRecord) =
+            let floor = if record.HostingInFloor then " (floor)" else ""
+
+            let state, detail =
+                match record.HostingObserved with
+                | HostingControlState.Enforced detail -> "enforced", detail
+                | HostingControlState.Unenforced detail -> "unenforced", detail
+                | HostingControlState.NotApplicable reason -> "not applicable", reason
+
+            sprintf "%s%s: %s — %s" record.HostingControlId floor state detail
+
+        [
+            yield! integrity.HostingControls |> List.map row
+            yield
+                sprintf
+                    "binding: %s"
+                    (if List.isEmpty integrity.HostingBinding then
+                         "none resolved"
+                     else
+                         String.concat ", " integrity.HostingBinding)
+        ]
+
+    /// The hardening baseline (Phase 771): the request-edge controls a
+    /// hardened host carries, each read off the COMPOSED pipeline at boot —
+    /// a probe request's response headers, the scheme the pipeline resolved
+    /// for a proxied request, the container's registrations — and never off
+    /// `ServerConfig`, which states intent.
+    ///
+    /// `Enforced` is `Verified`; `Unenforced` is `Observed`, because the
+    /// standard profile serves with a control off by design and the section
+    /// exists to say so rather than to fail it; `Refused` is `Failed`, the
+    /// verified profile's floor naming a control observed off. A process
+    /// that never probed — the `--verify-deployment` entry composes no
+    /// pipeline — reads `NotComposed`.
+    let gatherHostingBaseline (evidence: IDeploymentVerificationEvidence) : ReportSection =
+        let title = "Hardening baseline"
+
+        match DeploymentVerificationEvidence.hostingBaselineOf evidence with
+        | None ->
+            section
+                HostingBaselineSection
+                title
+                (VerificationSectionVerdict.NotComposed
+                    "no hardening baseline was observed in this process: it is read off the composed request pipeline after composition and before serving, and a process that composed no pipeline (the --verify-deployment entry), or a root that never asked for the observation, has nothing to report")
+                []
+        | Some integrity ->
+            let count predicate =
+                integrity.HostingControls
+                |> List.filter (fun record -> predicate record.HostingObserved)
+                |> List.length
+
+            let enforced =
+                count (function
+                    | HostingControlState.Enforced _ -> true
+                    | _ -> false)
+
+            let notApplicable =
+                count (function
+                    | HostingControlState.NotApplicable _ -> true
+                    | _ -> false)
+
+            let offIds inFloorOnly =
+                integrity.HostingControls
+                |> List.filter (fun record ->
+                    (not inFloorOnly || record.HostingInFloor)
+                    && (match record.HostingObserved with
+                        | HostingControlState.Unenforced _ -> true
+                        | _ -> false))
+                |> List.map _.HostingControlId
+                |> String.concat ", "
+
+            let findings = hostingFindings integrity
+
+            match integrity.HostingVerdict with
+            | HostingBaselineVerdict.Enforced ->
+                section
+                    HostingBaselineSection
+                    title
+                    (VerificationSectionVerdict.Verified(
+                        sprintf
+                            "every applicable control was observed on at boot: %d enforced, %d not applicable to this binding (profile %s)"
+                            enforced
+                            notApplicable
+                            integrity.HostingProfile
+                    ))
+                    findings
+            | HostingBaselineVerdict.Unenforced ->
+                section
+                    HostingBaselineSection
+                    title
+                    (VerificationSectionVerdict.Observed(
+                        sprintf
+                            "%d control(s) were observed on and these were observed off: %s; nothing refuses the start over them (profile %s)"
+                            enforced
+                            (offIds false)
+                            integrity.HostingProfile
+                    ))
+                    findings
+            | HostingBaselineVerdict.Refused ->
+                section
+                    HostingBaselineSection
+                    title
+                    (VerificationSectionVerdict.Failed(
+                        sprintf
+                            "the verified profile's declared floor names control(s) observed off at boot: %s — the start is refused through the composition profile refusal (profile %s)"
+                            (offIds true)
+                            integrity.HostingProfile
+                    ))
+                    findings
+
     // ─── What the report does not prove ──────────────────────────────────
 
     /// The not-proved statements, with the two that a composed substrate
@@ -2681,6 +2989,22 @@ module DeploymentVerificationReport =
                     else
                         None
             }
+            {
+                // Phase 771. The baseline observes that each control is
+                // PRESENT on the composed pipeline. Whether the policy a
+                // present header carries is adequate is a judgement no
+                // probe can make, and the statement says so in the
+                // phase's own words so a reader never mistakes the one for
+                // the other.
+                Id = HostingBaselineNotProvedId
+                Statement = HostingBaselineNotProvedStatement
+                Narrowing =
+                    if isComposed HostingBaselineSection then
+                        Some
+                            "the section names every control in the closed list as it was observed on this deployment's composed pipeline at boot, so presence is enumerated control by control rather than inferred from configuration. What it does not narrow is adequacy, a route that overrides a header per request, or anything the pipeline does after boot."
+                    else
+                        None
+            }
         ]
 
     // ─── Assembly ────────────────────────────────────────────────────────
@@ -2740,6 +3064,11 @@ module DeploymentVerificationReport =
             // rather than the other way round.
             let remotingArgumentDecoders = gatherRemotingArgumentDecoders evidence
 
+            // Phase 771. The one section whose subject is the request
+            // edge as the composed pipeline actually serves it — read off
+            // a probe at boot rather than off configuration.
+            let hostingBaseline = gatherHostingBaseline evidence
+
             // Phase 693 appends rather than inserting. Adding a section
             // moves every deployment's verdict digest once, which is
             // correct and expected — the report grew. Inserting it among
@@ -2772,6 +3101,9 @@ module DeploymentVerificationReport =
                 // Phase 842 appends for the same reason: the report grew
                 // by one section, and every earlier line keeps its place.
                 remotingArgumentDecoders
+                // Phase 771 appends for the same reason: the report grew
+                // by one section, and every earlier line keeps its place.
+                hostingBaseline
             ]
 
             let notProved = notProvedFor sections
@@ -2801,10 +3133,22 @@ module DeploymentVerificationReport =
             | :? IDeploymentVerificationEvidence as evidence -> evidence
             | _ -> DeploymentVerificationEvidence.none
 
-        match services.GetService(typeof<SeamReachObserver>) with
-        | :? SeamReachObserver as observer ->
-            DeploymentVerificationEvidence.withObservedSeamReach (observer.Snapshot()) evidence
-        | _ -> evidence
+        let evidence =
+            match services.GetService(typeof<SeamReachObserver>) with
+            | :? SeamReachObserver as observer ->
+                DeploymentVerificationEvidence.withObservedSeamReach (observer.Snapshot()) evidence
+            | _ -> evidence
+
+        // Phase 771 — the hardening baseline observed at boot, when the
+        // root recorded one. Evidence that already carries a baseline keeps
+        // it: a root (or a test) that supplied its own observation meant it.
+        match DeploymentVerificationEvidence.hostingBaselineOf evidence with
+        | Some _ -> evidence
+        | None ->
+            match services.GetService(typeof<HostingBaselineRecord>) with
+            | :? HostingBaselineRecord as record when record.Current.IsSome ->
+                DeploymentVerificationEvidence.withHostingBaseline record.Current evidence
+            | _ -> evidence
 
     /// The audited-read record.
     ///
