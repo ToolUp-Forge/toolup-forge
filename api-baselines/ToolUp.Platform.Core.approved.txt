@@ -7211,6 +7211,7 @@ ToolUp.Platform.HostCapabilityRegistry (class)
 ToolUp.Platform.HostCapabilityRegistry.InvokeActionKind : System.String (literal)
 ToolUp.Platform.HostCapabilityRegistry.TargetScopeArg : System.String (literal)
 ToolUp.Platform.HostCapabilityRegistry.create(ToolUp.Platform.IActionAuthorizer) : ToolUp.Platform.IHostCapabilityRegistry
+ToolUp.Platform.HostCapabilityRegistry.installBoundary(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.IHostCapabilityRegistry, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.CapabilityId, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AccessContext, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.HostCapabilityOutcome]]]]]]]) : System.Void
 ToolUp.Platform.HostCapabilityRegistry.toActionDescriptor(ToolUp.Platform.CapabilityId, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.AccessContext) : ToolUp.Platform.ActionDescriptor
 ToolUp.Platform.HostContentKind (class)
 ToolUp.Platform.HostContentKind.Code : ToolUp.Platform.HostContentKind { get }

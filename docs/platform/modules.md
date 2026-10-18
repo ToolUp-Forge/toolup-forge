@@ -138,6 +138,29 @@ Every server route declares which subject kinds may reach it via `SurfaceRequire
 
 The strict global default (when no module or route declaration applies) is `userOrTeam`. Fail-closed is the rule — a forgotten declaration produces a 403 the operator notices, not a silent public exposure. The compose-time `SurfaceCoherenceValidator` raises an error when a module's declared default or a per-route override is unreachable under the deployment's `Surfaces` list, so misconfiguration surfaces at startup rather than at first traffic.
 
+## Declare your route's envelope
+
+A module's `Handlers` are Giraffe closures, so the platform cannot see what a route does. By default a route is **effect-labelled, not contained**: whatever it reaches, it reaches. A route that declares its effects with `ServerModule.withRouteEffect` is held to the declaration on two axes:
+
+```fsharp skip=fragment
+ServerModule.create "reports"
+|> ServerModule.withHandlers [ reportRoutes ]
+// Computes over data it was handed: no host capability, no outbound call.
+|> ServerModule.withRouteEffect "GET" "/api/reports/summary" (RouteEffectDeclaration.envelope CompanionCapability.pure')
+// Calls exactly one origin.
+|> ServerModule.withRouteEffect
+    "POST"
+    "/api/reports/publish"
+    (RouteEffectDeclaration.egress (EgressGrant.ofOrigins [ "https://api.example.com" ]))
+```
+
+- **Host capabilities.** An invocation through a registry built by `HostCapabilityRegistry.create` is checked against the route's `EffectEnvelope` by the composition capability gate (`CompositionCapabilityGate.guardInvoke`) before the registry's authorizer is reached. Every invocation counts as effecting, so a `Pure` route may invoke none. A refusal comes back as `HostCapabilityOutcome.Denied`, naming the route, and is written as a `CompositionCapabilityRefused` audit row. A verified composition registers its own `RouteEffectObserver` so the row carries its profile.
+- **Outbound calls.** A call through a platform client (`PlatformHttpClient`, or the named `IHttpClientFactory` client) to an origin outside the route's `EgressGrant` raises `EgressDeniedException` before any socket opens, with an `EgressDenied` audit row. The grant narrows the deployment's egress policy and never widens it. A `Pure` envelope permits no outbound call, with or without a grant beside it. While the route runs, its outbound calls are attributed to the owning module rather than to the platform.
+
+Routes are matched exactly on `(method, path)`, case-insensitively, the same way `withRouteSurfaceRequirement` matches. Undeclared routes, including other methods on the same path, run exactly as before. A module that declares nothing is not wrapped at all. Each declared route appears on the module's label as a `route-effect` entry.
+
+**The claim is narrow.** A route that declared `Pure` cannot invoke a host capability or make an outbound call *through the platform*. A route that opens its own socket, constructs its own `HttpClient`, or invokes a capability through a registry it built some other way is outside both checks. Containment covers declared routes on the effect and egress axes and nothing more; it does not sandbox handlers.
+
 ## Client-side `Visibility`
 
 The client module registration carries a `Visibility: SubjectKind -> bool` predicate. The shell's sidebar filter hides modules whose predicate returns `false` for the current `Subject`. Four smart constructors cover the common shapes:

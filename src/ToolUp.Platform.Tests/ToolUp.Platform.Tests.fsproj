@@ -1680,6 +1680,7 @@
              the handler (deny before the socket, permit byte-identical, the audit row), the
              ambient component carrier, the DI-named client and the report's eleventh section. -->
         <Compile Include="InProcess\EgressPolicyTests.fs" />
+        <Compile Include="InProcess\RouteEffectContainmentTests.fs" />
         <!-- Phase 63 — StaticCorpus MessagePack round-trip + determinism
              (63.B/63.G) and the IRetrievalPipeline contract (63.H). -->
         <Compile Include="RAG\StaticCorpusContract.fs" />

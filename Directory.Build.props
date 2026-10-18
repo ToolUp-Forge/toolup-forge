@@ -539,6 +539,21 @@
       `TreeScan` modules; and the generated rule reference
       `docs/platform/analyzer-rules.md`. The package keeps its published id.
       Migration recipe: `docs/migrations/776-toolup-analyzers-rule-set.md`.
+
+      Rides this draft, in the class it already carries (a record gaining a
+      field): Phase 773 holds a declared route to its effects.
+      `ServerModule.RouteEffects` (Platform.Server) retypes that record's
+      constructor (FS0764 for a full literal); `ServerModule.create` sets it
+      to `[]`. Additive (Platform.Server): `ServerModule.withRouteEffect`,
+      `RouteEffectDeclaration` and its module, `RouteEffectObserver`,
+      `RouteEffectScope`, `RouteEffectContext`, `RouteEffectContainment`
+      and `EgressRouteContext`. Additive (Platform.Core):
+      `HostCapabilityBoundary` and `HostCapabilityRegistry.installBoundary`.
+      Behaviour: a module that declares no route effect is byte-identical; a
+      declared route's host-capability invocations go through the Phase 300
+      `guardInvoke` with its envelope, and its outbound calls through
+      platform clients are held to its egress grant. Migration recipe:
+      `docs/migrations/773-declared-route-effect-containment.md`.
     -->
     <Version>0.28.0</Version>
     <!--
