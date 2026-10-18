@@ -57,6 +57,11 @@ open ToolUp.Platform.VectorKnowledgeTypes
 //      705.B outcome, derived here through `PopulationDisclosure.fold`
 //      (Phase 706's shared partition) rather than through a second
 //      implementation that would agree for a while and then quietly not.
+//      That fold judges the document once, when it is written. Because
+//      the document cites its facts by `factRef`, retrieval re-gates
+//      every one of them on every turn (Phase 775), so a later deny is
+//      honoured without regenerating the document; that read-side check,
+//      not this write-side fold, is the authoritative one.
 //
 // **Off by default (GP 13), behind a double gate.** A deployment opts in
 // with `FactsCompose.withCoverageNarratives`; without it nothing is

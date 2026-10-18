@@ -533,7 +533,10 @@ type RetrievalBudgets = {
     /// overrun or fault the turn proceeds without pushed facts and the
     /// trace carries `FactsDegraded:<TimedOut|Failed>`. Fail-closed by
     /// construction: a fact whose disclosure check did not complete is
-    /// absent, never admitted.
+    /// absent, never admitted. The same bound applies, separately, to the
+    /// derived-disclosure check (Phase 775): on overrun or fault every
+    /// chunk citing facts is dropped and the trace carries
+    /// `DerivedDisclosureDegraded:<TimedOut|Failed>`.
     FactStage: System.TimeSpan
 }
 
@@ -661,6 +664,36 @@ let private factScopeFor (scopes: VectorScope list) : VectorScope =
         | User _ -> true
         | _ -> false)
     |> Option.defaultValue Deployment
+
+// ─── Derived-corpus disclosure (Phase 775) ────────────────────────
+
+/// The fact ids a chunk cites through its `_factRefs` metadata (Phase
+/// 521.D) — the comma-separated list narrative-commit stamps. Empty for a
+/// chunk with no refs. Read by the derived-disclosure stage (which re-gates
+/// the cited facts) and the fact→narrative join boost (which prefers the
+/// chunks citing a fact resolved this turn).
+let private factRefsOf (m: VectorMatch) : string list =
+    match m.Metadata.TryFind ChunkMetadata.FactRefsKey with
+    | Some csv ->
+        csv.Split(
+            ',',
+            System.StringSplitOptions.RemoveEmptyEntries
+            ||| System.StringSplitOptions.TrimEntries
+        )
+        |> List.ofArray
+    | None -> []
+
+/// Whether a chunk survives the derived-disclosure stage: a chunk with no
+/// refs always does; a chunk with refs does only when EVERY cited fact has
+/// an affirmative `FactDisclosable` verdict. A denied ref, or one missing
+/// from the verdict map, drops the chunk (default-deny, the 525.B posture).
+let private derivedChunkDisclosed (verdicts: Map<string, FactDisclosureVerdict>) (m: VectorMatch) : bool =
+    factRefsOf m
+    |> List.forall (fun factId ->
+        match verdicts.TryFind factId with
+        | Some FactDisclosable -> true
+        | Some(FactNotDisclosable _)
+        | None -> false)
 
 type RetrievalPipeline
     (
@@ -1278,6 +1311,81 @@ type RetrievalPipeline
                                 true
                             | Some value -> allowed.Contains(ChunkOrigin.fromMetadataValue value))
 
+                // Phase 775 — derived-corpus disclosure, re-gated at retrieval.
+                // A chunk DERIVED from facts (a narrative committed with
+                // `_factRefs`, Phase 521.D — the coverage narratives among
+                // them) was judged for disclosure once, at commit (525.D, the
+                // `FactNarrativePublication` surface). That judgement is the
+                // cheap first filter and it stays; THIS one is authoritative:
+                // a policy tightened, a fact reclassified or superseded under
+                // a restricted lineage, a purpose taxonomy declared since the
+                // chunk was written — each is honoured here without
+                // re-indexing. Every distinct fact id cited across the
+                // candidate pool goes through ONE gate call at the
+                // `FactRetrieval` surface, in the request's resolved fact
+                // scope (the scope 525.B hands the gate above), and a chunk
+                // with ANY ref lacking an affirmative verdict is dropped —
+                // absent, not annotated. The pool is already top-K-bounded,
+                // and refs are deduped, so one fact cited by fifty chunks is
+                // one verdict. Applied after the scoping filters (the pool the
+                // caller may see) and before normalisation and rerank, so no
+                // ranking stage ever sees a dropped chunk. No gate wired, or
+                // no chunk carrying refs ⇒ the pool is untouched and no stage
+                // is recorded (GP 11). Under a budget the check shares the
+                // fact stage's bound; a check that overruns or faults drops
+                // every derived chunk (fail-closed) and says so.
+                let! filtered =
+                    match disclosureGate with
+                    | None -> async.Return filtered
+                    | Some gate ->
+                        match filtered |> List.collect factRefsOf |> List.distinct with
+                        | [] -> async.Return filtered
+                        | cited -> async {
+                            let sw = System.Diagnostics.Stopwatch.StartNew()
+                            let check = gate.Check(request.FactScope, ctx.UserId, FactRetrieval, cited)
+
+                            let! verdicts =
+                                match budgets with
+                                | None -> async {
+                                    let! v = check
+                                    return Ok v
+                                  }
+                                | Some b -> async {
+                                    let bounded = async {
+                                        let! child = Async.StartChild(check, max 1 (int b.FactStage.TotalMilliseconds))
+                                        return! child
+                                    }
+
+                                    match! Async.Catch bounded with
+                                    | Choice1Of2 v -> return Ok v
+                                    | Choice2Of2(:? System.TimeoutException) ->
+                                        return Error "DerivedDisclosureDegraded:TimedOut"
+                                    | Choice2Of2 _ -> return Error "DerivedDisclosureDegraded:Failed"
+                                  }
+
+                            sw.Stop()
+                            timings.Add("DerivedDisclosure", sw.Elapsed.TotalMilliseconds)
+
+                            let admitted =
+                                match verdicts with
+                                | Ok v -> filtered |> List.filter (derivedChunkDisclosed v)
+                                | Error mark ->
+                                    stages.Add mark
+                                    filtered |> List.filter (fun m -> List.isEmpty (factRefsOf m))
+
+                            if admitted.Length < filtered.Length then
+                                stages.Add "DerivedDisclosure"
+
+                                stages.Add(
+                                    sprintf
+                                        "DerivedDisclosure:%d/%d"
+                                        (filtered.Length - admitted.Length)
+                                        filtered.Length
+                                )
+
+                            return admitted
+                          }
+
                 // Phase 866 — the space the pool's scores are in, carried
                 // from the stage that produced them (Dense → cosine, RRF →
                 // fused) to every stage below that reads a score: the
@@ -1417,15 +1525,15 @@ type RetrievalPipeline
                         let result =
                             boosted
                             |> List.map (fun m ->
-                                match m.Metadata.TryFind ChunkMetadata.FactRefsKey with
-                                | Some csv when csv.Split(',') |> Array.exists resolvedFactIds.Contains ->
+                                if factRefsOf m |> List.exists resolvedFactIds.Contains then
                                     joined <- true
 
                                     {
                                         m with
                                             Score = m.Score + opts.FactNarrativeJoinBoost * boostScale
                                     }
-                                | _ -> m)
+                                else
+                                    m)
 
                         if joined then
                             stages.Add "FactNarrativeJoin"
