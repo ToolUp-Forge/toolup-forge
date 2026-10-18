@@ -548,7 +548,8 @@
       and `BlobDeclaredDeliveryLedger`, and the shared `DeclaredPrincipal`
       record with its `user` / `userOf` / `missingGrant` readings. Additive
       (DataSources.Common): `DeclaredDelivery` (`seed`, `watchHandler`,
-      `depsFrom`, `withDeclaredDataSources`), `DeclaredDeliveryDeps`,
+      `depsOf`, `startupService`, `withDeclaredDataSources`),
+      `DeclaredDeliveryDeps`, `DeclaredDeliveryServices`,
       `DeclaredSeedReport`, `DeclaredDeliveryRefusal`,
       `DeclaredDataSourcesRefused`, `WatchedObject`, `Files.listObjects` and
       `IWatchableFileSource`, which the Csv, Excel and Parquet connectors now

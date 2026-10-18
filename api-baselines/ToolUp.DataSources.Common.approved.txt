@@ -56,10 +56,11 @@ ToolUp.DataSources.Common.DeclaredDelivery.DefaultWatchPoll : System.String (lit
 ToolUp.DataSources.Common.DeclaredDelivery.JobKeyTag : System.String (literal)
 ToolUp.DataSources.Common.DeclaredDelivery.SourceTag : System.String (literal)
 ToolUp.DataSources.Common.DeclaredDelivery.WatchJobHandlerName : System.String (literal)
-ToolUp.DataSources.Common.DeclaredDelivery.depsFrom(System.IServiceProvider, System.String, ToolUp.Platform.ILogger) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.DeclaredDeliveryDeps, ToolUp.DataSources.Common.DeclaredDeliveryRefusal]
+ToolUp.DataSources.Common.DeclaredDelivery.depsOf(ToolUp.DataSources.Common.DeclaredDeliveryServices, System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.DeclaredDeliveryDeps, ToolUp.DataSources.Common.DeclaredDeliveryRefusal]
 ToolUp.DataSources.Common.DeclaredDelivery.seed(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DeclaredPrincipalResolver], ToolUp.DataSources.Common.DeclaredDeliveryDeps, ToolUp.Platform.DeclaredDataSources) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.DeclaredSeedReport, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.Common.DeclaredDeliveryRefusal]]]
+ToolUp.DataSources.Common.DeclaredDelivery.startupService(ToolUp.Platform.DeclaredDataSources, System.String, ToolUp.DataSources.Common.DeclaredDeliveryServices) : Microsoft.Extensions.Hosting.IHostedService
 ToolUp.DataSources.Common.DeclaredDelivery.watchHandler(ToolUp.DataSources.Common.DeclaredDeliveryDeps, ToolUp.Platform.ILogger) : ToolUp.Platform.IJobHandler
-ToolUp.DataSources.Common.DeclaredDelivery.withDeclaredDataSources(ToolUp.Platform.DeclaredDataSources, System.String, System.IServiceProvider) : Microsoft.Extensions.Hosting.IHostedService
+ToolUp.DataSources.Common.DeclaredDelivery.withDeclaredDataSources(ToolUp.Platform.DeclaredDataSources, System.String, Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.Extensions.DependencyInjection.IServiceCollection
 ToolUp.DataSources.Common.DeclaredDeliveryDeps (class)
 ToolUp.DataSources.Common.DeclaredDeliveryDeps..ctor(ToolUp.Platform.IDataSourceConfigStore, ToolUp.Platform.IJobScheduler, ToolUp.Platform.IDataIngestor, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataSource], ToolUp.Platform.IDeclaredDeliveryLedger, System.String)
 ToolUp.DataSources.Common.DeclaredDeliveryDeps.Configs : ToolUp.Platform.IDataSourceConfigStore { get }
@@ -156,6 +157,15 @@ ToolUp.DataSources.Common.DeclaredDeliveryRefusal+UnknownConnector.kind : System
 ToolUp.DataSources.Common.DeclaredDeliveryRefusal+UnknownConnector.sourceId : System.String { get }
 ToolUp.DataSources.Common.DeclaredDeliveryRefusalModule (class)
 ToolUp.DataSources.Common.DeclaredDeliveryRefusalModule.describe(ToolUp.DataSources.Common.DeclaredDeliveryRefusal) : System.String
+ToolUp.DataSources.Common.DeclaredDeliveryServices (class)
+ToolUp.DataSources.Common.DeclaredDeliveryServices..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IDataSourceConfigStore], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IDataIngestor], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BlobStorage+IBlobStorage], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataSource], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DeclaredPrincipalResolver], ToolUp.Platform.ILogger)
+ToolUp.DataSources.Common.DeclaredDeliveryServices.Configs : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IDataSourceConfigStore] { get }
+ToolUp.DataSources.Common.DeclaredDeliveryServices.Connectors : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataSource] { get }
+ToolUp.DataSources.Common.DeclaredDeliveryServices.Ingestor : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IDataIngestor] { get }
+ToolUp.DataSources.Common.DeclaredDeliveryServices.Logger : ToolUp.Platform.ILogger { get }
+ToolUp.DataSources.Common.DeclaredDeliveryServices.Resolver : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DeclaredPrincipalResolver] { get }
+ToolUp.DataSources.Common.DeclaredDeliveryServices.Scheduler : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IJobScheduler] { get }
+ToolUp.DataSources.Common.DeclaredDeliveryServices.Storage : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BlobStorage+IBlobStorage] { get }
 ToolUp.DataSources.Common.DeclaredSeedReport (class)
 ToolUp.DataSources.Common.DeclaredSeedReport..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]])
 ToolUp.DataSources.Common.DeclaredSeedReport.Retired : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }

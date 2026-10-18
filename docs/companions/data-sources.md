@@ -93,10 +93,14 @@ let declared: DeclaredDataSources = {
     ]
 }
 
-services.AddSingleton<IHostedService>(
-    Func<IServiceProvider, IHostedService>(
-        DeclaredDelivery.withDeclaredDataSources declared DeclaredDelivery.DefaultWatchPoll))
+services
+|> DeclaredDelivery.withDeclaredDataSources declared DeclaredDelivery.DefaultWatchPoll
+|> ignore
 ```
+
+`withDeclaredDataSources` registers the startup service; its registration factory resolves the config store,
+ingestor, scheduler, blob storage, connectors and `DeclaredPrincipalResolver` from the deployment's container.
+`DeclaredDelivery.startupService` builds the same service over values a composition already holds.
 
 **The principal is resolved, never trusted.** At startup the deployment's own scope resolver resolves it
 (`DeclaredPrincipalResolver`, the same resolver a standing report subscription runs through), the source's config

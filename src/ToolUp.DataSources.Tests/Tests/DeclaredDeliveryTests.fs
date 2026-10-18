@@ -378,10 +378,14 @@ let tests =
             services.AddSingleton<IBlobStorage>(world.Blobs) |> ignore
             services.AddSingleton<IDataSource>(world.Csv) |> ignore
             services.AddSingleton<DeclaredPrincipalResolver>(world.Resolver) |> ignore
-            let sp = services.BuildServiceProvider() :> IServiceProvider
+
+            services
+            |> DeclaredDelivery.withDeclaredDataSources declared DeclaredDelivery.DefaultWatchPoll
+            |> ignore
 
             let service =
-                DeclaredDelivery.withDeclaredDataSources declared DeclaredDelivery.DefaultWatchPoll sp
+                services.BuildServiceProvider().GetServices<Microsoft.Extensions.Hosting.IHostedService>()
+                |> Seq.exactlyOne
 
             let raised =
                 try

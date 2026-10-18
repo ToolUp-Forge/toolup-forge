@@ -3,7 +3,8 @@
 **Ships in:** ToolUp.Platform.Server (`DataSourceDelivery`, `DeclaredDataSource`, `DeclaredDataSources`,
 `IDeclaredDeliveryLedger`, `DataSourceConfigStore.declaredDeliveryLedger`, and the shared `DeclaredPrincipal`
 record with its `DeclaredPrincipal.user` / `userOf` / `missingGrant` readings), ToolUp.DataSources.Common
-(`DeclaredDelivery.seed` / `watchHandler` / `withDeclaredDataSources`, `DeclaredDeliveryRefusal`,
+(`DeclaredDelivery.seed` / `watchHandler` / `depsOf` / `startupService` / `withDeclaredDataSources`,
+`DeclaredDeliveryDeps`, `DeclaredDeliveryServices`, `DeclaredSeedReport`, `DeclaredDeliveryRefusal`,
 `DeclaredDataSourcesRefused`, `WatchedObject`, `Files.listObjects`, `IWatchableFileSource`), and the Csv, Excel and
 Parquet connectors, which now implement `IWatchableFileSource`. Rides the 0.28.0 draft. Additive only.
 
@@ -45,9 +46,9 @@ a source a request saves still arrives by upload.
   +        { Source = dropFolder; Delivery = DataSourceDelivery.Watched("incoming", "loader") }
   +    ]
   +}
-  +services.AddSingleton<IHostedService>(
-  +    Func<IServiceProvider, IHostedService>(
-  +        DeclaredDelivery.withDeclaredDataSources declared DeclaredDelivery.DefaultWatchPoll))
+  +services
+  +|> DeclaredDelivery.withDeclaredDataSources declared DeclaredDelivery.DefaultWatchPoll
+  +|> ignore
   ```
 
   The deployment must compose data ingestion (`ServerConfig.DataIngestion = EnabledDataIngestion`) and the job

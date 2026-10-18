@@ -160,6 +160,26 @@ type DeclaredSeedReport = {
     Retired: (string * DataSourceId) list
 }
 
+/// What the declared-delivery startup service takes from the deployment's
+/// composition (Phase 1015). `None` (or an empty list) for a part the
+/// deployment does not compose.
+type DeclaredDeliveryServices = {
+    /// The deployment's config store (composed with data ingestion).
+    Configs: IDataSourceConfigStore option
+    /// The ingestion path (composed with data ingestion).
+    Ingestor: IDataIngestor option
+    /// The job scheduler.
+    Scheduler: IJobScheduler option
+    /// The deployment's blob storage, which holds the ledger.
+    Storage: BlobStorage.IBlobStorage option
+    /// The composed connectors.
+    Connectors: IDataSource list
+    /// The platform's declared-principal resolver.
+    Resolver: DeclaredPrincipalResolver option
+    /// Where a watch logs an object refused for its content.
+    Logger: ILogger
+}
+
 /// A declaration that passed every check, ready to write.
 type private CheckedSource = {
     Declared: DeclaredDataSource
@@ -773,54 +793,71 @@ module DeclaredDelivery =
 
     // ── Composition ──────────────────────────────────────────────────
 
-    let private resolveService<'T when 'T: not struct> (sp: IServiceProvider) : 'T option =
-        match sp.GetService(typeof<'T>) with
-        | :? 'T as service -> Some service
-        | _ -> None
-
-    /// The deployment's declared-delivery deps out of its service
-    /// provider, or the part it does not compose. Registers the watch
-    /// handler with the scheduler (resolving the ingestor first registers
-    /// the platform's own ingestion handler).
-    let depsFrom
-        (sp: IServiceProvider)
+    /// The declared-delivery deps over what the deployment composes, or the
+    /// part it does not compose. Registers the watch poll's handler with the
+    /// scheduler; the platform's own ingestion handler is registered when
+    /// the platform builds the ingestor.
+    let depsOf
+        (composed: DeclaredDeliveryServices)
         (watchPoll: string)
-        (logger: ILogger)
         : Result<DeclaredDeliveryDeps, DeclaredDeliveryRefusal> =
-        match
-            resolveService<IDataSourceConfigStore> sp,
-            resolveService<IDataIngestor> sp,
-            resolveService<IJobScheduler> sp
-        with
-        | None, _, _
-        | _, None, _ -> Error(DeliveryUnavailable "data ingestion (ServerConfig.DataIngestion = EnabledDataIngestion)")
-        | _, _, None -> Error(DeliveryUnavailable "job scheduler")
-        | Some configs, Some ingestor, Some scheduler ->
-            match resolveService<BlobStorage.IBlobStorage> sp with
-            | None -> Error(DeliveryUnavailable "blob storage")
-            | Some storage ->
-                let deps = {
-                    Configs = configs
-                    Scheduler = scheduler
-                    Ingestor = ingestor
-                    Connectors = sp.GetServices(typeof<IDataSource>) |> Seq.cast<IDataSource> |> List.ofSeq
-                    Ledger = DataSourceConfigStore.declaredDeliveryLedger storage
-                    WatchPoll = watchPoll
+        match composed.Configs, composed.Ingestor, composed.Scheduler, composed.Storage with
+        | None, _, _, _
+        | _, None, _, _ ->
+            Error(DeliveryUnavailable "data ingestion (ServerConfig.DataIngestion = EnabledDataIngestion)")
+        | _, _, None, _ -> Error(DeliveryUnavailable "job scheduler")
+        | _, _, _, None -> Error(DeliveryUnavailable "blob storage")
+        | Some configs, Some ingestor, Some scheduler, Some storage ->
+            let deps = {
+                Configs = configs
+                Scheduler = scheduler
+                Ingestor = ingestor
+                Connectors = composed.Connectors
+                Ledger = DataSourceConfigStore.declaredDeliveryLedger storage
+                WatchPoll = watchPoll
+            }
+
+            scheduler.RegisterHandler(WatchJobHandlerName, watchHandler deps composed.Logger)
+            Ok deps
+
+    /// The startup service over what the deployment composes: at start it
+    /// seeds `declared` through the platform's `DeclaredPrincipalResolver`,
+    /// and a refusal FAILS the start (`DeclaredDataSourcesRefused`) naming
+    /// every source and what it lacks. A deployment declaring nothing starts
+    /// whatever it composes.
+    let startupService
+        (declared: DeclaredDataSources)
+        (watchPoll: string)
+        (composed: DeclaredDeliveryServices)
+        : Microsoft.Extensions.Hosting.IHostedService =
+        let deps = depsOf composed watchPoll
+
+        { new Microsoft.Extensions.Hosting.IHostedService with
+            member _.StartAsync _ =
+                async {
+                    match deps with
+                    | Error _ when List.isEmpty declared.Sources -> ()
+                    | Error refusal -> return raise (DeclaredDataSourcesRefused [ refusal ])
+                    | Ok deps ->
+                        match! seed composed.Resolver deps declared with
+                        | Ok _ -> ()
+                        | Error refusals -> return raise (DeclaredDataSourcesRefused refusals)
                 }
+                |> Async.StartAsTask
+                :> System.Threading.Tasks.Task
 
-                scheduler.RegisterHandler(WatchJobHandlerName, watchHandler deps logger)
-                Ok deps
+            member _.StopAsync _ =
+                System.Threading.Tasks.Task.CompletedTask
+        }
 
-    /// Compose a deployment's declared data sources. Returns the startup
-    /// service the composition root registers; at start it seeds through
-    /// the platform's `DeclaredPrincipalResolver`, and a refusal FAILS the
-    /// start (`DeclaredDataSourcesRefused`) naming every source and what it
-    /// lacks:
+    /// Compose a deployment's declared data sources: registers the startup
+    /// service, resolving what it needs from the deployment's container in
+    /// its registration factory.
     ///
     /// ```fsharp skip=fragment
-    /// services.AddSingleton<IHostedService>(
-    ///     Func<IServiceProvider, IHostedService>(
-    ///         DeclaredDelivery.withDeclaredDataSources declared DeclaredDelivery.DefaultWatchPoll))
+    /// services
+    /// |> DeclaredDelivery.withDeclaredDataSources declared DeclaredDelivery.DefaultWatchPoll
+    /// |> ignore
     /// ```
     ///
     /// Removing a declared source is declaring the set without it: the
@@ -829,36 +866,35 @@ module DeclaredDelivery =
     let withDeclaredDataSources
         (declared: DeclaredDataSources)
         (watchPoll: string)
-        : IServiceProvider -> Microsoft.Extensions.Hosting.IHostedService =
-        fun sp ->
-            let logger =
-                match sp.GetService(typeof<ILogger>) with
-                | :? ILogger as logger -> logger
-                | _ -> ConsoleLogger.ConsoleLogger() :> ILogger
-
-            let deps = depsFrom sp watchPoll logger
-
-            { new Microsoft.Extensions.Hosting.IHostedService with
-                member _.StartAsync _ =
-                    let resolver =
-                        match sp.GetService(typeof<DeclaredPrincipalResolver>) with
-                        | :? DeclaredPrincipalResolver as r -> Some r
-                        | _ -> None
-
-                    async {
-                        let nothingDeclared = List.isEmpty declared.Sources
-
-                        match deps with
-                        | Error _ when nothingDeclared -> ()
-                        | Error refusal -> return raise (DeclaredDataSourcesRefused [ refusal ])
-                        | Ok deps ->
-                            match! seed resolver deps declared with
-                            | Ok _ -> ()
-                            | Error refusals -> return raise (DeclaredDataSourcesRefused refusals)
-                    }
-                    |> Async.StartAsTask
-                    :> System.Threading.Tasks.Task
-
-                member _.StopAsync _ =
-                    System.Threading.Tasks.Task.CompletedTask
+        (services: IServiceCollection)
+        : IServiceCollection =
+        services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun (sp: IServiceProvider) ->
+            let composed: DeclaredDeliveryServices = {
+                Configs =
+                    match sp.GetService(typeof<IDataSourceConfigStore>) with
+                    | :? IDataSourceConfigStore as store -> Some store
+                    | _ -> None
+                Ingestor =
+                    match sp.GetService(typeof<IDataIngestor>) with
+                    | :? IDataIngestor as ingestor -> Some ingestor
+                    | _ -> None
+                Scheduler =
+                    match sp.GetService(typeof<IJobScheduler>) with
+                    | :? IJobScheduler as scheduler -> Some scheduler
+                    | _ -> None
+                Storage =
+                    match sp.GetService(typeof<BlobStorage.IBlobStorage>) with
+                    | :? BlobStorage.IBlobStorage as storage -> Some storage
+                    | _ -> None
+                Connectors = sp.GetServices(typeof<IDataSource>) |> Seq.cast<IDataSource> |> List.ofSeq
+                Resolver =
+                    match sp.GetService(typeof<DeclaredPrincipalResolver>) with
+                    | :? DeclaredPrincipalResolver as resolver -> Some resolver
+                    | _ -> None
+                Logger =
+                    match sp.GetService(typeof<ILogger>) with
+                    | :? ILogger as logger -> logger
+                    | _ -> ConsoleLogger.ConsoleLogger() :> ILogger
             }
+
+            startupService declared watchPoll composed)
