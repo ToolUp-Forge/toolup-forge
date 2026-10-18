@@ -513,6 +513,16 @@
       no surface change - the push loop is internal): every `Publish` push
       passes a push timeout, a failed package push is retried with backoff, and a
       persistent failure names every package left unpushed.
+
+      Rides this draft, additive (Remoting.Analyzers, an analyser-only package
+      with no lib surface): Phase 776 adds the containment rules TUA001 to
+      TUA003 (container resolution outside service registration, an HttpClient
+      built without the egress handler, Async.RunSynchronously outside an
+      entry point) as a second analyser, `ToolUpContainment`, beside the
+      unchanged TUR0001 / TUR0002 pair; the `Rules`, `ContainmentRules` and
+      `TreeScan` modules; and the generated rule reference
+      `docs/platform/analyzer-rules.md`. The package keeps its published id.
+      Migration recipe: `docs/migrations/776-toolup-analyzers-rule-set.md`.
     -->
     <Version>0.28.0</Version>
     <!--

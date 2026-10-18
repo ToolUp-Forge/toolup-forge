@@ -4,8 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>true</IsPackable>
     <PackageId>ToolUp.Remoting.Analyzers</PackageId>
-    <Description>FSharp.Analyzers.SDK analyzer for ToolUp.Remoting API records: flags methods missing a Phase 69d authorisation classification (TUR0001) or — opt-in — an audit annotation (TUR0002), shifting the dispatcher's startup refusal left to an IDE squiggle / CI diagnostic. Pure tooling; references nothing at runtime.</Description>
-    <PackageTags>fsharp;analyzer;fsharp-analyzers;remoting;authorization;audit</PackageTags>
+    <Description>The ToolUp SDK's static analyser rule set (FSharp.Analyzers.SDK): Remoting API methods missing an authorisation classification (TUR0001) or, opt-in, an audit annotation (TUR0002); container resolution outside service registration (TUA001); an HttpClient built without the platform egress handler (TUA002); Async.RunSynchronously outside a program entry point (TUA003). Each rule is the compile-time half of a runtime check. Pure tooling; references nothing at runtime.</Description>
+    <PackageTags>fsharp;analyzer;fsharp-analyzers;remoting;authorization;audit;security;egress</PackageTags>
     <!--
       Analyzer-package shape (FSharp.Analyzers.SDK convention): the analyzer
       DLL ships under `analyzers/dotnet/fs`, NOT `lib/`, so the analyzer host
@@ -29,6 +29,12 @@
          code against the runtime AuthClassifier — see Recognition.fs header. -->
     <Compile Include="Recognition.fs" />
     <Compile Include="Extraction.fs" />
+    <!-- Phase 776 — the rule metadata the rule document is rendered from,
+         the TUA containment rules, and the whole-tree run the VerifyAll
+         `Analyzers` leg invokes. -->
+    <Compile Include="Rules.fs" />
+    <Compile Include="ContainmentRules.fs" />
+    <Compile Include="TreeScan.fs" />
     <Compile Include="Analyzer.fs" />
   </ItemGroup>
   <ItemGroup>
