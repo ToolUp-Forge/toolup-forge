@@ -271,6 +271,19 @@ module DeploymentVerification =
     [<Literal>]
     let RemotingArgumentDecoderSection = "remoting-argument-decoders"
 
+    /// Phase 771 — the thirteenth section: the hardening baseline. Each
+    /// request-edge control a hardened host carries (CSP, HSTS, the static
+    /// security headers, credentialed CORS, the unknown-config-key refusal,
+    /// the configuration manifest, rate limiting, forwarded-headers trust
+    /// behind the cookie `Secure` flag) as observed on the composed pipeline
+    /// at boot, with a declared floor the verified profile refuses below.
+    ///
+    /// The only section whose subject is the request edge as the composed
+    /// pipeline actually serves it, read off a probe rather than off the
+    /// configuration that asked for it.
+    [<Literal>]
+    let HostingBaselineSection = "hardening-baseline"
+
     /// One section of the report: what was checked, what the check said,
     /// and any per-item findings the verdict summarises.
     ///

@@ -168,11 +168,16 @@ let private configSectionIds = [ ConfigConformanceSection; AcceptedAcknowledgeme
 /// (`IRemotingArgumentDecoderEvidence`), so it too reads `not-composed`
 /// for every arrangement in this pack; `JsonDecoderAlgebraTests` drives
 /// it directly against the gatherer.
+/// Phase 771 joins this list by the same route again: the hardening
+/// baseline arrives through its own sibling interface
+/// (`IHostingBaselineEvidence`), so it reads `not-composed` for every
+/// arrangement in this pack; `HostingBaselineTests` drives it.
 let private chainSectionIds = [
     EvidenceChainSection
     RemotingDecoderSection
     EgressSection
     RemotingArgumentDecoderSection
+    HostingBaselineSection
 ]
 
 let private allSectionIds = evidenceSectionIds @ configSectionIds @ chainSectionIds
@@ -376,6 +381,19 @@ let private sampleChain: EvidenceChain = {
     Enumeration = EnumerationCompleteness.Complete
 }
 
+let private sampleHostingBaseline: HostingBaselineIntegrity = {
+    HostingProfile = "verified"
+    HostingVerdict = HostingBaselineVerdict.Refused
+    HostingBinding = [ "http://0.0.0.0:5000" ]
+    HostingControls = [
+        {
+            HostingControlId = "strict-transport-security"
+            HostingInFloor = true
+            HostingObserved = HostingControlState.Unenforced "sample"
+        }
+    ]
+}
+
 /// The walker the chain packs bind: answers the same chain every time.
 let private sampleChainWalk: unit -> Async<Result<EvidenceChain, EvidenceChainError>> =
     fun () -> async { return Ok sampleChain }
@@ -388,6 +406,7 @@ let private evidenceWithAllFacets () =
     |> DeploymentVerificationEvidence.withSeamAuthority (Some healthySeamAuthority)
     |> DeploymentVerificationEvidence.withEvidenceChain (Some sampleChainWalk)
     |> DeploymentVerificationEvidence.withEgress (Some sampleEgress)
+    |> DeploymentVerificationEvidence.withHostingBaseline (Some sampleHostingBaseline)
 
 let private runReport (evidence: IDeploymentVerificationEvidence) (auditLog: IAuditLog option) =
     DeploymentVerificationReport.run (servicesWith (Some evidence) auditLog) "probe"
@@ -2330,5 +2349,101 @@ let tests =
             IEgressEvidenceContract.tests "DeploymentVerificationEvidence.withEgress" (Some sampleEgress) (fun () ->
                 DeploymentVerificationEvidence.none
                 |> DeploymentVerificationEvidence.withEgress (Some sampleEgress))
+        ]
+
+        // ── Phase 771 — the hardening-baseline seam carries a contract
+        //    pack, and the new wither carries every other facet ─────
+        //
+        // `IHostingBaselineEvidence` bound against all nine producers
+        // (`none`, `create`, the seven withers), each wither applied to a
+        // base carrying every facet; and the five older facet packs bound
+        // through `withHostingBaseline`, so the newest wither cannot drop a
+        // member it does not name either.
+        testList "Phase 771 — the hardening-baseline seam carries a contract pack" [
+
+            IHostingBaselineEvidenceContract.tests "DeploymentVerificationEvidence.none" None (fun () ->
+                DeploymentVerificationEvidence.none)
+
+            IHostingBaselineEvidenceContract.tests "DeploymentVerificationEvidence.create (no facets)" None (fun () ->
+                DeploymentVerificationEvidence.create None None None None None)
+
+            IHostingBaselineEvidenceContract.tests
+                "withGroundingContinuity carries HostingBaseline through"
+                (Some sampleHostingBaseline)
+                (fun () ->
+                    evidenceWithAllFacets ()
+                    |> DeploymentVerificationEvidence.withGroundingContinuity None)
+
+            IHostingBaselineEvidenceContract.tests
+                "withSeamAuthority carries HostingBaseline through"
+                (Some sampleHostingBaseline)
+                (fun () ->
+                    evidenceWithAllFacets ()
+                    |> DeploymentVerificationEvidence.withSeamAuthority None)
+
+            IHostingBaselineEvidenceContract.tests
+                "withEvidenceChain carries HostingBaseline through"
+                (Some sampleHostingBaseline)
+                (fun () ->
+                    evidenceWithAllFacets ()
+                    |> DeploymentVerificationEvidence.withEvidenceChain None)
+
+            IHostingBaselineEvidenceContract.tests
+                "withRemotingDecoders carries HostingBaseline through"
+                (Some sampleHostingBaseline)
+                (fun () ->
+                    evidenceWithAllFacets ()
+                    |> DeploymentVerificationEvidence.withRemotingDecoders None)
+
+            IHostingBaselineEvidenceContract.tests
+                "withRemotingArgumentDecoders carries HostingBaseline through"
+                (Some sampleHostingBaseline)
+                (fun () ->
+                    evidenceWithAllFacets ()
+                    |> DeploymentVerificationEvidence.withRemotingArgumentDecoders None)
+
+            IHostingBaselineEvidenceContract.tests
+                "withEgress carries HostingBaseline through"
+                (Some sampleHostingBaseline)
+                (fun () -> evidenceWithAllFacets () |> DeploymentVerificationEvidence.withEgress None)
+
+            IHostingBaselineEvidenceContract.tests
+                "DeploymentVerificationEvidence.withHostingBaseline"
+                (Some sampleHostingBaseline)
+                (fun () ->
+                    DeploymentVerificationEvidence.none
+                    |> DeploymentVerificationEvidence.withHostingBaseline (Some sampleHostingBaseline))
+
+            ISeamAuthorityEvidenceContract.tests
+                "withHostingBaseline carries SeamAuthority through"
+                (Some healthySeamAuthority)
+                (fun () ->
+                    evidenceWithAllFacets ()
+                    |> DeploymentVerificationEvidence.withHostingBaseline None)
+
+            IEvidenceChainEvidenceContract.tests
+                "withHostingBaseline carries EvidenceChain through"
+                (Some(Ok sampleChain))
+                (fun () ->
+                    evidenceWithAllFacets ()
+                    |> DeploymentVerificationEvidence.withHostingBaseline None)
+
+            IEgressEvidenceContract.tests "withHostingBaseline carries Egress through" (Some sampleEgress) (fun () ->
+                evidenceWithAllFacets ()
+                |> DeploymentVerificationEvidence.withHostingBaseline None)
+
+            IRemotingDecoderEvidenceContract.tests
+                "withHostingBaseline carries RemotingDecoders through"
+                (Some sampleRemotingDecoders)
+                (fun () ->
+                    evidenceWithAllFacets ()
+                    |> DeploymentVerificationEvidence.withHostingBaseline None)
+
+            IRemotingArgumentDecoderEvidenceContract.tests
+                "withHostingBaseline carries RemotingArgumentDecoders through"
+                (Some sampleRemotingArgumentDecoders)
+                (fun () ->
+                    evidenceWithAllFacets ()
+                    |> DeploymentVerificationEvidence.withHostingBaseline None)
         ]
     ]
