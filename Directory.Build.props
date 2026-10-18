@@ -513,6 +513,22 @@
       no surface change - the push loop is internal): every `Publish` push
       passes a push timeout, a failed package push is retried with backoff, and a
       persistent failure names every package left unpushed.
+
+      Rides this draft, in the class it already carries (a record gaining a
+      field): Phase 770 gives seam authority a runtime edge.
+      `ComponentSeamAuthority.ObservedReach: SeamId list option`
+      (Platform.Server) retypes that record's constructor (FS0764 for a full
+      literal); `None` reads as before. Additive (Platform.Server):
+      `SeamConfinement`, `SeamAwareServiceProvider` (the type and its
+      `confineHandler(s)` / `confineTool(s)` module), `SeamReachObserver`,
+      `SeamAuthorityEnforcement.confine` / `confineAudited`,
+      `DeploymentVerificationEvidence.withObservedSeamReach`,
+      `DeploymentVerificationReport.SeamAuthorityObservedBeyondDerived` and
+      `ModuleSurface.substrateSeams`. Behaviour: `ServerApp.addModule` now
+      runs each module's route handlers and AI tools through the seam-aware
+      provider, which is a passthrough until a composition calls `confine`;
+      a deployment that does not is byte-identical. Migration recipe:
+      `docs/migrations/770-seam-aware-service-provider.md`.
     -->
     <Version>0.28.0</Version>
     <!--

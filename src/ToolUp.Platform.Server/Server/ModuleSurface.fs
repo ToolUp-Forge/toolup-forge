@@ -491,39 +491,53 @@ module ModuleSurface =
     /// registration field, so a module that registers an AI tool needs an
     /// `IAIProvider` by construction, and a module that registers nothing
     /// needs nothing.
+    ///
+    /// The rules are one table — field, whether the module declared it,
+    /// the interfaces it implies — so the projection below and the
+    /// vocabulary `substrateSeams` exposes are read off the same rows and
+    /// cannot disagree.
+    let private serverNeedRules (m: ServerModule) : (string * bool * string list) list = [
+        nameof m.DataTypes, not m.DataTypes.IsEmpty, [ "IBlobStorage" ]
+        nameof m.VectorisationHandlers, not m.VectorisationHandlers.IsEmpty, [ "IEmbeddingProvider"; "IVectorStore" ]
+        nameof m.ConfigSchema, m.ConfigSchema.IsSome, [ "IConfigStore" ]
+        // Phase 10b — a declared migrator needs somewhere to read and
+        // write the documents it upgrades. Usually redundant with the
+        // line above (a module that versions a schema declares one),
+        // but not always: a deployment may register a migrator for a
+        // reserved `_platform*` key no ServerModule owns a schema for.
+        // `distinctBy` in `serverNeeds` dedupes the common case.
+        nameof m.ConfigMigrations, not m.ConfigMigrations.IsEmpty, [ "IConfigStore" ]
+        nameof m.QueryHandlers, not m.QueryHandlers.IsEmpty, [ "IModuleQueryBus" ]
+        nameof m.AITools, not m.AITools.IsEmpty, [ "IAIProvider" ]
+        nameof m.MetricDefinitions, not m.MetricDefinitions.IsEmpty, [ "IMetricsSink" ]
+        nameof m.JobHandlers, not m.JobHandlers.IsEmpty, [ "IJobScheduler" ]
+        nameof m.BindingStamp, m.BindingStamp.IsSome, [ "IModuleBindingVerifier" ]
+        nameof m.Metrics, not m.Metrics.IsEmpty, [ "IFactStore" ]
+        nameof m.Subjects, not m.Subjects.IsEmpty, [ "IFactStore" ]
+        nameof m.FactTables, not m.FactTables.IsEmpty, [ "IFactTableWriter" ]
+    ]
+
     let private serverNeeds (m: ServerModule) : ModuleSurfaceEntry list =
-        let implied field (declared: bool) (interfaces: string list) =
+        serverNeedRules m
+        |> List.collect (fun (field, declared, interfaces) ->
             if not declared then
                 []
             else
                 interfaces
                 |> List.map (fun iface ->
-                    entry field "substrate" iface ("implied by " + field) (Some(ComponentId.forCompanionSlot iface)))
-
-        List.concat [
-            implied (nameof m.DataTypes) (not m.DataTypes.IsEmpty) [ "IBlobStorage" ]
-            implied (nameof m.VectorisationHandlers) (not m.VectorisationHandlers.IsEmpty) [
-                "IEmbeddingProvider"
-                "IVectorStore"
-            ]
-            implied (nameof m.ConfigSchema) m.ConfigSchema.IsSome [ "IConfigStore" ]
-            // Phase 10b — a declared migrator needs somewhere to read and
-            // write the documents it upgrades. Usually redundant with the
-            // line above (a module that versions a schema declares one),
-            // but not always: a deployment may register a migrator for a
-            // reserved `_platform*` key no ServerModule owns a schema for.
-            // `distinctBy` at the end of this list dedupes the common case.
-            implied (nameof m.ConfigMigrations) (not m.ConfigMigrations.IsEmpty) [ "IConfigStore" ]
-            implied (nameof m.QueryHandlers) (not m.QueryHandlers.IsEmpty) [ "IModuleQueryBus" ]
-            implied (nameof m.AITools) (not m.AITools.IsEmpty) [ "IAIProvider" ]
-            implied (nameof m.MetricDefinitions) (not m.MetricDefinitions.IsEmpty) [ "IMetricsSink" ]
-            implied (nameof m.JobHandlers) (not m.JobHandlers.IsEmpty) [ "IJobScheduler" ]
-            implied (nameof m.BindingStamp) m.BindingStamp.IsSome [ "IModuleBindingVerifier" ]
-            implied (nameof m.Metrics) (not m.Metrics.IsEmpty) [ "IFactStore" ]
-            implied (nameof m.Subjects) (not m.Subjects.IsEmpty) [ "IFactStore" ]
-            implied (nameof m.FactTables) (not m.FactTables.IsEmpty) [ "IFactTableWriter" ]
-        ]
+                    entry field "substrate" iface ("implied by " + field) (Some(ComponentId.forCompanionSlot iface))))
         |> List.distinctBy (fun e -> e.Kind, e.Key)
+
+    /// Phase 770 — every substrate seam a server module's registrations
+    /// can imply, as interface names (the Phase 688 `SeamId` id space),
+    /// distinct and ordinal-sorted. The vocabulary the seam-aware service
+    /// provider intercepts: the same seams the Phase 691 derived reach
+    /// and the Phase 693 report speak, read off the same rule rows.
+    let substrateSeams: string list =
+        serverNeedRules (ServerModule.create "_substrate-vocabulary")
+        |> List.collect (fun (_, _, interfaces) -> interfaces)
+        |> List.distinct
+        |> List.sortWith (fun a b -> String.CompareOrdinal(a, b))
 
     let private serverOpaque (m: ServerModule) : ModuleOpaqueSurface list = [
         {
