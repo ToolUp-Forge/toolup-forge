@@ -2385,7 +2385,7 @@ module ServerApp =
 
         match result.Verdict with
         | BootVerificationVerdict.Verified ->
-            BootSealVerified(profile, policy, BootVerificationVerdict.describe result.Verdict)
+            BootSealVerified(profile, policy, BootVerificationVerdict.describe result.Verdict, result.Level)
         | BootVerificationVerdict.VerifiedUnrecorded _ ->
             // Phase 694 — affirmative, and carried as its own case. See
             // `BootSealVerifiedUnrecorded`: rendering it as a plain
@@ -2395,7 +2395,8 @@ module ServerApp =
                 profile,
                 policy,
                 BootVerificationVerdict.describe result.Verdict,
-                BootVerificationVerdict.findings result.Verdict
+                BootVerificationVerdict.findings result.Verdict,
+                result.Level
             )
         | BootVerificationVerdict.Unsealed reason -> BootSealUnsealed(profile, policy, reason)
         | BootVerificationVerdict.VerificationFailed _
@@ -2406,7 +2407,10 @@ module ServerApp =
         // job here is to carry that refusal and its reason. The verdict's
         // own `describe` / `findings` name the retirement, so nothing is
         // lost by not giving it a fourth tier-neutral case.
-        | BootVerificationVerdict.Retired _ ->
+        | BootVerificationVerdict.Retired _
+        // Phase 774 — below the declared verification-level floor is a
+        // rejection too; its finding names the level and the floor.
+        | BootVerificationVerdict.BelowVerificationFloor _ ->
             BootSealRejected(
                 profile,
                 policy,

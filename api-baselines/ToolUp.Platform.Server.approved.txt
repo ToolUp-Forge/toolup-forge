@@ -1059,10 +1059,12 @@ ToolUp.Platform.BootSealIntegrity+BootSealUnsealed.profile : System.String { get
 ToolUp.Platform.BootSealIntegrity+BootSealUnsealed.reason : System.String { get }
 ToolUp.Platform.BootSealIntegrity+BootSealVerified (class)
 ToolUp.Platform.BootSealIntegrity+BootSealVerified.detail : System.String { get }
+ToolUp.Platform.BootSealIntegrity+BootSealVerified.level : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VerificationLevelReading] { get }
 ToolUp.Platform.BootSealIntegrity+BootSealVerified.policy : System.String { get }
 ToolUp.Platform.BootSealIntegrity+BootSealVerified.profile : System.String { get }
 ToolUp.Platform.BootSealIntegrity+BootSealVerifiedUnrecorded (class)
 ToolUp.Platform.BootSealIntegrity+BootSealVerifiedUnrecorded.detail : System.String { get }
+ToolUp.Platform.BootSealIntegrity+BootSealVerifiedUnrecorded.level : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VerificationLevelReading] { get }
 ToolUp.Platform.BootSealIntegrity+BootSealVerifiedUnrecorded.policy : System.String { get }
 ToolUp.Platform.BootSealIntegrity+BootSealVerifiedUnrecorded.profile : System.String { get }
 ToolUp.Platform.BootSealIntegrity+BootSealVerifiedUnrecorded.unrecorded : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
@@ -1072,10 +1074,12 @@ ToolUp.Platform.BootSealIntegrity+Tags.BootSealUnsealed : System.Int32 (literal)
 ToolUp.Platform.BootSealIntegrity+Tags.BootSealVerified : System.Int32 (literal)
 ToolUp.Platform.BootSealIntegrity+Tags.BootSealVerifiedUnrecorded : System.Int32 (literal)
 ToolUp.Platform.BootVerificationOptions (class)
-ToolUp.Platform.BootVerificationOptions..ctor(ToolUp.Platform.CompositionProfile, ToolUp.Platform.BootVerificationPolicy, ToolUp.Platform.IDeployRecordSealer, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SealedDeployRecord], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SealedCompositionBinding], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BuildTranscript], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], System.String)
+ToolUp.Platform.BootVerificationOptions..ctor(ToolUp.Platform.CompositionProfile, ToolUp.Platform.BootVerificationPolicy, ToolUp.Platform.IDeployRecordSealer, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SealedDeployRecord], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SealedCompositionBinding], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.BuildTranscript], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog], System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VerificationLevel], ToolUp.Platform.IRuntimeAttestor)
+ToolUp.Platform.BootVerificationOptions.Attestor : ToolUp.Platform.IRuntimeAttestor { get }
 ToolUp.Platform.BootVerificationOptions.AuditLog : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IAuditLog] { get }
 ToolUp.Platform.BootVerificationOptions.Binding : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SealedCompositionBinding] { get }
 ToolUp.Platform.BootVerificationOptions.Locate : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]] { get }
+ToolUp.Platform.BootVerificationOptions.MinimumLevel : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VerificationLevel] { get }
 ToolUp.Platform.BootVerificationOptions.Policy : ToolUp.Platform.BootVerificationPolicy { get }
 ToolUp.Platform.BootVerificationOptions.Profile : ToolUp.Platform.CompositionProfile { get }
 ToolUp.Platform.BootVerificationOptions.Record : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SealedDeployRecord] { get }
@@ -1111,12 +1115,14 @@ ToolUp.Platform.BootVerificationPreflight.unrecorded(ToolUp.Platform.Composition
 ToolUp.Platform.BootVerificationPreflight.verify(ToolUp.Platform.BootVerificationOptions, ToolUp.Platform.CompositionManifest) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.BootVerificationVerdict]
 ToolUp.Platform.BootVerificationPreflight.verifyWithRetirement(ToolUp.Platform.BootVerificationOptions, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DeployRetirement], ToolUp.Platform.CompositionManifest) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.BootVerificationVerdict]
 ToolUp.Platform.BootVerificationResult (class)
-ToolUp.Platform.BootVerificationResult..ctor(ToolUp.Platform.BootVerificationVerdict, ToolUp.Platform.CompositionProfile, ToolUp.Platform.BootVerificationPolicy, System.Boolean)
+ToolUp.Platform.BootVerificationResult..ctor(ToolUp.Platform.BootVerificationVerdict, ToolUp.Platform.CompositionProfile, ToolUp.Platform.BootVerificationPolicy, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VerificationLevelReading])
+ToolUp.Platform.BootVerificationResult.Level : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VerificationLevelReading] { get }
 ToolUp.Platform.BootVerificationResult.Policy : ToolUp.Platform.BootVerificationPolicy { get }
 ToolUp.Platform.BootVerificationResult.Profile : ToolUp.Platform.CompositionProfile { get }
 ToolUp.Platform.BootVerificationResult.RefusedStart : System.Boolean { get }
 ToolUp.Platform.BootVerificationResult.Verdict : ToolUp.Platform.BootVerificationVerdict { get }
 ToolUp.Platform.BootVerificationVerdict (class)
+ToolUp.Platform.BootVerificationVerdict.IsBelowVerificationFloor : System.Boolean { get }
 ToolUp.Platform.BootVerificationVerdict.IsDrifted : System.Boolean { get }
 ToolUp.Platform.BootVerificationVerdict.IsRetired : System.Boolean { get }
 ToolUp.Platform.BootVerificationVerdict.IsUnsealed : System.Boolean { get }
@@ -1125,11 +1131,15 @@ ToolUp.Platform.BootVerificationVerdict.IsVerified : System.Boolean { get }
 ToolUp.Platform.BootVerificationVerdict.IsVerifiedUnrecorded : System.Boolean { get }
 ToolUp.Platform.BootVerificationVerdict.Tag : System.Int32 { get }
 ToolUp.Platform.BootVerificationVerdict.Verified : ToolUp.Platform.BootVerificationVerdict { get }
+ToolUp.Platform.BootVerificationVerdict+BelowVerificationFloor (class)
+ToolUp.Platform.BootVerificationVerdict+BelowVerificationFloor.floor : ToolUp.Platform.VerificationLevel { get }
+ToolUp.Platform.BootVerificationVerdict+BelowVerificationFloor.reading : ToolUp.Platform.VerificationLevelReading { get }
 ToolUp.Platform.BootVerificationVerdict+Drifted (class)
 ToolUp.Platform.BootVerificationVerdict+Drifted.drift : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.CompositionDrift] { get }
 ToolUp.Platform.BootVerificationVerdict+Retired (class)
 ToolUp.Platform.BootVerificationVerdict+Retired.retirement : ToolUp.Platform.DeployRetirement { get }
 ToolUp.Platform.BootVerificationVerdict+Tags (class)
+ToolUp.Platform.BootVerificationVerdict+Tags.BelowVerificationFloor : System.Int32 (literal)
 ToolUp.Platform.BootVerificationVerdict+Tags.Drifted : System.Int32 (literal)
 ToolUp.Platform.BootVerificationVerdict+Tags.Retired : System.Int32 (literal)
 ToolUp.Platform.BootVerificationVerdict+Tags.Unsealed : System.Int32 (literal)

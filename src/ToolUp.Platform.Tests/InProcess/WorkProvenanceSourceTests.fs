@@ -612,12 +612,25 @@ let tests =
                 // construction, and invalidate every existing seal. This
                 // arm fails if a later phase reaches for the obvious
                 // shape instead.
+                //
+                // Phase 774's `VerificationLevel` is the one deliberate
+                // widening since, and it is not the work companion: it is
+                // inside the signed bytes by design, under a schema bump
+                // that keeps every pre-774 seal verifying byte for byte.
                 Expect.equal
                     (Microsoft.FSharp.Reflection.FSharpType.GetRecordFields typeof<DeployRecord>
                      |> Array.map _.Name
                      |> Array.toList
                      |> List.sort)
-                    [ "BuildId"; "DeployId"; "Manifest"; "Provenance"; "SchemaVersion"; "TenantId" ]
+                    [
+                        "BuildId"
+                        "DeployId"
+                        "Manifest"
+                        "Provenance"
+                        "SchemaVersion"
+                        "TenantId"
+                        "VerificationLevel"
+                    ]
                     "DeployRecord must stay exactly as 656 shipped it — the work companion embeds, never widens"
             }
 
