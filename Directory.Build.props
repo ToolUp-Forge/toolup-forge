@@ -511,7 +511,7 @@
       and their descriptors (`TOOLUP_PUBLISH_PUSH_TIMEOUT_SECONDS`, default
       900; `TOOLUP_PUBLISH_PUSH_RETRIES`, default 3). Behaviour (Platform.Build,
       no surface change - the push loop is internal): every `Publish` push
-      passes `--timeout`, a failed package push is retried with backoff, and a
+      passes a push timeout, a failed package push is retried with backoff, and a
       persistent failure names every package left unpushed.
     -->
     <Version>0.28.0</Version>
