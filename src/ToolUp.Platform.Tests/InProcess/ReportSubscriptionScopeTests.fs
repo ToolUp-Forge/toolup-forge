@@ -1151,7 +1151,7 @@ let private memberOfNewTeam (teamStore: TeamManagement.TeamStore) (userId: strin
 
     team
 
-let private principalNamed (name: string) : StandingSubscriptionPrincipal = {
+let private principalNamed (name: string) : DeclaredPrincipal = {
     Name = name
     UserId = "svc-" + Guid.NewGuid().ToString "N"
     DisplayName = $"{name} service principal"
@@ -1525,6 +1525,8 @@ let standingSubscriptionTests =
                 (startRefusals world (providerWith None) { Principals = []; Subscriptions = [] })
                 "a deployment declaring nothing starts"
         }
+
+        ReportSubscriptionEarlierNames.earlierPrincipalNameTest
 
         test "the declared-principal resolver has no public constructor, and resolves no anonymous principal" {
             Expect.isEmpty

@@ -623,6 +623,21 @@
       removed or retyped. Behaviour: every report grows a fourteenth section,
       appended, so every verdict digest moves once; a bare deployment still
       reads nothing-composed. Public page: `docs/platform/trust-boundaries.md`.
+
+      Rides this draft, in the BREAKING class it already carries: Phase 1029
+      gives a declared principal one shape across the platform and reporting
+      tiers. The `DeclaredPrincipal` record (never released) moves from
+      Platform.Server to Platform.Core, same namespace and fields; its
+      `user` / `userOf` / `missingGrant` readings stay in Platform.Server.
+      `StandingSubscriptionPrincipal` (Reporting.Core) becomes an
+      `[<Obsolete>]` abbreviation of `DeclaredPrincipal`: F# source naming it
+      still compiles, with a warning, but its own IL class is gone (a binary
+      break for an assembly compiled against 0.27.0). Retyped
+      (Reporting.Server): `ReportingCompose.StandingSubscriptions.Principals`
+      is a `DeclaredPrincipal list`. Deprecated (Reporting.Server):
+      `StandingSubscriptionRefusal.missingGrant`, in favour of
+      `DeclaredPrincipal.missingGrant`. Behaviour is unchanged. Migration
+      recipe: `docs/migrations/1029-one-declared-principal-shape.md`.
     -->
     <Version>0.28.0</Version>
     <!--

@@ -4740,6 +4740,11 @@ ToolUp.Platform.DatasetVersion.RowCount : System.Int64 { get }
 ToolUp.Platform.DatasetVersion.Schema : ToolUp.Platform.DatasetSchema { get }
 ToolUp.Platform.DatasetVersion.ScopeId : System.String { get }
 ToolUp.Platform.DatasetVersion.Version : System.Int32 { get }
+ToolUp.Platform.DeclaredPrincipal (class)
+ToolUp.Platform.DeclaredPrincipal..ctor(System.String, System.String, System.String)
+ToolUp.Platform.DeclaredPrincipal.DisplayName : System.String { get }
+ToolUp.Platform.DeclaredPrincipal.Name : System.String { get }
+ToolUp.Platform.DeclaredPrincipal.UserId : System.String { get }
 ToolUp.Platform.DegradedCapability (class)
 ToolUp.Platform.DegradedCapability..ctor(System.String, System.DateTimeOffset, System.String, System.String, System.String)
 ToolUp.Platform.DegradedCapability.Capability : System.String { get }

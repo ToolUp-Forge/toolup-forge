@@ -163,6 +163,11 @@
              the typed scope. StorageScope.fs below keeps the resolver's
              request and error types (they need AuthenticatedUser). -->
         <Compile Include="Shared\Types\ResolvedScope.fs" />
+        <!-- Phase 1029 - the one declared-principal record every kind of
+             declared work runs as (standing report subscriptions, declared
+             data delivery). Three strings, Fable-safe; the server-tier
+             readings stay with the resolver in ToolUp.Platform.Server. -->
+        <Compile Include="Shared\DeclaredPrincipal.fs" />
         <Compile Include="Shared\Types\VectorKnowledgeTypes.fs" />
         <!-- Phase 648 — the provenance walk's read-only wire contract: the
              Fable-safe mirrors of the server-tier node / edge / ref records,

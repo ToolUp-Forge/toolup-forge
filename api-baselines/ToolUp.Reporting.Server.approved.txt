@@ -305,9 +305,10 @@ ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal+UndeclaredPrincipa
 ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusalModule (class)
 ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusalModule.describe(ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusal) : System.String
 ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusalModule.missingGrant(ToolUp.Platform.ScopeResolutionError) : System.String
+ToolUp.Reporting.ReportingCompose+StandingSubscriptionRefusalModule.missingGrant(ToolUp.Platform.ScopeResolutionError) : System.String  (obsolete)
 ToolUp.Reporting.ReportingCompose+StandingSubscriptions (class)
-ToolUp.Reporting.ReportingCompose+StandingSubscriptions..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.StandingSubscriptionPrincipal], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.StandingReportSubscription])
-ToolUp.Reporting.ReportingCompose+StandingSubscriptions.Principals : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.StandingSubscriptionPrincipal] { get }
+ToolUp.Reporting.ReportingCompose+StandingSubscriptions..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeclaredPrincipal], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.StandingReportSubscription])
+ToolUp.Reporting.ReportingCompose+StandingSubscriptions.Principals : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeclaredPrincipal] { get }
 ToolUp.Reporting.ReportingCompose+StandingSubscriptions.Subscriptions : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Reporting.StandingReportSubscription] { get }
 ToolUp.Reporting.ReportingCompose+StandingSubscriptionsRefused (class)
 ToolUp.Reporting.ReportingCompose+StandingSubscriptionsRefused..ctor()

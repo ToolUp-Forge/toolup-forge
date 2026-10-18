@@ -351,30 +351,19 @@ type DeclaredPrincipalResolver
     }
 // ─── Phase 1015 — the declared principal, shared ─────────────────────
 //
-// A second kind of declared work, a data source's declared delivery, names
-// its principal the way a standing subscription does: by a name the
-// declarations refer to, the user id the deployment's resolver resolves,
-// and a label. The record and the two readings every declarer needs (the
+// Every kind of declared work — a standing subscription, a data source's
+// declared delivery — names its principal by a name the declarations refer
+// to, the user id the deployment's resolver resolves, and a label. That
+// record is `DeclaredPrincipal` in ToolUp.Platform.Core (Phase 1029: one
+// shape for every tier). The two readings every declarer needs (the
 // identity handed to `DeclaredPrincipalResolver.Resolve`, and the grant a
-// refusal says the principal lacks) live here, beside the resolver, so a
-// declarer never re-derives either.
-
-/// A principal a deployment declares in its composition (Phase 1015): the
-/// identity declared work runs as, never a scope. The same shape as the
-/// reporting tier's `StandingSubscriptionPrincipal`.
-type DeclaredPrincipal = {
-    /// The name declarations refer to it by. Unique within a deployment's
-    /// declarations of one kind.
-    Name: string
-    /// The identity the scope resolver resolves — the user id a request
-    /// signed in as this principal would carry.
-    UserId: string
-    /// Label the audit trail and an admin surface show for it.
-    DisplayName: string
-}
+// refusal says the principal lacks) need the server-tier identity type, so
+// they live here, beside the resolver, and a declarer never re-derives
+// either.
 
 /// Readings of a declared principal (Phase 1015).
 [<RequireQualifiedAccess>]
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DeclaredPrincipal =
 
     /// The identity `DeclaredPrincipalResolver.Resolve` resolves for a

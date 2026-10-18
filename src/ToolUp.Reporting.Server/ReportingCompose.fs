@@ -219,7 +219,7 @@ let withReportSubscriptions
 /// A deployment's standing-subscription declarations.
 type StandingSubscriptions = {
     /// The principals standing subscriptions may run as.
-    Principals: StandingSubscriptionPrincipal list
+    Principals: DeclaredPrincipal list
     /// The subscriptions. An empty list retires every row seeded before.
     Subscriptions: StandingReportSubscription list
 }
@@ -291,6 +291,7 @@ module StandingSubscriptionRefusal =
             $"standing subscription '{subscription}' could not be seeded: {reason}"
 
     /// The grant a scope-resolution refusal says the principal lacks.
+    [<Obsolete("Use DeclaredPrincipal.missingGrant (ToolUp.Platform.Server), the one reading every declarer shares. StandingSubscriptionRefusal.missingGrant will be removed in a future major.")>]
     let missingGrant (error: ScopeResolutionError) : string = DeclaredPrincipal.missingGrant error
 
 /// The host's start was refused; carries every refusal at once.
@@ -314,12 +315,9 @@ type StandingSeedReport = {
 /// A declaration that passed every check, ready to write.
 type private CheckedStanding = {
     Declaration: StandingReportSubscription
-    Principal: StandingSubscriptionPrincipal
+    Principal: DeclaredPrincipal
     Scope: ResolvedScope
 }
-
-let private principalUser (principal: StandingSubscriptionPrincipal) : Auth.AuthenticatedUser =
-    DeclaredPrincipal.userOf principal.UserId principal.DisplayName
 
 let private oks (results: Result<'a, 'e> seq) : 'a list =
     results
@@ -361,13 +359,13 @@ let private shapeRefusals (standing: StandingSubscriptions) : StandingSubscripti
 /// Check one declaration under its principal's resolution. Writes nothing.
 let private checkOne
     (deps: StandingSubscriptionDeps)
-    (principal: StandingSubscriptionPrincipal)
+    (principal: DeclaredPrincipal)
     (resolved: Result<ResolvedScope, ScopeResolutionError>)
     (d: StandingReportSubscription)
     : Async<Result<CheckedStanding, StandingSubscriptionRefusal>> =
     async {
         match resolved with
-        | Error e -> return Error(PrincipalUnresolved(d.Key, d.Principal, StandingSubscriptionRefusal.missingGrant e))
+        | Error e -> return Error(PrincipalUnresolved(d.Key, d.Principal, DeclaredPrincipal.missingGrant e))
         | Ok scope ->
             match scope.Storage with
             | Some storage when storage.Persist ->
@@ -416,7 +414,7 @@ let private checkStanding
                 standing.Principals
                 |> List.filter (fun p -> used.Contains p.Name)
                 |> List.map (fun p -> async {
-                    let! resolved = resolver.Resolve(principalUser p)
+                    let! resolved = resolver.Resolve(DeclaredPrincipal.user p)
                     return p.Name, (p, resolved)
                 })
                 |> Async.Sequential

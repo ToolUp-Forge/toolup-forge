@@ -316,20 +316,11 @@ module ReportSubscription =
 // can never carry the standing prefix.
 
 /// A principal a deployment declares for standing subscriptions to run as.
-/// The deployment's scope resolver resolves it exactly as it resolves a
-/// request signed in as `UserId`: a team-mode deployment resolves its
-/// active team and checks its membership, a per-user deployment resolves
-/// its own scope. The grants it holds ARE that resolution.
-type StandingSubscriptionPrincipal = {
-    /// The name standing subscriptions refer to it by. Unique within a
-    /// deployment's declarations.
-    Name: string
-    /// The identity the scope resolver resolves — the user id a request
-    /// signed in as this principal would carry.
-    UserId: string
-    /// Label the audit trail and an admin surface show for it.
-    DisplayName: string
-}
+/// Since Phase 1029 this is `ToolUp.Platform.DeclaredPrincipal` — the one
+/// declared-principal shape every kind of declared work runs as — under its
+/// earlier name: same fields, same construction, same resolution.
+[<Obsolete("Use ToolUp.Platform.DeclaredPrincipal (ToolUp.Platform.Core), the same record under its shared name. See docs/migrations/1029-one-declared-principal-shape.md. StandingSubscriptionPrincipal will be removed in a future major.")>]
+type StandingSubscriptionPrincipal = ToolUp.Platform.DeclaredPrincipal
 
 /// A report subscription a deployment declares in its composition rather
 /// than creates on a request: run producer `ProducerKey` on `Schedule`, as
@@ -352,7 +343,7 @@ type StandingReportSubscription = {
     Parameters: Map<string, string>
     /// Five-field cron expression — the cadence.
     Schedule: string
-    /// `StandingSubscriptionPrincipal.Name` of the principal the
+    /// `DeclaredPrincipal.Name` of the principal the
     /// subscription runs as.
     Principal: string
     /// Users the rendered report is delivered to.

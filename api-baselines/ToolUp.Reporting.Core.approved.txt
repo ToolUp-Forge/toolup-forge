@@ -299,11 +299,6 @@ ToolUp.Reporting.StandingReportSubscriptionModule.isStanding(System.String) : Sy
 ToolUp.Reporting.StandingReportSubscriptionModule.subscriptionId(System.String) : System.String
 ToolUp.Reporting.StandingReportSubscriptionModule.toRequest(ToolUp.Reporting.StandingReportSubscription) : ToolUp.Reporting.NewReportSubscription
 ToolUp.Reporting.StandingReportSubscriptionModule.validateKey(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
-ToolUp.Reporting.StandingSubscriptionPrincipal (class)
-ToolUp.Reporting.StandingSubscriptionPrincipal..ctor(System.String, System.String, System.String)
-ToolUp.Reporting.StandingSubscriptionPrincipal.DisplayName : System.String { get }
-ToolUp.Reporting.StandingSubscriptionPrincipal.Name : System.String { get }
-ToolUp.Reporting.StandingSubscriptionPrincipal.UserId : System.String { get }
 ToolUp.Reporting.SubscriptionError (class)
 ToolUp.Reporting.SubscriptionError.IsInvalidParameter : System.Boolean { get }
 ToolUp.Reporting.SubscriptionError.IsInvalidSchedule : System.Boolean { get }

@@ -1602,6 +1602,7 @@
              created it (and fails closed when that scope cannot be re-minted),
              a scheduled grounded report end to end under its team's scope, and
              an assistant chat turn's fact tools reading the request's scope. -->
+        <Compile Include="InProcess\ReportSubscriptionEarlierNames.fs" />
         <Compile Include="InProcess\ReportSubscriptionScopeTests.fs" />
         <Compile Include="InProcess\AssistantFactScopeTests.fs" />
         <!-- Phase 709 — the AI tool-result context budget: the knob and its
