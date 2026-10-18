@@ -798,14 +798,7 @@ let registerTargets (config: BuildConfig) =
 
         Trace.tracefn "Pushing artifacts to %s..." source
 
-        // Push .nupkg only — .snupkg files in the same directory are
-        // skipped (GitHub Packages NuGet rejects them).
-        let nupkgs =
-            System.IO.Directory.GetFiles(artifactsDir, "*.nupkg")
-            |> Array.filter (fun p -> not (p.EndsWith(".snupkg")))
-            |> Array.sort
-
-        for nupkg in nupkgs do
+        for nupkg in producedNupkgs do
             Trace.tracefn "Pushing %s..." (System.IO.Path.GetFileName nupkg)
 
             run
