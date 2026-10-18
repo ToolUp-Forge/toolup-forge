@@ -1123,7 +1123,8 @@ let reportSectionTests =
             // sections that have been appended since. Phase 842 appended
             // a twelfth (the argument-side remoting-decoder twin), so the
             // tail grows by one more. Phase 771 appended a thirteenth (the
-            // hardening baseline), by the same rule.
+            // hardening baseline), by the same rule, and Phase 777 a
+            // fourteenth (the trust boundaries).
             Expect.equal
                 (report.Sections |> List.map _.Id)
                 (priorIds
@@ -1133,6 +1134,7 @@ let reportSectionTests =
                      EgressSection
                      RemotingArgumentDecoderSection
                      HostingBaselineSection
+                     TrustBoundariesSection
                  ])
                 "the section is APPENDED — inserting it would move every later section's canonical line"
         }

@@ -592,6 +592,20 @@
       bytes of a NEWLY created record change once (schema 2); nothing sealed
       before moves, and no floor is declared by default. Migration recipe:
       `docs/migrations/774-verification-level.md`.
+
+      Rides this draft, additive (Platform.Core, Platform.Server): Phase 777
+      puts the platform's trust boundaries on every verification report.
+      Core gains `TrustBoundaryId`, `TrustClaim`, `ContainmentProfile`,
+      `TrustMechanism`, the `TrustBoundary` record, the `TrustBoundaries`
+      module (the closed list and the generated public page) and the
+      `TrustBoundariesSection` literal. Server gains the route-effect
+      evidence member (`DeclaredRouteRecord`, `RouteEffectIntegrity`,
+      `IRouteEffectEvidence`, `DeclaredRouteEffects`,
+      `DeploymentVerificationEvidence.routeEffectsOf` / `withRouteEffects`)
+      and `DeploymentVerificationReport.gatherTrustBoundaries`. No member is
+      removed or retyped. Behaviour: every report grows a fourteenth section,
+      appended, so every verdict digest moves once; a bare deployment still
+      reads nothing-composed. Public page: `docs/platform/trust-boundaries.md`.
     -->
     <Version>0.28.0</Version>
     <!--

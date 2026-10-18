@@ -1362,6 +1362,8 @@ let private registeredTests =
         HostingBaselineTests.tests
         // Phase 773 — declared-route effect containment.
         RouteEffectContainmentTests.tests
+        // Phase 777 — trust boundaries as data.
+        TrustBoundaryTests.tests
         // Phase 63 — StaticCorpus MessagePack round-trip + determinism.
         StaticCorpusContract.tests
         // Phase 502 — RetrievalRequest.Filters parity pack (both pipelines).

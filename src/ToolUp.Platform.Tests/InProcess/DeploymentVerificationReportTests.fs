@@ -172,12 +172,17 @@ let private configSectionIds = [ ConfigConformanceSection; AcceptedAcknowledgeme
 /// baseline arrives through its own sibling interface
 /// (`IHostingBaselineEvidence`), so it reads `not-composed` for every
 /// arrangement in this pack; `HostingBaselineTests` drives it.
+/// Phase 777 joins this list too: the trust-boundaries section reads the
+/// sibling members and sections above, none of which `healthyEvidence`
+/// composes a containment mechanism for, so it reads `not-composed` here;
+/// `TrustBoundaryTests` drives it.
 let private chainSectionIds = [
     EvidenceChainSection
     RemotingDecoderSection
     EgressSection
     RemotingArgumentDecoderSection
     HostingBaselineSection
+    TrustBoundariesSection
 ]
 
 let private allSectionIds = evidenceSectionIds @ configSectionIds @ chainSectionIds

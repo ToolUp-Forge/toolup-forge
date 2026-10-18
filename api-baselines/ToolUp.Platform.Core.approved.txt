@@ -3713,6 +3713,15 @@ ToolUp.Platform.ContainerStatus+Tags.ContainerExited : System.Int32 (literal)
 ToolUp.Platform.ContainerStatus+Tags.ContainerNotFound : System.Int32 (literal)
 ToolUp.Platform.ContainerStatus+Tags.ContainerRestarting : System.Int32 (literal)
 ToolUp.Platform.ContainerStatus+Tags.ContainerRunning : System.Int32 (literal)
+ToolUp.Platform.ContainmentProfile (class)
+ToolUp.Platform.ContainmentProfile.IsStandard : System.Boolean { get }
+ToolUp.Platform.ContainmentProfile.IsVerified : System.Boolean { get }
+ToolUp.Platform.ContainmentProfile.Standard : ToolUp.Platform.ContainmentProfile { get }
+ToolUp.Platform.ContainmentProfile.Tag : System.Int32 { get }
+ToolUp.Platform.ContainmentProfile.Verified : ToolUp.Platform.ContainmentProfile { get }
+ToolUp.Platform.ContainmentProfile+Tags (class)
+ToolUp.Platform.ContainmentProfile+Tags.Standard : System.Int32 (literal)
+ToolUp.Platform.ContainmentProfile+Tags.Verified : System.Int32 (literal)
 ToolUp.Platform.ContentHash (class)
 ToolUp.Platform.ContentHash.Tag : System.Int32 { get }
 ToolUp.Platform.ContentHash.hex : System.String { get }
@@ -5075,6 +5084,7 @@ ToolUp.Platform.DeploymentVerification.RemotingArgumentDecoderSection : System.S
 ToolUp.Platform.DeploymentVerification.RemotingDecoderSection : System.String (literal)
 ToolUp.Platform.DeploymentVerification.SchemaVersion : System.Int32 (literal)
 ToolUp.Platform.DeploymentVerification.SeamAuthoritySection : System.String (literal)
+ToolUp.Platform.DeploymentVerification.TrustBoundariesSection : System.String (literal)
 ToolUp.Platform.DeploymentVerification.canonicalForm(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+ReportSection], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+NotProvedStatement]) : System.String
 ToolUp.Platform.DeploymentVerification.exitCode(ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport) : System.Int32
 ToolUp.Platform.DeploymentVerification.outcomeOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+ReportSection]) : ToolUp.Platform.DeploymentVerificationOutcome
@@ -13228,6 +13238,98 @@ ToolUp.Platform.TriggerSource+Tags (class)
 ToolUp.Platform.TriggerSource+Tags.ScheduledByCron : System.Int32 (literal)
 ToolUp.Platform.TriggerSource+Tags.ScheduledByEvent : System.Int32 (literal)
 ToolUp.Platform.TriggerSource+Tags.ScheduledManually : System.Int32 (literal)
+ToolUp.Platform.TrustBoundaries (class)
+ToolUp.Platform.TrustBoundaries.all : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TrustBoundary] { get }
+ToolUp.Platform.TrustBoundaries.claimLabel(ToolUp.Platform.TrustClaim) : System.String
+ToolUp.Platform.TrustBoundaries.entry(ToolUp.Platform.TrustBoundaryId) : ToolUp.Platform.TrustBoundary
+ToolUp.Platform.TrustBoundaries.ids : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TrustBoundaryId] { get }
+ToolUp.Platform.TrustBoundaries.label(ToolUp.Platform.TrustBoundaryId) : System.String
+ToolUp.Platform.TrustBoundaries.profileLabel(ToolUp.Platform.ContainmentProfile) : System.String
+ToolUp.Platform.TrustBoundaries.renderMarkdown() : System.String
+ToolUp.Platform.TrustBoundaries.renderMechanism(ToolUp.Platform.TrustMechanism) : System.String
+ToolUp.Platform.TrustBoundary (class)
+ToolUp.Platform.TrustBoundary..ctor(ToolUp.Platform.TrustBoundaryId, System.String, System.String, System.String, ToolUp.Platform.TrustClaim, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TrustMechanism])
+ToolUp.Platform.TrustBoundary.BoundedBy : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TrustMechanism] { get }
+ToolUp.Platform.TrustBoundary.Claim : ToolUp.Platform.TrustClaim { get }
+ToolUp.Platform.TrustBoundary.Crosses : System.String { get }
+ToolUp.Platform.TrustBoundary.Id : ToolUp.Platform.TrustBoundaryId { get }
+ToolUp.Platform.TrustBoundary.Mediates : System.String { get }
+ToolUp.Platform.TrustBoundary.NotClaimed : System.String { get }
+ToolUp.Platform.TrustBoundary.Statement : System.String { get }
+ToolUp.Platform.TrustBoundary.Title : System.String { get }
+ToolUp.Platform.TrustBoundaryId (class)
+ToolUp.Platform.TrustBoundaryId.AdvisoryRendererDefaults : ToolUp.Platform.TrustBoundaryId { get }
+ToolUp.Platform.TrustBoundaryId.CustomRoutes : ToolUp.Platform.TrustBoundaryId { get }
+ToolUp.Platform.TrustBoundaryId.HandResolvedSubstrate : ToolUp.Platform.TrustBoundaryId { get }
+ToolUp.Platform.TrustBoundaryId.HostileHostWithRoot : ToolUp.Platform.TrustBoundaryId { get }
+ToolUp.Platform.TrustBoundaryId.IsAdvisoryRendererDefaults : System.Boolean { get }
+ToolUp.Platform.TrustBoundaryId.IsCustomRoutes : System.Boolean { get }
+ToolUp.Platform.TrustBoundaryId.IsHandResolvedSubstrate : System.Boolean { get }
+ToolUp.Platform.TrustBoundaryId.IsHostileHostWithRoot : System.Boolean { get }
+ToolUp.Platform.TrustBoundaryId.IsModelIntent : System.Boolean { get }
+ToolUp.Platform.TrustBoundaryId.IsNativeCompanionParsers : System.Boolean { get }
+ToolUp.Platform.TrustBoundaryId.IsOutboundEgress : System.Boolean { get }
+ToolUp.Platform.TrustBoundaryId.IsRemotingDecoders : System.Boolean { get }
+ToolUp.Platform.TrustBoundaryId.IsStatisticalDisclosureFloors : System.Boolean { get }
+ToolUp.Platform.TrustBoundaryId.ModelIntent : ToolUp.Platform.TrustBoundaryId { get }
+ToolUp.Platform.TrustBoundaryId.NativeCompanionParsers : ToolUp.Platform.TrustBoundaryId { get }
+ToolUp.Platform.TrustBoundaryId.OutboundEgress : ToolUp.Platform.TrustBoundaryId { get }
+ToolUp.Platform.TrustBoundaryId.RemotingDecoders : ToolUp.Platform.TrustBoundaryId { get }
+ToolUp.Platform.TrustBoundaryId.StatisticalDisclosureFloors : ToolUp.Platform.TrustBoundaryId { get }
+ToolUp.Platform.TrustBoundaryId.Tag : System.Int32 { get }
+ToolUp.Platform.TrustBoundaryId+Tags (class)
+ToolUp.Platform.TrustBoundaryId+Tags.AdvisoryRendererDefaults : System.Int32 (literal)
+ToolUp.Platform.TrustBoundaryId+Tags.CustomRoutes : System.Int32 (literal)
+ToolUp.Platform.TrustBoundaryId+Tags.HandResolvedSubstrate : System.Int32 (literal)
+ToolUp.Platform.TrustBoundaryId+Tags.HostileHostWithRoot : System.Int32 (literal)
+ToolUp.Platform.TrustBoundaryId+Tags.ModelIntent : System.Int32 (literal)
+ToolUp.Platform.TrustBoundaryId+Tags.NativeCompanionParsers : System.Int32 (literal)
+ToolUp.Platform.TrustBoundaryId+Tags.OutboundEgress : System.Int32 (literal)
+ToolUp.Platform.TrustBoundaryId+Tags.RemotingDecoders : System.Int32 (literal)
+ToolUp.Platform.TrustBoundaryId+Tags.StatisticalDisclosureFloors : System.Int32 (literal)
+ToolUp.Platform.TrustClaim (class)
+ToolUp.Platform.TrustClaim.IsContainedUnder : System.Boolean { get }
+ToolUp.Platform.TrustClaim.IsNotClaimed : System.Boolean { get }
+ToolUp.Platform.TrustClaim.IsStatedHatch : System.Boolean { get }
+ToolUp.Platform.TrustClaim.NotClaimed : ToolUp.Platform.TrustClaim { get }
+ToolUp.Platform.TrustClaim.StatedHatch : ToolUp.Platform.TrustClaim { get }
+ToolUp.Platform.TrustClaim.Tag : System.Int32 { get }
+ToolUp.Platform.TrustClaim+ContainedUnder (class)
+ToolUp.Platform.TrustClaim+ContainedUnder.profile : ToolUp.Platform.ContainmentProfile { get }
+ToolUp.Platform.TrustClaim+Tags (class)
+ToolUp.Platform.TrustClaim+Tags.ContainedUnder : System.Int32 (literal)
+ToolUp.Platform.TrustClaim+Tags.NotClaimed : System.Int32 (literal)
+ToolUp.Platform.TrustClaim+Tags.StatedHatch : System.Int32 (literal)
+ToolUp.Platform.TrustMechanism (class)
+ToolUp.Platform.TrustMechanism.IsAwaits : System.Boolean { get }
+ToolUp.Platform.TrustMechanism.IsContains : System.Boolean { get }
+ToolUp.Platform.TrustMechanism.IsEvidences : System.Boolean { get }
+ToolUp.Platform.TrustMechanism.IsNarrows : System.Boolean { get }
+ToolUp.Platform.TrustMechanism.IsStated : System.Boolean { get }
+ToolUp.Platform.TrustMechanism.IsUpstream : System.Boolean { get }
+ToolUp.Platform.TrustMechanism.Stated : ToolUp.Platform.TrustMechanism { get }
+ToolUp.Platform.TrustMechanism.Tag : System.Int32 { get }
+ToolUp.Platform.TrustMechanism+Awaits (class)
+ToolUp.Platform.TrustMechanism+Awaits.landsAt : System.String { get }
+ToolUp.Platform.TrustMechanism+Awaits.phase : System.Int32 { get }
+ToolUp.Platform.TrustMechanism+Contains (class)
+ToolUp.Platform.TrustMechanism+Contains.phase : System.Int32 { get }
+ToolUp.Platform.TrustMechanism+Contains.reference : System.String { get }
+ToolUp.Platform.TrustMechanism+Evidences (class)
+ToolUp.Platform.TrustMechanism+Evidences.phase : System.Int32 { get }
+ToolUp.Platform.TrustMechanism+Evidences.reference : System.String { get }
+ToolUp.Platform.TrustMechanism+Narrows (class)
+ToolUp.Platform.TrustMechanism+Narrows.phase : System.Int32 { get }
+ToolUp.Platform.TrustMechanism+Narrows.reference : System.String { get }
+ToolUp.Platform.TrustMechanism+Tags (class)
+ToolUp.Platform.TrustMechanism+Tags.Awaits : System.Int32 (literal)
+ToolUp.Platform.TrustMechanism+Tags.Contains : System.Int32 (literal)
+ToolUp.Platform.TrustMechanism+Tags.Evidences : System.Int32 (literal)
+ToolUp.Platform.TrustMechanism+Tags.Narrows : System.Int32 (literal)
+ToolUp.Platform.TrustMechanism+Tags.Stated : System.Int32 (literal)
+ToolUp.Platform.TrustMechanism+Tags.Upstream : System.Int32 (literal)
+ToolUp.Platform.TrustMechanism+Upstream (class)
+ToolUp.Platform.TrustMechanism+Upstream.entry : System.Int32 { get }
 ToolUp.Platform.UnattestedReason (class)
 ToolUp.Platform.UnattestedReason.ExternalPackage : ToolUp.Platform.UnattestedReason { get }
 ToolUp.Platform.UnattestedReason.IsExternalPackage : System.Boolean { get }

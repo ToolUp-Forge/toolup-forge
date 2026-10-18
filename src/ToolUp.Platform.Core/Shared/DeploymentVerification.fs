@@ -284,6 +284,15 @@ module DeploymentVerification =
     [<Literal>]
     let HostingBaselineSection = "hardening-baseline"
 
+    /// Phase 777 — the fourteenth section: the platform's trust boundaries,
+    /// every one, on every report. The closed list in `TrustBoundaries.all`
+    /// with each entry's claim state, and beside each contained boundary
+    /// whether the mechanism that contains it is in force in this
+    /// deployment. The section that says what the rest of the report does
+    /// NOT cover, boundary by boundary, rather than in a closing paragraph.
+    [<Literal>]
+    let TrustBoundariesSection = "trust-boundaries"
+
     /// One section of the report: what was checked, what the check said,
     /// and any per-item findings the verdict summarises.
     ///

@@ -3126,6 +3126,15 @@ ToolUp.Platform.DeadTopic.EmittedBy : Microsoft.FSharp.Collections.FSharpList`1[
 ToolUp.Platform.DeadTopic.Kind : ToolUp.Platform.EventKind { get }
 ToolUp.Platform.DeclaredPrincipalResolver (class)
 ToolUp.Platform.DeclaredPrincipalResolver.Resolve(ToolUp.Platform.Auth+AuthenticatedUser) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ResolvedScope, ToolUp.Platform.ScopeResolutionError]]
+ToolUp.Platform.DeclaredRouteEffects (class)
+ToolUp.Platform.DeclaredRouteEffects..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeclaredRouteRecord])
+ToolUp.Platform.DeclaredRouteEffects.Routes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeclaredRouteRecord] { get }
+ToolUp.Platform.DeclaredRouteRecord (class)
+ToolUp.Platform.DeclaredRouteRecord..ctor(ToolUp.Platform.ComponentId, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.DeclaredRouteRecord.RouteEgress : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.DeclaredRouteRecord.RouteEnvelope : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.DeclaredRouteRecord.RouteKey : System.String { get }
+ToolUp.Platform.DeclaredRouteRecord.RouteOwner : ToolUp.Platform.ComponentId { get }
 ToolUp.Platform.DefaultDeployPipeline (class)
 ToolUp.Platform.DefaultDeployPipeline.DeployRecordSealedEventType : System.String (literal)
 ToolUp.Platform.DefaultDeployPipeline.DeployRecordSourceModule : System.String (literal)
@@ -3250,6 +3259,7 @@ ToolUp.Platform.DeploymentVerificationEvidence.hostingBaselineOf(ToolUp.Platform
 ToolUp.Platform.DeploymentVerificationEvidence.none : ToolUp.Platform.IDeploymentVerificationEvidence { get }
 ToolUp.Platform.DeploymentVerificationEvidence.remotingArgumentDecodersOf(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RemotingDecoderIntegrity]
 ToolUp.Platform.DeploymentVerificationEvidence.remotingDecodersOf(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RemotingDecoderIntegrity]
+ToolUp.Platform.DeploymentVerificationEvidence.routeEffectsOf(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RouteEffectIntegrity]
 ToolUp.Platform.DeploymentVerificationEvidence.seamAuthorityOf(ToolUp.Platform.IDeploymentVerificationEvidence) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SeamAuthorityIntegrity]
 ToolUp.Platform.DeploymentVerificationEvidence.withEgress(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EgressIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.withEvidenceChain(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidenceChain, ToolUp.Platform.EvidenceChainError]]]], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
@@ -3258,9 +3268,11 @@ ToolUp.Platform.DeploymentVerificationEvidence.withHostingBaseline(Microsoft.FSh
 ToolUp.Platform.DeploymentVerificationEvidence.withObservedSeamReach(Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SeamId]], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.withRemotingArgumentDecoders(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RemotingDecoderIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.withRemotingDecoders(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RemotingDecoderIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
+ToolUp.Platform.DeploymentVerificationEvidence.withRouteEffects(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RouteEffectIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.withSeamAuthority(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SeamAuthorityIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationReport (class)
 ToolUp.Platform.DeploymentVerificationReport.ConfigConformanceKeyCap : System.Int32 (literal)
+ToolUp.Platform.DeploymentVerificationReport.DeclaredRouteCap : System.Int32 { get }
 ToolUp.Platform.DeploymentVerificationReport.EgressComponentCap : System.Int32 (literal)
 ToolUp.Platform.DeploymentVerificationReport.EgressDenialCap : System.Int32 (literal)
 ToolUp.Platform.DeploymentVerificationReport.EvidenceChainFindingCap : System.Int32 (literal)
@@ -3286,6 +3298,7 @@ ToolUp.Platform.DeploymentVerificationReport.gatherLedger(ToolUp.Platform.IDeplo
 ToolUp.Platform.DeploymentVerificationReport.gatherRemotingArgumentDecoders(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.DeploymentVerification+ReportSection
 ToolUp.Platform.DeploymentVerificationReport.gatherRemotingDecoders(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.DeploymentVerification+ReportSection
 ToolUp.Platform.DeploymentVerificationReport.gatherSeamAuthority(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.DeploymentVerification+ReportSection
+ToolUp.Platform.DeploymentVerificationReport.gatherTrustBoundaries(ToolUp.Platform.IDeploymentVerificationEvidence, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+ReportSection]) : ToolUp.Platform.DeploymentVerification+ReportSection
 ToolUp.Platform.DeploymentVerificationReport.notProvedFor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+ReportSection]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+NotProvedStatement]
 ToolUp.Platform.DeploymentVerificationReport.recordRead(System.IServiceProvider, ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.DeploymentVerificationReport.resolveEvidence(System.IServiceProvider) : ToolUp.Platform.IDeploymentVerificationEvidence
@@ -6471,6 +6484,8 @@ ToolUp.Platform.IRetrievalTracer+RetrievalTrace.StageTimings : Microsoft.FSharp.
 ToolUp.Platform.IRetrievalTracer+RetrievalTrace.Stages : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.IRetrievalTracer+RetrievalTrace.TopK : System.Int32 { get }
 ToolUp.Platform.IRetrievalTracer+RetrievalTrace.TopScore : System.Double { get }
+ToolUp.Platform.IRouteEffectEvidence (interface)
+ToolUp.Platform.IRouteEffectEvidence.RouteEffects : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RouteEffectIntegrity] { get }
 ToolUp.Platform.ISbomSource (interface)
 ToolUp.Platform.ISbomSource.Closure() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DependencyClosure, System.String]]
 ToolUp.Platform.ISbomSource.Describe() : System.String
@@ -9503,6 +9518,9 @@ ToolUp.Platform.RouteEffectDeclarationModule.effectiveEgress(ToolUp.Platform.Rou
 ToolUp.Platform.RouteEffectDeclarationModule.egress(ToolUp.Platform.EgressGrant) : ToolUp.Platform.RouteEffectDeclaration
 ToolUp.Platform.RouteEffectDeclarationModule.envelope(ToolUp.Platform.CompanionCapability) : ToolUp.Platform.RouteEffectDeclaration
 ToolUp.Platform.RouteEffectDeclarationModule.isDeclared(ToolUp.Platform.RouteEffectDeclaration) : System.Boolean
+ToolUp.Platform.RouteEffectIntegrity (class)
+ToolUp.Platform.RouteEffectIntegrity..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeclaredRouteRecord])
+ToolUp.Platform.RouteEffectIntegrity.DeclaredRoutes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeclaredRouteRecord] { get }
 ToolUp.Platform.RouteEffectObserver (class)
 ToolUp.Platform.RouteEffectObserver..ctor(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.CapabilityDenial, Microsoft.FSharp.Core.Unit])
 ToolUp.Platform.RouteEffectObserver.OnDeny(ToolUp.Platform.CapabilityDenial) : System.Void

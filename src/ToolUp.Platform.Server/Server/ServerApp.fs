@@ -2574,6 +2574,49 @@ module ServerApp =
         else
             app
 
+    /// Phase 777 — register the module's declared routes as verification
+    /// report evidence (`DeclaredRouteEffects`, one registration per module),
+    /// so the trust-boundaries section can name them and the report can
+    /// narrow its decision-point statement to the routes that are not. A
+    /// module declaring no route effect registers nothing.
+    let private withDeclaredRouteEffects (owner: ComponentId) (m: ServerModule) (app: ServerApp) : ServerApp =
+        let routes =
+            m.RouteEffects
+            |> List.filter (snd >> RouteEffectDeclaration.isDeclared)
+            |> List.map (fun ((httpMethod, path), declaration) ->
+                let methodKey, pathKey = RouteEffectContainment.routeKey httpMethod path
+
+                {
+                    RouteOwner = owner
+                    RouteKey = methodKey + " " + pathKey
+                    RouteEnvelope =
+                        declaration.EffectEnvelope
+                        |> Option.map VerifiedCompositionProfile.renderCapability
+                    RouteEgress =
+                        RouteEffectDeclaration.effectiveEgress declaration
+                        |> Option.map EgressGrant.render
+                })
+
+        if List.isEmpty routes then
+            app
+        else
+            let register (services: IServiceCollection) =
+                services.AddSingleton<DeclaredRouteEffects>(DeclaredRouteEffects routes)
+                |> ignore
+
+                services
+
+            {
+                app with
+                    Extensions = {
+                        app.Extensions with
+                            ServiceConfig =
+                                match app.Extensions.ServiceConfig with
+                                | None -> Some register
+                                | Some existing -> Some(fun services -> register (existing services))
+                    }
+            }
+
     let addModule (m: ServerModule) (app: ServerApp) : ServerApp =
         if not (ModuleFilter.matches app.Config.ModuleFilter m.Name) then
             // Phase 169 — a name-filtered module is dropped, but the drop is
@@ -2825,6 +2868,7 @@ module ServerApp =
                         }
                 }
                 |> withRouteEffectObserver m
+                |> withDeclaredRouteEffects resolvedComponentId m
 
     let addModules (modules: ServerModule list) (app: ServerApp) : ServerApp =
         modules |> List.fold (fun a m -> addModule m a) app

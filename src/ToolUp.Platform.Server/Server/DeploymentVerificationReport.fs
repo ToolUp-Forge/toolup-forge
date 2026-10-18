@@ -654,6 +654,58 @@ type HostingBaselineRecord() =
     /// The observation, when one was made.
     member _.Current: HostingBaselineIntegrity option = observed
 
+// ─── Phase 777 — declared route effects, mirrored ────────────────────
+//
+// Phase 773 holds a route that declares an effect envelope to it at
+// request time, but nothing on the report enumerated which routes those
+// are, so the report could neither say how many routes are contained nor
+// narrow its own "the gates do not confine running code" statement to the
+// routes that are not. The declaration lives on `ServerModule`, which
+// compiles after this file, so it arrives as a tier-neutral record.
+
+/// One route that declared its effects (Phase 773), as the trust-boundaries
+/// section reads it. Prefixed field names for the Phase 431 inference
+/// reason recorded on `ComponentSeamAuthority`.
+type DeclaredRouteRecord = {
+    /// The module that owns the route.
+    RouteOwner: ComponentId
+    /// `METHOD /path`, normalised the way the containment table keys it.
+    RouteKey: string
+    /// The effect envelope it is held to, rendered; `None` when it declared
+    /// only an egress grant.
+    RouteEnvelope: string option
+    /// The egress grant it is EFFECTIVELY held to, rendered — a `Pure`
+    /// envelope reads as an empty declared set; `None` when it declared no
+    /// grant and its envelope is not `Pure`.
+    RouteEgress: string option
+}
+
+/// The declared routes, mirrored (Phase 777). Every declared route of every
+/// composed module, in composition order.
+type RouteEffectIntegrity = {
+    DeclaredRoutes: DeclaredRouteRecord list
+}
+
+/// Phase 777 — the route-effect source: a standalone sibling interface for
+/// the reason Phase 693 recorded when it cut the first. Resolved by type
+/// test, so an evidence value that never heard of it still compiles. A
+/// VALUE: the declarations are fixed at composition.
+type IRouteEffectEvidence =
+    /// The routes this deployment's modules declared effects for. `None`
+    /// when no composed module declared one.
+    abstract RouteEffects: RouteEffectIntegrity option
+
+/// Phase 777 — one composed module's declared routes, registered by
+/// `ServerApp.addModule` for every module that declared a route effect.
+/// One registration per module; `DeploymentVerificationReport.resolveEvidence`
+/// reads them all and supplies the route-effect member when the composition
+/// root supplied none. A module that declared nothing registers nothing
+/// (GP 13).
+[<Sealed>]
+type DeclaredRouteEffects(routes: DeclaredRouteRecord list) =
+    /// The module's declared routes.
+    member _.Routes: DeclaredRouteRecord list = routes
+
 [<RequireQualifiedAccess>]
 module DeploymentVerificationEvidence =
 
@@ -725,6 +777,15 @@ module DeploymentVerificationEvidence =
         | :? IHostingBaselineEvidence as source -> source.HostingBaseline
         | _ -> None
 
+    /// Phase 777 — read the route-effect member off an evidence value that
+    /// carries one. `None` for any evidence that does not implement the
+    /// sibling interface. The same single-read-path discipline
+    /// `seamAuthorityOf` established.
+    let routeEffectsOf (evidence: IDeploymentVerificationEvidence) : RouteEffectIntegrity option =
+        match box evidence with
+        | :? IRouteEffectEvidence as source -> source.RouteEffects
+        | _ -> None
+
     // Phase 777 tidy — every producer below builds its value through ONE
     // object expression. Until this phase each of the eight producers
     // spelled out every sibling interface by hand, so a sibling added a
@@ -742,6 +803,7 @@ module DeploymentVerificationEvidence =
         RemotingArgumentDecoders: RemotingDecoderIntegrity option
         Egress: EgressIntegrity option
         HostingBaseline: HostingBaselineIntegrity option
+        RouteEffects: RouteEffectIntegrity option
     }
 
     let private noMembers: Members = {
@@ -751,6 +813,7 @@ module DeploymentVerificationEvidence =
         RemotingArgumentDecoders = None
         Egress = None
         HostingBaseline = None
+        RouteEffects = None
     }
 
     let private membersOf (evidence: IDeploymentVerificationEvidence) : Members = {
@@ -760,6 +823,7 @@ module DeploymentVerificationEvidence =
         RemotingArgumentDecoders = remotingArgumentDecodersOf evidence
         Egress = egressOf evidence
         HostingBaseline = hostingBaselineOf evidence
+        RouteEffects = routeEffectsOf evidence
     }
 
     let private assemble
@@ -795,6 +859,8 @@ module DeploymentVerificationEvidence =
           interface IHostingBaselineEvidence with
               member _.HostingBaseline = members.HostingBaseline
 
+          interface IRouteEffectEvidence with
+              member _.RouteEffects = members.RouteEffects
         }
 
     /// Rebuild `evidence` with its five primary members unchanged and the
@@ -959,6 +1025,22 @@ module DeploymentVerificationEvidence =
             (fun members -> {
                 members with
                     HostingBaseline = hostingBaseline
+            })
+            evidence
+
+    /// Phase 777 — supply the declared route effects, preserving every
+    /// other source. A composition root normally never calls this:
+    /// `ServerApp.addModule` registers each module's declared routes and
+    /// `DeploymentVerificationReport.resolveEvidence` reads them. A test,
+    /// or a root composing routes some other way, supplies them here.
+    let withRouteEffects
+        (routeEffects: RouteEffectIntegrity option)
+        (evidence: IDeploymentVerificationEvidence)
+        : IDeploymentVerificationEvidence =
+        rebuild
+            (fun members -> {
+                members with
+                    RouteEffects = routeEffects
             })
             evidence
 
@@ -2590,6 +2672,227 @@ module DeploymentVerificationReport =
                     ))
                     findings
 
+    // ─── Phase 777 — the trust boundaries ────────────────────────────────
+    //
+    // Every boundary in `TrustBoundaries.all`, on every report, with its
+    // claim state — and beside each CONTAINED one, whether the mechanism
+    // containing it is in force in this deployment, read off the sections
+    // already gathered and the route-effect member. The section adds no
+    // verification of its own: a contained boundary is "in force" exactly
+    // when the section that reads its mechanism verifies it.
+    //
+    // **The verdict cannot make `NothingComposed` unreachable.** It is
+    // `NotComposed` when no containment mechanism this report reads is
+    // composed — the bare deployment — and otherwise follows the sections
+    // it reads: `Observed` only where one of them is itself short of
+    // `Verified`, so the top-line outcome never moves on this section's
+    // account alone.
+
+    /// The cap on declared routes the custom-routes entry names.
+    let DeclaredRouteCap = 20
+
+    /// The finding the custom-routes entry writes when declared routes are
+    /// contained here — what `notProvedFor` narrows its decision-point
+    /// statement on, so the narrowing follows composed evidence rather than
+    /// the SDK's capability.
+    let private RouteContainmentInForce =
+        TrustBoundaries.label TrustBoundaryId.CustomRoutes + " here: in force"
+
+    /// Whether a contained boundary's mechanism is in force here.
+    type private Presence =
+        | InForce of string
+        | Partial of string
+        | NotShown of string
+
+    let private presenceOfSection (sections: ReportSection list) (id: string) : Presence =
+        match sections |> List.tryFind (fun s -> s.Id = id) |> Option.map _.Verdict with
+        | None
+        | Some(VerificationSectionVerdict.NotComposed _) -> NotShown(sprintf "the %s section is not composed" id)
+        | Some(VerificationSectionVerdict.Verified _) -> InForce(sprintf "the %s section verifies it" id)
+        | Some(VerificationSectionVerdict.Observed _) ->
+            Partial(sprintf "the %s section observes it without verifying it" id)
+        | Some(VerificationSectionVerdict.Failed _)
+        | Some(VerificationSectionVerdict.Unreadable _) ->
+            Partial(sprintf "the %s section is adverse; read it above" id)
+
+    let private presenceFor
+        (evidence: IDeploymentVerificationEvidence)
+        (sections: ReportSection list)
+        (id: TrustBoundaryId)
+        : Presence =
+        match id with
+        | TrustBoundaryId.CustomRoutes ->
+            match DeploymentVerificationEvidence.routeEffectsOf evidence with
+            | Some { DeclaredRoutes = (_ :: _) as routes } ->
+                let modules = routes |> List.map _.RouteOwner |> List.distinct |> List.length
+
+                InForce(sprintf "%d declared route(s) across %d module(s)" (List.length routes) modules)
+            | _ -> NotShown "no composed module declares a route effect"
+        | TrustBoundaryId.HandResolvedSubstrate ->
+            let confined =
+                sections
+                |> List.exists (fun s ->
+                    s.Id = SeamAuthoritySection
+                    && s.Findings
+                       |> List.exists (fun finding ->
+                           finding.StartsWith(RuntimeConfinementFinding, StringComparison.Ordinal)))
+
+            if confined then
+                InForce "the seam-authority section reports runtime seam confinement"
+            else
+                NotShown "the composition does not confine its modules (no confine or confineAudited)"
+        | TrustBoundaryId.OutboundEgress -> presenceOfSection sections EgressSection
+        | TrustBoundaryId.RemotingDecoders ->
+            match
+                presenceOfSection sections RemotingDecoderSection,
+                presenceOfSection sections RemotingArgumentDecoderSection
+            with
+            | NotShown a, NotShown b -> NotShown(a + "; " + b)
+            | InForce a, InForce b -> InForce(a + "; " + b)
+            | (InForce a | Partial a | NotShown a), (InForce b | Partial b | NotShown b) -> Partial(a + "; " + b)
+        | TrustBoundaryId.NativeCompanionParsers ->
+            NotShown
+                "this report reads no companion-isolation evidence, so whether a native path runs isolated here is not shown"
+        | TrustBoundaryId.HostileHostWithRoot
+        | TrustBoundaryId.ModelIntent
+        | TrustBoundaryId.StatisticalDisclosureFloors
+        | TrustBoundaryId.AdvisoryRendererDefaults -> NotShown "no mechanism contains it"
+
+    let private routeFindings (evidence: IDeploymentVerificationEvidence) : string list =
+        match DeploymentVerificationEvidence.routeEffectsOf evidence with
+        | Some { DeclaredRoutes = (_ :: _) as routes } ->
+            let label = TrustBoundaries.label TrustBoundaryId.CustomRoutes
+
+            let named =
+                routes
+                |> List.truncate DeclaredRouteCap
+                |> List.map (fun route ->
+                    sprintf
+                        "%s declared: %s (%s) envelope=%s; egress=%s"
+                        label
+                        route.RouteKey
+                        (ComponentId.value route.RouteOwner)
+                        (defaultArg route.RouteEnvelope "undeclared")
+                        (defaultArg route.RouteEgress "undeclared"))
+
+            if List.length routes > DeclaredRouteCap then
+                named
+                @ [
+                    sprintf "%s declared: … and %d more" label (List.length routes - DeclaredRouteCap)
+                ]
+            else
+                named
+        | _ -> []
+
+    /// The trust-boundaries section (Phase 777). Reads the sections gathered
+    /// before it, so `buildReport` gathers it last.
+    let gatherTrustBoundaries
+        (evidence: IDeploymentVerificationEvidence)
+        (sections: ReportSection list)
+        : ReportSection =
+        let title = "Trust boundaries (what is and is not claimed)"
+
+        let rows =
+            TrustBoundaries.all
+            |> List.map (fun boundary ->
+                let contained =
+                    match boundary.Claim with
+                    | TrustClaim.ContainedUnder _ -> Some(presenceFor evidence sections boundary.Id)
+                    | TrustClaim.NotClaimed
+                    | TrustClaim.StatedHatch -> None
+
+                boundary, contained)
+
+        let findings =
+            rows
+            |> List.collect (fun (boundary, contained) ->
+                let label = TrustBoundaries.label boundary.Id
+
+                let here =
+                    match boundary.Claim, contained with
+                    | _, Some(InForce detail) -> "in force — " + detail
+                    | _, Some(Partial detail) -> "partly in force — " + detail
+                    | _, Some(NotShown detail) -> "not shown in force — " + detail
+                    | TrustClaim.StatedHatch, _ -> "stated; the hatch sits outside what this report reads"
+                    | _ -> "nothing is claimed, in this or any deployment"
+
+                [
+                    sprintf "%s [%s] %s" label (TrustBoundaries.claimLabel boundary.Claim) boundary.Title
+                    sprintf "%s crosses: %s" label boundary.Crosses
+                    sprintf "%s mediates: %s" label boundary.Mediates
+                    sprintf "%s claim: %s" label boundary.Statement
+                    sprintf "%s not claimed: %s" label boundary.NotClaimed
+                    sprintf
+                        "%s bounded by: %s"
+                        label
+                        (boundary.BoundedBy
+                         |> List.map TrustBoundaries.renderMechanism
+                         |> String.concat "; ")
+                    sprintf "%s here: %s" label here
+                ]
+                @ (if boundary.Id = TrustBoundaryId.CustomRoutes then
+                       routeFindings evidence
+                   else
+                       []))
+
+        let count predicate =
+            TrustBoundaries.all |> List.filter (fun b -> predicate b.Claim) |> List.length
+
+        let containedCount =
+            count (function
+                | TrustClaim.ContainedUnder _ -> true
+                | _ -> false)
+
+        let tally =
+            sprintf
+                "%d trust boundaries: %d contained, %d not claimed, %d stated hatch(es)"
+                (List.length TrustBoundaries.all)
+                containedCount
+                (count ((=) TrustClaim.NotClaimed))
+                (count ((=) TrustClaim.StatedHatch))
+
+        let presences = rows |> List.choose snd
+
+        let inForce =
+            presences
+            |> List.filter (function
+                | InForce _ -> true
+                | _ -> false)
+            |> List.length
+
+        let partial =
+            presences
+            |> List.filter (function
+                | Partial _ -> true
+                | _ -> false)
+            |> List.length
+
+        let verdict =
+            if inForce = 0 && partial = 0 then
+                VerificationSectionVerdict.NotComposed(
+                    tally
+                    + " — no containment mechanism this report reads is composed here, so none is shown in force; every boundary is listed below as the platform states it"
+                )
+            elif partial > 0 then
+                VerificationSectionVerdict.Observed(
+                    sprintf
+                        "%s — %d of %d contained boundaries in force here, %d partly, the rest not shown"
+                        tally
+                        inForce
+                        containedCount
+                        partial
+                )
+            else
+                VerificationSectionVerdict.Verified(
+                    sprintf
+                        "%s — %d of %d contained boundaries in force here, the rest not shown"
+                        tally
+                        inForce
+                        containedCount
+                )
+
+        section TrustBoundariesSection title verdict findings
+
     // ─── What the report does not prove ──────────────────────────────────
 
     /// The not-proved statements, with the two that a composed substrate
@@ -2620,6 +2923,16 @@ module DeploymentVerificationReport =
                 && s.Findings
                    |> List.exists (fun finding ->
                        finding.StartsWith(RuntimeConfinementFinding, StringComparison.Ordinal)))
+
+        // Phase 777 — whether declared routes are contained here, read off
+        // the trust-boundaries section's own finding.
+        let routeContainmentComposed =
+            sections
+            |> List.exists (fun s ->
+                s.Id = TrustBoundariesSection
+                && s.Findings
+                   |> List.exists (fun finding ->
+                       finding.StartsWith(RouteContainmentInForce, StringComparison.Ordinal)))
 
         [
             {
@@ -2669,7 +2982,18 @@ module DeploymentVerificationReport =
                 Id = "gate-is-a-decision-point"
                 Statement =
                     "The composition gates are decision points, not a sandbox. They refuse a composition at the moment it is presented; they do not confine code that is already running, and nothing here observes runtime behaviour."
-                Narrowing = None
+                // Phase 777, carrying Phase 773's acceptance: a route that
+                // declares its effects IS confined while it runs, on two
+                // axes. The narrowing follows the trust-boundaries
+                // section's own finding, so it appears only where declared
+                // routes are actually composed — never because the SDK can
+                // contain them.
+                Narrowing =
+                    if routeContainmentComposed then
+                        Some
+                            "each route that declares its effects runs inside them: a host-capability invocation its envelope does not admit is refused, and an outbound call through the platform client factory outside its egress grant is denied, while the request runs. The trust-boundaries section names those routes. The statement still stands whole for every undeclared route, which is labelled, not contained, and for anything a declared route does outside the capability registry and the client factory."
+                    else
+                        None
             }
             {
                 Id = "certificate-bodies-not-retained"
@@ -2957,6 +3281,11 @@ module DeploymentVerificationReport =
                 hostingBaseline
             ]
 
+            // Phase 777 appends for the same reason, and LAST by necessity:
+            // the trust-boundaries section reads the sections above to say
+            // which contained boundaries are in force here.
+            let sections = sections @ [ gatherTrustBoundaries evidence sections ]
+
             let notProved = notProvedFor sections
 
             return {
@@ -2993,12 +3322,26 @@ module DeploymentVerificationReport =
         // Phase 771 — the hardening baseline observed at boot, when the
         // root recorded one. Evidence that already carries a baseline keeps
         // it: a root (or a test) that supplied its own observation meant it.
-        match DeploymentVerificationEvidence.hostingBaselineOf evidence with
+        let evidence =
+            match DeploymentVerificationEvidence.hostingBaselineOf evidence with
+            | Some _ -> evidence
+            | None ->
+                match services.GetService(typeof<HostingBaselineRecord>) with
+                | :? HostingBaselineRecord as record when record.Current.IsSome ->
+                    DeploymentVerificationEvidence.withHostingBaseline record.Current evidence
+                | _ -> evidence
+
+        // Phase 777 — every composed module's declared routes, one
+        // registration per module that declared any. Evidence that already
+        // carries the member keeps it, as with the baseline above.
+        match DeploymentVerificationEvidence.routeEffectsOf evidence with
         | Some _ -> evidence
         | None ->
-            match services.GetService(typeof<HostingBaselineRecord>) with
-            | :? HostingBaselineRecord as record when record.Current.IsSome ->
-                DeploymentVerificationEvidence.withHostingBaseline record.Current evidence
+            match services.GetService(typeof<seq<DeclaredRouteEffects>>) with
+            | :? seq<DeclaredRouteEffects> as declared ->
+                match declared |> Seq.collect _.Routes |> List.ofSeq with
+                | [] -> evidence
+                | routes -> DeploymentVerificationEvidence.withRouteEffects (Some { DeclaredRoutes = routes }) evidence
             | _ -> evidence
 
     /// The audited-read record.

@@ -65,7 +65,7 @@
         "src/ToolUp.Platform.Server/Server/DataObjectOrphanSweepJobHandler.fs": 3,
         "src/ToolUp.Platform.Server/Server/DatadogReadbackHandlers.fs": 4,
         "src/ToolUp.Platform.Server/Server/DeploymentReadinessReport.fs": 5,
-        "src/ToolUp.Platform.Server/Server/DeploymentVerificationReport.fs": 6,
+        "src/ToolUp.Platform.Server/Server/DeploymentVerificationReport.fs": 7,
         "src/ToolUp.Platform.Server/Server/DevDiagnosticsHandler.fs": 8,
         "src/ToolUp.Platform.Server/Server/DiagnosticBundleHandler.fs": 5,
         "src/ToolUp.Platform.Server/Server/EncryptionAdminHandler.fs": 3,

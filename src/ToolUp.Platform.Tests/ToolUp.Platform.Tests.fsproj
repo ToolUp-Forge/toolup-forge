@@ -1688,6 +1688,11 @@
              probe driven through a real composed pipeline. -->
         <Compile Include="InProcess\HostingBaselineTests.fs" />
         <Compile Include="InProcess\RouteEffectContainmentTests.fs" />
+        <!-- Phase 777 — trust boundaries as data: the closed list, the lag
+             checks, the generated public page and the report's fourteenth
+             section, plus the route-effect evidence member's contract pack. -->
+        <Compile Include="Contracts\IRouteEffectEvidenceContract.fs" />
+        <Compile Include="InProcess\TrustBoundaryTests.fs" />
         <!-- Phase 63 — StaticCorpus MessagePack round-trip + determinism
              (63.B/63.G) and the IRetrievalPipeline contract (63.H). -->
         <Compile Include="RAG\StaticCorpusContract.fs" />
