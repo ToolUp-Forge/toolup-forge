@@ -1533,6 +1533,18 @@
              CompositionProfile.Standard with the log-and-serve default is
              byte-for-byte the prior behaviour (GP 11/13). -->
         <Compile Include="Server\BootVerificationPreflight.fs" />
+        <!-- Phase 771 - the hardening baseline observed on the composed
+             pipeline at boot (a probe through IServerHost.Invoke plus the
+             container's reads), judged against a declared floor. AFTER
+             BootVerificationPreflight (its policy names a CompositionProfile
+             and its refusal is a CompositionProfileRefusal case), after
+             IServerHost / ServerBinding / the preflight aggregator (it reads
+             each); BEFORE ServerApp, whose run observes it between compose and
+             serve. The report reads it through the tier-neutral mirror in
+             DeploymentVerificationReport.fs, the way it reads the egress
+             handler. Opt-in: nothing is probed unless the verification route
+             is mounted or a policy is declared (GP 13). -->
+        <Compile Include="Server\HostingBaseline.fs" />
         <!-- Phase 684 — the grounding envelope sealed past boot: the enumerated
              grounding-relevant mutation surface (metric / subject registration,
              purpose declaration, canonical-method selection, disclosure policy),

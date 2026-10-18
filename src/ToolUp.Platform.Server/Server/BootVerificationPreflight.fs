@@ -468,6 +468,12 @@ type CompositionProfileRefusal =
     /// registered AI tools declare no effects, so their bodies are bound to
     /// no envelope. `tools` names each one.
     | ToolEffectsUndeclared of tools: string list
+    /// Phase 771 — the verified profile was declared with a hardening-baseline
+    /// floor, and one or more controls that floor names were observed off on
+    /// the composed pipeline at boot. Each entry names the control and what
+    /// was observed, because "the baseline" is not something an operator can
+    /// fix; the control is.
+    | HostingBaselineBelowFloor of controls: string list
 
 [<RequireQualifiedAccess>]
 module CompositionProfileRefusal =
@@ -500,6 +506,10 @@ module CompositionProfileRefusal =
             let clauses = String.concat "; " missing
 
             $"the verified composition profile requires backend '{backend}' to honour ExecutionProfile.Isolated, and it does not assert: {clauses}. Compose a backend that declares the isolation posture, or drop the work to ExecutionProfile.Standard."
+        | HostingBaselineBelowFloor controls ->
+            let named = String.concat "; " controls
+
+            $"the verified composition profile's hardening-baseline floor names controls the composed pipeline was observed not to enforce at boot: {named}. Compose each control (see docs/platform/security.md, \"Hardening baseline\"), drop it from the declared floor, or run CompositionProfile.Standard."
 
 // ─── The preflight ───────────────────────────────────────────────────
 

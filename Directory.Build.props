@@ -540,6 +540,25 @@
       `docs/platform/analyzer-rules.md`. The package keeps its published id.
       Migration recipe: `docs/migrations/776-toolup-analyzers-rule-set.md`.
 
+      Rides this draft, in the class it already carries (a source-breaking
+      addition): Phase 771 observes the hardening baseline at boot.
+      `CompositionProfileRefusal` (Platform.Server) gains the case
+      `HostingBaselineBelowFloor`, which breaks an exhaustive match on that
+      union the way a record gaining a field breaks a full literal; `describe`
+      handles it. Additive (Platform.Core): the `HostingBaselineSection`
+      literal. Additive (Platform.Server): `HostingBaseline` (`HostingControl`,
+      `BaselineControl`, `HostingBaselinePolicy`, `ProbeResponse`,
+      `HostingObservation`, `UnknownKeyGuardObservation`), the report's
+      `HostingControlState` / `HostingBaselineVerdict` / `HostingControlRecord`
+      / `HostingBaselineIntegrity` / `IHostingBaselineEvidence` /
+      `HostingBaselineRecord`, `DeploymentVerificationEvidence.withHostingBaseline`
+      / `hostingBaselineOf`, and `ServerApp.withHostingBaselinePolicy`.
+      Behaviour: `ServerApp.withDeploymentVerification` now has `run` send two
+      probe requests through the composed pipeline before it serves, and the
+      report gains a thirteenth section; a deployment that mounts no route and
+      declares no floor sends nothing and is byte-identical. Migration recipe:
+      `docs/migrations/771-hosting-hardening-baseline.md`.
+
       Rides this draft, additive: Phase 1015 lets a deployment declare how a
       data source's data arrives - a scheduled pull or a watched location -
       run as a declared principal, never a scope. Additive (Platform.Server):

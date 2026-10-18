@@ -213,6 +213,88 @@ The third is the general one, and it **refuses startup**. It is security-class, 
 
 `TOOLUP_ACCEPT_PLAINTEXT_SECRETS=1` (equivalently `ServerConfig.AcceptPlaintextSecretsWhenAuthRequired`, which the older `TOOLUP_ACCEPT_PLAINTEXT_SECRETS_IN_AUTH_MODE=1` spelling also sets) lowers the refusal to a `Warning` that names the acknowledgement as the reason nothing was refused. That is the right lever when the storage medium supplies the encryption the store does not — disk FDE, an encrypting volume, a KMS-managed bucket — and the wrong one as a way past a failing boot. Full operator procedure, including master-key provisioning and rotation: [`DEPLOYMENT.md`](../../DEPLOYMENT.md) — "Secrets at rest".
 
+## Hardening baseline
+
+The request-edge controls a hardened host carries ship as separate mechanisms — the CSP middleware and
+its `ICspContributor` aggregation, the security-headers floor, the credentials-with-wildcard CORS
+refusal, the unknown-config-key guard, the configuration manifest, rate limiting, forwarded-headers
+trust. Phase 771 declares them as **one baseline** and proves at boot which of them this process
+actually serves. The proof is **observed, never read from `ServerConfig`**: a header configured on and
+then stripped, overridden or never mounted reads as off.
+
+`ServerApp.run` observes the baseline after `compose` returns and before the host serves. It sends two
+probe requests through the composed pipeline (`IServerHost.Invoke`, the seam serverless adapters use)
+to a path nothing serves, `/.well-known/hardening-baseline-probe`:
+
+- a **direct** HTTPS request carrying `Origin: https://hardening-probe.invalid`, whose response
+  headers the header and CORS controls read;
+- a **proxied** request, plain HTTP from the trusted proxy's address with `X-Forwarded-Proto: https`,
+  the way a TLS-terminating load balancer forwards one.
+
+The remaining controls read what the container holds and what the preflight recorded at this boot.
+
+| Control (report row) | Observed as on when | Not applicable when |
+|---|---|---|
+| `content-security-policy` | the direct probe's response carries a non-empty `Content-Security-Policy` | — |
+| `strict-transport-security` | the direct probe's response carries `Strict-Transport-Security` with a positive `max-age` | every listen URL is loopback |
+| `x-content-type-options` | `X-Content-Type-Options: nosniff` | — |
+| `x-frame-options` | `X-Frame-Options: DENY` or `SAMEORIGIN`, or a CSP `frame-ancestors` directive | — |
+| `referrer-policy` | a `Referrer-Policy` other than `unsafe-url` | — |
+| `cors-credentials` | the arbitrary probe origin is **not** granted `Access-Control-Allow-Credentials: true` (with its own origin or `*`) | — |
+| `unknown-config-key-refusal` | the unknown-config-key guard ran at this boot (it is in the preflight's record) **and** strict mode (`TOOLUP_STRICT_CONFIG`) is in force | — |
+| `config-manifest-bound` | a configuration manifest is bound | — |
+| `rate-limiting` | the container composes a global inbound rate limiter or a per-route rate-limit store | — |
+| `forwarded-secure-cookie` | the proxied probe reaches the pipeline as `https` — the input every SDK cookie's `Secure` flag follows (`Request.IsHttps`) — and any cookie it set carries `Secure` | every listen URL is loopback, or a listen URL is `https://` (TLS terminates here) |
+
+The listen URLs come from the host configuration (`ServerBinding.resolve`). `ServerConfig` is consulted
+for exactly one input: the proxied probe originates inside the first `TrustedProxyCidrs` network, because
+forwarded-headers trust applies only to those peers. That chooses where the probe comes from; it never
+decides what a control reads.
+
+**When it runs, and what it costs.** Only when something will read it: the verification route is
+mounted (`ServerApp.withDeploymentVerification`), or a floor is declared
+(`ServerApp.withHostingBaselinePolicy`). A deployment asking for neither sends no probe (GP 13). A root
+that drives its host without `ServerApp.run`, such as a serverless adapter, calls
+`HostingBaseline.atBoot host config` on the same terms. The `--verify-deployment` CI entry composes no
+pipeline, so its report's hardening-baseline section reads `not-composed`.
+
+**The floor, and the refusal.** The report's section verdict is `verified` when every applicable control
+was observed on, `observed` when some were off, and `failed` when the declared floor is not met under the
+verified profile:
+
+```fsharp skip=fragment
+app
+|> ServerApp.withHostingBaselinePolicy (
+    HostingBaselinePolicy.verified [
+        HostingControl.StrictTransportSecurity
+        HostingControl.ContentSecurityPolicy
+        HostingControl.ForwardedSecureCookie
+    ]
+)
+|> ServerApp.run
+```
+
+Under `CompositionProfile.Verified`, a floor control observed off **refuses the start** with
+`CompositionProfileRefusal.HostingBaselineBelowFloor`, which names each control and what was observed.
+Under `CompositionProfile.Standard` the floor only marks the report's rows (GP 11). The config preflight
+runs inside `compose`, before any pipeline exists, so its refusals win first: a credentials-with-wildcard
+`ServerConfig.Cors` is refused there and the baseline is never observed. The baseline's own CORS row
+exists for the shape the preflight cannot see, such as a pre-middleware that reflects any origin with
+credentials.
+
+### What this does not claim
+
+The hardening baseline proves header presence, not policy adequacy. It observes that each control is
+on in the composed pipeline at boot: a `Content-Security-Policy` header is sent, HSTS is sent, the
+cookie `Secure` flag follows a proxied HTTPS request. Whether that CSP actually blocks the scripts that
+matter, whether the HSTS `max-age` is long enough, whether a rate limit is tight enough, and anything a
+route sets or overrides per request are outside it. The report carries the same sentence as data
+(`hardening-baseline-is-presence-not-adequacy`), so it survives into every export.
+
+Two further limits follow from where the probe sits. It sees the pipeline the SDK composed, not what
+sits in front of it: a CDN or ingress that strips or adds headers is outside it. And it is a boot-time
+observation; nothing here proves the pipeline did not change afterwards.
+
 ## Vulnerability disclosure
 
 Security defects in the SDK itself are reported via the process documented in [`SECURITY.md`](../../SECURITY.md) at the repo root. Deployment-time hardening defects (a `SurfaceCoherenceValidator` rule that should fire and does not, a per-shape rate-limit partition that the documented partitioning model does not match, an audit envelope shape that breaks a downstream sink) are reported the same way — they are SDK defects, not operator-tuning concerns.
