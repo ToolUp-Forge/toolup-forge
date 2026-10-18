@@ -127,3 +127,23 @@ module Analyzer =
                      "https://github.com/ToolUp-Forge/toolup-forge/blob/main/src/ToolUp.Remoting.Analyzers/README.md")>]
     let editorAnalyzer: Analyzer<EditorContext> =
         fun (ctx: EditorContext) -> run ctx.ParseFileResults.ParseTree
+
+    // Phase 776 — the containment rules (TUA001–TUA003), registered as their
+    // own analyser so a host can list, enable or silence the family apart
+    // from the Remoting auth/audit pair above.
+
+    let private runContainment (parseTree: ParsedInput) : Async<Message list> = async {
+        return ContainmentRules.analyze parseTree |> List.map ContainmentRules.toMessage
+    }
+
+    [<CliAnalyzer("ToolUpContainment",
+                  "Flags container resolution outside registration (TUA001), an HttpClient built without the egress handler (TUA002) and Async.RunSynchronously outside an entry point (TUA003).",
+                  "https://github.com/ToolUp-Forge/toolup-forge/blob/main/docs/platform/analyzer-rules.md")>]
+    let containmentCliAnalyzer: Analyzer<CliContext> =
+        fun (ctx: CliContext) -> runContainment ctx.ParseFileResults.ParseTree
+
+    [<EditorAnalyzer("ToolUpContainment",
+                     "Flags container resolution outside registration (TUA001), an HttpClient built without the egress handler (TUA002) and Async.RunSynchronously outside an entry point (TUA003).",
+                     "https://github.com/ToolUp-Forge/toolup-forge/blob/main/docs/platform/analyzer-rules.md")>]
+    let containmentEditorAnalyzer: Analyzer<EditorContext> =
+        fun (ctx: EditorContext) -> runContainment ctx.ParseFileResults.ParseTree

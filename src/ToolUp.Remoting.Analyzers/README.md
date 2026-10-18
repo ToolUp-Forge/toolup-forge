@@ -21,8 +21,17 @@ installs it sees byte-for-byte-unchanged behaviour, and the runtime classifier i
 |------|----------|---------------|
 | `TUR0001` | Error | A Remoting API-record field (method) carrying **none** of `[<RequiresRole>]` / `[<RequiresClaim>]` / `[<TenantScoped>]` / `[<AllowAnonymous>]` / `[<PublicEndpoint>]`. Mirrors the runtime `AuthClassifier`'s by-simple-name recognition, so the analyzer flags exactly the set the dispatcher would refuse to start on. |
 | `TUR0002` | Warning (opt-in) | An unaudited API method whose input record carries a `[<PiiSafe>]` field — PII flows through but no `[<Audit(...)>]` records it. Off by default. |
+| `TUA001` | Warning | Container resolution (`GetService` / `GetRequiredService` / `GetServices` / keyed forms / `RequestServices`) outside service registration. |
+| `TUA002` | Warning | An `HttpClient` constructed without the platform egress handler (`PlatformHttpClient`). |
+| `TUA003` | Warning | `Async.RunSynchronously` outside an `[<EntryPoint>]`. |
 
-Both attribute families are recognised: the server-tier `ToolUp.Remoting.Server.*` set and the
+The `TUA` rules (Phase 776) ship as a second analyser, `ToolUpContainment`. The full rule reference —
+rationale, sanctioned alternative and since-version for every code — is generated from `Rules.fs` into
+[`docs/platform/analyzer-rules.md`](../../docs/platform/analyzer-rules.md); the `Analyzers` leg of
+`VerifyAll` fails when the two differ, and runs the `TUA` rules over this repository's own `src/`
+against the inventory in `analyzer-inventory.json`.
+
+For `TUR0001` / `TUR0002`, both attribute families are recognised: the server-tier `ToolUp.Remoting.Server.*` set and the
 tier-shared `ToolUp.Platform.*` mirrors that Fable-compiled API records carry.
 
 ### Codefixes

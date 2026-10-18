@@ -530,6 +530,16 @@
       a deployment that does not is byte-identical. Migration recipe:
       `docs/migrations/770-seam-aware-service-provider.md`.
 
+      Rides this draft, additive (Remoting.Analyzers, an analyser-only package
+      with no lib surface): Phase 776 adds the containment rules TUA001 to
+      TUA003 (container resolution outside service registration, an HttpClient
+      built without the egress handler, Async.RunSynchronously outside an
+      entry point) as a second analyser, `ToolUpContainment`, beside the
+      unchanged TUR0001 / TUR0002 pair; the `Rules`, `ContainmentRules` and
+      `TreeScan` modules; and the generated rule reference
+      `docs/platform/analyzer-rules.md`. The package keeps its published id.
+      Migration recipe: `docs/migrations/776-toolup-analyzers-rule-set.md`.
+
       Rides this draft, additive: Phase 1015 lets a deployment declare how a
       data source's data arrives - a scheduled pull or a watched location -
       run as a declared principal, never a scope. Additive (Platform.Server):
