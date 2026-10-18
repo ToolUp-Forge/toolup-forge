@@ -3002,8 +3002,30 @@ ToolUp.Platform.DataSourceCallContext.Credential : Microsoft.FSharp.Core.FSharpO
 ToolUp.Platform.DataSourceCallContext.ScopeId : System.String { get }
 ToolUp.Platform.DataSourceConfigStore (class)
 ToolUp.Platform.DataSourceConfigStore.create(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.IDataSourceConfigStore
+ToolUp.Platform.DataSourceConfigStore.declaredDeliveryLedger(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.IDeclaredDeliveryLedger
 ToolUp.Platform.DataSourceConfigStore+BlobDataSourceConfigStore (class)
 ToolUp.Platform.DataSourceConfigStore+BlobDataSourceConfigStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
+ToolUp.Platform.DataSourceConfigStore+BlobDeclaredDeliveryLedger (class)
+ToolUp.Platform.DataSourceConfigStore+BlobDeclaredDeliveryLedger..ctor(ToolUp.Platform.BlobStorage+IBlobStorage)
+ToolUp.Platform.DataSourceDelivery (class)
+ToolUp.Platform.DataSourceDelivery.IsScheduledPull : System.Boolean { get }
+ToolUp.Platform.DataSourceDelivery.IsUpload : System.Boolean { get }
+ToolUp.Platform.DataSourceDelivery.IsWatched : System.Boolean { get }
+ToolUp.Platform.DataSourceDelivery.Tag : System.Int32 { get }
+ToolUp.Platform.DataSourceDelivery.Upload : ToolUp.Platform.DataSourceDelivery { get }
+ToolUp.Platform.DataSourceDelivery+ScheduledPull (class)
+ToolUp.Platform.DataSourceDelivery+ScheduledPull.cadence : System.String { get }
+ToolUp.Platform.DataSourceDelivery+ScheduledPull.principal : System.String { get }
+ToolUp.Platform.DataSourceDelivery+Tags (class)
+ToolUp.Platform.DataSourceDelivery+Tags.ScheduledPull : System.Int32 (literal)
+ToolUp.Platform.DataSourceDelivery+Tags.Upload : System.Int32 (literal)
+ToolUp.Platform.DataSourceDelivery+Tags.Watched : System.Int32 (literal)
+ToolUp.Platform.DataSourceDelivery+Watched (class)
+ToolUp.Platform.DataSourceDelivery+Watched.location : System.String { get }
+ToolUp.Platform.DataSourceDelivery+Watched.principal : System.String { get }
+ToolUp.Platform.DataSourceDeliveryModule (class)
+ToolUp.Platform.DataSourceDeliveryModule.principal(ToolUp.Platform.DataSourceDelivery) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.DataSourceDeliveryModule.token(ToolUp.Platform.DataSourceDelivery) : System.String
 ToolUp.Platform.DataSubjectRequestApiHandler (class)
 ToolUp.Platform.DataSubjectRequestApiHandler.auditToLog(ToolUp.Platform.IAuditLog, ToolUp.Platform.DataSubjectRequestApiHandler+DsrAuditEvent) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.DataSubjectRequestApiHandler.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataExporter+IDataExporter], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataExporter+IErasureHandler], ToolUp.Platform.ErasurePolicy, System.String, System.String, ToolUp.Platform.AccessContext, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DataSubjectRequestApiHandler+DsrAuditEvent, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataSubjectRequestApiHandler+DsrAsyncDeps]) : ToolUp.Platform.DataSubjectRequestApi+IDataSubjectRequestApi
@@ -3124,6 +3146,23 @@ ToolUp.Platform.DeadTopic (class)
 ToolUp.Platform.DeadTopic..ctor(ToolUp.Platform.EventKind, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentId])
 ToolUp.Platform.DeadTopic.EmittedBy : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentId] { get }
 ToolUp.Platform.DeadTopic.Kind : ToolUp.Platform.EventKind { get }
+ToolUp.Platform.DeclaredDataSource (class)
+ToolUp.Platform.DeclaredDataSource..ctor(ToolUp.Platform.DataSourceConfig, ToolUp.Platform.DataSourceDelivery)
+ToolUp.Platform.DeclaredDataSource.Delivery : ToolUp.Platform.DataSourceDelivery { get }
+ToolUp.Platform.DeclaredDataSource.Source : ToolUp.Platform.DataSourceConfig { get }
+ToolUp.Platform.DeclaredDataSources (class)
+ToolUp.Platform.DeclaredDataSources..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeclaredPrincipal], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeclaredDataSource])
+ToolUp.Platform.DeclaredDataSources.Principals : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeclaredPrincipal] { get }
+ToolUp.Platform.DeclaredDataSources.Sources : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeclaredDataSource] { get }
+ToolUp.Platform.DeclaredPrincipal (class)
+ToolUp.Platform.DeclaredPrincipal..ctor(System.String, System.String, System.String)
+ToolUp.Platform.DeclaredPrincipal.DisplayName : System.String { get }
+ToolUp.Platform.DeclaredPrincipal.Name : System.String { get }
+ToolUp.Platform.DeclaredPrincipal.UserId : System.String { get }
+ToolUp.Platform.DeclaredPrincipalModule (class)
+ToolUp.Platform.DeclaredPrincipalModule.missingGrant(ToolUp.Platform.ScopeResolutionError) : System.String
+ToolUp.Platform.DeclaredPrincipalModule.user(ToolUp.Platform.DeclaredPrincipal) : ToolUp.Platform.Auth+AuthenticatedUser
+ToolUp.Platform.DeclaredPrincipalModule.userOf(System.String, System.String) : ToolUp.Platform.Auth+AuthenticatedUser
 ToolUp.Platform.DeclaredPrincipalResolver (class)
 ToolUp.Platform.DeclaredPrincipalResolver.Resolve(ToolUp.Platform.Auth+AuthenticatedUser) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ResolvedScope, ToolUp.Platform.ScopeResolutionError]]
 ToolUp.Platform.DeclaredRouteEffects (class)
@@ -5852,6 +5891,11 @@ ToolUp.Platform.IDatasetStore.GetLatest(System.String, System.String) : Microsof
 ToolUp.Platform.IDatasetStore.GetVersion(System.String, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetVersion, ToolUp.Platform.DatasetError]]
 ToolUp.Platform.IDatasetStore.ListVersions(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DatasetVersion]]
 ToolUp.Platform.IDatasetStore.ReadPage(System.String, System.String, System.Int32, ToolUp.Platform.DatasetPageQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DatasetPage, ToolUp.Platform.DatasetError]]
+ToolUp.Platform.IDeclaredDeliveryLedger (interface)
+ToolUp.Platform.IDeclaredDeliveryLedger.ReadSeeded() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpSet`1[System.Tuple`2[System.String, System.String]], System.String]]
+ToolUp.Platform.IDeclaredDeliveryLedger.RecordIngested(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.IDeclaredDeliveryLedger.WasIngested(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Boolean, System.String]]
+ToolUp.Platform.IDeclaredDeliveryLedger.WriteSeeded(Microsoft.FSharp.Collections.FSharpSet`1[System.Tuple`2[System.String, System.String]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
 ToolUp.Platform.IDeclaresCredentialNeed (interface)
 ToolUp.Platform.IDeclaresCredentialNeed.CredentialNeed : ToolUp.Platform.CredentialNeed { get }
 ToolUp.Platform.IDeclaresPayloadFormat (interface)

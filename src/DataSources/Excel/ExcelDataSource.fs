@@ -536,6 +536,15 @@ type private ExcelDataSourceImpl(storage: IBlobStorage) =
     interface IDeclaresCredentialNeed with
         member _.CredentialNeed = CredentialNeed.NoCredential
 
+    // Phase 1015 — a watched delivery lists the objects this connector
+    // reads, under the connector's own naming.
+    interface IWatchableFileSource with
+        member _.ListObjects(ctx) =
+            // A workbook is one object; it is ingested as the bare `<file>`
+            // table, the workbook's default sheet.
+            withSettings ctx "Excel ListObjects" (fun settings ->
+                Files.listObjects storage "Excel ListObjects" settings.File)
+
     interface IDataSource with
         member _.Kind = Kind
 

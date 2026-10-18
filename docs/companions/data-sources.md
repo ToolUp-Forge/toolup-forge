@@ -72,6 +72,56 @@ The bindings live in [`src/ToolUp.DataSources.Tests/Tests/FidelityContractTests.
 
 A new connector should reach for the strongest shape its backend allows. When a backend has neither a local engine nor a reachable render path, say so with `unbound` and the reason — and treat that reason as the first thing to fix, because an unbound connector is one the pack cannot protect.
 
+## Declared delivery — a scheduled pull or a watched location (Phase 1015)
+
+A source a request saves arrives by upload: someone signed in triggers each refresh, under the scope that
+request resolved. A deployment can instead **declare** a source in its composition, together with how its data
+arrives and the principal that delivery runs as — never a scope:
+
+| `DataSourceDelivery` | What runs |
+|---|---|
+| `Upload` (the default) | Nothing is scheduled. A source previously declared with another delivery keeps its config and has that delivery's jobs cancelled. |
+| `ScheduledPull(cadence, principal)` | One job per table in the config's `Tables`, on the 5-field cron `cadence`. Each is the platform's own ingestion job, so the run is recorded and `IngestionRunCompleted` is written exactly as for a refresh someone triggered. |
+| `Watched(location, principal)` | A poll (`DeclaredDelivery.DefaultWatchPoll`, every minute, unless the composition passes another cadence) lists the blob prefix `location` in the **principal's own scope container** through the connector, and ingests each object not yet ingested. File connectors only: the connector implements `IWatchableFileSource`, which `Csv`, `Excel` and `Parquet` do. |
+
+```fsharp skip=fragment
+let declared: DeclaredDataSources = {
+    Principals = [ { Name = "loader"; UserId = "svc-loader"; DisplayName = "Nightly loader" } ]
+    Sources = [
+        { Source = salesWarehouse; Delivery = DataSourceDelivery.ScheduledPull("0 6 * * *", "loader") }
+        { Source = dropFolder; Delivery = DataSourceDelivery.Watched("incoming", "loader") }
+    ]
+}
+
+services
+|> DeclaredDelivery.withDeclaredDataSources declared DeclaredDelivery.DefaultWatchPoll
+|> ignore
+```
+
+`withDeclaredDataSources` registers the startup service; its registration factory resolves the config store,
+ingestor, scheduler, blob storage, connectors and `DeclaredPrincipalResolver` from the deployment's container.
+`DeclaredDelivery.startupService` builds the same service over values a composition already holds.
+
+**The principal is resolved, never trusted.** At startup the deployment's own scope resolver resolves it
+(`DeclaredPrincipalResolver`, the same resolver a standing report subscription runs through), the source's config
+is seeded at that scope, and every job is scheduled through the typed `IJobScheduler.Schedule(scope, …)`, so the
+platform's scope carrier seals the resolution onto it. No scope is built from a string.
+
+**Refused at startup, never at the first tick.** Every declaration is checked before anything is written, and any
+refusal fails the host's start (`DeclaredDataSourcesRefused`) naming each source and what it lacks: an undeclared
+principal or one that does not resolve (naming the grant it lacks), a scope that does not persist, a `Kind` no
+connector answers, a cadence that is not cron, a pull with no tables, a watch over a connector that is not a file
+connector, a watched config that sets its own `container` or `prefix`, a location that climbs out of the scope
+container, and a watched location that cannot be read.
+
+**Idempotent, and retired by declaration.** A re-deploy updates what it seeded; a new cadence replaces the job on
+the old one. A ledger (`DataSourceConfigStore.declaredDeliveryLedger`) records where each source was seeded, so a
+source removed from the composition, or whose principal now resolves elsewhere, has its jobs cancelled and its
+config deleted there. A watched object is recorded once ingested, by its identity — blob name, last-modified
+instant and size — so polling never ingests it twice, and an object rewritten in place is ingested again. An
+object refused for its own content (`SchemaMismatch`) is recorded too, and is not retried until it is rewritten;
+any other failure is retried at the next poll.
+
 ## Authoring a connector
 
 The general companion rules apply (see the companion-authoring guide in the repository's `CLAUDE.md`): its own `.fsproj` and vendor `PackageReference`s, credentials read per call through `ISecretStore` (never env vars or config files), a packed `README.md`, and an explicit dev-only vs production-ready statement in the file header. Specific to `IDataSource`:

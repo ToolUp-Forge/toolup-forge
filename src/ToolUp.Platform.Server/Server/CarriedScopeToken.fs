@@ -349,3 +349,57 @@ type DeclaredPrincipalResolver
             // for — the same mint a redeemed job token takes.
             return resolved |> Result.map ResolvedScope.ofCarried
     }
+// ─── Phase 1015 — the declared principal, shared ─────────────────────
+//
+// A second kind of declared work, a data source's declared delivery, names
+// its principal the way a standing subscription does: by a name the
+// declarations refer to, the user id the deployment's resolver resolves,
+// and a label. The record and the two readings every declarer needs (the
+// identity handed to `DeclaredPrincipalResolver.Resolve`, and the grant a
+// refusal says the principal lacks) live here, beside the resolver, so a
+// declarer never re-derives either.
+
+/// A principal a deployment declares in its composition (Phase 1015): the
+/// identity declared work runs as, never a scope. The same shape as the
+/// reporting tier's `StandingSubscriptionPrincipal`.
+type DeclaredPrincipal = {
+    /// The name declarations refer to it by. Unique within a deployment's
+    /// declarations of one kind.
+    Name: string
+    /// The identity the scope resolver resolves — the user id a request
+    /// signed in as this principal would carry.
+    UserId: string
+    /// Label the audit trail and an admin surface show for it.
+    DisplayName: string
+}
+
+/// Readings of a declared principal (Phase 1015).
+[<RequireQualifiedAccess>]
+module DeclaredPrincipal =
+
+    /// The identity `DeclaredPrincipalResolver.Resolve` resolves for a
+    /// principal with this user id and label: a member signed in with no
+    /// roles, no email and no tenant, as a request carrying only that
+    /// identity would be.
+    let userOf (userId: string) (displayName: string) : Auth.AuthenticatedUser = {
+        UserId = userId
+        DisplayName = displayName
+        Email = None
+        TenantId = None
+        Roles = []
+        DirectoryRoles = []
+        Admission = Auth.PrincipalAdmission.Member
+    }
+
+    /// The identity `DeclaredPrincipalResolver.Resolve` resolves for
+    /// `principal`.
+    let user (principal: DeclaredPrincipal) : Auth.AuthenticatedUser =
+        userOf principal.UserId principal.DisplayName
+
+    /// The grant a scope-resolution refusal says a declared principal lacks.
+    let missingGrant (error: ScopeResolutionError) : string =
+        match error with
+        | NotAuthenticated -> "an identity the deployment's scope resolver accepts"
+        | NoActiveTeam -> "an active team"
+        | NotTeamMember teamId -> $"membership of team '{teamId}'"
+        | ScopeResolutionFailed message -> $"a resolution (the scope resolver failed: {message})"

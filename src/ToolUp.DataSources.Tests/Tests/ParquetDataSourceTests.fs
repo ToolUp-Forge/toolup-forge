@@ -11,6 +11,7 @@ open Parquet.Schema
 open ToolUp.Platform
 open ToolUp.DataSources.Parquet
 open ToolUp.DataSources.Tests.Support
+open ToolUp.DataSources.Tests.Contracts
 open DataManagementTypes
 
 // ─── ToolUp.DataSources.Parquet (the IDataSource leg) ─────────────
@@ -370,6 +371,9 @@ let tests =
         nativeTests
 
         LocalFileDataSourceContract.tests "Parquet" target
+
+        // Phase 1015 - what a watched delivery lists through this connector.
+        IWatchableFileSourceContract.tests "Parquet" ParquetDataSource.create ".parquet"
 
         testList "readSettings" [
             test "container is required" {

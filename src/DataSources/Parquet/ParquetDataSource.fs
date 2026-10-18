@@ -586,6 +586,13 @@ type private ParquetDataSourceImpl(storage: IBlobStorage) =
                     return decoded |> Result.map (fun _ -> bytes)
             })
 
+    // Phase 1015 — a watched delivery lists the objects this connector
+    // reads, under the connector's own naming.
+    interface IWatchableFileSource with
+        member _.ListObjects(ctx) =
+            withSettings ctx "Parquet ListObjects" (fun settings ->
+                Files.listObjects storage "Parquet ListObjects" settings.File)
+
     interface IDataSource with
         member _.Kind = Kind
 

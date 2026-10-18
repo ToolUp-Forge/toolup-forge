@@ -19,6 +19,9 @@
     <Compile Include="OutboundRateBudget.fs" />
     <Compile Include="IExternalApiConnector.fs" />
     <Compile Include="SyncCursor.fs" />
+    <!-- Phase 1015 — declared data-source deliveries: a scheduled pull or a
+         watched location, run under a declared principal. -->
+    <Compile Include="DeclaredDelivery.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />

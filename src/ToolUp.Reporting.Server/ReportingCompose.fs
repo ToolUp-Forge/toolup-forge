@@ -291,12 +291,7 @@ module StandingSubscriptionRefusal =
             $"standing subscription '{subscription}' could not be seeded: {reason}"
 
     /// The grant a scope-resolution refusal says the principal lacks.
-    let missingGrant =
-        function
-        | NotAuthenticated -> "an identity the deployment's scope resolver accepts"
-        | NoActiveTeam -> "an active team"
-        | NotTeamMember teamId -> $"membership of team '{teamId}'"
-        | ScopeResolutionFailed message -> $"a resolution (the scope resolver failed: {message})"
+    let missingGrant (error: ScopeResolutionError) : string = DeclaredPrincipal.missingGrant error
 
 /// The host's start was refused; carries every refusal at once.
 exception StandingSubscriptionsRefused of refusals: StandingSubscriptionRefusal list with
@@ -323,15 +318,8 @@ type private CheckedStanding = {
     Scope: ResolvedScope
 }
 
-let private principalUser (principal: StandingSubscriptionPrincipal) : Auth.AuthenticatedUser = {
-    UserId = principal.UserId
-    DisplayName = principal.DisplayName
-    Email = None
-    TenantId = None
-    Roles = []
-    DirectoryRoles = []
-    Admission = Auth.PrincipalAdmission.Member
-}
+let private principalUser (principal: StandingSubscriptionPrincipal) : Auth.AuthenticatedUser =
+    DeclaredPrincipal.userOf principal.UserId principal.DisplayName
 
 let private oks (results: Result<'a, 'e> seq) : 'a list =
     results

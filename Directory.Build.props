@@ -593,6 +593,23 @@
       before moves, and no floor is declared by default. Migration recipe:
       `docs/migrations/774-verification-level.md`.
 
+      Rides this draft, additive: Phase 1015 lets a deployment declare how a
+      data source's data arrives - a scheduled pull or a watched location -
+      run as a declared principal, never a scope. Additive (Platform.Server):
+      `DataSourceDelivery`, `DeclaredDataSource`, `DeclaredDataSources`,
+      `IDeclaredDeliveryLedger`, `DataSourceConfigStore.declaredDeliveryLedger`
+      and `BlobDeclaredDeliveryLedger`, and the shared `DeclaredPrincipal`
+      record with its `user` / `userOf` / `missingGrant` readings. Additive
+      (DataSources.Common): `DeclaredDelivery` (`seed`, `watchHandler`,
+      `depsOf`, `startupService`, `withDeclaredDataSources`),
+      `DeclaredDeliveryDeps`, `DeclaredDeliveryServices`,
+      `DeclaredSeedReport`, `DeclaredDeliveryRefusal`,
+      `DeclaredDataSourcesRefused`, `WatchedObject`, `Files.listObjects` and
+      `IWatchableFileSource`, which the Csv, Excel and Parquet connectors now
+      implement. `DataSourceConfig` is unchanged; a deployment that declares
+      no source is byte-identical. Migration recipe:
+      `docs/migrations/1015-declared-data-delivery.md`.
+
       Rides this draft, additive (Platform.Core, Platform.Server): Phase 777
       puts the platform's trust boundaries on every verification report.
       Core gains `TrustBoundaryId`, `TrustClaim`, `ContainmentProfile`,

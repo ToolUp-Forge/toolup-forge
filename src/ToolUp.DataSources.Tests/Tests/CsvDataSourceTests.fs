@@ -8,6 +8,7 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.DataSources.Csv
 open ToolUp.DataSources.Tests.Support
+open ToolUp.DataSources.Tests.Contracts
 open DataManagementTypes
 
 // ─── ToolUp.DataSources.Csv ───────────────────────────────────────
@@ -64,6 +65,9 @@ let tests =
         // pass the first run and fail the second.
         LocalFileDataSourceContract.tests "Csv (comma)" (target [] ",")
         LocalFileDataSourceContract.tests "Csv (tab)" (target [ "delimiter", "tab" ] "\t")
+
+        // Phase 1015 - what a watched delivery lists through this connector.
+        IWatchableFileSourceContract.tests "Csv" CsvDataSource.create ".csv"
 
         testList "readSettings" [
             test "container is required" {
