@@ -77,6 +77,10 @@ let private registeredTests =
         // both directions, and the shipped workflow + Directory.Build.targets.
         // Pure over strings and two committed files; no git, no network.
         ReleaseChannelTests.tests
+        // Phase 1016 - the Publish push loop: the --timeout on every push,
+        // the bounded per-package retry, and the unpushed-remainder report.
+        // A scripted fake runner; nothing is pushed, nothing sleeps.
+        NugetPushTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

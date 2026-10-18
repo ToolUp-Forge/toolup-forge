@@ -435,6 +435,195 @@ module internal TestPackHost =
 
             result.ExitCode
 
+// ─── Resilient package push (Phase 1016) ─────────────────────────────
+
+/// The `Publish` target's push loop, with the network taken out of it.
+///
+/// One slow or cancelled upload used to abort the whole release: the
+/// push client's 300 s default timeout, or one cancelled symbol-package
+/// upload, failed the target with the release half served, and the
+/// only remedy was a manual re-run. Here each package's push (which
+/// includes its `.snupkg`, auto-detected by `dotnet nuget push`) runs
+/// under a longer `--timeout` and is retried with backoff before the
+/// target gives up. When it does give up, it names every package still
+/// unpushed, which is what a re-run will push.
+///
+/// Retrying is safe because every push passes `--skip-duplicate`: a
+/// retry whose package was already accepted is skipped by the server
+/// rather than refused, so it moves on to whatever was left (in the
+/// common case, the symbol package).
+///
+/// The budget is a `RetryPolicy` record (portability rule 3): the
+/// transport tier's own retry type, reused here, not a second shape.
+/// `Timeout` is the per-push `--timeout`.
+///
+/// `internal` for the reason `TestPackHost` is: the unit is reached by
+/// the Build test pack through `InternalsVisibleTo` and by the root
+/// `Build.fs`, which compiles this file into its own assembly. It does
+/// not enlarge the published surface of `ToolUp.Platform.Build`.
+module internal NugetPush =
+
+    open ToolUp.Platform.Transport
+
+    /// Seconds per `dotnet nuget push` (the `--timeout` value).
+    [<Literal>]
+    let TimeoutVariable = "TOOLUP_PUBLISH_PUSH_TIMEOUT_SECONDS"
+
+    /// Retries after a package's first failed push (0 = no retry).
+    [<Literal>]
+    let RetriesVariable = "TOOLUP_PUBLISH_PUSH_RETRIES"
+
+    /// The first push plus three retries, waiting 15 s, 30 s and 60 s
+    /// between them, each push allowed 900 s. One package's worst case
+    /// is therefore 4 x 900 s + 105 s, just under 62 minutes.
+    let defaultPolicy: RetryPolicy = {
+        MaxAttempts = 4
+        InitialBackoff = TimeSpan.FromSeconds 15.0
+        MaxBackoff = TimeSpan.FromSeconds 120.0
+        Timeout = Some(TimeSpan.FromSeconds 900.0)
+    }
+
+    let private parseBounded (name: string) (lo: int) (hi: int) (raw: string) : Result<int, string> =
+        match Int32.TryParse(raw.Trim()) with
+        | true, v when v >= lo && v <= hi -> Ok v
+        | _ -> Error(sprintf "%s must be a whole number from %d to %d (got '%s')" name lo hi raw)
+
+    /// The default policy with the two environment overrides applied.
+    /// A malformed value is an `Error`, never a silent fall-back to the
+    /// default: the release path should fail before it packs, not
+    /// publish under a budget nobody chose.
+    let policyFromEnv (getEnv: string -> string) : Result<RetryPolicy, string> =
+        let read name lo hi =
+            match getEnv name with
+            | null
+            | "" -> Ok None
+            | raw -> parseBounded name lo hi raw |> Result.map Some
+
+        match read TimeoutVariable 1 7200, read RetriesVariable 0 10 with
+        | Error e, _
+        | _, Error e -> Error e
+        | Ok timeout, Ok retries ->
+            Ok {
+                defaultPolicy with
+                    Timeout =
+                        timeout
+                        |> Option.map (float >> TimeSpan.FromSeconds)
+                        |> Option.orElse defaultPolicy.Timeout
+                    MaxAttempts =
+                        retries
+                        |> Option.map (fun r -> r + 1)
+                        |> Option.defaultValue defaultPolicy.MaxAttempts
+            }
+
+    /// The `dotnet` argument list for one package's push.
+    let pushArgs (policy: RetryPolicy) (source: string) (apiKey: string) (nupkg: string) : string list = [
+        "nuget"
+        "push"
+        nupkg
+        "--source"
+        source
+        "--api-key"
+        apiKey
+        "--skip-duplicate"
+        match policy.Timeout with
+        | Some t ->
+            "--timeout"
+            string (int (Math.Ceiling t.TotalSeconds))
+        | None -> ()
+    ]
+
+    /// What the loop achieved. `Failed` is the package whose last
+    /// attempt failed, with that attempt's exit code; `Unpushed` is that
+    /// package followed by every package the loop never reached, in
+    /// push order. Both are empty on a clean run.
+    type PushOutcome = {
+        Pushed: string list
+        Failed: (string * int) option
+        Unpushed: string list
+    }
+
+    /// Push `packages` in order. `push` runs one package's push and
+    /// returns its exit code (0 = accepted or skipped as a duplicate);
+    /// an exception from it counts as a failed attempt. Stops at the
+    /// first package that fails on every attempt the policy allows.
+    let pushAll
+        (policy: RetryPolicy)
+        (sleep: TimeSpan -> unit)
+        (log: string -> unit)
+        (push: string -> int)
+        (packages: string list)
+        : PushOutcome =
+        let attempts = max 1 policy.MaxAttempts
+        let name (p: string) = IO.Path.GetFileName p
+
+        let attempt (pkg: string) (n: int) =
+            try
+                push pkg
+            with ex ->
+                log (sprintf "Push of %s threw on attempt %d of %d: %s" (name pkg) n attempts ex.Message)
+                -1
+
+        let rec tryPush (pkg: string) (n: int) : Result<unit, int> =
+            if n > 1 then
+                sleep (RetryPolicy.delayFor policy n)
+
+            match attempt pkg n with
+            | 0 ->
+                if n > 1 then
+                    log (sprintf "Pushed %s on attempt %d of %d (retry succeeded)" (name pkg) n attempts)
+
+                Ok()
+            | code when n < attempts ->
+                log (
+                    sprintf
+                        "Push of %s failed (exit %d) on attempt %d of %d; retrying in %.0f s"
+                        (name pkg)
+                        code
+                        n
+                        attempts
+                        (RetryPolicy.delayFor policy (n + 1)).TotalSeconds
+                )
+
+                tryPush pkg (n + 1)
+            | code ->
+                log (sprintf "Push of %s failed (exit %d) on its last attempt (%d of %d)" (name pkg) code n attempts)
+                Error code
+
+        let rec loop pushed remaining =
+            match remaining with
+            | [] -> {
+                Pushed = List.rev pushed
+                Failed = None
+                Unpushed = []
+              }
+            | pkg :: rest ->
+                match tryPush pkg 1 with
+                | Ok() -> loop (pkg :: pushed) rest
+                | Error code -> {
+                    Pushed = List.rev pushed
+                    Failed = Some(pkg, code)
+                    Unpushed = remaining
+                  }
+
+        loop [] packages
+
+    /// The failure message for an outcome with a `Failed` package: what
+    /// failed, after how many attempts, and the full unpushed set.
+    let remainderReport (policy: RetryPolicy) (outcome: PushOutcome) : string =
+        let name (p: string) = IO.Path.GetFileName p
+
+        match outcome.Failed with
+        | None -> ""
+        | Some(pkg, code) ->
+            sprintf
+                "Publish: %s failed on all %d attempt(s) (last exit %d). %d package(s) were pushed; %d are left unpushed, and a re-run of the publish pushes exactly these (the pushed ones are skipped by --skip-duplicate): %s"
+                (name pkg)
+                (max 1 policy.MaxAttempts)
+                code
+                outcome.Pushed.Length
+                outcome.Unpushed.Length
+                (outcome.Unpushed |> List.map name |> String.concat ", ")
+
 type BuildConfig = {
     ServerProject: string
     ClientProject: string
@@ -709,6 +898,15 @@ let registerTargets (config: BuildConfig) =
         // .snupkg beside each .nupkg and pushes it to the symbol server —
         // no extra handling needed here. Symbol files remain in
         // `artifacts/` for local inspection either way.
+        //
+        // Phase 1016: each push runs under a longer `--timeout` and is
+        // retried with backoff (`NugetPush` above). The budget is read
+        // before anything is packed, so a malformed override fails in
+        // seconds rather than after the pack.
+        let pushPolicy =
+            match NugetPush.policyFromEnv System.Environment.GetEnvironmentVariable with
+            | Ok p -> p
+            | Error e -> failwithf "Publish: %s" e
 
         let artifactsDir = Path.getFullName "./artifacts"
         Shell.cleanDir artifactsDir
@@ -796,24 +994,34 @@ let registerTargets (config: BuildConfig) =
                     failwith
                         "No publish token in environment. Set GITHUB_TOKEN (CI — Actions provides it when permissions: { packages: write } is declared on the workflow) or GITHUB_PACKAGES_TOKEN (local — a PAT with write:packages scope).")
 
-        Trace.tracefn "Pushing artifacts to %s..." source
+        Trace.tracefn
+            "Pushing %d package(s) to %s (timeout %s per push, up to %d attempt(s) each)..."
+            producedNupkgs.Length
+            source
+            (ToolUp.Platform.Transport.RetryPolicy.timeoutDescription pushPolicy)
+            pushPolicy.MaxAttempts
 
-        for nupkg in producedNupkgs do
+        let pushOne (nupkg: string) =
             Trace.tracefn "Pushing %s..." (System.IO.Path.GetFileName nupkg)
 
-            run
-                dotnet
-                [
-                    "nuget"
-                    "push"
-                    nupkg
-                    "--source"
-                    source
-                    "--api-key"
-                    token
-                    "--skip-duplicate"
-                ]
-                ".")
+            let result =
+                CreateProcess.fromRawCommand "dotnet" (NugetPush.pushArgs pushPolicy source token nupkg)
+                |> CreateProcess.withWorkingDirectory "."
+                |> Proc.run
+
+            result.ExitCode
+
+        let outcome =
+            NugetPush.pushAll
+                pushPolicy
+                (fun delay -> System.Threading.Thread.Sleep delay)
+                (Trace.tracefn "%s")
+                pushOne
+                producedNupkgs
+
+        match outcome.Failed with
+        | Some _ -> failwith (NugetPush.remainderReport pushPolicy outcome)
+        | None -> Trace.tracefn "Publish: pushed all %d package(s)." outcome.Pushed.Length)
 
     Target.create "ThirdPartyNotices" (fun _ ->
         // Walks the MSBuild PackageReference graph via `dotnet list package

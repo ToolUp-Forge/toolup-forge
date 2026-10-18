@@ -107,6 +107,16 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # Phase 1016 — the job timeout sits ABOVE one package's worst case
+    # under the push budget set on the push step below: 4 attempts x 900 s
+    # plus 15 + 30 + 60 s of backoff is just under 62 minutes, on top of
+    # the ~10-minute pack. Below that, a single slow package would be
+    # killed by the runner mid-retry, without the remainder report the
+    # target prints. `NugetPushTests` reads this value against the budget.
+    # Note the one-hour temp key minted below: a push phase that outlives
+    # it fails on auth, which no retry heals — the target then names what
+    # is left, and a re-run (with a fresh key) pushes exactly that.
+    timeout-minutes: 120
     steps:
       # Phase 260 — `fetch-depth: 0` is a PRECONDITION of the version
       # check below, not a nicety. That check derives the bump by diffing
@@ -220,6 +230,16 @@ jobs:
           # ./artifacts/ alongside the nupkgs; the push loop filters to
           # *.nupkg, so the .cdx.json files are never pushed to the feed.
           TOOLUP_EMIT_SBOM: "true"
+          # Phase 1016 — the per-package push budget, stated here rather
+          # than left to the target's defaults (which are the same values),
+          # so the job timeout above is checked against what CI actually
+          # runs. Each `dotnet nuget push` gets --timeout 900 (the client's
+          # own default is 300 s, which a slow nuget.org upload exceeded)
+          # and a failed push is retried 3 times with backoff; retrying is
+          # safe because every push passes --skip-duplicate. A persistent
+          # failure fails the step naming every package left unpushed.
+          TOOLUP_PUBLISH_PUSH_TIMEOUT_SECONDS: "900"
+          TOOLUP_PUBLISH_PUSH_RETRIES: "3"
         run: dotnet run --project Build.fsproj -- Publish
 
       # Phase 182 — signed build-provenance attestation for every pushed

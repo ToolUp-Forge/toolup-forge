@@ -173,6 +173,13 @@ gh workflow run publish-nuget.yml --ref v1.0.0-rc.1
 A dispatch from a branch packs the tree's `<Version>` on the stable channel — never use one to publish
 ahead of a tag. `--skip-duplicate` makes a re-run skip what already landed.
 
+A slow or cancelled upload rarely needs a re-run now. The `Publish` target gives every
+`dotnet nuget push` a `--timeout` of `TOOLUP_PUBLISH_PUSH_TIMEOUT_SECONDS` (default 900). It retries a
+package whose push fails, symbol package included, `TOOLUP_PUBLISH_PUSH_RETRIES` times (default 3, with
+15 / 30 / 60 s backoff) before it gives up. When a package fails on every attempt, the target stops and
+names every package still unpushed: the failed one and every one after it. That set is what a re-run
+pushes. The re-run stays safe because the packages already pushed are skipped by `--skip-duplicate`.
+
 ## Smoke-testing the channel end to end
 
 The offline rules are proven on every push; the one thing only a real publish shows is that a

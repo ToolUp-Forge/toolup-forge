@@ -14,6 +14,11 @@
     <!-- Phase 183 — the consumer codemod behind the Codemod target
          registerTargets registers (compiled after this). -->
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.Codemod.fs" />
+    <!-- Phase 1016 - the transport tier's RetryPolicy, the push budget the
+         Publish target's retry loop in SDK.Build.fs takes. The packaged
+         ToolUp.Platform.Build reaches it through Core; this driver has no
+         project references, so it compiles the one file. -->
+    <Compile Include="src\ToolUp.Platform.Transport\RetryPolicy.fs" Link="RetryPolicy.fs" />
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.Build.fs" />
     <Compile Include="src\ToolUp.Platform.Build\Build\SDK.HostPackaging.fs" />
     <!-- Phase 213 — the Core-Web-Vitals budget parser + check behind the

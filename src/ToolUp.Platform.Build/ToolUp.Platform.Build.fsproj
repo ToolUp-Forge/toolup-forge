@@ -72,4 +72,8 @@
          API would MissingMethodException at load time. -->
     <PackageReference Include="FSharp.Core" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Phase 1016: the Publish push loop (`NugetPush`) is internal; its tests reach it here. -->
+    <InternalsVisibleTo Include="ToolUp.Platform.Build.Tests" />
+  </ItemGroup>
 </Project>
