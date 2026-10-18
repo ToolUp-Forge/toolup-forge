@@ -3,6 +3,8 @@
 
 namespace ToolUp.Platform
 
+open Microsoft.Extensions.DependencyInjection
+
 // ─── Phase 691 — the seam gate's first production call site ───────────
 //
 // Phase 300 built a composition-capability gate, Phase 657 made it
@@ -40,6 +42,15 @@ namespace ToolUp.Platform
 // Stating that is the point: the gate reports what it can observe, and
 // an enforcement layer that overstated its coverage would be worse than
 // one that does not exist, because it would be believed.
+//
+// **Phase 770 closes that for the paths it can reach.** `confine` below
+// makes every composed module's route handlers and AI tools resolve
+// through a `SeamAwareServiceProvider`, which refuses a seam outside the
+// grant and records the seams it hands over, and the report sets that
+// OBSERVED reach beside this DERIVED one. What stays outside is named
+// rather than implied: a provider or instance a module captured outside a
+// request, and the query, job, migration and vectorisation handlers,
+// which are handed no provider at all.
 //
 // **The additive floor is structural.** A composition with no
 // `SeamGrantSignature` resolves every component to
@@ -189,6 +200,75 @@ module SeamAuthorityEnforcement =
         | SeamAuthorityRefusal.Reaches denials ->
             denials |> List.map _.Reason |> String.concat System.Environment.NewLine
 
+    // ─── Phase 770 — the runtime half: confining what modules resolve ────
+    //
+    // `verify` above answers "may each module reach what its registrations
+    // imply"; `confine` makes the grant bind what a module's code actually
+    // resolves. `ServerApp.addModule` already runs every module's route
+    // handlers and AI tools through a `SeamAwareServiceProvider` keyed by
+    // its `ComponentId`; those wrappers are passthroughs until a
+    // `SeamConfinement` is registered, which is the one thing this does.
+    // The seam vocabulary is `ModuleSurface.substrateSeams` — the seams
+    // the derived reach and the report already speak, so a refusal, an
+    // observation and a declaration name the same things.
+
+    /// Confine every composed module's route handlers and AI tools to its
+    /// seam grant, through `gate`, and record what each one resolves for
+    /// the deployment verification report's observed reach.
+    ///
+    /// `SeamAuthorityGate.disabled` returns the app unchanged — the
+    /// additive floor, with nothing registered and nothing observed. Any
+    /// other gate is enforced: a seam outside a component's grant resolves
+    /// as "not registered", and the denial reaches the gate's own observer
+    /// (build the gate with `VerifiedCompositionProfile.auditedSeamGate`,
+    /// or use `confineAudited`, to put it on the audit path). A gate that
+    /// grants every seam — a composition with no `SeamGrantSignature` —
+    /// refuses nothing and still observes, which is how a deployment
+    /// learns what its modules reach before it declares.
+    ///
+    /// Order-independent with `addModules`: the wrappers resolve the
+    /// confinement per request.
+    let confine (gate: ISeamAuthorityGate) (app: ServerApp) : ServerApp =
+        if obj.ReferenceEquals(gate, SeamAuthorityGate.disabled) then
+            app
+        else
+            let register (services: IServiceCollection) =
+                let observer = SeamReachObserver()
+
+                services
+                    .AddSingleton<SeamReachObserver>(observer)
+                    .AddSingleton<SeamConfinement>(SeamConfinement(gate, ModuleSurface.substrateSeams, observer))
+
+            {
+                app with
+                    Extensions = {
+                        app.Extensions with
+                            ServiceConfig =
+                                match app.Extensions.ServiceConfig with
+                                | None -> Some register
+                                | Some existing -> Some(fun services -> register (existing services))
+                    }
+            }
+
+    /// `confine` over the profile's audited seam gate — the runtime twin
+    /// of `verifyAudited`, and the call a verified composition makes.
+    /// Refused exactly when `verifyAudited` would refuse on the profile
+    /// (an undeclared envelope or grant signature under
+    /// `CompositionProfile.Verified`); under `CompositionProfile.Standard`
+    /// with nothing declared the gate is `SeamAuthorityGate.disabled` and
+    /// the app comes back unchanged.
+    let confineAudited
+        (auditLog: IAuditLog)
+        (scopeId: string)
+        (profile: CompositionProfile)
+        (signature: CapabilitySignature option)
+        (grants: SeamGrantSignature option)
+        (app: ServerApp)
+        : Result<ServerApp, SeamAuthorityRefusal> =
+        match VerifiedCompositionProfile.auditedSeamGate auditLog scopeId profile signature grants with
+        | Error refusal -> Error(SeamAuthorityRefusal.Profile refusal)
+        | Ok gate -> Ok(confine gate app)
+
     // ─── Phase 693 — the deployment verification report's source ──────
     //
     // The report lives in `DeploymentVerificationReport.fs`, which
@@ -255,6 +335,7 @@ module SeamAuthorityEnforcement =
                 DeclaredGrant = SeamGrant.resolve signature entry.ReachComponent
                 DerivedReach = entry.ReachedSeams
                 ComposedHere = true
+                ObservedReach = None
             })
 
         let orphaned =
@@ -266,6 +347,7 @@ module SeamAuthorityEnforcement =
                 DeclaredGrant = grant
                 DerivedReach = []
                 ComposedHere = false
+                ObservedReach = None
             })
             |> List.sortWith (fun a b ->
                 System.String.CompareOrdinal(a.AuthorityComponent.Value, b.AuthorityComponent.Value))

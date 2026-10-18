@@ -231,7 +231,56 @@ type ComponentSeamAuthority = {
     /// than dropped, because a grant naming a component that left the
     /// composition is stale review surface that still reads as governance.
     ComposedHere: bool
+    /// Phase 770 — the substrate seams this component's own code actually
+    /// resolved at runtime since boot, through the seam-aware service
+    /// provider its route handlers and AI tools run under. `None` when no
+    /// runtime confinement is composed, so nothing was observed — never
+    /// "observed nothing", which is `Some []`. Filled at report time from
+    /// the `SeamReachObserver`, not supplied by the composition root.
+    ObservedReach: SeamId list option
 }
+
+/// Phase 770 — the runtime half of seam authority: which substrate seams
+/// each component's code actually resolved since boot.
+///
+/// Phase 691's derived reach reads what a module's registrations IMPLY;
+/// this reads what its code DID, as recorded by the seam-aware service
+/// provider every route handler and AI tool of a composed module runs
+/// under. A resolution is recorded only when the seam gate granted it —
+/// a refusal is already on the audit path through the gate's own
+/// observer, and recording it here too would describe reach the
+/// component never obtained.
+///
+/// Defined here, ahead of the gate it serves, for the tier-order reason
+/// the rest of this file's mirrors give: the report must read it, and the
+/// report compiles before `CompositionCapabilityGate.fs`. It holds only
+/// `Platform.Core` value types, so it crosses that boundary freely.
+[<Sealed>]
+type SeamReachObserver() =
+    let observed =
+        System.Collections.Concurrent.ConcurrentDictionary<
+            ComponentId,
+            System.Collections.Concurrent.ConcurrentDictionary<SeamId, byte>
+         >()
+
+    /// Record that `componentId` resolved `seam`. Idempotent and safe under
+    /// concurrent requests.
+    member _.Record(componentId: ComponentId, seam: SeamId) : unit =
+        observed
+            .GetOrAdd(componentId, fun _ -> System.Collections.Concurrent.ConcurrentDictionary<SeamId, byte>())
+            .TryAdd(seam, 0uy)
+        |> ignore
+
+    /// What every component has resolved so far, each component's seams
+    /// in ordinal order so a report is deterministic.
+    member _.Snapshot() : Map<ComponentId, SeamId list> =
+        observed
+        |> Seq.map (fun entry ->
+            entry.Key,
+            entry.Value.Keys
+            |> Seq.sortWith (fun a b -> String.CompareOrdinal(SeamId.value a, SeamId.value b))
+            |> List.ofSeq)
+        |> Map.ofSeq
 
 /// The seam-authority posture (Phase 688 / 691), mirrored.
 ///
@@ -699,6 +748,43 @@ module DeploymentVerificationEvidence =
               member _.Egress = egress
         }
 
+    /// Phase 770 — overlay the runtime-observed reach onto the
+    /// seam-authority member, preserving every other source.
+    ///
+    /// Every COMPOSED component gains `ObservedReach = Some seams` — `[]`
+    /// when its code resolved nothing, because the observer was running
+    /// and saw nothing, which is a different statement from `None`. A
+    /// grant for a component this deployment does not compose keeps
+    /// `None`: no code of its ran here to observe. Evidence carrying no
+    /// seam-authority member is returned unchanged — the section reads
+    /// `NotComposed` either way, and an observation with no declared or
+    /// derived half beside it has nothing to be compared against.
+    let withObservedSeamReach
+        (observed: Map<ComponentId, SeamId list>)
+        (evidence: IDeploymentVerificationEvidence)
+        : IDeploymentVerificationEvidence =
+        match seamAuthorityOf evidence with
+        | None -> evidence
+        | Some integrity ->
+            let components =
+                integrity.Components
+                |> List.map (fun entry ->
+                    if entry.ComposedHere then
+                        {
+                            entry with
+                                ObservedReach =
+                                    Some(observed |> Map.tryFind entry.AuthorityComponent |> Option.defaultValue [])
+                        }
+                    else
+                        entry)
+
+            withSeamAuthority
+                (Some {
+                    integrity with
+                        Components = components
+                })
+                evidence
+
     /// Phase 713 — supply the evidence-chain walk, preserving every other
     /// source.
     ///
@@ -886,6 +972,21 @@ module DeploymentVerificationReport =
     /// and `SeamAuthoritySurface.toWire` is the surface for the whole set.
     [<Literal>]
     let SeamAuthorityComponentCap = 20
+
+    /// Phase 770 — the finding family a component earns when the seams
+    /// its code resolved at runtime exceed the reach its registrations
+    /// imply. A finding and never a refusal: the gate already decided
+    /// every one of those resolutions, and this names what the Phase 691
+    /// derivation could not see.
+    [<Literal>]
+    let SeamAuthorityObservedBeyondDerived = "SeamAuthorityObservedBeyondDerived"
+
+    /// Phase 770 — the opening of the finding line that says runtime
+    /// seam confinement is composed. `notProvedFor` keys the narrowed
+    /// hand-resolution statement off it, because the confinement is a
+    /// property of THIS deployment's section and not of the SDK.
+    [<Literal>]
+    let private RuntimeConfinementFinding = "runtime seam confinement:"
 
     let private section id title verdict findings : ReportSection = {
         Id = id
@@ -1237,15 +1338,17 @@ module DeploymentVerificationReport =
     /// `{a,b}` shape `SeamGrant.render` uses for the declared set, so the
     /// two halves of a finding line read against each other rather than
     /// in two notations.
-    let private renderReach (reach: SeamId list) : string =
-        if List.isEmpty reach then
-            "nothing derived"
+    let private renderSeams (empty: string) (seams: SeamId list) : string =
+        if List.isEmpty seams then
+            empty
         else
-            reach
+            seams
             |> List.map SeamId.value
             |> List.sortWith (fun a b -> String.CompareOrdinal(a, b))
             |> String.concat ","
             |> sprintf "{%s}"
+
+    let private renderReach (reach: SeamId list) : string = renderSeams "nothing derived" reach
 
     /// One finding line per component: what it declared beside what its
     /// registrations imply it reaches.
@@ -1260,10 +1363,13 @@ module DeploymentVerificationReport =
             |> List.truncate SeamAuthorityComponentCap
             |> List.map (fun entry ->
                 sprintf
-                    "%s: declared %s, reaches %s%s"
+                    "%s: declared %s, reaches %s%s%s"
                     (ComponentId.value entry.AuthorityComponent)
                     (SeamGrant.render entry.DeclaredGrant)
                     (renderReach entry.DerivedReach)
+                    (match entry.ObservedReach with
+                     | None -> ""
+                     | Some observed -> ", observed " + renderSeams "nothing" observed)
                     (if entry.ComposedHere then
                          ""
                      else
@@ -1275,6 +1381,55 @@ module DeploymentVerificationReport =
             rendered @ [ sprintf "(%d further component(s) not listed)" withheld ]
         else
             rendered
+
+    /// Phase 770 — what runtime observation adds: one line saying the
+    /// confinement is composed (absent when no component was observed,
+    /// so a deployment without it renders exactly as before), then one
+    /// `SeamAuthorityObservedBeyondDerived` line per component whose code
+    /// resolved a seam its registrations do not imply, capped like the
+    /// component lines and for the same reason.
+    let private observedFindings (components: ComponentSeamAuthority list) : string list =
+        let observed =
+            components
+            |> List.choose (fun entry -> entry.ObservedReach |> Option.map (fun seams -> entry, seams))
+
+        if List.isEmpty observed then
+            []
+        else
+            let beyond =
+                observed
+                |> List.choose (fun (entry, seams) ->
+                    match seams |> List.filter (fun seam -> not (List.contains seam entry.DerivedReach)) with
+                    | [] -> None
+                    | extra -> Some(entry, extra))
+
+            let rendered =
+                beyond
+                |> List.truncate SeamAuthorityComponentCap
+                |> List.map (fun (entry, extra) ->
+                    sprintf
+                        "%s: %s resolved %s at runtime beyond the reach its registrations imply (%s) — declare the registration that needs it or remove the hand-resolution"
+                        SeamAuthorityObservedBeyondDerived
+                        (ComponentId.value entry.AuthorityComponent)
+                        (renderSeams "nothing" extra)
+                        (renderReach entry.DerivedReach))
+
+            let withheld = beyond.Length - rendered.Length
+
+            [
+                sprintf
+                    "%s %d component(s) run their route handlers and AI tools under the seam-aware service provider, %d of them resolved a seam beyond their derived reach"
+                    RuntimeConfinementFinding
+                    observed.Length
+                    beyond.Length
+            ]
+            @ rendered
+            @ (if withheld > 0 then
+                   [
+                       sprintf "(%d further observed-beyond-derived component(s) not listed)" withheld
+                   ]
+               else
+                   [])
 
     /// Module seam authority (Phase 688 / 691).
     ///
@@ -1314,7 +1469,8 @@ module DeploymentVerificationReport =
                 integrity.Components
                 |> List.filter (fun entry -> SeamGrant.isDeclared entry.DeclaredGrant)
 
-            let findings = componentFindings integrity.Components
+            let findings =
+                componentFindings integrity.Components @ observedFindings integrity.Components
 
             match integrity.Verification with
             | SeamAuthorityRefused(detail, refusalFindings) ->
@@ -2293,6 +2449,19 @@ module DeploymentVerificationReport =
             | None -> false
             | Some _ -> true
 
+        // Phase 770 — whether this deployment's modules run under the
+        // seam-aware service provider. Read off the section's own
+        // finding rather than any SDK constant: the confinement is
+        // something a composition root composes, not something the SDK
+        // ships switched on.
+        let seamConfinementComposed =
+            sections
+            |> List.exists (fun s ->
+                s.Id = SeamAuthoritySection
+                && s.Findings
+                   |> List.exists (fun finding ->
+                       finding.StartsWith(RuntimeConfinementFinding, StringComparison.Ordinal)))
+
         [
             {
                 Id = "post-boot-mutation"
@@ -2363,11 +2532,24 @@ module DeploymentVerificationReport =
                 // refusal is therefore sound and an admission is a subset
                 // claim — and an enforcement layer believed to be a
                 // sandbox would be worse than none.
+                //
+                // Phase 770 removes the hand-resolution clause for exactly
+                // the paths the seam-aware service provider covers — a
+                // module's route handlers and AI tools — and names what is
+                // still outside it, rather than dropping the statement:
+                // the hatches that remain are where a reader would
+                // otherwise assume confinement.
                 Id = "seam-reach-is-a-subset-claim"
                 Statement =
-                    "The seam-authority section reports the substrate each module's own registrations IMPLY it reaches. A module can still resolve substrate from the container by hand, and route handlers are closures whose reach is not enumerable, so a seam refusal is sound while an admission is a subset claim and never a proof of confinement."
+                    if seamConfinementComposed then
+                        "Each module's route handlers and AI tools resolve services through a seam-aware provider that refuses a substrate seam outside the module's grant and records every seam it hands over, so hand-resolution through the request's services is bounded and observed. It does not reach a provider or substrate instance a module captured outside a request — at composition, from the root container, or in a hosted service of its own — nor the query handlers, job handlers, configuration migrators and vectorisation handlers, which are handed no provider and reach only what they closed over. Through those paths an admission is still a subset claim."
+                    else
+                        "The seam-authority section reports the substrate each module's own registrations IMPLY it reaches. A module can still resolve substrate from the container by hand, and route handlers are closures whose reach is not enumerable, so a seam refusal is sound while an admission is a subset claim and never a proof of confinement."
                 Narrowing =
-                    if isComposed SeamAuthoritySection then
+                    if seamConfinementComposed then
+                        Some
+                            "the section names each component's declared seam set, the reach derived from its registrations and the reach observed at runtime, and names every component whose observed reach exceeds its derived one."
+                    elif isComposed SeamAuthoritySection then
                         Some
                             "the section names each component's declared seam set beside the reach derived from its registrations, so the distance between what was declared and what is observable is visible rather than inferred. It does not shrink the bound: substrate resolved by hand sits outside both halves."
                     else
@@ -2608,10 +2790,21 @@ module DeploymentVerificationReport =
     /// Resolve the registered evidence, or `none` when the deployment
     /// registered none at all — the bare-deployment path, which must produce
     /// an honest empty report rather than an error.
+    ///
+    /// Phase 770 — when the composition registered a `SeamReachObserver`,
+    /// its snapshot is overlaid onto the seam-authority member HERE, at
+    /// report time, so the observed reach is "since boot" as of this read
+    /// rather than as of the moment the root built its evidence.
     let resolveEvidence (services: IServiceProvider) : IDeploymentVerificationEvidence =
-        match services.GetService(typeof<IDeploymentVerificationEvidence>) with
-        | :? IDeploymentVerificationEvidence as evidence -> evidence
-        | _ -> DeploymentVerificationEvidence.none
+        let evidence =
+            match services.GetService(typeof<IDeploymentVerificationEvidence>) with
+            | :? IDeploymentVerificationEvidence as evidence -> evidence
+            | _ -> DeploymentVerificationEvidence.none
+
+        match services.GetService(typeof<SeamReachObserver>) with
+        | :? SeamReachObserver as observer ->
+            DeploymentVerificationEvidence.withObservedSeamReach (observer.Snapshot()) evidence
+        | _ -> evidence
 
     /// The audited-read record.
     ///

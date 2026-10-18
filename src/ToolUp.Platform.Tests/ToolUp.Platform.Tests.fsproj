@@ -738,6 +738,8 @@
              listed; and the verified profile refusing before any reach is
              checked, with real refusals landing on the Phase 658 ledger. -->
         <Compile Include="InProcess\SeamAuthorityEnforcementTests.fs" />
+        <!-- Phase 770 — the seam-aware service provider: an ungranted seam resolved by hand is refused and audited; a granted one is the raw instance at the raw lifetime; Standard is a passthrough; addModule confines handlers and AI tools; the report sets observed reach beside derived reach. -->
+        <Compile Include="InProcess\SeamAwareServiceProviderTests.fs" />
         <!-- Phase 281 — composition well-formedness preflight: duplicate
              ComponentId / companion-slot legality / orphaned tool reference
              each fail with a readable message; a well-formed app passes. -->

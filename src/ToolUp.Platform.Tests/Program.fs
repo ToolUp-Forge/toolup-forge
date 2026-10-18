@@ -515,6 +515,8 @@ let private registeredTests =
         SeamAuthorityTests.tests
         // Phase 691 — the seam gate's first production call site.
         SeamAuthorityEnforcementTests.tests
+        // Phase 770 — the seam-aware service provider.
+        SeamAwareServiceProviderTests.tests
         // Phase 281 — composition well-formedness preflight.
         CompositionValidatorTests.tests
         // Phase 294 — composition invariant rule-manifest (well-formedness as data).

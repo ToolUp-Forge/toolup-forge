@@ -1574,11 +1574,12 @@ ToolUp.Platform.ComponentScaleModule.needs(ToolUp.Platform.ComponentScale) : Mic
 ToolUp.Platform.ComponentScaleModule.ofNeeds(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentId]) : ToolUp.Platform.ComponentScale
 ToolUp.Platform.ComponentScaleModule.ofReadiness(ToolUp.Platform.Readiness) : ToolUp.Platform.ComponentScale
 ToolUp.Platform.ComponentSeamAuthority (class)
-ToolUp.Platform.ComponentSeamAuthority..ctor(ToolUp.Platform.ComponentId, ToolUp.Platform.SeamGrant, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SeamId], System.Boolean)
+ToolUp.Platform.ComponentSeamAuthority..ctor(ToolUp.Platform.ComponentId, ToolUp.Platform.SeamGrant, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SeamId], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SeamId]])
 ToolUp.Platform.ComponentSeamAuthority.AuthorityComponent : ToolUp.Platform.ComponentId { get }
 ToolUp.Platform.ComponentSeamAuthority.ComposedHere : System.Boolean { get }
 ToolUp.Platform.ComponentSeamAuthority.DeclaredGrant : ToolUp.Platform.SeamGrant { get }
 ToolUp.Platform.ComponentSeamAuthority.DerivedReach : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SeamId] { get }
+ToolUp.Platform.ComponentSeamAuthority.ObservedReach : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SeamId]] { get }
 ToolUp.Platform.ComponentSeamGrant (class)
 ToolUp.Platform.ComponentSeamGrant..ctor(ToolUp.Platform.ComponentId, ToolUp.Platform.SeamGrant)
 ToolUp.Platform.ComponentSeamGrant.GrantComponent : ToolUp.Platform.ComponentId { get }
@@ -3233,6 +3234,7 @@ ToolUp.Platform.DeploymentVerificationEvidence.seamAuthorityOf(ToolUp.Platform.I
 ToolUp.Platform.DeploymentVerificationEvidence.withEgress(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.EgressIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.withEvidenceChain(Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.EvidenceChain, ToolUp.Platform.EvidenceChainError]]]], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.withGroundingContinuity(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.GroundingContinuityIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
+ToolUp.Platform.DeploymentVerificationEvidence.withObservedSeamReach(Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SeamId]], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.withRemotingArgumentDecoders(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RemotingDecoderIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.withRemotingDecoders(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.RemotingDecoderIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationEvidence.withSeamAuthority(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SeamAuthorityIntegrity], ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.IDeploymentVerificationEvidence
@@ -3245,6 +3247,7 @@ ToolUp.Platform.DeploymentVerificationReport.PlatformScopeId : System.String (li
 ToolUp.Platform.DeploymentVerificationReport.RecentIssuanceCap : System.Int32 (literal)
 ToolUp.Platform.DeploymentVerificationReport.RemotingDecoderRecordCap : System.Int32 (literal)
 ToolUp.Platform.DeploymentVerificationReport.SeamAuthorityComponentCap : System.Int32 (literal)
+ToolUp.Platform.DeploymentVerificationReport.SeamAuthorityObservedBeyondDerived : System.String (literal)
 ToolUp.Platform.DeploymentVerificationReport.buildReport(ToolUp.Platform.IDeploymentVerificationEvidence, System.String, System.DateTime) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport]
 ToolUp.Platform.DeploymentVerificationReport.deploymentVerificationApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IDeploymentVerificationApi
 ToolUp.Platform.DeploymentVerificationReport.gatherAcceptedAcknowledgements() : ToolUp.Platform.DeploymentVerification+ReportSection
@@ -7863,6 +7866,7 @@ ToolUp.Platform.ModuleSurfaceModule.driftAgainst(ToolUp.Platform.CertifiedSurfac
 ToolUp.Platform.ModuleSurfaceModule.driftFrom(System.String, ToolUp.Platform.ModuleSurface) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleSurfaceDrift], System.String]
 ToolUp.Platform.ModuleSurfaceModule.parseProjection(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.CertifiedSurfaceProjection, System.String]
 ToolUp.Platform.ModuleSurfaceModule.project(ToolUp.Platform.ModuleSurface) : ToolUp.Platform.CertifiedSurfaceProjection
+ToolUp.Platform.ModuleSurfaceModule.substrateSeams : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Platform.ModuleSurfaceModule.toJson(ToolUp.Platform.ModuleSurface) : System.String
 ToolUp.Platform.ModuleVisibilityApiHandler (class)
 ToolUp.Platform.ModuleVisibilityApiHandler.moduleVisibilityApi(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IModuleVisibilityApi
@@ -9715,6 +9719,8 @@ ToolUp.Platform.SeamAuthorityDelta.GrantsNarrowed : Microsoft.FSharp.Collections
 ToolUp.Platform.SeamAuthorityDelta.GrantsRemoved : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentSeamGrant] { get }
 ToolUp.Platform.SeamAuthorityDelta.GrantsWidened : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.ComponentSeamGrant, ToolUp.Platform.ComponentSeamGrant]] { get }
 ToolUp.Platform.SeamAuthorityEnforcement (class)
+ToolUp.Platform.SeamAuthorityEnforcement.confine(ToolUp.Platform.ISeamAuthorityGate, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Platform.SeamAuthorityEnforcement.confineAudited(ToolUp.Platform.IAuditLog, System.String, ToolUp.Platform.CompositionProfile, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.CompanionCapability]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.SeamGrant]], ToolUp.Platform.ServerApp) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServerApp, ToolUp.Platform.SeamAuthorityRefusal]
 ToolUp.Platform.SeamAuthorityEnforcement.deploymentVerificationEvidence(ToolUp.Platform.CompositionProfile, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, ToolUp.Platform.SeamGrant]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServerModule], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.SeamAuthorityRefusal]]) : ToolUp.Platform.SeamAuthorityIntegrity
 ToolUp.Platform.SeamAuthorityEnforcement.describeRefusal(ToolUp.Platform.SeamAuthorityRefusal) : System.String
 ToolUp.Platform.SeamAuthorityEnforcement.reach(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServerModule]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentSeamReach]
@@ -9782,6 +9788,26 @@ ToolUp.Platform.SeamAuthorityWireEntry..ctor(System.String, System.String, Micro
 ToolUp.Platform.SeamAuthorityWireEntry.GrantComponentIdentity : System.String { get }
 ToolUp.Platform.SeamAuthorityWireEntry.GrantKind : System.String { get }
 ToolUp.Platform.SeamAuthorityWireEntry.GrantSeams : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.SeamAwareServiceProvider (class)
+ToolUp.Platform.SeamAwareServiceProvider..ctor(System.IServiceProvider, ToolUp.Platform.ComponentId, ToolUp.Platform.SeamConfinement)
+ToolUp.Platform.SeamAwareServiceProvider.GetService(System.Type) : System.Object
+ToolUp.Platform.SeamAwareServiceProvider.Inner : System.IServiceProvider { get }
+ToolUp.Platform.SeamAwareServiceProvider.Owner : ToolUp.Platform.ComponentId { get }
+ToolUp.Platform.SeamAwareServiceProviderModule (class)
+ToolUp.Platform.SeamAwareServiceProviderModule.confineHandler(ToolUp.Platform.ComponentId, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]
+ToolUp.Platform.SeamAwareServiceProviderModule.confineHandlers(ToolUp.Platform.ComponentId, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]]) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]]
+ToolUp.Platform.SeamAwareServiceProviderModule.confineTool(ToolUp.Platform.ComponentId, ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]) : System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]
+ToolUp.Platform.SeamAwareServiceProviderModule.confineTools(ToolUp.Platform.ComponentId, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]]
+ToolUp.Platform.SeamConfinement (class)
+ToolUp.Platform.SeamConfinement..ctor(ToolUp.Platform.ISeamAuthorityGate, System.Collections.Generic.IEnumerable`1[System.String], ToolUp.Platform.SeamReachObserver)
+ToolUp.Platform.SeamConfinement.Enforces : System.Boolean { get }
+ToolUp.Platform.SeamConfinement.Gate : ToolUp.Platform.ISeamAuthorityGate { get }
+ToolUp.Platform.SeamConfinement.Observer : ToolUp.Platform.SeamReachObserver { get }
+ToolUp.Platform.SeamConfinement.SeamOf(System.Type) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SeamId]
+ToolUp.Platform.SeamReachObserver (class)
+ToolUp.Platform.SeamReachObserver..ctor()
+ToolUp.Platform.SeamReachObserver.Record(ToolUp.Platform.ComponentId, ToolUp.Platform.SeamId) : System.Void
+ToolUp.Platform.SeamReachObserver.Snapshot() : Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.Platform.ComponentId, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SeamId]]
 ToolUp.Platform.SecondaryIndex (class)
 ToolUp.Platform.SecondaryIndex+BlobIndex (class)
 ToolUp.Platform.SecondaryIndex+BlobIndex.create`2(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[TKey, System.String], Microsoft.FSharp.Core.FSharpFunc`2[TValue, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[TValue]]) : ToolUp.Platform.SecondaryIndex+BlobIndex`2[TKey, TValue]

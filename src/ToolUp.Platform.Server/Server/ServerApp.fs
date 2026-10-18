@@ -2592,16 +2592,28 @@ module ServerApp =
                         resolvedComponentId
                         m.RoutePrefixes
 
+                // Phase 770 — the module's route handlers and AI tools run
+                // under the seam-aware service provider, keyed by the id
+                // resolved above. Built here, once per module, because this
+                // is the one place the code and its owner are known
+                // together; each wrapper is a passthrough until a
+                // composition registers an enforcing `SeamConfinement`.
+                let confinedHandlers =
+                    SeamAwareServiceProvider.confineHandlers resolvedComponentId m.Handlers
+
+                let confinedTools =
+                    SeamAwareServiceProvider.confineTools resolvedComponentId m.AITools
+
                 {
                     app with
-                        Handlers = app.Handlers @ m.Handlers
+                        Handlers = app.Handlers @ confinedHandlers
                         DataTypes = app.DataTypes @ m.DataTypes
                         VectorisationHandlers = app.VectorisationHandlers @ m.VectorisationHandlers
                         ModuleNames = app.ModuleNames @ [ m.Name ]
                         ModuleConfigs = moduleConfigs
                         QueryHandlerRegistrations = app.QueryHandlerRegistrations @ queryRegistrations
                         DataTypeRegistrations = app.DataTypeRegistrations @ dataTypeRegistrations
-                        AITools = app.AITools @ m.AITools
+                        AITools = app.AITools @ confinedTools
                         MetricRegistrations = app.MetricRegistrations @ metricRegistrations
                         RegisteredMetrics = app.RegisteredMetrics @ metricRegistryRegistrations
                         RegisteredSubjects = app.RegisteredSubjects @ subjectRegistryRegistrations

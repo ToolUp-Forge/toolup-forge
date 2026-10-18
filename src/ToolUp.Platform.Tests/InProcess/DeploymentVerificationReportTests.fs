@@ -273,12 +273,14 @@ let private healthySeamAuthority = {
             DeclaredGrant = SeamGrant.ofInterfaces [ "IEntityStore"; "IAuditSink" ]
             DerivedReach = [ SeamId.ofInterface "IEntityStore"; SeamId.ofInterface "IAuditSink" ]
             ComposedHere = true
+            ObservedReach = None
         }
         {
             AuthorityComponent = ComponentId.ofModule "reader"
             DeclaredGrant = SeamGrant.ofInterfaces [ "IEntityStore" ]
             DerivedReach = [ SeamId.ofInterface "IEntityStore" ]
             ComposedHere = true
+            ObservedReach = None
         }
     ]
     Verification = SeamAuthorityAdmitted(2, 3)
@@ -1450,6 +1452,7 @@ let tests =
                                     DeclaredGrant = SeamGrant.ofInterfaces [ "ISecretStore" ]
                                     DerivedReach = []
                                     ComposedHere = false
+                                    ObservedReach = None
                                 }
                             ]
                 }
@@ -1473,6 +1476,7 @@ let tests =
                                 DeclaredGrant = SeamGrant.ofInterfaces [ "IEntityStore" ]
                                 DerivedReach = [ SeamId.ofInterface "IEntityStore" ]
                                 ComposedHere = true
+                                ObservedReach = None
                             })
                 }
 

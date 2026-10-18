@@ -3,6 +3,9 @@
 
 namespace ToolUp.Platform
 
+open Microsoft.AspNetCore.Http
+open Microsoft.Extensions.DependencyInjection
+
 // ─── Phase 300 — composition capability sandbox (runtime default-deny) ──
 //
 // Enforces the Phase 296 effect-join AT RUNTIME: a composed component may
@@ -351,3 +354,280 @@ module SeamAuthorityGate =
             | CapabilityGateDecision.Denied denial -> return HostCapabilityOutcome.Denied denial.Reason
             | CapabilityGateDecision.Granted -> return! registry.Invoke capability args ctx
         }
+
+// ─── Phase 770 — the seam-aware service provider ──────────────────────
+//
+// Phase 691 checks the seams a module's registrations IMPLY; its own
+// header says why that admission is a subset claim — a module can still
+// resolve substrate from the `IServiceProvider` by hand. This gives the
+// declared grant a runtime edge at the point module code is handed
+// services: every route handler and AI tool of a composed module runs
+// against a provider that resolves ordinary services transparently and,
+// for a type that IS a substrate seam, asks the seam gate first.
+//
+// **A refusal is the framework's own "not registered".** `GetService`
+// returns `null`, so `GetRequiredService` raises the container's usual
+// error and nothing partial is handed back; the gate has already handed
+// the `CapabilityDenial` to its observer, which under the verified
+// profile is the Phase 657 audit path. A grant returns the inner
+// provider's own instance — same object, same lifetime — so a granted
+// resolution is indistinguishable from the raw provider.
+//
+// **Passthrough is structural.** A deployment that composes no
+// `SeamConfinement`, or composes one over `SeamAuthorityGate.disabled`,
+// never builds this provider: the per-module wrappers below find nothing
+// to enforce and call the module's code with the request untouched
+// (GP 11 / GP 13).
+//
+// It lives here, ahead of `ServerApp.fs`, because `ServerApp.addModule`
+// is the one place a module's handlers and tools are known together with
+// its `ComponentId`, and it wraps them there — so no module opts in and
+// none can opt out.
+
+/// The runtime seam confinement a composition installs (Phase 770): the
+/// seam gate every module's resolutions are checked against, the seam
+/// vocabulary that decides which service types are substrate seams at
+/// all, and the observer that records what was resolved.
+///
+/// Registered as a singleton by `SeamAuthorityEnforcement.confine`; the
+/// per-module wrappers resolve it per request, so a module composed
+/// before the gate was chosen is still confined by it.
+[<Sealed>]
+type SeamConfinement(gate: ISeamAuthorityGate, governedSeams: string seq, observer: SeamReachObserver) =
+    let governed =
+        System.Collections.Generic.HashSet<string>(governedSeams, System.StringComparer.Ordinal)
+
+    /// The gate every resolution of a governed seam is checked against.
+    member _.Gate = gate
+
+    /// Where granted resolutions are recorded — the report's observed reach.
+    member _.Observer = observer
+
+    /// `false` over `SeamAuthorityGate.disabled`: that gate grants
+    /// everything and observes nothing, so a confinement over it is the
+    /// passthrough and the wrappers never build a provider.
+    member _.Enforces = not (obj.ReferenceEquals(gate, SeamAuthorityGate.disabled))
+
+    /// The substrate seam a service type resolves, if it is one. An
+    /// interface whose name is in the governed vocabulary — the Phase 688
+    /// id space is interface names — or an `IEnumerable<>` of one, which
+    /// is how `GetServices` asks for it. Every other type is not a seam
+    /// and is never intercepted.
+    member _.SeamOf(serviceType: System.Type) : SeamId option =
+        let candidate =
+            if
+                serviceType.IsGenericType
+                && serviceType.GetGenericTypeDefinition() = typedefof<System.Collections.Generic.IEnumerable<_>>
+            then
+                serviceType.GetGenericArguments().[0]
+            else
+                serviceType
+
+        if candidate.IsInterface && governed.Contains candidate.Name then
+            Some(SeamId.ofInterface candidate.Name)
+        else
+            None
+
+/// A scoped `IServiceProvider` keyed by the module that holds it (Phase
+/// 770): resolves through the inner provider and refuses, with the
+/// framework's own "not registered" result, any substrate seam outside
+/// the module's grant.
+///
+/// It also answers for itself when asked for `IServiceProvider`, and
+/// hands back a scope factory whose scopes are confined the same way, so
+/// a module cannot step around it by asking the container for the
+/// container.
+[<Sealed>]
+type SeamAwareServiceProvider(inner: System.IServiceProvider, owner: ComponentId, confinement: SeamConfinement) =
+
+    /// Whether `serviceType` may be handed to `owner`: always for a type
+    /// that is not a substrate seam; for a seam, exactly when the gate
+    /// grants it — and a granted seam is recorded as observed reach.
+    /// `CompanionCapability.identity` is the seam-only question (Phase
+    /// 691): anything above the bottom would turn a seam question into an
+    /// effect question.
+    let admits (serviceType: System.Type) : bool =
+        match confinement.SeamOf serviceType with
+        | None -> true
+        | Some seam ->
+            match confinement.Gate.CheckSeam owner seam CompanionCapability.identity with
+            | CapabilityGateDecision.Granted ->
+                confinement.Observer.Record(owner, seam)
+                true
+            | CapabilityGateDecision.Denied _ -> false
+
+    let keyed () : IKeyedServiceProvider =
+        match inner with
+        | :? IKeyedServiceProvider as keyedInner -> keyedInner
+        | _ -> raise (System.InvalidOperationException "This service provider does not support keyed services.")
+
+    /// The provider this one resolves through.
+    member _.Inner = inner
+
+    /// The module whose grant this provider enforces.
+    member _.Owner = owner
+
+    /// Resolve `serviceType` for `Owner`: the provider itself for
+    /// `IServiceProvider`, a confined scope factory for
+    /// `IServiceScopeFactory`, `null` for a seam outside the grant, and
+    /// the inner provider's own answer for everything else.
+    member this.GetService(serviceType: System.Type) : obj =
+        if serviceType = typeof<System.IServiceProvider> then
+            box this
+        elif serviceType = typeof<IServiceScopeFactory> then
+            match inner.GetService serviceType with
+            | :? IServiceScopeFactory as factory -> box (ConfinedScopeFactory(factory, owner, confinement))
+            | other -> other
+        elif admits serviceType then
+            inner.GetService serviceType
+        else
+            null
+
+    interface System.IServiceProvider with
+        member this.GetService serviceType = this.GetService serviceType
+
+    interface IKeyedServiceProvider with
+        member _.GetKeyedService(serviceType, serviceKey) =
+            if admits serviceType then
+                keyed().GetKeyedService(serviceType, serviceKey)
+            else
+                null
+
+        member _.GetRequiredKeyedService(serviceType, serviceKey) =
+            if admits serviceType then
+                keyed().GetRequiredKeyedService(serviceType, serviceKey)
+            else
+                raise (
+                    System.InvalidOperationException(
+                        sprintf "No service for type '%s' has been registered." serviceType.FullName
+                    )
+                )
+
+/// A scope factory whose scopes resolve through a `SeamAwareServiceProvider`
+/// for the same module.
+and [<Sealed>] internal ConfinedScopeFactory
+    (inner: IServiceScopeFactory, owner: ComponentId, confinement: SeamConfinement) =
+    interface IServiceScopeFactory with
+        member _.CreateScope() =
+            new ConfinedServiceScope(inner.CreateScope(), owner, confinement) :> IServiceScope
+
+and [<Sealed>] internal ConfinedServiceScope(inner: IServiceScope, owner: ComponentId, confinement: SeamConfinement) =
+    let provider = SeamAwareServiceProvider(inner.ServiceProvider, owner, confinement)
+
+    interface IServiceScope with
+        member _.ServiceProvider = provider :> System.IServiceProvider
+        member _.Dispose() = inner.Dispose()
+
+    interface System.IAsyncDisposable with
+        member _.DisposeAsync() =
+            match inner with
+            | :? System.IAsyncDisposable as asyncScope -> asyncScope.DisposeAsync()
+            | _ ->
+                inner.Dispose()
+                System.Threading.Tasks.ValueTask.CompletedTask
+
+/// The request as an AI tool sees it under confinement: every member is
+/// the real request's, except `RequestServices`.
+///
+/// AI tools run CONCURRENTLY on one context (the agent loop executes a
+/// turn's tool calls in parallel), so swapping the shared context's
+/// services — what a route handler gets — would let one module's tool run
+/// under another's grant. A view per call is the race-free shape.
+[<Sealed>]
+type internal ConfinedHttpContext(inner: HttpContext, initialServices: System.IServiceProvider) =
+    inherit HttpContext()
+    let mutable services = initialServices
+    override _.Features = inner.Features
+    override _.Request = inner.Request
+    override _.Response = inner.Response
+    override _.Connection = inner.Connection
+    override _.WebSockets = inner.WebSockets
+
+    override _.User
+        with get () = inner.User
+        and set value = inner.User <- value
+
+    override _.Items
+        with get () = inner.Items
+        and set value = inner.Items <- value
+
+    override _.RequestServices
+        with get () = services
+        and set value = services <- value
+
+    override _.RequestAborted
+        with get () = inner.RequestAborted
+        and set value = inner.RequestAborted <- value
+
+    override _.TraceIdentifier
+        with get () = inner.TraceIdentifier
+        and set value = inner.TraceIdentifier <- value
+
+    override _.Session
+        with get () = inner.Session
+        and set value = inner.Session <- value
+
+    override _.Abort() = inner.Abort()
+
+[<RequireQualifiedAccess>]
+module SeamAwareServiceProvider =
+
+    /// The confinement to enforce for a request, if any. `None` — the
+    /// passthrough — when none is registered or it enforces nothing.
+    let private confinementOf (services: System.IServiceProvider) : SeamConfinement option =
+        if isNull services then
+            None
+        else
+            match services.GetService(typeof<SeamConfinement>) with
+            | :? SeamConfinement as confinement when confinement.Enforces -> Some confinement
+            | _ -> None
+
+    /// Run one route handler of `owner`'s under the seam-aware provider.
+    /// The request's services are swapped for the handler's duration and
+    /// restored on every exit path; a request is handled sequentially, so
+    /// nothing else observes the swap. Under no confinement the handler
+    /// runs on the untouched request.
+    let confineHandler (owner: ComponentId) (handler: Giraffe.Core.HttpHandler) : Giraffe.Core.HttpHandler =
+        fun next ctx ->
+            let services = ctx.RequestServices
+
+            match confinementOf services with
+            | None -> handler next ctx
+            | Some confinement ->
+                ctx.RequestServices <- SeamAwareServiceProvider(services, owner, confinement)
+
+                task {
+                    try
+                        return! handler next ctx
+                    finally
+                        ctx.RequestServices <- services
+                }
+
+    /// Every route handler of one module, confined to its grant. Built
+    /// once per module at composition.
+    let confineHandlers (owner: ComponentId) (handlers: Giraffe.Core.HttpHandler list) : Giraffe.Core.HttpHandler list =
+        handlers |> List.map (confineHandler owner)
+
+    /// Run one AI tool of `owner`'s under the seam-aware provider, through
+    /// a per-call view of the request (see `ConfinedHttpContext` for why a
+    /// tool cannot share the route handler's swap).
+    let confineTool
+        (owner: ComponentId)
+        (definition: AIToolDefinition, execute: HttpContext -> string -> Async<string>)
+        : AIToolDefinition * (HttpContext -> string -> Async<string>) =
+        definition,
+        fun ctx arguments ->
+            match confinementOf ctx.RequestServices with
+            | None -> execute ctx arguments
+            | Some confinement ->
+                let services = SeamAwareServiceProvider(ctx.RequestServices, owner, confinement)
+
+                execute (ConfinedHttpContext(ctx, services)) arguments
+
+    /// Every AI tool of one module, confined to its grant. Built once per
+    /// module at composition.
+    let confineTools
+        (owner: ComponentId)
+        (tools: (AIToolDefinition * (HttpContext -> string -> Async<string>)) list)
+        : (AIToolDefinition * (HttpContext -> string -> Async<string>)) list =
+        tools |> List.map (confineTool owner)
