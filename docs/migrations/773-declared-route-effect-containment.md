@@ -51,8 +51,9 @@ not contained.
 
 ## Verification
 
-`dotnet <ToolUp.Platform.Tests.dll> --filter-test-list "Phase 773"`: twelve cases covering the `Pure` refusal and its
-audit row, the undeclared route unchanged, exact egress origins, and the `route-effect` surface entries.
+`dotnet <ToolUp.Platform.Tests.dll> --filter-test-list "Phase 773"` covers the `Pure` refusal and its audit row, the
+undeclared route unchanged, exact egress origins, the `route-effect` surface entries, and the new
+`IHostCapabilityRegistry` contract pack, bound with and without a route boundary in force.
 
 ## Rollback
 
