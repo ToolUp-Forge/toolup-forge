@@ -23,6 +23,7 @@ let private registeredTests =
         PayloadFormatDeclarationTests.tests
         FidelityContractTests.tests
         GoogleAnalyticsTests.tests
+        DeclaredDeliveryTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

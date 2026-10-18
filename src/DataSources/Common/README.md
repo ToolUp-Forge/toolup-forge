@@ -16,6 +16,8 @@ places for the CSV escaping or the credential-fallback order to drift:
 | `CredentialJson` | Parses a JSON-object credential blob into a case-insensitive `key → string` map, with `tryFind` accepting several spellings of a key (vendors are not consistent about `accessKeyId` vs `aws_access_key_id`). |
 | `Csv` | RFC 4180 emission — the uniform `IDataSource.Query` wire format for the family. `renderValue` / `escapeField` / `renderRow` / `toBytes`, plus `ofReader` to drain a `DbDataReader` (`System.Data.Common` is BCL, so the ADO-shaped and API-shaped connectors share it). |
 | `TypeMap` | Native-type-name → coarse `ColumnType` classification: `normalise`, the `ansi` fallback table, and `classify` to compose a connector's own overrides in front of it. |
+| `Files` / `IWatchableFileSource` | File acquisition and table-to-blob naming for the file connectors. Phase 1015 adds `listObjects` (each object at the location with its identity) and the `IWatchableFileSource` interface a file connector implements so a watched delivery sees exactly the objects the connector reads. |
+| `DeclaredDelivery` | Phase 1015 — a declared source's delivery (a scheduled pull or a watched location) run under a declared principal: `seed` checks and seeds the declarations, `watchHandler` is the watch poll's job handler, `withDeclaredDataSources` is the startup service a composition root registers. See [`docs/companions/data-sources.md`](../../../docs/companions/data-sources.md). |
 
 ## Why one CSV format for the whole family
 

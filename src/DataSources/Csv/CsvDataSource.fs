@@ -360,6 +360,13 @@ type private CsvDataSourceImpl(storage: IBlobStorage) =
     interface IDeclaresCredentialNeed with
         member _.CredentialNeed = CredentialNeed.NoCredential
 
+    // Phase 1015 — a watched delivery lists the objects this connector
+    // reads, under the connector's own naming.
+    interface IWatchableFileSource with
+        member _.ListObjects(ctx) =
+            withSettings ctx "Csv ListObjects" (fun settings ->
+                Files.listObjects storage "Csv ListObjects" settings.File)
+
     interface IDataSource with
         member _.Kind = Kind
 

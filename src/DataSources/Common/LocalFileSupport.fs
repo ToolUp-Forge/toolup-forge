@@ -31,6 +31,20 @@ open DataManagementTypes
 // container is scope-derived, so a source can never enumerate another
 // tenant's files.
 
+/// One object at a file source's location, as a watched delivery sees it
+/// (Phase 1015): the table it is, the blob it is stored as, and the
+/// identity that says whether it is new.
+type WatchedObject = {
+    /// The table name the connector reads the object as.
+    Table: string
+    /// The object's blob name within the source's container.
+    BlobName: string
+    /// The object's identity: its blob name, last-modified instant and
+    /// size. A new object, or an object rewritten in place, has an identity
+    /// no ingestion has recorded.
+    Identity: string
+}
+
 /// File acquisition and table↔blob naming for the file-shaped
 /// connectors.
 module Files =
@@ -215,6 +229,73 @@ module Files =
                 let! found = storage.Exists(settings.Container, blobName settings table)
                 return Ok found
         })
+
+    /// Phase 1015 — the objects at the configured location that this
+    /// connector reads as tables, each with its identity. The same naming
+    /// `listTables` applies, so a sidecar or a nested blob is never an
+    /// object; sorted by blob name, so a listing is stable between calls.
+    let listObjects
+        (storage: IBlobStorage)
+        (context: string)
+        (settings: FileSourceSettings)
+        : Async<Result<WatchedObject list, IngestionError>> =
+        Errors.guard context (fun () -> async {
+            let! names = storage.List(settings.Container, settings.Prefix)
+
+            let candidates =
+                names
+                |> List.distinct
+                |> List.choose (fun name -> tableOf settings name |> Option.map (fun table -> table, name))
+                |> List.sortWith (fun (_, a) (_, b) -> String.CompareOrdinal(a, b))
+
+            let! described =
+                candidates
+                |> List.map (fun (table, name) -> async {
+                    match! storage.GetMetadata(settings.Container, name) with
+                    | Error message ->
+                        return
+                            Error(
+                                SourceUnreachable
+                                    $"%s{context}: could not read the metadata of '%s{name}' in container '%s{settings.Container}': %s{message}"
+                            )
+                    | Ok metadata ->
+                        return
+                            Ok {
+                                Table = table
+                                BlobName = name
+                                Identity =
+                                    $"%s{name}@%d{metadata.LastModified.ToUniversalTime().Ticks}:%d{metadata.Size}"
+                            }
+                })
+                |> Async.Sequential
+
+            return
+                match
+                    described
+                    |> Array.tryPick (function
+                        | Error e -> Some e
+                        | Ok _ -> None)
+                with
+                | Some err -> Error err
+                | None ->
+                    Ok(
+                        described
+                        |> Array.choose (function
+                            | Ok o -> Some o
+                            | Error _ -> None)
+                        |> List.ofArray
+                    )
+        })
+
+/// A file connector whose location a watched delivery can watch (Phase
+/// 1015). Implemented by the connector because the connector owns its
+/// naming — container, prefix and extension come from ITS reading of the
+/// config — so a watch sees exactly the objects the connector would read.
+/// A connector that does not implement it cannot be declared `Watched`.
+type IWatchableFileSource =
+    /// The objects at the source's configured location, with their
+    /// identities. `Error` when the location cannot be read.
+    abstract ListObjects: ctx: DataSourceCallContext -> Async<Result<WatchedObject list, IngestionError>>
 
 /// Type-probe schema inference over sampled cell text.
 ///

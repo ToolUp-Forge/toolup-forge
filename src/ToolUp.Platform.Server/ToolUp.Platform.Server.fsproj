@@ -36,6 +36,10 @@
              preserves that surface for tests without exposing it on the
              public API. -->
         <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
+        <!-- Phase 1015: the data-source pack builds the platform's
+             DeclaredPrincipalResolver over a real team resolver, as the
+             Platform pack does for Phase 1005; its constructor is internal. -->
+        <InternalsVisibleTo Include="ToolUp.DataSources.Tests" />
     </ItemGroup>
     <ItemGroup>
         <!-- Phase 880 — what only a server can run, moved out of

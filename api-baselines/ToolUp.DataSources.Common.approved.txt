@@ -46,6 +46,120 @@ ToolUp.DataSources.Common.Csv+PayloadField+Tags.Null : System.Int32 (literal)
 ToolUp.DataSources.Common.Csv+PayloadField+Tags.Value : System.Int32 (literal)
 ToolUp.DataSources.Common.Csv+PayloadField+Value (class)
 ToolUp.DataSources.Common.Csv+PayloadField+Value.Item : System.String { get }
+ToolUp.DataSources.Common.DeclaredDataSourcesRefused (class)
+ToolUp.DataSources.Common.DeclaredDataSourcesRefused..ctor()
+ToolUp.DataSources.Common.DeclaredDataSourcesRefused..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.Common.DeclaredDeliveryRefusal])
+ToolUp.DataSources.Common.DeclaredDataSourcesRefused.Message : System.String { get }
+ToolUp.DataSources.Common.DeclaredDataSourcesRefused.refusals : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.Common.DeclaredDeliveryRefusal] { get }
+ToolUp.DataSources.Common.DeclaredDelivery (class)
+ToolUp.DataSources.Common.DeclaredDelivery.DefaultWatchPoll : System.String (literal)
+ToolUp.DataSources.Common.DeclaredDelivery.JobKeyTag : System.String (literal)
+ToolUp.DataSources.Common.DeclaredDelivery.SourceTag : System.String (literal)
+ToolUp.DataSources.Common.DeclaredDelivery.WatchJobHandlerName : System.String (literal)
+ToolUp.DataSources.Common.DeclaredDelivery.depsFrom(System.IServiceProvider, System.String, ToolUp.Platform.ILogger) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.DeclaredDeliveryDeps, ToolUp.DataSources.Common.DeclaredDeliveryRefusal]
+ToolUp.DataSources.Common.DeclaredDelivery.seed(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DeclaredPrincipalResolver], ToolUp.DataSources.Common.DeclaredDeliveryDeps, ToolUp.Platform.DeclaredDataSources) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.DeclaredSeedReport, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.Common.DeclaredDeliveryRefusal]]]
+ToolUp.DataSources.Common.DeclaredDelivery.watchHandler(ToolUp.DataSources.Common.DeclaredDeliveryDeps, ToolUp.Platform.ILogger) : ToolUp.Platform.IJobHandler
+ToolUp.DataSources.Common.DeclaredDelivery.withDeclaredDataSources(ToolUp.Platform.DeclaredDataSources, System.String, System.IServiceProvider) : Microsoft.Extensions.Hosting.IHostedService
+ToolUp.DataSources.Common.DeclaredDeliveryDeps (class)
+ToolUp.DataSources.Common.DeclaredDeliveryDeps..ctor(ToolUp.Platform.IDataSourceConfigStore, ToolUp.Platform.IJobScheduler, ToolUp.Platform.IDataIngestor, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataSource], ToolUp.Platform.IDeclaredDeliveryLedger, System.String)
+ToolUp.DataSources.Common.DeclaredDeliveryDeps.Configs : ToolUp.Platform.IDataSourceConfigStore { get }
+ToolUp.DataSources.Common.DeclaredDeliveryDeps.Connectors : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataSource] { get }
+ToolUp.DataSources.Common.DeclaredDeliveryDeps.Ingestor : ToolUp.Platform.IDataIngestor { get }
+ToolUp.DataSources.Common.DeclaredDeliveryDeps.Ledger : ToolUp.Platform.IDeclaredDeliveryLedger { get }
+ToolUp.DataSources.Common.DeclaredDeliveryDeps.Scheduler : ToolUp.Platform.IJobScheduler { get }
+ToolUp.DataSources.Common.DeclaredDeliveryDeps.WatchPoll : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal (class)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal.IsDeliveryUnavailable : System.Boolean { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal.IsDuplicatePrincipal : System.Boolean { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal.IsDuplicateSourceId : System.Boolean { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal.IsInvalidCadence : System.Boolean { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal.IsInvalidLocation : System.Boolean { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal.IsInvalidSourceId : System.Boolean { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal.IsLedgerUnavailable : System.Boolean { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal.IsLocationInConfig : System.Boolean { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal.IsLocationUnreadable : System.Boolean { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal.IsNoPrincipalResolver : System.Boolean { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal.IsNoTablesToPull : System.Boolean { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal.IsNotWatchable : System.Boolean { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal.IsPrincipalScopeNotPersistent : System.Boolean { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal.IsPrincipalUnresolved : System.Boolean { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal.IsSeedFailed : System.Boolean { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal.IsUndeclaredPrincipal : System.Boolean { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal.IsUnknownConnector : System.Boolean { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal.NoPrincipalResolver : ToolUp.DataSources.Common.DeclaredDeliveryRefusal { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal.Tag : System.Int32 { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+DeliveryUnavailable (class)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+DeliveryUnavailable.missing : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+DuplicatePrincipal (class)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+DuplicatePrincipal.principal : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+DuplicateSourceId (class)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+DuplicateSourceId.sourceId : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+InvalidCadence (class)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+InvalidCadence.cadence : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+InvalidCadence.reason : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+InvalidCadence.sourceId : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+InvalidLocation (class)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+InvalidLocation.location : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+InvalidLocation.reason : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+InvalidLocation.sourceId : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+InvalidSourceId (class)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+InvalidSourceId.reason : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+InvalidSourceId.sourceId : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+LedgerUnavailable (class)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+LedgerUnavailable.reason : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+LocationInConfig (class)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+LocationInConfig.key : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+LocationInConfig.sourceId : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+LocationUnreadable (class)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+LocationUnreadable.location : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+LocationUnreadable.reason : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+LocationUnreadable.sourceId : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+NoTablesToPull (class)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+NoTablesToPull.sourceId : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+NotWatchable (class)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+NotWatchable.kind : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+NotWatchable.sourceId : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+PrincipalScopeNotPersistent (class)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+PrincipalScopeNotPersistent.principal : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+PrincipalScopeNotPersistent.scopeId : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+PrincipalScopeNotPersistent.sourceId : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+PrincipalUnresolved (class)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+PrincipalUnresolved.missing : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+PrincipalUnresolved.principal : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+PrincipalUnresolved.sourceId : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+SeedFailed (class)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+SeedFailed.reason : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+SeedFailed.sourceId : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+Tags (class)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+Tags.DeliveryUnavailable : System.Int32 (literal)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+Tags.DuplicatePrincipal : System.Int32 (literal)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+Tags.DuplicateSourceId : System.Int32 (literal)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+Tags.InvalidCadence : System.Int32 (literal)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+Tags.InvalidLocation : System.Int32 (literal)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+Tags.InvalidSourceId : System.Int32 (literal)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+Tags.LedgerUnavailable : System.Int32 (literal)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+Tags.LocationInConfig : System.Int32 (literal)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+Tags.LocationUnreadable : System.Int32 (literal)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+Tags.NoPrincipalResolver : System.Int32 (literal)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+Tags.NoTablesToPull : System.Int32 (literal)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+Tags.NotWatchable : System.Int32 (literal)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+Tags.PrincipalScopeNotPersistent : System.Int32 (literal)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+Tags.PrincipalUnresolved : System.Int32 (literal)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+Tags.SeedFailed : System.Int32 (literal)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+Tags.UndeclaredPrincipal : System.Int32 (literal)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+Tags.UnknownConnector : System.Int32 (literal)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+UndeclaredPrincipal (class)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+UndeclaredPrincipal.principal : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+UndeclaredPrincipal.sourceId : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+UnknownConnector (class)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+UnknownConnector.kind : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusal+UnknownConnector.sourceId : System.String { get }
+ToolUp.DataSources.Common.DeclaredDeliveryRefusalModule (class)
+ToolUp.DataSources.Common.DeclaredDeliveryRefusalModule.describe(ToolUp.DataSources.Common.DeclaredDeliveryRefusal) : System.String
+ToolUp.DataSources.Common.DeclaredSeedReport (class)
+ToolUp.DataSources.Common.DeclaredSeedReport..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]])
+ToolUp.DataSources.Common.DeclaredSeedReport.Retired : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.DataSources.Common.DeclaredSeedReport.Seeded : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
 ToolUp.DataSources.Common.Errors (class)
 ToolUp.DataSources.Common.Errors.classify(System.String, System.Exception) : ToolUp.Platform.IngestionError
 ToolUp.DataSources.Common.Errors.guard`1(System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.IngestionError]]]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[T, ToolUp.Platform.IngestionError]]
@@ -83,6 +197,7 @@ ToolUp.DataSources.Common.Files (class)
 ToolUp.DataSources.Common.Files.blobName(ToolUp.DataSources.Common.Files+FileSourceSettings, System.String) : System.String
 ToolUp.DataSources.Common.Files.download(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, ToolUp.DataSources.Common.Files+FileSourceSettings, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Byte[], ToolUp.Platform.IngestionError]]
 ToolUp.DataSources.Common.Files.exists(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, ToolUp.DataSources.Common.Files+FileSourceSettings, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Boolean, ToolUp.Platform.IngestionError]]
+ToolUp.DataSources.Common.Files.listObjects(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, ToolUp.DataSources.Common.Files+FileSourceSettings) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.Common.WatchedObject], ToolUp.Platform.IngestionError]]
 ToolUp.DataSources.Common.Files.listTables(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, ToolUp.DataSources.Common.Files+FileSourceSettings) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.IngestionError]]
 ToolUp.DataSources.Common.Files.normaliseExtension(System.String) : System.String
 ToolUp.DataSources.Common.Files.normalisePrefix(System.String) : System.String
@@ -102,6 +217,8 @@ ToolUp.DataSources.Common.IExternalApiConnector`1.Endpoints : Microsoft.FSharp.C
 ToolUp.DataSources.Common.IExternalApiConnector`1.PageRequest(ToolUp.DataSources.Common.ExternalApiCall, ToolUp.DataSources.Common.PageCursor) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Transport.HttpRequest, System.String]
 ToolUp.DataSources.Common.IExternalApiConnector`1.Provider : ToolUp.DataSources.Common.ExternalApiProvider { get }
 ToolUp.DataSources.Common.IExternalApiConnector`1.Watermark(Row) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.DataSources.Common.IWatchableFileSource (interface)
+ToolUp.DataSources.Common.IWatchableFileSource.ListObjects(ToolUp.Platform.DataSourceCallContext) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.Common.WatchedObject], ToolUp.Platform.IngestionError]]
 ToolUp.DataSources.Common.IncrementalSync (class)
 ToolUp.DataSources.Common.IncrementalSync.handler`1(ToolUp.DataSources.Common.IncrementalSyncDeps`1[Row]) : ToolUp.Platform.IJobHandler
 ToolUp.DataSources.Common.IncrementalSync.payload(ToolUp.DataSources.Common.IncrementalSyncRequest) : System.String
@@ -310,3 +427,8 @@ ToolUp.DataSources.Common.TypeProbe (class)
 ToolUp.DataSources.Common.TypeProbe.infer(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : DataManagementTypes+ColumnType
 ToolUp.DataSources.Common.TypeProbe.nativeName(DataManagementTypes+ColumnType) : System.String
 ToolUp.DataSources.Common.TypeProbe.schemaOf(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Collections.Generic.IEnumerable`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]) : ToolUp.Platform.TableSchema
+ToolUp.DataSources.Common.WatchedObject (class)
+ToolUp.DataSources.Common.WatchedObject..ctor(System.String, System.String, System.String)
+ToolUp.DataSources.Common.WatchedObject.BlobName : System.String { get }
+ToolUp.DataSources.Common.WatchedObject.Identity : System.String { get }
+ToolUp.DataSources.Common.WatchedObject.Table : System.String { get }

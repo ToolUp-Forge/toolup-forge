@@ -60,6 +60,9 @@
         <Compile Include="Tests\FidelityContractTests.fs" />
         <!-- Phase 838 - GA4's declared absence sentinels, read at the payload boundary. -->
         <Compile Include="Tests\GoogleAnalyticsTests.fs" />
+        <!-- Phase 1015 - a declared source's scheduled pull or watched location,
+             run under its declared principal, end to end in process. -->
+        <Compile Include="Tests\DeclaredDeliveryTests.fs" />
         <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
              ToolUp.Platform.Tests so there is one implementation. -->
         <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />

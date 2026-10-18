@@ -529,6 +529,22 @@
       provider, which is a passthrough until a composition calls `confine`;
       a deployment that does not is byte-identical. Migration recipe:
       `docs/migrations/770-seam-aware-service-provider.md`.
+
+      Rides this draft, additive: Phase 1015 lets a deployment declare how a
+      data source's data arrives - a scheduled pull or a watched location -
+      run as a declared principal, never a scope. Additive (Platform.Server):
+      `DataSourceDelivery`, `DeclaredDataSource`, `DeclaredDataSources`,
+      `IDeclaredDeliveryLedger`, `DataSourceConfigStore.declaredDeliveryLedger`
+      and `BlobDeclaredDeliveryLedger`, and the shared `DeclaredPrincipal`
+      record with its `user` / `userOf` / `missingGrant` readings. Additive
+      (DataSources.Common): `DeclaredDelivery` (`seed`, `watchHandler`,
+      `depsFrom`, `withDeclaredDataSources`), `DeclaredDeliveryDeps`,
+      `DeclaredSeedReport`, `DeclaredDeliveryRefusal`,
+      `DeclaredDataSourcesRefused`, `WatchedObject`, `Files.listObjects` and
+      `IWatchableFileSource`, which the Csv, Excel and Parquet connectors now
+      implement. `DataSourceConfig` is unchanged; a deployment that declares
+      no source is byte-identical. Migration recipe:
+      `docs/migrations/1015-declared-data-delivery.md`.
     -->
     <Version>0.28.0</Version>
     <!--

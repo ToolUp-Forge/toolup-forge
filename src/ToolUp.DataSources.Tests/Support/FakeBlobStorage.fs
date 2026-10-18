@@ -24,12 +24,28 @@ open ToolUp.Platform.BlobStorage
 
 /// A dictionary-backed blob store. Blob names are `/`-delimited, as
 /// `IBlobStorage` requires of every backend.
+///
+/// Phase 1015 — `GetMetadata` reports the instant a blob was WRITTEN, as
+/// every real backend does, not the instant it was asked: a watched
+/// delivery identifies an object by it. Write instants strictly increase,
+/// so a rewrite is always a new identity even within one clock tick.
 type InMemoryBlobStorage() =
 
-    let blobs = ConcurrentDictionary<string * string, byte[]>()
+    let blobs = ConcurrentDictionary<string * string, byte[] * DateTime>()
+    let clock = obj ()
+    let mutable lastWrite = DateTime.MinValue
+
+    let writtenNow () =
+        lock clock (fun () ->
+            let now = DateTime.UtcNow
+            lastWrite <- if now > lastWrite then now else lastWrite.AddTicks 1L
+            lastWrite)
+
+    let write (container: string) (blobName: string) (content: byte[]) =
+        blobs[(container, blobName)] <- (content, writtenNow ())
 
     /// Write (or replace) a blob.
-    member _.Put(container: string, blobName: string, content: byte[]) = blobs[(container, blobName)] <- content
+    member _.Put(container: string, blobName: string, content: byte[]) = write container blobName content
 
     /// Every blob currently held, as `container/name`.
     member _.Names =
@@ -39,13 +55,13 @@ type InMemoryBlobStorage() =
 
     interface IBlobStorage with
         member _.Upload(container, blobName, content) = async {
-            blobs[(container, blobName)] <- content
+            write container blobName content
             return Ok blobName
         }
 
         member _.Download(container, blobName) = async {
             match blobs.TryGetValue((container, blobName)) with
-            | true, content -> return Ok content
+            | true, (content, _) -> return Ok content
             | false, _ -> return Error $"blob '%s{blobName}' not found in container '%s{container}'"
         }
 
@@ -69,11 +85,11 @@ type InMemoryBlobStorage() =
 
         member _.GetMetadata(container, blobName) = async {
             match blobs.TryGetValue((container, blobName)) with
-            | true, content ->
+            | true, (content, writtenAt) ->
                 return
                     Ok {
                         Size = int64 content.Length
-                        LastModified = DateTime.UtcNow
+                        LastModified = writtenAt
                         ContentType = None
                     }
             | false, _ -> return Error $"blob '%s{blobName}' not found in container '%s{container}'"
