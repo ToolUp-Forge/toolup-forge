@@ -2851,6 +2851,8 @@
         <Compile Include="InProcess\ServerAppSecretStoreTests.fs" />
         <!-- Phase 1000 — the listen address is configuration: loopback default, precedence, the deployed-posture preflight. -->
         <Compile Include="InProcess\ServerBindAddressTests.fs" />
+        <!-- Phase 1028 - the fire-and-forget harness the Phase 1024, 1025 and 1026 suites share. -->
+        <Compile Include="Support\FireAndForgetHarness.fs" />
         <!-- Phase 1024 - a fire-and-forget audit write never faults unobserved. -->
         <Compile Include="InProcess\AuditFireAndForgetTests.fs" />
         <!-- Phase 1025 - a store write started fire-and-forget cannot kill the host. -->

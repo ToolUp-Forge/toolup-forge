@@ -52,44 +52,13 @@ open ToolUp.Platform.FileProcessor
 open ToolUp.Platform.Usage
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 open ToolUp.Platform.Tests.Support
+open ToolUp.Platform.Tests.Support.FireAndForgetHarness
 
 type CallSiteSinkDownException(marker: string) =
     inherit Exception(marker)
 
-type private FailureMode =
-    | Plain
-    | TaskShaped
-    | Synchronous
-
-/// Every unobserved task exception the process raises, by message. Each arm
-/// looks only for its own marker, so a sibling test's unobserved exception
-/// can neither fail nor pass this one.
-let private unobserved = ConcurrentQueue<string>()
-
-let private unobservedHook =
-    lazy
-        TaskScheduler.UnobservedTaskException.Add(fun e ->
-            for inner in e.Exception.Flatten().InnerExceptions do
-                unobserved.Enqueue inner.Message)
-
-let private failWith<'a> (mode: FailureMode) (marker: string) : Async<'a> =
-    match mode with
-    | Plain -> async {
-        do! Async.Sleep 5
-        return raise (CallSiteSinkDownException marker)
-      }
-    | TaskShaped -> async {
-        do!
-            Task.Run(
-                Action(fun () ->
-                    Thread.Sleep 5
-                    raise (CallSiteSinkDownException marker))
-            )
-            |> Async.AwaitTask
-
-        return Unchecked.defaultof<'a>
-      }
-    | Synchronous -> raise (CallSiteSinkDownException marker)
+let private failWith mode marker =
+    FireAndForgetHarness.failWith (fun m -> CallSiteSinkDownException m :> exn) mode marker
 
 /// The sinks a site writes to: the audit log, the auth-denial hook and the
 /// usage log. Healthy (`None`) or all failing per the mode.
@@ -486,34 +455,10 @@ let private sites = [
     transactionalDelivery
 ]
 
-let private settleOn (attempts: int) (probe: unit -> 'a list) = async {
-    let rec go attempt = async {
-        match probe () with
-        | [] when attempt < attempts ->
-            do! Async.Sleep 50
-            return! go (attempt + 1)
-        | found -> return found
-    }
-
-    return! go 0
-}
-
-/// A faulted, unobserved task is only reported when it is finalised.
-let private leakedFor (marker: string) = async {
-    for _ in 1..3 do
-        GC.Collect()
-        GC.WaitForPendingFinalizers()
-
-    do! Async.Sleep 100
-    GC.Collect()
-    GC.WaitForPendingFinalizers()
-    return unobserved.ToArray() |> Array.filter (fun m -> m.Contains marker)
-}
-
 let private arm (site: Site) (mode: FailureMode) =
     testCaseAsync (sprintf "%s: a %A failure is caught, logged once, and changes nothing" site.Family mode)
     <| async {
-        unobservedHook.Force()
+        watchUnobserved ()
         let marker = sprintf "callsite-down-%s" (Guid.NewGuid().ToString "N")
         let _, controlLogger = capturingLogger ()
         let! control = site.Act (sinks None) controlLogger

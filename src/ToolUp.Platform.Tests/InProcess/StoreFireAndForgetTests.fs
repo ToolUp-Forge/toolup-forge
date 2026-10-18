@@ -32,7 +32,6 @@ open System.Collections.Concurrent
 open System.Net
 open System.Net.Http
 open System.Threading
-open System.Threading.Tasks
 open Expecto
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Hosting
@@ -41,46 +40,27 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.Tracing
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Tests.Support
+open ToolUp.Platform.Tests.Support.FireAndForgetHarness
 
 type StoreDownException(marker: string) =
     inherit Exception(marker)
 
-type private FailureMode =
-    | Plain
-    | TaskShaped
-    | Synchronous
+/// How a store write fails: it raises per one of the harness's modes, or
+/// (lineage only) `ILineageStore.Record` returns `Error`.
+type private StoreFailure =
+    | Raises of FailureMode
     | Refused
 
-/// Every unobserved task exception the process raises, by message. Each arm
-/// looks only for its own marker, so a sibling test's unobserved exception
-/// can neither fail nor pass this one.
-let private unobserved = ConcurrentQueue<string>()
+/// How a test name spells a failure: the bare mode, so `Raises Plain` is
+/// named `Plain`.
+let private label (failure: StoreFailure) =
+    match failure with
+    | Raises mode -> sprintf "%A" mode
+    | Refused -> "Refused"
 
-let private unobservedHook =
-    lazy
-        TaskScheduler.UnobservedTaskException.Add(fun e ->
-            for inner in e.Exception.Flatten().InnerExceptions do
-                unobserved.Enqueue inner.Message)
-
-let private failWith<'a> (mode: FailureMode) (marker: string) : Async<'a> =
-    match mode with
-    | Plain -> async {
-        do! Async.Sleep 5
-        return raise (StoreDownException marker)
-      }
-    | TaskShaped -> async {
-        do!
-            Task.Run(
-                Action(fun () ->
-                    Thread.Sleep 5
-                    raise (StoreDownException marker))
-            )
-            |> Async.AwaitTask
-
-        return Unchecked.defaultof<'a>
-      }
-    | Synchronous
-    | Refused -> raise (StoreDownException marker)
+let private failWith mode marker =
+    FireAndForgetHarness.failWith (fun m -> StoreDownException m :> exn) mode marker
 
 let private failingEventStore (mode: FailureMode) (marker: string) =
     { new IEventStore with
@@ -105,12 +85,12 @@ let private healthyEventStore () =
 
 /// A lineage store that records into `links`, or fails per `fails` — the
 /// failure decided per link, so one link can fail while the next succeeds.
-let private lineageStore (links: ConcurrentQueue<LineageLink>) (fails: LineageLink -> (FailureMode * string) option) =
+let private lineageStore (links: ConcurrentQueue<LineageLink>) (fails: LineageLink -> (StoreFailure * string) option) =
     { new ILineageStore with
         member _.Record(_, link) =
             match fails link with
             | Some(Refused, marker) -> async { return Error marker }
-            | Some(mode, marker) -> failWith mode marker
+            | Some(Raises mode, marker) -> failWith mode marker
             | None -> async {
                 links.Enqueue link
                 return Ok()
@@ -156,30 +136,6 @@ let private capturingLogger () =
         member _.Warn message = warnings.Enqueue message
         member _.Error(message, ex) = errors.Enqueue(message, ex)
     }
-
-let private settleOn (attempts: int) (probe: unit -> 'a list) = async {
-    let rec go attempt = async {
-        match probe () with
-        | [] when attempt < attempts ->
-            do! Async.Sleep 50
-            return! go (attempt + 1)
-        | found -> return found
-    }
-
-    return! go 0
-}
-
-/// A faulted, unobserved task is only reported when it is finalised.
-let private leakedFor (marker: string) = async {
-    for _ in 1..3 do
-        GC.Collect()
-        GC.WaitForPendingFinalizers()
-
-    do! Async.Sleep 100
-    GC.Collect()
-    GC.WaitForPendingFinalizers()
-    return unobserved.ToArray() |> Array.filter (fun m -> m.Contains marker)
-}
 
 // ─── The store sites ────────────────────────────────────────────────
 
@@ -348,10 +304,10 @@ let private failureWarnings (site: Site) (warnings: ConcurrentQueue<string>) =
     |> List.ofArray
     |> List.filter (fun w -> w.Contains(sprintf "the %s" site.Write) && w.Contains " write failed")
 
-let private storeArm (site: Site) (mode: FailureMode) =
-    testCaseAsync (sprintf "%s: a %A failure is caught, logged once, and changes nothing" site.Name mode)
+let private storeArm (site: Site) (failure: StoreFailure) =
+    testCaseAsync (sprintf "%s: a %s failure is caught, logged once, and changes nothing" site.Name (label failure))
     <| async {
-        unobservedHook.Force()
+        watchUnobserved ()
         let marker = sprintf "store-down-%s" (Guid.NewGuid().ToString "N")
         let _, _, controlLogger = capturingLogger ()
 
@@ -359,9 +315,11 @@ let private storeArm (site: Site) (mode: FailureMode) =
 
         let events, lineage =
             if site.ThroughLineage then
-                healthyEventStore (), lineageStore (ConcurrentQueue()) (fun _ -> Some(mode, marker))
+                healthyEventStore (), lineageStore (ConcurrentQueue()) (fun _ -> Some(failure, marker))
             else
-                failingEventStore mode marker, lineageStore (ConcurrentQueue()) (fun _ -> None)
+                match failure with
+                | Raises mode -> failingEventStore mode marker, lineageStore (ConcurrentQueue()) (fun _ -> None)
+                | Refused -> failtestf "%s writes no lineage, so it has no Refused arm" site.Name
 
         let warnings, _, logger = capturingLogger ()
         let! result = site.Act events lineage logger
@@ -375,7 +333,7 @@ let private storeArm (site: Site) (mode: FailureMode) =
         match logged with
         | [ warning ] ->
             let named =
-                if mode = Refused then
+                if failure = Refused then
                     "InvalidOperationException"
                 else
                     "StoreDownException"
@@ -444,7 +402,7 @@ let private webhookArm (mode: FailureMode) =
             mode
     )
     <| async {
-        unobservedHook.Force()
+        watchUnobserved ()
         let marker = sprintf "store-down-%s" (Guid.NewGuid().ToString "N")
         let storage = InMemoryBlobStorage() :> IBlobStorage
         let registry = failingRegistry (WebhookRegistry.createRegistry storage) mode marker
@@ -563,14 +521,14 @@ let private lineageSpecifics =
                 sprintf "%A: one link failing does not lose the others, and its warning reconstructs it" kind
             )
             <| async {
-                unobservedHook.Force()
+                watchUnobserved ()
                 let marker = sprintf "store-down-%s" (Guid.NewGuid().ToString "N")
                 let recorded = ConcurrentQueue<LineageLink>()
 
                 let lineage =
                     lineageStore recorded (fun link ->
                         if link.FromObjectId = "input-a" then
-                            Some(Plain, marker)
+                            Some(Raises Plain, marker)
                         else
                             None)
 
@@ -624,7 +582,7 @@ let tests =
     testList "Phase 1025 — a store write started fire-and-forget cannot kill the host" [
         for site in storeSites do
             for mode in [ Plain; TaskShaped; Synchronous ] do
-                storeArm site mode
+                storeArm site (Raises mode)
 
             if site.ThroughLineage then
                 storeArm site Refused

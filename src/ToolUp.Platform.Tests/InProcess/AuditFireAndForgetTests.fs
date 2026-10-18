@@ -33,44 +33,14 @@ open ToolUp.Platform.Auth
 open ToolUp.Platform.NotificationChannel
 open ToolUp.Platform.TeamManagement
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
+open ToolUp.Platform.Tests.Support
+open ToolUp.Platform.Tests.Support.FireAndForgetHarness
 
 type AuditSinkDownException(marker: string) =
     inherit Exception(marker)
 
-type private FailureMode =
-    | Plain
-    | TaskShaped
-    | Synchronous
-
-/// Every unobserved task exception the process raises, by message. Each arm
-/// looks only for its own marker, so a sibling test's unobserved exception
-/// can neither fail nor pass this one.
-let private unobserved = ConcurrentQueue<string>()
-
-let private unobservedHook =
-    lazy
-        TaskScheduler.UnobservedTaskException.Add(fun e ->
-            for inner in e.Exception.Flatten().InnerExceptions do
-                unobserved.Enqueue inner.Message)
-
-let private failWith<'a> (mode: FailureMode) (marker: string) : Async<'a> =
-    match mode with
-    | Plain -> async {
-        do! Async.Sleep 5
-        return raise (AuditSinkDownException marker)
-      }
-    | TaskShaped -> async {
-        do!
-            Task.Run(
-                Action(fun () ->
-                    Threading.Thread.Sleep 5
-                    raise (AuditSinkDownException marker))
-            )
-            |> Async.AwaitTask
-
-        return Unchecked.defaultof<'a>
-      }
-    | Synchronous -> raise (AuditSinkDownException marker)
+let private failWith mode marker =
+    FireAndForgetHarness.failWith (fun m -> AuditSinkDownException m :> exn) mode marker
 
 let private healthyAuditLog () =
     let rows = ConcurrentQueue<AuditEvent>()
@@ -228,7 +198,7 @@ let private failureWarnings (site: Site) (warnings: ConcurrentQueue<string>) =
 let private arm (site: Site) (mode: FailureMode) =
     testCaseAsync (sprintf "%s: a %A failure is caught, logged once, and changes nothing" site.Write mode)
     <| async {
-        unobservedHook.Force()
+        watchUnobserved ()
         let marker = sprintf "sink-down-%s" (Guid.NewGuid().ToString "N")
 
         let _, healthy = healthyAuditLog ()
@@ -248,26 +218,8 @@ let private arm (site: Site) (mode: FailureMode) =
         Expect.equal status controlStatus "the response status is the healthy sink's"
         Expect.equal subject controlSubject "the request resolves to the healthy sink's subject"
 
-        let rec settle attempt = async {
-            match failureWarnings site warnings with
-            | [] when attempt < 60 ->
-                do! Async.Sleep 50
-                return! settle (attempt + 1)
-            | logged -> return logged
-        }
-
-        let! logged = settle 0
-
-        // A faulted, unobserved task is only reported when it is finalised.
-        for _ in 1..3 do
-            GC.Collect()
-            GC.WaitForPendingFinalizers()
-
-        do! Async.Sleep 100
-        GC.Collect()
-        GC.WaitForPendingFinalizers()
-
-        let leaked = unobserved.ToArray() |> Array.filter (fun m -> m.Contains marker)
+        let! logged = settleOn 60 (fun () -> failureWarnings site warnings)
+        let! leaked = leakedFor marker
         Expect.isEmpty leaked "no unobserved task exception carries this write's failure"
 
         match logged with
