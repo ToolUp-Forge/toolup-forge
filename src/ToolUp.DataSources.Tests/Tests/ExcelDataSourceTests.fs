@@ -12,6 +12,7 @@ open Expecto
 open ToolUp.Platform
 open ToolUp.DataSources.Excel
 open ToolUp.DataSources.Tests.Support
+open ToolUp.DataSources.Tests.Contracts
 
 // ─── ToolUp.DataSources.Excel ─────────────────────────────────────
 //
@@ -182,6 +183,9 @@ let tests =
         // fail the second.
         LocalFileDataSourceContract.tests "Excel (first sheet)" (target [] "Data")
         LocalFileDataSourceContract.tests "Excel (named sheet)" (target [ "sheet", "Figures" ] "Figures")
+
+        // Phase 1015 - what a watched delivery lists through this connector.
+        IWatchableFileSourceContract.tests "Excel" ExcelDataSource.create ".xlsx"
 
         testList "readSettings" [
             test "container is required" {

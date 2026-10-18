@@ -34,6 +34,9 @@
              the always-on seven-point contract the file connectors meet. -->
         <Compile Include="Support\FakeBlobStorage.fs" />
         <Compile Include="Support\LocalFileDataSourceContract.fs" />
+        <!-- Phase 1015 - the IWatchableFileSource pack, bound by every file
+             connector a watched delivery lists through. -->
+        <Compile Include="Contracts\IWatchableFileSourceContract.fs" />
         <Compile Include="Tests\ConnectorSupportTests.fs" />
         <Compile Include="Tests\SqlDataSourceTests.fs" />
         <Compile Include="Tests\BigQueryDataSourceTests.fs" />
