@@ -863,6 +863,12 @@ module Names =
     let publishSource = "TOOLUP_PUBLISH_SOURCE"
 
     [<Literal>]
+    let publishPushTimeoutSeconds = "TOOLUP_PUBLISH_PUSH_TIMEOUT_SECONDS"
+
+    [<Literal>]
+    let publishPushRetries = "TOOLUP_PUBLISH_PUSH_RETRIES"
+
+    [<Literal>]
     let testArgs = "TOOLUP_TEST_ARGS"
 
     [<Literal>]
@@ -2733,6 +2739,23 @@ let all: ConfigKeyDescriptor list = [
         Description = "Build-time: overrides the NuGet source the Publish target pushes to."
         Type = StringKey
         Default = None
+        IsSecret = false
+        Category = ToolingCategory
+    }
+    {
+        EnvVar = Names.publishPushTimeoutSeconds
+        Description = "Build-time: seconds each Publish-target `dotnet nuget push` may take (its --timeout), 1 to 7200."
+        Type = IntKey
+        Default = Some "900"
+        IsSecret = false
+        Category = ToolingCategory
+    }
+    {
+        EnvVar = Names.publishPushRetries
+        Description =
+            "Build-time: retries of a failed Publish-target push (per package, with backoff) before the target fails naming what is left unpushed, 0 to 10."
+        Type = IntKey
+        Default = Some "3"
         IsSecret = false
         Category = ToolingCategory
     }
