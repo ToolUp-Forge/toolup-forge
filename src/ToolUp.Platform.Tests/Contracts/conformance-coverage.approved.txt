@@ -40,7 +40,6 @@ IContentScanner
 ICspContributor
 IDataExporter
 IDatasetCodec
-IDeploymentVerificationEvidence
 IDevDiagnosticsContributor
 IEmbeddingCache
 IEmbeddingProvider

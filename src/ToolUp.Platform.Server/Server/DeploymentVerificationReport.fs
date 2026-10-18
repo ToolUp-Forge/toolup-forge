@@ -725,35 +725,94 @@ module DeploymentVerificationEvidence =
         | :? IHostingBaselineEvidence as source -> source.HostingBaseline
         | _ -> None
 
+    // Phase 777 tidy — every producer below builds its value through ONE
+    // object expression. Until this phase each of the eight producers
+    // spelled out every sibling interface by hand, so a sibling added a
+    // block to all eight, and a wither that forgot to carry one through
+    // silently deleted that section for every root that supplied both — the
+    // hazard each wither's comment warned about. Reading every member once
+    // (`membersOf`) and building once (`assemble`) makes "carry the rest
+    // through" structural: a wither replaces one field of a record.
+
+    /// Every sibling member an evidence value carries.
+    type private Members = {
+        SeamAuthority: SeamAuthorityIntegrity option
+        EvidenceChain: (unit -> Async<Result<EvidenceChain, EvidenceChainError>>) option
+        RemotingDecoders: RemotingDecoderIntegrity option
+        RemotingArgumentDecoders: RemotingDecoderIntegrity option
+        Egress: EgressIntegrity option
+        HostingBaseline: HostingBaselineIntegrity option
+    }
+
+    let private noMembers: Members = {
+        SeamAuthority = None
+        EvidenceChain = None
+        RemotingDecoders = None
+        RemotingArgumentDecoders = None
+        Egress = None
+        HostingBaseline = None
+    }
+
+    let private membersOf (evidence: IDeploymentVerificationEvidence) : Members = {
+        SeamAuthority = seamAuthorityOf evidence
+        EvidenceChain = evidenceChainOf evidence
+        RemotingDecoders = remotingDecodersOf evidence
+        RemotingArgumentDecoders = remotingArgumentDecodersOf evidence
+        Egress = egressOf evidence
+        HostingBaseline = hostingBaselineOf evidence
+    }
+
+    let private assemble
+        (bootSeal: BootSealIntegrity option)
+        (groundingContinuity: GroundingContinuityIntegrity option)
+        (ledger: (unit -> Async<Result<LedgerIntegrity, string>>) option)
+        (certificates: (unit -> Async<Result<CertificateIssuanceIntegrity, string>>) option)
+        (answerJoins: (unit -> Async<Result<AnswerJoinIntegrity, string>>) option)
+        (members: Members)
+        : IDeploymentVerificationEvidence =
+        { new IDeploymentVerificationEvidence with
+            member _.BootSeal = bootSeal
+            member _.GroundingContinuity = groundingContinuity
+            member _.Ledger = ledger
+            member _.Certificates = certificates
+            member _.AnswerJoins = answerJoins
+
+          interface ISeamAuthorityEvidence with
+              member _.SeamAuthority = members.SeamAuthority
+
+          interface IEvidenceChainEvidence with
+              member _.EvidenceChain = members.EvidenceChain
+
+          interface IRemotingDecoderEvidence with
+              member _.RemotingDecoders = members.RemotingDecoders
+
+          interface IRemotingArgumentDecoderEvidence with
+              member _.RemotingArgumentDecoders = members.RemotingArgumentDecoders
+
+          interface IEgressEvidence with
+              member _.Egress = members.Egress
+
+          interface IHostingBaselineEvidence with
+              member _.HostingBaseline = members.HostingBaseline
+
+        }
+
+    /// Rebuild `evidence` with its five primary members unchanged and the
+    /// sibling members `update` returns from the ones it carries.
+    let private rebuild (update: Members -> Members) (evidence: IDeploymentVerificationEvidence) =
+        assemble
+            evidence.BootSeal
+            evidence.GroundingContinuity
+            evidence.Ledger
+            evidence.Certificates
+            evidence.AnswerJoins
+            (update (membersOf evidence))
+
     /// Evidence naming nothing — every section reads `NotComposed`.
     /// Behaviourally identical to registering no evidence at all; useful
     /// where a value is required rather than an option.
     let none: IDeploymentVerificationEvidence =
-        { new IDeploymentVerificationEvidence with
-            member _.BootSeal = None
-            member _.GroundingContinuity = None
-            member _.Ledger = None
-            member _.Certificates = None
-            member _.AnswerJoins = None
-
-          interface ISeamAuthorityEvidence with
-              member _.SeamAuthority = None
-
-          interface IEvidenceChainEvidence with
-              member _.EvidenceChain = None
-
-          interface IRemotingDecoderEvidence with
-              member _.RemotingDecoders = None
-
-          interface IRemotingArgumentDecoderEvidence with
-              member _.RemotingArgumentDecoders = None
-
-          interface IEgressEvidence with
-              member _.Egress = None
-
-          interface IHostingBaselineEvidence with
-              member _.HostingBaseline = None
-        }
+        assemble None None None None None noMembers
 
     /// Evidence naming whichever sources the composition root holds. Each
     /// argument is independently optional.
@@ -764,31 +823,7 @@ module DeploymentVerificationEvidence =
         (certificates: (unit -> Async<Result<CertificateIssuanceIntegrity, string>>) option)
         (answerJoins: (unit -> Async<Result<AnswerJoinIntegrity, string>>) option)
         : IDeploymentVerificationEvidence =
-        { new IDeploymentVerificationEvidence with
-            member _.BootSeal = bootSeal
-            member _.GroundingContinuity = groundingContinuity
-            member _.Ledger = ledger
-            member _.Certificates = certificates
-            member _.AnswerJoins = answerJoins
-
-          interface ISeamAuthorityEvidence with
-              member _.SeamAuthority = None
-
-          interface IEvidenceChainEvidence with
-              member _.EvidenceChain = None
-
-          interface IRemotingDecoderEvidence with
-              member _.RemotingDecoders = None
-
-          interface IRemotingArgumentDecoderEvidence with
-              member _.RemotingArgumentDecoders = None
-
-          interface IEgressEvidence with
-              member _.Egress = None
-
-          interface IHostingBaselineEvidence with
-              member _.HostingBaseline = None
-        }
+        assemble bootSeal groundingContinuity ledger certificates answerJoins noMembers
 
     /// Replace the grounding-continuity member, preserving every other
     /// source. The seam `ServerApp.withDeploymentVerificationEvidence`
@@ -798,45 +833,17 @@ module DeploymentVerificationEvidence =
         (continuity: GroundingContinuityIntegrity option)
         (evidence: IDeploymentVerificationEvidence)
         : IDeploymentVerificationEvidence =
-        // Phase 693: the seam-authority member is carried THROUGH, not
-        // rebuilt as `None`. A wither that dropped a member it does not
-        // name would silently delete the sixth section for every root
-        // that supplies both — and `withDeploymentVerificationEvidence`
-        // calls this one unconditionally, so the loss would be the
-        // default rather than an edge case. Phase 713's chain member
-        // rides through for exactly the same reason.
-        let seamAuthority = seamAuthorityOf evidence
-        let evidenceChain = evidenceChainOf evidence
-        let remotingDecoders = remotingDecodersOf evidence
-        let remotingArgumentDecoders = remotingArgumentDecodersOf evidence
-        let egress = egressOf evidence
-        let hostingBaseline = hostingBaselineOf evidence
-
-        { new IDeploymentVerificationEvidence with
-            member _.BootSeal = evidence.BootSeal
-            member _.GroundingContinuity = continuity
-            member _.Ledger = evidence.Ledger
-            member _.Certificates = evidence.Certificates
-            member _.AnswerJoins = evidence.AnswerJoins
-
-          interface ISeamAuthorityEvidence with
-              member _.SeamAuthority = seamAuthority
-
-          interface IEvidenceChainEvidence with
-              member _.EvidenceChain = evidenceChain
-
-          interface IRemotingDecoderEvidence with
-              member _.RemotingDecoders = remotingDecoders
-
-          interface IRemotingArgumentDecoderEvidence with
-              member _.RemotingArgumentDecoders = remotingArgumentDecoders
-
-          interface IEgressEvidence with
-              member _.Egress = egress
-
-          interface IHostingBaselineEvidence with
-              member _.HostingBaseline = hostingBaseline
-        }
+        // Every sibling member is carried THROUGH, not rebuilt as `None`:
+        // `withDeploymentVerificationEvidence` calls this one
+        // unconditionally, so a dropped member would be the default rather
+        // than an edge case.
+        assemble
+            evidence.BootSeal
+            continuity
+            evidence.Ledger
+            evidence.Certificates
+            evidence.AnswerJoins
+            (membersOf evidence)
 
     /// Phase 693 — supply the seam-authority posture, preserving every
     /// other source.
@@ -847,42 +854,17 @@ module DeploymentVerificationEvidence =
     /// which breaks every existing call. The composition root builds its
     /// evidence with `create` exactly as before and pipes it through
     /// here, the same shape `withGroundingContinuity` already
-    /// established.
+    /// established. Every wither below is one for the same reason.
     let withSeamAuthority
         (seamAuthority: SeamAuthorityIntegrity option)
         (evidence: IDeploymentVerificationEvidence)
         : IDeploymentVerificationEvidence =
-        let evidenceChain = evidenceChainOf evidence
-        let remotingDecoders = remotingDecodersOf evidence
-        let remotingArgumentDecoders = remotingArgumentDecodersOf evidence
-        let egress = egressOf evidence
-        let hostingBaseline = hostingBaselineOf evidence
-
-        { new IDeploymentVerificationEvidence with
-            member _.BootSeal = evidence.BootSeal
-            member _.GroundingContinuity = evidence.GroundingContinuity
-            member _.Ledger = evidence.Ledger
-            member _.Certificates = evidence.Certificates
-            member _.AnswerJoins = evidence.AnswerJoins
-
-          interface ISeamAuthorityEvidence with
-              member _.SeamAuthority = seamAuthority
-
-          interface IEvidenceChainEvidence with
-              member _.EvidenceChain = evidenceChain
-
-          interface IRemotingDecoderEvidence with
-              member _.RemotingDecoders = remotingDecoders
-
-          interface IRemotingArgumentDecoderEvidence with
-              member _.RemotingArgumentDecoders = remotingArgumentDecoders
-
-          interface IEgressEvidence with
-              member _.Egress = egress
-
-          interface IHostingBaselineEvidence with
-              member _.HostingBaseline = hostingBaseline
-        }
+        rebuild
+            (fun members -> {
+                members with
+                    SeamAuthority = seamAuthority
+            })
+            evidence
 
     /// Phase 770 — overlay the runtime-observed reach onto the
     /// seam-authority member, preserving every other source.
@@ -923,219 +905,62 @@ module DeploymentVerificationEvidence =
 
     /// Phase 713 — supply the evidence-chain walk, preserving every other
     /// source.
-    ///
-    /// A wither rather than a sixth argument to `create`, for the reason
-    /// `withSeamAuthority` is one: widening that function's parameter
-    /// list retypes it, which the public-API approval gate reads as a
-    /// REMOVAL of the five-argument form and which breaks every existing
-    /// call.
     let withEvidenceChain
         (walk: (unit -> Async<Result<EvidenceChain, EvidenceChainError>>) option)
         (evidence: IDeploymentVerificationEvidence)
         : IDeploymentVerificationEvidence =
-        let seamAuthority = seamAuthorityOf evidence
-        let remotingDecoders = remotingDecodersOf evidence
-        let remotingArgumentDecoders = remotingArgumentDecodersOf evidence
-        let egress = egressOf evidence
-        let hostingBaseline = hostingBaselineOf evidence
-
-        { new IDeploymentVerificationEvidence with
-            member _.BootSeal = evidence.BootSeal
-            member _.GroundingContinuity = evidence.GroundingContinuity
-            member _.Ledger = evidence.Ledger
-            member _.Certificates = evidence.Certificates
-            member _.AnswerJoins = evidence.AnswerJoins
-
-          interface ISeamAuthorityEvidence with
-              member _.SeamAuthority = seamAuthority
-
-          interface IEvidenceChainEvidence with
-              member _.EvidenceChain = walk
-
-          interface IRemotingDecoderEvidence with
-              member _.RemotingDecoders = remotingDecoders
-
-          interface IRemotingArgumentDecoderEvidence with
-              member _.RemotingArgumentDecoders = remotingArgumentDecoders
-
-          interface IEgressEvidence with
-              member _.Egress = egress
-
-          interface IHostingBaselineEvidence with
-              member _.HostingBaseline = hostingBaseline
-        }
+        rebuild (fun members -> { members with EvidenceChain = walk }) evidence
 
     /// Phase 785 — supply the remoting-decoder facet, preserving every
     /// other source.
-    ///
-    /// A wither rather than a sixth argument to `create`, for the reason
-    /// `withSeamAuthority` and `withEvidenceChain` are: widening that
-    /// function's parameter list retypes it, which the public-API
-    /// approval gate reads as a REMOVAL of the five-argument form and
-    /// which breaks every existing call.
     let withRemotingDecoders
         (remotingDecoders: RemotingDecoderIntegrity option)
         (evidence: IDeploymentVerificationEvidence)
         : IDeploymentVerificationEvidence =
-        let seamAuthority = seamAuthorityOf evidence
-        let evidenceChain = evidenceChainOf evidence
-        let remotingArgumentDecoders = remotingArgumentDecodersOf evidence
-        let egress = egressOf evidence
-        let hostingBaseline = hostingBaselineOf evidence
-
-        { new IDeploymentVerificationEvidence with
-            member _.BootSeal = evidence.BootSeal
-            member _.GroundingContinuity = evidence.GroundingContinuity
-            member _.Ledger = evidence.Ledger
-            member _.Certificates = evidence.Certificates
-            member _.AnswerJoins = evidence.AnswerJoins
-
-          interface ISeamAuthorityEvidence with
-              member _.SeamAuthority = seamAuthority
-
-          interface IEvidenceChainEvidence with
-              member _.EvidenceChain = evidenceChain
-
-          interface IRemotingDecoderEvidence with
-              member _.RemotingDecoders = remotingDecoders
-
-          interface IRemotingArgumentDecoderEvidence with
-              member _.RemotingArgumentDecoders = remotingArgumentDecoders
-
-          interface IEgressEvidence with
-              member _.Egress = egress
-
-          interface IHostingBaselineEvidence with
-              member _.HostingBaseline = hostingBaseline
-        }
+        rebuild
+            (fun members -> {
+                members with
+                    RemotingDecoders = remotingDecoders
+            })
+            evidence
 
     /// Phase 842 — supply the remoting-ARGUMENT-decoder facet, preserving
     /// every other source. The argument-side twin of
-    /// `withRemotingDecoders`, for the same reason: a sixth argument to
-    /// `create` retypes it, which the public-API approval gate reads as
-    /// a REMOVAL of the five-argument form and which breaks every
-    /// existing call.
+    /// `withRemotingDecoders`.
     let withRemotingArgumentDecoders
         (remotingArgumentDecoders: RemotingDecoderIntegrity option)
         (evidence: IDeploymentVerificationEvidence)
         : IDeploymentVerificationEvidence =
-        let seamAuthority = seamAuthorityOf evidence
-        let evidenceChain = evidenceChainOf evidence
-        let remotingDecoders = remotingDecodersOf evidence
-        let egress = egressOf evidence
-        let hostingBaseline = hostingBaselineOf evidence
-
-        { new IDeploymentVerificationEvidence with
-            member _.BootSeal = evidence.BootSeal
-            member _.GroundingContinuity = evidence.GroundingContinuity
-            member _.Ledger = evidence.Ledger
-            member _.Certificates = evidence.Certificates
-            member _.AnswerJoins = evidence.AnswerJoins
-
-          interface ISeamAuthorityEvidence with
-              member _.SeamAuthority = seamAuthority
-
-          interface IEvidenceChainEvidence with
-              member _.EvidenceChain = evidenceChain
-
-          interface IRemotingDecoderEvidence with
-              member _.RemotingDecoders = remotingDecoders
-
-          interface IRemotingArgumentDecoderEvidence with
-              member _.RemotingArgumentDecoders = remotingArgumentDecoders
-
-          interface IEgressEvidence with
-              member _.Egress = egress
-
-          interface IHostingBaselineEvidence with
-              member _.HostingBaseline = hostingBaseline
-        }
+        rebuild
+            (fun members -> {
+                members with
+                    RemotingArgumentDecoders = remotingArgumentDecoders
+            })
+            evidence
 
     /// Phase 772 — supply the outbound-egress posture, preserving every
     /// other source.
-    ///
-    /// A wither rather than a sixth argument to `create`, for the reason
-    /// `withSeamAuthority`, `withEvidenceChain` and `withRemotingDecoders`
-    /// are: widening that function's parameter list retypes it, which the
-    /// public-API approval gate reads as a REMOVAL of the five-argument
-    /// form and which breaks every existing call.
     let withEgress
         (egress: EgressIntegrity option)
         (evidence: IDeploymentVerificationEvidence)
         : IDeploymentVerificationEvidence =
-        let seamAuthority = seamAuthorityOf evidence
-        let evidenceChain = evidenceChainOf evidence
-        let remotingDecoders = remotingDecodersOf evidence
-        let remotingArgumentDecoders = remotingArgumentDecodersOf evidence
-        let hostingBaseline = hostingBaselineOf evidence
-
-        { new IDeploymentVerificationEvidence with
-            member _.BootSeal = evidence.BootSeal
-            member _.GroundingContinuity = evidence.GroundingContinuity
-            member _.Ledger = evidence.Ledger
-            member _.Certificates = evidence.Certificates
-            member _.AnswerJoins = evidence.AnswerJoins
-
-          interface ISeamAuthorityEvidence with
-              member _.SeamAuthority = seamAuthority
-
-          interface IEvidenceChainEvidence with
-              member _.EvidenceChain = evidenceChain
-
-          interface IRemotingDecoderEvidence with
-              member _.RemotingDecoders = remotingDecoders
-
-          interface IRemotingArgumentDecoderEvidence with
-              member _.RemotingArgumentDecoders = remotingArgumentDecoders
-
-          interface IEgressEvidence with
-              member _.Egress = egress
-
-          interface IHostingBaselineEvidence with
-              member _.HostingBaseline = hostingBaseline
-        }
+        rebuild (fun members -> { members with Egress = egress }) evidence
 
     /// Phase 771 — supply the hardening baseline, preserving every other
-    /// source. A wither rather than an argument to `create`, for the reason
-    /// every wither above gives. A composition root normally never calls
-    /// this: the baseline is observed after the container is built and
-    /// reaches the report through `HostingBaselineRecord`. A test, or a
-    /// root that observed the baseline itself, supplies it here.
+    /// source. A composition root normally never calls this: the baseline
+    /// is observed after the container is built and reaches the report
+    /// through `HostingBaselineRecord`. A test, or a root that observed the
+    /// baseline itself, supplies it here.
     let withHostingBaseline
         (hostingBaseline: HostingBaselineIntegrity option)
         (evidence: IDeploymentVerificationEvidence)
         : IDeploymentVerificationEvidence =
-        let seamAuthority = seamAuthorityOf evidence
-        let evidenceChain = evidenceChainOf evidence
-        let remotingDecoders = remotingDecodersOf evidence
-        let remotingArgumentDecoders = remotingArgumentDecodersOf evidence
-        let egress = egressOf evidence
-
-        { new IDeploymentVerificationEvidence with
-            member _.BootSeal = evidence.BootSeal
-            member _.GroundingContinuity = evidence.GroundingContinuity
-            member _.Ledger = evidence.Ledger
-            member _.Certificates = evidence.Certificates
-            member _.AnswerJoins = evidence.AnswerJoins
-
-          interface ISeamAuthorityEvidence with
-              member _.SeamAuthority = seamAuthority
-
-          interface IEvidenceChainEvidence with
-              member _.EvidenceChain = evidenceChain
-
-          interface IRemotingDecoderEvidence with
-              member _.RemotingDecoders = remotingDecoders
-
-          interface IRemotingArgumentDecoderEvidence with
-              member _.RemotingArgumentDecoders = remotingArgumentDecoders
-
-          interface IEgressEvidence with
-              member _.Egress = egress
-
-          interface IHostingBaselineEvidence with
-              member _.HostingBaseline = hostingBaseline
-        }
+        rebuild
+            (fun members -> {
+                members with
+                    HostingBaseline = hostingBaseline
+            })
+            evidence
 
 /// Phase 686 — gather the sections, fold them into the report, and
 /// serve it. Separated from the evidence types above only by F# scoping:

@@ -2188,9 +2188,9 @@ let tests =
         //
         // `IRemotingDecoderEvidence` (Phase 785) and its argument-side
         // twin `IRemotingArgumentDecoderEvidence` (Phase 842) are
-        // replaceable seams — eight production implementations each, one
-        // per `DeploymentVerificationEvidence` producer function (`none`,
-        // `create`, and the six withers). Bound against all eight here,
+        // produced by every `DeploymentVerificationEvidence` producer
+        // function (`none`, `create`, and the withers) — since Phase 777
+        // through one shared object expression. Bound against them here,
         // so the file's own hand-written warning on every wither — "a
         // wither that dropped a member it does not name would silently
         // delete the section" — is an executable law rather than a
