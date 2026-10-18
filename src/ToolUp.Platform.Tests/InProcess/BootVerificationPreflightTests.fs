@@ -177,6 +177,8 @@ let private optionsFor
         Transcript = None
         AuditLog = auditLog
         ScopeId = BootVerificationPreflight.PlatformScopeId
+        MinimumLevel = None
+        Attestor = RuntimeAttestor.unattested
     }
 
 /// Seal a record + a binding over `recordedComposition`, the honest pair
@@ -1311,6 +1313,391 @@ let tests =
                     (BootVerificationPreflight.verifyWithRetirement options None drifted
                      |> Async.RunSynchronously)
                     "verify is verifyWithRetirement with None — the drifted arm"
+            }
+        ]
+        // ── Phase 774 — the verification level ───────────────────────
+        //
+        // Each claim is probed in both directions: the honest case passes
+        // AND its twin fails, so a check that always said yes (or always
+        // no) could not satisfy the list.
+        testList "verification level (Phase 774)" [
+            let sealRecordOnly (record: DeployRecord) : SealedDeployRecord =
+                match sealer.Seal(DeployRecords.canonicalBytes record) |> Async.RunSynchronously with
+                | Ok seal -> { Record = record; Seal = seal }
+                | Error e -> failwithf "fixture could not seal the record: %s" e
+
+            /// The record exactly as a pre-774 store hands it back: schema
+            /// 1, and no level field at all (a deserialiser's `null`).
+            let legacyRecord: DeployRecord = {
+                baseRecord with
+                    SchemaVersion = DeployRecord.PreLevelSchemaVersion
+                    VerificationLevel = Unchecked.defaultof<VerificationLevel>
+            }
+
+            /// The canonical form the pre-774 `DeployRecord.canonicalForm`
+            /// produced, framed field by field exactly as that function did.
+            /// Independent of the code under test past the two sub-forms
+            /// Phase 774 did not touch.
+            let preLevelCanonicalForm (record: DeployRecord) : string =
+                let builder = Text.StringBuilder()
+                let frame = ProvenanceFraming.frame builder
+                frame "toolup.deployrecord.v1"
+                frame "1"
+                frame record.DeployId
+                frame record.TenantId
+                frame record.BuildId
+                frame (DeployRecord.manifestCanonicalForm record.Manifest)
+                frame (DeployProvenance.canonicalForm record.Provenance)
+                builder.ToString()
+
+            /// An attestor that reports a fixed observation.
+            let attestorObserving (observation: RuntimeObservation) : IRuntimeAttestor =
+                { new IRuntimeAttestor with
+                    member _.Name() = "fixed"
+                    member _.Observe _ = async { return observation }
+                }
+
+            let runWith (options: BootVerificationOptions) =
+                BootVerificationPreflight.run options composition |> Async.RunSynchronously
+
+            test "a new record carries its level inside the signed bytes" {
+                let attributed = DeployRecord.canonicalForm baseRecord
+
+                let isolated =
+                    baseRecord
+                    |> DeployRecord.withVerificationLevel VerificationLevel.IsolatedSigner
+                    |> DeployRecord.canonicalForm
+
+                Expect.equal
+                    baseRecord.SchemaVersion
+                    DeployRecord.LevelSchemaVersion
+                    "a new record is stamped at the level schema"
+
+                Expect.stringContains attributed "attributed" "the level is framed into the canonical form"
+                Expect.notEqual attributed isolated "two levels cannot canonicalise to the same bytes"
+            }
+
+            test "re-labelling a sealed record breaks its seal, and the boot reports no level" {
+                let sealedRecord, sealedBinding = sealPair baseRecord composition
+
+                let relabelled = {
+                    sealedRecord with
+                        Record =
+                            sealedRecord.Record
+                            |> DeployRecord.withVerificationLevel VerificationLevel.IsolatedSigner
+                }
+
+                let verdictFor record =
+                    optionsFor
+                        CompositionProfile.Standard
+                        BootVerificationPolicy.LogAndServe
+                        (Some record)
+                        (Some sealedBinding)
+                        None
+                    |> runWith
+
+                // The honest twin first: the same pair, un-relabelled, verifies.
+                match verdictFor sealedRecord with
+                | Ok result -> Expect.equal result.Verdict BootVerificationVerdict.Verified "the honest record verifies"
+                | Error result -> failtestf "the honest record must verify, got %A" result.Verdict
+
+                match verdictFor relabelled with
+                | Ok result ->
+                    match result.Verdict with
+                    | BootVerificationVerdict.VerificationFailed _ -> ()
+                    | other -> failtestf "a re-labelled record must fail verification, got %A" other
+
+                    Expect.isNone result.Level "a level read off a record whose seal failed is a claim nobody made"
+                | Error result -> failtestf "log-and-serve serves, got a refusal: %A" result.Verdict
+            }
+
+            test "re-labelling a record to the pre-level schema to strip its level breaks the seal too" {
+                let isolated =
+                    baseRecord
+                    |> DeployRecord.withVerificationLevel VerificationLevel.IsolatedSigner
+
+                let sealedRecord = sealRecordOnly isolated
+
+                let downgraded = {
+                    sealedRecord with
+                        Record = {
+                            isolated with
+                                SchemaVersion = DeployRecord.PreLevelSchemaVersion
+                        }
+                }
+
+                let verify record =
+                    DeployRecords.verify sealer (fun _ -> None) None record
+                    |> Async.RunSynchronously
+
+                Expect.isOk (verify sealedRecord) "the record as sealed verifies"
+                Expect.isError (verify downgraded) "the schema version is inside the signed bytes"
+            }
+
+            test "a pre-level record canonicalises to its old bytes, so its seal verifies byte for byte" {
+                Expect.equal
+                    (DeployRecord.canonicalForm legacyRecord)
+                    (preLevelCanonicalForm legacyRecord)
+                    "a schema-1 record's canonical form is exactly the pre-774 one"
+
+                // Sealed over the PRE-774 bytes, independently framed, and
+                // verified by the current code.
+                let legacySeal =
+                    match
+                        sealer.Seal(Text.Encoding.UTF8.GetBytes(preLevelCanonicalForm legacyRecord))
+                        |> Async.RunSynchronously
+                    with
+                    | Ok seal -> seal
+                    | Error e -> failwithf "fixture could not seal: %s" e
+
+                let sealedLegacy = {
+                    Record = legacyRecord
+                    Seal = legacySeal
+                }
+
+                Expect.isOk
+                    (DeployRecords.verify sealer (fun _ -> None) None sealedLegacy
+                     |> Async.RunSynchronously)
+                    "an old seal verifies under the new code"
+
+                let binding = BootVerificationPreflight.bindingFor legacyRecord composition
+
+                let sealedBinding =
+                    match BootVerificationPreflight.sealBinding sealer binding |> Async.RunSynchronously with
+                    | Ok b -> b
+                    | Error e -> failwithf "fixture could not seal the binding: %s" e
+
+                match
+                    optionsFor
+                        CompositionProfile.Verified
+                        BootVerificationPolicy.RefuseOnDrift
+                        (Some sealedLegacy)
+                        (Some sealedBinding)
+                        None
+                    |> runWith
+                with
+                | Ok result ->
+                    Expect.equal
+                        result.Verdict
+                        BootVerificationVerdict.Verified
+                        "an old record verifies exactly as before"
+
+                    match result.Level with
+                    | Some reading ->
+                        Expect.equal reading.Level VerificationLevel.Attributed "read as Attributed"
+
+                        Expect.equal
+                            reading.Provenance
+                            (VerificationLevelProvenance.InferredFromSchema DeployRecord.PreLevelSchemaVersion)
+                            "and the inference is named, never presented as a declaration"
+
+                        Expect.stringContains
+                            (VerificationLevelReading.describe reading)
+                            "attributed (inferred: pre-level schema)"
+                            "the rendered reading says it was inferred"
+                    | None -> failtest "an affirmative boot reports its level"
+                | Error result -> failtestf "an old record must not refuse the start, got %A" result.Verdict
+            }
+
+            test "a pre-level record read back from JSON without the field coerces and keeps its bytes" {
+                let json = ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ()
+
+                let node =
+                    Text.Json.Nodes.JsonNode.Parse(Text.Json.JsonSerializer.Serialize(baseRecord, json)).AsObject()
+
+                Expect.isTrue (node.Remove "VerificationLevel") "the probe removed a field that was there"
+                node["SchemaVersion"] <- Text.Json.Nodes.JsonValue.Create DeployRecord.PreLevelSchemaVersion
+
+                let readBack =
+                    Text.Json.JsonSerializer.Deserialize<DeployRecord>(node.ToJsonString(), json)
+
+                let coerced = DeployRecord.coerce readBack
+
+                Expect.equal
+                    coerced.VerificationLevel
+                    VerificationLevel.Attributed
+                    "an absent level coerces to the floor"
+
+                Expect.equal
+                    (DeployRecord.canonicalForm readBack)
+                    (preLevelCanonicalForm readBack)
+                    "and canonicalises to the pre-774 bytes, coerced or not"
+
+                Expect.equal
+                    (DeployRecord.canonicalForm coerced)
+                    (DeployRecord.canonicalForm readBack)
+                    "coercion never moves the bytes a seal covers"
+            }
+
+            test "under the verified profile a floor the level does not reach refuses the start, naming both" {
+                let sealedRecord, sealedBinding = sealPair baseRecord composition
+
+                let withFloor floor = {
+                    optionsFor
+                        CompositionProfile.Verified
+                        BootVerificationPolicy.LogAndServe
+                        (Some sealedRecord)
+                        (Some sealedBinding)
+                        None with
+                        MinimumLevel = Some floor
+                }
+
+                // The twin: a floor the level meets serves.
+                match runWith (withFloor VerificationLevel.Attributed) with
+                | Ok result -> Expect.equal result.Verdict BootVerificationVerdict.Verified "a met floor is no finding"
+                | Error result -> failtestf "a met floor must serve, got %A" result.Verdict
+
+                match runWith (withFloor VerificationLevel.IsolatedSigner) with
+                | Error result ->
+                    Expect.isTrue result.RefusedStart "the verified profile refuses"
+
+                    match result.Verdict with
+                    | BootVerificationVerdict.BelowVerificationFloor(reading, floor) ->
+                        Expect.equal floor VerificationLevel.IsolatedSigner "the floor rides the verdict"
+                        Expect.equal reading.Level VerificationLevel.Attributed "and so does the level"
+                    | other -> failtestf "expected BelowVerificationFloor, got %A" other
+
+                    let rendered =
+                        BootVerificationVerdict.findings result.Verdict |> String.concat " | "
+
+                    Expect.stringContains rendered "isolated-signer" "the finding names the floor"
+
+                    Expect.stringContains
+                        rendered
+                        "attributed (declared by the record)"
+                        "and the level, with its provenance"
+                | Ok result ->
+                    failtestf "a floor above the level must refuse under the verified profile, got %A" result.Verdict
+            }
+
+            test "under the standard log-and-serve profile a missed floor is reported and serves" {
+                let sealedRecord, sealedBinding = sealPair baseRecord composition
+
+                let options = {
+                    optionsFor
+                        CompositionProfile.Standard
+                        BootVerificationPolicy.LogAndServe
+                        (Some sealedRecord)
+                        (Some sealedBinding)
+                        None with
+                        MinimumLevel = Some VerificationLevel.RuntimeQuoted
+                }
+
+                match runWith options with
+                | Ok result ->
+                    Expect.equal
+                        (BootVerificationVerdict.label result.Verdict)
+                        "below-verification-floor"
+                        "the finding is recorded"
+
+                    Expect.isFalse (BootVerificationVerdict.isAffirmative result.Verdict) "and is not affirmative"
+                | Error result -> failtestf "log-and-serve must serve, got %A" result.Verdict
+            }
+
+            test "a drifted boot stays Drifted under a floor, with its level reported beside it" {
+                let sealedRecord, sealedBinding = sealPair baseRecord composition
+
+                let options = {
+                    optionsFor
+                        CompositionProfile.Standard
+                        BootVerificationPolicy.LogAndServe
+                        (Some sealedRecord)
+                        (Some sealedBinding)
+                        None with
+                        MinimumLevel = Some VerificationLevel.RuntimeQuoted
+                }
+
+                match
+                    BootVerificationPreflight.run options { composition with Tools = [] }
+                    |> Async.RunSynchronously
+                with
+                | Ok result ->
+                    Expect.equal
+                        (BootVerificationVerdict.label result.Verdict)
+                        "drifted"
+                        "drift is the actionable finding"
+
+                    Expect.isSome result.Level "the level is still read for a record whose seal held"
+                | Error result -> failtestf "log-and-serve must serve, got %A" result.Verdict
+            }
+
+            test "the Unattested provider never claims more than the record is credited with" {
+                let observation =
+                    RuntimeAttestor.unattested.Observe "any-digest" |> Async.RunSynchronously
+
+                match observation with
+                | RuntimeObservation.Unattested _ -> ()
+                | other -> failtestf "the in-tree provider must observe nothing, got %A" other
+
+                for declared in
+                    [
+                        VerificationLevel.Attributed
+                        VerificationLevel.IsolatedSigner
+                        VerificationLevel.RuntimeQuoted
+                    ] do
+                    let reading =
+                        VerificationLevelReading.read
+                            declared
+                            VerificationLevelProvenance.DeclaredByRecord
+                            (RuntimeAttestor.unattested.Name())
+                            observation
+
+                    Expect.equal
+                        reading.Level
+                        (VerificationLevel.recordCredit declared)
+                        "the level is the record's credit, never raised"
+
+                    Expect.equal
+                        reading.Provenance
+                        VerificationLevelProvenance.DeclaredByRecord
+                        "and it is attributed to the record, not to the attestor"
+
+                    Expect.notEqual
+                        reading.Level
+                        VerificationLevel.RuntimeQuoted
+                        "no record, on its own say-so, reaches a runtime quote"
+            }
+
+            test "an attestor that observes a runtime quote raises the level, naming its evidence" {
+                let sealedRecord, sealedBinding = sealPair baseRecord composition
+
+                let options observation = {
+                    optionsFor
+                        CompositionProfile.Verified
+                        BootVerificationPolicy.RefuseOnDrift
+                        (Some sealedRecord)
+                        (Some sealedBinding)
+                        None with
+                        MinimumLevel = Some VerificationLevel.RuntimeQuoted
+                        Attestor = attestorObserving observation
+                }
+
+                match
+                    runWith (options (RuntimeObservation.Observed(VerificationLevel.RuntimeQuoted, "sha256:quote")))
+                with
+                | Ok result ->
+                    Expect.equal result.Verdict BootVerificationVerdict.Verified "an observed quote meets the floor"
+
+                    match result.Level with
+                    | Some reading ->
+                        Expect.equal reading.Level VerificationLevel.RuntimeQuoted "credited with what was observed"
+
+                        Expect.equal
+                            reading.Provenance
+                            (VerificationLevelProvenance.ObservedByAttestor("fixed", "sha256:quote"))
+                            "and the provenance names the attestor and its evidence"
+                    | None -> failtest "an affirmative boot reports its level"
+                | Error result -> failtestf "an observed quote must serve, got %A" result.Verdict
+
+                // The twin: the same attestor reporting nothing refuses.
+                match runWith (options (RuntimeObservation.Unattested "no quote")) with
+                | Error result ->
+                    Expect.equal
+                        (BootVerificationVerdict.label result.Verdict)
+                        "below-verification-floor"
+                        "without the observation the floor is not met"
+                | Ok result ->
+                    failtestf "an unobserved quote must not meet a runtime-quoted floor, got %A" result.Verdict
             }
         ]
     ]

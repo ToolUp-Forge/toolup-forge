@@ -117,6 +117,14 @@ type ServerModule = {
     /// is normalised to upper-case and path to lower-case in the
     /// registry — declarations match regardless of the casing used here.
     RouteSurfaceRequirements: ((string * string) * SurfaceRequirement) list
+    /// Phase 773 — exact `(method, path)` → `RouteEffectDeclaration` for
+    /// this module: the effect envelope host-capability invocations made
+    /// while the route runs are held to, and the egress grant its outbound
+    /// calls are. Keyed and normalised exactly as `RouteSurfaceRequirements`
+    /// is. `addModule` wraps a module's handlers only when this is
+    /// non-empty, so a module declaring nothing is byte-for-byte unchanged
+    /// (GP 11). Declare with `ServerModule.withRouteEffect`.
+    RouteEffects: ((string * string) * RouteEffectDeclaration) list
     /// Phase 9b.B — compose-time declarations of recurring / event-driven
     /// background jobs this module owns. Each entry pairs an
     /// `IJobHandler` with a `Trigger`; `addModule` accumulates them onto
@@ -235,6 +243,7 @@ module ServerModule =
         DefaultSurfaceRequirement = SurfaceRequirement.userOrTeam
         RoutePrefixes = []
         RouteSurfaceRequirements = []
+        RouteEffects = []
         JobHandlers = []
         BindingStamp = None
         ComponentId = None
@@ -566,6 +575,26 @@ module ServerModule =
         {
             m with
                 RouteSurfaceRequirements = m.RouteSurfaceRequirements @ [ (httpMethod, path), requirement ]
+        }
+
+    /// Phase 773 — declare what one `(method, path)` route of this module
+    /// may do: an effect envelope (a host-capability invocation beyond it
+    /// is refused by the Phase 300 gate, with a `Pure` envelope refusing
+    /// every invocation and every outbound call) and/or an egress grant
+    /// (an outbound call through a platform client to any other origin is
+    /// refused). Containment holds what the route reaches THROUGH THE
+    /// PLATFORM — the registry `HostCapabilityRegistry.create` builds and
+    /// the egress-policed clients — and nothing it reaches around them.
+    /// A later declaration of the same route replaces an earlier one.
+    let withRouteEffect
+        (httpMethod: string)
+        (path: string)
+        (declaration: RouteEffectDeclaration)
+        (m: ServerModule)
+        : ServerModule =
+        {
+            m with
+                RouteEffects = m.RouteEffects @ [ (httpMethod, path), declaration ]
         }
 
     /// Phase 9b.B — declare a recurring / event-driven background job
@@ -2385,7 +2414,7 @@ module ServerApp =
 
         match result.Verdict with
         | BootVerificationVerdict.Verified ->
-            BootSealVerified(profile, policy, BootVerificationVerdict.describe result.Verdict)
+            BootSealVerified(profile, policy, BootVerificationVerdict.describe result.Verdict, result.Level)
         | BootVerificationVerdict.VerifiedUnrecorded _ ->
             // Phase 694 — affirmative, and carried as its own case. See
             // `BootSealVerifiedUnrecorded`: rendering it as a plain
@@ -2395,7 +2424,8 @@ module ServerApp =
                 profile,
                 policy,
                 BootVerificationVerdict.describe result.Verdict,
-                BootVerificationVerdict.findings result.Verdict
+                BootVerificationVerdict.findings result.Verdict,
+                result.Level
             )
         | BootVerificationVerdict.Unsealed reason -> BootSealUnsealed(profile, policy, reason)
         | BootVerificationVerdict.VerificationFailed _
@@ -2406,7 +2436,10 @@ module ServerApp =
         // job here is to carry that refusal and its reason. The verdict's
         // own `describe` / `findings` name the retirement, so nothing is
         // lost by not giving it a fourth tier-neutral case.
-        | BootVerificationVerdict.Retired _ ->
+        | BootVerificationVerdict.Retired _
+        // Phase 774 — below the declared verification-level floor is a
+        // rejection too; its finding names the level and the floor.
+        | BootVerificationVerdict.BelowVerificationFloor _ ->
             BootSealRejected(
                 profile,
                 policy,
@@ -2500,6 +2533,46 @@ module ServerApp =
         app with
             ModuleLoadOutcomes = app.ModuleLoadOutcomes @ [ moduleId, outcome ]
     }
+
+    /// Phase 773 — register the route-effect refusal observer a module
+    /// with declared routes needs, unless the composition registered its
+    /// own: the Phase 657 refusal row through the composition's
+    /// `IAuditLog`, under the standard profile's label. A verified
+    /// composition registers a `RouteEffectObserver` over
+    /// `VerifiedCompositionProfile.auditingObserver` so the row names its
+    /// profile. The refusal itself stands either way. A module declaring no
+    /// route effect registers nothing.
+    let private withRouteEffectObserver (m: ServerModule) (app: ServerApp) : ServerApp =
+        if m.RouteEffects |> List.exists (snd >> RouteEffectDeclaration.isDeclared) then
+            let register (services: IServiceCollection) =
+                Extensions.ServiceCollectionDescriptorExtensions.TryAddSingleton<RouteEffectObserver>(
+                    services,
+                    fun provider ->
+                        match provider.GetService(typeof<IAuditLog>) with
+                        | :? IAuditLog as auditLog ->
+                            RouteEffectObserver(
+                                VerifiedCompositionProfile.auditingObserver
+                                    auditLog
+                                    EgressEnforcement.AuditScope
+                                    CompositionProfile.Standard
+                            )
+                        | _ -> RouteEffectObserver ignore
+                )
+
+                services
+
+            {
+                app with
+                    Extensions = {
+                        app.Extensions with
+                            ServiceConfig =
+                                match app.Extensions.ServiceConfig with
+                                | None -> Some register
+                                | Some existing -> Some(fun services -> register (existing services))
+                    }
+            }
+        else
+            app
 
     let addModule (m: ServerModule) (app: ServerApp) : ServerApp =
         if not (ModuleFilter.matches app.Config.ModuleFilter m.Name) then
@@ -2667,8 +2740,14 @@ module ServerApp =
                 // is the one place the code and its owner are known
                 // together; each wrapper is a passthrough until a
                 // composition registers an enforcing `SeamConfinement`.
+                //
+                // Phase 773 — inside that, each route the module declared
+                // an effect for runs under its declaration. A module that
+                // declared none gets its handler list back unchanged.
                 let confinedHandlers =
-                    SeamAwareServiceProvider.confineHandlers resolvedComponentId m.Handlers
+                    m.Handlers
+                    |> RouteEffectContainment.containHandlers resolvedComponentId m.RouteEffects
+                    |> SeamAwareServiceProvider.confineHandlers resolvedComponentId
 
                 let confinedTools =
                     SeamAwareServiceProvider.confineTools resolvedComponentId m.AITools
@@ -2745,6 +2824,7 @@ module ServerApp =
                                 RateLimits = app.Config.RateLimits @ envelopeRouteLimits
                         }
                 }
+                |> withRouteEffectObserver m
 
     let addModules (modules: ServerModule list) (app: ServerApp) : ServerApp =
         modules |> List.fold (fun a m -> addModule m a) app

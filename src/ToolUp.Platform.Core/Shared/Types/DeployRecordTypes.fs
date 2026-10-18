@@ -35,6 +35,213 @@ open System.Text
 // of any crypto surface, and keeps the deploy plane composable with a
 // sealer this SDK never shipped.
 
+// ─── Phase 774 — the verification level ──────────────────────────────
+//
+// A sealed record says WHAT was deployed, and the boot preflight says the
+// running composition MATCHES it. Neither said under what environment
+// guarantee either statement was made, so a reader could not tell a seal
+// minted with a developer's keyring from one minted by a key that never
+// left an isolated signer, and had no place to record that a runtime quote
+// covered the running binary. The level below is that place.
+//
+// **A ladder, read conservatively.** Each rung includes the ones below it.
+// A record can declare only what was true when it was SEALED, so the
+// strongest thing a record can be credited with is `IsolatedSigner`:
+// `RuntimeQuoted` is a statement about the binary now running, and only a
+// runtime attestor observing it at boot can make that statement. The level
+// a boot reports is therefore never more than the record's credit or the
+// attestor's observation, whichever is higher.
+//
+// **The level is inside the signed bytes** (`DeployRecord.canonicalForm`),
+// so a record cannot be re-labelled after sealing: changing the level, or
+// the schema version that says whether a level is recorded at all, breaks
+// the seal.
+
+/// How strong an environment guarantee stands behind a sealed deploy
+/// record and the boot that verified it. Ordered: each case includes the
+/// ones before it.
+[<RequireQualifiedAccess>]
+type VerificationLevel =
+    /// A signature attributes the record to a key holder, and nothing more.
+    /// What a developer keyring gives, and what every record sealed before
+    /// the level existed is read as.
+    | Attributed
+    /// The signing key never left an isolated signing environment.
+    | IsolatedSigner
+    /// A runtime quote from the host covers the running binary. Only a
+    /// runtime attestor can establish this, at boot.
+    | RuntimeQuoted
+
+/// What a runtime attestor reported about the process it runs in.
+///
+/// **Never a quote payload.** The seam carries a level and an opaque
+/// evidence digest; a verifier that wants the quote itself fetches it from
+/// wherever the attestor keeps it, by that digest.
+[<RequireQualifiedAccess>]
+type RuntimeObservation =
+    /// The attestor observed nothing it can vouch for. `reason` says why.
+    | Unattested of reason: string
+    /// The attestor observed `level`, evidenced by the opaque
+    /// `evidenceDigest`.
+    | Observed of level: VerificationLevel * evidenceDigest: string
+
+/// The seam a deployment composes to have the running binary vouched for
+/// at boot.
+///
+/// The first and only in-tree provider is `RuntimeAttestor.unattested`,
+/// which honestly observes nothing. A provider backed by a real runtime
+/// quote implements this and is composed through
+/// `BootVerificationOptions.Attestor`.
+///
+/// GP 12: identity by value (a digest string in, a value out), async at
+/// the boundary, failure as data (`RuntimeObservation.Unattested`, never
+/// an exception), stateless between calls.
+type IRuntimeAttestor =
+    /// The attestor's own name, recorded beside what it observed.
+    abstract Name: unit -> string
+
+    /// Observe the running process. `deployRecordDigest` is the digest of
+    /// the sealed record's canonical bytes, so a provider can bind its
+    /// quote to the record it is vouching for.
+    abstract Observe: deployRecordDigest: string -> Async<RuntimeObservation>
+
+/// Where the level a boot reports came from.
+[<RequireQualifiedAccess>]
+type VerificationLevelProvenance =
+    /// The sealed record declares it, inside its signed bytes.
+    | DeclaredByRecord
+    /// The record was sealed under a schema that carried no level, so the
+    /// level is inferred, never read. `schemaVersion` names that schema.
+    | InferredFromSchema of schemaVersion: int
+    /// A runtime attestor observed it at boot.
+    | ObservedByAttestor of attestor: string * evidenceDigest: string
+
+/// The level a boot reports, with where it came from and what the runtime
+/// attestor said.
+type VerificationLevelReading = {
+    /// The level this boot is credited with.
+    Level: VerificationLevel
+    /// Where `Level` came from.
+    Provenance: VerificationLevelProvenance
+    /// What the sealed record declares (or is inferred to declare).
+    Declared: VerificationLevel
+    /// The runtime attestor consulted.
+    Attestor: string
+    /// What it observed, recorded whether or not it raised the level.
+    Observation: RuntimeObservation
+}
+
+[<RequireQualifiedAccess>]
+module VerificationLevel =
+
+    /// Position on the ladder. `Attributed` is 0.
+    let rank =
+        function
+        | VerificationLevel.Attributed -> 0
+        | VerificationLevel.IsolatedSigner -> 1
+        | VerificationLevel.RuntimeQuoted -> 2
+
+    /// Whether `level` is at or above `floor`.
+    let meets (floor: VerificationLevel) (level: VerificationLevel) : bool = rank level >= rank floor
+
+    /// Stable lowercase label. Part of a sealed record's canonical bytes,
+    /// so never change one.
+    let label =
+        function
+        | VerificationLevel.Attributed -> "attributed"
+        | VerificationLevel.IsolatedSigner -> "isolated-signer"
+        | VerificationLevel.RuntimeQuoted -> "runtime-quoted"
+
+    /// The most a sealed record can be credited with on its own say-so.
+    /// A record is written before the binary it describes runs, so it
+    /// cannot carry a runtime quote of it; a record declaring
+    /// `RuntimeQuoted` is credited as `IsolatedSigner`, the strongest
+    /// statement a sealing environment can make.
+    let recordCredit (declared: VerificationLevel) : VerificationLevel =
+        match declared with
+        | VerificationLevel.RuntimeQuoted -> VerificationLevel.IsolatedSigner
+        | other -> other
+
+[<RequireQualifiedAccess>]
+module RuntimeAttestor =
+
+    /// Name of the in-tree provider.
+    [<Literal>]
+    let UnattestedName = "unattested"
+
+    /// The in-tree provider: observes nothing, and says so. Composing it
+    /// is the honest default: a boot under it reports exactly what the
+    /// sealed record is credited with, never more.
+    let unattested: IRuntimeAttestor =
+        { new IRuntimeAttestor with
+            member _.Name() = UnattestedName
+
+            member _.Observe _ = async {
+                return
+                    RuntimeObservation.Unattested
+                        "no runtime attestor is composed, so nothing vouches for the running binary"
+            }
+        }
+
+[<RequireQualifiedAccess>]
+module VerificationLevelReading =
+
+    /// Read the level a boot is credited with: the record's credit, raised
+    /// only by what the attestor actually observed.
+    let read
+        (declared: VerificationLevel)
+        (declaredProvenance: VerificationLevelProvenance)
+        (attestor: string)
+        (observation: RuntimeObservation)
+        : VerificationLevelReading =
+        let credit = VerificationLevel.recordCredit declared
+
+        let level, provenance =
+            match observation with
+            | RuntimeObservation.Observed(observed, digest) when
+                VerificationLevel.rank observed > VerificationLevel.rank credit
+                ->
+                observed, VerificationLevelProvenance.ObservedByAttestor(attestor, digest)
+            | _ -> credit, declaredProvenance
+
+        {
+            Level = level
+            Provenance = provenance
+            Declared = declared
+            Attestor = attestor
+            Observation = observation
+        }
+
+    /// The provenance as a short phrase, e.g. `inferred: pre-level schema`.
+    let describeProvenance =
+        function
+        | VerificationLevelProvenance.DeclaredByRecord -> "declared by the record"
+        | VerificationLevelProvenance.InferredFromSchema _ -> "inferred: pre-level schema"
+        | VerificationLevelProvenance.ObservedByAttestor(attestor, digest) ->
+            $"observed by runtime attestor '{attestor}', evidence {digest}"
+
+    /// One line naming the level and its provenance, e.g.
+    /// `attributed (inferred: pre-level schema)`, followed by what the
+    /// attestor said and any credit cap applied to the record's claim.
+    let describe (reading: VerificationLevelReading) : string =
+        let head =
+            $"{VerificationLevel.label reading.Level} ({describeProvenance reading.Provenance})"
+
+        let capped =
+            if VerificationLevel.recordCredit reading.Declared <> reading.Declared then
+                $"; the record declares {VerificationLevel.label reading.Declared}, which a sealed record cannot evidence on its own"
+            else
+                ""
+
+        let observation =
+            match reading.Observation with
+            | RuntimeObservation.Unattested reason ->
+                $"; runtime attestor '{reading.Attestor}' observed nothing: {reason}"
+            | RuntimeObservation.Observed(level, digest) ->
+                $"; runtime attestor '{reading.Attestor}' observed {VerificationLevel.label level}, evidence {digest}"
+
+        head + capped + observation
+
 /// A deploy record: what was deployed, and what it was built from.
 ///
 /// Identity by value throughout (GP 12 rule 1) — every field is a
@@ -58,6 +265,15 @@ type DeployRecord = {
     /// What was deployed, and what it was built from. `DeployProvenance.none`
     /// for a deploy that recorded nothing.
     Provenance: DeployProvenance
+    /// Phase 774 — the environment guarantee the record was sealed under.
+    /// Inside the signed bytes from `DeployRecord.LevelSchemaVersion` on.
+    ///
+    /// **Read it through `DeployRecord.verificationLevel`, never directly.**
+    /// A record sealed before the field existed carries no level, so its
+    /// value here is meaningless (a deserialiser yields `null`); the
+    /// accessor reads that record as `Attributed`, inferred from its
+    /// schema, and says so.
+    VerificationLevel: VerificationLevel
 }
 
 /// An opaque seal over a deploy record's canonical bytes.
@@ -130,15 +346,42 @@ type IDeployRecordSealer =
 module DeployRecord =
 
     /// Schema version this build of the substrate emits.
+    ///
+    /// Phase 774 moved it from 1 to 2: the canonical form gained the
+    /// verification level. A record at schema 1 still canonicalises to the
+    /// exact bytes it was sealed over (see `canonicalForm`), so its seal
+    /// still verifies.
     [<Literal>]
-    let SchemaVersion = 1
+    let SchemaVersion = 2
+
+    /// The schema of every record sealed before Phase 774 — no
+    /// verification level in its canonical bytes.
+    [<Literal>]
+    let PreLevelSchemaVersion = 1
+
+    /// The schema at which the verification level joined the canonical
+    /// form. Separate from `SchemaVersion` deliberately (the Phase 694
+    /// shape): the next field to join advances `SchemaVersion` and must
+    /// NOT move this, or every record sealed between the two would be read
+    /// as carrying no level.
+    [<Literal>]
+    let LevelSchemaVersion = 2
 
     /// Framing version, prefixed to the record's canonical form.
     /// Bumping it invalidates every existing seal by construction.
     [<Literal>]
     let FramingVersion = "toolup.deployrecord.v1"
 
-    /// Build a deploy record at the current schema version.
+    /// Framing version of the Phase 774 level block. Part of the framed
+    /// bytes, so a level framed under a future scheme can never collide
+    /// with one framed under this.
+    [<Literal>]
+    let LevelFramingVersion = "toolup.deployrecord.level.v1"
+
+    /// Build a deploy record at the current schema version, at
+    /// `VerificationLevel.Attributed` — the claim every signature can
+    /// honestly make. A producer sealing under a stronger guarantee raises
+    /// it with `withVerificationLevel` BEFORE sealing.
     let create
         (deployId: DeployId)
         (tenantId: TenantId)
@@ -153,7 +396,47 @@ module DeployRecord =
             BuildId = buildId
             Manifest = manifest
             Provenance = DeployProvenance.coerce provenance
+            VerificationLevel = VerificationLevel.Attributed
         }
+
+    /// The schema a record was sealed under, reading an absent or
+    /// non-positive field as the pre-level shape.
+    let effectiveSchemaVersion (record: DeployRecord) : int =
+        if record.SchemaVersion <= 0 then
+            PreLevelSchemaVersion
+        else
+            record.SchemaVersion
+
+    /// Whether the record's canonical bytes carry a verification level.
+    let recordsVerificationLevel (record: DeployRecord) : bool =
+        effectiveSchemaVersion record >= LevelSchemaVersion
+
+    /// The level field with the null coercion a read path needs: a record
+    /// deserialised without the field carries `null`, read as the floor.
+    let private levelField (record: DeployRecord) : VerificationLevel =
+        if isNull (box record.VerificationLevel) then
+            VerificationLevel.Attributed
+        else
+            record.VerificationLevel
+
+    /// The level the record declares, and where that answer came from.
+    /// A pre-level record is `Attributed`, inferred from its schema — never
+    /// read from a field it did not seal.
+    let verificationLevel (record: DeployRecord) : VerificationLevel * VerificationLevelProvenance =
+        if recordsVerificationLevel record then
+            levelField record, VerificationLevelProvenance.DeclaredByRecord
+        else
+            VerificationLevel.Attributed, VerificationLevelProvenance.InferredFromSchema(effectiveSchemaVersion record)
+
+    /// Set the level a record declares. Must be applied BEFORE sealing:
+    /// the level is inside the signed bytes, so changing it afterwards
+    /// breaks the seal, which is the point. Stamps the record at the
+    /// current schema, since only that schema carries a level.
+    let withVerificationLevel (level: VerificationLevel) (record: DeployRecord) : DeployRecord = {
+        record with
+            SchemaVersion = max record.SchemaVersion SchemaVersion
+            VerificationLevel = level
+    }
 
     /// The canonical text for a manifest, framed field by field.
     ///
@@ -282,6 +565,16 @@ module DeployRecord =
         frame (manifestCanonicalForm record.Manifest)
         frame (DeployProvenance.canonicalForm record.Provenance)
 
+        // Phase 774 — the level block is emitted only for a record whose
+        // schema carries it, and that gate is load-bearing: a record sealed
+        // before the level existed must canonicalise to the exact bytes its
+        // seal was minted over, for ever. The schema version is framed
+        // above, so stripping the level by re-labelling a record to the old
+        // schema changes the bytes too.
+        if recordsVerificationLevel record then
+            frame LevelFramingVersion
+            frame (VerificationLevel.label (levelField record))
+
         builder.ToString()
 
     /// Coerce a record read back from a store written before this
@@ -291,6 +584,7 @@ module DeployRecord =
     let coerce (record: DeployRecord) : DeployRecord = {
         record with
             Provenance = DeployProvenance.coerce record.Provenance
+            VerificationLevel = levelField record
     }
 
 // ─── The upstream work half, as an optional structured companion ─────

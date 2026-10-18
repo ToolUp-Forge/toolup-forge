@@ -80,15 +80,27 @@ open ToolUp.Platform.DeploymentVerification
 /// manifest recorded canonical-method selectors cannot speak to them, and
 /// a report that rendered "matched everything it recorded" as a plain
 /// verification would restate the blind spot one tier up.
+///
+/// **Phase 774: the two affirmative cases carry the verification level**
+/// the boot was credited with (`BootVerificationResult.Level`), so the
+/// section can say under what environment guarantee it verified and where
+/// that answer came from. `None` for evidence that never read one. A
+/// below-floor boot arrives as `BootSealRejected`, its finding naming the
+/// level and the floor.
 type BootSealIntegrity =
     /// The running composition is the sealed one.
-    | BootSealVerified of profile: string * policy: string * detail: string
+    | BootSealVerified of profile: string * policy: string * detail: string * level: VerificationLevelReading option
     /// The running composition matches everything the sealed binding
     /// recorded, and the binding predates one or more of the declarations
     /// the preflight now compares. Not adverse — an old binding is not a
     /// drifted deployment — and not a verification either. `unrecorded`
     /// names each declaration that could not be compared.
-    | BootSealVerifiedUnrecorded of profile: string * policy: string * detail: string * unrecorded: string list
+    | BootSealVerifiedUnrecorded of
+        profile: string *
+        policy: string *
+        detail: string *
+        unrecorded: string list *
+        level: VerificationLevelReading option
     /// The preflight ran and had nothing to compare against — no sealed
     /// deploy record, or a record with no composition binding. Honest,
     /// legitimate, and emphatically not a verification.
@@ -1197,6 +1209,16 @@ module DeploymentVerificationReport =
     let gatherBootSeal (evidence: IDeploymentVerificationEvidence) : ReportSection =
         let title = "Sealed composition (boot verification)"
 
+        // Phase 774 — the level and its provenance, appended to an
+        // affirmative section's account. Rendered whole (declared by the
+        // record / inferred from an old schema / observed by the attestor,
+        // and what the attestor said), never just the label: "attributed"
+        // read alone would hide that it was inferred.
+        let withLevel (account: string) (level: VerificationLevelReading option) =
+            match level with
+            | None -> account
+            | Some reading -> sprintf "%s; verification level %s" account (VerificationLevelReading.describe reading)
+
         match evidence.BootSeal with
         | None ->
             section
@@ -1205,13 +1227,15 @@ module DeploymentVerificationReport =
                 (VerificationSectionVerdict.NotComposed
                     "this deployment did not run the boot verification preflight, so there is no verdict to report")
                 []
-        | Some(BootSealVerified(profile, policy, detail)) ->
+        | Some(BootSealVerified(profile, policy, detail, level)) ->
             section
                 BootSealSection
                 title
-                (VerificationSectionVerdict.Verified(sprintf "%s (profile %s, policy %s)" detail profile policy))
+                (VerificationSectionVerdict.Verified(
+                    withLevel (sprintf "%s (profile %s, policy %s)" detail profile policy) level
+                ))
                 []
-        | Some(BootSealVerifiedUnrecorded(profile, policy, detail, unrecorded)) ->
+        | Some(BootSealVerifiedUnrecorded(profile, policy, detail, unrecorded, level)) ->
             // `Observed`, not `Verified`: the substrate is composed, was
             // read, and there is a part of its check it could not perform.
             // Not `Failed` either — nothing failed, and an upgrade that
@@ -1222,7 +1246,9 @@ module DeploymentVerificationReport =
             section
                 BootSealSection
                 title
-                (VerificationSectionVerdict.Observed(sprintf "%s (profile %s, policy %s)" detail profile policy))
+                (VerificationSectionVerdict.Observed(
+                    withLevel (sprintf "%s (profile %s, policy %s)" detail profile policy) level
+                ))
                 unrecorded
         | Some(BootSealUnsealed(profile, policy, reason)) ->
             section

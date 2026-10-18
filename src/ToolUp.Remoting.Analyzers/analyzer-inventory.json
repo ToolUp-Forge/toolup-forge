@@ -57,7 +57,7 @@
         "src/ToolUp.Platform.Server/Server/Compose/ComposeTeamRuntime.fs": 2,
         "src/ToolUp.Platform.Server/Server/Compose/ComposeTenantLifecycle.fs": 1,
         "src/ToolUp.Platform.Server/Server/Compose/LiveSessionsCompose.fs": 2,
-        "src/ToolUp.Platform.Server/Server/CompositionCapabilityGate.fs": 4,
+        "src/ToolUp.Platform.Server/Server/CompositionCapabilityGate.fs": 6,
         "src/ToolUp.Platform.Server/Server/CompositionInspectorHandler.fs": 4,
         "src/ToolUp.Platform.Server/Server/Config/ConfigHandler.fs": 4,
         "src/ToolUp.Platform.Server/Server/CsrfMiddleware.fs": 1,

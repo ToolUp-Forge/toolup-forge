@@ -55,6 +55,19 @@ open ToolUp.Remoting
 //      reads a binding sealed before that field existed as SILENT on it
 //      (`VerifiedUnrecorded`) rather than as agreeing.
 //
+// **Phase 774 added a fifth, asked only of an affirmative answer to the
+// four:** *under what environment guarantee does this boot stand?* The
+// sealed record declares a `VerificationLevel` inside its signed bytes
+// (a record sealed before the level existed is read as `Attributed`,
+// inferred from its schema), the composed `IRuntimeAttestor` reports what
+// it observed of the running binary, and the boot is credited with the
+// higher of the record's credit and the observation — never more than
+// either source actually says. A declared floor
+// (`BootVerificationOptions.MinimumLevel`) the level does not reach turns
+// the verdict into `BelowVerificationFloor`, naming both, which the
+// policy then decides on like any other non-affirmative verdict: under
+// the verified profile it refuses the start.
+//
 // ── What it does NOT prove ───────────────────────────────────────────
 //
 // Written here rather than left to be inferred, because a reader who
@@ -282,6 +295,17 @@ type BootVerificationVerdict =
     /// grace period for serving a deployment somebody signed a
     /// decommission for.
     | Retired of retirement: DeployRetirement
+    /// Phase 774 — every other question was answered affirmatively, and
+    /// the verification level this boot is credited with is below the floor
+    /// the deployment declared (`BootVerificationOptions.MinimumLevel`).
+    /// Carries the reading (the level, where it came from, what the runtime
+    /// attestor observed) and the floor, so the refusal names both.
+    ///
+    /// **Not affirmative.** A deployment that declared it needs a runtime
+    /// quote and is running without one is not the deployment it said it
+    /// was, however well its seal verifies. The policy decides what that
+    /// costs: under the verified profile, the start.
+    | BelowVerificationFloor of reading: VerificationLevelReading * floor: VerificationLevel
 
 [<RequireQualifiedAccess>]
 module BootVerificationVerdict =
@@ -294,6 +318,7 @@ module BootVerificationVerdict =
         | BootVerificationVerdict.VerificationFailed _ -> "unverified"
         | BootVerificationVerdict.Drifted _ -> "drifted"
         | BootVerificationVerdict.Retired _ -> "retired"
+        | BootVerificationVerdict.BelowVerificationFloor _ -> "below-verification-floor"
 
     /// `true` for the two affirmative verdicts. Everything else is a
     /// reason not to serve under a refusing policy.
@@ -328,6 +353,9 @@ module BootVerificationVerdict =
             @ bindingFindings
         | BootVerificationVerdict.Drifted drift -> drift |> List.map CompositionDrift.describe
         | BootVerificationVerdict.Retired retirement -> [ DeployRetirement.describe retirement ]
+        | BootVerificationVerdict.BelowVerificationFloor(reading, floor) -> [
+            $"the deployment declares a verification-level floor of {VerificationLevel.label floor}, and this boot is credited with {VerificationLevelReading.describe reading}"
+          ]
 
     /// One-line account naming the verdict and how many findings sit
     /// behind it.
@@ -345,6 +373,8 @@ module BootVerificationVerdict =
             $"boot verification: the running composition differs from the sealed one ({drift.Length} difference(s))"
         | BootVerificationVerdict.Retired retirement ->
             $"boot verification: this deployment's sealed record was retired by '{retirement.RetiredBy}' at {retirement.RetiredAt} — its audit ledger is closed and it must not serve"
+        | BootVerificationVerdict.BelowVerificationFloor(reading, floor) ->
+            $"boot verification: the running composition is the sealed one, and its verification level {VerificationLevel.label reading.Level} is below the declared floor {VerificationLevel.label floor}"
 
 // ─── Policy + profile ────────────────────────────────────────────────
 
@@ -523,6 +553,13 @@ type BootVerificationResult = {
     Policy: BootVerificationPolicy
     /// Whether this verdict refused the process a start.
     RefusedStart: bool
+    /// Phase 774 — the verification level this boot is credited with, and
+    /// where it came from. `Some` whenever the sealed record verified and
+    /// the binding belongs to it (an affirmative, drifted or below-floor
+    /// verdict); `None` when there was no record, its seal failed, or it
+    /// was retired — a level read off a record whose seal did not hold
+    /// would be a claim nobody made.
+    Level: VerificationLevelReading option
 }
 
 /// Everything the preflight needs that is not the composition itself.
@@ -559,6 +596,15 @@ type BootVerificationOptions = {
     AuditLog: IAuditLog option
     /// Scope the verdict is recorded under.
     ScopeId: string
+    /// Phase 774 — the verification level the deployment requires. `None`
+    /// declares no floor: the level is still read and reported, and never
+    /// refuses anything.
+    MinimumLevel: VerificationLevel option
+    /// Phase 774 — the runtime attestor asked what it observed of the
+    /// running binary. `RuntimeAttestor.unattested` is the honest default:
+    /// it observes nothing, so the boot is credited with exactly what the
+    /// sealed record is.
+    Attestor: IRuntimeAttestor
 }
 
 [<RequireQualifiedAccess>]
@@ -940,8 +986,9 @@ module BootVerificationPreflight =
                 | drift -> return BootVerificationVerdict.Drifted drift
     }
 
-    /// Phase 678 — the four questions in the file header, preceded by a
-    /// fifth: *has this deployment been retired?*
+    /// Phase 678 — the four questions in the file header, preceded by the
+    /// retirement question — *has this deployment been retired?* — and
+    /// followed by Phase 774's level question (`assessLevel`).
     ///
     /// **The retirement is a parameter rather than a field on
     /// `BootVerificationOptions`.** Widening that record would retype its
@@ -961,11 +1008,53 @@ module BootVerificationPreflight =
     /// binding-mismatch family the composition binding already uses, and
     /// emphatically not a reason to refuse the boot of a deployment nobody
     /// retired.
-    let verifyWithRetirement
+    /// Phase 774 — the fifth question, asked of a verdict the first four
+    /// answered: read the verification level, and hold it against the
+    /// declared floor.
+    ///
+    /// The level is read only when the record's seal held and the binding
+    /// belongs to it (`Verified`, `VerifiedUnrecorded`, `Drifted`); for any
+    /// other verdict the record's own declaration is not evidence of
+    /// anything and no reading is returned. The floor binds only an
+    /// affirmative verdict: a drifted deployment is reported as drifted,
+    /// the more actionable finding, with its level beside it.
+    let private assessLevel
+        (options: BootVerificationOptions)
+        (recordDigest: string option)
+        (verdict: BootVerificationVerdict)
+        : Async<BootVerificationVerdict * VerificationLevelReading option> =
+        async {
+            match options.Record, recordDigest, verdict with
+            | Some sealedRecord,
+              Some digest,
+              (BootVerificationVerdict.Verified | BootVerificationVerdict.VerifiedUnrecorded _ | BootVerificationVerdict.Drifted _) ->
+                let declared, provenance = DeployRecord.verificationLevel sealedRecord.Record
+                let! observation = options.Attestor.Observe digest
+
+                let reading =
+                    VerificationLevelReading.read declared provenance (options.Attestor.Name()) observation
+
+                let assessed =
+                    match options.MinimumLevel with
+                    | Some floor when
+                        BootVerificationVerdict.isAffirmative verdict
+                        && not (VerificationLevel.meets floor reading.Level)
+                        ->
+                        BootVerificationVerdict.BelowVerificationFloor(reading, floor)
+                    | _ -> verdict
+
+                return assessed, Some reading
+            | _ -> return verdict, None
+        }
+
+    /// The whole check — retirement, the four questions, and the level —
+    /// returning the verdict and the level reading `runWithRetirement`
+    /// reports beside it.
+    let private assessWithRetirement
         (options: BootVerificationOptions)
         (retirement: DeployRetirement option)
         (observed: CompositionManifest)
-        : Async<BootVerificationVerdict> =
+        : Async<BootVerificationVerdict * VerificationLevelReading option> =
         async {
             let recordDigest =
                 options.Record
@@ -977,7 +1066,7 @@ module BootVerificationPreflight =
 
             match recordDigest, retirement with
             | Some digest, Some retirement when DeployRetirement.bindsRecord digest retirement ->
-                return BootVerificationVerdict.Retired retirement
+                return BootVerificationVerdict.Retired retirement, None
             | _ ->
                 let misbound = [
                     match recordDigest, retirement with
@@ -991,10 +1080,23 @@ module BootVerificationPreflight =
                 let! verdict = verifyUnretired options observed
 
                 match verdict, misbound with
-                | _, [] -> return verdict
+                | _, [] -> return! assessLevel options recordDigest verdict
                 | BootVerificationVerdict.VerificationFailed(failures, findings), _ ->
-                    return BootVerificationVerdict.VerificationFailed(failures, findings @ misbound)
-                | _, _ -> return BootVerificationVerdict.VerificationFailed([], misbound)
+                    return BootVerificationVerdict.VerificationFailed(failures, findings @ misbound), None
+                | _, _ -> return BootVerificationVerdict.VerificationFailed([], misbound), None
+        }
+
+    /// Phase 678 — the questions in the file header, preceded by the
+    /// retirement question; see `assessWithRetirement`. Returns the verdict
+    /// alone.
+    let verifyWithRetirement
+        (options: BootVerificationOptions)
+        (retirement: DeployRetirement option)
+        (observed: CompositionManifest)
+        : Async<BootVerificationVerdict> =
+        async {
+            let! verdict, _ = assessWithRetirement options retirement observed
+            return verdict
         }
 
     /// Ask the four questions in the file header and return the verdict.
@@ -1061,7 +1163,7 @@ module BootVerificationPreflight =
         : Async<Result<BootVerificationResult, BootVerificationResult>> =
         async {
             let policy = CompositionProfile.effectivePolicy options.Profile options.Policy
-            let! verdict = verifyWithRetirement options retirement observed
+            let! verdict, level = assessWithRetirement options retirement observed
 
             let refusedStart =
                 match verdict with
@@ -1076,6 +1178,7 @@ module BootVerificationPreflight =
                 Profile = options.Profile
                 Policy = policy
                 RefusedStart = refusedStart
+                Level = level
             }
 
             do! recordVerdict options result

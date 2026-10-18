@@ -170,6 +170,8 @@ let private verifiedBoot () =
         Transcript = None
         AuditLog = None
         ScopeId = BootVerificationPreflight.PlatformScopeId
+        MinimumLevel = None
+        Attestor = RuntimeAttestor.unattested
     }
 
     match BootVerificationPreflight.run options composition |> Async.RunSynchronously with

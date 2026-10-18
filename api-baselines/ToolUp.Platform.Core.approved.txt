@@ -4879,20 +4879,28 @@ ToolUp.Platform.DeployProvenanceModule.withArtifacts(Microsoft.FSharp.Collection
 ToolUp.Platform.DeployProvenanceModule.withTranscriptDigest(System.String, ToolUp.Platform.DeployProvenance) : ToolUp.Platform.DeployProvenance
 ToolUp.Platform.DeployProvenanceModule.withUpstreamProvenanceDigest(System.String, ToolUp.Platform.DeployProvenance) : ToolUp.Platform.DeployProvenance
 ToolUp.Platform.DeployRecord (class)
-ToolUp.Platform.DeployRecord..ctor(System.Int32, System.String, System.String, System.String, ToolUp.Platform.DeployManifest, ToolUp.Platform.DeployProvenance)
+ToolUp.Platform.DeployRecord..ctor(System.Int32, System.String, System.String, System.String, ToolUp.Platform.DeployManifest, ToolUp.Platform.DeployProvenance, ToolUp.Platform.VerificationLevel)
 ToolUp.Platform.DeployRecord.BuildId : System.String { get }
 ToolUp.Platform.DeployRecord.DeployId : System.String { get }
 ToolUp.Platform.DeployRecord.Manifest : ToolUp.Platform.DeployManifest { get }
 ToolUp.Platform.DeployRecord.Provenance : ToolUp.Platform.DeployProvenance { get }
 ToolUp.Platform.DeployRecord.SchemaVersion : System.Int32 { get }
 ToolUp.Platform.DeployRecord.TenantId : System.String { get }
+ToolUp.Platform.DeployRecord.VerificationLevel : ToolUp.Platform.VerificationLevel { get }
 ToolUp.Platform.DeployRecordModule (class)
 ToolUp.Platform.DeployRecordModule.FramingVersion : System.String (literal)
+ToolUp.Platform.DeployRecordModule.LevelFramingVersion : System.String (literal)
+ToolUp.Platform.DeployRecordModule.LevelSchemaVersion : System.Int32 (literal)
+ToolUp.Platform.DeployRecordModule.PreLevelSchemaVersion : System.Int32 (literal)
 ToolUp.Platform.DeployRecordModule.SchemaVersion : System.Int32 (literal)
 ToolUp.Platform.DeployRecordModule.canonicalForm(ToolUp.Platform.DeployRecord) : System.String
 ToolUp.Platform.DeployRecordModule.coerce(ToolUp.Platform.DeployRecord) : ToolUp.Platform.DeployRecord
 ToolUp.Platform.DeployRecordModule.create(System.String, System.String, System.String, ToolUp.Platform.DeployManifest, ToolUp.Platform.DeployProvenance) : ToolUp.Platform.DeployRecord
+ToolUp.Platform.DeployRecordModule.effectiveSchemaVersion(ToolUp.Platform.DeployRecord) : System.Int32
 ToolUp.Platform.DeployRecordModule.manifestCanonicalForm(ToolUp.Platform.DeployManifest) : System.String
+ToolUp.Platform.DeployRecordModule.recordsVerificationLevel(ToolUp.Platform.DeployRecord) : System.Boolean
+ToolUp.Platform.DeployRecordModule.verificationLevel(ToolUp.Platform.DeployRecord) : System.Tuple`2[ToolUp.Platform.VerificationLevel, ToolUp.Platform.VerificationLevelProvenance]
+ToolUp.Platform.DeployRecordModule.withVerificationLevel(ToolUp.Platform.VerificationLevel, ToolUp.Platform.DeployRecord) : ToolUp.Platform.DeployRecord
 ToolUp.Platform.DeployRecordSeal (class)
 ToolUp.Platform.DeployRecordSeal..ctor(System.String, System.String, System.String, System.String, System.DateTimeOffset)
 ToolUp.Platform.DeployRecordSeal.Claim : System.String { get }
@@ -7212,6 +7220,7 @@ ToolUp.Platform.HostCapabilityRegistry (class)
 ToolUp.Platform.HostCapabilityRegistry.InvokeActionKind : System.String (literal)
 ToolUp.Platform.HostCapabilityRegistry.TargetScopeArg : System.String (literal)
 ToolUp.Platform.HostCapabilityRegistry.create(ToolUp.Platform.IActionAuthorizer) : ToolUp.Platform.IHostCapabilityRegistry
+ToolUp.Platform.HostCapabilityRegistry.installBoundary(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.IHostCapabilityRegistry, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.CapabilityId, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.AccessContext, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.HostCapabilityOutcome]]]]]]]) : System.Void
 ToolUp.Platform.HostCapabilityRegistry.toActionDescriptor(ToolUp.Platform.CapabilityId, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String], ToolUp.Platform.AccessContext) : ToolUp.Platform.ActionDescriptor
 ToolUp.Platform.HostContentKind (class)
 ToolUp.Platform.HostContentKind.Code : ToolUp.Platform.HostContentKind { get }
@@ -7533,6 +7542,9 @@ ToolUp.Platform.IProviderProfileApi.SetFallback : Microsoft.FSharp.Core.FSharpFu
 ToolUp.Platform.IProviderProfileApi.SetRoute : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.RoutingRule, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.IRateLimiter (interface)
 ToolUp.Platform.IRateLimiter.Wait(ToolUp.Platform.RateLimitKey) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.RateLimitDecision]
+ToolUp.Platform.IRuntimeAttestor (interface)
+ToolUp.Platform.IRuntimeAttestor.Name() : System.String
+ToolUp.Platform.IRuntimeAttestor.Observe(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.RuntimeObservation]
 ToolUp.Platform.IServiceAccountApi (class)
 ToolUp.Platform.IServiceAccountApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServiceAccount], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.CreateServiceAccountRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServiceAccount, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, ToolUp.Platform.ServiceAccountStatus], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServiceAccount, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]]], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServiceAccount, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ServiceAccountTokenView], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.MintServiceAccountTokenRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.MintedServiceAccountTokenView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]])
 ToolUp.Platform.IServiceAccountApi.CreateAccount : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.CreateServiceAccountRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ServiceAccount, System.String]]] { get }
@@ -11317,6 +11329,21 @@ ToolUp.Platform.RulesView..ctor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp
 ToolUp.Platform.RulesView.CapturedAtUtc : System.DateTime { get }
 ToolUp.Platform.RulesView.Defects : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InspectedDefect] { get }
 ToolUp.Platform.RulesView.Rules : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.InspectedRule] { get }
+ToolUp.Platform.RuntimeAttestor (class)
+ToolUp.Platform.RuntimeAttestor.UnattestedName : System.String (literal)
+ToolUp.Platform.RuntimeAttestor.unattested : ToolUp.Platform.IRuntimeAttestor { get }
+ToolUp.Platform.RuntimeObservation (class)
+ToolUp.Platform.RuntimeObservation.IsObserved : System.Boolean { get }
+ToolUp.Platform.RuntimeObservation.IsUnattested : System.Boolean { get }
+ToolUp.Platform.RuntimeObservation.Tag : System.Int32 { get }
+ToolUp.Platform.RuntimeObservation+Observed (class)
+ToolUp.Platform.RuntimeObservation+Observed.evidenceDigest : System.String { get }
+ToolUp.Platform.RuntimeObservation+Observed.level : ToolUp.Platform.VerificationLevel { get }
+ToolUp.Platform.RuntimeObservation+Tags (class)
+ToolUp.Platform.RuntimeObservation+Tags.Observed : System.Int32 (literal)
+ToolUp.Platform.RuntimeObservation+Tags.Unattested : System.Int32 (literal)
+ToolUp.Platform.RuntimeObservation+Unattested (class)
+ToolUp.Platform.RuntimeObservation+Unattested.reason : System.String { get }
 ToolUp.Platform.SanitizedContent (class)
 ToolUp.Platform.SanitizedContent..ctor(System.String, System.Boolean)
 ToolUp.Platform.SanitizedContent.Html : System.String { get }
@@ -13705,6 +13732,49 @@ ToolUp.Platform.VectorisationTypes+VectorisationHandler..ctor(System.String, Mic
 ToolUp.Platform.VectorisationTypes+VectorisationHandler.DataTypeId : System.String { get }
 ToolUp.Platform.VectorisationTypes+VectorisationHandler.Summarise : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ProcessedDataTypes+ProcessedData, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+TextChunk]]]] { get }
 ToolUp.Platform.VectorisationTypes+VectorisationHandler.Vectorise : Microsoft.FSharp.Core.FSharpFunc`2[ProcessedDataTypes+ProcessedData, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorKnowledgeTypes+TextChunk]] { get }
+ToolUp.Platform.VerificationLevel (class)
+ToolUp.Platform.VerificationLevel.Attributed : ToolUp.Platform.VerificationLevel { get }
+ToolUp.Platform.VerificationLevel.IsAttributed : System.Boolean { get }
+ToolUp.Platform.VerificationLevel.IsIsolatedSigner : System.Boolean { get }
+ToolUp.Platform.VerificationLevel.IsRuntimeQuoted : System.Boolean { get }
+ToolUp.Platform.VerificationLevel.IsolatedSigner : ToolUp.Platform.VerificationLevel { get }
+ToolUp.Platform.VerificationLevel.RuntimeQuoted : ToolUp.Platform.VerificationLevel { get }
+ToolUp.Platform.VerificationLevel.Tag : System.Int32 { get }
+ToolUp.Platform.VerificationLevel+Tags (class)
+ToolUp.Platform.VerificationLevel+Tags.Attributed : System.Int32 (literal)
+ToolUp.Platform.VerificationLevel+Tags.IsolatedSigner : System.Int32 (literal)
+ToolUp.Platform.VerificationLevel+Tags.RuntimeQuoted : System.Int32 (literal)
+ToolUp.Platform.VerificationLevelModule (class)
+ToolUp.Platform.VerificationLevelModule.label(ToolUp.Platform.VerificationLevel) : System.String
+ToolUp.Platform.VerificationLevelModule.meets(ToolUp.Platform.VerificationLevel, ToolUp.Platform.VerificationLevel) : System.Boolean
+ToolUp.Platform.VerificationLevelModule.rank(ToolUp.Platform.VerificationLevel) : System.Int32
+ToolUp.Platform.VerificationLevelModule.recordCredit(ToolUp.Platform.VerificationLevel) : ToolUp.Platform.VerificationLevel
+ToolUp.Platform.VerificationLevelProvenance (class)
+ToolUp.Platform.VerificationLevelProvenance.DeclaredByRecord : ToolUp.Platform.VerificationLevelProvenance { get }
+ToolUp.Platform.VerificationLevelProvenance.IsDeclaredByRecord : System.Boolean { get }
+ToolUp.Platform.VerificationLevelProvenance.IsInferredFromSchema : System.Boolean { get }
+ToolUp.Platform.VerificationLevelProvenance.IsObservedByAttestor : System.Boolean { get }
+ToolUp.Platform.VerificationLevelProvenance.Tag : System.Int32 { get }
+ToolUp.Platform.VerificationLevelProvenance+InferredFromSchema (class)
+ToolUp.Platform.VerificationLevelProvenance+InferredFromSchema.schemaVersion : System.Int32 { get }
+ToolUp.Platform.VerificationLevelProvenance+ObservedByAttestor (class)
+ToolUp.Platform.VerificationLevelProvenance+ObservedByAttestor.attestor : System.String { get }
+ToolUp.Platform.VerificationLevelProvenance+ObservedByAttestor.evidenceDigest : System.String { get }
+ToolUp.Platform.VerificationLevelProvenance+Tags (class)
+ToolUp.Platform.VerificationLevelProvenance+Tags.DeclaredByRecord : System.Int32 (literal)
+ToolUp.Platform.VerificationLevelProvenance+Tags.InferredFromSchema : System.Int32 (literal)
+ToolUp.Platform.VerificationLevelProvenance+Tags.ObservedByAttestor : System.Int32 (literal)
+ToolUp.Platform.VerificationLevelReading (class)
+ToolUp.Platform.VerificationLevelReading..ctor(ToolUp.Platform.VerificationLevel, ToolUp.Platform.VerificationLevelProvenance, ToolUp.Platform.VerificationLevel, System.String, ToolUp.Platform.RuntimeObservation)
+ToolUp.Platform.VerificationLevelReading.Attestor : System.String { get }
+ToolUp.Platform.VerificationLevelReading.Declared : ToolUp.Platform.VerificationLevel { get }
+ToolUp.Platform.VerificationLevelReading.Level : ToolUp.Platform.VerificationLevel { get }
+ToolUp.Platform.VerificationLevelReading.Observation : ToolUp.Platform.RuntimeObservation { get }
+ToolUp.Platform.VerificationLevelReading.Provenance : ToolUp.Platform.VerificationLevelProvenance { get }
+ToolUp.Platform.VerificationLevelReadingModule (class)
+ToolUp.Platform.VerificationLevelReadingModule.describe(ToolUp.Platform.VerificationLevelReading) : System.String
+ToolUp.Platform.VerificationLevelReadingModule.describeProvenance(ToolUp.Platform.VerificationLevelProvenance) : System.String
+ToolUp.Platform.VerificationLevelReadingModule.read(ToolUp.Platform.VerificationLevel, ToolUp.Platform.VerificationLevelProvenance, System.String, ToolUp.Platform.RuntimeObservation) : ToolUp.Platform.VerificationLevelReading
 ToolUp.Platform.VerificationSectionVerdict (class)
 ToolUp.Platform.VerificationSectionVerdict.IsFailed : System.Boolean { get }
 ToolUp.Platform.VerificationSectionVerdict.IsNotComposed : System.Boolean { get }

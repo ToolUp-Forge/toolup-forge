@@ -1360,6 +1360,8 @@ let private registeredTests =
         // report's thirteenth section, and the probe through a real
         // composed pipeline.
         HostingBaselineTests.tests
+        // Phase 773 — declared-route effect containment.
+        RouteEffectContainmentTests.tests
         // Phase 63 — StaticCorpus MessagePack round-trip + determinism.
         StaticCorpusContract.tests
         // Phase 502 — RetrievalRequest.Filters parity pack (both pipelines).

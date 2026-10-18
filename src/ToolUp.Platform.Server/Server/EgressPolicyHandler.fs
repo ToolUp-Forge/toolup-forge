@@ -156,6 +156,36 @@ module EgressLabelContext =
             claimed.Value <- prior
     }
 
+/// Phase 773 — the ambient route egress grant. A module route that
+/// declared an egress grant (or a `Pure` effect envelope, which permits no
+/// outbound call) claims it for the async chain its handler runs on, with
+/// the route it belongs to; `EgressEnforcement.check` then refuses any
+/// origin outside it even where the installed policy would permit. The
+/// grant NARROWS the policy and never widens it: a call must clear both.
+/// An unclaimed chain carries no route grant, which is every chain that
+/// is not a declared route (GP 11).
+[<RequireQualifiedAccess>]
+module EgressRouteContext =
+
+    let private claimed = AsyncLocal<(string * EgressGrant) option>()
+
+    /// The route (`METHOD /path`) and its grant the current chain claims,
+    /// if any.
+    let tryCurrent () : (string * EgressGrant) option =
+        match claimed.Value with
+        | Some routeGrant -> Some routeGrant
+        | _ -> None
+
+    /// Claim `grant` for `route` on the current async chain, returning the
+    /// prior claim so the caller can restore it.
+    let claim (route: string) (grant: EgressGrant) : (string * EgressGrant) option =
+        let prior = claimed.Value
+        claimed.Value <- Some(route, grant)
+        prior
+
+    /// Restore a claim `claim` returned.
+    let restore (prior: (string * EgressGrant) option) : unit = claimed.Value <- prior
+
 /// The installed policy and everything a denial leaves behind: the
 /// bounded since-boot ledger the deployment verification report reads,
 /// and the `EgressDenied` audit row.
@@ -231,7 +261,8 @@ module EgressEnforcement =
             auditLog)
 
     /// Ask the installed policy about one outbound call on behalf of the
-    /// ambient component, and on a deny leave the trail: one ledger entry,
+    /// ambient component — then, on a declared route (Phase 773), whether the
+    /// route's own grant admits the origin — and on a deny leave the trail: one ledger entry,
     /// one `EgressDenied` audit row (best-effort, per `IAuditLog.Record`'s
     /// contract), and the typed exception for the caller to raise. Nothing
     /// here opens a connection.
@@ -239,7 +270,21 @@ module EgressEnforcement =
         let componentId = EgressComponentContext.current ()
         let label = EgressLabelContext.current ()
 
-        match binding.Policy.Decide(componentId, destination, surface, label) with
+        let verdict =
+            match binding.Policy.Decide(componentId, destination, surface, label), EgressRouteContext.tryCurrent () with
+            | EgressVerdict.Permit, Some(route, grant) when not (EgressGrant.permits grant destination) ->
+                EgressVerdict.Deny(
+                    sprintf
+                        "egress from component %s on route %s to origin %s (%s surface) is outside the route's declared egress grant %s"
+                        (ComponentId.value componentId)
+                        route
+                        (EgressDestination.origin destination)
+                        (EgressSurface.label surface)
+                        (EgressGrant.render grant)
+                )
+            | policyVerdict, _ -> policyVerdict
+
+        match verdict with
         | EgressVerdict.Permit -> return Ok()
         | EgressVerdict.Deny reason ->
             let origin = EgressDestination.origin destination

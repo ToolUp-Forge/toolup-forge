@@ -559,6 +559,40 @@
       declares no floor sends nothing and is byte-identical. Migration recipe:
       `docs/migrations/771-hosting-hardening-baseline.md`.
 
+      Rides this draft, in the class it already carries (a record gaining a
+      field): Phase 773 holds a declared route to its effects.
+      `ServerModule.RouteEffects` (Platform.Server) retypes that record's
+      constructor (FS0764 for a full literal); `ServerModule.create` sets it
+      to `[]`. Additive (Platform.Server): `ServerModule.withRouteEffect`,
+      `RouteEffectDeclaration` and its module, `RouteEffectObserver`,
+      `RouteEffectScope`, `RouteEffectContext`, `RouteEffectContainment`
+      and `EgressRouteContext`. Additive (Platform.Core):
+      `HostCapabilityBoundary` and `HostCapabilityRegistry.installBoundary`.
+      Behaviour: a module that declares no route effect is byte-identical; a
+      declared route's host-capability invocations go through the Phase 300
+      `guardInvoke` with its envelope, and its outbound calls through
+      platform clients are held to its egress grant. Migration recipe:
+      `docs/migrations/773-declared-route-effect-containment.md`.
+
+      Rides this draft, in the class it already carries (a record gaining a
+      field, a union gaining a case): Phase 774 puts a verification level on
+      the boot seal. `DeployRecord` (Platform.Core) gains `VerificationLevel`,
+      inside the signed bytes under `SchemaVersion` 2; a schema-1 record still
+      canonicalises to the bytes it was sealed over and reads as `Attributed`,
+      inferred. `BootVerificationOptions` gains `MinimumLevel` and `Attestor`,
+      `BootVerificationResult` gains `Level`, `BootVerificationVerdict` gains
+      the case `BelowVerificationFloor`, and the report's `BootSealVerified` /
+      `BootSealVerifiedUnrecorded` gain a `level` element (Platform.Server):
+      each breaks a full literal (FS0764), an exhaustive match or a positional
+      pattern. Additive (Platform.Core): `VerificationLevel`,
+      `RuntimeObservation`, `IRuntimeAttestor`, `RuntimeAttestor.unattested`,
+      `VerificationLevelProvenance`, `VerificationLevelReading` and their
+      modules, and `DeployRecord.withVerificationLevel` / `verificationLevel` /
+      `effectiveSchemaVersion` / `recordsVerificationLevel`. Behaviour: the
+      bytes of a NEWLY created record change once (schema 2); nothing sealed
+      before moves, and no floor is declared by default. Migration recipe:
+      `docs/migrations/774-verification-level.md`.
+
       Rides this draft, additive: Phase 1015 lets a deployment declare how a
       data source's data arrives - a scheduled pull or a watched location -
       run as a declared principal, never a scope. Additive (Platform.Server):

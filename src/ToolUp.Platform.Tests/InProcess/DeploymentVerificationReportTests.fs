@@ -240,7 +240,7 @@ let private withProfile (values: (string * string) list) (body: unit -> unit) =
 // ─── Healthy sources ─────────────────────────────────────────────────
 
 let private healthyBootSeal =
-    BootSealVerified("verified", "refuse-on-drift", "the running composition matches the sealed one")
+    BootSealVerified("verified", "refuse-on-drift", "the running composition matches the sealed one", None)
 
 let private healthyContinuity = GroundingContinuous("seal-abc", 4, 2, "digest-live")
 
@@ -1064,6 +1064,7 @@ let tests =
                 Profile = CompositionProfile.Verified
                 Policy = BootVerificationPolicy.RefuseOnDrift
                 RefusedStart = false
+                Level = None
             }
 
             test "maps an affirmative verdict to a verified seal" {
@@ -1088,6 +1089,92 @@ let tests =
                 | other -> failtestf "expected BootSealRejected, got %A" other
             }
 
+            test "Phase 774 — the verification level and its provenance ride through to the boot-seal section" {
+                let reading =
+                    VerificationLevelReading.read
+                        VerificationLevel.Attributed
+                        (VerificationLevelProvenance.InferredFromSchema 1)
+                        RuntimeAttestor.UnattestedName
+                        (RuntimeObservation.Unattested "nothing composed")
+
+                let evidence =
+                    ServerApp.bootSealEvidence (
+                        Ok {
+                            resultWith BootVerificationVerdict.Verified with
+                                Level = Some reading
+                        }
+                    )
+
+                match evidence with
+                | BootSealVerified(_, _, _, Some carried) -> Expect.equal carried reading "the reading is carried whole"
+                | other -> failtestf "expected BootSealVerified with a level, got %A" other
+
+                let section =
+                    DeploymentVerificationReport.gatherBootSeal (fullEvidence (Some evidence) None None None None)
+
+                let account =
+                    match section.Verdict with
+                    | VerificationSectionVerdict.Verified account -> account
+                    | other -> failtestf "expected a verified section, got %A" other
+
+                Expect.stringContains
+                    account
+                    "attributed (inferred: pre-level schema)"
+                    "the level is rendered with its provenance, so an inference never reads as a declaration"
+
+                Expect.stringContains
+                    account
+                    "runtime attestor 'unattested' observed nothing"
+                    "and what the attestor said is rendered beside it"
+
+                // The falsifier: the same section with no reading says
+                // nothing about a level, so the string above is the
+                // reading's doing and not boilerplate.
+                let bare =
+                    DeploymentVerificationReport.gatherBootSeal (
+                        fullEvidence
+                            (Some(ServerApp.bootSealEvidence (Ok(resultWith BootVerificationVerdict.Verified))))
+                            None
+                            None
+                            None
+                            None
+                    )
+
+                match bare.Verdict with
+                | VerificationSectionVerdict.Verified account ->
+                    Expect.isFalse (account.Contains "verification level") "no reading, no level claimed"
+                | other -> failtestf "expected a verified section, got %A" other
+            }
+
+            test "Phase 774 — a boot below its verification-level floor is a rejection naming both" {
+                let reading =
+                    VerificationLevelReading.read
+                        VerificationLevel.Attributed
+                        VerificationLevelProvenance.DeclaredByRecord
+                        RuntimeAttestor.UnattestedName
+                        (RuntimeObservation.Unattested "nothing composed")
+
+                let refused = {
+                    resultWith (
+                        BootVerificationVerdict.BelowVerificationFloor(reading, VerificationLevel.RuntimeQuoted)
+                    ) with
+                        RefusedStart = true
+                        Level = Some reading
+                }
+
+                match ServerApp.bootSealEvidence (Error refused) with
+                | BootSealRejected(_, _, _, findings, refusedStart) ->
+                    Expect.isTrue refusedStart "the refusal rides through"
+                    let rendered = String.concat " | " findings
+                    Expect.stringContains rendered "runtime-quoted" "the floor is named"
+
+                    Expect.stringContains
+                        rendered
+                        "attributed (declared by the record)"
+                        "and so is the level, with its provenance"
+                | other -> failtestf "expected BootSealRejected, got %A" other
+            }
+
             test "Phase 694 — keeps a partly-uncomparable verdict separate from a plain verification" {
                 // Folding `VerifiedUnrecorded` into `BootSealVerified`
                 // would restate one tier up the very blind spot Phase 694
@@ -1101,7 +1188,7 @@ let tests =
                 let evidence = ServerApp.bootSealEvidence (Ok(resultWith verdict))
 
                 match evidence with
-                | BootSealVerifiedUnrecorded(_, _, _, unrecorded) ->
+                | BootSealVerifiedUnrecorded(_, _, _, unrecorded, _) ->
                     Expect.stringContains
                         (unrecorded |> String.concat " | ")
                         "revenue"
