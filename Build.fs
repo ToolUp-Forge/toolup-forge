@@ -563,6 +563,58 @@ let main args =
             runVerifySamples ()
             0)
 
+    // Phase 776 — the analyser rule set runs over the SDK's own tree.
+    //
+    // `ToolUp.Remoting.Analyzers` carries the TUA containment rules
+    // (container resolution outside registration, an `HttpClient` built
+    // without the egress handler, `Async.RunSynchronously` outside an entry
+    // point). This leg parses every tracked `src/**/*.fs` with them and
+    // reconciles the sites against the committed inventory
+    // (`src/ToolUp.Remoting.Analyzers/analyzer-inventory.json`), then checks
+    // that `docs/platform/analyzer-rules.md` is the render of the rule
+    // metadata. Any finding is red: a new site, an inventory entry the tree
+    // no longer needs, a stale exclusion, a file that does not parse, a
+    // hand-edited rule document.
+    //
+    // It runs the RemotingAnalyzers pack's built dll in its `--scan-tree`
+    // mode: that exe already loads the analyser and the compiler service,
+    // so this file takes no compiler dependency, and the build the packs
+    // ran has produced it. One more `PASS` line in the summary (CI's
+    // `EXPECTED_PACKS` floor moved 28 → 29 in the same commit).
+    //
+    // `fast` and `full`, not `pure`: it reads the tree and asks git for the
+    // tracked set, which is the opposite of the pure lane's claim. About
+    // six seconds over ~1,700 in-scope files, so the fast lane keeps it —
+    // a new site is cheapest to hear about before the merge.
+    let runVerifyAnalyzers () =
+        let project =
+            "src/ToolUp.Remoting.Analyzers.Tests/ToolUp.Remoting.Analyzers.Tests.fsproj"
+
+        match TestPackHost.resolveTargetPath project with
+        | Error message ->
+            Trace.traceError (sprintf "VerifyAll: Analyzers — %s" message)
+            1
+        | Ok dll ->
+            CreateProcess.fromRawCommand "dotnet" [ dll; "--scan-tree"; Path.getFullName "." ]
+            |> CreateProcess.withWorkingDirectory "."
+            |> Proc.run
+            |> _.ExitCode
+
+    // Usage: `dotnet run --project Build.fsproj -- VerifyAnalyzers`, after a
+    // build of the RemotingAnalyzers pack.
+    Target.create "VerifyAnalyzers" (fun _ ->
+        match runVerifyAnalyzers () with
+        | 0 -> ()
+        | code -> failwithf "VerifyAnalyzers: the analyser run exited %d; its findings are printed above." code)
+
+    match TestLane.current with
+    | TestLane.Lane.Pure -> ()
+    | TestLane.Lane.Fast
+    | TestLane.Lane.Full ->
+        VerifyLeg.register "Analyzers" (fun () ->
+            Trace.tracefn "▶ VerifyAll: Analyzers (TUA rules over src/, via the RemotingAnalyzers pack)"
+            runVerifyAnalyzers ())
+
     // Phase 761 — the browser-level smoke gate.
     //
     // The repo's first REAL-BROWSER tier. Two scenarios, both of which

@@ -10,6 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="AnalyzerAstTests.fs" />
+    <Compile Include="ContainmentRuleTests.fs" />
     <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
          ToolUp.Platform.Tests so there is one implementation. -->
     <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />

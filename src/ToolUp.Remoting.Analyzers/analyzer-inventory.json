@@ -1,0 +1,511 @@
+{
+  "$comment": "Phase 776 - the TUA rules' scope and known-site inventory, read by the Analyzers leg of VerifyAll (src/ToolUp.Remoting.Analyzers/TreeScan.fs). A count must EQUAL the sites the file holds: more is a new site, fewer is an entry to tighten. Rules and sanctioned forms: docs/platform/analyzer-rules.md.",
+  "exclude": [
+    {
+      "segmentSuffix": ".Tests",
+      "reason": "Test packs: fixtures and harnesses that exercise the SDK, never code a deployment runs."
+    },
+    {
+      "prefix": "src/ToolUp.Platform.Testing/",
+      "reason": "Test-support library consumers reference from their own test packs; it runs in a test host, never in a server."
+    },
+    {
+      "prefix": "src/ToolUp.RAG.Benchmarks/",
+      "reason": "Benchmark console: it measures the SDK from outside, so blocking and plain HttpClient downloads are its job."
+    },
+    {
+      "prefix": "src/ToolUp.AI.Evaluation/",
+      "reason": "Offline evaluation console run by an operator, not by a deployment."
+    },
+    {
+      "prefix": "src/ToolUp.RAG.Evaluation/",
+      "reason": "Offline evaluation console run by an operator, not by a deployment."
+    },
+    {
+      "prefix": "src/ToolUp.Cli/",
+      "reason": "The operator CLI is a client of a deployment, not code running inside one; its HTTP calls are the operator's own."
+    },
+    {
+      "prefix": "src/ToolUp.Platform.Build/",
+      "reason": "Build-time FAKE targets; never loaded by a server."
+    },
+    {
+      "prefix": "src/ToolUp.RAG.StaticCorpus.Build/",
+      "reason": "Build-time corpus compiler console; never loaded by a server."
+    }
+  ],
+  "suppressions": [
+    {
+      "rule": "TUA001",
+      "reason": "The platform host itself: its handlers, middleware and compose steps resolve platform substrate per request from the container it owns. This is the container's owner, not a module reaching past its grant.",
+      "sites": {
+        "src/ToolUp.Platform.Server/Server/AdAnalyticsApiHandler.fs": 2,
+        "src/ToolUp.Platform.Server/Server/AlertRuleEngine.fs": 3,
+        "src/ToolUp.Platform.Server/Server/AnonymousSessionBinding.fs": 1,
+        "src/ToolUp.Platform.Server/Server/AnonymousSessionMigrationMiddleware.fs": 2,
+        "src/ToolUp.Platform.Server/Server/Api.fs": 3,
+        "src/ToolUp.Platform.Server/Server/AuditViewApiHandler.fs": 3,
+        "src/ToolUp.Platform.Server/Server/AuthDenialsDiagnosticsHandler.fs": 3,
+        "src/ToolUp.Platform.Server/Server/AuthSessionHandler.fs": 1,
+        "src/ToolUp.Platform.Server/Server/Background.fs": 1,
+        "src/ToolUp.Platform.Server/Server/CarriedScopeToken.fs": 1,
+        "src/ToolUp.Platform.Server/Server/ColumnMappingApiHandler.fs": 4,
+        "src/ToolUp.Platform.Server/Server/Compose/BuildRouteHandlers.fs": 13,
+        "src/ToolUp.Platform.Server/Server/Compose/ComposeBootstrap.fs": 3,
+        "src/ToolUp.Platform.Server/Server/Compose/ComposeRuntimeServices.fs": 3,
+        "src/ToolUp.Platform.Server/Server/Compose/ComposeStores.fs": 3,
+        "src/ToolUp.Platform.Server/Server/Compose/ComposeTeamRuntime.fs": 2,
+        "src/ToolUp.Platform.Server/Server/Compose/ComposeTenantLifecycle.fs": 1,
+        "src/ToolUp.Platform.Server/Server/Compose/LiveSessionsCompose.fs": 2,
+        "src/ToolUp.Platform.Server/Server/CompositionCapabilityGate.fs": 4,
+        "src/ToolUp.Platform.Server/Server/CompositionInspectorHandler.fs": 4,
+        "src/ToolUp.Platform.Server/Server/Config/ConfigHandler.fs": 4,
+        "src/ToolUp.Platform.Server/Server/CsrfMiddleware.fs": 1,
+        "src/ToolUp.Platform.Server/Server/DataIngestionApiHandler.fs": 9,
+        "src/ToolUp.Platform.Server/Server/DataObjectOrphanSweepJobHandler.fs": 3,
+        "src/ToolUp.Platform.Server/Server/DatadogReadbackHandlers.fs": 4,
+        "src/ToolUp.Platform.Server/Server/DeploymentReadinessReport.fs": 5,
+        "src/ToolUp.Platform.Server/Server/DeploymentVerificationReport.fs": 5,
+        "src/ToolUp.Platform.Server/Server/DevDiagnosticsHandler.fs": 8,
+        "src/ToolUp.Platform.Server/Server/DiagnosticBundleHandler.fs": 5,
+        "src/ToolUp.Platform.Server/Server/EncryptionAdminHandler.fs": 3,
+        "src/ToolUp.Platform.Server/Server/EvidenceChainWalker.fs": 1,
+        "src/ToolUp.Platform.Server/Server/EvidencePackGenerator.fs": 2,
+        "src/ToolUp.Platform.Server/Server/ExternalComputeCallback.fs": 4,
+        "src/ToolUp.Platform.Server/Server/ExternalContactApiHandler.fs": 3,
+        "src/ToolUp.Platform.Server/Server/FeatureFlagHandler.fs": 6,
+        "src/ToolUp.Platform.Server/Server/Files/FileManagement.fs": 11,
+        "src/ToolUp.Platform.Server/Server/HealthCheckResponseWriter.fs": 1,
+        "src/ToolUp.Platform.Server/Server/HealthMonitorApiHandler.fs": 6,
+        "src/ToolUp.Platform.Server/Server/HealthStateTracker.fs": 1,
+        "src/ToolUp.Platform.Server/Server/HomeOverviewApiHandler.fs": 6,
+        "src/ToolUp.Platform.Server/Server/IEdgeCache.fs": 1,
+        "src/ToolUp.Platform.Server/Server/INarrativeStore.fs": 2,
+        "src/ToolUp.Platform.Server/Server/JobApiHandler.fs": 3,
+        "src/ToolUp.Platform.Server/Server/Lifecycle/ConfigSeedLifecycle.fs": 2,
+        "src/ToolUp.Platform.Server/Server/Lifecycle/ConversationStoreLifecycle.fs": 1,
+        "src/ToolUp.Platform.Server/Server/Lifecycle/DataSubjectRequestLifecycle.fs": 5,
+        "src/ToolUp.Platform.Server/Server/Lifecycle/EncryptionKeyLifecycle.fs": 2,
+        "src/ToolUp.Platform.Server/Server/Lifecycle/EncryptionKeyProvisionLifecycle.fs": 1,
+        "src/ToolUp.Platform.Server/Server/Lifecycle/JobSchedulerLifecycle.fs": 2,
+        "src/ToolUp.Platform.Server/Server/Lifecycle/MembershipCacheLifecycle.fs": 4,
+        "src/ToolUp.Platform.Server/Server/Lifecycle/OwnerTeamBootstrapLifecycle.fs": 3,
+        "src/ToolUp.Platform.Server/Server/Lifecycle/UserMembershipTeardownLifecycle.fs": 3,
+        "src/ToolUp.Platform.Server/Server/LifecycleJobHandler.fs": 6,
+        "src/ToolUp.Platform.Server/Server/MaintenanceApiHandler.fs": 2,
+        "src/ToolUp.Platform.Server/Server/MetricsEndpoint.fs": 1,
+        "src/ToolUp.Platform.Server/Server/MetricsHistoryFlusher.fs": 2,
+        "src/ToolUp.Platform.Server/Server/Middleware.fs": 7,
+        "src/ToolUp.Platform.Server/Server/MigrationApiHandler.fs": 5,
+        "src/ToolUp.Platform.Server/Server/ModelExecutionApi.fs": 1,
+        "src/ToolUp.Platform.Server/Server/ModuleVisibilityApiHandler.fs": 5,
+        "src/ToolUp.Platform.Server/Server/ModuleVisibilityRouteMiddleware.fs": 2,
+        "src/ToolUp.Platform.Server/Server/NotificationPreferenceApiHandler.fs": 3,
+        "src/ToolUp.Platform.Server/Server/Notifications/SseScopeResolution.fs": 1,
+        "src/ToolUp.Platform.Server/Server/OAuth1aFlowHandler.fs": 3,
+        "src/ToolUp.Platform.Server/Server/OAuthFlowHandler.fs": 4,
+        "src/ToolUp.Platform.Server/Server/ObservabilityHandlers.fs": 2,
+        "src/ToolUp.Platform.Server/Server/PeerBearerAuthMiddleware.fs": 3,
+        "src/ToolUp.Platform.Server/Server/PlatformAdmin/AdUnitConfigApi.fs": 4,
+        "src/ToolUp.Platform.Server/Server/PlatformAdmin/PremiumUserApi.fs": 2,
+        "src/ToolUp.Platform.Server/Server/PlatformAdmin/RateLimitEventApi.fs": 2,
+        "src/ToolUp.Platform.Server/Server/PlatformAdminApiHandler.fs": 3,
+        "src/ToolUp.Platform.Server/Server/PlatformApiHandler.fs": 9,
+        "src/ToolUp.Platform.Server/Server/PlatformTenantApiHandler.fs": 13,
+        "src/ToolUp.Platform.Server/Server/Premium/GrantPremiumApiHandler.fs": 4,
+        "src/ToolUp.Platform.Server/Server/Premium/PremiumGate.fs": 2,
+        "src/ToolUp.Platform.Server/Server/PresenceApiHandler.fs": 2,
+        "src/ToolUp.Platform.Server/Server/ProviderProfileApiHandler.fs": 4,
+        "src/ToolUp.Platform.Server/Server/Remoting/Giraffe/GiraffeAdapter.fs": 2,
+        "src/ToolUp.Platform.Server/Server/Remoting/Giraffe/SharedReader.fs": 1,
+        "src/ToolUp.Platform.Server/Server/RemotingHelpers.fs": 7,
+        "src/ToolUp.Platform.Server/Server/SbomProjection.fs": 1,
+        "src/ToolUp.Platform.Server/Server/ScheduledDeprovisionJobHandler.fs": 1,
+        "src/ToolUp.Platform.Server/Server/Scope/StorageScopeResolver.fs": 3,
+        "src/ToolUp.Platform.Server/Server/SeedDataLoader.fs": 2,
+        "src/ToolUp.Platform.Server/Server/ServerApp.fs": 2,
+        "src/ToolUp.Platform.Server/Server/ServiceAccountApiHandler.fs": 3,
+        "src/ToolUp.Platform.Server/Server/ServiceAccountTokenHandler.fs": 3,
+        "src/ToolUp.Platform.Server/Server/ServiceStatusBoardApiHandler.fs": 7,
+        "src/ToolUp.Platform.Server/Server/SessionApiHandler.fs": 5,
+        "src/ToolUp.Platform.Server/Server/SessionRevocationMiddleware.fs": 2,
+        "src/ToolUp.Platform.Server/Server/ShareTokenAuthMiddleware.fs": 2,
+        "src/ToolUp.Platform.Server/Server/SmokeTestHandler.fs": 1,
+        "src/ToolUp.Platform.Server/Server/Static/SpaFallbackMiddleware.fs": 2,
+        "src/ToolUp.Platform.Server/Server/SurfaceEnforcementMiddleware.fs": 3,
+        "src/ToolUp.Platform.Server/Server/Teams/TeamInvitationHandler.fs": 3,
+        "src/ToolUp.Platform.Server/Server/Teams/TeamPolicyStore.fs": 8,
+        "src/ToolUp.Platform.Server/Server/TelemetryApiHandler.fs": 1,
+        "src/ToolUp.Platform.Server/Server/UsageQueryApi.fs": 3,
+        "src/ToolUp.Platform.Server/Server/UserDirectoryApiHandler.fs": 3,
+        "src/ToolUp.Platform.Server/Server/UserSchemaApiHandler.fs": 2,
+        "src/ToolUp.Platform.Server/Server/WebhookApiHandler.fs": 9
+      }
+    },
+    {
+      "rule": "TUA001",
+      "reason": "First-party modules and companions resolving substrate per request: the hand-resolution census the seam-aware service provider governs at runtime. Recorded so a new site is a finding; each moves to a registration factory as its module adopts the seam.",
+      "sites": {
+        "src/AuthProviders/Oidc/OidcSsrSignIn.fs": 3,
+        "src/AuthProviders/Passkey/PasskeyAuthProvider.fs": 1,
+        "src/AuthProviders/Passkey/PasskeyHost.fs": 2,
+        "src/AuthProviders/Scim/ScimRoutes.fs": 1,
+        "src/Calendar/Google/GoogleCalendarChannels.fs": 3,
+        "src/Calendar/Microsoft/MicrosoftGraphCalendarSubscriptions.fs": 3,
+        "src/ContentAuthoring/Server/ContentAdminCompose.fs": 1,
+        "src/FactStores/Postgres/PostgresFactStore.fs": 2,
+        "src/InterPlatform/Server/JsonRpcPeerHost.fs": 2,
+        "src/Media/MediaLibrary/Server/HlsKeyDelivery.fs": 2,
+        "src/Media/MediaLibrary/Server/MediaCompose.fs": 2,
+        "src/Media/MediaLibrary/Server/PlaybackTelemetry.fs": 4,
+        "src/Media/MediaLibrary/Server/RangeHandler.fs": 3,
+        "src/ToolUp.AI.McpHost/Server/McpAudit.fs": 1,
+        "src/ToolUp.AI.McpHost/Server/McpGovernance.fs": 2,
+        "src/ToolUp.AI.McpHost/Server/McpHost.fs": 1,
+        "src/ToolUp.AI.Server/Server/AIAgentEngine.fs": 6,
+        "src/ToolUp.AI.Server/Server/AIAllowlistDiagnosticsHandler.fs": 1,
+        "src/ToolUp.AI.Server/Server/AIAssistantHandler.fs": 16,
+        "src/ToolUp.AI.Server/Server/AICancellationRegistry.fs": 1,
+        "src/ToolUp.AI.Server/Server/AICompose.fs": 1,
+        "src/ToolUp.AI.Server/Server/AIConsentDispatch.fs": 3,
+        "src/ToolUp.AI.Server/Server/AIConsentHandler.fs": 2,
+        "src/ToolUp.AI.Server/Server/AICrossModuleAudit.fs": 1,
+        "src/ToolUp.AI.Server/Server/AICrossModuleObservability.fs": 1,
+        "src/ToolUp.AI.Server/Server/AILatencyHandler.fs": 1,
+        "src/ToolUp.AI.Server/Server/AIProviderUsageMiddleware.fs": 13,
+        "src/ToolUp.AI.Server/Server/AISettingsHandler.fs": 6,
+        "src/ToolUp.AI.Server/Server/AIToolRegistry.fs": 5,
+        "src/ToolUp.AI.Server/Server/ClientToolDispatch.fs": 1,
+        "src/ToolUp.AI.Server/Server/FastPathBeaconHandler.fs": 6,
+        "src/ToolUp.AI.Server/Server/FastPathTelemetryHandler.fs": 1,
+        "src/ToolUp.AI.Server/Server/FastPathTriageResolver.fs": 2,
+        "src/ToolUp.AI.Server/Server/GroundedNarrativeRun.fs": 2,
+        "src/ToolUp.AI.Server/Server/NarrativeTools.fs": 3,
+        "src/ToolUp.AI.Server/Server/PlatformAIKeysHandler.fs": 4,
+        "src/ToolUp.AI.Server/Server/PlatformAITools.fs": 4,
+        "src/ToolUp.AI.Server/Server/TeamConversationPolicyStore.fs": 6,
+        "src/ToolUp.AI.Server/Server/ToolApprovalDispatch.fs": 3,
+        "src/ToolUp.AI.Server/Server/ToolApprovalHandler.fs": 1,
+        "src/ToolUp.AI.Server/Server/ToolContext.fs": 1,
+        "src/ToolUp.Algorithms.Server/Server/AlgorithmAITools.fs": 2,
+        "src/ToolUp.ArtefactSigning/Server/SigningKeyHandler.fs": 1,
+        "src/ToolUp.AssetStore/Server/AssetCompose.fs": 1,
+        "src/ToolUp.Facts.Server/Server/CoverageNarrative.fs": 1,
+        "src/ToolUp.Facts.Server/Server/CoverageTool.fs": 1,
+        "src/ToolUp.Facts.Server/Server/FactBrowseHandler.fs": 1,
+        "src/ToolUp.Facts.Server/Server/FactQueryTool.fs": 1,
+        "src/ToolUp.Facts.Server/Server/FactsCompose.fs": 5,
+        "src/ToolUp.Facts.Server/Server/PopulationQueryTool.fs": 1,
+        "src/ToolUp.Forms.Server/Server/FormApiHandler.fs": 1,
+        "src/ToolUp.Forms.Server/Server/FormsCompose.fs": 13,
+        "src/ToolUp.Graph.Projection/EntityGraphProjector.fs": 2,
+        "src/ToolUp.KnowledgeBase.Server/Server/AICompose.fs": 1,
+        "src/ToolUp.KnowledgeBase.Server/Server/Api/Deps.fs": 30,
+        "src/ToolUp.KnowledgeBase.Server/Server/Api/NarrativeIngestor.fs": 1,
+        "src/ToolUp.KnowledgeBase.Server/Server/KnowledgeBaseLifecycle.fs": 1,
+        "src/ToolUp.KnowledgeBase.Server/Server/PlatformAdmin.fs": 1,
+        "src/ToolUp.KnowledgeBase.Server/Server/RetentionSweep.fs": 4,
+        "src/ToolUp.KnowledgeBase.Server/Server/Server.fs": 2,
+        "src/ToolUp.KnowledgeBase.Server/Server/UploadPolicy.fs": 2,
+        "src/ToolUp.PublicRendering/Server/ContentPreview.fs": 2,
+        "src/ToolUp.PublicRendering/Server/PublicPageHandler.fs": 10,
+        "src/ToolUp.PublicRendering/Server/PublicRenderingCompose.fs": 9,
+        "src/ToolUp.PublicRendering/Server/PublicationReads.fs": 3,
+        "src/ToolUp.PublicRendering/Server/SemanticSearchHandler.fs": 1,
+        "src/ToolUp.RAG.Server/Server/RAGCitationDevEndpoint.fs": 1,
+        "src/ToolUp.RAG.Server/Server/RAGCompose.fs": 14,
+        "src/ToolUp.RAG.Server/Server/RagHealthHandler.fs": 1,
+        "src/ToolUp.RAG.Server/Server/RagVectorStoreLifecycle.fs": 1,
+        "src/ToolUp.Reporting.Server/ReportingAITools.fs": 3,
+        "src/ToolUp.Scheduling.Server/Server/SchedulingCompose.fs": 7
+      }
+    },
+    {
+      "rule": "TUA002",
+      "reason": "KNOWN EGRESS BYPASS: the directory companion's process-wide client predates the egress seam.",
+      "sites": {
+        "src/AuthProviders/EntraDirectory/EntraDirectory.fs": 1
+      }
+    },
+    {
+      "rule": "TUA002",
+      "reason": "KNOWN EGRESS BYPASS: the directory companion's process-wide client predates the egress seam.",
+      "sites": {
+        "src/AuthProviders/GoogleDirectory/GoogleDirectory.fs": 1
+      }
+    },
+    {
+      "rule": "TUA002",
+      "reason": "KNOWN EGRESS BYPASS: the preflight validator's client predates the egress seam.",
+      "sites": {
+        "src/AuthProviders/GoogleDirectory/GoogleDirectoryConfigValidator.fs": 1
+      }
+    },
+    {
+      "rule": "TUA002",
+      "reason": "Secret-store bootstrap: the secret store is resolved before an egress policy (which may itself read secrets) can be composed.",
+      "sites": {
+        "src/Secrets/GcpSecretManager/GcpSecretManagerSecretStore.fs": 1
+      }
+    },
+    {
+      "rule": "TUA002",
+      "reason": "Secret-store bootstrap: the secret store is resolved before an egress policy (which may itself read secrets) can be composed.",
+      "sites": {
+        "src/Secrets/HashiCorpVault/VaultSecretStore.fs": 1
+      }
+    },
+    {
+      "rule": "TUA002",
+      "reason": "KNOWN EGRESS BYPASS: the webhook-delivery and OAuth refresh-token clients are built at compose without the egress handler.",
+      "sites": {
+        "src/ToolUp.Platform.Server/Server/Compose/ComposeJobs.fs": 2
+      }
+    },
+    {
+      "rule": "TUA002",
+      "reason": "The egress seam's own constructors (`PlatformHttpClient.create` / `createWith`), which put the handler in front.",
+      "sites": {
+        "src/ToolUp.Platform.Server/Server/EgressPolicyHandler.fs": 2
+      }
+    },
+    {
+      "rule": "TUA002",
+      "reason": "KNOWN EGRESS BYPASS: the public form-submission surface's shared client is built at compose without the egress handler.",
+      "sites": {
+        "src/ToolUp.PublicRendering/Server/PublicRenderingCompose.fs": 1
+      }
+    },
+    {
+      "rule": "TUA002",
+      "reason": "KNOWN EGRESS BYPASS: the Stripe companion's process-wide client predates the egress seam.",
+      "sites": {
+        "src/ToolUp.Stripe.Server/StripeHttp.fs": 1
+      }
+    },
+    {
+      "rule": "TUA002",
+      "reason": "KNOWN EGRESS BYPASS: the provider's process-wide client predates the egress seam.",
+      "sites": {
+        "src/VoiceProviders/AzureSpeech/AzureSpeechTranscriptionProvider.fs": 1
+      }
+    },
+    {
+      "rule": "TUA002",
+      "reason": "KNOWN EGRESS BYPASS: the provider's process-wide client predates the egress seam.",
+      "sites": {
+        "src/VoiceProviders/Whisper/WhisperTranscriptionProvider.fs": 1
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Dev-only provider (file header): its IDF state persists and loads synchronously under the provider's own lock; production swaps to a stateless provider.",
+      "sites": {
+        "src/EmbeddingProviders/Local/LocalEmbeddingProvider.fs": 3
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Compose-time `create*` factories run the schema migration once before the store is handed out; no request has started.",
+      "sites": {
+        "src/EntityStores/Postgres/PostgresEntityStore.fs": 3
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Compose-time factories probe and migrate the schema once before the store is handed out; no request has started.",
+      "sites": {
+        "src/FactStores/Postgres/PostgresFactStore.fs": 2
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Entry point of the isolated child process: the whole process exists to run this one call.",
+      "sites": {
+        "src/OcrProviders/Tesseract/TesseractOcrIsolation.fs": 1
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Subscribes once when the decorator is applied at compose and unsubscribes once in Dispose at shutdown.",
+      "sites": {
+        "src/ShareTokenStoreDecorators/RevokeOnIssuerRemoved/RevokeOnIssuerRemovedStore.fs": 2
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Compose-time factory probes and migrates the schema once before the index is handed out.",
+      "sites": {
+        "src/SparseIndices/Postgres/PostgresFullTextIndex.fs": 1
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Module admission at startup awaits the transparency-log record so it is durable before the module loads.",
+      "sites": {
+        "src/ToolUp.ArtefactSigning/Server/DefaultModuleBindingVerifier.fs": 1
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Entry points of the isolated child process: the whole process exists to run these calls.",
+      "sites": {
+        "src/ToolUp.AssetStore/Server/IsolatedSkiaDerivativeRenderer.fs": 2
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Constructor restores persisted grants once when the publication service is built at compose.",
+      "sites": {
+        "src/ToolUp.Facts.Server/Server/FactPublication.fs": 1
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Implements ASP.NET Core Data Protection's synchronous IXmlRepository; the framework calls it on key-ring load and rotation, not per request.",
+      "sites": {
+        "src/ToolUp.Platform.Server/Server/BlobXmlRepository.fs": 3
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Compose-time bootstrap of the platform-admin store and the runtime config store, before the host binds.",
+      "sites": {
+        "src/ToolUp.Platform.Server/Server/Compose/ComposeAuth.fs": 2
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Compose-time config-drift detection, run once before request traffic.",
+      "sites": {
+        "src/ToolUp.Platform.Server/Server/Compose/ComposeBootstrap.fs": 2
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Compose-time wiring of the per-scope key resolver to the notification channel.",
+      "sites": {
+        "src/ToolUp.Platform.Server/Server/Compose/ComposeEncryption.fs": 1
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Compose-time webhook-secret migration and webhook-registry channel wiring.",
+      "sites": {
+        "src/ToolUp.Platform.Server/Server/Compose/ComposeJobs.fs": 2
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Compose-time bootstrap-team creation.",
+      "sites": {
+        "src/ToolUp.Platform.Server/Server/Compose/ComposeTeamRuntime.fs": 1
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Preflight: runs the config validators in parallel and waits for the set, at startup or on the operator's preflight call.",
+      "sites": {
+        "src/ToolUp.Platform.Server/Server/ConfigValidatorAggregator.fs": 1
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "The synchronous HttpMessageHandler.Send override: .NET's sync contract; SendAsync, the path every SDK caller uses, stays asynchronous.",
+      "sites": {
+        "src/ToolUp.Platform.Server/Server/EgressPolicyHandler.fs": 1
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "KNOWN REQUEST-PATH SITE: lazy per-scope hydration on first access, bounded by a timeout and degrade-not-throw; making it asynchronous reshapes the file-management scope cache.",
+      "sites": {
+        "src/ToolUp.Platform.Server/Server/Files/FileManagement.fs": 1
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Compose-time registration of declared recurring jobs.",
+      "sites": {
+        "src/ToolUp.Platform.Server/Server/IJobScheduler.fs": 1
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "The CLI verification mode: builds a provider, runs the deployment report and exits; no host is serving.",
+      "sites": {
+        "src/ToolUp.Platform.Server/Server/SDK.Server.fs": 1
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Subscribes once at singleton activation and unsubscribes once in Dispose at shutdown.",
+      "sites": {
+        "src/ToolUp.Platform.Server/Server/Scope/DefaultSubjectResolver.fs": 2
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Subscribe at singleton activation, unsubscribe at shutdown, and the pre-Phase-5d synchronous compat shim no production request path calls.",
+      "sites": {
+        "src/ToolUp.Platform.Server/Server/Scope/StorageScopeResolver.fs": 3
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Startup seed-pack application, once, before the host serves.",
+      "sites": {
+        "src/ToolUp.Platform.Server/Server/SeedDataLoader.fs": 1
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Cleanup in an async `finally` (F# async has no awaiting finally) on the opt-in deploy-time smoke endpoint.",
+      "sites": {
+        "src/ToolUp.Platform.Server/Server/SmokeTests.fs": 3
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "KNOWN REQUEST-PATH SITE: the synchronous `Enqueue` kept for the knowledge-base upload handlers, one durable-store append; new callers use `EnqueueAsync`.",
+      "sites": {
+        "src/ToolUp.RAG.Core/IngestionTypes.fs": 1
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Construction loads the two eager scopes once (Phase 861); Dispose flushes once at shutdown.",
+      "sites": {
+        "src/ToolUp.RAG.Server/Server/InMemoryBM25Index.fs": 3
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Construction loads the two eager scopes once (Phase 861); Dispose flushes once at shutdown.",
+      "sites": {
+        "src/ToolUp.RAG.Server/Server/InMemoryVectorStore.fs": 3
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "The analyser's own whole-tree run, a build-time tool that blocks on the compiler service's parse.",
+      "sites": {
+        "src/ToolUp.Remoting.Analyzers/TreeScan.fs": 1
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Construction loads the two eager scopes once (Phase 861: a failed load leaves the scope lazy); Dispose flushes once at shutdown.",
+      "sites": {
+        "src/VectorStores/Hnsw/HnswVectorStore.fs": 3
+      }
+    },
+    {
+      "rule": "TUA003",
+      "reason": "Compose-time factories probe the extension and migrate once before the store is handed out.",
+      "sites": {
+        "src/VectorStores/Pgvector/PgvectorVectorStore.fs": 2
+      }
+    }
+  ]
+}
