@@ -12,6 +12,7 @@ open ToolUp.Platform.Narrative
 open ToolUp.Platform.IVectorStore
 open ToolUp.Platform.IEmbeddingProvider
 open ToolUp.Platform.IRetrievalPipeline
+open ToolUp.Platform.IRetrievalTracer
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.TeamManagement
 open ToolUp.RAG.IngestionTypes
@@ -62,11 +63,15 @@ type private PresetGate(verdicts: Map<string, FactDisclosureVerdict>) =
     let mutable lastCall: (string * string * FactEgressSurface * string list) option =
         None
 
+    let mutable calls = 0
+
     member _.LastCall = lastCall
+    member _.Calls = calls
 
     interface IFactDisclosureGate with
         member _.Check(scopeId: string, principal: string, surface: FactEgressSurface, factIds: string list) = async {
             lastCall <- Some(scopeId, principal, surface, factIds)
+            calls <- calls + 1
 
             return
                 factIds
@@ -819,6 +824,324 @@ let purposeTests =
         }
     ]
 
+// ── Derived-corpus disclosure at retrieval (Phase 775) ────────────
+//
+// A chunk derived from facts carries their ids under `_factRefs`. Commit
+// judged them once (525.D); retrieval re-gates them on every turn, at
+// the `FactRetrieval` surface, in the request's resolved fact scope.
+
+type private CapturingTracer() =
+    let mutable last: RetrievalTrace option = None
+    member _.Last = last
+
+    interface IRetrievalTracer with
+        member _.Trace trace _ =
+            last <- Some trace
+            async.Return()
+
+        member _.Miss _ _ = async.Return()
+
+/// A gate whose check never completes inside any budget, or faults.
+type private BrokenGate(fault: bool) =
+    let check () : Async<Map<string, FactDisclosureVerdict>> = async {
+        if fault then
+            return failwith "gate unavailable"
+        else
+            do! Async.Sleep 10000
+            return Map.empty
+    }
+
+    interface IFactDisclosureGate with
+        member _.Check(_: string, _: string, _: FactEgressSurface, _: string list) = check ()
+        member _.Check(_: ResolvedScope, _: string, _: FactEgressSurface, _: string list) = check ()
+
+let private derivedScope () =
+    let id = "u-" + Guid.NewGuid().ToString("N")
+
+    id,
+    StorageScopeResolver.ScopeResolution.ofStorageScope {
+        ScopeId = id
+        Container = "user-" + id
+        Persist = true
+    }
+
+/// A clause-less request — the derived-disclosure stage needs no fact
+/// clause, only a gate and a chunk that cites facts.
+let private derivedRequest (factScope: ResolvedScope) = {
+    RetrievalRequest.create "q" [ User "u" ] 10 Interleaved with
+        FactScope = factScope
+}
+
+let private upsertChunk (store: IVectorStore) (chunkId: string) (refs: string option) =
+    store.Upsert (User "u") chunkId unitVec {
+        Content = "chunk " + chunkId
+        Metadata =
+            match refs with
+            | Some csv -> Map.ofList [ ChunkMetadata.FactRefsKey, csv ]
+            | None -> Map.empty
+    }
+
+let private chunkIds (results: VectorMatch list) =
+    results |> List.map _.ChunkId |> List.sort
+
+let private derivedPipeline (store: IVectorStore) (gate: IFactDisclosureGate) (tracer: IRetrievalTracer) =
+    new ToolUp.RAG.RetrievalPipeline.RetrievalPipeline(
+        store,
+        ConstantEmbedder(),
+        tracer = tracer,
+        disclosureGate = gate
+    )
+    :> IRetrievalPipeline
+
+let derivedRetrievalTests =
+    testList "Phase 775 derived-corpus disclosure at retrieval" [
+
+        testCaseAsync
+            "a chunk citing a fact that later becomes non-disclosable disappears from retrieval without re-indexing"
+        <| async {
+            let store, dispose = newVectorStore ()
+
+            try
+                let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+                let factStore = BlobFactStore.create (InMemoryBlobStorage()) events
+                // The deployment's policy vocabulary: `vendor-terms` permits
+                // retrieval until it is tightened. Nothing else changes.
+                let mutable vendorTermsPermitted = true
+
+                let gate =
+                    FactDisclosureGate.createWithPolicyResolver
+                        (fun policyRef _ ->
+                            if policyRef = "vendor-terms" then
+                                Some vendorTermsPermitted
+                            else
+                                None)
+                        factStore
+                        events
+
+                let scopeId, factScope = derivedScope ()
+
+                let fact =
+                    assertFact factStore scopeId (draftWith "syndicated" (Restricted "vendor-terms"))
+
+                do! upsertChunk store "derived" (Some fact.FactId)
+                do! upsertChunk store "plain" None
+
+                let tracer = CapturingTracer()
+                let pipeline = derivedPipeline store gate tracer
+                let ctx = AccessContext.unrestricted (AuthenticatedUser "u")
+
+                let! before = pipeline.Retrieve (derivedRequest factScope) ctx
+
+                Expect.equal
+                    (chunkIds before)
+                    [ "derived"; "plain" ]
+                    "while the policy permits, the derived chunk surfaces"
+
+                vendorTermsPermitted <- false
+
+                let! after = pipeline.Retrieve (derivedRequest factScope) ctx
+
+                Expect.equal
+                    (chunkIds after)
+                    [ "plain" ]
+                    "after the policy tightens, the derived chunk is absent — the store was never touched"
+
+                let! stillIndexed = store.Search [ User "u" ] unitVec 10
+                Expect.equal stillIndexed.Length 2 "nothing was re-indexed or deleted"
+            finally
+                dispose.Dispose()
+        }
+
+        testCaseAsync "a chunk with no refs is byte-identical with or without the gate, and the gate is never asked"
+        <| async {
+            let store, dispose = newVectorStore ()
+
+            try
+                do! upsertChunk store "a" None
+                do! upsertChunk store "b" None
+                let gate = PresetGate Map.empty
+                let ctx = AccessContext.unrestricted (AuthenticatedUser "u")
+                let _, factScope = derivedScope ()
+
+                let gatedTracer = CapturingTracer()
+                let gated = derivedPipeline store gate gatedTracer
+
+                let ungatedTracer = CapturingTracer()
+
+                let ungated =
+                    new ToolUp.RAG.RetrievalPipeline.RetrievalPipeline(
+                        store,
+                        ConstantEmbedder(),
+                        tracer = ungatedTracer
+                    )
+                    :> IRetrievalPipeline
+
+                let! withGate = gated.Retrieve (derivedRequest factScope) ctx
+                let! withoutGate = ungated.Retrieve (derivedRequest factScope) ctx
+
+                Expect.equal withGate withoutGate "ref-less chunks are untouched by the stage"
+                Expect.isNone gate.LastCall "no refs in the pool ⇒ no gate call"
+
+                Expect.equal
+                    (gatedTracer.Last |> Option.map _.Stages)
+                    (ungatedTracer.Last |> Option.map _.Stages)
+                    "and the stage list is the same"
+            finally
+                dispose.Dispose()
+        }
+
+        testCaseAsync "the stage list names the drop; refs are deduped into one verdict per fact, one call per turn"
+        <| async {
+            let store, dispose = newVectorStore ()
+
+            try
+                // Three chunks cite `fact-open`; one also cites `fact-secret`.
+                do! upsertChunk store "d1" (Some "fact-open")
+                do! upsertChunk store "d2" (Some "fact-open")
+                do! upsertChunk store "d3" (Some "fact-open,fact-secret")
+                do! upsertChunk store "plain" None
+
+                let gate =
+                    PresetGate(
+                        Map.ofList [ "fact-open", FactDisclosable; "fact-secret", FactNotDisclosable "Internal" ]
+                    )
+
+                let tracer = CapturingTracer()
+                let scopeId, factScope = derivedScope ()
+
+                let! results =
+                    (derivedPipeline store gate tracer).Retrieve
+                        (derivedRequest factScope)
+                        (AccessContext.unrestricted (AuthenticatedUser "u"))
+
+                Expect.equal (chunkIds results) [ "d1"; "d2"; "plain" ] "a chunk with ANY denied ref is dropped"
+
+                Expect.equal gate.Calls 1 "one gate call for the whole candidate pool"
+
+                match gate.LastCall with
+                | Some(scope, principal, surface, ids) ->
+                    Expect.equal scope scopeId "checked in the request's resolved fact scope"
+                    Expect.equal principal "u" "for the authenticated caller"
+                    Expect.equal surface FactRetrieval "at the retrieval surface"
+                    Expect.equal (List.sort ids) [ "fact-open"; "fact-secret" ] "each distinct fact asked once"
+                | None -> failtest "the gate was never consulted"
+
+                let stages = tracer.Last |> Option.map _.Stages |> Option.defaultValue []
+                Expect.contains stages "DerivedDisclosure" "the stage list names the drop"
+                Expect.contains stages "DerivedDisclosure:1/4" "and counts it against the pool"
+
+                // Nothing dropped ⇒ no stage recorded.
+                let allOpen =
+                    PresetGate(Map.ofList [ "fact-open", FactDisclosable; "fact-secret", FactDisclosable ])
+
+                let quietTracer = CapturingTracer()
+
+                let! all =
+                    (derivedPipeline store allOpen quietTracer).Retrieve
+                        (derivedRequest factScope)
+                        (AccessContext.unrestricted (AuthenticatedUser "u"))
+
+                Expect.equal all.Length 4 "every chunk survives when every ref is disclosable"
+
+                Expect.isFalse
+                    (quietTracer.Last
+                     |> Option.map _.Stages
+                     |> Option.defaultValue []
+                     |> List.exists _.StartsWith("DerivedDisclosure"))
+                    "a stage that dropped nothing is not recorded"
+            finally
+                dispose.Dispose()
+        }
+
+        testCaseAsync "a purpose-denied check drops every derived chunk in the turn"
+        <| async {
+            let store, dispose = newVectorStore ()
+
+            try
+                let factStore, _, gate = newPurposeGateHarness ()
+                let scopeId, factScope = derivedScope ()
+                let revenue = assertFact factStore scopeId (draftWith "revenue" Surfaceable)
+                let units = assertFact factStore scopeId (draftWith "units" Surfaceable)
+
+                do! upsertChunk store "d-revenue" (Some revenue.FactId)
+                do! upsertChunk store "d-both" (Some(revenue.FactId + "," + units.FactId))
+                do! upsertChunk store "plain" None
+
+                let pipeline = derivedPipeline store gate (CapturingTracer())
+                let ctx = AccessContext.unrestricted (AuthenticatedUser "u")
+
+                do!
+                    withClaim
+                        (Some "analytics")
+                        (async {
+                            let! permitted = pipeline.Retrieve (derivedRequest factScope) ctx
+
+                            Expect.equal
+                                (chunkIds permitted)
+                                [ "d-both"; "d-revenue"; "plain" ]
+                                "an in-set purpose admits the derived chunks"
+                        })
+
+                // `billing` is not in Retrieval's allowed set.
+                do!
+                    withClaim
+                        (Some "billing")
+                        (async {
+                            let! denied = pipeline.Retrieve (derivedRequest factScope) ctx
+
+                            Expect.equal
+                                (chunkIds denied)
+                                [ "plain" ]
+                                "every derived chunk is dropped; the plain one stays"
+                        })
+            finally
+                dispose.Dispose()
+        }
+
+        testCaseAsync "under a budget, a gate that overruns or faults drops every derived chunk and says so"
+        <| async {
+            let store, dispose = newVectorStore ()
+
+            try
+                do! upsertChunk store "derived" (Some "fact-1")
+                do! upsertChunk store "plain" None
+                let _, factScope = derivedScope ()
+
+                let tight: ToolUp.RAG.RetrievalPipeline.RetrievalBudgets = {
+                    ToolUp.RAG.RetrievalPipeline.RetrievalBudgets.defaults with
+                        FactStage = TimeSpan.FromMilliseconds 50.0
+                }
+
+                for fault, mark in
+                    [
+                        false, "DerivedDisclosureDegraded:TimedOut"
+                        true, "DerivedDisclosureDegraded:Failed"
+                    ] do
+                    let tracer = CapturingTracer()
+
+                    let pipeline =
+                        new ToolUp.RAG.RetrievalPipeline.RetrievalPipeline(
+                            store,
+                            ConstantEmbedder(),
+                            tracer = tracer,
+                            disclosureGate = BrokenGate fault,
+                            budgets = tight
+                        )
+                        :> IRetrievalPipeline
+
+                    let! results =
+                        pipeline.Retrieve
+                            (derivedRequest factScope)
+                            (AccessContext.unrestricted (AuthenticatedUser "u"))
+
+                    Expect.equal (chunkIds results) [ "plain" ] "fail-closed: no derived chunk without a verdict"
+                    let stages = tracer.Last |> Option.map _.Stages |> Option.defaultValue []
+                    Expect.contains stages mark "the degradation is named on the trace"
+            finally
+                dispose.Dispose()
+        }
+    ]
+
 let tests =
     testList "Phase 525 disclosure egress" [
         predicateTests
@@ -827,4 +1150,5 @@ let tests =
         redactionTests
         narrativeCommitTests
         purposeTests
+        derivedRetrievalTests
     ]

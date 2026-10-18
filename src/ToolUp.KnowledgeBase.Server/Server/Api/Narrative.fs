@@ -23,6 +23,14 @@ open KnowledgeBase.ServerApiDeps
 /// the document cites no facts, or everything is disclosable (GP 13 /
 /// plan D17 — a deployment without classified facts is byte-identical).
 /// Each deny is audited by the gate itself (GP 6).
+///
+/// This commit-time judgement is the cheaper FIRST filter, not the last
+/// word: the chunks a committed document produces carry its refs under
+/// `_factRefs`, and the retrieval pipeline re-checks every cited fact at
+/// the `FactRetrieval` surface on every retrieval (Phase 775). A fact that
+/// becomes non-disclosable after commit therefore drops the chunks citing
+/// it without re-indexing; the retrieval-time check is the authoritative
+/// one.
 let private disclosureRefusalFor (deps: KnowledgeApiDeps) (document: NarrativeDocument) : Async<string option> = async {
     match deps.DisclosureGate with
     | None -> return None

@@ -117,7 +117,10 @@ module ChunkMetadata =
     /// section carries fact-referencing metric spans; absent for chunks
     /// with no fact references. Retrieval's fact→narrative join (Phase
     /// 522.E) reads this so a resolved fact can prefer the narrative
-    /// chunks that cite it over generic similarity matches.
+    /// chunks that cite it over generic similarity matches, and the
+    /// derived-disclosure stage (Phase 775) re-checks every cited fact
+    /// at the `FactRetrieval` surface on each retrieval, dropping the
+    /// chunk when any of them is not disclosable to the caller today.
     [<Literal>]
     let FactRefsKey = "_factRefs"
 
@@ -888,7 +891,10 @@ type RetrievalRequest = {
     /// `RetrievalRequest.create` defaults it to `ResolvedScope.anonymous`:
     /// a retrieval built without a request (ingestion, evaluation, tests)
     /// reads the anonymous shard, never a scope inferred from a user or
-    /// team id. Only a clause-bearing request reads it.
+    /// team id. A clause-bearing request's fact stage reads it, and so
+    /// does the derived-disclosure check (Phase 775) whenever a candidate
+    /// chunk cites facts, so an anonymous-scope request sees no derived
+    /// chunk (its cited facts are unresolvable there, hence denied).
     FactScope: ResolvedScope
 }
 
