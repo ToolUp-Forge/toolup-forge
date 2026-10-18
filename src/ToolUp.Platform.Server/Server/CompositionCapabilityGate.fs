@@ -631,3 +631,241 @@ module SeamAwareServiceProvider =
         (tools: (AIToolDefinition * (HttpContext -> string -> Async<string>)) list)
         : (AIToolDefinition * (HttpContext -> string -> Async<string>)) list =
         tools |> List.map (confineTool owner)
+// ─── Phase 773 — declared-route effect containment ────────────────────
+//
+// A module's `Handlers` are Giraffe closures, so the platform cannot
+// enumerate what a route does, and Phase 300's `guardInvoke` had no call
+// site a route reached. This gives a route that DECLARES its effects a
+// runtime that holds it to the declaration, on two axes and no others:
+//
+//   * a host-capability invocation through a registry built by
+//     `HostCapabilityRegistry.create` goes through `guardInvoke` with the
+//     route's envelope — a `Pure` route is refused every invocation, and
+//     the refusal is a Phase 300 `CapabilityDenial` handed to the
+//     observer (the Phase 657 audit row);
+//   * an outbound call through a platform client is held to the route's
+//     egress grant by the Phase 772 handler, on top of whatever the
+//     installed egress policy says. A `Pure` envelope permits no
+//     outbound call at all.
+//
+// **The claim is narrow and stated, never "handlers are sandboxed".** A
+// route that opens its own socket, constructs its own `HttpClient`, or
+// invokes a capability through a registry of its own making is outside
+// both checks, exactly as such code is outside 300 and 772 everywhere
+// else. What a declared route cannot do is reach a host capability or
+// the network THROUGH THE PLATFORM beyond what it declared.
+//
+// **Undeclared routes are untouched (GP 11).** A module that declares no
+// route effect gets its handler list back as the same list, unwrapped; a
+// declared module's handlers look the request's `(method, path)` up once
+// in a table built at composition and, for an undeclared route, call the
+// handler on the untouched request.
+
+/// What one route declares about its effects (Phase 773). Both halves are
+/// optional; a route declaring neither is not a declared route.
+type RouteEffectDeclaration = {
+    /// The capability envelope host-capability invocations made while the
+    /// route runs are held to. `Effect = Pure` also permits no outbound
+    /// call.
+    EffectEnvelope: CompanionCapability option
+    /// The origins outbound calls made while the route runs may reach,
+    /// narrowing the installed egress policy.
+    EgressGrant: EgressGrant option
+}
+
+/// The deny observer a composition registers for route-effect refusals
+/// (Phase 773) — what a verified composition registers to put them on the
+/// audit path under its own profile. Without one the default observer
+/// `ServerApp.addModule` supplies is used.
+[<Sealed>]
+type RouteEffectObserver(onDeny: CapabilityDenial -> unit) =
+    /// Observe one refusal.
+    member _.OnDeny(denial: CapabilityDenial) : unit = onDeny denial
+
+/// The route context in force while a declared route's handler runs.
+type RouteEffectScope = {
+    /// The module that owns the route.
+    Owner: ComponentId
+    /// `METHOD /path`, normalised.
+    Route: string
+    /// What the route declared.
+    Declaration: RouteEffectDeclaration
+    /// Where a refusal is reported.
+    OnDeny: CapabilityDenial -> unit
+}
+
+[<RequireQualifiedAccess>]
+module RouteEffectDeclaration =
+
+    /// Declare only an effect envelope.
+    let envelope (capability: CompanionCapability) : RouteEffectDeclaration = {
+        EffectEnvelope = Some capability
+        EgressGrant = None
+    }
+
+    /// Declare only an egress grant.
+    let egress (grant: EgressGrant) : RouteEffectDeclaration = {
+        EffectEnvelope = None
+        EgressGrant = Some grant
+    }
+
+    /// Whether either half is declared.
+    let isDeclared (declaration: RouteEffectDeclaration) : bool =
+        declaration.EffectEnvelope.IsSome || declaration.EgressGrant.IsSome
+
+    /// The egress grant the route is actually held to. A `Pure` envelope
+    /// permits no outbound call, with or without a grant beside it — the
+    /// narrower declaration wins.
+    let effectiveEgress (declaration: RouteEffectDeclaration) : EgressGrant option =
+        match declaration.EffectEnvelope with
+        | Some envelope when envelope.Effect = Pure -> Some(DeclaredDestinations Set.empty)
+        | _ -> declaration.EgressGrant
+
+[<RequireQualifiedAccess>]
+module RouteEffectContext =
+
+    let private active = System.Threading.AsyncLocal<RouteEffectScope option>()
+
+    /// The declared route the current async chain is running, if any.
+    let current () : RouteEffectScope option =
+        match active.Value with
+        | Some scope -> Some scope
+        | _ -> None
+
+    /// Run `body` with `scope` in force — the route context, the owner
+    /// claimed for egress attribution, and the route's effective egress
+    /// grant — restoring all three on every exit path.
+    let runWithin
+        (scope: RouteEffectScope)
+        (body: unit -> System.Threading.Tasks.Task<'T>)
+        : System.Threading.Tasks.Task<'T> =
+        task {
+            let priorScope = active.Value
+            let priorComponent = EgressComponentContext.tryCurrent ()
+            active.Value <- Some scope
+            EgressComponentContext.claim scope.Owner
+
+            let priorGrant =
+                RouteEffectDeclaration.effectiveEgress scope.Declaration
+                |> Option.map (EgressRouteContext.claim scope.Route)
+
+            try
+                return! body ()
+            finally
+                active.Value <- priorScope
+
+                match priorComponent with
+                | Some componentId -> EgressComponentContext.claim componentId
+                | None -> EgressComponentContext.clear ()
+
+                priorGrant |> Option.iter EgressRouteContext.restore
+        }
+
+[<RequireQualifiedAccess>]
+module RouteEffectContainment =
+
+    /// What a host-capability invocation requires of an envelope. The
+    /// registry carries no per-capability effect declaration, so every
+    /// invocation is treated as effecting: a `Pure` route may invoke none.
+    let hostCapabilityRequirement: CompanionCapability =
+        CompanionCapability.identity |> CompanionCapability.withEffect Effecting
+
+    /// The normalised `(METHOD, /path)` key — the normalisation the
+    /// surface-requirement registry applies to `RouteSurfaceRequirements`.
+    let routeKey (httpMethod: string) (path: string) : string * string =
+        httpMethod.ToUpperInvariant(), path.ToLowerInvariant()
+
+    /// The Phase 300 gate a route's envelope is enforced through: the
+    /// stock gate over a one-entry signature, its refusal re-worded to
+    /// name the route and handed to the scope's observer.
+    let gateFor (scope: RouteEffectScope) (envelope: CompanionCapability) : ICompositionCapabilityGate =
+        let inner =
+            CompositionCapabilityGate.create ignore (Map.ofList [ scope.Owner, envelope ])
+
+        { new ICompositionCapabilityGate with
+            member _.Check componentId required =
+                match inner.Check componentId required with
+                | CapabilityGateDecision.Granted -> CapabilityGateDecision.Granted
+                | CapabilityGateDecision.Denied denial ->
+                    let routed = {
+                        denial with
+                            Reason = sprintf "route %s: %s" scope.Route denial.Reason
+                    }
+
+                    scope.OnDeny routed
+                    CapabilityGateDecision.Denied routed
+        }
+
+    /// The boundary a host-capability invocation is held to while a
+    /// declared route with an envelope runs: `guardInvoke` over that
+    /// envelope, so the registry's authorizer is reached only when the
+    /// envelope admits the call.
+    let private currentBoundary () : HostCapabilityBoundary option =
+        match RouteEffectContext.current () with
+        | Some({
+                   Declaration = { EffectEnvelope = Some envelope }
+               } as scope) ->
+            Some(fun unbounded capability args ctx ->
+                CompositionCapabilityGate.guardInvoke
+                    (gateFor scope envelope)
+                    scope.Owner
+                    hostCapabilityRequirement
+                    unbounded
+                    capability
+                    args
+                    ctx)
+        | _ -> None
+
+    let private installed =
+        lazy (HostCapabilityRegistry.installBoundary currentBoundary)
+
+    /// Hold every route `owner` declared to its declaration. Built once per
+    /// module at composition: a module declaring nothing gets its handler
+    /// list back unchanged; otherwise each handler looks the request's
+    /// normalised `(method, path)` up in a table built here and runs a
+    /// declared route inside `RouteEffectContext.runWithin`. A later
+    /// declaration of the same route replaces an earlier one. A refusal
+    /// is handed to the `RouteEffectObserver` the request's services hold
+    /// (`ServerApp.addModule` registers the audited default), resolved
+    /// only when a refusal happens; with none registered it is still
+    /// returned to the caller.
+    let containHandlers
+        (owner: ComponentId)
+        (declarations: ((string * string) * RouteEffectDeclaration) list)
+        (handlers: Giraffe.Core.HttpHandler list)
+        : Giraffe.Core.HttpHandler list =
+        let table =
+            declarations
+            |> List.filter (snd >> RouteEffectDeclaration.isDeclared)
+            |> List.map (fun ((httpMethod, path), declaration) -> routeKey httpMethod path, declaration)
+            |> Map.ofList
+
+        if Map.isEmpty table then
+            handlers
+        else
+            installed.Force()
+
+            let contain (handler: Giraffe.Core.HttpHandler) : Giraffe.Core.HttpHandler =
+                fun next ctx ->
+                    let key = routeKey ctx.Request.Method (string ctx.Request.Path)
+
+                    match Map.tryFind key table with
+                    | None -> handler next ctx
+                    | Some declaration ->
+                        let services = ctx.RequestServices
+
+                        let onDeny denial =
+                            match services.GetService(typeof<RouteEffectObserver>) with
+                            | :? RouteEffectObserver as observer -> observer.OnDeny denial
+                            | _ -> ()
+
+                        let scope = {
+                            Owner = owner
+                            Route = fst key + " " + snd key
+                            Declaration = declaration
+                            OnDeny = onDeny
+                        }
+
+                        RouteEffectContext.runWithin scope (fun () -> handler next ctx)
+
+            handlers |> List.map contain

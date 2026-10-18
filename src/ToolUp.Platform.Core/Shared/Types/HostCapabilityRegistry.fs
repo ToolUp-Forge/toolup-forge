@@ -104,6 +104,13 @@ type IHostCapabilityRegistry =
     abstract Invoke:
         capability: CapabilityId -> args: HostCapabilityArgs -> ctx: AccessContext -> Async<HostCapabilityOutcome>
 
+/// Phase 773 — a boundary an invocation is held to while some ambient
+/// context is in force (a contained route, on the server). Receives the
+/// UNBOUNDED registry so it can refuse before the authorizer is reached,
+/// or delegate to it once it has decided to admit the call.
+type HostCapabilityBoundary =
+    IHostCapabilityRegistry -> CapabilityId -> HostCapabilityArgs -> AccessContext -> Async<HostCapabilityOutcome>
+
 [<RequireQualifiedAccess>]
 module HostCapabilityRegistry =
 
@@ -135,6 +142,20 @@ module HostCapabilityRegistry =
             Scope = args |> Map.tryFind TargetScopeArg |> Option.orElseWith (fun () -> ctx.TeamId)
         }
 
+    // Phase 773 — the installed boundary resolver. Module-level mutable
+    // state, on the `EgressEnforcement.install` precedent: the registry is
+    // built where no request context exists, so the context that decides
+    // whether a boundary is in force has to be consulted per call rather
+    // than captured. Nothing installed resolves to no boundary (GP 11).
+    let mutable private boundaryResolver: unit -> HostCapabilityBoundary option =
+        fun () -> None
+
+    /// Install the resolver every registry built by `create` consults on
+    /// each `Invoke`. `None` from the resolver is the passthrough; `Some`
+    /// hands the call, with the unbounded registry, to that boundary. A
+    /// later install replaces an earlier one.
+    let installBoundary (resolve: unit -> HostCapabilityBoundary option) : unit = boundaryResolver <- resolve
+
     /// Build the shipped authorizer-gated registry over an `IActionAuthorizer`.
     /// Every `Invoke` maps to an `ActionDescriptor` and routes through
     /// `authorizer` (default-deny); a handler runs ONLY on `Allow` AND when a
@@ -144,32 +165,46 @@ module HostCapabilityRegistry =
     /// Registration is a compose-time concern (single-threaded startup), so
     /// the backing map is a plain `Dictionary` with no runtime lock — the
     /// same shape the SDK's other name-keyed registration surfaces use.
+    ///
+    /// Phase 773: an invoke made while an installed boundary is in force
+    /// goes through that boundary first (see `installBoundary`); with none
+    /// in force the call is exactly the unbounded one.
     let create (authorizer: IActionAuthorizer) : IHostCapabilityRegistry =
         let handlers = Dictionary<string, HostCapabilityHandler>()
 
-        { new IHostCapabilityRegistry with
-            member _.Register capability handler =
-                handlers[CapabilityId.value capability] <- handler
+        let unbounded =
+            { new IHostCapabilityRegistry with
+                member _.Register capability handler =
+                    handlers[CapabilityId.value capability] <- handler
 
-            member _.Invoke capability args ctx = async {
-                let descriptor = toActionDescriptor capability args ctx
-                let! decision = authorizer.Authorize descriptor ctx
+                member _.Invoke capability args ctx = async {
+                    let descriptor = toActionDescriptor capability args ctx
+                    let! decision = authorizer.Authorize descriptor ctx
 
-                match decision with
-                | AuthorizationDecision.Deny reason -> return HostCapabilityOutcome.Denied reason
-                | AuthorizationDecision.Allow ->
-                    match handlers.TryGetValue(CapabilityId.value capability) with
-                    | true, handler ->
-                        let! result = handler args ctx
-                        return HostCapabilityOutcome.Completed result
-                    | false, _ ->
-                        return
-                            HostCapabilityOutcome.Denied(
-                                sprintf
-                                    "no capability registered for id '%s' (default-deny)"
-                                    (CapabilityId.value capability)
-                            )
+                    match decision with
+                    | AuthorizationDecision.Deny reason -> return HostCapabilityOutcome.Denied reason
+                    | AuthorizationDecision.Allow ->
+                        match handlers.TryGetValue(CapabilityId.value capability) with
+                        | true, handler ->
+                            let! result = handler args ctx
+                            return HostCapabilityOutcome.Completed result
+                        | false, _ ->
+                            return
+                                HostCapabilityOutcome.Denied(
+                                    sprintf
+                                        "no capability registered for id '%s' (default-deny)"
+                                        (CapabilityId.value capability)
+                                )
+                }
             }
+
+        { new IHostCapabilityRegistry with
+            member _.Register capability handler = unbounded.Register capability handler
+
+            member _.Invoke capability args ctx =
+                match boundaryResolver () with
+                | None -> unbounded.Invoke capability args ctx
+                | Some boundary -> boundary unbounded capability args ctx
         }
 
 /// Forge-public built-in capabilities. Each is OPT-IN — a host registers it

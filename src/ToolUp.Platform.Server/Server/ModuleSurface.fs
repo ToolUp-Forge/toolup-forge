@@ -270,6 +270,11 @@ module ModuleSurface =
             c (nameof m.DefaultSurfaceRequirement) ProvidesFacet
             c (nameof m.RoutePrefixes) ProvidesFacet
             c (nameof m.RouteSurfaceRequirements) ProvidesFacet
+            // Phase 773 — the routes the module holds to a declared effect
+            // envelope / egress grant. `Provides` on the
+            // `RouteSurfaceRequirements` precedent directly above: a
+            // module-declared posture per route, implying no substrate.
+            c (nameof m.RouteEffects) ProvidesFacet
             c (nameof m.JobHandlers) ProvidesFacet
             c (nameof m.BindingStamp) ProvidesFacet
             c (nameof m.ComponentId) ProvidesFacet
@@ -394,6 +399,30 @@ module ModuleSurface =
                     (admitLabel requirement)
                     None)
 
+        // Phase 773 — one `route-effect` entry per declared route, labelled
+        // with what it is held to: the envelope and the EFFECTIVE egress
+        // grant (a `Pure` envelope reads as `declared{}`).
+        let routeEffects =
+            m.RouteEffects
+            |> List.filter (snd >> RouteEffectDeclaration.isDeclared)
+            |> List.map (fun ((httpMethod, path), declaration) ->
+                let envelope =
+                    declaration.EffectEnvelope
+                    |> Option.map VerifiedCompositionProfile.renderCapability
+                    |> Option.defaultValue "undeclared"
+
+                let egress =
+                    RouteEffectDeclaration.effectiveEgress declaration
+                    |> Option.map EgressGrant.render
+                    |> Option.defaultValue "undeclared"
+
+                entry
+                    (nameof m.RouteEffects)
+                    "route-effect"
+                    (httpMethod.ToUpperInvariant() + " " + path)
+                    ("envelope=" + envelope + "; egress=" + egress)
+                    None)
+
         let jobs =
             m.JobHandlers
             |> List.map (fun d -> entry (nameof m.JobHandlers) "job" d.HandlerName (string d.Trigger) None)
@@ -476,6 +505,7 @@ module ModuleSurface =
             surfaceDefault
             routePrefixes
             routeOverrides
+            routeEffects
             jobs
             bindingStamp
             grantPolicy
@@ -547,6 +577,12 @@ module ModuleSurface =
             Reason =
                 "a Giraffe HttpHandler is a closure — its routes are not enumerable; "
                 + "the declared route surface is RoutePrefixes / RouteSurfaceRequirements"
+                + (match m.RouteEffects |> List.filter (snd >> RouteEffectDeclaration.isDeclared) with
+                   | [] -> ""
+                   | declared ->
+                       sprintf
+                           "; %d route(s) declare their effects (route-effect entries) and are contained on the effect and egress axes, every other route is effect-labelled, not contained"
+                           declared.Length)
         }
         {
             Field = "(unregistered)"
