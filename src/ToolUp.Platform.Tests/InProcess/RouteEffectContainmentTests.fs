@@ -509,6 +509,42 @@ let private surface =
             Expect.isFalse (handlerNote.Reason.Contains "declare their effects") "the note is unchanged"
     ]
 
+// ── the registry contract, with and without a route boundary ──────────
+
+/// Every invoke made inside a declared route whose envelope admits it, so the
+/// registry contract is held through the route boundary as well as without
+/// it. Composing a declared route is what installs the boundary.
+let private insideEffectingRoute (inner: IHostCapabilityRegistry) : IHostCapabilityRegistry =
+    let declaration = RouteEffectDeclaration.envelope effectingEnvelope
+
+    RouteEffectContainment.containHandlers reporter [ ("GET", Route), declaration ] []
+    |> ignore
+
+    let scope = {
+        Owner = reporter
+        Route = "GET " + Route
+        Declaration = declaration
+        OnDeny = ignore
+    }
+
+    { new IHostCapabilityRegistry with
+        member _.Register capability handler = inner.Register capability handler
+
+        member _.Invoke capability args ctx =
+            RouteEffectContext.runWithin scope (fun () -> inner.Invoke capability args ctx |> Async.StartAsTask)
+            |> Async.AwaitTask
+    }
+
+let private contract =
+    testList "registry contract" [
+        ToolUp.Platform.Tests.Contracts.IHostCapabilityRegistryContract.tests
+            "HostCapabilityRegistry.create"
+            HostCapabilityRegistry.create
+        ToolUp.Platform.Tests.Contracts.IHostCapabilityRegistryContract.tests
+            "HostCapabilityRegistry.create inside an effecting declared route"
+            (HostCapabilityRegistry.create >> insideEffectingRoute)
+    ]
+
 [<Tests>]
 let tests =
-    testList "Phase 773 — declared-route effect containment" [ effectAxis; egressAxis; surface ]
+    testList "Phase 773 — declared-route effect containment" [ effectAxis; egressAxis; surface; contract ]
