@@ -1,0 +1,14 @@
+# SYNTHETIC data: an invented daily trading extract for a fictional retailer. No real business is described.
+Date,Site,Channel,Orders,Shoppers,Revenue,Units
+2026-01-12,uk-web,direct,451,499,17889.38,1356
+2026-01-12,uk-web,search,668,702,26275.10,2041
+2026-01-12,uk-web,social,639,703,30655.29,1283
+2026-01-12,eu-web,direct,191,262,9122.91,417
+2026-01-12,eu-web,search,699,740,36649.24,1438
+2026-01-12,eu-web,social,183,340,11063.06,552
+2026-01-13,uk-web,direct,167,319,7955.91,352
+2026-01-13,uk-web,search,673,713,38206.82,2054
+2026-01-13,uk-web,social,305,341,12273.48,633
+2026-01-13,eu-web,direct,849,875,36283.76,1737
+2026-01-13,eu-web,search,816,962,39746.42,2468
+2026-01-13,eu-web,social,584,686,32862.11,1767

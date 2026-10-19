@@ -1,0 +1,35 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- One property drives every ToolUp.* pin; bump it in one place. -->
+    <ToolUpSdkVersion>TOOLUP_SDK_VERSION</ToolUpSdkVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The platform -->
+    <PackageVersion Include="ToolUp.Platform.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Platform.Client" Version="$(ToolUpSdkVersion)" />
+    <!-- AI, retrieval and the knowledge base -->
+    <PackageVersion Include="ToolUp.AI.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AI.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.RAG.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.KnowledgeBase.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.KnowledgeBase.Server" Version="$(ToolUpSdkVersion)" />
+    <!-- The fact tier and the published pages -->
+    <PackageVersion Include="ToolUp.Facts.Core" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.Facts.Server" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.PublicRendering" Version="$(ToolUpSdkVersion)" />
+    <!-- Companions the composition selects -->
+    <PackageVersion Include="ToolUp.AIProviders.Claude" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.EmbeddingProviders.Local" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.VectorStores.Hnsw" Version="$(ToolUpSdkVersion)" />
+    <PackageVersion Include="ToolUp.AuthProviders.Oidc" Version="$(ToolUpSdkVersion)" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageVersion Include="FSharp.Core" Version="10.1.300" />
+    <PackageVersion Include="Giraffe" Version="8.2" />
+    <PackageVersion Include="Fable.Core" Version="5.0" />
+    <PackageVersion Include="Feliz" Version="3.3.3" />
+    <PackageVersion Include="Expecto" Version="10.2.3" />
+  </ItemGroup>
+</Project>

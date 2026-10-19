@@ -1,0 +1,22 @@
+name: CI
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      # The `local` feed in nuget.config is a machine-local folder; an empty
+      # directory lets restore enumerate it on the runner.
+      - run: mkdir -p LOCAL_FEED_PATH
+      - run: dotnet tool restore
+      - run: dotnet fantomas --check src/ tests/
+      - run: dotnet build MyDataPlatform.slnx -c Release
+      - run: dotnet run --project tests/MyDataPlatform.Tests/MyDataPlatform.Tests.fsproj -c Release --no-build

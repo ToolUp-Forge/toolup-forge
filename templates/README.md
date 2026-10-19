@@ -9,6 +9,7 @@ Templates for scaffolding ToolUp.Platform consumers. Phase 11.B Step 3.
 | `platformsdk-module` | Four-file analysis module (`SharedTypes` / `Server` / `ClientModel` / `ClientView`) plus `.fsproj` + `.Client.props`. Compiles against `ToolUp.Platform.Core` only — proves the minimum-viable-module dependency floor. **In-tree shape**: the module lives inside the deployment. |
 | `platformsdk-module-packaged` | The same module seam, as **its own repository shipped as a NuGet package**: packable project + `fable/` shadow project carrying the client tier as source, `Pack` into a configurable folder feed, `run.ps1`, CPM, tool manifest, README, licence placeholder — and **both conformance layers pre-wired**, so the discipline is the default rather than a retrofit. |
 | `platformsdk-datamanager` | External data manager module: same shape as `platformsdk-module` but fills the data-manager shell slot (`Slots.DataManager = SlotFill.External …`) and ships an `IDataSource` skeleton. It publishes what it ingests via `ClientModule.withProcessedData` — see [the data-manager slot contract](../docs/platform/modules.md#the-data-manager-slot-contract--a-checklist-for-a-replacement) before rewriting `ClientModel.fs` / `ClientView.fs`. |
+| `platformsdk-dataplatform` | A **grounded data platform as its own repository**: a RAG application with the fact tier, an upload-fed data module whose outputs are declared fact tables, a model-written daily report whose every number is a Fact, and report pages gated to a reader role on the same pipeline. Synthetic data, a hash-verified reference calendar and an end-to-end test ship with it. Walkthrough: [`docs/getting-started/dataplatform.md`](../docs/getting-started/dataplatform.md). |
 
 ### Not a `dotnet new` template
 
@@ -26,6 +27,7 @@ dotnet new install .\templates\platformsdk-application
 dotnet new install .\templates\platformsdk-module
 dotnet new install .\templates\platformsdk-module-packaged
 dotnet new install .\templates\platformsdk-datamanager
+dotnet new install .\templates\platformsdk-dataplatform
 ```
 
 ## Port-clash enforcement
@@ -72,6 +74,15 @@ dotnet new platformsdk-module-packaged -n Contoso.Orders `
     --datatype OrderExport --feed ../local-nuget-feed --sdk-version 0.22.0
 cd Contoso.Orders
 pwsh ./run.ps1 -Pack
+
+# Scaffold a grounded data platform as its own repository, then run its
+# end-to-end test over the synthetic data (PortGuard first, then dotnet new)
+dotnet run --project tools/ToolUp.PortGuard -- `
+    --server-port 5030 --client-port 8130 --workspace-root ..
+dotnet new platformsdk-dataplatform -n TradingInsights `
+    --port-server 5030 --port-client-vite 8130
+cd TradingInsights
+pwsh ./run.ps1
 ```
 
 ## Programmatic invocation
@@ -86,12 +97,17 @@ The acceptance bar requires byte-identical output from `dotnet new` and direct p
   ones (`platformsdk-application`, `platformsdk-datamanager`, `platformsdk-module`) are project
   fragments that build against the repo's own `Directory.*.props` + `nuget.config`, so
   `VerifyTemplates` compiles them in place. The *standalone* ones (`safer`,
-  `platformsdk-solution`, `platformsdk-module-packaged`) carry their own MSBuild roots and a
+  `platformsdk-solution`, `platformsdk-module-packaged`, `platformsdk-dataplatform`) carry their own MSBuild roots and a
   literal `TOOLUP_SDK_VERSION` placeholder, and are not buildable in-repo without rewriting what
   makes them templates. `platformsdk-module-packaged` is the first of that class with a gate:
   `VerifyPackagedModuleTemplate` instantiates it into a scratch directory outside the repo and runs
   the scaffold's own pipeline end to end. See the root `CLAUDE.md` for what that gate checks
   beyond "it compiles".
+  `platformsdk-dataplatform` is the second: `VerifyDataPlatformTemplate` packs the closure it
+  references at the gate version, instantiates it the same way, builds the solution and runs the
+  scaffold's end-to-end test. It also scans the template's files and the scaffolded tree for the
+  private vocabulary the OSS guard bans, read from the same private token sources the guard tests
+  use.
 - ToolUp.* packages are consumed via the `ToolUpSdkVersion` property in `Directory.Packages.props`; bump the property to bump every transitive ToolUp package.
 - The `platformsdk-solution` template includes a `Directory.Build.props`, `Directory.Packages.props`, `nuget.config`, `global.json`, and `.gitignore` so the scaffold is a complete buildable repo root.
 - Modules ship the same 4-file convention demonstrated by `samples/HelloWorld/HelloWorld.Module/`.

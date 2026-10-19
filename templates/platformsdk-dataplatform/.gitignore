@@ -1,0 +1,11 @@
+bin/
+obj/
+.vs/
+.idea/
+output/
+node_modules/
+data/blobs/
+data/secrets/
+*.user
+*.log
+data/dev-master-key

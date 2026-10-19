@@ -1092,6 +1092,17 @@ jobs:
       - name: Scaffold, build and pack the packaged-module template (VerifyPackagedModuleTemplate)
         run: dotnet run --project Build.fsproj -- VerifyPackagedModuleTemplate
 
+      # Phase 1036 — the data-platform template is the second whole-repository
+      # template, gated by the same instantiate-then-build harness: pack the
+      # closure it references at the gate version, `dotnet new` it outside the
+      # repo under a private packages folder, build its solution and run its
+      # end-to-end test (the synthetic delivery becomes fact tables and a
+      # grounded report; the gated report page refuses an anonymous reader).
+      # It also fails on any private vocabulary in the template's files or the
+      # scaffolded tree, read from the OSS guard's token sources.
+      - name: Scaffold, build and test the data-platform template (VerifyDataPlatformTemplate)
+        run: dotnet run --project Build.fsproj -- VerifyDataPlatformTemplate
+
   # ─── Phase 761: the browser gate ───────────────────────────────────
   #
   # The repo's first REAL-BROWSER tier, and the reason it exists is that

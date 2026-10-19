@@ -54,9 +54,10 @@ For a runnable end-to-end sample — module + server + client — see [`samples/
 
 ### Starter templates
 
-Two `dotnet new` paths sit alongside the bare-`PackageReference` shape above; pick whichever matches the deployment shape you're aiming at:
+Three `dotnet new` paths sit alongside the bare-`PackageReference` shape above; pick whichever matches the deployment shape you're aiming at:
 
 - **`platformsdk-solution`** — full F# full-stack scaffold with `{AppName}-Server` + `{AppName}-Client`, one starter module, `Build.fs`, `compose.yml`, and CI workflow. Production-multi-tenant shape; the right starter for the typical commercial deployment. See [`templates/platformsdk-solution/`](templates/platformsdk-solution/) (and `platformsdk-application` / `platformsdk-module` / `platformsdk-datamanager` / `platformsdk-docker` for adding to an existing solution).
+- **`platformsdk-dataplatform`** — a grounded data platform as a whole repository: a RAG application with the fact tier, an upload-fed data module whose outputs are fact tables, a model-written daily report whose every number is a Fact, and audience-gated report pages on the same pipeline, with synthetic data and an end-to-end test. See [`docs/getting-started/dataplatform.md`](docs/getting-started/dataplatform.md).
 - **`toolup-safer`** — minimal SAFE-Stack-shaped starter; one chat module, anonymous mode, no auth, no persistence, in-memory only. Useful for SAFE-Stack-familiar developers who want to learn the in-tree ToolUp.Elmish + ToolUp.Remoting primitives via a Tiny Chat demo. **An option**, not the recommended path — for production multi-tenant + auth + persistence, use `platformsdk-solution`. See [`docs/getting-started/safer.md`](docs/getting-started/safer.md).
 
 ## Documentation

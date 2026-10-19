@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "ToolUp Analytics Ltd (UK)",
+  "classifications": [ "Web", "F#", "Giraffe", "Fable", "AI", "RAG", "ToolUp" ],
+  "identity": "ToolUp.Templates.DataPlatform",
+  "groupIdentity": "ToolUp.Templates.DataPlatform",
+  "name": "ToolUp Platform SDK Data Platform",
+  "shortName": "platformsdk-dataplatform",
+  "description": "A grounded data platform as a whole repository: a RAG application with the fact tier, an upload-fed data module whose outputs are fact tables, a model-written daily report whose every number is a Fact, and audience-gated report pages on the same pipeline. Ships synthetic data and an end-to-end test.",
+  "tags": {
+    "language": "F#",
+    "type": "project"
+  },
+  "sourceName": "MyDataPlatform",
+  "preferNameDirectory": true,
+  "sources": [
+    {
+      "modifiers": [
+        {
+          "exclude": [ "**/bin/**", "**/obj/**", "**/.vs/**", "**/output/**", "**/node_modules/**", "data/blobs/**", "data/secrets/**" ]
+        }
+      ]
+    }
+  ],
+  "symbols": {
+    "port-server": {
+      "type": "parameter",
+      "datatype": "integer",
+      "defaultValue": "5000",
+      "description": "Server port. Must not clash with any port already bound on the dev machine; tools/ToolUp.PortGuard (run via templates/New-ToolUpApp.ps1) can scan an adjacent app tree and reject clashing values.",
+      "replaces": "5000"
+    },
+    "port-client-vite": {
+      "type": "parameter",
+      "datatype": "integer",
+      "defaultValue": "8080",
+      "description": "Vite dev-server port. Same clash-rejection contract as --port-server.",
+      "replaces": "8080"
+    },
+    "sdk-version": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "0.28.0",
+      "description": "ToolUp.* SDK version. Drives every ToolUp.* pin through $(ToolUpSdkVersion) in Directory.Packages.props.",
+      "replaces": "TOOLUP_SDK_VERSION"
+    },
+    "feed": {
+      "type": "parameter",
+      "datatype": "text",
+      "defaultValue": "../local-nuget-feed",
+      "description": "Folder feed added as an extra restore source in nuget.config, for unreleased ToolUp.* packs. The only machine-shaped path in the generated repository; delete the `local` source if you consume released versions only.",
+      "replaces": "LOCAL_FEED_PATH"
+    }
+  },
+  "primaryOutputs": [
+    { "path": "MyDataPlatform.slnx" },
+    { "path": "src/MyDataPlatform-Server/MyDataPlatform-Server.fsproj" },
+    { "path": "tests/MyDataPlatform.Tests/MyDataPlatform.Tests.fsproj" }
+  ],
+  "postActions": [
+    {
+      "description": "Next steps.",
+      "manualInstructions": [
+        { "text": "Run `pwsh ./run.ps1`: format check, build, and the end-to-end test over the synthetic data." },
+        { "text": "Run `pwsh ./run.ps1 -Run` to start the server, then upload data/sample/daily-trade.synthetic.csv; README.md walks through it." }
+      ],
+      "actionId": "AC1156F7-BB77-4DB8-B28F-24EEBCCA1E5C",
+      "continueOnError": true
+    }
+  ]
+}

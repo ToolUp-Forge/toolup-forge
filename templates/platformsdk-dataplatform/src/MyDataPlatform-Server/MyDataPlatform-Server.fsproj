@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="ReferenceData.fs" />
+    <Compile Include="LocalRun.fs" />
+    <Compile Include="Companions.fs" />
+    <Compile Include="Narratives.fs" />
+    <Compile Include="PublishedPages.fs" />
+    <Compile Include="Composition.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Reference data and the published-page content root travel with the
+         binary, so the server (and the end-to-end test) read them from
+         AppContext.BaseDirectory. -->
+    <Content Include="reference\**" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="content\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="ToolUp.Platform.Core" />
+    <PackageReference Include="ToolUp.Platform.Server" />
+    <PackageReference Include="ToolUp.AI.Core" />
+    <PackageReference Include="ToolUp.AI.Server" />
+    <PackageReference Include="ToolUp.RAG.Server" />
+    <PackageReference Include="ToolUp.Facts.Server" />
+    <PackageReference Include="ToolUp.KnowledgeBase.Core" />
+    <PackageReference Include="ToolUp.KnowledgeBase.Server" />
+    <PackageReference Include="ToolUp.PublicRendering" />
+    <PackageReference Include="ToolUp.AIProviders.Claude" />
+    <PackageReference Include="ToolUp.EmbeddingProviders.Local" />
+    <PackageReference Include="ToolUp.VectorStores.Hnsw" />
+    <PackageReference Include="ToolUp.AuthProviders.Oidc" />
+    <ProjectReference Include="..\Modules\DailyTrade\DailyTrade.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Giraffe" />
+    <PackageReference Include="FSharp.Core" />
+  </ItemGroup>
+</Project>

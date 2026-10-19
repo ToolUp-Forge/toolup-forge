@@ -4806,6 +4806,282 @@ let main args =
 
         Trace.tracefn "▶ VerifyPackagedModuleTemplate: scaffold -> build -> conformance -> pack, green")
 
+    // Phase 1036 — instantiate-then-build gate for the
+    // `platformsdk-dataplatform` template.
+    //
+    // Usage: `dotnet run --project Build.fsproj -- VerifyDataPlatformTemplate`
+    //
+    // The template is a whole repository (its own CPM props, nuget.config,
+    // global.json and a literal TOOLUP_SDK_VERSION placeholder), so it is
+    // in the class VerifyPackagedModuleTemplate's note describes and this
+    // is the same harness: pack the SDK closure the scaffold references at
+    // the throwaway gate version, `dotnet new` it OUTSIDE the repo under a
+    // private packages folder (Phase 903), build the scaffold's solution
+    // and run its own end-to-end test — which uploads the synthetic
+    // delivery, writes both fact tables, generates the grounded report and
+    // probes the gated page anonymously and as a reader.
+    //
+    // It also holds the publication boundary: the template's own files and
+    // the scaffolded tree are scanned for the private vocabulary forge's
+    // OSS guard bans, so a regeneration of the template from an upstream
+    // composition cannot leak a name into a public scaffold.
+    let dataPlatformTemplateDir = "templates/platformsdk-dataplatform"
+
+    // The VerifyTemplates closure plus every ToolUp.* package the scaffold's
+    // server, module and test projects reference, and their own ToolUp.*
+    // dependencies. Incomplete here fails the stray-pin check below by name.
+    let dataPlatformTemplateGatePackages =
+        templateGatePackages
+        @ [
+            TemplateGate.package "ToolUp.AI.Core" "src/ToolUp.AI.Core/ToolUp.AI.Core.fsproj"
+            TemplateGate.package "ToolUp.AI.Server" "src/ToolUp.AI.Server/ToolUp.AI.Server.fsproj"
+            TemplateGate.package "ToolUp.RAG.Core" "src/ToolUp.RAG.Core/ToolUp.RAG.Core.fsproj"
+            TemplateGate.package "ToolUp.RAG.Server" "src/ToolUp.RAG.Server/ToolUp.RAG.Server.fsproj"
+            TemplateGate.package "ToolUp.Facts.Core" "src/ToolUp.Facts.Core/ToolUp.Facts.Core.fsproj"
+            TemplateGate.package "ToolUp.Facts.Shared" "src/ToolUp.Facts.Shared/ToolUp.Facts.Shared.fsproj"
+            TemplateGate.package "ToolUp.Facts.Server" "src/ToolUp.Facts.Server/ToolUp.Facts.Server.fsproj"
+            TemplateGate.package "ToolUp.ArtefactSigning" "src/ToolUp.ArtefactSigning/ArtefactSigning.fsproj"
+            TemplateGate.package "ToolUp.PublicRendering" "src/ToolUp.PublicRendering/ToolUp.PublicRendering.fsproj"
+            TemplateGate.package
+                "ToolUp.KnowledgeBase.Core"
+                "src/ToolUp.KnowledgeBase.Core/ToolUp.KnowledgeBase.Core.fsproj"
+            TemplateGate.package
+                "ToolUp.KnowledgeBase.Server"
+                "src/ToolUp.KnowledgeBase.Server/ToolUp.KnowledgeBase.Server.fsproj"
+            TemplateGate.package "ToolUp.OpenXml" "src/ToolUp.OpenXml/ToolUp.OpenXml.fsproj"
+            TemplateGate.package "ToolUp.AIProviders.Claude" "src/AIProviders/Claude/ClaudeAIProvider.fsproj"
+            TemplateGate.package
+                "ToolUp.EmbeddingProviders.Local"
+                "src/EmbeddingProviders/Local/LocalEmbeddingProvider.fsproj"
+            TemplateGate.package "ToolUp.VectorStores.Hnsw" "src/VectorStores/Hnsw/HnswVectorStore.fsproj"
+            TemplateGate.package "ToolUp.AuthProviders.Oidc" "src/AuthProviders/Oidc/OidcAuthProvider.fsproj"
+        ]
+
+    // The publication-boundary scan. The banned vocabulary is private and is
+    // never written into this public file: it is read at run time from the
+    // same sources the OSS guard tests read (`neutrality-tokens.local.txt`
+    // at the repo root, else `TOOLUP_NEUTRALITY_TOKENS`, semicolon-separated),
+    // with the one public-safe canary token always enforced. The matching
+    // rule is the guard's (src/ToolUp.Platform.Tests/InProcess/NeutralityTokens.fs):
+    // case-insensitive, word-bounded at an alphanumeric end, whitespace in a
+    // multi-word token matching any run, `re:` for a raw regex. That module
+    // is an Expecto test module and cannot be compiled into the build
+    // script, so the rule is restated here.
+    let boundaryRules () : (string * System.Text.RegularExpressions.Regex) list * bool =
+        let parse (lines: string seq) =
+            lines
+            |> Seq.map _.Trim()
+            |> Seq.filter (fun l -> l <> "" && not (l.StartsWith "#"))
+            |> List.ofSeq
+
+        let external =
+            if File.Exists "neutrality-tokens.local.txt" then
+                parse (File.ReadAllLines "neutrality-tokens.local.txt")
+            else
+                match System.Environment.GetEnvironmentVariable "TOOLUP_NEUTRALITY_TOKENS" with
+                | null -> []
+                | value -> parse (value.Split ';')
+
+        let toRegex (token: string) =
+            let options =
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase
+                ||| System.Text.RegularExpressions.RegexOptions.CultureInvariant
+
+            if token.StartsWith("re:", System.StringComparison.OrdinalIgnoreCase) then
+                System.Text.RegularExpressions.Regex(token.Substring 3, options)
+            else
+                let isWord (c: char) =
+                    System.Char.IsLetterOrDigit c || c = '_'
+
+                let body =
+                    token.Split([| ' '; '\t' |], System.StringSplitOptions.RemoveEmptyEntries)
+                    |> Array.map System.Text.RegularExpressions.Regex.Escape
+                    |> String.concat @"\s+"
+
+                let edge (c: char) = if isWord c then @"\b" else ""
+                System.Text.RegularExpressions.Regex(edge token[0] + body + edge token[token.Length - 1], options)
+
+        ("PRIVATE-VOCAB-CANARY" :: external) |> List.map (fun t -> t, toRegex t), not (List.isEmpty external)
+
+    /// Every banned-token hit under `root` (text files; build output and
+    /// installed packages skipped), as `path:line token`. `masked` are
+    /// literal values the gate itself substituted into the scaffold (the
+    /// scratch feed's machine path), removed from each line before it is
+    /// matched: they are this machine's, not the template's.
+    let boundaryHits
+        (rules: (string * System.Text.RegularExpressions.Regex) list)
+        (masked: string list)
+        (root: string)
+        : string list =
+        let skipped = [ "bin"; "obj"; "node_modules"; "output" ]
+
+        Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+        |> Seq.filter (fun path ->
+            let segments = Path.GetRelativePath(root, path).Split([| '\\'; '/' |])
+            not (segments |> Array.exists (fun s -> List.contains s skipped)))
+        |> Seq.collect (fun path ->
+            File.ReadAllLines path
+            |> Seq.mapi (fun i line -> i + 1, masked |> List.fold (fun (l: string) m -> l.Replace(m, "")) line)
+            |> Seq.collect (fun (n, line) ->
+                rules
+                |> Seq.filter (fun (_, rx) -> rx.IsMatch line)
+                |> Seq.map (fun (token, _) -> sprintf "%s:%d  '%s'" (Path.GetRelativePath(root, path)) n token)))
+        |> List.ofSeq
+
+    Target.create "VerifyDataPlatformTemplate" (fun _ ->
+        let runIn exe args dir =
+            CreateProcess.fromRawCommand exe args
+            |> CreateProcess.withWorkingDirectory dir
+            |> Proc.run
+            |> fun r -> r.ExitCode
+
+        let runCheckedIn exe args dir =
+            let code = runIn exe args dir
+
+            if code <> 0 then
+                failwithf "VerifyDataPlatformTemplate: `%s %s` exited %d (in %s)" exe (String.concat " " args) code dir
+
+        let rules, fullList = boundaryRules ()
+
+        let assertNeutral (label: string) (masked: string list) (root: string) =
+            match boundaryHits rules masked root with
+            | [] ->
+                Trace.tracefn
+                    "▶ VerifyDataPlatformTemplate: %s carries no banned vocabulary (%s)"
+                    label
+                    (if fullList then
+                         sprintf "%d tokens" rules.Length
+                     else
+                         "NEUTRALITY TOKEN SOURCE ABSENT: only the public canary was enforced")
+            | hits ->
+                failwithf
+                    "VerifyDataPlatformTemplate: the publication boundary is broken in %s, %d reference(s) to private vocabulary:%s%s%sThis template is Apache-2.0 public; neutralise the wording."
+                    label
+                    hits.Length
+                    System.Environment.NewLine
+                    (hits |> List.truncate 40 |> String.concat System.Environment.NewLine)
+                    System.Environment.NewLine
+
+        // ── 0. The template's own files are neutral ──────────────────
+        assertNeutral "the template's files" [] (Path.getFullName dataPlatformTemplateDir)
+
+        // ── 1. A scratch feed carrying the closure at the gate version ─
+        let feedDir = Path.getFullName "obj/dataplatform-template-feed"
+        Shell.deleteDir feedDir
+        Directory.ensure feedDir
+
+        let privatePackages =
+            TemplateGatePackages.privatePackagesFolder (Path.getFullName ".")
+
+        let eviction = TemplateGatePackages.evict privatePackages
+
+        Trace.tracefn
+            "▶ VerifyDataPlatformTemplate: private packages folder %s (evicted %d prior entr%s)"
+            eviction.Folder
+            eviction.Removed.Length
+            (if eviction.Removed.Length = 1 then "y" else "ies")
+
+        System.Environment.SetEnvironmentVariable("NUGET_PACKAGES", privatePackages)
+
+        for pkg in dataPlatformTemplateGatePackages do
+            if not (File.Exists(Path.getFullName pkg.Project)) then
+                failwithf
+                    "VerifyDataPlatformTemplate: gate package %s declares project %s, which does not exist."
+                    pkg.Id
+                    pkg.Project
+
+            Trace.tracefn "▶ VerifyDataPlatformTemplate: packing %s @ %s" pkg.Id templateGateVersion
+
+            runCheckedIn
+                "dotnet"
+                [
+                    "pack"
+                    pkg.Project
+                    sprintf "-p:Version=%s" templateGateVersion
+                    "-o"
+                    feedDir
+                    "--nologo"
+                ]
+                "."
+
+        match
+            TemplateGate.unproducedIds
+                templateGateVersion
+                dataPlatformTemplateGatePackages
+                (Directory.EnumerateFiles(feedDir, "*.nupkg"))
+        with
+        | [] -> ()
+        | unproduced -> failwith (TemplateGate.report "VerifyDataPlatformTemplate" templateGateVersion unproduced)
+
+        // ── 2. Instantiate OUTSIDE the repo (short path: MAX_PATH) ───
+        let scratchRoot = Path.Combine(Path.GetTempPath(), "tu-dpt")
+        let appName = "GateData"
+        let scaffoldDir = Path.Combine(scratchRoot, appName)
+        Shell.deleteDir scratchRoot
+        Directory.ensure scaffoldDir
+
+        let templatePath = Path.getFullName dataPlatformTemplateDir
+        runIn "dotnet" [ "new"; "uninstall"; templatePath ] "." |> ignore
+        runCheckedIn "dotnet" [ "new"; "install"; templatePath ] "."
+
+        try
+            runCheckedIn
+                "dotnet"
+                [
+                    "new"
+                    "platformsdk-dataplatform"
+                    "-n"
+                    appName
+                    "-o"
+                    scaffoldDir
+                    "--sdk-version"
+                    templateGateVersion
+                    "--feed"
+                    feedDir.Replace('\\', '/')
+                ]
+                "."
+
+            // ── 3. The scaffolded tree is neutral too ────────────────
+            assertNeutral "the scaffolded repository" [ feedDir.Replace('\\', '/') ] scaffoldDir
+
+            // ── 4. Build the solution, then run the scaffold's own test ─
+            runCheckedIn "dotnet" [ "build"; appName + ".slnx"; "--nologo" ] scaffoldDir
+
+            // Every ToolUp.* resolved at the gate version, read off each
+            // project's restore graph (the NU1603-escalation equivalent).
+            let strayPins =
+                Directory.EnumerateFiles(scaffoldDir, "project.assets.json", SearchOption.AllDirectories)
+                |> Seq.collect (fun assets ->
+                    System.Text.RegularExpressions.Regex.Matches(
+                        File.ReadAllText assets,
+                        "\"(ToolUp\\.[A-Za-z.]+)/([^\"]+)\""
+                    )
+                    |> Seq.map (fun m -> m.Groups[1].Value, m.Groups[2].Value))
+                |> Seq.filter (fun (_, version) -> version <> templateGateVersion)
+                |> Seq.distinct
+                |> List.ofSeq
+
+            if not (List.isEmpty strayPins) then
+                failwithf
+                    "VerifyDataPlatformTemplate: %d ToolUp.* package(s) resolved at a version other than %s, so the scaffold built against a MIX of current source and a released SDK: %s. Add them to `dataPlatformTemplateGatePackages`."
+                    (List.length strayPins)
+                    templateGateVersion
+                    (strayPins |> List.map (fun (p, v) -> sprintf "%s@%s" p v) |> String.concat ", ")
+
+            runCheckedIn
+                "dotnet"
+                [
+                    "run"
+                    "--project"
+                    Path.Combine("tests", appName + ".Tests", appName + ".Tests.fsproj")
+                    "--no-build"
+                ]
+                scaffoldDir
+        finally
+            runIn "dotnet" [ "new"; "uninstall"; templatePath ] "." |> ignore
+
+        Trace.tracefn "▶ VerifyDataPlatformTemplate: neutral -> scaffold -> build -> end-to-end test, green")
+
     // ─── Phase 184 — the fresh-machine published-package smoke gate ──
     //
     // "A fresh machine can `dotnet add package` the SDK and build it"

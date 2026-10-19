@@ -1,0 +1,10 @@
+<Project>
+  <!--
+    Present at the repository root, so MSBuild stops walking up here: an
+    instantiated copy inherits nothing from whatever directory it sits under.
+  -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>

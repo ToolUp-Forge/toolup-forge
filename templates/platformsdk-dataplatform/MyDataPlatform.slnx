@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Modules/DailyTrade/DailyTrade.fsproj" />
+    <Project Path="src/MyDataPlatform-Server/MyDataPlatform-Server.fsproj" />
+    <Project Path="src/MyDataPlatform-Client/MyDataPlatform-Client.fsproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MyDataPlatform.Tests/MyDataPlatform.Tests.fsproj" />
+  </Folder>
+</Solution>
