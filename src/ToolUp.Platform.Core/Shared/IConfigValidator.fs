@@ -172,3 +172,20 @@ module IConfigValidator =
     /// connect, HTTP GET, blob round-trip) finish well under that
     /// bound on a healthy network.
     let defaultTimeout = TimeSpan.FromSeconds 5.0
+
+    /// Phase 1038 — the timeout a NETWORK-BACKED secret store's preflight
+    /// read gets by default: any store the application supplies (a KMS
+    /// companion such as Key Vault, AWS Secrets Manager, GCP Secret Manager
+    /// or Vault, or whatever the environment-driven selector returned). The
+    /// SDK's own in-process file store keeps `defaultTimeout`.
+    ///
+    /// Sized for a COLD read, which is what preflight always is: the first
+    /// call pays the managed-identity token acquisition plus the vault round
+    /// trip. A Key Vault-backed store read through a system-assigned managed
+    /// identity on a cold B1 App Service container measured 6.1-6.8 s over
+    /// four cold boots — past `defaultTimeout`, so a correctly provisioned
+    /// store was refused on its first read. Ten seconds is also the
+    /// preflight aggregator's overall ceiling (a declared timeout above it
+    /// is clamped down), so this is the largest budget preflight can give
+    /// one probe without lengthening the worst-case deploy wait.
+    let remoteSecretStoreTimeout = TimeSpan.FromSeconds 10.0

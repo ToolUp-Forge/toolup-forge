@@ -28,11 +28,16 @@ open ToolUp.Platform.BlobEncryption
 /// Register the first-party `IConfigValidator` set plus the one
 /// interleaved audit-chain durability `IHealthCheck`. Order is
 /// load-bearing — preserves the inline `compose` body exactly.
+///
+/// `secretStorePreflightTimeout` is the secret-store probe's budget, chosen
+/// by `compose` through `ConfigValidator.secretStorePreflightTimeout`
+/// (Phase 1038: a supplied, network-backed store gets a cold-read budget).
 let registerFirstPartyConfigValidators
     (services: IServiceCollection)
     (config: ServerConfig)
     (resolvedBlobStorage: IBlobStorage)
     (secretStore: Secrets.ISecretStore)
+    (secretStorePreflightTimeout: System.TimeSpan)
     (auth: IAuthProvider)
     (auditLog: IAuditLog)
     (eventStore: IEventStore)
@@ -55,7 +60,7 @@ let registerFirstPartyConfigValidators
 
     addConfigValidator (ConfigValidator.BlobStorageValidator(resolvedBlobStorage)) // blob storage reachable
     addConfigValidator (BlobStorageSelectionValidator.BlobStorageSelectionValidator(resolvedBlobStorage)) // refuse cloud-declared backend that silently fell back to LocalFileStorage
-    addConfigValidator (ConfigValidator.SecretStoreValidator(secretStore)) // secret store reachable
+    addConfigValidator (ConfigValidator.SecretStoreValidator(secretStore, secretStorePreflightTimeout)) // secret store reachable; a supplied (network-backed) store gets the cold-read budget (Phase 1038)
     addConfigValidator (OidcConfigCompletenessValidator.OidcConfigCompletenessValidator()) // refuse auth=oidc with unset issuer; ordered before HeaderAuth so its message lands earlier
     addConfigValidator (OidcAudienceBindingValidator.OidcAudienceBindingValidator(config)) // refuse auth=oidc with unbound audience in authenticated modes (token-reuse; escape hatch)
     addConfigValidator (OidcClaimMappingAdvisoryValidator.OidcClaimMappingAdvisoryValidator()) // announce a configured OIDC claim mapping (identity source changed; fail-closed) — advisory only, never refuses

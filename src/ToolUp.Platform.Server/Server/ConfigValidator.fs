@@ -97,6 +97,9 @@ type BlobStorageValidator(storage: IBlobStorage, ?timeout: TimeSpan) =
 /// permission / decryption / connectivity failures. An exception is
 /// `Error` because it means the secret store itself is broken, not
 /// that a particular key is missing.
+///
+/// The timeout is the one `secretStorePreflightTimeout` chooses for the
+/// composed store; omitting it keeps `IConfigValidator.defaultTimeout`.
 type SecretStoreValidator(secretStore: ISecretStore, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
 
@@ -111,3 +114,18 @@ type SecretStoreValidator(secretStore: ISecretStore, ?timeout: TimeSpan) =
             with ex ->
                 return Error(sprintf "secret store read failed: %s" ex.Message)
         }
+
+/// Phase 1038 — the secret-store preflight's timeout, chosen by what kind of
+/// store it probes. `storeSupplied` is whether the application supplied its
+/// own store (`ServerApp.withSecretStore`) rather than composing the SDK's
+/// in-process `FileSecretStore` default: a supplied store is taken to be
+/// network-backed and gets `IConfigValidator.remoteSecretStoreTimeout`, sized
+/// for a cold managed-identity read; the default keeps
+/// `IConfigValidator.defaultTimeout`. An explicit `overrideTimeout`
+/// (`ServerApp.withSecretStorePreflightTimeout`) wins over both. The
+/// preflight aggregator still clamps any timeout above its overall budget.
+let secretStorePreflightTimeout (storeSupplied: bool) (overrideTimeout: TimeSpan option) : TimeSpan =
+    match overrideTimeout with
+    | Some timeout -> timeout
+    | None when storeSupplied -> IConfigValidator.remoteSecretStoreTimeout
+    | None -> IConfigValidator.defaultTimeout

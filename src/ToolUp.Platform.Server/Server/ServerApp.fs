@@ -1075,6 +1075,12 @@ type ServerApp = {
     /// receives, after `SecretResilience` is applied. Wired via
     /// `ServerApp.withSecretStore`.
     SecretStore: Secrets.ISecretStore option
+    /// Phase 1038 — the composition root's override of the secret-store
+    /// preflight timeout. `None` (the default) lets the store's kind choose:
+    /// a supplied store gets `IConfigValidator.remoteSecretStoreTimeout`, the
+    /// SDK's file store keeps `IConfigValidator.defaultTimeout`. Wired via
+    /// `ServerApp.withSecretStorePreflightTimeout`.
+    SecretStorePreflightTimeout: TimeSpan option
     /// Phase 169 — per-module load outcome, accumulated in `addModule`
     /// order and emitted through `Logger` at `run`. Empty until the first
     /// `addModule`; a stock deployment accumulates only `ModuleRegistered`
@@ -1205,6 +1211,7 @@ module ServerApp =
         StorageResilience = NoResilience
         SecretResilience = NoResilience
         SecretStore = None
+        SecretStorePreflightTimeout = None
         ModuleLoadOutcomes = []
         ModuleComponentIds = []
         ModuleGrantPolicies = []
@@ -1861,6 +1868,25 @@ module ServerApp =
         app with
             SecretStore = Some store
     }
+
+    /// Phase 1038 — override the secret-store preflight timeout. Not needed
+    /// to boot on a cloud secret store: a store supplied through
+    /// `withSecretStore` already gets `IConfigValidator.remoteSecretStoreTimeout`,
+    /// sized for a cold managed-identity read, and the SDK's file store keeps
+    /// `IConfigValidator.defaultTimeout`. Use it when a deployment's measured
+    /// cold read needs a different bound — a tighter one to fail fast, or the
+    /// full preflight budget. The preflight aggregator clamps any value above
+    /// its overall ten-second budget. Calling this multiple times keeps the
+    /// last value; a zero or negative timeout is refused, because it would
+    /// refuse every boot.
+    let withSecretStorePreflightTimeout (timeout: TimeSpan) (app: ServerApp) : ServerApp =
+        if timeout <= TimeSpan.Zero then
+            invalidArg (nameof timeout) (sprintf "the secret-store preflight timeout must be positive (got %O)" timeout)
+
+        {
+            app with
+                SecretStorePreflightTimeout = Some timeout
+        }
 
     /// Phase 9d — override the SDK default per-team compute quota
     /// policy. Deployments supply a custom `ITeamQuotaPolicy` to plug
@@ -3555,6 +3581,7 @@ module ServerApp =
                 app.StorageResilience
                 app.SecretResilience
                 app.SecretStore
+                app.SecretStorePreflightTimeout
 
         // Phase 801 — the remoting decode edge's coverage, one boot line:
         // how many of the API records this process mounted (every

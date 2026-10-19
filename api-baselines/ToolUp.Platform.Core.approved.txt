@@ -3422,6 +3422,7 @@ ToolUp.Platform.ConfigValidation+IConfigValidator.Timeout : System.TimeSpan { ge
 ToolUp.Platform.ConfigValidation+IConfigValidator.Validate() : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.ConfigValidation+ValidationResult]
 ToolUp.Platform.ConfigValidation+IConfigValidatorModule (class)
 ToolUp.Platform.ConfigValidation+IConfigValidatorModule.defaultTimeout : System.TimeSpan { get }
+ToolUp.Platform.ConfigValidation+IConfigValidatorModule.remoteSecretStoreTimeout : System.TimeSpan { get }
 ToolUp.Platform.ConfigValidation+ISecurityClassValidator (interface)
 ToolUp.Platform.ConfigValidation+IStructuralClassValidator (interface)
 ToolUp.Platform.ConfigValidation+ValidationResult (class)

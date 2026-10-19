@@ -166,6 +166,9 @@ let compose
     (storageResilience: ResilienceMode)
     (secretResilience: ResilienceMode)
     (secretStore: Secrets.ISecretStore option)
+    // Phase 1038 — `ServerApp.withSecretStorePreflightTimeout`; `None` lets
+    // the store's kind choose (`ConfigValidator.secretStorePreflightTimeout`).
+    (secretStorePreflightTimeout: TimeSpan option)
     =
 
     // Phase 9l — resolve the deployment's distributed-tracing sink.
@@ -307,6 +310,13 @@ let compose
     let resolvedBlobStorage =
         applyEncryptionDecorator innerBlobStorage encryptionKeyResolver
         |> applyStorageResilience storageResilience
+
+    // Phase 1038 — the secret-store preflight budget, chosen from the
+    // SUPPLIED option before resilience wraps it: an application-supplied
+    // store is network-backed and gets the cold-read budget; the SDK's file
+    // store keeps the 5 s default.
+    let secretStorePreflightTimeout =
+        ConfigValidator.secretStorePreflightTimeout secretStore.IsSome secretStorePreflightTimeout
 
     // Phase 1001 — the app's own store when it supplied one, else the
     // FileSecretStore default; resilience applies to either. This single
@@ -1139,6 +1149,7 @@ let compose
         config
         resolvedBlobStorage
         secretStore
+        secretStorePreflightTimeout
         auth
         auditLog
         eventStore
