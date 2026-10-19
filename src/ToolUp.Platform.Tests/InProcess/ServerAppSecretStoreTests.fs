@@ -191,8 +191,13 @@ type private Composed = {
 /// preflight. Nothing binds a port: this minimal app is refused by
 /// validators this phase does not touch (header auth, SSE auth, …), so
 /// compose stops at the preflight — the point at which every validator has
-/// run against the composed secret store.
-let private composeWith (supplied: ISecretStore option) (resilience: ResilienceMode) : Composed =
+/// run against the composed secret store. `preflightTimeout` is the
+/// `ServerApp.withSecretStorePreflightTimeout` override (Phase 1038).
+let private composeWithPreflightTimeout
+    (supplied: ISecretStore option)
+    (resilience: ResilienceMode)
+    (preflightTimeout: TimeSpan option)
+    : Composed =
     let logger = CapturingLogger()
     let mutable captured: IServiceCollection option = None
 
@@ -239,7 +244,8 @@ let private composeWith (supplied: ISecretStore option) (resilience: ResilienceM
             NoResilience
             resilience
             supplied
-        |> ignore
+            preflightTimeout
+        |> ignore<IServerHost> // typed: a compose arity change must not compile into a silently-ignored partial application
     with :? ConfigValidatorAggregator.ConfigPreflightFailedException ->
         ()
 
@@ -251,6 +257,23 @@ let private composeWith (supplied: ISecretStore option) (resilience: ResilienceM
     }
 
 /// The real preflight's verdict on `name`: `Ok`, `Warning` or `Error`.
+let private composeWith (supplied: ISecretStore option) (resilience: ResilienceMode) : Composed =
+    composeWithPreflightTimeout supplied resilience None
+
+/// The timeout of the composed `secret-store` reachability probe.
+let private secretStoreProbeTimeout (composed: Composed) : TimeSpan =
+    match
+        composed.Services
+        |> Seq.choose (fun d ->
+            match d.ImplementationInstance with
+            | :? IConfigValidator as v when d.ServiceType = typeof<IConfigValidator> && v.Name = "secret-store" ->
+                Some v.Timeout
+            | _ -> None)
+        |> List.ofSeq
+    with
+    | [ t ] -> t
+    | ts -> failtestf "expected exactly one secret-store validator, found %d" ts.Length
+
 let private preflightVerdict (composed: Composed) (name: string) : string =
     let prefix = sprintf "[preflight] %s: " name
 
@@ -490,5 +513,36 @@ let tests =
 
                 for name in threeChecks do
                     Expect.isTrue (isError (resultOf name results)) (sprintf "%s refuses a plaintext store" name))
+        }
+
+        test "Phase 1038 — compose budgets the secret-store probe by the store's kind, and honours the override" {
+            withCleanSecretEnv (fun () ->
+                inEmptyCwd (fun _ ->
+                    Expect.equal
+                        (secretStoreProbeTimeout (composeWith None NoResilience))
+                        IConfigValidator.defaultTimeout
+                        "nothing supplied: the SDK's file store keeps the 5 s default"
+
+                    Expect.equal
+                        (secretStoreProbeTimeout (composeWith (Some(FakeVault() |> vaultStore)) NoResilience))
+                        IConfigValidator.remoteSecretStoreTimeout
+                        "a supplied store gets the cold-read budget with no other change"
+
+                    Expect.equal
+                        (secretStoreProbeTimeout (
+                            composeWith (Some(FakeVault() |> vaultStore)) (WithResiliencePolicy policy)
+                        ))
+                        IConfigValidator.remoteSecretStoreTimeout
+                        "the resilience wrapper does not hide that the store was supplied"
+
+                    Expect.equal
+                        (secretStoreProbeTimeout (
+                            composeWithPreflightTimeout
+                                (Some(FakeVault() |> vaultStore))
+                                NoResilience
+                                (Some(TimeSpan.FromSeconds 3.0))
+                        ))
+                        (TimeSpan.FromSeconds 3.0)
+                        "the composition root's override reaches the probe"))
         }
     ]

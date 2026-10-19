@@ -162,7 +162,8 @@ let private composedVerdict (config: ServerConfig) : string * string list =
                 NoResilience
                 NoResilience
                 None
-            |> ignore
+                None
+            |> ignore<IServerHost> // typed: a compose arity change must not compile into a silently-ignored partial application
         with :? ConfigValidatorAggregator.ConfigPreflightFailedException ->
             ()
     finally
