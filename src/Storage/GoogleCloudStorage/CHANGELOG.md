@@ -9,6 +9,20 @@ patch bump stays non-breaking.
 
 ## [Unreleased]
 
+### Changed
+
+- Inline credential JSON (`CredentialsJson` / `CredentialsJsonProvider`)
+  now loads through `CredentialFactory`, typed by the `type` the JSON
+  declares, instead of the deprecated `GoogleCredential.FromJson`
+  (Phase 1037). No accepted credential changes: the five types the old
+  loader accepted (`service_account`, `authorized_user`,
+  `external_account`, `external_account_authorized_user`,
+  `impersonated_service_account`) each load to the same underlying
+  credential. Any other declared type is refused with a message naming
+  the accepted set, where the library used to refuse it with its own.
+  The encryption-at-rest validator now builds its client through the
+  store's own builder rather than a copy of it.
+
 ### Fixed
 
 - Vendor exceptions arriving wrapped in `AggregateException` are now

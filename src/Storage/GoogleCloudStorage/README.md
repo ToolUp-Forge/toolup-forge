@@ -2,7 +2,7 @@
 
 Google Cloud Storage `IBlobStorage` companion for `ToolUp.Platform`. Wraps the GCP SDK to back the platform's storage interface with GCS buckets; supports object versioning, customer-managed encryption keys, and bucket-level retention policies.
 
-Configuration via Application Default Credentials, or an inline service-account JSON string. Production deployments typically pair with `GcsEncryptionAtRestValidator` to confirm encryption-at-rest is enabled.
+Configuration via Application Default Credentials, or an inline credential JSON string — a service-account key, or a stored user, workload/workforce-identity or impersonation credential (each loaded as the type it declares; any other type is refused). Production deployments typically pair with `GcsEncryptionAtRestValidator` to confirm encryption-at-rest is enabled.
 
 ## Credential rotation
 

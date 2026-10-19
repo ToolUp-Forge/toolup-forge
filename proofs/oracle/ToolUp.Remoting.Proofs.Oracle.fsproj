@@ -31,12 +31,12 @@
              every parameter and some of those annotations are narrower than
              the inferred type.
 
-         The incomplete-match warnings the extractor's field projectors
-         produce are NOT suppressed here — naming FS0025 in `NoWarn` is
-         exactly what the Phase 624 gate forbids. They stay warnings
-         because `Directory.Build.props` beside this file stops the
-         repository-wide walk, which is the documented mechanism; read that
-         file for why, and for what a reader gives up by it. -->
+         FS0025 (incomplete match) is an ERROR here, as it is tree-wide
+         (Phase 624): `Directory.Build.props` beside this file stops the
+         repository-wide walk and states the promotion itself (Phase 1037).
+         The extractor's field projectors no longer trip it because the
+         normaliser completes each one (Phase 1035); read that file for
+         why the walk stops, and for what a reader gives up by it. -->
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
         <IsPackable>false</IsPackable>

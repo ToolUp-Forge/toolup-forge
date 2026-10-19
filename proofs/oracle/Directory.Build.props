@@ -1,55 +1,47 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     Phase 787 — the boundary that stops the repository-wide MSBuild walk at
-    the generated oracle.
+    the generated oracle. Phase 1037 — and states the Phase 624
+    incomplete-match rule itself, so the boundary is no longer an
+    exemption from it.
 
     **It deliberately does NOT import the parent.** MSBuild walks up from a
     project directory until it finds a `Directory.Build.props` and stops
     there unless that file imports its own parent; this one does not, so
-    the repo-root props never reaches `RemotingDecode.fs`. That is the same
+    the repo-root props never reaches the extractions. That is the same
     structural mechanism `templates/safer/` and
-    `templates/platformsdk-solution/` use, and the exemption is mirrored in
-    the root props' documented NOT-COVERED list and in
-    `ArchitectureFitness.fs0025ExemptPrefixes` — a test asserts the two
-    agree, so this cannot be widened without saying so where authors read
-    the policy.
+    `templates/platformsdk-solution/` use. The walk stops because
+    everything under this directory is the prover's output, not authored
+    code: the root props is the policy for packages this repository
+    publishes (version, package metadata, readme and icon, XML docs), and
+    none of it describes a generated, unpackable proof oracle.
 
-    WHY IT IS NEEDED. `RemotingDecode.fs` is emitted by the F* extractor,
-    which generates one field projector per constructor argument. Each
-    extracts as a single-case `match` over the nine-case value union — an
-    FS0025 incomplete-match warning apiece, seventeen in all. The root
-    props promotes FS0025 to an error tree-wide (Phase 624), and the gate
-    that keeps that promotion meaningful pins at ZERO the two ways to
-    silence it locally: `#nowarn "25"` in the file, and FS0025 in a
-    project's `NoWarn` / `WarningsNotAsErrors`. Both are correct
-    prohibitions and neither is the answer here, because the third option
-    the gate's message assumes — "fix the matches" — does not exist for a
-    file nobody wrote and that a byte-diff holds identical to the
-    extractor's output.
+    FS0025 IS AN ERROR HERE (Phase 1037). The root props promotes FS0025
+    to an error tree-wide (Phase 624); this file states the same promotion
+    below, so the oracle is under the rule exactly as authored code is, and
+    `ArchitectureFitness.fs0025ExemptPrefixes` no longer names this
+    subtree. Until Phase 1035 that was impossible: the F* extractor emits
+    one field projector per constructor argument, each a single-case
+    `match` over a multi-case union, and nobody can fix a file a byte-diff
+    holds identical to the extractor's output. Since 1035
+    `normalise-extraction.fsx` completes each such match with one explicit,
+    loudly failing arm per missing case — the root policy's own
+    prescription for an unreachable case — and since 1037 `check.ps1`
+    strips the FS0025 suppression Custard's backend writes into its
+    `#nowarn` line, so every committed extraction compiles with the rule
+    on. A future extraction shape the normaliser does not complete now
+    fails BOTH the proof leg's build and the solution build, by name,
+    rather than compiling into a silent warning.
 
-    The projectors cannot be suppressed at the source either: F*'s
-    `no_auto_projectors` attribute is deprecated and a no-op on the pinned
-    release ("projectors are declaration-only; this attribute is a no-op"),
-    and the extractor has no flag to omit them. So the honest move is to
-    put the generated subtree outside the policy, in the documented way,
-    rather than to exempt it quietly inside the policy.
-
-    SINCE PHASE 1035 the generated files carry no FS0025 at all:
-    `normalise-extraction.fsx` completes each projector (and `item_at`)
-    with one explicit arm per missing case that fails loudly, which is the
-    root policy's own prescription for an unreachable case. The boundary
-    is kept nonetheless, because the oracle is the prover's output and not
-    authored code: a future extraction shape the normaliser does not yet
-    complete must fail the proof leg, where the remedy (teach the
-    normaliser) is named, rather than the solution build.
-
-    WHAT IS LOST, so nobody has to re-derive it: the root props sets the
-    FS0025 promotion, `GenerateDocumentationFile`, and package metadata
-    guarded on `IsPackable != false`. This project is `IsPackable=false`
-    and sets its own doc-file property, so nothing else here is affected.
-    A project added under `proofs/oracle/` in future inherits this file
-    rather than the root one — which is why nothing but the generated
-    oracle should live here.
+    WHAT IS LOST by not importing the root, so nobody has to re-derive it:
+    the package metadata and version guarded on `IsPackable != false`, and
+    `GenerateDocumentationFile`. Every project here is `IsPackable=false`
+    and sets its own doc-file property. A project added under
+    `proofs/oracle/` in future inherits this file rather than the root one
+    — which is why nothing but the generated oracle should live here.
 -->
 <Project>
+    <PropertyGroup>
+        <WarningsAsErrors>$(WarningsAsErrors);FS0025</WarningsAsErrors>
+    </PropertyGroup>
 </Project>

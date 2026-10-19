@@ -1,12 +1,5 @@
 module ToolUp.Storage.GoogleCloudStorage
 
-// `GoogleCredential.FromJson` is marked deprecated in favour of the
-// newer `CredentialFactory` API. For single-call credential
-// construction from inline JSON, `FromJson` remains the simplest
-// surface and carries no security risk in this use case (caller
-// supplies a trusted service-account JSON read from config).
-#nowarn "44"
-
 open System
 open System.Globalization
 open System.IO
@@ -14,6 +7,7 @@ open System.Net
 open System.Runtime.ExceptionServices
 open Google
 open Google.Apis.Auth.OAuth2
+open Google.Apis.Json
 open Google.Cloud.Storage.V1
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.ProviderExceptions
@@ -147,14 +141,75 @@ let internal authFailureStatus (ex: exn) : int option =
         | _ -> None
     | _ -> None
 
-let private buildClientFor (endpointUrl: string option) (credentialsJson: string option) : StorageClient =
+/// A workload- or workforce-identity configuration (`external_account`)
+/// loads as one of the JSON-sourced subtypes of `ExternalAccountCredential`
+/// — a token read from a file, from a URL, or through AWS — and each
+/// converts on its own; the base class does not.
+let private externalAccountCredential (credential: ExternalAccountCredential) : GoogleCredential =
+    match credential with
+    | :? FileSourcedExternalAccountCredential as c -> c.ToGoogleCredential()
+    | :? UrlSourcedExternalAccountCredential as c -> c.ToGoogleCredential()
+    | :? AwsExternalAccountCredential as c -> c.ToGoogleCredential()
+    | other ->
+        invalidOp (
+            sprintf
+                "GCS credential JSON loaded an external-account credential of an unsupported source (%s)."
+                (other.GetType().Name)
+        )
+
+/// The credential types `CredentialsJson` / `CredentialsJsonProvider`
+/// accept, each loaded through `CredentialFactory` AS that type. They are
+/// the five `GoogleCredential.FromJson` accepted before Phase 1037 moved
+/// the companion off that deprecated loader: a service-account key, a
+/// stored user credential, a workload- or workforce-identity
+/// configuration, and an impersonation configuration. Named here so the
+/// set is reviewable rather than whatever the library happens to parse.
+let private credentialLoaders: (string * (string -> GoogleCredential)) list = [
+    JsonCredentialParameters.ServiceAccountCredentialType,
+    fun json -> CredentialFactory.FromJson<ServiceAccountCredential>(json).ToGoogleCredential()
+    JsonCredentialParameters.AuthorizedUserCredentialType,
+    fun json -> CredentialFactory.FromJson<UserCredential>(json).ToGoogleCredential()
+    JsonCredentialParameters.ExternalAccountCredentialType,
+    fun json -> externalAccountCredential (CredentialFactory.FromJson<ExternalAccountCredential> json)
+    JsonCredentialParameters.ExternalAccountAuthorizedUserCredentialType,
+    fun json -> CredentialFactory.FromJson<ExternalAccountAuthorizedUserCredential>(json).ToGoogleCredential()
+    JsonCredentialParameters.ImpersonatedServiceAccountCredentialType,
+    fun json -> CredentialFactory.FromJson<ImpersonatedCredential>(json).ToGoogleCredential()
+]
+
+/// Load the configured credential JSON through `CredentialFactory`, typed
+/// by the `type` the JSON declares (read with the library's own
+/// serializer) and refused when that type is not one the companion
+/// accepts. Every accepted type yields the same underlying credential the
+/// deprecated `GoogleCredential.FromJson` produced.
+let internal credentialFromJson (json: string) : GoogleCredential =
+    let declared =
+        NewtonsoftJsonSerializer.Instance.Deserialize<JsonCredentialParameters>(json).Type
+
+    match
+        credentialLoaders
+        |> List.tryFind (fun (credentialType, _) -> credentialType = declared)
+    with
+    | Some(_, load) -> load json
+    | None ->
+        invalidOp (
+            sprintf
+                "GCS credential JSON declares type '%s'; the companion accepts %s."
+                declared
+                (credentialLoaders |> List.map fst |> String.concat ", ")
+        )
+
+/// The client for an endpoint override and credential JSON — shared by the
+/// store and its encryption-at-rest validator, which must reach the same
+/// place the store reads and writes.
+let internal buildClientFor (endpointUrl: string option) (credentialsJson: string option) : StorageClient =
     match endpointUrl with
     | None ->
         // Unchanged pre-existing path (GP 11) — no builder, no behaviour
         // difference for any deployment that does not set an override.
         match credentialsJson with
         | Some json ->
-            let credential = GoogleCredential.FromJson json
+            let credential = credentialFromJson json
             StorageClient.Create credential
         | None ->
             // Application Default Credentials — the SDK resolves env /
@@ -164,7 +219,7 @@ let private buildClientFor (endpointUrl: string option) (credentialsJson: string
         let builder = StorageClientBuilder(BaseUri = uri)
 
         match credentialsJson with
-        | Some json -> builder.Credential <- GoogleCredential.FromJson json
+        | Some json -> builder.Credential <- credentialFromJson json
         | None ->
             // No credential to present, and an emulator wants none — say so
             // explicitly rather than letting the ADC chain throw first.
@@ -664,7 +719,7 @@ type GoogleCloudStorage(config: GoogleCloudStorageConfig) =
                     )
             | Some json ->
                 try
-                    let signer = UrlSigner.FromCredential(GoogleCredential.FromJson json)
+                    let signer = UrlSigner.FromCredential(credentialFromJson json)
                     let key = blobKey toolupContainer blobName
                     let! url = signer.SignAsync(config.BucketName, key, ttl) |> Async.AwaitTask
                     return Ok url

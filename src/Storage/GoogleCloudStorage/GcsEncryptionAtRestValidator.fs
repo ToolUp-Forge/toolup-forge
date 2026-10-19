@@ -1,10 +1,6 @@
 module ToolUp.Storage.GcsEncryptionAtRestValidator
 
-#nowarn "44"
-
 open System
-open Google.Apis.Auth.OAuth2
-open Google.Cloud.Storage.V1
 open ToolUp.Platform.ConfigValidation
 open ToolUp.Storage.GoogleCloudStorage
 
@@ -24,26 +20,6 @@ open ToolUp.Storage.GoogleCloudStorage
 //   transient network — aborts startup so misconfigured deployments
 //   fail fast at boot.
 
-let private buildClient (config: GoogleCloudStorageConfig) : StorageClient =
-    // Mirrors `GoogleCloudStorage.buildClientFor` — the validator has to
-    // reach the same endpoint the store does, or it validates a bucket in a
-    // different place from the one the deployment reads and writes.
-    match config.EndpointUrl with
-    | None ->
-        match config.CredentialsJson with
-        | Some json ->
-            let credential = GoogleCredential.FromJson json
-            StorageClient.Create credential
-        | None -> StorageClient.Create()
-    | Some uri ->
-        let builder = StorageClientBuilder(BaseUri = uri)
-
-        match config.CredentialsJson with
-        | Some json -> builder.Credential <- GoogleCredential.FromJson json
-        | None -> builder.UnauthenticatedAccess <- true
-
-        builder.Build()
-
 type private Impl(config: GoogleCloudStorageConfig, ?timeout: TimeSpan) =
     let timeout = defaultArg timeout IConfigValidator.defaultTimeout
 
@@ -53,7 +29,9 @@ type private Impl(config: GoogleCloudStorageConfig, ?timeout: TimeSpan) =
 
         member _.Validate() = async {
             try
-                let client = buildClient config
+                // The store's own client builder, so the validator checks the
+                // bucket at the endpoint, with the credential, the deployment uses.
+                let client = buildClientFor config.EndpointUrl config.CredentialsJson
                 let! bucket = client.GetBucketAsync(config.BucketName) |> Async.AwaitTask
 
                 // GCS always encrypts at rest; the only meaningful

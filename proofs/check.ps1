@@ -30,11 +30,13 @@
          the definitions the entry names (Phase 955).
       4. NORMALISE each LEGACY extraction's layout (Phase 850). Custard's
          output is never passed through the normaliser: it is compiled
-         as written in step 6, so a layout the compiler refuses fails
-         THERE, by name, rather than being repaired here. The legacy
-         printer emits a verbose, OCaml-shaped dialect — `begin … end`, match
-         arms at column 0 whatever their nesting — that F# 8 rejects
-         (FS0058) and F# 10 cannot be told to accept (`#light "off"` is
+         as laid out in step 6, so a layout the compiler refuses fails
+         THERE, by name, rather than being repaired here. Its one edit
+         is to drop FS0025 from the `#nowarn` line Custard writes, so
+         the oracle stays under the incomplete-match rule (Phase 1037).
+         The legacy printer emits a verbose, OCaml-shaped dialect —
+         `begin … end`, match arms at column 0 whatever their nesting —
+         that F# 8 rejects (FS0058) and F# 10 cannot be told to accept (`#light "off"` is
          refused outright, FS1205). `normalise-extraction.fsx` is a
          deterministic re-layout of exactly that dialect into
          indentation-clean F#: parentheses for `begin … end`, every
@@ -56,7 +58,8 @@
          caught here rather than in someone else's `VerifyAll`. Both are
          built on .NET here; the Fable compile of the second is
          `VerifyFable`'s, through `ToolUp.AI.Client.Tests`. A Custard
-         module's generated project is also built AS GENERATED.
+         module's generated project is also built AS GENERATED (less
+         the FS0025 token step 4 drops).
       7. RUN each module's differential host — an Expecto list inside
          `ToolUp.Platform.Tests` that runs the extracted model beside
          production and requires them to agree. Skippable with
@@ -467,6 +470,31 @@ foreach ($module in $legacyModules) {
 & dotnet fsi (Join-Path $PSScriptRoot "normalise-extraction.fsx") @freshFiles
 if ($LASTEXITCODE -ne 0) { Fail "the layout normaliser refused an extraction (exit $LASTEXITCODE) — a shape it does not know. Teach it the shape, or reshape the model; never hand-edit the extraction." }
 
+# Custard's ONE edit (Phase 1037). Its backend heads every module it
+# writes with a `#nowarn` line that names FS0025, which would switch the
+# incomplete-match rule off for the whole file — exactly the file-scoped
+# suppression the Phase 624 gate pins at zero, and since 1037 the oracle
+# is under that gate (`oracle/Directory.Build.props` states FS0025 as an
+# error). The token is removed and nothing else: the line keeps every
+# other id Custard names, the layout is untouched (step 6 still builds
+# what Custard laid out, so a layout the compiler refuses fails THERE),
+# and a module with an incomplete match now fails the build by name
+# instead of compiling with the check off. Any other spelling of the
+# suppression left behind is refused here rather than byte-held below.
+foreach ($module in $custardModules) {
+    $fresh = Join-Path $custardDir "$($module.Name).fs"
+    if (-not (Test-Path $fresh)) { Fail "Custard wrote no $($module.Name).fs." }
+
+    $text = [IO.File]::ReadAllText((Resolve-Path $fresh).Path)
+    $text = [regex]::Replace($text, '(?m)^(#nowarn(?:[ \t]+"[0-9]+")*?)[ \t]+"25"(?=[ \t"]|$)', '$1')
+
+    if ([regex]::IsMatch($text, '(?m)^[ \t]*#nowarn\b.*(?<![0-9A-Za-z])"?(FS0*)?25"?(?![0-9])')) {
+        Fail "Custard's $($module.Name).fs still suppresses FS0025 after the one edit this step makes — a #nowarn shape it does not know. Teach this step the shape; never suppress the rule."
+    }
+
+    [IO.File]::WriteAllText((Resolve-Path $fresh).Path, $text)
+}
+
 Write-Step "5/7  Byte-diffing each normalised extraction against its committed oracle"
 
 # One (fresh, committed) pair per generated file. A legacy module is one
@@ -534,7 +562,10 @@ if ($LASTEXITCODE -ne 0) { Fail "the Fable-host oracle does not compile on .NET 
 
 # A Custard module's generated PROJECT, as generated (Phase 955): the
 # .fsproj Custard wrote, over the two sources it wrote, with nothing of
-# this repository's added. The two oracle projects above compile the
+# this repository's added — the one thing taken away is the FS0025 token
+# step 4 drops, and the project inherits `oracle/Directory.Build.props`,
+# so it builds under the incomplete-match rule (Phase 1037). The two
+# oracle projects above compile the
 # same sources for the hosts; this is the build that says the project a
 # reader would get from the extractor alone stands on .NET 10.
 foreach ($module in $custardModules) {

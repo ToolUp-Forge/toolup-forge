@@ -575,17 +575,6 @@ let fs0025ExemptPrefixes: Fs0025Exemption list = [
         Prefix = "templates/platformsdk-solution/"
         Reason = "template content — same structural reason as templates/safer/"
     }
-    {
-        Prefix = "proofs/oracle/"
-        Reason =
-            "the F* extractor's output — one field projector per constructor argument, each a "
-            + "single-case match over the nine-case value union. Nobody wrote it and a byte-diff "
-            + "holds it identical to the extraction, so \"fix the matches\" does not exist here; "
-            + "its own Directory.Build.props has no parent import, so the policy never reaches it "
-            + "(Phase 787). Since Phase 1035 the normaliser completes those matches with explicit "
-            + "failing arms, so the oracle carries no FS0025; the boundary keeps a future "
-            + "uncompleted shape a proof-leg failure rather than a solution-build one"
-    }
 ]
 
 /// Extensions the gate applies to: F# sources (`#nowarn`) and the
@@ -607,11 +596,20 @@ let fs0025ScannableFiles () : string list =
         let rel = relative p
         not (exemptPrefixes |> List.exists rel.StartsWith))
 
-/// The tree-wide policy declaration, read from `Directory.Build.props`.
-/// A gate that can be deleted to make a build go green is not a gate, so
-/// its presence is asserted like any other rule.
-let policyDeclaresFs0025AsError () : bool =
-    let path = Path.Combine(repoRoot (), "Directory.Build.props")
+/// Subtrees whose own `Directory.Build.props` stops the MSBuild walk to
+/// the root policy but which are NOT exempt from it: each such props file
+/// restates the FS0025 promotion itself, and a test holds it to that and
+/// keeps the subtree in the sweep. `proofs/oracle/` is the F* extractor's
+/// output (Phase 787); it left the exemption list in Phase 1037, once the
+/// normaliser completed every incomplete match the extractor emits
+/// (Phase 1035) and the proof leg stopped carrying Custard's FS0025
+/// `#nowarn` into the committed copy.
+let fs0025SelfDeclaringSubtrees: string list = [ "proofs/oracle/" ]
+
+/// True when the props file at a repo-relative path promotes FS0025 to an
+/// error through `WarningsAsErrors`.
+let propsDeclaresFs0025AsError (relativePath: string) : bool =
+    let path = Path.Combine(repoRoot (), relativePath)
 
     if not (File.Exists path) then
         false
@@ -620,6 +618,12 @@ let policyDeclaresFs0025AsError () : bool =
 
         Regex.Matches(text, @"<WarningsAsErrors[^>]*>([^<]*)</WarningsAsErrors>", RegexOptions.IgnoreCase)
         |> Seq.exists (fun m -> listSuppressesFs0025 m.Groups[1].Value)
+
+/// The tree-wide policy declaration, read from `Directory.Build.props`.
+/// A gate that can be deleted to make a build go green is not a gate, so
+/// its presence is asserted like any other rule.
+let policyDeclaresFs0025AsError () : bool =
+    propsDeclaresFs0025AsError "Directory.Build.props"
 
 // ─── Phase 880 — the packed fable/ project carries no server-only region ──
 //

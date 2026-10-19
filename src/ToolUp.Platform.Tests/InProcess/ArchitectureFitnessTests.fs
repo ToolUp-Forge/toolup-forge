@@ -344,6 +344,35 @@ let private fs0025Tests =
                 Expect.isNotEmpty exemption.Reason (sprintf "exemption `%s` must carry a reason" exemption.Prefix)
         }
 
+        // Phase 1037 — a subtree whose own props stops the walk to the root
+        // policy is under the rule only if that props says so. The generated
+        // proof oracle is the case: it was exempt until the normaliser
+        // completed its matches, and an exemption kept "in case" turns a
+        // new extraction shape back into a silent warning.
+        test "a walk-stopping subtree that is not exempt restates the rule and stays in the sweep" {
+            let scanned = fs0025ScannableFiles () |> List.map relative
+
+            for subtree in fs0025SelfDeclaringSubtrees do
+                Expect.isEmpty
+                    (fs0025ExemptPrefixes
+                     |> List.filter (fun e -> subtree.StartsWith e.Prefix || e.Prefix.StartsWith subtree))
+                    (sprintf
+                        "`%s` is declared under the rule but an exemption covers (part of) it — it cannot be both."
+                        subtree)
+
+                Expect.isTrue
+                    (propsDeclaresFs0025AsError (subtree + "Directory.Build.props"))
+                    (sprintf
+                        "`%sDirectory.Build.props` stops the walk to the root policy, so it must state FS0025 in <WarningsAsErrors> itself — without it every project below it builds with the incomplete-match rule off."
+                        subtree)
+
+                Expect.isNonEmpty
+                    (scanned |> List.filter (fun f -> f.StartsWith subtree))
+                    (sprintf
+                        "the FS0025 sweep reaches nothing under `%s` — the subtree would be exempt in effect while reading as covered."
+                        subtree)
+        }
+
         // ── fail-closed: the detectors fire on planted violations ──────
 
         test "a planted #nowarn \"25\" is detected" {
