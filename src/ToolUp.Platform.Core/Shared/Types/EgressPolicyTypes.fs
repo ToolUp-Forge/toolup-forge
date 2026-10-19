@@ -384,7 +384,7 @@ type EgressVerdict =
 /// `HttpRequestMessage` has nowhere to put it.
 type IEgressPolicy =
     abstract Decide:
-        component: ComponentId * destination: EgressDestination * surface: EgressSurface * label: EgressLabel ->
+        componentId: ComponentId * destination: EgressDestination * surface: EgressSurface * label: EgressLabel ->
             EgressVerdict
 
 /// One component's declared outbound authority, mirroring `SeamGrant`'s

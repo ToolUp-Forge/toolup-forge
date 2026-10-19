@@ -213,10 +213,12 @@ let tests =
             ]
 
             let registry =
+                // `yield` on both: under `for ... ->` the consumer-module tool below was a
+                // discarded expression (FS3221), so the negative half of this test never ran.
                 registryOf [
-                    for name, source in reserved ->
-                        AIToolRegistry.createTool (toolDef name source ServerResident) mustNotRun
-                    AIToolRegistry.createTool (toolDef "sales.forecast" "SalesAnalysis" ServerResident) mustNotRun
+                    for name, source in reserved do
+                        yield AIToolRegistry.createTool (toolDef name source ServerResident) mustNotRun
+                    yield AIToolRegistry.createTool (toolDef "sales.forecast" "SalesAnalysis" ServerResident) mustNotRun
                 ]
 
             let access = accessWith [ "MoodJournal", [ ModulePermission.Read ] ]

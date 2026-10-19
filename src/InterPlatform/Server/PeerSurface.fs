@@ -243,7 +243,7 @@ module PeerSurface =
                 member this.Schedule
                     (scope: ToolUp.Platform.ResolvedScope, registration: ToolUp.Platform.JobRegistration)
                     =
-                    (this :> IJobScheduler).Schedule {
+                    this.Schedule {
                         registration with
                             ScopeId = scope.ScopeId
                     }

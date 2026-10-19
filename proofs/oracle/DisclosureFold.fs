@@ -22,7 +22,8 @@ let uu___is_OSome =
 let __proj__OSome__item__item =
     (fun (projectee : opt<'a>) ->
          (match (projectee) with
-          | OSome (item) -> (item)))
+          | OSome (item) -> (item)
+          | ONone -> (failwith "DisclosureFold.__proj__OSome__item__item: ONone is a case the F* model proves unreachable")))
 
 type pair<'a, 'b> =
     | Pair of 'a * 'b
@@ -71,7 +72,9 @@ let uu___is_Restricted : disclosure -> Prims.bool =
 let __proj__Restricted__item__policy_ref : disclosure -> Prims.string =
     (fun (projectee : disclosure) ->
          (match (projectee) with
-          | Restricted (policy_ref) -> (policy_ref)))
+          | Restricted (policy_ref) -> (policy_ref)
+          | Surfaceable -> (failwith "DisclosureFold.__proj__Restricted__item__policy_ref: Surfaceable is a case the F* model proves unreachable")
+          | Internal -> (failwith "DisclosureFold.__proj__Restricted__item__policy_ref: Internal is a case the F* model proves unreachable")))
 
 type verdict =
     | Disclosable
@@ -92,7 +95,8 @@ let uu___is_NotDisclosable : verdict -> Prims.bool =
 let __proj__NotDisclosable__item__policy_ref : verdict -> Prims.string =
     (fun (projectee : verdict) ->
          (match (projectee) with
-          | NotDisclosable (policy_ref) -> (policy_ref)))
+          | NotDisclosable (policy_ref) -> (policy_ref)
+          | Disclosable -> (failwith "DisclosureFold.__proj__NotDisclosable__item__policy_ref: Disclosable is a case the F* model proves unreachable")))
 
 type resolver<'surface> = Prims.string  ->  'surface  ->  opt<Prims.bool>
 

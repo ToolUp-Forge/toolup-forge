@@ -503,7 +503,7 @@ let private nullScheduler =
         member _.RegisterHandlerAsync(_, _) = async { return Ok() }
 
         member this.Schedule(scope: ToolUp.Platform.ResolvedScope, registration: ToolUp.Platform.JobRegistration) =
-            (this :> IJobScheduler).Schedule {
+            this.Schedule {
                 registration with
                     ScopeId = scope.ScopeId
             }

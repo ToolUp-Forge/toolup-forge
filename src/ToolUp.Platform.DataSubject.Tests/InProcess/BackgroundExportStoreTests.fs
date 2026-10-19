@@ -47,7 +47,7 @@ let private implTests =
                 DSRExportJobHandler.create store exporters audit.Callback (NoOpLogger())
 
             let payload = DsrJobPayload.serialise ticket request
-            let! result = (handler :> IJobHandler).Execute(jobContext "team-1" payload)
+            let! result = handler.Execute(jobContext "team-1" payload)
 
             Expect.equal result Success "export job succeeds"
 
@@ -103,7 +103,7 @@ let private implTests =
                 DSRExportJobHandler.create store [ throwingExporter ] audit.Callback (NoOpLogger())
 
             let payload = DsrJobPayload.serialise ticket request
-            let! result = (handler :> IJobHandler).Execute(jobContext "team-1" payload)
+            let! result = handler.Execute(jobContext "team-1" payload)
 
             match result with
             | TransientFailure _ -> ()
@@ -123,7 +123,7 @@ let private implTests =
             let handler =
                 DSRExportJobHandler.create store [] (CapturingAudit()).Callback (NoOpLogger())
 
-            let! result = (handler :> IJobHandler).Execute(jobContext "team-1" "not-json")
+            let! result = handler.Execute(jobContext "team-1" "not-json")
 
             match result with
             | PermanentFailure _ -> ()
@@ -147,7 +147,7 @@ let private implTests =
             }
 
             let payload = DsrJobPayload.serialise "" request
-            let! result = (handler :> IJobHandler).Execute(jobContext "team-1" payload)
+            let! result = handler.Execute(jobContext "team-1" payload)
 
             Expect.equal result Success "erasure job succeeds"
 

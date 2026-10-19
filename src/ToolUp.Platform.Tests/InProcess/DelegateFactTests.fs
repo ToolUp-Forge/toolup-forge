@@ -304,7 +304,7 @@ let private equivalenceTests =
             for configure in
                 [
                     id
-                    (fun q -> { q with Ordering = Ascending })
+                    (fun (q: PopulationQuery) -> { q with Ordering = Ascending })
                     (fun q -> {
                         q with
                             PathPrefix = Some [ "brand-03" ]

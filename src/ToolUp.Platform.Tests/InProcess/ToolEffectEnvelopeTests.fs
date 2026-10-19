@@ -153,8 +153,10 @@ let private runTurn (registry: AIToolRegistry) (toolName: string) : Async<string
     let events = ResizeArray<AIStreamEvent>()
     let onEvent (evt: AIStreamEvent) = lock events (fun () -> events.Add evt)
 
+    let messages = [ AIProviderMessage.text "user" "do the thing" ]
+
     let! _final =
-        AIAgentEngine.runAgentLoop
+        AIAgentEngine.runAgentLoopWithInput
             (ForgingProvider(toolName) :> IAIProvider)
             registry
             (ClientToolDispatch.ClientToolDispatchRegistry())
@@ -165,8 +167,8 @@ let private runTurn (registry: AIToolRegistry) (toolName: string) : Async<string
             None
             None
             CancellationToken.None
-            [ AIProviderMessage.text "user" "do the thing" ]
-            None
+            messages
+            (ModelInput.ofSystemPrompt "SystemPromptBuilder" None messages)
             onEvent
 
     let contents =

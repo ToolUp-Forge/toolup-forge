@@ -16,7 +16,8 @@ let uu___is_Msg =
 let __proj__Msg__item__msg =
     (fun (projectee : ev<'m>) ->
          (match (projectee) with
-          | Msg (msg) -> (msg)))
+          | Msg (msg) -> (msg)
+          | Term -> (failwith "ElmishLoop.__proj__Msg__item__msg: Term is a case the F* model proves unreachable")))
 
 let uu___is_Term =
     (fun (projectee : ev<'m>) ->
@@ -37,7 +38,8 @@ let uu___is_XDispatch =
 let __proj__XDispatch__item__msg =
     (fun (projectee : ext<'m>) ->
          (match (projectee) with
-          | XDispatch (msg) -> (msg)))
+          | XDispatch (msg) -> (msg)
+          | XTerminate -> (failwith "ElmishLoop.__proj__XDispatch__item__msg: XTerminate is a case the F* model proves unreachable")))
 
 let uu___is_XTerminate =
     (fun (projectee : ext<'m>) ->

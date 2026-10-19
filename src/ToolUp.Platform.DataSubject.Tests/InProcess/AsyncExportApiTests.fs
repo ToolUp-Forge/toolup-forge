@@ -176,7 +176,7 @@ let tests =
                 DSRExportJobHandler.create store exporters audit.Callback (NoOpLogger())
 
             let payload = DsrJobPayload.serialise ticket request
-            let! result = (handler :> IJobHandler).Execute(jobContext "team-1" payload)
+            let! result = handler.Execute(jobContext "team-1" payload)
 
             Expect.equal result Success "a cancelled ticket's job completes as a no-op (Success)"
 

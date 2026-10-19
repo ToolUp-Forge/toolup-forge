@@ -89,7 +89,7 @@ let userTypeahead (value: string) (onChange: string -> unit) (placeholder: strin
             let active = Browser.Dom.document.activeElement
 
             match containerRef.current with
-            | Some root when not (isNull active) && root.contains (active :?> Browser.Types.Node) -> ()
+            | Some root when not (isNull active) && root.contains active -> ()
             | _ -> setDisplayValue value),
         [| box value |]
     )

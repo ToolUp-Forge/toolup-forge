@@ -26,6 +26,8 @@
     <PackageReference Include="Npgsql" />
     <PackageReference Include="MySqlConnector" />
     <PackageReference Include="Microsoft.Data.SqlClient" />
+    <!-- Phase 1035 - lifts the Pkcs SqlClient brings transitively (9.0.13, advisories) to the patched CPM pin. -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="Oracle.ManagedDataAccess.Core" />
     <PackageReference Include="ClickHouse.Client" />

@@ -34,6 +34,15 @@
     put the generated subtree outside the policy, in the documented way,
     rather than to exempt it quietly inside the policy.
 
+    SINCE PHASE 1035 the generated files carry no FS0025 at all:
+    `normalise-extraction.fsx` completes each projector (and `item_at`)
+    with one explicit arm per missing case that fails loudly, which is the
+    root policy's own prescription for an unreachable case. The boundary
+    is kept nonetheless, because the oracle is the prover's output and not
+    authored code: a future extraction shape the normaliser does not yet
+    complete must fail the proof leg, where the remedy (teach the
+    normaliser) is named, rather than the solution build.
+
     WHAT IS LOST, so nobody has to re-derive it: the root props sets the
     FS0025 promotion, `GenerateDocumentationFile`, and package metadata
     guarded on `IsPackable != false`. This project is `IsPackable=false`

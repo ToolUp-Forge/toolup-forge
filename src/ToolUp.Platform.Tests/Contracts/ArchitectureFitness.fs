@@ -582,7 +582,9 @@ let fs0025ExemptPrefixes: Fs0025Exemption list = [
             + "single-case match over the nine-case value union. Nobody wrote it and a byte-diff "
             + "holds it identical to the extraction, so \"fix the matches\" does not exist here; "
             + "its own Directory.Build.props has no parent import, so the policy never reaches it "
-            + "(Phase 787)"
+            + "(Phase 787). Since Phase 1035 the normaliser completes those matches with explicit "
+            + "failing arms, so the oracle carries no FS0025; the boundary keeps a future "
+            + "uncompleted shape a proof-leg failure rather than a solution-build one"
     }
 ]
 

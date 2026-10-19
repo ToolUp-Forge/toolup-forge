@@ -18,6 +18,9 @@
 /// wrote is kept, so no precedence can move; no identifier, literal or operator is touched; the
 /// text of each atom — a name, a string, a type annotation such as `opt<'a>` — is carried through
 /// verbatim. Types, `module` and `open` lines are emitted as they came, with union cases indented.
+/// The ONE non-layout change (Phase 1035): a match the extractor left incomplete because F*
+/// erased the refinement that made it total gains an explicit, loudly failing arm per missing
+/// case — see "Completing the matches" below — so the committed oracle compiles without FS0025.
 ///
 /// **It refuses rather than guesses.** The parser knows the constructs the backend emits —
 /// parentheses, brackets, braces, `match … with | … -> …`, `if … then … else …`, `let … in …`,
@@ -467,6 +470,165 @@ type private Decl =
     | Verbatim of string list
     | Binding of keyword: string * header: string * rhs: Expr
 
+// ─── Completing the matches (Phase 1035) ─────────────────────────────
+//
+// The extractor writes one field projector per constructor argument, and each is a match with ONE
+// arm over a union of several cases: the refinement that makes it total in F* (`projectee:t{C?
+// projectee}`) is erased, so F# sees an incomplete match and warns FS0025 — one per projector.
+// `item_at`'s `nat{position < count xs}` refinement is erased the same way, leaving a cons-only
+// match over a list. The repository's rule for a genuinely unreachable case is to match it
+// EXPLICITLY and fail loudly in its body, never a wildcard (Phase 624, the root
+// Directory.Build.props), so this pass adds one arm per missing case whose body is `failwith`
+// naming the module, the binding and the case. Behaviour is unchanged in kind: the case F* proves
+// unreachable used to raise MatchFailureException and now raises with a message that says where.
+//
+// It completes only what it can prove it understands: a match whose every arm is a constructor of
+// ONE union declared earlier in this module (with irrefutable arguments), or whose arms are list
+// cons / nil. Any other incomplete match is left exactly as extracted, and the compiler's FS0025
+// on the oracle build is what reports it.
+
+type private UnionCase = { Name: string; HasFields: bool }
+
+/// The cases a verbatim `type` block declares, in order (empty for a record or an abbreviation).
+let private declaredCases (lines: string list) : UnionCase list =
+    lines
+    |> List.choose (fun line ->
+        let t = line.Trim()
+
+        if t.StartsWith "| " then
+            let body = t.Substring(2).Trim()
+            let name = body.Split(' ')[0]
+
+            Some
+                { Name = name
+                  HasFields = body.Contains " of " }
+        else
+            None)
+
+/// A pattern that binds or discards without testing: names, `_`, commas, and parentheses over them.
+/// The tokeniser glues a tuple's comma to the name before it (`payload,`), so a name is read with
+/// its commas trimmed.
+let rec private irrefutable (pattern: Expr) =
+    pattern
+    |> List.forall (fun item ->
+        match item with
+        | Atom s ->
+            let name = s.Trim(',')
+
+            name = ""
+            || (Char.IsLower name[0] || name[0] = '_')
+               && name |> Seq.forall (fun c -> Char.IsLetterOrDigit c || c = '_' || c = '\'')
+        | Group('(', inner, _) -> irrefutable inner
+        | Group _
+        | Match _
+        | If _
+        | Fun _
+        | Let _ -> false)
+
+type private ArmShape =
+    | CtorArm of string
+    | ConsArm
+    | NilArm
+    | CatchAll
+    | Other
+
+let private armShape (cases: Map<string, UnionCase list>) (pattern: Expr) =
+    match pattern with
+    | [ Group('[', [], ']') ] -> NilArm
+    | [ head; Atom tail ] when
+        tail.StartsWith "::"
+        && irrefutable [ head ]
+        && irrefutable [ Atom(tail.Substring 2) ]
+        ->
+        ConsArm
+    | Atom name :: rest when cases.ContainsKey name && (rest.IsEmpty || irrefutable rest) -> CtorArm name
+    | p when irrefutable p -> CatchAll
+    | _ -> Other
+
+let private unreachableArm (moduleName: string) (binding: string) (pattern: Expr) (shown: string) : Expr * Expr =
+    let message =
+        sprintf "\"%s.%s: %s is a case the F* model proves unreachable\"" moduleName binding shown
+
+    pattern, [ Group('(', [ Atom "failwith"; Atom message ], ')') ]
+
+let private missingArms
+    (moduleName: string)
+    (binding: string)
+    (cases: Map<string, UnionCase list>)
+    (arms: (Expr * Expr) list)
+    =
+    let shapes = arms |> List.map (fst >> armShape cases)
+
+    let ctorNames =
+        shapes
+        |> List.choose (fun s ->
+            match s with
+            | CtorArm n -> Some n
+            | ConsArm
+            | NilArm
+            | CatchAll
+            | Other -> None)
+
+    if ctorNames.Length = shapes.Length then
+        let unions = ctorNames |> List.map (fun n -> cases[n]) |> List.distinct
+
+        match unions with
+        | [ union ] ->
+            union
+            |> List.filter (fun c -> not (List.contains c.Name ctorNames))
+            |> List.map (fun c ->
+                let pattern =
+                    if c.HasFields then
+                        [ Atom c.Name; Atom "_" ]
+                    else
+                        [ Atom c.Name ]
+
+                unreachableArm moduleName binding pattern c.Name)
+        | [] -> []
+        | _ :: _ :: _ -> []
+    elif shapes |> List.forall (fun s -> s = ConsArm || s = NilArm) then
+        [ if not (List.contains NilArm shapes) then
+              unreachableArm moduleName binding [ Group('[', [], ']') ] "the empty list"
+          if not (List.contains ConsArm shapes) then
+              unreachableArm moduleName binding [ Atom "_"; Atom "::"; Atom "_" ] "a non-empty list" ]
+    else
+        []
+
+let rec private completeExpr moduleName binding cases (items: Expr) : Expr =
+    items |> List.map (completeItem moduleName binding cases)
+
+and private completeItem moduleName binding cases (item: Item) : Item =
+    let go = completeExpr moduleName binding cases
+
+    match item with
+    | Atom _ -> item
+    | Group(o, e, c) -> Group(o, go e, c)
+    | Match(scrutinee, arms) ->
+        let arms = arms |> List.map (fun (p, body) -> p, go body)
+        Match(go scrutinee, arms @ missingArms moduleName binding cases arms)
+    | If(c, t, e) -> If(go c, go t, Option.map go e)
+    | Fun(ps, body) -> Fun(ps, go body)
+    | Let(isRec, p, rhs, body) -> Let(isRec, p, go rhs, go body)
+
+/// Complete every binding's matches against the unions declared ABOVE it — the same order F#
+/// resolves a case name in, so a module redeclaring a case name reads the nearer declaration.
+let private completeMatches (moduleName: string) (decls: Decl list) : Decl list =
+    decls
+    |> List.mapFold
+        (fun (cases: Map<string, UnionCase list>) decl ->
+            match decl with
+            | Verbatim lines ->
+                let union = declaredCases lines
+                decl, union |> List.fold (fun m c -> Map.add c.Name union m) cases
+            | Binding(keyword, header, rhs) ->
+                let binding =
+                    header.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                    |> Array.find (fun w -> w <> "rec")
+
+                Binding(keyword, header, completeExpr moduleName binding cases rhs), cases)
+        Map.empty
+    |> fst
+
 let normalise (moduleName: string) (text: string) : string =
     let sourceLines = text.Replace("\r\n", "\n").Split('\n')
     let toks = tokenise moduleName text |> Array.ofList
@@ -545,6 +707,7 @@ let normalise (moduleName: string) (text: string) : string =
 
                   Binding(keyword, header, rhs)
               | t -> failwithf "%s: line %d: unexpected declaration start %A" moduleName slice[0].Line t ]
+        |> completeMatches moduleName
 
     let out = ResizeArray<string>()
 

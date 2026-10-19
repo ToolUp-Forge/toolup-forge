@@ -171,7 +171,7 @@ let private silentLogger =
 
 let private credentialRejection =
     let rejected () =
-        EmbeddingProviderUnavailableException(401, "invalid api key") :> exn
+        EmbeddingProviderUnavailableException(401, "invalid api key")
 
     testList "Phase 867 — a typed credentials rejection is permanent" [
         test "the typed EmbeddingProviderUnavailableException classifies Permanent" {

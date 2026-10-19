@@ -22,7 +22,8 @@ let uu___is_OSome =
 let __proj__OSome__item__item =
     (fun (projectee : opt<'a>) ->
          (match (projectee) with
-          | OSome (item) -> (item)))
+          | OSome (item) -> (item)
+          | ONone -> (failwith "ElmishRing.__proj__OSome__item__item: ONone is a case the F* model proves unreachable")))
 
 type pair<'a, 'b> =
     | Pair of 'a * 'b
@@ -58,7 +59,8 @@ let uu___is_Written =
 let __proj__Written__item__value =
     (fun (projectee : slot<'a>) ->
          (match (projectee) with
-          | Written (value) -> (value)))
+          | Written (value) -> (value)
+          | Placeholder -> (failwith "ElmishRing.__proj__Written__item__value: Placeholder is a case the F* model proves unreachable")))
 
 let rec length =
     (fun (xs : Prims.list<'a>) ->
@@ -119,12 +121,14 @@ let uu___is_Writable =
 let __proj__Writable__item__items =
     (fun (projectee : ring<'a>) ->
          (match (projectee) with
-          | Writable (items, ix) -> (items)))
+          | Writable (items, ix) -> (items)
+          | ReadWritable _ -> (failwith "ElmishRing.__proj__Writable__item__items: ReadWritable is a case the F* model proves unreachable")))
 
 let __proj__Writable__item__ix =
     (fun (projectee : ring<'a>) ->
          (match (projectee) with
-          | Writable (items, ix) -> (ix)))
+          | Writable (items, ix) -> (ix)
+          | ReadWritable _ -> (failwith "ElmishRing.__proj__Writable__item__ix: ReadWritable is a case the F* model proves unreachable")))
 
 let uu___is_ReadWritable =
     (fun (projectee : ring<'a>) ->
@@ -135,17 +139,20 @@ let uu___is_ReadWritable =
 let __proj__ReadWritable__item__items =
     (fun (projectee : ring<'a>) ->
          (match (projectee) with
-          | ReadWritable (items, wix, rix) -> (items)))
+          | ReadWritable (items, wix, rix) -> (items)
+          | Writable _ -> (failwith "ElmishRing.__proj__ReadWritable__item__items: Writable is a case the F* model proves unreachable")))
 
 let __proj__ReadWritable__item__wix =
     (fun (projectee : ring<'a>) ->
          (match (projectee) with
-          | ReadWritable (items, wix, rix) -> (wix)))
+          | ReadWritable (items, wix, rix) -> (wix)
+          | Writable _ -> (failwith "ElmishRing.__proj__ReadWritable__item__wix: Writable is a case the F* model proves unreachable")))
 
 let __proj__ReadWritable__item__rix =
     (fun (projectee : ring<'a>) ->
          (match (projectee) with
-          | ReadWritable (items, wix, rix) -> (rix)))
+          | ReadWritable (items, wix, rix) -> (rix)
+          | Writable _ -> (failwith "ElmishRing.__proj__ReadWritable__item__rix: Writable is a case the F* model proves unreachable")))
 
 let minimum_capacity : Prims.nat = (Prims.parse_int "2")
 
@@ -187,7 +194,8 @@ let uu___is_Push =
 let __proj__Push__item__item =
     (fun (projectee : op<'a>) ->
          (match (projectee) with
-          | Push (item) -> (item)))
+          | Push (item) -> (item)
+          | Pop -> (failwith "ElmishRing.__proj__Push__item__item: Pop is a case the F* model proves unreachable")))
 
 let uu___is_Pop =
     (fun (projectee : op<'a>) ->

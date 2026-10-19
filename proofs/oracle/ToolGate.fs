@@ -22,7 +22,8 @@ let uu___is_OSome =
 let __proj__OSome__item__item =
     (fun (projectee : opt<'a>) ->
          (match (projectee) with
-          | OSome (item) -> (item)))
+          | OSome (item) -> (item)
+          | ONone -> (failwith "ToolGate.__proj__OSome__item__item: ONone is a case the F* model proves unreachable")))
 
 let rec mem =
     (fun (x : 'a) (xs : Prims.list<'a>) ->
@@ -67,7 +68,14 @@ let uu___is_WriteState : tool_effect -> Prims.bool =
 let __proj__WriteState__item__scope : tool_effect -> Prims.string =
     (fun (projectee : tool_effect) ->
          (match (projectee) with
-          | WriteState (scope) -> (scope)))
+          | WriteState (scope) -> (scope)
+          | ReadFacts -> (failwith "ToolGate.__proj__WriteState__item__scope: ReadFacts is a case the F* model proves unreachable")
+          | ComputeFacts -> (failwith "ToolGate.__proj__WriteState__item__scope: ComputeFacts is a case the F* model proves unreachable")
+          | ReadContent -> (failwith "ToolGate.__proj__WriteState__item__scope: ReadContent is a case the F* model proves unreachable")
+          | Egress _ -> (failwith "ToolGate.__proj__WriteState__item__scope: Egress is a case the F* model proves unreachable")
+          | Spend _ -> (failwith "ToolGate.__proj__WriteState__item__scope: Spend is a case the F* model proves unreachable")
+          | External _ -> (failwith "ToolGate.__proj__WriteState__item__scope: External is a case the F* model proves unreachable")
+          | EmitsActions -> (failwith "ToolGate.__proj__WriteState__item__scope: EmitsActions is a case the F* model proves unreachable")))
 
 let uu___is_Egress : tool_effect -> Prims.bool =
     (fun (projectee : tool_effect) ->
@@ -78,7 +86,14 @@ let uu___is_Egress : tool_effect -> Prims.bool =
 let __proj__Egress__item__destination : tool_effect -> Prims.string =
     (fun (projectee : tool_effect) ->
          (match (projectee) with
-          | Egress (destination) -> (destination)))
+          | Egress (destination) -> (destination)
+          | ReadFacts -> (failwith "ToolGate.__proj__Egress__item__destination: ReadFacts is a case the F* model proves unreachable")
+          | ComputeFacts -> (failwith "ToolGate.__proj__Egress__item__destination: ComputeFacts is a case the F* model proves unreachable")
+          | ReadContent -> (failwith "ToolGate.__proj__Egress__item__destination: ReadContent is a case the F* model proves unreachable")
+          | WriteState _ -> (failwith "ToolGate.__proj__Egress__item__destination: WriteState is a case the F* model proves unreachable")
+          | Spend _ -> (failwith "ToolGate.__proj__Egress__item__destination: Spend is a case the F* model proves unreachable")
+          | External _ -> (failwith "ToolGate.__proj__Egress__item__destination: External is a case the F* model proves unreachable")
+          | EmitsActions -> (failwith "ToolGate.__proj__Egress__item__destination: EmitsActions is a case the F* model proves unreachable")))
 
 let uu___is_Spend : tool_effect -> Prims.bool =
     (fun (projectee : tool_effect) ->
@@ -89,7 +104,14 @@ let uu___is_Spend : tool_effect -> Prims.bool =
 let __proj__Spend__item__budget_class : tool_effect -> Prims.string =
     (fun (projectee : tool_effect) ->
          (match (projectee) with
-          | Spend (budget_class) -> (budget_class)))
+          | Spend (budget_class) -> (budget_class)
+          | ReadFacts -> (failwith "ToolGate.__proj__Spend__item__budget_class: ReadFacts is a case the F* model proves unreachable")
+          | ComputeFacts -> (failwith "ToolGate.__proj__Spend__item__budget_class: ComputeFacts is a case the F* model proves unreachable")
+          | ReadContent -> (failwith "ToolGate.__proj__Spend__item__budget_class: ReadContent is a case the F* model proves unreachable")
+          | WriteState _ -> (failwith "ToolGate.__proj__Spend__item__budget_class: WriteState is a case the F* model proves unreachable")
+          | Egress _ -> (failwith "ToolGate.__proj__Spend__item__budget_class: Egress is a case the F* model proves unreachable")
+          | External _ -> (failwith "ToolGate.__proj__Spend__item__budget_class: External is a case the F* model proves unreachable")
+          | EmitsActions -> (failwith "ToolGate.__proj__Spend__item__budget_class: EmitsActions is a case the F* model proves unreachable")))
 
 let uu___is_External : tool_effect -> Prims.bool =
     (fun (projectee : tool_effect) ->
@@ -100,7 +122,14 @@ let uu___is_External : tool_effect -> Prims.bool =
 let __proj__External__item__capability_id : tool_effect -> Prims.string =
     (fun (projectee : tool_effect) ->
          (match (projectee) with
-          | External (capability_id) -> (capability_id)))
+          | External (capability_id) -> (capability_id)
+          | ReadFacts -> (failwith "ToolGate.__proj__External__item__capability_id: ReadFacts is a case the F* model proves unreachable")
+          | ComputeFacts -> (failwith "ToolGate.__proj__External__item__capability_id: ComputeFacts is a case the F* model proves unreachable")
+          | ReadContent -> (failwith "ToolGate.__proj__External__item__capability_id: ReadContent is a case the F* model proves unreachable")
+          | WriteState _ -> (failwith "ToolGate.__proj__External__item__capability_id: WriteState is a case the F* model proves unreachable")
+          | Egress _ -> (failwith "ToolGate.__proj__External__item__capability_id: Egress is a case the F* model proves unreachable")
+          | Spend _ -> (failwith "ToolGate.__proj__External__item__capability_id: Spend is a case the F* model proves unreachable")
+          | EmitsActions -> (failwith "ToolGate.__proj__External__item__capability_id: EmitsActions is a case the F* model proves unreachable")))
 
 let uu___is_EmitsActions : tool_effect -> Prims.bool =
     (fun (projectee : tool_effect) ->
@@ -197,7 +226,8 @@ let uu___is_Declared : declaration -> Prims.bool =
 let __proj__Declared__item__effects : declaration -> Prims.list<tool_effect> =
     (fun (projectee : declaration) ->
          (match (projectee) with
-          | Declared (effects) -> (effects)))
+          | Declared (effects) -> (effects)
+          | Undeclared -> (failwith "ToolGate.__proj__Declared__item__effects: Undeclared is a case the F* model proves unreachable")))
 
 type ceiling =
     | Unbounded
@@ -218,7 +248,8 @@ let uu___is_Bounded : ceiling -> Prims.bool =
 let __proj__Bounded__item__classes : ceiling -> Prims.list<effect_class> =
     (fun (projectee : ceiling) ->
          (match (projectee) with
-          | Bounded (classes) -> (classes)))
+          | Bounded (classes) -> (classes)
+          | Unbounded -> (failwith "ToolGate.__proj__Bounded__item__classes: Unbounded is a case the F* model proves unreachable")))
 
 type policy = {ceiling : ceiling; permit_undeclared : Prims.bool}
 
@@ -254,7 +285,11 @@ let uu___is_RefusedSource : verdict -> Prims.bool =
 let __proj__RefusedSource__item__source_module : verdict -> Prims.string =
     (fun (projectee : verdict) ->
          (match (projectee) with
-          | RefusedSource (source_module) -> (source_module)))
+          | RefusedSource (source_module) -> (source_module)
+          | Admitted -> (failwith "ToolGate.__proj__RefusedSource__item__source_module: Admitted is a case the F* model proves unreachable")
+          | RefusedGrant _ -> (failwith "ToolGate.__proj__RefusedSource__item__source_module: RefusedGrant is a case the F* model proves unreachable")
+          | RefusedUndeclared -> (failwith "ToolGate.__proj__RefusedSource__item__source_module: RefusedUndeclared is a case the F* model proves unreachable")
+          | RefusedEffects _ -> (failwith "ToolGate.__proj__RefusedSource__item__source_module: RefusedEffects is a case the F* model proves unreachable")))
 
 let uu___is_RefusedGrant : verdict -> Prims.bool =
     (fun (projectee : verdict) ->
@@ -265,7 +300,11 @@ let uu___is_RefusedGrant : verdict -> Prims.bool =
 let __proj__RefusedGrant__item__source_module : verdict -> Prims.string =
     (fun (projectee : verdict) ->
          (match (projectee) with
-          | RefusedGrant (source_module) -> (source_module)))
+          | RefusedGrant (source_module) -> (source_module)
+          | Admitted -> (failwith "ToolGate.__proj__RefusedGrant__item__source_module: Admitted is a case the F* model proves unreachable")
+          | RefusedSource _ -> (failwith "ToolGate.__proj__RefusedGrant__item__source_module: RefusedSource is a case the F* model proves unreachable")
+          | RefusedUndeclared -> (failwith "ToolGate.__proj__RefusedGrant__item__source_module: RefusedUndeclared is a case the F* model proves unreachable")
+          | RefusedEffects _ -> (failwith "ToolGate.__proj__RefusedGrant__item__source_module: RefusedEffects is a case the F* model proves unreachable")))
 
 let uu___is_RefusedUndeclared : verdict -> Prims.bool =
     (fun (projectee : verdict) ->
@@ -282,7 +321,11 @@ let uu___is_RefusedEffects : verdict -> Prims.bool =
 let __proj__RefusedEffects__item__exceeding : verdict -> Prims.list<tool_effect> =
     (fun (projectee : verdict) ->
          (match (projectee) with
-          | RefusedEffects (exceeding) -> (exceeding)))
+          | RefusedEffects (exceeding) -> (exceeding)
+          | Admitted -> (failwith "ToolGate.__proj__RefusedEffects__item__exceeding: Admitted is a case the F* model proves unreachable")
+          | RefusedSource _ -> (failwith "ToolGate.__proj__RefusedEffects__item__exceeding: RefusedSource is a case the F* model proves unreachable")
+          | RefusedGrant _ -> (failwith "ToolGate.__proj__RefusedEffects__item__exceeding: RefusedGrant is a case the F* model proves unreachable")
+          | RefusedUndeclared -> (failwith "ToolGate.__proj__RefusedEffects__item__exceeding: RefusedUndeclared is a case the F* model proves unreachable")))
 
 let rec exceeding_in : Prims.list<effect_class> -> Prims.list<tool_effect> -> Prims.list<tool_effect> =
     (fun (classes : Prims.list<effect_class>) (es : Prims.list<tool_effect>) ->

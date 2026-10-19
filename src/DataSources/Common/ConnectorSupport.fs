@@ -301,16 +301,16 @@ module CredentialJson =
                     let pairs =
                         document.RootElement.EnumerateObject()
                         |> Seq.map (fun property ->
+                            // A string is unquoted, null is empty, and every other kind keeps
+                            // its raw JSON text. A comparison rather than a match: `ValueKind` is
+                            // an enum, so a match over its named cases is never exhaustive (FS0104).
                             let value =
-                                match property.Value.ValueKind with
-                                | System.Text.Json.JsonValueKind.String -> property.Value.GetString()
-                                | System.Text.Json.JsonValueKind.Null -> ""
-                                | System.Text.Json.JsonValueKind.Undefined
-                                | System.Text.Json.JsonValueKind.Object
-                                | System.Text.Json.JsonValueKind.Array
-                                | System.Text.Json.JsonValueKind.Number
-                                | System.Text.Json.JsonValueKind.True
-                                | System.Text.Json.JsonValueKind.False -> property.Value.GetRawText()
+                                if property.Value.ValueKind = System.Text.Json.JsonValueKind.String then
+                                    property.Value.GetString()
+                                elif property.Value.ValueKind = System.Text.Json.JsonValueKind.Null then
+                                    ""
+                                else
+                                    property.Value.GetRawText()
 
                             property.Name.ToLowerInvariant(), (if isNull value then "" else value))
                         |> List.ofSeq

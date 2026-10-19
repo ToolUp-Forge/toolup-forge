@@ -18,5 +18,7 @@
   <ItemGroup>
     <!-- FSharp.Core is implicit via the .NET SDK. MailKit is unique. -->
     <PackageReference Include="MailKit" />
+    <!-- Phase 1035 - lifts the Pkcs MimeKit brings transitively (10.0.0, advisories) to the patched CPM pin. -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
   </ItemGroup>
 </Project>

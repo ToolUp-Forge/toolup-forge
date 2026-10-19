@@ -74,7 +74,7 @@ let registerLogStore
         | ServerlessHost -> ()
         | KestrelHost ->
             services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun _ ->
-                SqliteLogStore.LogStoreRetentionService(logStore, storeConfig, resolvedLogger)
+                new SqliteLogStore.LogStoreRetentionService(logStore, storeConfig, resolvedLogger)
                 :> Microsoft.Extensions.Hosting.IHostedService)
             |> ignore
 

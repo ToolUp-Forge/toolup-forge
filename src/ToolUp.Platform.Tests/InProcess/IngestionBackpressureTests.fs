@@ -408,7 +408,7 @@ let private queryPath =
                     }
 
                     member this.GenerateEmbeddings texts =
-                        batchedFallback (this :> IEmbeddingProvider).GenerateEmbedding texts
+                        batchedFallback this.GenerateEmbedding texts
 
                     member _.Dimensions = 8
                     member _.ProviderId = "test"
@@ -900,7 +900,7 @@ let private embedderRetries =
     testList "(a) the query policy governs the embedder's retries" [
         testCaseAsync "a query embed makes the attempts its policy names, decides inside its budget, and frees its slot"
         <| async {
-            let handler = ScriptedHandler failsTwice
+            let handler = new ScriptedHandler(failsTwice)
 
             // The composed shape: the provider behind the caching decorator.
             let embedder =
@@ -937,14 +937,14 @@ let private embedderRetries =
 
         testCaseAsync "ingestion keeps the provider's own retry policy"
         <| async {
-            let handler = ScriptedHandler failsTwice
+            let handler = new ScriptedHandler(failsTwice)
             let! vector = (openAiOver handler).GenerateEmbedding "a chunk"
             Expect.equal vector.Length 3 "the third attempt answered"
             Expect.equal handler.Requests 3 "the provider retried twice, as configured"
         }
 
         IEmbeddingProviderCallOverrideContract.tests "OpenAIEmbeddingProvider" (fun () ->
-            let handler = ScriptedHandler failsTwice
+            let handler = new ScriptedHandler(failsTwice)
 
             {
                 Provider = openAiOverWith (TimeSpan.FromMilliseconds 1.0) handler

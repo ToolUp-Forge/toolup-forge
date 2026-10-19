@@ -22,7 +22,8 @@ let uu___is_OSome =
 let __proj__OSome__item__item =
     (fun (projectee : opt<'a>) ->
          (match (projectee) with
-          | OSome (item) -> (item)))
+          | OSome (item) -> (item)
+          | ONone -> (failwith "RemotingDecode.__proj__OSome__item__item: ONone is a case the F* model proves unreachable")))
 
 type pair<'a, 'b> =
     | Pair of 'a * 'b
@@ -114,7 +115,8 @@ let uu___is_Accepted =
 let __proj__Accepted__item__value =
     (fun (projectee : outcome<'a>) ->
          (match (projectee) with
-          | Accepted (value) -> (value)))
+          | Accepted (value) -> (value)
+          | Refused _ -> (failwith "RemotingDecode.__proj__Accepted__item__value: Refused is a case the F* model proves unreachable")))
 
 let uu___is_Refused =
     (fun (projectee : outcome<'a>) ->
@@ -125,7 +127,8 @@ let uu___is_Refused =
 let __proj__Refused__item__error =
     (fun (projectee : outcome<'a>) ->
          (match (projectee) with
-          | Refused (error) -> (error)))
+          | Refused (error) -> (error)
+          | Accepted _ -> (failwith "RemotingDecode.__proj__Refused__item__error: Accepted is a case the F* model proves unreachable")))
 
 type integer_width =
     | Fixnum
@@ -224,7 +227,15 @@ let uu___is_VBool =
 let __proj__VBool__item__payload =
     (fun (projectee : value<'raw, 'flt>) ->
          (match (projectee) with
-          | VBool (payload) -> (payload)))
+          | VBool (payload) -> (payload)
+          | VNil -> (failwith "RemotingDecode.__proj__VBool__item__payload: VNil is a case the F* model proves unreachable")
+          | VInt _ -> (failwith "RemotingDecode.__proj__VBool__item__payload: VInt is a case the F* model proves unreachable")
+          | VUInt _ -> (failwith "RemotingDecode.__proj__VBool__item__payload: VUInt is a case the F* model proves unreachable")
+          | VFloat _ -> (failwith "RemotingDecode.__proj__VBool__item__payload: VFloat is a case the F* model proves unreachable")
+          | VStr _ -> (failwith "RemotingDecode.__proj__VBool__item__payload: VStr is a case the F* model proves unreachable")
+          | VBin _ -> (failwith "RemotingDecode.__proj__VBool__item__payload: VBin is a case the F* model proves unreachable")
+          | VArr _ -> (failwith "RemotingDecode.__proj__VBool__item__payload: VArr is a case the F* model proves unreachable")
+          | VMap _ -> (failwith "RemotingDecode.__proj__VBool__item__payload: VMap is a case the F* model proves unreachable")))
 
 let uu___is_VInt =
     (fun (projectee : value<'raw, 'flt>) ->
@@ -235,12 +246,28 @@ let uu___is_VInt =
 let __proj__VInt__item__payload =
     (fun (projectee : value<'raw, 'flt>) ->
          (match (projectee) with
-          | VInt (payload, width) -> (payload)))
+          | VInt (payload, width) -> (payload)
+          | VNil -> (failwith "RemotingDecode.__proj__VInt__item__payload: VNil is a case the F* model proves unreachable")
+          | VBool _ -> (failwith "RemotingDecode.__proj__VInt__item__payload: VBool is a case the F* model proves unreachable")
+          | VUInt _ -> (failwith "RemotingDecode.__proj__VInt__item__payload: VUInt is a case the F* model proves unreachable")
+          | VFloat _ -> (failwith "RemotingDecode.__proj__VInt__item__payload: VFloat is a case the F* model proves unreachable")
+          | VStr _ -> (failwith "RemotingDecode.__proj__VInt__item__payload: VStr is a case the F* model proves unreachable")
+          | VBin _ -> (failwith "RemotingDecode.__proj__VInt__item__payload: VBin is a case the F* model proves unreachable")
+          | VArr _ -> (failwith "RemotingDecode.__proj__VInt__item__payload: VArr is a case the F* model proves unreachable")
+          | VMap _ -> (failwith "RemotingDecode.__proj__VInt__item__payload: VMap is a case the F* model proves unreachable")))
 
 let __proj__VInt__item__width =
     (fun (projectee : value<'raw, 'flt>) ->
          (match (projectee) with
-          | VInt (payload, width) -> (width)))
+          | VInt (payload, width) -> (width)
+          | VNil -> (failwith "RemotingDecode.__proj__VInt__item__width: VNil is a case the F* model proves unreachable")
+          | VBool _ -> (failwith "RemotingDecode.__proj__VInt__item__width: VBool is a case the F* model proves unreachable")
+          | VUInt _ -> (failwith "RemotingDecode.__proj__VInt__item__width: VUInt is a case the F* model proves unreachable")
+          | VFloat _ -> (failwith "RemotingDecode.__proj__VInt__item__width: VFloat is a case the F* model proves unreachable")
+          | VStr _ -> (failwith "RemotingDecode.__proj__VInt__item__width: VStr is a case the F* model proves unreachable")
+          | VBin _ -> (failwith "RemotingDecode.__proj__VInt__item__width: VBin is a case the F* model proves unreachable")
+          | VArr _ -> (failwith "RemotingDecode.__proj__VInt__item__width: VArr is a case the F* model proves unreachable")
+          | VMap _ -> (failwith "RemotingDecode.__proj__VInt__item__width: VMap is a case the F* model proves unreachable")))
 
 let uu___is_VUInt =
     (fun (projectee : value<'raw, 'flt>) ->
@@ -251,12 +278,28 @@ let uu___is_VUInt =
 let __proj__VUInt__item__payload =
     (fun (projectee : value<'raw, 'flt>) ->
          (match (projectee) with
-          | VUInt (payload, width) -> (payload)))
+          | VUInt (payload, width) -> (payload)
+          | VNil -> (failwith "RemotingDecode.__proj__VUInt__item__payload: VNil is a case the F* model proves unreachable")
+          | VBool _ -> (failwith "RemotingDecode.__proj__VUInt__item__payload: VBool is a case the F* model proves unreachable")
+          | VInt _ -> (failwith "RemotingDecode.__proj__VUInt__item__payload: VInt is a case the F* model proves unreachable")
+          | VFloat _ -> (failwith "RemotingDecode.__proj__VUInt__item__payload: VFloat is a case the F* model proves unreachable")
+          | VStr _ -> (failwith "RemotingDecode.__proj__VUInt__item__payload: VStr is a case the F* model proves unreachable")
+          | VBin _ -> (failwith "RemotingDecode.__proj__VUInt__item__payload: VBin is a case the F* model proves unreachable")
+          | VArr _ -> (failwith "RemotingDecode.__proj__VUInt__item__payload: VArr is a case the F* model proves unreachable")
+          | VMap _ -> (failwith "RemotingDecode.__proj__VUInt__item__payload: VMap is a case the F* model proves unreachable")))
 
 let __proj__VUInt__item__width =
     (fun (projectee : value<'raw, 'flt>) ->
          (match (projectee) with
-          | VUInt (payload, width) -> (width)))
+          | VUInt (payload, width) -> (width)
+          | VNil -> (failwith "RemotingDecode.__proj__VUInt__item__width: VNil is a case the F* model proves unreachable")
+          | VBool _ -> (failwith "RemotingDecode.__proj__VUInt__item__width: VBool is a case the F* model proves unreachable")
+          | VInt _ -> (failwith "RemotingDecode.__proj__VUInt__item__width: VInt is a case the F* model proves unreachable")
+          | VFloat _ -> (failwith "RemotingDecode.__proj__VUInt__item__width: VFloat is a case the F* model proves unreachable")
+          | VStr _ -> (failwith "RemotingDecode.__proj__VUInt__item__width: VStr is a case the F* model proves unreachable")
+          | VBin _ -> (failwith "RemotingDecode.__proj__VUInt__item__width: VBin is a case the F* model proves unreachable")
+          | VArr _ -> (failwith "RemotingDecode.__proj__VUInt__item__width: VArr is a case the F* model proves unreachable")
+          | VMap _ -> (failwith "RemotingDecode.__proj__VUInt__item__width: VMap is a case the F* model proves unreachable")))
 
 let uu___is_VFloat =
     (fun (projectee : value<'raw, 'flt>) ->
@@ -267,17 +310,41 @@ let uu___is_VFloat =
 let __proj__VFloat__item__payload =
     (fun (projectee : value<'raw, 'flt>) ->
          (match (projectee) with
-          | VFloat (payload, width, rendered) -> (payload)))
+          | VFloat (payload, width, rendered) -> (payload)
+          | VNil -> (failwith "RemotingDecode.__proj__VFloat__item__payload: VNil is a case the F* model proves unreachable")
+          | VBool _ -> (failwith "RemotingDecode.__proj__VFloat__item__payload: VBool is a case the F* model proves unreachable")
+          | VInt _ -> (failwith "RemotingDecode.__proj__VFloat__item__payload: VInt is a case the F* model proves unreachable")
+          | VUInt _ -> (failwith "RemotingDecode.__proj__VFloat__item__payload: VUInt is a case the F* model proves unreachable")
+          | VStr _ -> (failwith "RemotingDecode.__proj__VFloat__item__payload: VStr is a case the F* model proves unreachable")
+          | VBin _ -> (failwith "RemotingDecode.__proj__VFloat__item__payload: VBin is a case the F* model proves unreachable")
+          | VArr _ -> (failwith "RemotingDecode.__proj__VFloat__item__payload: VArr is a case the F* model proves unreachable")
+          | VMap _ -> (failwith "RemotingDecode.__proj__VFloat__item__payload: VMap is a case the F* model proves unreachable")))
 
 let __proj__VFloat__item__width =
     (fun (projectee : value<'raw, 'flt>) ->
          (match (projectee) with
-          | VFloat (payload, width, rendered) -> (width)))
+          | VFloat (payload, width, rendered) -> (width)
+          | VNil -> (failwith "RemotingDecode.__proj__VFloat__item__width: VNil is a case the F* model proves unreachable")
+          | VBool _ -> (failwith "RemotingDecode.__proj__VFloat__item__width: VBool is a case the F* model proves unreachable")
+          | VInt _ -> (failwith "RemotingDecode.__proj__VFloat__item__width: VInt is a case the F* model proves unreachable")
+          | VUInt _ -> (failwith "RemotingDecode.__proj__VFloat__item__width: VUInt is a case the F* model proves unreachable")
+          | VStr _ -> (failwith "RemotingDecode.__proj__VFloat__item__width: VStr is a case the F* model proves unreachable")
+          | VBin _ -> (failwith "RemotingDecode.__proj__VFloat__item__width: VBin is a case the F* model proves unreachable")
+          | VArr _ -> (failwith "RemotingDecode.__proj__VFloat__item__width: VArr is a case the F* model proves unreachable")
+          | VMap _ -> (failwith "RemotingDecode.__proj__VFloat__item__width: VMap is a case the F* model proves unreachable")))
 
 let __proj__VFloat__item__rendered =
     (fun (projectee : value<'raw, 'flt>) ->
          (match (projectee) with
-          | VFloat (payload, width, rendered) -> (rendered)))
+          | VFloat (payload, width, rendered) -> (rendered)
+          | VNil -> (failwith "RemotingDecode.__proj__VFloat__item__rendered: VNil is a case the F* model proves unreachable")
+          | VBool _ -> (failwith "RemotingDecode.__proj__VFloat__item__rendered: VBool is a case the F* model proves unreachable")
+          | VInt _ -> (failwith "RemotingDecode.__proj__VFloat__item__rendered: VInt is a case the F* model proves unreachable")
+          | VUInt _ -> (failwith "RemotingDecode.__proj__VFloat__item__rendered: VUInt is a case the F* model proves unreachable")
+          | VStr _ -> (failwith "RemotingDecode.__proj__VFloat__item__rendered: VStr is a case the F* model proves unreachable")
+          | VBin _ -> (failwith "RemotingDecode.__proj__VFloat__item__rendered: VBin is a case the F* model proves unreachable")
+          | VArr _ -> (failwith "RemotingDecode.__proj__VFloat__item__rendered: VArr is a case the F* model proves unreachable")
+          | VMap _ -> (failwith "RemotingDecode.__proj__VFloat__item__rendered: VMap is a case the F* model proves unreachable")))
 
 let uu___is_VStr =
     (fun (projectee : value<'raw, 'flt>) ->
@@ -288,12 +355,28 @@ let uu___is_VStr =
 let __proj__VStr__item__payload =
     (fun (projectee : value<'raw, 'flt>) ->
          (match (projectee) with
-          | VStr (payload, length) -> (payload)))
+          | VStr (payload, length) -> (payload)
+          | VNil -> (failwith "RemotingDecode.__proj__VStr__item__payload: VNil is a case the F* model proves unreachable")
+          | VBool _ -> (failwith "RemotingDecode.__proj__VStr__item__payload: VBool is a case the F* model proves unreachable")
+          | VInt _ -> (failwith "RemotingDecode.__proj__VStr__item__payload: VInt is a case the F* model proves unreachable")
+          | VUInt _ -> (failwith "RemotingDecode.__proj__VStr__item__payload: VUInt is a case the F* model proves unreachable")
+          | VFloat _ -> (failwith "RemotingDecode.__proj__VStr__item__payload: VFloat is a case the F* model proves unreachable")
+          | VBin _ -> (failwith "RemotingDecode.__proj__VStr__item__payload: VBin is a case the F* model proves unreachable")
+          | VArr _ -> (failwith "RemotingDecode.__proj__VStr__item__payload: VArr is a case the F* model proves unreachable")
+          | VMap _ -> (failwith "RemotingDecode.__proj__VStr__item__payload: VMap is a case the F* model proves unreachable")))
 
 let __proj__VStr__item__length =
     (fun (projectee : value<'raw, 'flt>) ->
          (match (projectee) with
-          | VStr (payload, length) -> (length)))
+          | VStr (payload, length) -> (length)
+          | VNil -> (failwith "RemotingDecode.__proj__VStr__item__length: VNil is a case the F* model proves unreachable")
+          | VBool _ -> (failwith "RemotingDecode.__proj__VStr__item__length: VBool is a case the F* model proves unreachable")
+          | VInt _ -> (failwith "RemotingDecode.__proj__VStr__item__length: VInt is a case the F* model proves unreachable")
+          | VUInt _ -> (failwith "RemotingDecode.__proj__VStr__item__length: VUInt is a case the F* model proves unreachable")
+          | VFloat _ -> (failwith "RemotingDecode.__proj__VStr__item__length: VFloat is a case the F* model proves unreachable")
+          | VBin _ -> (failwith "RemotingDecode.__proj__VStr__item__length: VBin is a case the F* model proves unreachable")
+          | VArr _ -> (failwith "RemotingDecode.__proj__VStr__item__length: VArr is a case the F* model proves unreachable")
+          | VMap _ -> (failwith "RemotingDecode.__proj__VStr__item__length: VMap is a case the F* model proves unreachable")))
 
 let uu___is_VBin =
     (fun (projectee : value<'raw, 'flt>) ->
@@ -304,12 +387,28 @@ let uu___is_VBin =
 let __proj__VBin__item__payload =
     (fun (projectee : value<'raw, 'flt>) ->
          (match (projectee) with
-          | VBin (payload, length) -> (payload)))
+          | VBin (payload, length) -> (payload)
+          | VNil -> (failwith "RemotingDecode.__proj__VBin__item__payload: VNil is a case the F* model proves unreachable")
+          | VBool _ -> (failwith "RemotingDecode.__proj__VBin__item__payload: VBool is a case the F* model proves unreachable")
+          | VInt _ -> (failwith "RemotingDecode.__proj__VBin__item__payload: VInt is a case the F* model proves unreachable")
+          | VUInt _ -> (failwith "RemotingDecode.__proj__VBin__item__payload: VUInt is a case the F* model proves unreachable")
+          | VFloat _ -> (failwith "RemotingDecode.__proj__VBin__item__payload: VFloat is a case the F* model proves unreachable")
+          | VStr _ -> (failwith "RemotingDecode.__proj__VBin__item__payload: VStr is a case the F* model proves unreachable")
+          | VArr _ -> (failwith "RemotingDecode.__proj__VBin__item__payload: VArr is a case the F* model proves unreachable")
+          | VMap _ -> (failwith "RemotingDecode.__proj__VBin__item__payload: VMap is a case the F* model proves unreachable")))
 
 let __proj__VBin__item__length =
     (fun (projectee : value<'raw, 'flt>) ->
          (match (projectee) with
-          | VBin (payload, length) -> (length)))
+          | VBin (payload, length) -> (length)
+          | VNil -> (failwith "RemotingDecode.__proj__VBin__item__length: VNil is a case the F* model proves unreachable")
+          | VBool _ -> (failwith "RemotingDecode.__proj__VBin__item__length: VBool is a case the F* model proves unreachable")
+          | VInt _ -> (failwith "RemotingDecode.__proj__VBin__item__length: VInt is a case the F* model proves unreachable")
+          | VUInt _ -> (failwith "RemotingDecode.__proj__VBin__item__length: VUInt is a case the F* model proves unreachable")
+          | VFloat _ -> (failwith "RemotingDecode.__proj__VBin__item__length: VFloat is a case the F* model proves unreachable")
+          | VStr _ -> (failwith "RemotingDecode.__proj__VBin__item__length: VStr is a case the F* model proves unreachable")
+          | VArr _ -> (failwith "RemotingDecode.__proj__VBin__item__length: VArr is a case the F* model proves unreachable")
+          | VMap _ -> (failwith "RemotingDecode.__proj__VBin__item__length: VMap is a case the F* model proves unreachable")))
 
 let uu___is_VArr =
     (fun (projectee : value<'raw, 'flt>) ->
@@ -320,7 +419,15 @@ let uu___is_VArr =
 let __proj__VArr__item__items =
     (fun (projectee : value<'raw, 'flt>) ->
          (match (projectee) with
-          | VArr (items) -> (items)))
+          | VArr (items) -> (items)
+          | VNil -> (failwith "RemotingDecode.__proj__VArr__item__items: VNil is a case the F* model proves unreachable")
+          | VBool _ -> (failwith "RemotingDecode.__proj__VArr__item__items: VBool is a case the F* model proves unreachable")
+          | VInt _ -> (failwith "RemotingDecode.__proj__VArr__item__items: VInt is a case the F* model proves unreachable")
+          | VUInt _ -> (failwith "RemotingDecode.__proj__VArr__item__items: VUInt is a case the F* model proves unreachable")
+          | VFloat _ -> (failwith "RemotingDecode.__proj__VArr__item__items: VFloat is a case the F* model proves unreachable")
+          | VStr _ -> (failwith "RemotingDecode.__proj__VArr__item__items: VStr is a case the F* model proves unreachable")
+          | VBin _ -> (failwith "RemotingDecode.__proj__VArr__item__items: VBin is a case the F* model proves unreachable")
+          | VMap _ -> (failwith "RemotingDecode.__proj__VArr__item__items: VMap is a case the F* model proves unreachable")))
 
 let uu___is_VMap =
     (fun (projectee : value<'raw, 'flt>) ->
@@ -331,7 +438,15 @@ let uu___is_VMap =
 let __proj__VMap__item__entries =
     (fun (projectee : value<'raw, 'flt>) ->
          (match (projectee) with
-          | VMap (entries) -> (entries)))
+          | VMap (entries) -> (entries)
+          | VNil -> (failwith "RemotingDecode.__proj__VMap__item__entries: VNil is a case the F* model proves unreachable")
+          | VBool _ -> (failwith "RemotingDecode.__proj__VMap__item__entries: VBool is a case the F* model proves unreachable")
+          | VInt _ -> (failwith "RemotingDecode.__proj__VMap__item__entries: VInt is a case the F* model proves unreachable")
+          | VUInt _ -> (failwith "RemotingDecode.__proj__VMap__item__entries: VUInt is a case the F* model proves unreachable")
+          | VFloat _ -> (failwith "RemotingDecode.__proj__VMap__item__entries: VFloat is a case the F* model proves unreachable")
+          | VStr _ -> (failwith "RemotingDecode.__proj__VMap__item__entries: VStr is a case the F* model proves unreachable")
+          | VBin _ -> (failwith "RemotingDecode.__proj__VMap__item__entries: VBin is a case the F* model proves unreachable")
+          | VArr _ -> (failwith "RemotingDecode.__proj__VMap__item__entries: VArr is a case the F* model proves unreachable")))
 
 let rec count =
     (fun (xs : Prims.list<'a>) ->
@@ -489,7 +604,8 @@ let exactly =
 let rec item_at =
     (fun (xs : Prims.list<value<'raw, 'flt>>) (position : Prims.nat) ->
          (match (xs) with
-          | (head) ::tail -> (if (Prims.op_Equals position (Prims.parse_int "0")) then (head) else ((item_at tail (position - (Prims.parse_int "1")))))))
+          | (head) ::tail -> (if (Prims.op_Equals position (Prims.parse_int "0")) then (head) else ((item_at tail (position - (Prims.parse_int "1")))))
+          | [] -> (failwith "RemotingDecode.item_at: the empty list is a case the F* model proves unreachable")))
 
 let element_of = (fun (position : Prims.nat) (xs : Prims.list<value<'raw, 'flt>>) -> if (position < (count xs)) then (OSome ((item_at xs position))) else (ONone))
 
@@ -727,12 +843,16 @@ let uu___is_Delayed : ref_status -> Prims.bool =
 let __proj__Delayed__item__reason : ref_status -> Prims.string =
     (fun (projectee : ref_status) ->
          (match (projectee) with
-          | Delayed (reason, minutes) -> (reason)))
+          | Delayed (reason, minutes) -> (reason)
+          | Planned -> (failwith "RemotingDecode.__proj__Delayed__item__reason: Planned is a case the F* model proves unreachable")
+          | Arrived _ -> (failwith "RemotingDecode.__proj__Delayed__item__reason: Arrived is a case the F* model proves unreachable")))
 
 let __proj__Delayed__item__minutes : ref_status -> i32 =
     (fun (projectee : ref_status) ->
          (match (projectee) with
-          | Delayed (reason, minutes) -> (minutes)))
+          | Delayed (reason, minutes) -> (minutes)
+          | Planned -> (failwith "RemotingDecode.__proj__Delayed__item__minutes: Planned is a case the F* model proves unreachable")
+          | Arrived _ -> (failwith "RemotingDecode.__proj__Delayed__item__minutes: Arrived is a case the F* model proves unreachable")))
 
 let uu___is_Arrived : ref_status -> Prims.bool =
     (fun (projectee : ref_status) ->
@@ -743,7 +863,9 @@ let uu___is_Arrived : ref_status -> Prims.bool =
 let __proj__Arrived__item__at : ref_status -> i32 =
     (fun (projectee : ref_status) ->
          (match (projectee) with
-          | Arrived (at) -> (at)))
+          | Arrived (at) -> (at)
+          | Planned -> (failwith "RemotingDecode.__proj__Arrived__item__at: Planned is a case the F* model proves unreachable")
+          | Delayed _ -> (failwith "RemotingDecode.__proj__Arrived__item__at: Delayed is a case the F* model proves unreachable")))
 
 type ref_leg = {hop : pair<i32, Prims.string>; status : ref_status}
 

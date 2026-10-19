@@ -44,11 +44,11 @@ open System.Threading.Tasks
 /// reason. The message is the reason, which names the ORIGIN and never
 /// the URL.
 type EgressDeniedException
-    (component: ComponentId, destination: EgressDestination, surface: EgressSurface, reason: string) =
+    (componentId: ComponentId, destination: EgressDestination, surface: EgressSurface, reason: string) =
     inherit Exception(reason)
 
     /// The component the call was attributed to.
-    member _.Component = component
+    member _.Component = componentId
     /// The refused destination — origin only.
     member _.Destination = destination
     /// The surface the client was created for.
@@ -366,7 +366,7 @@ type EgressPolicyHandler(surface: EgressSurface) =
     /// `IHttpClientFactory` client and any caller with no better label.
     /// An explicit secondary constructor rather than an optional
     /// argument, which the public-API gate would read as a removal.
-    new() = EgressPolicyHandler(EgressSurface.Other)
+    new() = new EgressPolicyHandler(EgressSurface.Other)
 
     /// The surface every request through this handler is attributed to.
     member _.Surface = surface

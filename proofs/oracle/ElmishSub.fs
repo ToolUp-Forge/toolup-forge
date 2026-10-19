@@ -22,7 +22,8 @@ let uu___is_OSome =
 let __proj__OSome__item__item =
     (fun (projectee : opt<'a>) ->
          (match (projectee) with
-          | OSome (item) -> (item)))
+          | OSome (item) -> (item)
+          | ONone -> (failwith "ElmishSub.__proj__OSome__item__item: ONone is a case the F* model proves unreachable")))
 
 type pair<'a, 'b> =
     | Pair of 'a * 'b

@@ -71,7 +71,11 @@
         has no flag to omit projectors. So the subtree carries its own
         Directory.Build.props with no parent import — the same structural
         mechanism the two templates use — rather than naming FS0025 in a
-        NoWarn, which is what the gate below rightly forbids.
+        NoWarn, which is what the gate below rightly forbids. Since Phase
+        1035 the normaliser completes those matches (one explicit, loudly
+        failing arm per missing case), so the oracle builds with no FS0025;
+        the boundary stays so that an extraction shape the normaliser does
+        not yet complete fails the proof leg rather than the solution.
     All three exemptions are mirrored in `ArchitectureFitness.fs0025ExemptPrefixes`.
 
     THE WILDCARD HAZARD. Making this an error creates pressure to write

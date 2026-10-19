@@ -356,7 +356,7 @@ let private requestFor (app: ServerApp) : DefaultHttpContext =
     let configured =
         match app.Extensions.ServiceConfig with
         | Some configure -> configure collection
-        | None -> collection :> IServiceCollection
+        | None -> collection
 
     let ctx = DefaultHttpContext()
     ctx.RequestServices <- configured.BuildServiceProvider()

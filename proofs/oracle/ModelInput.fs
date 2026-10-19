@@ -22,7 +22,8 @@ let uu___is_OSome =
 let __proj__OSome__item__item =
     (fun (projectee : opt<'a>) ->
          (match (projectee) with
-          | OSome (item) -> (item)))
+          | OSome (item) -> (item)
+          | ONone -> (failwith "ModelInput.__proj__OSome__item__item: ONone is a case the F* model proves unreachable")))
 
 type outcome<'a> =
     | Admitted of 'a
@@ -37,7 +38,8 @@ let uu___is_Admitted =
 let __proj__Admitted__item__item =
     (fun (projectee : outcome<'a>) ->
          (match (projectee) with
-          | Admitted (item) -> (item)))
+          | Admitted (item) -> (item)
+          | Refused _ -> (failwith "ModelInput.__proj__Admitted__item__item: Refused is a case the F* model proves unreachable")))
 
 let uu___is_Refused =
     (fun (projectee : outcome<'a>) ->
@@ -48,7 +50,8 @@ let uu___is_Refused =
 let __proj__Refused__item__reason =
     (fun (projectee : outcome<'a>) ->
          (match (projectee) with
-          | Refused (reason) -> (reason)))
+          | Refused (reason) -> (reason)
+          | Admitted _ -> (failwith "ModelInput.__proj__Refused__item__reason: Admitted is a case the F* model proves unreachable")))
 
 let rec append =
     (fun (xs : Prims.list<'a>) (ys : Prims.list<'a>) ->
@@ -88,7 +91,8 @@ let uu___is_NotDisclosable : verdict -> Prims.bool =
 let __proj__NotDisclosable__item__policy_ref : verdict -> Prims.string =
     (fun (projectee : verdict) ->
          (match (projectee) with
-          | NotDisclosable (policy_ref) -> (policy_ref)))
+          | NotDisclosable (policy_ref) -> (policy_ref)
+          | Disclosable -> (failwith "ModelInput.__proj__NotDisclosable__item__policy_ref: Disclosable is a case the F* model proves unreachable")))
 
 let refusal_text : Prims.string -> Prims.string = (fun (policy_ref : Prims.string) -> (Prims.strcat "computed, but not disclosable under policy " policy_ref))
 
@@ -134,7 +138,9 @@ let uu___is_GateFailed : gate_result -> Prims.bool =
 let __proj__GateFailed__item__reason : gate_result -> Prims.string =
     (fun (projectee : gate_result) ->
          (match (projectee) with
-          | GateFailed (reason) -> (reason)))
+          | GateFailed (reason) -> (reason)
+          | GatePassed -> (failwith "ModelInput.__proj__GateFailed__item__reason: GatePassed is a case the F* model proves unreachable")
+          | NotGated -> (failwith "ModelInput.__proj__GateFailed__item__reason: NotGated is a case the F* model proves unreachable")))
 
 let uu___is_NotGated : gate_result -> Prims.bool =
     (fun (projectee : gate_result) ->

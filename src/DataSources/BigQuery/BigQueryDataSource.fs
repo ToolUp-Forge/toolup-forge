@@ -150,7 +150,10 @@ type private BigQueryDataSourceImpl(secretStore: ISecretStore option) =
             | Ok json ->
                 let credential =
                     try
-                        Ok(GoogleCredential.FromJson json)
+                        // The blob is a service-account key, so it is parsed as exactly that
+                        // type: `GoogleCredential.FromJson` (deprecated) accepted any credential
+                        // kind the JSON named, which is the risk its deprecation names.
+                        Ok(CredentialFactory.FromJson<ServiceAccountCredential>(json).ToGoogleCredential())
                     with ex ->
                         Error(
                             SchemaMismatch

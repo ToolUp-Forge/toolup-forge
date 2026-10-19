@@ -384,8 +384,8 @@ let private fileStoreTests =
                     SuccessfulBatches = Set.ofList [ 1; 3 ]
                 }
 
-                (store :> IIndexNowStateStore).Write state |> Async.RunSynchronously
-                let back = (store :> IIndexNowStateStore).Read() |> Async.RunSynchronously
+                store.Write state |> Async.RunSynchronously
+                let back = store.Read() |> Async.RunSynchronously
                 Expect.equal back (Some state) "survives a round-trip through the file")
         }
 
@@ -393,14 +393,14 @@ let private fileStoreTests =
             withTempPath (fun path ->
                 File.WriteAllText(path, "{ this is not valid json")
                 let store = FileIndexNowStateStore.createAt path
-                let back = (store :> IIndexNowStateStore).Read() |> Async.RunSynchronously
+                let back = store.Read() |> Async.RunSynchronously
                 Expect.isNone back "corrupt file → None")
         }
 
         test "an absent file reads as None" {
             withTempPath (fun path ->
                 let store = FileIndexNowStateStore.createAt path
-                Expect.isNone ((store :> IIndexNowStateStore).Read() |> Async.RunSynchronously) "absent → None")
+                Expect.isNone (store.Read() |> Async.RunSynchronously) "absent → None")
         }
     ]
 

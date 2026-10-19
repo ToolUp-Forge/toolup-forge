@@ -1892,7 +1892,7 @@ type private LifetimeCapture
         member _.StopAsync _ = Threading.Tasks.Task.CompletedTask
 
 let private freePort () =
-    let listener = Net.Sockets.TcpListener(Net.IPAddress.Loopback, 0)
+    let listener = new Net.Sockets.TcpListener(Net.IPAddress.Loopback, 0)
     listener.Start()
     let port = (listener.LocalEndpoint :?> Net.IPEndPoint).Port
     listener.Stop()

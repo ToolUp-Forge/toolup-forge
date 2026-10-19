@@ -667,7 +667,7 @@ let private mkFlow (secrets: ISecretStore) (refresher: IOAuthTokenRefresher opti
 
 let private flowContractTests =
     let factory () =
-        mkFlow (DerivedSecretStore()) None (StubGoogle())
+        mkFlow (DerivedSecretStore()) None (new StubGoogle())
 
     IOAuthCredentialFlowContract.tests "GoogleOAuthFlow" factory
 
@@ -678,12 +678,12 @@ let private flowTests =
     testList "GoogleOAuthFlow — Google specifics" [
 
         test "declares PKCE support" {
-            let flow = mkFlow (DerivedSecretStore()) None (StubGoogle())
+            let flow = mkFlow (DerivedSecretStore()) None (new StubGoogle())
             Expect.isTrue flow.SupportsPkce "Google accepts PKCE on the web-server flow"
         }
 
         test "flow name and scope match the connector's expectations" {
-            let flow = mkFlow (DerivedSecretStore()) None (StubGoogle())
+            let flow = mkFlow (DerivedSecretStore()) None (new StubGoogle())
             Expect.equal flow.Name "google-analytics" "flow name is the connector's FlowName default"
 
             Expect.equal
@@ -694,7 +694,7 @@ let private flowTests =
 
         testCaseAsync "authorize URL carries access_type=offline and prompt=consent"
         <| async {
-            let flow = mkFlow (DerivedSecretStore()) None (StubGoogle())
+            let flow = mkFlow (DerivedSecretStore()) None (new StubGoogle())
             let redirect = "https://example.com/api/oauth/google-analytics/callback"
 
             match! flow.BuildAuthorizeUrl(flowCtx, "state-1", redirect, None) with
@@ -715,7 +715,7 @@ let private flowTests =
 
         testCaseAsync "authorize URL omits PKCE parameters when the substrate supplied no challenge"
         <| async {
-            let flow = mkFlow (DerivedSecretStore()) None (StubGoogle())
+            let flow = mkFlow (DerivedSecretStore()) None (new StubGoogle())
             let redirect = "https://example.com/api/oauth/google-analytics/callback"
 
             match! flow.BuildAuthorizeUrl(flowCtx, "state-1", redirect, None) with
@@ -725,7 +725,7 @@ let private flowTests =
 
         testCaseAsync "ExchangeCode sends the code verifier when the substrate supplied one"
         <| async {
-            let stub = StubGoogle()
+            let stub = new StubGoogle()
             let flow = mkFlow (DerivedSecretStore()) None stub
             let redirect = "https://example.com/api/oauth/google-analytics/callback"
 
@@ -747,7 +747,7 @@ let private flowTests =
             // re-consent without `prompt=consent` returns an access
             // token and nothing else.
             let stub =
-                StubGoogle(tokenBody = """{"access_token":"ya29.access","expires_in":3599}""")
+                new StubGoogle(tokenBody = """{"access_token":"ya29.access","expires_in":3599}""")
 
             let flow = mkFlow (DerivedSecretStore()) None stub
 
@@ -762,7 +762,7 @@ let private flowTests =
         testCaseAsync "a provider error keeps Google's own error code in the message"
         <| async {
             let stub =
-                StubGoogle(
+                new StubGoogle(
                     tokenBody = """{"error":"invalid_grant","error_description":"Token has been expired or revoked."}"""
                 )
 
@@ -779,7 +779,7 @@ let private flowTests =
 
         testCaseAsync "missing client credentials name the key to fill"
         <| async {
-            let flow = mkFlow (EmptySecretStore()) None (StubGoogle())
+            let flow = mkFlow (EmptySecretStore()) None (new StubGoogle())
 
             match! flow.BuildAuthorizeUrl(flowCtx, "state-1", "https://example.com/cb", None) with
             | Ok _ -> failtest "expected ClientCredentialMissing"
@@ -793,7 +793,7 @@ let private flowTests =
             let refresher = RecordingRefresher()
 
             let flow =
-                mkFlow (DerivedSecretStore()) (Some(refresher :> IOAuthTokenRefresher)) (StubGoogle())
+                mkFlow (DerivedSecretStore()) (Some(refresher :> IOAuthTokenRefresher)) (new StubGoogle())
 
             match! flow.Revoke(flowCtx, "1//refresh") with
             | Error err -> failtestf "Revoke failed: %s" (OAuthError.toMessage err)
@@ -812,7 +812,7 @@ let private flowTests =
                 mkFlow
                     (DerivedSecretStore())
                     (Some(refresher :> IOAuthTokenRefresher))
-                    (StubGoogle(revokeStatus = HttpStatusCode.InternalServerError))
+                    (new StubGoogle(revokeStatus = HttpStatusCode.InternalServerError))
 
             let! _ = flow.Revoke(flowCtx, "1//refresh")
 
@@ -830,7 +830,10 @@ let private flowTests =
                 mkFlow
                     (DerivedSecretStore())
                     None
-                    (StubGoogle(revokeStatus = HttpStatusCode.BadRequest, revokeBody = """{"error":"invalid_token"}"""))
+                    (new StubGoogle(
+                        revokeStatus = HttpStatusCode.BadRequest,
+                        revokeBody = """{"error":"invalid_token"}"""
+                    ))
 
             match! flow.Revoke(flowCtx, "already-gone") with
             | Ok() -> ()
@@ -842,7 +845,7 @@ let private flowTests =
 
         testCaseAsync "Revoke works without a refresher composed"
         <| async {
-            let flow = mkFlow (DerivedSecretStore()) None (StubGoogle())
+            let flow = mkFlow (DerivedSecretStore()) None (new StubGoogle())
 
             match! flow.Revoke(flowCtx, "1//refresh") with
             | Ok() -> ()
