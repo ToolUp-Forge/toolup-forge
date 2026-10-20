@@ -636,7 +636,7 @@
       `DeclaredPrincipal.missingGrant`. Behaviour is unchanged. Migration
       recipe: `docs/migrations/1029-one-declared-principal-shape.md`.
     -->
-    <Version>0.29.1</Version>
+    <Version>0.30.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
       DLL. Non-publishable projects (App composition roots, modules,
