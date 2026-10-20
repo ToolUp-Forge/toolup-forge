@@ -24,6 +24,19 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
+  <!--
+    FS0025 (incomplete pattern match) is an ERROR, not a warning. The
+    compiler reports only ONE of the cases a match misses, so as a warning
+    it lets a match fall several cases behind a union with the build still
+    green. As an error the fix loop continues until the match is
+    exhaustive. Do not reach for `| _ ->` to get green: a wildcard
+    silences the check for good. Enumerate the missing cases; where one is
+    genuinely unreachable, match it explicitly and fail loudly in its body.
+  -->
+  <PropertyGroup>
+    <WarningsAsErrors>$(WarningsAsErrors);FS0025</WarningsAsErrors>
+  </PropertyGroup>
+
   <ItemGroup Condition="'$(IsPackable)' != 'false' And Exists('$(MSBuildProjectDirectory)\README.md')">
     <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>

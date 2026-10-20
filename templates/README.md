@@ -108,6 +108,16 @@ The acceptance bar requires byte-identical output from `dotnet new` and direct p
   scaffold's end-to-end test. It also scans the template's files and the scaffolded tree for the
   private vocabulary the OSS guard bans, read from the same private token sources the guard tests
   use.
+- **Incomplete pattern matches (FS0025) are an error in what the gated standalone templates scaffold.**
+  The repo root promotes FS0025 to an error, but a standalone template's own `Directory.Build.props`
+  stops MSBuild's walk before the root, so each one either restates the rule or is exempt.
+  `platformsdk-module-packaged` and `platformsdk-dataplatform` restate it: an instantiated module or
+  data platform is born holding exhaustiveness as an error, and their scaffold gates fail on an
+  incomplete match. `safer` and `platformsdk-solution` are exempt: no gate instantiates and builds
+  them, so a rule stated there would be asserted on code nothing here compiles. The
+  root-inheriting templates get the rule from the root. An architecture-fitness test discovers every
+  walk-stopping `Directory.Build.props` and fails on one that is neither the root, a named exemption,
+  nor a restatement of the rule.
 - ToolUp.* packages are consumed via the `ToolUpSdkVersion` property in `Directory.Packages.props`; bump the property to bump every transitive ToolUp package.
 - The `platformsdk-solution` template includes a `Directory.Build.props`, `Directory.Packages.props`, `nuget.config`, `global.json`, and `.gitignore` so the scaffold is a complete buildable repo root.
 - Modules ship the same 4-file convention demonstrated by `samples/HelloWorld/HelloWorld.Module/`.

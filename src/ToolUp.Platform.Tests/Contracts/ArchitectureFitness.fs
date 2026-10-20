@@ -596,28 +596,108 @@ let fs0025ScannableFiles () : string list =
         let rel = relative p
         not (exemptPrefixes |> List.exists rel.StartsWith))
 
-/// Subtrees whose own `Directory.Build.props` stops the MSBuild walk to
-/// the root policy but which are NOT exempt from it: each such props file
-/// restates the FS0025 promotion itself, and a test holds it to that and
-/// keeps the subtree in the sweep. `proofs/oracle/` is the F* extractor's
-/// output (Phase 787); it left the exemption list in Phase 1037, once the
-/// normaliser completed every incomplete match the extractor emits
-/// (Phase 1035) and the proof leg stopped carrying Custard's FS0025
-/// `#nowarn` into the committed copy.
-let fs0025SelfDeclaringSubtrees: string list = [ "proofs/oracle/" ]
+/// MSBuild text with every `<!-- … -->` comment removed, so a commented-out
+/// element never reads as a declaration (the props files here carry long
+/// prose comments that quote MSBuild).
+let private stripXmlComments (text: string) : string =
+    Regex.Replace(text, "<!--.*?-->", "", RegexOptions.Singleline)
+
+/// True when props text promotes FS0025 to an error through
+/// `WarningsAsErrors`.
+let propsTextDeclaresFs0025AsError (text: string) : bool =
+    Regex.Matches(stripXmlComments text, @"<WarningsAsErrors[^>]*>([^<]*)</WarningsAsErrors>", RegexOptions.IgnoreCase)
+    |> Seq.exists (fun m -> listSuppressesFs0025 m.Groups[1].Value)
 
 /// True when the props file at a repo-relative path promotes FS0025 to an
 /// error through `WarningsAsErrors`.
 let propsDeclaresFs0025AsError (relativePath: string) : bool =
     let path = Path.Combine(repoRoot (), relativePath)
 
-    if not (File.Exists path) then
-        false
-    else
-        let text = File.ReadAllText path
+    File.Exists path && propsTextDeclaresFs0025AsError (File.ReadAllText path)
 
-        Regex.Matches(text, @"<WarningsAsErrors[^>]*>([^<]*)</WarningsAsErrors>", RegexOptions.IgnoreCase)
-        |> Seq.exists (fun m -> listSuppressesFs0025 m.Groups[1].Value)
+/// True when `Directory.Build.props` text imports a parent
+/// `Directory.Build.props` — an `<Import>` whose `Project` names that file,
+/// typically through `$([MSBuild]::GetPathOfFileAbove('Directory.Build.props',
+/// '$(MSBuildThisFileDirectory)../'))`. A props that does not is where
+/// MSBuild's upward walk STOPS: nothing above it applies below it.
+let propsTextImportsParent (text: string) : bool =
+    Regex.Matches(stripXmlComments text, @"<Import\b[^>]*\bProject\s*=\s*""([^""]*)""", RegexOptions.IgnoreCase)
+    |> Seq.exists (fun m -> m.Groups[1].Value.Contains("Directory.Build.props", StringComparison.OrdinalIgnoreCase))
+
+/// How the Phase 624 rule reaches the projects below a walk-stopping
+/// `Directory.Build.props` (Phase 1044).
+type WalkStoppingProps =
+    /// The repository root's props — the policy itself.
+    | PolicyRoot
+    /// Restates FS0025 in `WarningsAsErrors`, so the rule holds below it.
+    | DeclaresRule
+    /// Sits under a named `fs0025ExemptPrefixes` entry.
+    | NamedExemption of Fs0025Exemption
+    /// None of the three: every project below it builds with FS0025 a
+    /// silent warning while the tree reads as covered.
+    | Uncovered
+
+/// The directory a repo-relative props path stops the walk at, as a
+/// forward-slashed prefix (`""` for the root, else ending in `/`).
+let propsDirectoryPrefix (relativePath: string) : string =
+    let i = relativePath.LastIndexOf '/'
+    if i < 0 then "" else relativePath.Substring(0, i + 1)
+
+/// Pure classifier for one `Directory.Build.props` (repo-relative path +
+/// text). `None` when it imports a parent, so the walk continues past it.
+/// `DeclaresRule` is decided BEFORE the exemption list, so a subtree that
+/// both restates the rule and is listed as exempt surfaces as a
+/// contradiction in the tests rather than hiding behind the exemption.
+let classifyWalkStoppingProps
+    (exemptions: Fs0025Exemption list)
+    (relativePath: string)
+    (text: string)
+    : WalkStoppingProps option =
+    if propsTextImportsParent text then
+        None
+    else
+        let dir = propsDirectoryPrefix relativePath
+
+        if dir = "" then
+            Some PolicyRoot
+        elif propsTextDeclaresFs0025AsError text then
+            Some DeclaresRule
+        else
+            match exemptions |> List.tryFind (fun e -> dir.StartsWith e.Prefix) with
+            | Some e -> Some(NamedExemption e)
+            | None -> Some Uncovered
+
+/// Every `Directory.Build.props` of this checkout (`repoFiles`, so
+/// tracked plus untracked-not-ignored) that stops the MSBuild walk, with
+/// its classification. DISCOVERED rather than listed (Phase 1044): a new
+/// template or generated subtree carrying its own walk-stopping props is
+/// caught the moment it exists, not when someone remembers to list it —
+/// two templates had silently fallen outside the rule that way.
+let walkStoppingProps () : (string * WalkStoppingProps) list =
+    repoFiles ()
+    |> List.filter (fun p ->
+        String.Equals(Path.GetFileName p, "Directory.Build.props", StringComparison.OrdinalIgnoreCase))
+    |> List.choose (fun p ->
+        let rel = relative p
+
+        classifyWalkStoppingProps fs0025ExemptPrefixes rel (File.ReadAllText p)
+        |> Option.map (fun verdict -> rel, verdict))
+    |> List.sortBy fst
+
+/// Subtrees whose own `Directory.Build.props` stops the walk to the root
+/// policy but restates the FS0025 promotion, so they stay under the rule
+/// and in the sweep — derived from `walkStoppingProps` (Phase 1044), no
+/// longer a hand-kept list. Today: the F* extractor's `proofs/oracle/`
+/// (Phase 1037) and the two standalone templates that ship it to
+/// consumers, `platformsdk-module-packaged` and `platformsdk-dataplatform`.
+let fs0025SelfDeclaringSubtrees () : string list =
+    walkStoppingProps ()
+    |> List.choose (fun (rel, verdict) ->
+        match verdict with
+        | DeclaresRule -> Some(propsDirectoryPrefix rel)
+        | PolicyRoot
+        | NamedExemption _
+        | Uncovered -> None)
 
 /// The tree-wide policy declaration, read from `Directory.Build.props`.
 /// A gate that can be deleted to make a build go green is not a gate, so

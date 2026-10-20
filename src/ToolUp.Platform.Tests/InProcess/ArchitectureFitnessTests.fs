@@ -352,7 +352,7 @@ let private fs0025Tests =
         test "a walk-stopping subtree that is not exempt restates the rule and stays in the sweep" {
             let scanned = fs0025ScannableFiles () |> List.map relative
 
-            for subtree in fs0025SelfDeclaringSubtrees do
+            for subtree in fs0025SelfDeclaringSubtrees () do
                 Expect.isEmpty
                     (fs0025ExemptPrefixes
                      |> List.filter (fun e -> subtree.StartsWith e.Prefix || e.Prefix.StartsWith subtree))
@@ -373,6 +373,57 @@ let private fs0025Tests =
                         subtree)
         }
 
+        // Phase 1044 — the walk-stopping props are DISCOVERED, not listed. A
+        // `Directory.Build.props` that imports no parent cuts every project
+        // below it off from the root policy; two standalone templates sat in
+        // the sweep that way, reading as covered, with FS0025 a silent
+        // warning in everything they scaffolded.
+        test "every walk-stopping Directory.Build.props is the root, a named exemption, or restates the rule" {
+            let found = walkStoppingProps ()
+
+            Expect.contains
+                found
+                ("Directory.Build.props", PolicyRoot)
+                "the discovery did not find the root props as the policy root — it is reading nothing, and an empty discovery passes vacuously"
+
+            Expect.isGreaterThan
+                (found |> List.filter (fun (_, v) -> v <> PolicyRoot) |> List.length)
+                0
+                "the discovery found no walk-stopping props below the root, but this tree has several (templates/, proofs/oracle/) — the enumeration or the import test is broken"
+
+            let uncovered =
+                found
+                |> List.choose (fun (rel, v) ->
+                    match v with
+                    | Uncovered -> Some rel
+                    | PolicyRoot
+                    | DeclaresRule
+                    | NamedExemption _ -> None)
+
+            Expect.isEmpty
+                uncovered
+                (sprintf
+                    "These Directory.Build.props stop MSBuild's walk to the root (no <Import> of a parent Directory.Build.props), so the Phase 624 FS0025-as-error policy never reaches the projects below them — and they are neither the root nor a named exemption. Put FS0025 in <WarningsAsErrors> in each, or name the subtree in `fs0025ExemptPrefixes` and in the root props' NOT COVERED list with its reason:\n%s"
+                    (String.Join("\n", uncovered)))
+        }
+
+        test "the standalone templates that ship the rule are discovered as declaring it" {
+            let declaring = fs0025SelfDeclaringSubtrees ()
+
+            for subtree in
+                [
+                    "proofs/oracle/"
+                    "templates/platformsdk-module-packaged/"
+                    "templates/platformsdk-dataplatform/"
+                ] do
+                Expect.contains
+                    declaring
+                    subtree
+                    (sprintf
+                        "`%sDirectory.Build.props` should be discovered as restating FS0025 in <WarningsAsErrors>. If the subtree moved, update this list; if the rule was removed from it, restore it."
+                        subtree)
+        }
+
         // ── fail-closed: the detectors fire on planted violations ──────
 
         test "a planted #nowarn \"25\" is detected" {
@@ -383,6 +434,70 @@ let private fs0025Tests =
 
             Expect.hasLength findings 1 "the file-scoped suppression must be detected"
             Expect.equal findings[0].Line 3 "the finding names the directive's line"
+        }
+
+        test "a planted walk-stopping props with neither the rule nor an exemption is Uncovered" {
+            let planted =
+                "<Project>\n  <PropertyGroup>\n    <Nullable>enable</Nullable>\n  </PropertyGroup>\n</Project>\n"
+
+            Expect.equal
+                (classifyWalkStoppingProps fs0025ExemptPrefixes "scratch/planted/Directory.Build.props" planted)
+                (Some Uncovered)
+                "a props that imports no parent and declares nothing must be reported"
+        }
+
+        test "the walk-stopping classifier reads imports, declarations and exemptions" {
+            let declares =
+                "<Project><PropertyGroup><WarningsAsErrors>$(WarningsAsErrors);FS0025</WarningsAsErrors></PropertyGroup></Project>"
+
+            let importsParent =
+                "<Project><Import Project=\"$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))\" /></Project>"
+
+            let importsOther =
+                "<Project><Import Project=\"$(MSBuildThisFileDirectory)build/Some.targets\" /></Project>"
+
+            let commentedDeclaration =
+                "<Project><!-- <WarningsAsErrors>FS0025</WarningsAsErrors> --></Project>"
+
+            let commentedImport =
+                "<Project><!-- <Import Project=\"../Directory.Build.props\" /> --></Project>"
+
+            let classify = classifyWalkStoppingProps fs0025ExemptPrefixes
+
+            Expect.equal (classify "a/Directory.Build.props" importsParent) None "a parent import continues the walk"
+            Expect.equal (classify "a/Directory.Build.props" declares) (Some DeclaresRule) "a restated rule is covered"
+
+            Expect.equal
+                (classify "Directory.Build.props" importsOther)
+                (Some PolicyRoot)
+                "the root is the policy itself"
+
+            Expect.equal
+                (classify "a/Directory.Build.props" importsOther)
+                (Some Uncovered)
+                "an import of something other than a Directory.Build.props does not continue the walk"
+
+            Expect.equal
+                (classify "a/Directory.Build.props" commentedDeclaration)
+                (Some Uncovered)
+                "a commented-out declaration declares nothing"
+
+            Expect.equal
+                (classify "a/Directory.Build.props" commentedImport)
+                (Some Uncovered)
+                "a commented-out import imports nothing"
+
+            Expect.equal
+                (classify "templates/safer/Directory.Build.props" importsOther)
+                (fs0025ExemptPrefixes
+                 |> List.tryFind (fun e -> e.Prefix = "templates/safer/")
+                 |> Option.map NamedExemption)
+                "a props under a named exemption is that exemption"
+
+            Expect.equal
+                (classify "templates/safer/Directory.Build.props" declares)
+                (Some DeclaresRule)
+                "a declaration is read before the exemption list, so an exempt subtree that restates the rule surfaces as a contradiction"
         }
 
         test "a planted FS0025 NoWarn is detected in both property spellings" {

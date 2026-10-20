@@ -47,7 +47,12 @@
     SCOPE. Tree-wide: every project that inherits this file. That is all
     161 projects in ToolUp.Forge.sln, plus Build.fsproj, tools/*,
     probes/*, dev/*, samples/*, and the templates/ projects that have no
-    Directory.Build.props of their own.
+    Directory.Build.props of their own. A subtree whose own
+    Directory.Build.props does not import a parent stops MSBuild's walk
+    before it reaches this file, so the rule holds there only if that
+    props restates it (listed below) or the subtree is a named exemption.
+    The fitness gate DISCOVERS every such props (Phase 1044) and fails,
+    naming the file, on one that is neither.
 
     NOT COVERED, deliberately, and named here so the policy is not read
     as stronger than it is:
@@ -58,8 +63,19 @@
       • templates/safer/ and templates/platformsdk-solution/ — template
         CONTENT shipped to consumers via `dotnet new`. Each carries its
         own Directory.Build.props that does not import a parent, so
-        MSBuild's walk stops there and this file never applies.
+        MSBuild's walk stops there and this file never applies. Neither
+        has a scaffold gate that instantiates and builds it, so a rule
+        stated there would be asserted on code nothing in this repository
+        compiles; they stay exempt until such a gate exists.
     All three exemptions are mirrored in `ArchitectureFitness.fs0025ExemptPrefixes`.
+
+    templates/platformsdk-module-packaged/ and templates/platformsdk-dataplatform/
+    are NOT exempt (Phase 1044). Their own Directory.Build.props stop this
+    file's walk too, but each states the FS0025 promotion itself, so an
+    instantiated module or data platform is born holding exhaustiveness as
+    an error. Their scaffold gates (VerifyPackagedModuleTemplate,
+    VerifyDataPlatformTemplate in Build.fs) build the instantiated copy, so
+    an incomplete match in either template fails its gate by name.
 
     proofs/oracle/ — the F* extractor's output (Phase 787) — is NOT an
     exemption, though its own Directory.Build.props stops this file's walk
