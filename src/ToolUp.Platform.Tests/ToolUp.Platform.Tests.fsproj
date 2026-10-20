@@ -1978,6 +1978,10 @@
              states, and the export round-trip against each panel's own
              getter. -->
         <Compile Include="InProcess\CompositionInspectorHandlerTests.fs" />
+        <!-- Phase 782 - the reflection tools: same bytes as the APIs they
+             front, the APIs' own gates, an audit row per call, opt-in
+             registration, and the describe door agreeing with the tools. -->
+        <Compile Include="InProcess\ReflectionToolsTests.fs" />
         <!-- Phase 573 — administration-landing composition: tile order,
              the owning-module visibility filter (stated as the equation
              with SidebarVisibility.visibleIds), the click-through target

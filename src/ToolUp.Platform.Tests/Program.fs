@@ -1581,6 +1581,8 @@ let private registeredTests =
         CompositionInspectorHandlerTests.emptyStateTests
         CompositionInspectorHandlerTests.exportTests
         CompositionInspectorHandlerTests.contractShapeTests
+        // Phase 782 - the reflection tools + the --describe door.
+        ReflectionToolsTests.tests
         // Phase 573 — the administration landing: tile composition +
         // order, the owning-module visibility filter (and the equation
         // pinning it to `SidebarVisibility.visibleIds`), click-through

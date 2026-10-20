@@ -3391,6 +3391,18 @@ module DeploymentVerificationReport =
 
             AccessContext.unrestricted (AnonymousSession userId)
 
+    /// The Platform-Admin read gate the endpoint applies (Phase 686): the
+    /// caller's resolved `AccessContext` must carry `canModifyPlatformConfig`.
+    ///
+    /// Public since Phase 782 so the reflection tools that serve this report
+    /// and its seam-authority evidence apply THIS predicate rather than a
+    /// copy of it.
+    let readAllowed (ctx: HttpContext) : Result<unit, string> =
+        if AccessContext.canModifyPlatformConfig (resolveAccessContext ctx) then
+            Ok()
+        else
+            Error "platform admin role required"
+
     /// The actor recorded on the audited read: the resolved user id where one
     /// is present. The read is Platform-Admin-gated, so by the time the
     /// gatherer runs there always is.
@@ -3408,16 +3420,13 @@ module DeploymentVerificationReport =
     /// produces no `DeploymentVerified` row, because nothing was verified —
     /// recording refusals here would fill the trail this report's own ledger
     /// section walks with rows about reads that never happened.
-    let deploymentVerificationApi (ctx: HttpContext) : IDeploymentVerificationApi =
-        let accessContext = resolveAccessContext ctx
-
-        {
-            GetVerificationReport =
-                fun () -> async {
-                    if not (AccessContext.canModifyPlatformConfig accessContext) then
-                        return Error "platform admin role required"
-                    else
-                        let! report = run ctx.RequestServices (resolveActor ctx)
-                        return Ok report
-                }
-        }
+    let deploymentVerificationApi (ctx: HttpContext) : IDeploymentVerificationApi = {
+        GetVerificationReport =
+            fun () -> async {
+                match readAllowed ctx with
+                | Error reason -> return Error reason
+                | Ok() ->
+                    let! report = run ctx.RequestServices (resolveActor ctx)
+                    return Ok report
+            }
+    }

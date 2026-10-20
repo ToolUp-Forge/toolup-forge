@@ -34,8 +34,8 @@ open ToolUp.Platform.ConfigValidatorAggregator
 // are both in hand.
 
 /// The startup mode selected by a CLI flag. `NormalBoot` is the default
-/// and the only mode that binds a listener; the other two run an
-/// introspection task and terminate the process without serving.
+/// and the only mode that binds a listener; every other mode runs an
+/// introspection task and terminates the process without serving.
 type StartupMode =
     | NormalBoot
     | PrintConfig
@@ -46,6 +46,12 @@ type StartupMode =
     /// stdout, non-zero only when a COMPOSED section failed or would not
     /// answer.
     | VerifyDeployment
+    /// Phase 782 — emit the deployment's self-description (the composition
+    /// inspector's panels, the verification report, the per-component seam
+    /// reach) as JSON and exit, without binding a listener. The offline
+    /// door `toolup describe --json` drives; the same documents the
+    /// reflection tools serve a running deployment.
+    | Describe
 
 [<Literal>]
 let PrintConfigFlag = "--print-config"
@@ -56,6 +62,71 @@ let ValidateConfigFlag = "--validate-config"
 [<Literal>]
 let VerifyDeploymentFlag = "--verify-deployment"
 
+[<Literal>]
+let DescribeFlag = "--describe"
+
+/// Phase 782 — modifier for `--describe`: which document to emit
+/// (`composition`, `verification-report`, `module-reach`). Repeatable;
+/// absent means all three.
+[<Literal>]
+let DescribeSectionFlag = "--describe-section"
+
+/// Phase 782 — modifier for `--describe`: which inspector panel the
+/// `composition` document carries (`composition`, `surfaces`, `rules`,
+/// `disclosure`, `provenance`). Absent means `composition`.
+[<Literal>]
+let DescribePanelFlag = "--describe-panel"
+
+/// Phase 782 — modifier for `--describe`: write the JSON to this file
+/// rather than stdout. The offline door passes one, because a composition
+/// root's own startup logging shares stdout and would otherwise interleave
+/// with the document.
+[<Literal>]
+let DescribeOutFlag = "--describe-out"
+
+/// The values following every occurrence of `flag` in `argv`.
+let private valuesOf (flag: string) (argv: string seq) : string list =
+    argv
+    |> Seq.pairwise
+    |> Seq.choose (fun (a, b) ->
+        if String.Equals(a, flag, StringComparison.OrdinalIgnoreCase) then
+            Some b
+        else
+            None)
+    |> List.ofSeq
+
+/// The `--describe-section` values in this argv, in order.
+let describeSections (argv: string seq) : string list = valuesOf DescribeSectionFlag argv
+
+/// The `--describe-panel` value in this argv, if any (the last one wins).
+let describePanel (argv: string seq) : string option =
+    valuesOf DescribePanelFlag argv |> List.tryLast
+
+/// The `--describe-out` value in this argv, if any (the last one wins).
+let describeOut (argv: string seq) : string option =
+    valuesOf DescribeOutFlag argv |> List.tryLast
+
+/// The actor recorded on a `--describe` read, for the reason
+/// `CliVerificationActor` gives.
+[<Literal>]
+let CliDescribeActor = "cli:--describe"
+
+/// Phase 782 — what the `--describe` arm calls to render the documents.
+///
+/// A seam rather than a direct call because the arm sits in
+/// `SDK.Server.compose`, which compiles BEFORE the composition-inspector
+/// types the documents project; `ServerApp.run` — which compiles after
+/// them — registers the renderer, the same way it registers the
+/// inspector snapshot. A host composed through `compose` directly
+/// registers none, and the arm says so rather than emitting an empty
+/// description. `Render` takes the built provider, the requested sections
+/// and the requested panel, and returns the JSON with the process exit
+/// code, or a usage error.
+[<Sealed>]
+type DescribeRenderer(render: IServiceProvider -> string list -> string option -> Async<Result<string * int, string>>) =
+    member _.Render(services: IServiceProvider, sections: string list, panel: string option) =
+        render services sections panel
+
 /// Phase 696 — modifier for `--print-config`: print only the keys some
 /// layer actually supplied a value for, dropping every key still sitting
 /// on its declared default. On a surface of several hundred keys that is
@@ -64,7 +135,7 @@ let VerifyDeploymentFlag = "--verify-deployment"
 ///
 /// A modifier rather than a mode of its own: it never changes what is
 /// resolved, only how much of it is printed, and `detect` stays a total
-/// function over argv with the same four answers it had before.
+/// function over argv with the same answers it had before.
 [<Literal>]
 let DiffFlag = "--diff"
 
@@ -82,7 +153,7 @@ let CliVerificationActor = "cli:--verify-deployment"
 
 /// Detect the mode from a process argv. Pure + testable. Precedence when
 /// more than one flag is somehow present: `--print-config`, then
-/// `--validate-config`, then `--verify-deployment` — safest-and-never-
+/// `--validate-config`, then `--verify-deployment`, then `--describe` — safest-and-never-
 /// fails first, so a confused invocation degrades toward the action that
 /// cannot report a false verdict. Any unrecognised argv ⇒ `NormalBoot`,
 /// so the flags an SDK consumer's own composition root may already parse
@@ -95,6 +166,7 @@ let detect (argv: string seq) : StartupMode =
     if has PrintConfigFlag then PrintConfig
     elif has ValidateConfigFlag then ValidateConfig
     elif has VerifyDeploymentFlag then VerifyDeployment
+    elif has DescribeFlag then Describe
     else NormalBoot
 
 /// The live process mode, read from `Environment.GetCommandLineArgs()`.

@@ -273,6 +273,7 @@ ToolUp.AI.AICompose+AIServerAppModule.withPostMiddleware(Microsoft.FSharp.Core.F
 ToolUp.AI.AICompose+AIServerAppModule.withPreMiddleware(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Builder.IApplicationBuilder, Microsoft.AspNetCore.Builder.IApplicationBuilder], ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withProviderProfile(ToolUp.Platform.Providers+IProviderProfile, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withRateLimitDescriptor(ToolUp.Platform.RateLimitDescriptor, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
+ToolUp.AI.AICompose+AIServerAppModule.withReflectionTools(ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withScheduledJob(ToolUp.Platform.ScheduledJobDeclaration, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withStorage(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp
 ToolUp.AI.AICompose+AIServerAppModule.withToolEffects(ToolUp.Platform.CompositionProfile, ToolUp.AI.AIToolRegistry+ToolPolicy, ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp

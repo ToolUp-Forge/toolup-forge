@@ -1392,6 +1392,56 @@ let compose
             Console.Out.Flush()
             exit 1
 
+    | StartupModes.Describe ->
+        // Phase 782 — the offline door onto the deployment's self-
+        // description: the inspector panel, the verification report and the
+        // seam reach, as JSON, from the composition root's own process and
+        // with no listener bound. A provider is built here for the reason the
+        // `VerifyDeployment` arm gives, and disposed on the way out so the
+        // audited-read rows flush.
+        //
+        // The documents are rendered through the `DescribeRenderer`
+        // `ServerApp.run` registered, because the inspector types compile
+        // after this file. A host composed through `compose` directly
+        // registered none, and is told so rather than handed an empty
+        // description it could mistake for an empty deployment.
+        //
+        // Exit codes: the verification report's own (non-zero only when a
+        // COMPOSED section failed or would not answer) when the report is
+        // among the documents, else 0; 2 for a usage error; 1 when the
+        // description could not be produced at all.
+        let argv = Environment.GetCommandLineArgs()
+
+        try
+            use provider = services.BuildServiceProvider()
+
+            match provider.GetService(typeof<StartupModes.DescribeRenderer>) with
+            | :? StartupModes.DescribeRenderer as renderer ->
+                match
+                    renderer.Render(provider, StartupModes.describeSections argv, StartupModes.describePanel argv)
+                    |> Async.RunSynchronously
+                with
+                | Ok(json, code) ->
+                    match StartupModes.describeOut argv with
+                    | Some path -> IO.File.WriteAllText(path, json)
+                    | None ->
+                        Console.Out.WriteLine json
+                        Console.Out.Flush()
+
+                    exit code
+                | Error usage ->
+                    Console.Error.WriteLine(sprintf "--describe: %s" usage)
+                    exit 2
+            | _ ->
+                Console.Error.WriteLine
+                    "--describe: this host registered no describe renderer. The renderer is registered by ServerApp.run; a host composed through the lower-level compose entry point has no composition snapshot to describe."
+
+                exit 1
+        with ex ->
+            resolvedLogger.Error(sprintf "--describe could not run: %s" ex.Message, Some ex)
+            Console.Out.Flush()
+            exit 1
+
     | StartupModes.NormalBoot ->
         // Phase 9m — companion config preflight (extracted to
         // `ComposeBootstrap.runConfigPreflight`). Runs every registered

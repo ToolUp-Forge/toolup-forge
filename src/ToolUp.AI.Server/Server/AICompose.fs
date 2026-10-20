@@ -1106,6 +1106,28 @@ module AIServerApp =
             ToolEffects = Some { Profile = profile; Policy = policy }
     }
 
+    /// Phase 782 — compose the three read-only reflection tools
+    /// (`_platform.reflection.describe_composition`, `.verification_report`,
+    /// `.module_reach`): the deployment's own self-description, offered to
+    /// the model behind the composition inspector's Owner/Admin gate (and
+    /// the verification report's Platform-Admin gate for the latter two),
+    /// with every call recorded on the audit trail. See
+    /// `docs/ai/reflection-tools.md`.
+    ///
+    /// Opt-in: an AI composition that does not call this offers the model
+    /// exactly the tools it offered before (GP 11), and a composition with
+    /// no AI provider has no `AIServerApp` to call it on, so it registers
+    /// nothing (GP 13). The tools ride the ordinary module-tool accumulator,
+    /// so the tool-name collision check and the effect envelope see them as
+    /// they see every other tool.
+    let withReflectionTools (app: AIServerApp) : AIServerApp = {
+        app with
+            Base = {
+                app.Base with
+                    AITools = app.Base.AITools @ ReflectionTools.tools
+            }
+    }
+
     /// Phase 70 A.5 — additively declare a platform provider on the
     /// `AIServerApp` pipeline. Each call appends to
     /// `app.PlatformProviders`; `composeAI` cross-checks the

@@ -276,7 +276,12 @@ let private exportOptions =
 /// Serialise one projected view. Generic over the view type so every
 /// panel's export takes the identical path — an export that rendered
 /// per-panel could drift from the getter it claims to mirror.
-let private toCanonicalJson (view: 'view) : string =
+///
+/// Public since Phase 782: the reflection tools and the offline
+/// `--describe` door serialise their documents through this same
+/// function, so the three doors onto the deployment's self-description
+/// share one rendering rather than three that happen to agree.
+let canonicalJson (view: 'view) : string =
     JsonSerializer.Serialize(view, exportOptions.Value)
 
 // ─── Handler ──────────────────────────────────────────────────────────
@@ -296,8 +301,8 @@ let private resolveAccessContext (ctx: HttpContext) : AccessContext =
         AccessContext.unrestricted (AnonymousSession userId)
 
 /// True when a service of type `'svc` is registered.
-let private isComposed<'svc> (ctx: HttpContext) : bool =
-    match ctx.RequestServices.GetService(typeof<'svc>) with
+let private isComposed<'svc> (services: IServiceProvider) : bool =
+    match services.GetService(typeof<'svc>) with
     | :? 'svc -> true
     | _ -> false
 
@@ -309,6 +314,77 @@ let private isComposed<'svc> (ctx: HttpContext) : bool =
 let SnapshotMissingMessage =
     "This deployment did not record a composition snapshot at startup. The inspector is composed by ServerApp.run; a host composed through the lower-level compose entry point registers no snapshot and has nothing to inspect."
 
+/// Owner/Admin read gate. `AuditViewApiHandler.ensureReadAllowed`'s
+/// shape, and the same predicate (`TeamRoles.canWriteTeamConfig`) the
+/// Phase 593 shard names.
+///
+/// The same gate as the audit trail even though the content is different
+/// in kind — this panel set names the deployment's companions, its
+/// resolved config knobs, and the purposes it may disclose data under.
+/// That is a map of the attack surface, and a second, laxer predicate for
+/// it would be a second thing to keep in step with the first.
+///
+/// Public since Phase 782 so the reflection tools apply THIS gate rather
+/// than a copy of it: every method of the API below and every reflection
+/// tool call goes through the one definition.
+let readGate (ctx: HttpContext) : Async<Result<unit, string>> = async {
+    match (resolveAccessContext ctx).Subject with
+    | AnonymousSession _ -> return Error "The composition inspector is not available in this mode."
+    | TeamMember(userId, teamId) ->
+        match ctx.RequestServices.GetService(typeof<ITeamStore>) with
+        | :? ITeamStore as ts ->
+            let! role = ts.GetMemberRole(teamId, userId)
+
+            match role with
+            | Some r when TeamRoles.canWriteTeamConfig r -> return Ok()
+            | Some r ->
+                return
+                    Error
+                        $"Only team owners and admins can view the composition inspector. Your role: {TeamRoles.displayName r}."
+            | None -> return Error "You are not a member of this team."
+        | _ -> return Error "Team management is not available in this deployment."
+    | AuthenticatedUser _
+    | ClaimBearer _ -> return Ok()
+    // Phase 1002 — a publication reader is not an app user.
+    | PublicationReader _ -> return Error "The composition inspector is not available to a publication reader."
+}
+
+/// The registered snapshot, if the composition recorded one.
+let resolveSnapshot (services: IServiceProvider) : CompositionInspectorSnapshot option =
+    match services.GetService(typeof<CompositionInspectorSnapshot>) with
+    | :? CompositionInspectorSnapshot as s -> Some s
+    | _ -> None
+
+/// The provenance report is the one panel resolved per request rather
+/// than snapshotted: it reports DI registrations, which the container
+/// answers directly and which the compose-time snapshot would only be
+/// able to mirror.
+let provenanceView (services: IServiceProvider) : ProvenanceView = {
+    GraphComposed = isComposed<IProvenanceGraph> services
+    FactEvidenceComposed = isComposed<IFactEvidenceSource> services
+    ArtifactProvenanceComposed = isComposed<IArtifactProvenanceSource> services
+}
+
+/// The canonical JSON of one panel, UNGATED — the caller has already
+/// decided the reader may see it. `ExportPanel` below gates and then calls
+/// this; the offline `--describe` door calls it from a process that holds
+/// the deployment's own binary. Every arm serialises the SAME value its
+/// getter returns, through the same serialiser — so the round-trip
+/// property is structural rather than a pair of renderings that happen to
+/// agree today.
+let panelJson
+    (services: IServiceProvider)
+    (snapshot: CompositionInspectorSnapshot option)
+    (requested: InspectorPanel)
+    : Result<string, string> =
+    match requested, snapshot with
+    | ProvenancePanel, _ -> Ok(canonicalJson (provenanceView services))
+    | _, None -> Error SnapshotMissingMessage
+    | CompositionPanel, Some s -> Ok(canonicalJson s.Composition)
+    | SurfacesPanel, Some s -> Ok(canonicalJson s.Surfaces)
+    | RulesPanel, Some s -> Ok(canonicalJson s.Rules)
+    | DisclosurePanel, Some s -> Ok(canonicalJson s.Disclosure)
+
 /// Build the `ICompositionInspectorApi` ToolUp.Remoting handler.
 ///
 /// The snapshot is resolved per request rather than captured in the
@@ -317,47 +393,10 @@ let SnapshotMissingMessage =
 /// rather than a compose-time impossibility nobody has exercised.
 let compositionInspectorApi (ctx: HttpContext) : ICompositionInspectorApi =
 
-    let accessContext = resolveAccessContext ctx
-
-    let snapshot: CompositionInspectorSnapshot option =
-        match ctx.RequestServices.GetService(typeof<CompositionInspectorSnapshot>) with
-        | :? CompositionInspectorSnapshot as s -> Some s
-        | _ -> None
-
-    /// Owner/Admin read gate. `AuditViewApiHandler.ensureReadAllowed`'s
-    /// shape, and the same predicate (`TeamRoles.canWriteTeamConfig`)
-    /// the shard names.
-    ///
-    /// The same gate as the audit trail even though the content is
-    /// different in kind — this panel set names the deployment's
-    /// companions, its resolved config knobs, and the purposes it may
-    /// disclose data under. That is a map of the attack surface, and a
-    /// second, laxer predicate for it would be a second thing to keep in
-    /// step with the first.
-    let ensureReadAllowed () : Async<Result<unit, string>> = async {
-        match accessContext.Subject with
-        | AnonymousSession _ -> return Error "The composition inspector is not available in this mode."
-        | TeamMember(userId, teamId) ->
-            match ctx.RequestServices.GetService(typeof<ITeamStore>) with
-            | :? ITeamStore as ts ->
-                let! role = ts.GetMemberRole(teamId, userId)
-
-                match role with
-                | Some r when TeamRoles.canWriteTeamConfig r -> return Ok()
-                | Some r ->
-                    return
-                        Error
-                            $"Only team owners and admins can view the composition inspector. Your role: {TeamRoles.displayName r}."
-                | None -> return Error "You are not a member of this team."
-            | _ -> return Error "Team management is not available in this deployment."
-        | AuthenticatedUser _
-        | ClaimBearer _ -> return Ok()
-        // Phase 1002 — a publication reader is not an app user.
-        | PublicationReader _ -> return Error "The composition inspector is not available to a publication reader."
-    }
+    let snapshot = resolveSnapshot ctx.RequestServices
 
     let withGate (f: unit -> Async<Result<'T, string>>) : Async<Result<'T, string>> = async {
-        match! ensureReadAllowed () with
+        match! readGate ctx with
         | Error msg -> return Error msg
         | Ok() -> return! f ()
     }
@@ -372,37 +411,14 @@ let compositionInspectorApi (ctx: HttpContext) : ICompositionInspectorApi =
                 | None -> Error SnapshotMissingMessage
         })
 
-    /// The provenance report is the one panel resolved per request
-    /// rather than snapshotted: it reports DI registrations, which the
-    /// container answers directly and which the compose-time snapshot
-    /// would only be able to mirror.
-    let provenanceView () : ProvenanceView = {
-        GraphComposed = isComposed<IProvenanceGraph> ctx
-        FactEvidenceComposed = isComposed<IFactEvidenceSource> ctx
-        ArtifactProvenanceComposed = isComposed<IArtifactProvenanceSource> ctx
-    }
-
     {
         GetComposition = fun () -> panel _.Composition
         GetSurfaces = fun () -> panel _.Surfaces
         GetRules = fun () -> panel _.Rules
         GetDisclosure = fun () -> panel _.Disclosure
 
-        GetProvenance = fun () -> withGate (fun () -> async { return Ok(provenanceView ()) })
+        GetProvenance = fun () -> withGate (fun () -> async { return Ok(provenanceView ctx.RequestServices) })
 
         ExportPanel =
-            fun requested ->
-                withGate (fun () -> async {
-                    // Every arm serialises the SAME value its getter
-                    // returns, through the same serialiser — so the
-                    // round-trip property is structural rather than a
-                    // pair of renderings that happen to agree today.
-                    match requested, snapshot with
-                    | ProvenancePanel, _ -> return Ok(toCanonicalJson (provenanceView ()))
-                    | _, None -> return Error SnapshotMissingMessage
-                    | CompositionPanel, Some s -> return Ok(toCanonicalJson s.Composition)
-                    | SurfacesPanel, Some s -> return Ok(toCanonicalJson s.Surfaces)
-                    | RulesPanel, Some s -> return Ok(toCanonicalJson s.Rules)
-                    | DisclosurePanel, Some s -> return Ok(toCanonicalJson s.Disclosure)
-                })
+            fun requested -> withGate (fun () -> async { return panelJson ctx.RequestServices snapshot requested })
     }

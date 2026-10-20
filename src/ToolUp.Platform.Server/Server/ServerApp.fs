@@ -3517,6 +3517,11 @@ module ServerApp =
                 )
                 |> ignore
 
+                // Phase 782 — the `--describe` startup mode's renderer, beside
+                // the snapshot it reads, for the same compile-order reason.
+                services.AddSingleton<StartupModes.DescribeRenderer>(ReflectionTools.describeRenderer)
+                |> ignore
+
                 services)
 
         // Phase 593 — mount the composition-inspector route.

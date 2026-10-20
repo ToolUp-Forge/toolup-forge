@@ -23,6 +23,13 @@
          Result-envelope read, a mocked-transport round-trip per verb, and
          the no-confirmation-bypass assertions. -->
     <Compile Include="TenantUserVerbsTests.fs" />
+    <!-- Phase 782 — `describe`. The module fixture is the
+         platformsdk-module-packaged template's own server registration,
+         compiled from the template's source so the scaffold a consumer
+         instantiates is the shape the module form is tested over. -->
+    <Compile Include="..\..\templates\platformsdk-module-packaged\src\MyModule\SharedTypes.fs" Link="Fixtures\PackagedModule\SharedTypes.fs" />
+    <Compile Include="..\..\templates\platformsdk-module-packaged\src\MyModule\Server.fs" Link="Fixtures\PackagedModule\Server.fs" />
+    <Compile Include="DescribeCommandTests.fs" />
     <!-- Phase 722 — the unregistered-[<Tests>]-list guard, source-linked from
          ToolUp.Platform.Tests so there is one implementation. -->
     <Compile Include="..\ToolUp.Platform.Tests\Support\TestRegistrationGuard.fs" Link="Support\TestRegistrationGuard.fs" />
@@ -36,6 +43,9 @@
          references — the `toolup` CLI itself stays pure-BCL. -->
     <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
     <ProjectReference Include="..\ToolUp.ArtefactSigning\ArtefactSigning.fsproj" />
+    <!-- Phase 782 — the sample module the module form of `describe` must report as
+         declaring no ServerModule of its own. -->
+    <ProjectReference Include="..\..\samples\HelloWorld\HelloWorld.Module\HelloWorld.Module.fsproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="FSharp.Core" />

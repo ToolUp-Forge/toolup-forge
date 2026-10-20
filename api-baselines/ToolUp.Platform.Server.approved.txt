@@ -2000,7 +2000,12 @@ ToolUp.Platform.CompositionHotSwap.swap`1(ToolUp.Platform.HotSwapMode, Microsoft
 ToolUp.Platform.CompositionInspectorHandler (class)
 ToolUp.Platform.CompositionInspectorHandler.SnapshotMissingMessage : System.String (literal)
 ToolUp.Platform.CompositionInspectorHandler.SurfacesUnavailableNote : System.String (literal)
+ToolUp.Platform.CompositionInspectorHandler.canonicalJson`1(view) : System.String
 ToolUp.Platform.CompositionInspectorHandler.compositionInspectorApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.ICompositionInspectorApi
+ToolUp.Platform.CompositionInspectorHandler.panelJson(System.IServiceProvider, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshot], ToolUp.Platform.InspectorPanel) : Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]
+ToolUp.Platform.CompositionInspectorHandler.provenanceView(System.IServiceProvider) : ToolUp.Platform.ProvenanceView
+ToolUp.Platform.CompositionInspectorHandler.readGate(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]
+ToolUp.Platform.CompositionInspectorHandler.resolveSnapshot(System.IServiceProvider) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshot]
 ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshot (class)
 ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshot..ctor(ToolUp.Platform.CompositionView, ToolUp.Platform.SurfacesView, ToolUp.Platform.RulesView, ToolUp.Platform.DisclosureView)
 ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshot.Composition : ToolUp.Platform.CompositionView { get }
@@ -3335,6 +3340,7 @@ ToolUp.Platform.DeploymentVerificationReport.gatherRemotingDecoders(ToolUp.Platf
 ToolUp.Platform.DeploymentVerificationReport.gatherSeamAuthority(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.DeploymentVerification+ReportSection
 ToolUp.Platform.DeploymentVerificationReport.gatherTrustBoundaries(ToolUp.Platform.IDeploymentVerificationEvidence, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+ReportSection]) : ToolUp.Platform.DeploymentVerification+ReportSection
 ToolUp.Platform.DeploymentVerificationReport.notProvedFor(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+ReportSection]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeploymentVerification+NotProvedStatement]
+ToolUp.Platform.DeploymentVerificationReport.readAllowed(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]
 ToolUp.Platform.DeploymentVerificationReport.recordRead(System.IServiceProvider, ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.DeploymentVerificationReport.resolveEvidence(System.IServiceProvider) : ToolUp.Platform.IDeploymentVerificationEvidence
 ToolUp.Platform.DeploymentVerificationReport.run(System.IServiceProvider, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport]
@@ -9333,6 +9339,35 @@ ToolUp.Platform.ReevaluationSweepRequest (class)
 ToolUp.Platform.ReevaluationSweepRequest..ctor(System.String, System.String)
 ToolUp.Platform.ReevaluationSweepRequest.EvaluatedBy : System.String { get }
 ToolUp.Platform.ReevaluationSweepRequest.ScopeId : System.String { get }
+ToolUp.Platform.ReflectionTools (class)
+ToolUp.Platform.ReflectionTools.AuditKind : System.String (literal)
+ToolUp.Platform.ReflectionTools.CompositionDocument : System.String (literal)
+ToolUp.Platform.ReflectionTools.DescribeCompositionTool : System.String (literal)
+ToolUp.Platform.ReflectionTools.ModuleReachDocument : System.String (literal)
+ToolUp.Platform.ReflectionTools.ModuleReachTool : System.String (literal)
+ToolUp.Platform.ReflectionTools.ObservedReachAbsentNote : System.String (literal)
+ToolUp.Platform.ReflectionTools.SeamAuthorityNotComposedNote : System.String (literal)
+ToolUp.Platform.ReflectionTools.SourceModule : System.String (literal)
+ToolUp.Platform.ReflectionTools.VerificationReportDocument : System.String (literal)
+ToolUp.Platform.ReflectionTools.VerificationReportTool : System.String (literal)
+ToolUp.Platform.ReflectionTools.describe(System.IServiceProvider, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[System.String, System.Int32], System.String]]
+ToolUp.Platform.ReflectionTools.describeCompositionDefinition : ToolUp.Platform.AIToolDefinition { get }
+ToolUp.Platform.ReflectionTools.describeRenderer : ToolUp.Platform.StartupModes+DescribeRenderer { get }
+ToolUp.Platform.ReflectionTools.documents : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.ReflectionTools.executeDescribeComposition(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Platform.ReflectionTools.executeModuleReach(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Platform.ReflectionTools.executeVerificationReport(Microsoft.AspNetCore.Http.HttpContext, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.String]
+ToolUp.Platform.ReflectionTools.moduleReachDefinition : ToolUp.Platform.AIToolDefinition { get }
+ToolUp.Platform.ReflectionTools.moduleReachJson(System.IServiceProvider) : System.String
+ToolUp.Platform.ReflectionTools.tools : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]] { get }
+ToolUp.Platform.ReflectionTools.verificationReportDefinition : ToolUp.Platform.AIToolDefinition { get }
+ToolUp.Platform.ReflectionTools.verificationReportJson(ToolUp.Platform.DeploymentVerification+DeploymentVerificationReport, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]
+ToolUp.Platform.ReflectionTools+ModuleReachView (class)
+ToolUp.Platform.ReflectionTools+ModuleReachView..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SeamAuthorityIntegrity], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.ReflectionTools+ModuleReachView.Note : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.ReflectionTools+ModuleReachView.SeamAuthority : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.SeamAuthorityIntegrity] { get }
+ToolUp.Platform.ReflectionTools+ModuleReachViewModule (class)
+ToolUp.Platform.ReflectionTools+ModuleReachViewModule.ofEvidence(ToolUp.Platform.IDeploymentVerificationEvidence) : ToolUp.Platform.ReflectionTools+ModuleReachView
 ToolUp.Platform.RegisteredPurpose (class)
 ToolUp.Platform.RegisteredPurpose..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Platform.RegisteredPurpose.AllowedSurfaces : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
@@ -10687,12 +10722,20 @@ ToolUp.Platform.StampedRuleVersion..ctor(System.String, ToolUp.Platform.RuleVers
 ToolUp.Platform.StampedRuleVersion.StampedRuleCode : System.String { get }
 ToolUp.Platform.StampedRuleVersion.StampedRuleSemVer : ToolUp.Platform.RuleVersion { get }
 ToolUp.Platform.StartupModes (class)
+ToolUp.Platform.StartupModes.CliDescribeActor : System.String (literal)
 ToolUp.Platform.StartupModes.CliVerificationActor : System.String (literal)
+ToolUp.Platform.StartupModes.DescribeFlag : System.String (literal)
+ToolUp.Platform.StartupModes.DescribeOutFlag : System.String (literal)
+ToolUp.Platform.StartupModes.DescribePanelFlag : System.String (literal)
+ToolUp.Platform.StartupModes.DescribeSectionFlag : System.String (literal)
 ToolUp.Platform.StartupModes.DiffFlag : System.String (literal)
 ToolUp.Platform.StartupModes.PrintConfigFlag : System.String (literal)
 ToolUp.Platform.StartupModes.ValidateConfigFlag : System.String (literal)
 ToolUp.Platform.StartupModes.VerifyDeploymentFlag : System.String (literal)
 ToolUp.Platform.StartupModes.current() : ToolUp.Platform.StartupModes+StartupMode
+ToolUp.Platform.StartupModes.describeOut(System.Collections.Generic.IEnumerable`1[System.String]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.StartupModes.describePanel(System.Collections.Generic.IEnumerable`1[System.String]) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Platform.StartupModes.describeSections(System.Collections.Generic.IEnumerable`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.StartupModes.detect(System.Collections.Generic.IEnumerable`1[System.String]) : ToolUp.Platform.StartupModes+StartupMode
 ToolUp.Platform.StartupModes.diffRequested(System.Collections.Generic.IEnumerable`1[System.String]) : System.Boolean
 ToolUp.Platform.StartupModes.effectiveEntry(ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor) : System.Tuple`2[System.String, ToolUp.Platform.ConfigResolution+ConfigSource]
@@ -10703,7 +10746,12 @@ ToolUp.Platform.StartupModes.printValidationSummary(ToolUp.Platform.ILogger, Mic
 ToolUp.Platform.StartupModes.renderConfigReport(System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor]) : System.String
 ToolUp.Platform.StartupModes.renderEffectiveConfig(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKeys+ConfigKeyDescriptor]) : System.String
 ToolUp.Platform.StartupModes.renderValidationSummary(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigValidatorAggregator+ValidatorOutcome]) : System.String
+ToolUp.Platform.StartupModes+DescribeRenderer (class)
+ToolUp.Platform.StartupModes+DescribeRenderer..ctor(Microsoft.FSharp.Core.FSharpFunc`2[System.IServiceProvider, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[System.String, System.Int32], System.String]]]]])
+ToolUp.Platform.StartupModes+DescribeRenderer.Render(System.IServiceProvider, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Tuple`2[System.String, System.Int32], System.String]]
 ToolUp.Platform.StartupModes+StartupMode (class)
+ToolUp.Platform.StartupModes+StartupMode.Describe : ToolUp.Platform.StartupModes+StartupMode { get }
+ToolUp.Platform.StartupModes+StartupMode.IsDescribe : System.Boolean { get }
 ToolUp.Platform.StartupModes+StartupMode.IsNormalBoot : System.Boolean { get }
 ToolUp.Platform.StartupModes+StartupMode.IsPrintConfig : System.Boolean { get }
 ToolUp.Platform.StartupModes+StartupMode.IsValidateConfig : System.Boolean { get }
@@ -10714,6 +10762,7 @@ ToolUp.Platform.StartupModes+StartupMode.Tag : System.Int32 { get }
 ToolUp.Platform.StartupModes+StartupMode.ValidateConfig : ToolUp.Platform.StartupModes+StartupMode { get }
 ToolUp.Platform.StartupModes+StartupMode.VerifyDeployment : ToolUp.Platform.StartupModes+StartupMode { get }
 ToolUp.Platform.StartupModes+StartupMode+Tags (class)
+ToolUp.Platform.StartupModes+StartupMode+Tags.Describe : System.Int32 (literal)
 ToolUp.Platform.StartupModes+StartupMode+Tags.NormalBoot : System.Int32 (literal)
 ToolUp.Platform.StartupModes+StartupMode+Tags.PrintConfig : System.Int32 (literal)
 ToolUp.Platform.StartupModes+StartupMode+Tags.ValidateConfig : System.Int32 (literal)

@@ -98,6 +98,9 @@
     <Compile Include="Cli\StampCommand.fs" />
     <Compile Include="Cli\ModuleCommand.fs" />
     <Compile Include="Cli\MembershipsDoctorCommand.fs" />
+    <!-- Phase 782 - `describe`: the offline door onto a deployment's (or one
+         module's) self-description. -->
+    <Compile Include="Cli\DescribeCommand.fs" />
     <!-- Phase 550 — the tenant / user lifecycle verbs. `Users.fs` reuses
          `Tenants.fs`'s admin transport and offboard runner (a user
          offboard IS a scope offboard), so it compiles after it. -->

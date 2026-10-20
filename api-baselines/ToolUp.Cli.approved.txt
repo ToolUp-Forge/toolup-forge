@@ -60,6 +60,43 @@ ToolUp.Cli.Commands.Users.renderPrincipals(System.Boolean, System.Text.Json.Json
 ToolUp.Cli.Commands.Users.runList(ToolUp.Cli.Commands.Tenants+Transport, System.Boolean) : System.Int32
 ToolUp.Cli.Commands.Users.runOffboardUser(ToolUp.Cli.Commands.Tenants+Transport, System.String, System.String, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : System.Int32
 ToolUp.Cli.Commands.Users.userScope(System.String) : System.String
+ToolUp.Cli.DescribeCommand (class)
+ToolUp.Cli.DescribeCommand.ModuleDeclaredNote : System.String (literal)
+ToolUp.Cli.DescribeCommand.ServerModuleTypeName : System.String (literal)
+ToolUp.Cli.DescribeCommand.command : ToolUp.Cli.Dispatch+Command { get }
+ToolUp.Cli.DescribeCommand.defaultOptions : ToolUp.Cli.DescribeCommand+Options { get }
+ToolUp.Cli.DescribeCommand.describeModule(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]
+ToolUp.Cli.DescribeCommand.globalPackagesFolder() : System.String
+ToolUp.Cli.DescribeCommand.help : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Cli.DescribeCommand.parse(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Cli.DescribeCommand+Options, System.String]
+ToolUp.Cli.DescribeCommand.processRunner(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.Int32) : Microsoft.FSharp.Core.FSharpOption`1[System.Int32]
+ToolUp.Cli.DescribeCommand.resolveModuleAssembly(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]
+ToolUp.Cli.DescribeCommand.rootInvocation(ToolUp.Cli.DescribeCommand+Options, System.String) : System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]]
+ToolUp.Cli.DescribeCommand.runRoot(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.Int32]]]], System.IO.TextWriter, ToolUp.Cli.DescribeCommand+Options) : System.Int32
+ToolUp.Cli.DescribeCommand+DescribeTarget (class)
+ToolUp.Cli.DescribeCommand+DescribeTarget.IsModule : System.Boolean { get }
+ToolUp.Cli.DescribeCommand+DescribeTarget.IsRootAssembly : System.Boolean { get }
+ToolUp.Cli.DescribeCommand+DescribeTarget.IsRootProject : System.Boolean { get }
+ToolUp.Cli.DescribeCommand+DescribeTarget.Tag : System.Int32 { get }
+ToolUp.Cli.DescribeCommand+DescribeTarget+Module (class)
+ToolUp.Cli.DescribeCommand+DescribeTarget+Module.reference : System.String { get }
+ToolUp.Cli.DescribeCommand+DescribeTarget+RootAssembly (class)
+ToolUp.Cli.DescribeCommand+DescribeTarget+RootAssembly.path : System.String { get }
+ToolUp.Cli.DescribeCommand+DescribeTarget+RootProject (class)
+ToolUp.Cli.DescribeCommand+DescribeTarget+RootProject.path : System.String { get }
+ToolUp.Cli.DescribeCommand+DescribeTarget+Tags (class)
+ToolUp.Cli.DescribeCommand+DescribeTarget+Tags.Module : System.Int32 (literal)
+ToolUp.Cli.DescribeCommand+DescribeTarget+Tags.RootAssembly : System.Int32 (literal)
+ToolUp.Cli.DescribeCommand+DescribeTarget+Tags.RootProject : System.Int32 (literal)
+ToolUp.Cli.DescribeCommand+Options (class)
+ToolUp.Cli.DescribeCommand+Options..ctor(System.Boolean, ToolUp.Cli.DescribeCommand+DescribeTarget, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32)
+ToolUp.Cli.DescribeCommand+Options.Json : System.Boolean { get }
+ToolUp.Cli.DescribeCommand+Options.Member : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Cli.DescribeCommand+Options.Panel : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Cli.DescribeCommand+Options.Sections : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Cli.DescribeCommand+Options.Target : ToolUp.Cli.DescribeCommand+DescribeTarget { get }
+ToolUp.Cli.DescribeCommand+Options.TimeoutSeconds : System.Int32 { get }
+ToolUp.Cli.DescribeCommand+Options.Version : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Cli.Dispatch (class)
 ToolUp.Cli.Dispatch.ExitOk : System.Int32 (literal)
 ToolUp.Cli.Dispatch.ExitRuntimeError : System.Int32 (literal)
