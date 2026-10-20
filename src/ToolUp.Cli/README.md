@@ -36,6 +36,23 @@ toolup docker emit --help
 | `memberships doctor` | Detects membership-integrity drift in a local-file deployment's blob layout; `--repair` fixes the provably-safe subset. |
 | `tenants list` / `preview` / `offboard` | Scripted tenant lifecycle over a running deployment's admin API: enumerate teams, preview an offboard's blast radius, run one. |
 | `users list` / `offboard` | Enumerate the principals the substrate has evidence for (`--team-less` for the stray-account residue), and offboard one's personal scope. |
+| `describe` | Emits a deployment's self-description — composition, verification report, per-component seam reach — as JSON without a running server, or one built module's `ModuleSurface`. |
+
+#### `describe`
+
+```bash
+toolup describe --json --project src/App-Server             # all three documents, one object
+toolup describe --json --dll App-Server.dll --section verification-report
+toolup describe --module bin/Release/net10.0/Acme.Sales.dll --json
+```
+
+The composition-root form runs the root in its `--describe` startup mode (the application composes,
+emits the documents and exits without binding a listener) and returns the verification report's exit
+code: `0` when every composed section verified or was not composed, non-zero when one failed or would
+not answer. The documents are the same bytes the deployment's reflection tools return. The module form
+loads one built module with the `ToolUp.Platform.Server` it was built against and emits the
+`ModuleSurface` the module itself declares, saying so in the output. Reference:
+[`docs/ai/reflection-tools.md`](../../docs/ai/reflection-tools.md).
 
 #### `module add` / `module remove`
 
