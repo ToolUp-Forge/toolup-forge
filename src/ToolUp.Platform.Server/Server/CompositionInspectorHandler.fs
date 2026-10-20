@@ -393,7 +393,8 @@ let panelJson
 /// rather than a compose-time impossibility nobody has exercised.
 let compositionInspectorApi (ctx: HttpContext) : ICompositionInspectorApi =
 
-    let snapshot = resolveSnapshot ctx.RequestServices
+    let services = ctx.RequestServices
+    let snapshot = resolveSnapshot services
 
     let withGate (f: unit -> Async<Result<'T, string>>) : Async<Result<'T, string>> = async {
         match! readGate ctx with
@@ -417,8 +418,7 @@ let compositionInspectorApi (ctx: HttpContext) : ICompositionInspectorApi =
         GetRules = fun () -> panel _.Rules
         GetDisclosure = fun () -> panel _.Disclosure
 
-        GetProvenance = fun () -> withGate (fun () -> async { return Ok(provenanceView ctx.RequestServices) })
+        GetProvenance = fun () -> withGate (fun () -> async { return Ok(provenanceView services) })
 
-        ExportPanel =
-            fun requested -> withGate (fun () -> async { return panelJson ctx.RequestServices snapshot requested })
+        ExportPanel = fun requested -> withGate (fun () -> async { return panelJson services snapshot requested })
     }

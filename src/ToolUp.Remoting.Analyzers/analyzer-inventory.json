@@ -58,7 +58,7 @@
         "src/ToolUp.Platform.Server/Server/Compose/ComposeTenantLifecycle.fs": 1,
         "src/ToolUp.Platform.Server/Server/Compose/LiveSessionsCompose.fs": 2,
         "src/ToolUp.Platform.Server/Server/CompositionCapabilityGate.fs": 6,
-        "src/ToolUp.Platform.Server/Server/CompositionInspectorHandler.fs": 4,
+        "src/ToolUp.Platform.Server/Server/CompositionInspectorHandler.fs": 5,
         "src/ToolUp.Platform.Server/Server/Config/ConfigHandler.fs": 4,
         "src/ToolUp.Platform.Server/Server/CsrfMiddleware.fs": 1,
         "src/ToolUp.Platform.Server/Server/DataIngestionApiHandler.fs": 9,
@@ -117,9 +117,11 @@
         "src/ToolUp.Platform.Server/Server/Premium/PremiumGate.fs": 2,
         "src/ToolUp.Platform.Server/Server/PresenceApiHandler.fs": 2,
         "src/ToolUp.Platform.Server/Server/ProviderProfileApiHandler.fs": 4,
+        "src/ToolUp.Platform.Server/Server/ReflectionTools.fs": 3,
         "src/ToolUp.Platform.Server/Server/Remoting/Giraffe/GiraffeAdapter.fs": 2,
         "src/ToolUp.Platform.Server/Server/Remoting/Giraffe/SharedReader.fs": 1,
         "src/ToolUp.Platform.Server/Server/RemotingHelpers.fs": 7,
+        "src/ToolUp.Platform.Server/Server/SDK.Server.fs": 1,
         "src/ToolUp.Platform.Server/Server/SbomProjection.fs": 1,
         "src/ToolUp.Platform.Server/Server/ScheduledDeprovisionJobHandler.fs": 1,
         "src/ToolUp.Platform.Server/Server/Scope/StorageScopeResolver.fs": 3,
@@ -433,9 +435,9 @@
     },
     {
       "rule": "TUA003",
-      "reason": "The CLI verification mode: builds a provider, runs the deployment report and exits; no host is serving.",
+      "reason": "The CLI startup modes (--verify-deployment, --describe): build a provider, run the deployment report or render the description, and exit; no host is serving.",
       "sites": {
-        "src/ToolUp.Platform.Server/Server/SDK.Server.fs": 1
+        "src/ToolUp.Platform.Server/Server/SDK.Server.fs": 2
       }
     },
     {
