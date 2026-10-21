@@ -10535,7 +10535,8 @@ ToolUp.Platform.PlatformDocumentUploadedPayload.DocumentId : System.String { get
 ToolUp.Platform.PlatformDocumentUploadedPayload.FileName : System.String { get }
 ToolUp.Platform.PlatformDocumentUploadedPayload.SizeBytes : System.Int64 { get }
 ToolUp.Platform.PlatformInfo (class)
-ToolUp.Platform.PlatformInfo..ctor(System.Boolean)
+ToolUp.Platform.PlatformInfo..ctor(System.Boolean, System.Boolean)
+ToolUp.Platform.PlatformInfo.FileManagementMounted : System.Boolean { get }
 ToolUp.Platform.PlatformInfo.RequiresAuth : System.Boolean { get }
 ToolUp.Platform.PlatformInfoApi (class)
 ToolUp.Platform.PlatformInfoApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.PlatformInfo]])

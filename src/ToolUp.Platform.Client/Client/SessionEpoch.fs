@@ -31,6 +31,14 @@ open ProcessedDataTypes
 // Per-tab singleton; the shell subscribes at boot for the lifetime of
 // the React tree.
 //
+// Phase 1046 — the reads run only where the server mounts the file API.
+// The shell arms them from the server's own advertisement
+// (`PlatformInfo.FileManagementMounted`, via `setFileApiMounted`); until
+// then, and on a deployment whose modules declare no data type, there is
+// no session file store to reconcile against, so every check answers "no
+// reset" without a call. Nothing is lost by the unarmed default: before the
+// first read there is no cached epoch, so no check could report a reset.
+//
 // GP 11 — a deployment that never evicts is unchanged apart from the
 // one `GetSessionInfo` call on mount. Every other path here is driven by
 // an event that only fires when something was genuinely lost: the
@@ -46,6 +54,16 @@ let private log = Logger.forCategory "client.session-epoch"
 /// freshness is the `CsrfClient` request guard's job, not the proxy's.
 let private fileApi: FileManagementApi =
     Api.makeProxy<FileManagementApi> (customOptions = UserSession.withRequestHeaders)
+
+/// Where the epoch is read from: `fileApi.GetSessionInfo` once the server
+/// has advertised the file API as mounted, `None` otherwise (Phase 1046).
+let mutable private sessionInfoSource: (unit -> Async<SessionStoreInfo>) option =
+    None
+
+/// Replace the epoch source. The test seam behind `setFileApiMounted`, so
+/// a test can count the reads a check makes without a server.
+let internal useSessionInfoSource (source: (unit -> Async<SessionStoreInfo>) option) : unit =
+    sessionInfoSource <- source
 
 /// The epoch this tab believes it is talking to. `None` before the first
 /// successful read — the pre-mount state, in which nothing can be
@@ -72,6 +90,21 @@ let current () : Guid option = cachedEpoch
 /// NOT call this — it changes the language, not the scope, and the store
 /// on the other side of it is the same store.
 let reset () : unit = cachedEpoch <- None
+
+/// Phase 1046 — arm or disarm the epoch reads on the server's own
+/// advertisement of whether `FileManagementApi` is mounted
+/// (`PlatformInfo.FileManagementMounted`). Disarming also drops the cached
+/// epoch: an epoch read from a store the deployment no longer exposes is
+/// nothing a later check may compare against.
+let setFileApiMounted (mounted: bool) : unit =
+    if mounted then
+        useSessionInfoSource (Some(fun () -> fileApi.GetSessionInfo()))
+    else
+        useSessionInfoSource None
+        reset ()
+
+/// Whether the epoch reads are armed — the server advertised the file API.
+let fileApiMounted () : bool = sessionInfoSource.IsSome
 
 /// Subscribe to session-store resets. Returns a dispose thunk. Every
 /// holder of file-derived client state — the shell's prefetched
@@ -166,34 +199,41 @@ let applyServerNoticeJson (payloadJson: string) : unit =
 /// A failed read returns `None` and leaves the cache untouched: a
 /// transient network failure is not evidence that the store was reset,
 /// and guessing would clear the user's file list on a flaky connection.
+///
+/// Phase 1046 — unarmed (the server has not advertised the file API, or
+/// advertised it as not mounted), it answers `None` without a call: there
+/// is no session file store to compare against.
 let check () : Async<SessionStoreResetNotification option> = async {
-    try
-        let! info = fileApi.GetSessionInfo()
-        let previous = cachedEpoch
-
-        if observe info.Epoch then
-            // The server could not have told us the reason — a restart
-            // takes the channel down with it, and an eviction we learned
-            // about by polling means the notification did not reach us.
-            // Either way what the user needs is the same reconciliation.
-            let notice: SessionStoreResetNotification = {
-                Container = ""
-                PreviousEpoch = previous
-                CurrentEpoch = info.Epoch
-                Reason = SessionStoreResetReasonProcessRestart
-            }
-
-            fanOut notice
-            return Some notice
-        else
-            return None
-    with ex ->
+    match sessionInfoSource with
+    | None -> return None
+    | Some readSessionInfo ->
         try
-            log.Warn $"epoch check failed: {ex.Message}"
-        with _ ->
-            ()
+            let! info = readSessionInfo ()
+            let previous = cachedEpoch
 
-        return None
+            if observe info.Epoch then
+                // The server could not have told us the reason — a restart
+                // takes the channel down with it, and an eviction we learned
+                // about by polling means the notification did not reach us.
+                // Either way what the user needs is the same reconciliation.
+                let notice: SessionStoreResetNotification = {
+                    Container = ""
+                    PreviousEpoch = previous
+                    CurrentEpoch = info.Epoch
+                    Reason = SessionStoreResetReasonProcessRestart
+                }
+
+                fanOut notice
+                return Some notice
+            else
+                return None
+        with ex ->
+            try
+                log.Warn $"epoch check failed: {ex.Message}"
+            with _ ->
+                ()
+
+            return None
 }
 
 /// Seed the cache on mount without treating the first read as a reset.

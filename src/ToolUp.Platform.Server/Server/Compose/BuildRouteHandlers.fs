@@ -44,6 +44,14 @@ let inline private requireService<'t> (ctx: HttpContext) : 't =
             typeof<'t>.FullName
     | svc -> svc :?> 't
 
+/// Phase 1046 — the ONE predicate for "this deployment mounts
+/// `FileManagementApi`": some composed module declares a data type. The
+/// route composition below mounts the API on it, and `PlatformInfoApi`
+/// advertises the same answer (`PlatformInfo.FileManagementMounted`), so
+/// the client shell reads the server's decision rather than guessing it
+/// from its own data-manager slot.
+let fileManagementMounted (dataTypes: DataType list) : bool = not dataTypes.IsEmpty
+
 let buildRouteHandlers
     (config: ServerConfig)
     (handlers: HttpHandler list)
@@ -56,11 +64,13 @@ let buildRouteHandlers
     (blobJobStoreInstance: JobStore.BlobJobStore option ref)
     : RouteHandlers =
 
+    let fileApiMounted = fileManagementMounted dataTypes
+
     let fileManagementHandler =
-        if dataTypes.IsEmpty then
-            []
-        else
+        if fileApiMounted then
             [ makeApi FileManagement.fileManagementApi ]
+        else
+            []
 
     // Column-mapping API — mounted only when the mapping-aware Data
     // Manager substrate is enabled (`ColumnMapping = EnabledColumnMapping`).
@@ -808,7 +818,7 @@ let buildRouteHandlers
     let router (devRoutes: HttpHandler list) =
         choose (
             [
-                platformInfoApiHandler config
+                platformInfoApiHandler config fileApiMounted
                 teamApiHandler config
                 permissionApiHandler config
                 accessibilityApiHandler config

@@ -3500,10 +3500,12 @@ module PlatformClientProxies =
 
     /// Generated JSON decoder for `PlatformInfo` — members by name, cases by case name, read off the type's own shape.
     let decodePlatformInfo: JsonDecoder<PlatformInfo> =
-        JsonDecode.succeed (fun requiresAuth -> ({
+        JsonDecode.succeed (fun requiresAuth fileManagementMounted -> ({
             RequiresAuth = requiresAuth
+            FileManagementMounted = fileManagementMounted
         }: PlatformInfo))
         |> JsonDecode.apply (JsonDecode.field "RequiresAuth" JsonDecode.asBool)
+        |> JsonDecode.apply (JsonDecode.field "FileManagementMounted" JsonDecode.asBool)
 
     /// Generated JSON decoder for `TeamMembership` — members by name, cases by case name, read off the type's own shape.
     let decodeTeamMembership: JsonDecoder<TeamMembership> =

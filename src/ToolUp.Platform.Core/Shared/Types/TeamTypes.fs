@@ -53,7 +53,17 @@ type TeamMembership = {
 // ─── Platform info ────────────────────────────────────────────────
 
 /// Platform info returned to the client.
-type PlatformInfo = { RequiresAuth: bool }
+type PlatformInfo = {
+    RequiresAuth: bool
+    /// Phase 1046 — whether this deployment mounts `FileManagementApi`.
+    /// The server mounts it only when some module declares a data type
+    /// (`BuildRouteHandlers.fileManagementMounted`), and it advertises
+    /// that same answer here, so the client shell never calls an API the
+    /// server did not mount: a deployment whose data-manager slot is
+    /// filled by a module that does not use forge's file API boots with
+    /// no snapshot load and no session-epoch check.
+    FileManagementMounted: bool
+}
 
 /// Phase 5f — who may call `TeamApi.CreateTeam` on a `Team` /
 /// `MultiTeam` deployment. Secure-by-default flip: closed-roster

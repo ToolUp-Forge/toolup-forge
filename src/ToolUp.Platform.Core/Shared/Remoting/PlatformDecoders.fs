@@ -2825,10 +2825,12 @@ module PlatformDecoders =
 
     /// Generated decoder for `PlatformInfo` — one combinator per field or case, read off the type's own shape.
     let platformInfo: Decoder<PlatformInfo> =
-        Decode.succeed (fun requiresAuth -> ({
+        Decode.succeed (fun requiresAuth fileManagementMounted -> ({
             RequiresAuth = requiresAuth
+            FileManagementMounted = fileManagementMounted
         }: PlatformInfo))
         |> Decode.apply (Decode.field "RequiresAuth" 0 Decode.asBool)
+        |> Decode.apply (Decode.field "FileManagementMounted" 1 Decode.asBool)
 
     /// Generated decoder for `TeamMembership` — one combinator per field or case, read off the type's own shape.
     let teamMembership: Decoder<TeamMembership> =

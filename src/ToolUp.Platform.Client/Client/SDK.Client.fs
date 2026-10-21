@@ -270,6 +270,13 @@ module Client =
         /// `PrefetchedProcessedData` and merged into `ProcessedData` so data
         /// modules see uploaded data on load without visiting Data Manager.
         | DataSnapshotPrefetched of FileListSnapshot
+        /// Phase 1046 — the server's `PlatformInfo` arrived. Its
+        /// `FileManagementMounted` is the one answer to "does this
+        /// deployment mount `FileManagementApi`": the shell arms the
+        /// session-epoch reads on it and, when the data-manager slot is
+        /// filled, loads the file snapshot. A deployment whose modules
+        /// declare no data type makes no file-API call at all.
+        | PlatformInfoLoaded of PlatformInfo
         /// Phase 6p — the server-side session file store this tab was
         /// talking to is gone (TTL eviction, process restart, scope
         /// change) and a new one has taken its place. Raised by
@@ -523,6 +530,15 @@ module Client =
 
     let private loadFileSnapshot = async { return! fileApi.ListFiles() }
 
+    /// Phase 1046 — the always-on, ungated platform-info proxy. Its
+    /// `FileManagementMounted` is the server's own mount decision, read at
+    /// boot BEFORE any `FileManagementApi` call so the shell never calls an
+    /// API the server did not mount.
+    let private platformInfoApi: PlatformInfoApi =
+        Api.makeProxy<PlatformInfoApi> (customOptions = UserSession.withRequestHeaders)
+
+    let private loadPlatformInfo = async { return! platformInfoApi.GetPlatformInfo() }
+
     /// Async wrapper around `platformApi.GetAccessibleModules` that
     /// swallows any error — the client is expected to keep working if
     /// the RBAC endpoint is unavailable (e.g. an older server that
@@ -691,6 +707,7 @@ module Client =
         | "configs" -> "Saved configuration"
         | "flags" -> "Feature flags"
         | "platform-role" -> "Platform-admin role"
+        | "platform-info" -> "Platform info"
         | "team-role" -> "Team role"
         | "auth-bridge" -> "Session refresh"
         | other -> other
@@ -1270,6 +1287,15 @@ module Client =
     let private dataManagerModuleId (config: ClientConfig) : string option =
         ShellSlots.composedModuleId ShellSlots.dataManager config
 
+    /// Phase 1046 — whether the shell prefetches the file snapshot (and
+    /// seeds the session epoch) at boot: the data-manager slot is filled
+    /// AND the server advertises `FileManagementApi` as mounted. The slot
+    /// alone is not enough — a deployment can fill it with a module that
+    /// does not use forge's file API while declaring no data type, and the
+    /// server then mounts no file API to call.
+    let internal loadsDataSnapshotOnBoot (dataManagerModuleId: string option) (info: PlatformInfo) : bool =
+        dataManagerModuleId.IsSome && info.FileManagementMounted
+
     /// Module-derived processed data, plus the boot-prefetched snapshot while
     /// the DataManager module hasn't been mounted yet — so data modules see
     /// uploaded data on load without first visiting the Data Manager page.
@@ -1320,36 +1346,19 @@ module Client =
             else
                 []
 
-        // When the data-manager slot is filled — by the SDK's module or a
-        // deployment's own — prefetch its file snapshot at boot so data
-        // modules see uploaded data immediately, without the user first
-        // opening the data manager (best-effort — a failed fetch routes to
-        // `BootLoadFailed` and `PrefetchedProcessedData` stays empty).
-        let dataLoaders =
-            match dataManagerModuleId config with
-            | None -> []
-            | Some _ -> [
-                bootLoadCmd "data-snapshot" loadFileSnapshot DataSnapshotPrefetched
-                // Phase 6p — seed the session epoch alongside the
-                // snapshot it describes. The one call a healthy session
-                // makes that it did not make before; a first read can
-                // never report a reset (there is no prior epoch to
-                // differ from), so this only establishes the baseline
-                // the later checks compare against. Failure is swallowed
-                // inside `SessionEpoch.check` — an unreadable epoch
-                // leaves the tab exactly where 6p found it, not worse.
-                Cmd.ofEffect (fun _ -> Async.StartImmediate(SessionEpoch.prime ()))
-              ]
-
+        // Phase 1046 — every `FileManagementApi` call waits on the
+        // server's advertisement of whether that API is mounted: the
+        // snapshot prefetch and the epoch seed are issued from the
+        // `PlatformInfoLoaded` arm, and only when it is.
         Cmd.batch (
             [
                 loadPerms
                 loadConfigs
                 loadFlags
                 bootLoadCmd "platform-role" loadPlatformRole PlatformRoleLoaded
+                bootLoadCmd "platform-info" loadPlatformInfo PlatformInfoLoaded
             ]
             @ teamScopedLoaders
-            @ dataLoaders
         )
 
     let init (_config: ClientConfig) (queryBus: IModuleQueryBus) (modules: ErasedModule list) () =
@@ -1672,6 +1681,36 @@ module Client =
                         PrefetchedProcessedData = snapshot.Processed
                 },
                 Cmd.none
+
+            | PlatformInfoLoaded info ->
+                // Phase 1046 — arm (or disarm) the session-epoch reads on
+                // the server's own mount decision, then issue the file-API
+                // boot loads only where the API exists.
+                SessionEpoch.setFileApiMounted info.FileManagementMounted
+
+                let fileLoads =
+                    if loadsDataSnapshotOnBoot (dataManagerModuleId _config) info then
+                        [
+                            // When the data-manager slot is filled — by the
+                            // SDK's module or a deployment's own — prefetch its
+                            // file snapshot at boot so data modules see uploaded
+                            // data immediately, without the user first opening
+                            // the data manager (best-effort — a failed fetch
+                            // routes to `BootLoadFailed` and
+                            // `PrefetchedProcessedData` stays empty).
+                            bootLoadCmd "data-snapshot" loadFileSnapshot DataSnapshotPrefetched
+                            // Phase 6p — seed the session epoch alongside the
+                            // snapshot it describes. A first read can never
+                            // report a reset (there is no prior epoch to differ
+                            // from), so this only establishes the baseline the
+                            // later checks compare against. Failure is swallowed
+                            // inside `SessionEpoch.check`.
+                            Cmd.ofEffect (fun _ -> Async.StartImmediate(SessionEpoch.prime ()))
+                        ]
+                    else
+                        []
+
+                model, Cmd.batch fileLoads
 
             // Phase 567 — the two-surface area switcher fires through the
             // same onSelect as modules; its reserved ids flip the rendered
@@ -2145,6 +2184,7 @@ module Client =
                     | "configs" -> bootLoadCmd "configs" (withCsrf loadAllConfigs) ConfigsLoaded
                     | "flags" -> bootLoadCmd "flags" (withCsrf loadResolvedFlags) FlagsLoaded
                     | "platform-role" -> bootLoadCmd "platform-role" loadPlatformRole PlatformRoleLoaded
+                    | "platform-info" -> bootLoadCmd "platform-info" loadPlatformInfo PlatformInfoLoaded
                     | "team-role" -> activeTeamRoleCmd updated.ActiveTeamId
                     | "team-auto-select" -> maybeAutoSelectSoleTeam updated
                     | _ -> Cmd.none

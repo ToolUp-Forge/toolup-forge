@@ -123,15 +123,21 @@ let private recordAudit (ctx: HttpContext) (auditLog: IAuditLog option) : string
 // ─── PlatformInfoApi — mode + auth posture (1 method) ───────────────
 
 /// Build the `PlatformInfoApi` handler. Stateless; only reads
-/// `ServerConfig`. Always-on; no auth gating because the client shell
-/// needs this before it can decide whether to render a login
-/// affordance.
-let platformInfoApiHandler (config: ServerConfig) =
+/// `ServerConfig` and the composition's file-API mount decision.
+/// Always-on; no auth gating because the client shell needs this before
+/// it can decide whether to render a login affordance.
+///
+/// `fileManagementMounted` is the SAME answer the route composition used
+/// to decide whether to mount `FileManagementApi` (Phase 1046 —
+/// `BuildRouteHandlers.fileManagementMounted`), passed in rather than
+/// re-derived so the advertisement cannot disagree with the mount.
+let platformInfoApiHandler (config: ServerConfig) (fileManagementMounted: bool) =
     makeApi (fun (_: HttpContext) -> {
         GetPlatformInfo =
             fun () -> async {
                 return {
                     RequiresAuth = DeploymentConfig.requiresAnyAuth config
+                    FileManagementMounted = fileManagementMounted
                 }
             }
     })

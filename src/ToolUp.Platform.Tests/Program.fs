@@ -2641,6 +2641,8 @@ let private registeredTests =
         LineageDurabilityTests.tests
         // Phase 1026 - every fire-and-forget audit record is caught at its call site.
         AuditCallSiteFireAndForgetTests.tests
+        // Phase 1046 - the client calls the file API only where the server mounts it.
+        FileApiMountTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

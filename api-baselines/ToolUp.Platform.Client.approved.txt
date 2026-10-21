@@ -3285,6 +3285,7 @@ ToolUp.Platform.Client+Msg.IsModuleEventPublished : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsModuleMsg : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsModuleSelected : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsMyTeamsLoaded : System.Boolean { get }
+ToolUp.Platform.Client+Msg.IsPlatformInfoLoaded : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsPlatformRoleLoaded : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsRefreshAccessibleModules : System.Boolean { get }
 ToolUp.Platform.Client+Msg.IsResetModule : System.Boolean { get }
@@ -3344,6 +3345,8 @@ ToolUp.Platform.Client+Msg+ModuleSelected (class)
 ToolUp.Platform.Client+Msg+ModuleSelected.Item : System.String { get }
 ToolUp.Platform.Client+Msg+MyTeamsLoaded (class)
 ToolUp.Platform.Client+Msg+MyTeamsLoaded.Item : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.TeamInfo] { get }
+ToolUp.Platform.Client+Msg+PlatformInfoLoaded (class)
+ToolUp.Platform.Client+Msg+PlatformInfoLoaded.Item : ToolUp.Platform.PlatformInfo { get }
 ToolUp.Platform.Client+Msg+PlatformRoleLoaded (class)
 ToolUp.Platform.Client+Msg+PlatformRoleLoaded.Item : System.Boolean { get }
 ToolUp.Platform.Client+Msg+ResetModule (class)
@@ -3388,6 +3391,7 @@ ToolUp.Platform.Client+Msg+Tags.ModuleEventPublished : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.ModuleMsg : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.ModuleSelected : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.MyTeamsLoaded : System.Int32 (literal)
+ToolUp.Platform.Client+Msg+Tags.PlatformInfoLoaded : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.PlatformRoleLoaded : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.RefreshAccessibleModules : System.Int32 (literal)
 ToolUp.Platform.Client+Msg+Tags.ResetModule : System.Int32 (literal)
@@ -5669,9 +5673,11 @@ ToolUp.Platform.SessionEpoch.applyServerNoticeJson(System.String) : System.Void
 ToolUp.Platform.SessionEpoch.check() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpOption`1[ProcessedDataTypes+SessionStoreResetNotification]]
 ToolUp.Platform.SessionEpoch.current() : Microsoft.FSharp.Core.FSharpOption`1[System.Guid]
 ToolUp.Platform.SessionEpoch.documentVisible() : System.Boolean
+ToolUp.Platform.SessionEpoch.fileApiMounted() : System.Boolean
 ToolUp.Platform.SessionEpoch.preflight`1(Microsoft.FSharp.Control.FSharpAsync`1[T]) : Microsoft.FSharp.Control.FSharpAsync`1[T]
 ToolUp.Platform.SessionEpoch.prime() : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.SessionEpoch.reset() : System.Void
+ToolUp.Platform.SessionEpoch.setFileApiMounted(System.Boolean) : System.Void
 ToolUp.Platform.SessionEpoch.subscribe(Microsoft.FSharp.Core.FSharpFunc`2[ProcessedDataTypes+SessionStoreResetNotification, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.SessionEpoch+SessionStoreResetException (class)
 ToolUp.Platform.SessionEpoch+SessionStoreResetException..ctor()

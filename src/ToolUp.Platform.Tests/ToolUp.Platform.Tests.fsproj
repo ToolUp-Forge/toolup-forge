@@ -2881,6 +2881,8 @@
         <Compile Include="InProcess\LineageDurabilityTests.fs" />
         <!-- Phase 1026 - every fire-and-forget audit record is caught at its call site. -->
         <Compile Include="InProcess\AuditCallSiteFireAndForgetTests.fs" />
+        <!-- Phase 1046 - the client calls the file API only where the server mounts it. -->
+        <Compile Include="InProcess\FileApiMountTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />
