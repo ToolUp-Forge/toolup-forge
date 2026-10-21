@@ -231,6 +231,16 @@ Server-Sent Events open a long-lived connection to `/api/notifications`. The bro
 
 `SseAuthModeValidator` (an `IConfigValidator`) emits a `Warning` when a deployment whose `Surfaces` requires authentication is configured without a documented SSE auth strategy. Deployments set `ServerConfig.SseAuthMode` explicitly to acknowledge the choice.
 
+**The SDK's choice is option 2, and the cookie has more than one writer (Phase 1047).** Under `TOOLUP_SSE_AUTH=cookie` the OIDC provider reads the bearer header first and the `toolup-auth-token` cookie second (`TokenLocation = BearerOrCookie "toolup-auth-token"`). REST calls carry the header; an `EventSource` handshake carries only the cookie. Three things write that cookie:
+
+| Writer | How | Lifetime |
+|---|---|---|
+| The SPA, default `ClientCookieAndLocalStorage` path | `document.cookie` from `UserSession.setAuthToken`, not `HttpOnly` | browser session |
+| `POST /api/auth/session` | server `Set-Cookie`, `HttpOnly; SameSite=Strict; Secure` on HTTPS, after validating the token | browser session; cleared by `DELETE` |
+| The server-rendered sign-in (`OidcSsrSignIn`) | server `Set-Cookie`, `HttpOnly; SameSite=Lax; Secure` on HTTPS | `Max-Age` = the token's remaining life |
+
+A browser never lets script replace an `HttpOnly` cookie of the same name. Before Phase 1047 the SPA's write was therefore dropped silently whenever the server sign-in had run first. The streams rode the server's token, and they answered `401` once it expired while REST stayed authenticated. The client now reads `document.cookie` back after it writes. When its token is not there, it sends the token to `POST /api/auth/session`, so the server replaces its own cookie and the latest sign-in wins. Before a request the client also restores a held token that is missing from `document.cookie` (a script write, no network). That covers the reverse order: the server sign-in ran in another tab, and its cookie expired. Sign-out clears a cookie the script cannot see through `DELETE /api/auth/session`. No token ever travels in a URL. Composing the server sign-in mounts the two `/api/auth/session` routes, so the SPA can always reach them. With `AuthTokenStorage = ServerSetHttpOnlyCookie` every client write already goes through the server, and the server sign-in's `Max-Age` bounds its cookie in the same way.
+
 ## Permissions + roles
 
 Auth providers don't carry permissions; the SDK does:

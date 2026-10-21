@@ -66,8 +66,12 @@ let private tokenLocationFromEnv () : TokenLocation =
     | Some "cookies"
     | Some "cookieonly" ->
         // The cookie name is fixed in `UserSession.fs` client-side
-        // (`toolup-auth-token`). Hardcoded server-side to avoid two
-        // independent string literals drifting; both must agree.
+        // (`toolup-auth-token`) and is `AuthSession.CookieName`, which this
+        // file compiles before; the literals must agree. Phase 1047: three
+        // writers share it (the SPA's script write, `POST /api/auth/session`
+        // and the server-rendered sign-in), and the client keeps the latest
+        // sign-in's token in it, so the header-then-cookie read below
+        // authenticates a stream for exactly as long as REST.
         BearerOrCookie "toolup-auth-token"
     | _ -> BearerHeader
 

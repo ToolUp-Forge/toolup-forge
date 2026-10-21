@@ -19,8 +19,13 @@
 ///      token is held to exactly the rules every later request applies,
 ///      claim mapping and admission gate included), checks the nonce, sets
 ///      the session cookie the provider reads — `HttpOnly`,
-///      `SameSite=Lax`, `Secure` on HTTPS — and redirects to the return
-///      URL.
+///      `SameSite=Lax`, `Secure` on HTTPS, `Max-Age` the token's remaining
+///      life (Phase 1047) — and redirects to the return URL.
+///
+/// The session cookie shares its name with the SPA's (`toolup-auth-token` by
+/// default), which the event streams authenticate from. `routes` therefore
+/// also mounts `POST` / `DELETE /api/auth/session`, through which the SPA
+/// replaces a cookie it cannot overwrite from script (Phase 1047).
 ///
 /// `register` also puts an `InteractiveSignIn` in DI, which is what makes
 /// the page handler redirect a credential-less browser here instead of
@@ -90,7 +95,8 @@ type OidcSsrSignInConfig = {
     CallbackPath: string
     /// Name of the session cookie — the one the provider's `TokenLocation`
     /// reads (`BearerOrCookie <name>` / `Cookie <name>`). Defaults to the
-    /// SDK's `toolup-auth-token`.
+    /// SDK's `toolup-auth-token`, which the SPA writes too; with that name
+    /// `routes` also mounts `/api/auth/session` (Phase 1047).
     CookieName: string
     /// How long a started sign-in may take before its state expires.
     StateLifetime: TimeSpan
@@ -178,12 +184,16 @@ let private stateCookieOptions (config: OidcSsrSignInConfig) (ctx: HttpContext) 
     opts.MaxAge <- Nullable config.StateLifetime
     opts
 
-let private sessionCookieOptions (ctx: HttpContext) =
+/// Phase 1047 — `lifetime` is the token's remaining life: the cookie must not
+/// outlive the credential it carries, or the browser keeps presenting an
+/// expired token under the name the SPA needs to write.
+let private sessionCookieOptions (ctx: HttpContext) (lifetime: TimeSpan option) =
     let opts = CookieOptions()
     opts.HttpOnly <- true
     opts.SameSite <- SameSiteMode.Lax
     opts.Secure <- ctx.Request.IsHttps
     opts.Path <- "/"
+    lifetime |> Option.iter (fun l -> opts.MaxAge <- Nullable l)
     opts
 
 let private writePage (ctx: HttpContext) (status: int) (message: string) : Task<HttpContext option> =
@@ -256,19 +266,37 @@ let private authorizeUrl (config: OidcSsrSignInConfig) (s: SignInState) =
 
     $"{config.AuthorizationEndpoint}{sep}{query}"
 
-/// The `nonce` claim of an already-validated JWT, if any.
-let private nonceOf (token: string) : string option =
+/// The claim `name` of an already-validated JWT, read by `read`, if any.
+let private claimOf (token: string) (name: string) (read: JsonElement -> 'a option) : 'a option =
     try
         let parts = token.Split '.'
         let payload = parts[1].Replace('-', '+').Replace('_', '/')
         let padded = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=')
         use doc = JsonDocument.Parse(Convert.FromBase64String padded)
 
-        match doc.RootElement.TryGetProperty "nonce" with
-        | true, v when v.ValueKind = JsonValueKind.String -> Some(v.GetString())
+        match doc.RootElement.TryGetProperty name with
+        | true, v -> read v
         | _ -> None
     with _ ->
         None
+
+/// The `nonce` claim of an already-validated JWT, if any.
+let private nonceOf (token: string) : string option =
+    claimOf token "nonce" (fun v ->
+        if v.ValueKind = JsonValueKind.String then
+            Some(v.GetString())
+        else
+            None)
+
+/// Phase 1047 — the `exp` claim of an already-validated JWT, if any.
+let private expiryOf (token: string) : DateTimeOffset option =
+    claimOf token "exp" (fun v ->
+        match v.ValueKind with
+        | JsonValueKind.Number ->
+            match v.TryGetInt64() with
+            | true, seconds -> Some(DateTimeOffset.FromUnixTimeSeconds seconds)
+            | _ -> None
+        | _ -> None)
 
 /// Validate `token` through the registered provider, presenting it the way
 /// a later request will: as a bearer header AND as the session cookie, so a
@@ -396,10 +424,23 @@ let private callback (http: HttpClient) (config: OidcSsrSignInConfig) : HttpHand
                             // this sign-in is the state + PKCE exchange.
                             | SsrSessionToken.AccessToken -> true
 
+                        // Phase 1047 — the cookie lives exactly as long as the
+                        // token: whole seconds, since `Max-Age` is. A token
+                        // with no `exp` keeps a browser-session cookie.
+                        let lifetime =
+                            expiryOf token
+                            |> Option.map (fun exp ->
+                                TimeSpan.FromSeconds(floor (exp - DateTimeOffset.UtcNow).TotalSeconds))
+
                         if not nonceOk then
                             return! writePage ctx 401 "Sign-in failed: the token was not issued for this sign-in."
+                        elif lifetime |> Option.exists (fun l -> l <= TimeSpan.Zero) then
+                            // Accepted inside the provider's clock skew but
+                            // already past `exp`: a cookie the browser drops at
+                            // once would only send the reader round again.
+                            return! writePage ctx 401 "Sign-in failed: the token had already expired."
                         else
-                            ctx.Response.Cookies.Append(config.CookieName, token, sessionCookieOptions ctx)
+                            ctx.Response.Cookies.Append(config.CookieName, token, sessionCookieOptions ctx lifetime)
                             return! redirect ctx state.ReturnUrl
                     | _ ->
                         // Signed in at the IdP but not accepted here (admission
@@ -411,10 +452,22 @@ let private callback (http: HttpClient) (config: OidcSsrSignInConfig) : HttpHand
 
 /// The sign-in and callback routes. `http` performs the code exchange;
 /// production callers pass a long-lived client.
+///
+/// Phase 1047 — when the session cookie is the SDK's `toolup-auth-token`,
+/// also `POST` / `DELETE /api/auth/session` (`AuthSession.routes`). The SPA
+/// writes that cookie from script, and a browser silently drops a script
+/// write over the `HttpOnly` cookie this sign-in sets, so the SPA's only way
+/// to replace it is through the server. The route validates the bearer
+/// token it is sent before writing it `HttpOnly`, and sits behind the CSRF
+/// middleware like every mutating `/api` call. Mounting it twice (beside
+/// `AuthCookieIssuance = EnabledAuthCookieIssuance`) is harmless: the
+/// handlers are the same and the first match answers.
 let routes (http: HttpClient) (config: OidcSsrSignInConfig) : HttpHandler =
     choose [
         GET >=> route config.SignInPath >=> signIn config
         GET >=> route config.CallbackPath >=> callback http config
+        if config.CookieName = AuthSession.CookieName then
+            yield! AuthSession.routes
     ]
 
 /// Compose the interactive sign-in onto a `ServerApp`: the two routes are

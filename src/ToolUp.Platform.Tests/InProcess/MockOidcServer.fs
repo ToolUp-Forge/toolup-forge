@@ -324,6 +324,12 @@ type MockOidcServer(cfg: MockOidcConfig) =
     member _.MintTokenFor(subject: string, claims: (string * obj) list) =
         mintTokenFull cfg.TokenLifetime None None subject claims
 
+    /// Phase 1047 — a currently-valid RS256 token for `subject` whose `exp`
+    /// is `lifetime` from now, independent of the issuer's `TokenLifetime`:
+    /// a session holding two tokens of different lifetimes from one issuer.
+    member _.MintTokenWithLifetime(subject: string, lifetime: TimeSpan) =
+        mintTokenFull lifetime None None subject []
+
     /// Phase 987 — the identity the next `/authorize` → `/token` sign-in
     /// mints into its id_token: `subject` and extra `claims`. The id_token
     /// also carries the `nonce` the `/authorize` call sent.

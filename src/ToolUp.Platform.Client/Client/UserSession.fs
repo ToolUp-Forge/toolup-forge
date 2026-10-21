@@ -47,8 +47,29 @@ let private tokenEmailKey = "toolup-token-email"
 /// auth provider reads this cookie when configured with
 /// `TokenLocation.Cookie "toolup-auth-token"`. Matches `tokenKey` so
 /// localStorage-driven flows and cookie-driven flows agree on the
-/// key name.
+/// key name. Phase 1047: the server writes the same name `HttpOnly` too —
+/// the server-rendered sign-in and `POST /api/auth/session` — so this
+/// module is one of up to three writers of one cookie.
+[<Literal>]
 let private authCookieName = "toolup-auth-token"
+
+/// Phase 1047 — does `documentCookie` (the page's `document.cookie`) hold
+/// `token` as the SDK auth cookie?
+///
+/// `false` right after the script wrote that cookie means the write was
+/// dropped: a browser never lets script replace an `HttpOnly` cookie of the
+/// same name and path (RFC 6265bis, storage model), and `document.cookie`
+/// never shows one. The server-rendered sign-in writes exactly such a
+/// cookie, so without this check the event streams — which `EventSource`
+/// authenticates from the cookie alone — would keep riding the server's
+/// token after the client signed in, and fail once it expired while REST,
+/// on the bearer header, stayed authenticated. Pure, so the decision is
+/// testable off the browser.
+let internal authCookieCarries (documentCookie: string) (token: string) : bool =
+    not (System.String.IsNullOrEmpty documentCookie)
+    && not (System.String.IsNullOrEmpty token)
+    && documentCookie.Split ';'
+       |> Array.exists (fun pair -> pair.Trim() = authCookieName + "=" + token)
 
 // ─── Ambient session state (Phase 496 consolidation) ───────────────
 //
@@ -452,7 +473,9 @@ let getUserId () =
 /// EventSource handshakes can authenticate when
 /// `ServerConfig.SseAuthMode = CookieRequired`. The cookie path is
 /// silent overhead in `QueryParamFallback` deployments — the server
-/// just doesn't read it.
+/// just doesn't read it. Phase 1047: when that cookie write does not land
+/// (a server-written `HttpOnly` cookie holds the name), the token is sent
+/// to `POST /api/auth/session` so the server replaces its cookie.
 ///
 /// Phase 133: on the `ServerSetHttpOnlyCookie` path the JWT is held only
 /// in transient in-memory state and reflected to `POST /api/auth/session`
@@ -503,6 +526,14 @@ let setAuthToken (token: string) =
 
         Browser.Dom.window.localStorage.setItem (tokenKey, token)
         setAuthCookie token
+
+        // Phase 1047 — a server-written `HttpOnly` cookie of the same name
+        // (the server-rendered sign-in, or an earlier reflect) silently
+        // drops that write, and the event streams would keep riding the
+        // server's token. Replace it the one way a browser allows: through
+        // the server, which validates the token before writing it.
+        if not (authCookieCarries Browser.Dom.document.cookie token) then
+            reflectTokenToServer token
     | ServerSetHttpOnlyCookie ->
         // Never touch localStorage / document.cookie for the token.
         // Hold it in memory only and reflect it into the server-set
@@ -519,8 +550,19 @@ let setAuthToken (token: string) =
 /// the auth cookie — both the JS-readable cookie and (on the
 /// `ServerSetHttpOnlyCookie` path) the server-set `HttpOnly` cookie via
 /// `DELETE /api/auth/session` — so the next sign-in resolves a fresh
-/// subject and no usable token survives in either store.
+/// subject and no usable token survives in either store. Phase 1047: on the
+/// default path too, when the held token is not in `document.cookie` — a
+/// server-written `HttpOnly` cookie holds the name, which script can
+/// neither see nor delete.
 let clearAuthToken () =
+    // Phase 1047 — read before the token is removed below. Holding no
+    // token, the client signed nothing in and asks the server for nothing.
+    let serverHoldsCookie =
+        match Browser.Dom.window.localStorage.getItem tokenKey with
+        | null
+        | "" -> false
+        | held -> not (authCookieCarries Browser.Dom.document.cookie held)
+
     // Phase 854 — sign-out drops every cached read result (Phase 908:
     // through the one identity-change seam).
     identityChanged ()
@@ -538,9 +580,11 @@ let clearAuthToken () =
     }
 
     // On the server-cookie path also clear the HttpOnly cookie the
-    // server set — the client cannot touch it directly.
+    // server set — the client cannot touch it directly. On the default
+    // path, only when one holds the name (Phase 1047).
     match tokenState.Strategy with
-    | ClientCookieAndLocalStorage -> ()
+    | ClientCookieAndLocalStorage when not serverHoldsCookie -> ()
+    | ClientCookieAndLocalStorage
     | ServerSetHttpOnlyCookie -> clearServerCookie ()
 
 /// 0.5.6 — read the token-derived display name (JWT `name` claim).
@@ -571,6 +615,14 @@ let getEmail () : string option =
 /// the OIDC `exp` reader, `onAuthTokenChange`, and the bridge-dedup
 /// working identically on both paths without the token ever touching
 /// JS-readable storage.
+///
+/// Phase 1047: on the default path a held token missing from
+/// `document.cookie` is written there again — script only, no network. The
+/// event-stream clients read the token here right before every connect and
+/// reconnect, so a server-written cookie that expired and was dropped (a
+/// server-rendered sign-in in another tab) is replaced by the SPA's own
+/// before the handshake. While a server-written cookie still holds the
+/// name the write is dropped and that cookie, which is valid, stays.
 let getAuthToken () =
     match tokenState.ServerCookieToken with
     | Some _ as t -> t
@@ -578,7 +630,13 @@ let getAuthToken () =
         match Browser.Dom.window.localStorage.getItem tokenKey with
         | null
         | "" -> None
-        | token -> Some token
+        | token ->
+            match tokenState.Strategy with
+            | ClientCookieAndLocalStorage when not (authCookieCarries Browser.Dom.document.cookie token) ->
+                setAuthCookie token
+            | _ -> ()
+
+            Some token
 
 // ─── Auth bridge (Phase 6k Workstream A) ───────────────────────────
 //

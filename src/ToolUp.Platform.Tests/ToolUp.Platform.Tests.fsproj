@@ -2883,6 +2883,8 @@
         <Compile Include="InProcess\AuditCallSiteFireAndForgetTests.fs" />
         <!-- Phase 1046 - the client calls the file API only where the server mounts it. -->
         <Compile Include="InProcess\FileApiMountTests.fs" />
+        <!-- Phase 1047 - the event streams authenticate whichever sign-in the user took. -->
+        <Compile Include="InProcess\StreamAuthBothSignInsTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />
