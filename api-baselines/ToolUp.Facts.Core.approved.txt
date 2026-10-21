@@ -43,6 +43,18 @@ ToolUp.Facts.Confidence (class)
 ToolUp.Facts.Confidence..ctor(System.Decimal, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Facts.Confidence.Basis : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Facts.Confidence.Value : System.Decimal { get }
+ToolUp.Facts.DeclaredMethod (class)
+ToolUp.Facts.DeclaredMethod..ctor(System.String, System.String)
+ToolUp.Facts.DeclaredMethod.MethodId : System.String { get }
+ToolUp.Facts.DeclaredMethod.MethodVersion : System.String { get }
+ToolUp.Facts.DeclaredMethodModule (class)
+ToolUp.Facts.DeclaredMethodModule.TokenPrefix : System.String (literal)
+ToolUp.Facts.DeclaredMethodModule.create(System.String, System.String) : ToolUp.Facts.DeclaredMethod
+ToolUp.Facts.DeclaredMethodModule.describe(ToolUp.Facts.DeclaredMethod) : System.String
+ToolUp.Facts.DeclaredMethodModule.ofEvidence(ToolUp.Facts.Evidence) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclaredMethod]
+ToolUp.Facts.DeclaredMethodModule.problem(ToolUp.Facts.DeclaredMethod) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
+ToolUp.Facts.DeclaredMethodModule.token(ToolUp.Facts.DeclaredMethod) : System.String
+ToolUp.Facts.DeclaredMethodModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclaredMethod]
 ToolUp.Facts.DeclassificationRoutine (class)
 ToolUp.Facts.DeclassificationRoutine..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Facts.DeclassificationRoutine.AcceptingScopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }

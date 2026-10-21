@@ -222,6 +222,15 @@ type FactTableRunProvenance =
 //
 // A run opened with no options, or with `FactTableRunOptions.none`, writes
 // byte-for-byte what it wrote before.
+//
+// **Method (Phase 1040).** A third declaration names the derivation that
+// produced the run — its id and version (`DeclaredMethod`). Every fact the run
+// writes carries it in its evidence (`DeclaredMethod.ofEvidence`), so a fact
+// names the method as well as the inputs. The method enters each fact's
+// content address but not its lineage: the facts of a table stay ONE lineage
+// whatever method wrote them (still `Computed(producingOperation,
+// "v<schemaVersion>", tableId)`), so a run by method M2 supersedes the facts M1
+// wrote for the same subject and period exactly as a same-method run does.
 
 /// What a run declares beyond its table and provenance (Phase 994). Part of
 /// the `IFactTableWriter` contract: every writer honours it or refuses the
@@ -236,13 +245,21 @@ type FactTableRunOptions = {
     /// The period slice the run replaces — usually one period at the
     /// table's `PeriodGrain`. `None` replaces the whole table.
     Slice: TemporalExtent option
+    /// The method that produced the run (Phase 1040). Every fact the run
+    /// commits, absences included, names it in its evidence. `None`
+    /// declares nothing.
+    Method: DeclaredMethod option
 }
 
 /// Construction and validation of `FactTableRunOptions`.
 module FactTableRunOptions =
 
     /// No options: the run replaces the whole table and names no inputs.
-    let none: FactTableRunOptions = { Inputs = []; Slice = None }
+    let none: FactTableRunOptions = {
+        Inputs = []
+        Slice = None
+        Method = None
+    }
 
     /// Name the inputs the run was computed from.
     let withInputs (inputs: string list) (options: FactTableRunOptions) : FactTableRunOptions = {
@@ -256,9 +273,15 @@ module FactTableRunOptions =
             Slice = Some slice
     }
 
+    /// Name the method that produced the run (Phase 1040).
+    let withMethod (method: DeclaredMethod) (options: FactTableRunOptions) : FactTableRunOptions = {
+        options with
+            Method = Some method
+    }
+
     /// Whether the options declare nothing (`none`, or an omitted argument).
     let isNone (options: FactTableRunOptions) : bool =
-        List.isEmpty options.Inputs && options.Slice.IsNone
+        List.isEmpty options.Inputs && options.Slice.IsNone && options.Method.IsNone
 
     /// The options as a writer keeps them: each input once, in ordinal
     /// order — or the reason they cannot be honoured.
@@ -274,21 +297,23 @@ module FactTableRunOptions =
                     InputHash.MinimumDigits
             )
         | [] ->
-            match options.Slice with
-            | Some slice when slice.From >= slice.To ->
+            match options.Slice, options.Method |> Option.bind DeclaredMethod.problem with
+            | Some slice, _ when slice.From >= slice.To ->
                 Error(
                     sprintf
                         "the slice %s..%s is not a half-open extent"
                         (slice.From.ToString "o")
                         (slice.To.ToString "o")
                 )
-            | slice ->
+            | _, Some problem -> Error problem
+            | slice, None ->
                 Ok {
                     Inputs =
                         inputs
                         |> List.distinct
                         |> List.sortWith (fun a b -> String.CompareOrdinal(a, b))
                     Slice = slice
+                    Method = options.Method
                 }
 
     /// Whether a period lies inside a slice.
@@ -300,10 +325,14 @@ module FactTableRunOptions =
     let splits (slice: TemporalExtent) (from: DateTime) (``to``: DateTime) : bool =
         from < slice.To && ``to`` > slice.From && not (contains slice from ``to``)
 
-    /// The draft rewrite the options imply: the inputs join every draft's
-    /// input hashes. Identity when the options name no input.
+    /// The draft rewrite the options imply: the inputs, then the declared
+    /// method's token, join every draft's input hashes. Identity when the
+    /// options name neither.
     let rewrite (options: FactTableRunOptions) : FactDraft -> FactDraft =
-        match options.Inputs with
+        match
+            options.Inputs
+            @ (options.Method |> Option.map DeclaredMethod.token |> Option.toList)
+        with
         | [] -> id
         | inputs ->
             fun (draft: FactDraft) -> {
@@ -1109,8 +1138,10 @@ module FactTableOrphanSweep =
     type internal Layout = {
         /// The prefix every run's staged rows sit under, as `<root><runId>/…`.
         StagedRoot: string
-        /// The prefix every run's kept provenance sits under, as `<root><runId>.json`.
-        ProvenanceRoot: string
+        /// The prefixes a run's kept provenance sits under, each as
+        /// `<root><runId>.json` — its provenance, and (the delegate writer,
+        /// Phase 1040) the method it declared.
+        ProvenanceRoots: string list
         /// The blob a run's record is kept in.
         RecordName: string -> string
         /// Whether an ended run's provenance is kept past its end (the
@@ -1129,9 +1160,9 @@ module FactTableOrphanSweep =
         else
             None
 
-    let private runOfProvenance (layout: Layout) (name: string) : string option =
-        if name.StartsWith layout.ProvenanceRoot then
-            let rest = name.Substring layout.ProvenanceRoot.Length
+    let private runOfProvenance (root: string) (name: string) : string option =
+        if name.StartsWith root then
+            let rest = name.Substring root.Length
 
             if rest.EndsWith ".json" && rest.Length > 5 && not (rest.Contains '/') then
                 Some(rest.Substring(0, rest.Length - 5))
@@ -1162,7 +1193,18 @@ module FactTableOrphanSweep =
         : Async<FactTableOrphanSweepReport> =
         async {
             let! staged = storage.List(scopeId, layout.StagedRoot)
-            let! kept = storage.List(scopeId, layout.ProvenanceRoot)
+
+            let! kept = async {
+                let! perRoot =
+                    layout.ProvenanceRoots
+                    |> List.map (fun root -> async {
+                        let! names = storage.List(scopeId, root)
+                        return names |> List.map (fun name -> root, name)
+                    })
+                    |> Async.Sequential
+
+                return List.concat perRoot
+            }
 
             let stagedByRun =
                 staged
@@ -1173,8 +1215,10 @@ module FactTableOrphanSweep =
 
             let provenanceByRun =
                 kept
-                |> List.choose (fun name -> runOfProvenance layout name |> Option.map (fun runId -> runId, name))
+                |> List.choose (fun (root, name) -> runOfProvenance root name |> Option.map (fun runId -> runId, name))
                 |> List.filter (fun (runId, _) -> not (spared.Contains runId))
+                |> List.groupBy fst
+                |> List.map (fun (runId, names) -> runId, names |> List.map snd)
                 |> Map.ofList
 
             let candidates =
@@ -1205,7 +1249,7 @@ module FactTableOrphanSweep =
 
                             let provenanceNames =
                                 match provenanceByRun.TryFind runId with
-                                | Some name when not (layout.KeepsProvenance status) -> [ name ]
+                                | Some names when not (layout.KeepsProvenance status) -> names
                                 | _ -> []
 
                             if List.isEmpty stagedNames && List.isEmpty provenanceNames then
@@ -1386,7 +1430,7 @@ type DefaultFactTableWriter
     // writes carry their provenance), so an ended run keeps neither.
     let orphanLayout: FactTableOrphanSweep.Layout = {
         StagedRoot = sprintf "%srows/" root
-        ProvenanceRoot = FactTableRunProvenance.Root
+        ProvenanceRoots = [ FactTableRunProvenance.Root ]
         RecordName = recordName
         KeepsProvenance = fun _ -> false
     }

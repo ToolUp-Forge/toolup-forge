@@ -38,6 +38,12 @@ open ToolUp.Platform.Grounding
 // the refresh and the read path retire a quoted imported fact as they retire
 // a computed one.
 //
+// **Declared methods (Phase 1040).** A run may declare the method that
+// produced it (`FactTableRunOptions.Method`); the delegate keeps it beside the
+// run, as it keeps an imported provenance, and every row minted under the run
+// names it in its evidence — exactly the token the default writer stamps. The
+// delegate takes no other run option (inputs, a slice): see `OpenRun`.
+//
 // **What the fact tier holds** is the delegate records and exactly what was
 // quoted. A subject nobody asked about has no fact.
 //
@@ -78,6 +84,13 @@ type internal DelegateTableAnswer =
     | Rows of DelegateTableRow list
     | Ranked of ranked: DelegateTableRow list * stats: PopulationStats * truncated: bool
     | Totals of DelegateChildTotal list
+
+/// What a committed run mints its rows with: the provenance it was opened
+/// with (Phase 938) and the method it declared (Phase 1040).
+type internal DelegateRunMinting = {
+    Provenance: FactTableRunProvenance
+    Method: DeclaredMethod option
+}
 
 /// Minting — how a table row becomes an ordinary fact. Shared by the
 /// decorator, the ranking tiebreak and the refresh walk, so the id a row
@@ -176,6 +189,36 @@ module DelegateMint =
             draft
         else
             { draft with Method = fact.Method }
+
+    /// The method stamp a run's declared method implies — the default
+    /// writer's own rewrite, so a row reads the same through either writer.
+    /// Identity when the run declared none.
+    let private stamp (method: DeclaredMethod option) : FactDraft -> FactDraft =
+        FactTableRunOptions.rewrite {
+            FactTableRunOptions.none with
+                Method = method
+        }
+
+    /// The draft a row of a run mints (Phases 938 and 1040): `draftUnder`
+    /// its provenance, stamped with its declared method.
+    let internal draftMinted
+        (minting: DelegateRunMinting)
+        (delegateFact: DelegateFact)
+        (run: DelegateRun)
+        (row: DelegateTableRow)
+        : FactDraft =
+        draftUnder minting.Provenance delegateFact run row |> stamp minting.Method
+
+    /// The absence a run mints for a quoted fact whose row it no longer
+    /// carries: `removedDraftUnder` its provenance, stamped with its method.
+    let internal removedDraftMinted
+        (minting: DelegateRunMinting)
+        (delegateFact: DelegateFact)
+        (run: DelegateRun)
+        (fact: Fact)
+        : FactDraft =
+        removedDraftUnder minting.Provenance delegateFact run fact
+        |> stamp minting.Method
 
     /// The delegate's record: one fact per delegate, at the hierarchy root,
     /// whose value points at the run (`Series` of the watermark token). A
@@ -276,6 +319,9 @@ type internal DelegateTableStore(storage: IBlobStorage) =
     let lineageCache =
         ConcurrentDictionary<string * string * int64 * string, string list>()
 
+    let methodCache =
+        ConcurrentDictionary<string * string * int64 * string, DeclaredMethod option>()
+
     let remember (store: ConcurrentDictionary<_, _>) key value =
         if store.Count >= CacheCap then
             store.Clear()
@@ -306,6 +352,12 @@ type internal DelegateTableStore(storage: IBlobStorage) =
         sprintf "%sprovenance/%s.json" root runId
 
     member _.ProvenanceRoot = sprintf "%sprovenance/" root
+
+    /// Where a run's declared method is kept (Phase 1040) — only for a run
+    /// that declared one.
+    member _.MethodName(runId: string) = sprintf "%smethods/%s.json" root runId
+
+    member _.MethodRoot = sprintf "%smethods/" root
 
     /// Where the certificates a table's runs imported under are recorded.
     member _.LineagesName(tableId: string) =
@@ -387,6 +439,35 @@ type internal DelegateTableStore(storage: IBlobStorage) =
                 return Ok provenance
     }
 
+    /// The method a committed run declared: `None` when it kept none.
+    member this.Method(scopeId: string, run: DelegateRun) : Async<Result<DeclaredMethod option, string>> = async {
+        let key = scopeId, run.TableId, run.Watermark.Sequence, run.Watermark.ContentDigest
+
+        match methodCache.TryGetValue key with
+        | true, method -> return Ok method
+        | _ ->
+            match! FactTableBlobIo.tryGet<DeclaredMethod> storage scopeId (this.MethodName run.RunId) with
+            | Error e -> return Error(FactTableWriteError.describe e)
+            | Ok method ->
+                remember methodCache key method
+                return Ok method
+    }
+
+    /// What a committed run mints its rows with: its provenance and method.
+    member this.Minting(scopeId: string, run: DelegateRun) : Async<Result<DelegateRunMinting, string>> = async {
+        match! this.Provenance(scopeId, run) with
+        | Error e -> return Error e
+        | Ok provenance ->
+            match! this.Method(scopeId, run) with
+            | Error e -> return Error e
+            | Ok method ->
+                return
+                    Ok {
+                        Provenance = provenance
+                        Method = method
+                    }
+    }
+
     /// The certificates the table's runs have imported under, as of the
     /// committed run `current` — every lineage besides the delegate's own a
     /// quoted fact of the table can sit in.
@@ -446,14 +527,14 @@ type internal DelegateTableStore(storage: IBlobStorage) =
                 match! this.Rows(scopeId, run) with
                 | Error e -> return Error e
                 | Ok rows ->
-                    match! this.Provenance(scopeId, run) with
+                    match! this.Minting(scopeId, run) with
                     | Error e -> return Error e
-                    | Ok provenance -> return Ok(rows, provenance)
+                    | Ok minting -> return Ok(rows, minting)
             }
 
             match loaded with
             | Error e -> return Error e
-            | Ok(rows, provenance) ->
+            | Ok(rows, minting) ->
                 let column = delegateFact.Query.ValueColumn
 
                 let cell (row: FactTableRow) : DelegateTableRow option =
@@ -494,7 +575,7 @@ type internal DelegateTableStore(storage: IBlobStorage) =
 
                     let memberOf (row: DelegateTableRow) : PopulationMember * DelegateTableRow =
                         // The id and lineage the row is minted under.
-                        let draft = DelegateMint.draftUnder provenance delegateFact run row
+                        let draft = DelegateMint.draftMinted minting delegateFact run row
 
                         {
                             FactId =
@@ -795,14 +876,14 @@ type DelegatedFactStore
     // read of an unchanged table re-asserts identical tuples, which the
     // store answers idempotently by content address.
     let mint (ops: InnerScope) (d: DelegateFact) (run: DelegateRun) (rows: DelegateTableRow list) = async {
-        match! tables.Provenance(ops.ScopeId, run) with
+        match! tables.Minting(ops.ScopeId, run) with
         | Error e -> return Error e
-        | Ok provenance ->
+        | Ok minting ->
             let rec go (remaining: DelegateTableRow list) (acc: Fact list) = async {
                 match remaining with
                 | [] -> return Ok(List.rev acc)
                 | row :: rest ->
-                    match! ops.Assert(DelegateMint.draftUnder provenance d run row) with
+                    match! ops.Assert(DelegateMint.draftMinted minting d run row) with
                     | Ok fact -> return! go rest (fact :: acc)
                     | Error e -> return Error e
             }
@@ -815,14 +896,14 @@ type DelegatedFactStore
     // the log. Never an ordinary assertion — that would make a past value
     // the current head of its lineage.
     let quoteHistorical (ops: InnerScope) (d: DelegateFact) (run: DelegateRun) (rows: DelegateTableRow list) = async {
-        match! tables.Provenance(ops.ScopeId, run) with
+        match! tables.Minting(ops.ScopeId, run) with
         | Error e -> return Error e
-        | Ok provenance ->
+        | Ok minting ->
             let rec go (remaining: DelegateTableRow list) (acc: Fact list) = async {
                 match remaining with
                 | [] -> return Ok(List.rev acc)
                 | row :: rest ->
-                    let draft = DelegateMint.draftUnder provenance d run row
+                    let draft = DelegateMint.draftMinted minting d run row
                     let rebuilt = DelegateMint.reconstruct draft run.Watermark.CommittedAt
 
                     match! ops.Get rebuilt.FactId with
@@ -867,7 +948,7 @@ type DelegatedFactStore
                     DelegateLineages.importedHeads ops.Query d certificates (fun q -> { q with Subject = Some subject })
                 | _ -> async.Return []
 
-            let! provenance = tables.Provenance(ops.ScopeId, run)
+            let! minting = tables.Minting(ops.ScopeId, run)
 
             let removed =
                 (heads |> List.map (fun f -> d.Method, f)) @ imported
@@ -881,11 +962,11 @@ type DelegatedFactStore
             // A run whose provenance cannot be read retires nothing now
             // rather than minting an absence that names the wrong origin;
             // the next read retries, as a failed assertion is retried.
-            match provenance with
+            match minting with
             | Error _ -> ()
-            | Ok provenance ->
+            | Ok minting ->
                 for _, fact in removed do
-                    let! _ = ops.Assert(DelegateMint.removedDraftUnder provenance d run fact)
+                    let! _ = ops.Assert(DelegateMint.removedDraftMinted minting d run fact)
                     ()
         }
 
@@ -1269,9 +1350,9 @@ module internal DelegateRefresh =
         (fact: Fact)
         : Async<Result<FactDraft, string>> =
         async {
-            match! tables.Provenance(scopeId, commit.Run) with
+            match! tables.Minting(scopeId, commit.Run) with
             | Error e -> return Error e
-            | Ok provenance ->
+            | Ok minting ->
                 match!
                     tables.Read(
                         scopeId,
@@ -1287,9 +1368,9 @@ module internal DelegateRefresh =
                         rows
                         |> List.tryFind (fun r -> r.Period.From = fact.Period.From && r.Period.To = fact.Period.To)
                     with
-                    | Some row -> return Ok(DelegateMint.draftUnder provenance delegateFact commit.Run row)
-                    | None -> return Ok(DelegateMint.removedDraftUnder provenance delegateFact commit.Run fact)
-                | Ok _ -> return Ok(DelegateMint.removedDraftUnder provenance delegateFact commit.Run fact)
+                    | Some row -> return Ok(DelegateMint.draftMinted minting delegateFact commit.Run row)
+                    | None -> return Ok(DelegateMint.removedDraftMinted minting delegateFact commit.Run fact)
+                | Ok _ -> return Ok(DelegateMint.removedDraftMinted minting delegateFact commit.Run fact)
         }
 
     /// Refresh the delegates of one table after a commit: assert each
@@ -1454,7 +1535,7 @@ type DelegateTableWriter
     // for as long as they are read.
     let orphanLayout: FactTableOrphanSweep.Layout = {
         StagedRoot = tables.StagedRoot
-        ProvenanceRoot = tables.ProvenanceRoot
+        ProvenanceRoots = [ tables.ProvenanceRoot; tables.MethodRoot ]
         RecordName = tables.RecordName
         KeepsProvenance =
             function
@@ -1719,10 +1800,13 @@ type DelegateTableWriter
                     // committed run and mints every row under the current
                     // run, so it can neither keep an earlier slice's rows
                     // under the run that wrote them nor name a run's inputs
-                    // on the rows it carries. It refuses run options rather
-                    // than mint evidence that would be wrong.
-                    match options with
-                    | Some o when not (FactTableRunOptions.isNone o) ->
+                    // on the rows it carries. It refuses those run options
+                    // rather than mint evidence that would be wrong. A
+                    // declared method (Phase 1040) is the run's own, so every
+                    // row the run carries is minted under it: kept, not refused.
+                    match FactTableRunOptions.normalise (defaultArg options FactTableRunOptions.none) with
+                    | Error reason -> return Error(FactTableRunOptionsRefused(table.Id, reason))
+                    | Ok o when not (List.isEmpty o.Inputs) || o.Slice.IsSome ->
                         return
                             Error(
                                 FactTableRunOptionsRefused(
@@ -1730,7 +1814,7 @@ type DelegateTableWriter
                                     "a delegated table does not take run inputs or a period slice; bind the table to the default writer to use them"
                                 )
                             )
-                    | _ ->
+                    | Ok declared ->
                         let runId = Guid.NewGuid().ToString("N")
                         let openedAt = now ()
 
@@ -1775,11 +1859,22 @@ type DelegateTableWriter
                                     with
                                     | Error e -> return Error e
                                     | Ok() ->
-                                        match!
-                                            FactTableBlobIo.put storage scopeId (tables.RecordName run.RunId) run
-                                        with
+                                        // The method beside it, kept only when
+                                        // declared (GP 11).
+                                        let! kept =
+                                            match declared.Method with
+                                            | None -> async { return Ok() }
+                                            | Some method ->
+                                                FactTableBlobIo.put storage scopeId (tables.MethodName run.RunId) method
+
+                                        match kept with
                                         | Error e -> return Error e
-                                        | Ok() -> return Ok run
+                                        | Ok() ->
+                                            match!
+                                                FactTableBlobIo.put storage scopeId (tables.RecordName run.RunId) run
+                                            with
+                                            | Error e -> return Error e
+                                            | Ok() -> return Ok run
                             }
 
                             match opened with

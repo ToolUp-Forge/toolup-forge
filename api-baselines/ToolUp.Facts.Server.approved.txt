@@ -862,8 +862,9 @@ ToolUp.Facts.FactTableRunEvent.SchemaVersion : System.Int32 { get }
 ToolUp.Facts.FactTableRunEvent.StagedRows : System.Int32 { get }
 ToolUp.Facts.FactTableRunEvent.TableId : System.String { get }
 ToolUp.Facts.FactTableRunOptions (class)
-ToolUp.Facts.FactTableRunOptions..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent])
+ToolUp.Facts.FactTableRunOptions..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclaredMethod])
 ToolUp.Facts.FactTableRunOptions.Inputs : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.FactTableRunOptions.Method : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclaredMethod] { get }
 ToolUp.Facts.FactTableRunOptions.Slice : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent] { get }
 ToolUp.Facts.FactTableRunOptionsModule (class)
 ToolUp.Facts.FactTableRunOptionsModule.contains(ToolUp.Facts.TemporalExtent, System.DateTime, System.DateTime) : System.Boolean
@@ -874,6 +875,7 @@ ToolUp.Facts.FactTableRunOptionsModule.normalise(ToolUp.Facts.FactTableRunOption
 ToolUp.Facts.FactTableRunOptionsModule.rewrite(ToolUp.Facts.FactTableRunOptions) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactDraft, ToolUp.Facts.FactDraft]
 ToolUp.Facts.FactTableRunOptionsModule.splits(ToolUp.Facts.TemporalExtent, System.DateTime, System.DateTime) : System.Boolean
 ToolUp.Facts.FactTableRunOptionsModule.withInputs(Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Facts.FactTableRunOptions) : ToolUp.Facts.FactTableRunOptions
+ToolUp.Facts.FactTableRunOptionsModule.withMethod(ToolUp.Facts.DeclaredMethod, ToolUp.Facts.FactTableRunOptions) : ToolUp.Facts.FactTableRunOptions
 ToolUp.Facts.FactTableRunProvenance (class)
 ToolUp.Facts.FactTableRunProvenance.ComputedRun : ToolUp.Facts.FactTableRunProvenance { get }
 ToolUp.Facts.FactTableRunProvenance.IsComputedRun : System.Boolean { get }
