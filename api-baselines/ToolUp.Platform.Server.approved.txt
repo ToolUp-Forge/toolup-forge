@@ -2917,6 +2917,7 @@ ToolUp.Platform.DataIngestionJobHandler (class)
 ToolUp.Platform.DataIngestionJobHandler.JobHandlerName : System.String (literal)
 ToolUp.Platform.DataIngestionJobHandler.create(ToolUp.Platform.IDataIngestor, ToolUp.Platform.ILogger) : ToolUp.Platform.IJobHandler
 ToolUp.Platform.DataIngestionJobHandler.payloadFor(System.String, System.String) : System.String
+ToolUp.Platform.DataIngestionJobHandler.payloadForLabelled(System.String, System.String, ToolUp.Platform.IngestionLabel) : System.String
 ToolUp.Platform.DataIngestionJobHandler+DataIngestionJobHandler (class)
 ToolUp.Platform.DataIngestionJobHandler+DataIngestionJobHandler..ctor(ToolUp.Platform.IDataIngestor, ToolUp.Platform.ILogger)
 ToolUp.Platform.DataIngestionJobHandler+RunPayload (class)
@@ -2925,6 +2926,7 @@ ToolUp.Platform.DataIngestionJobHandler+RunPayload.sourceId : System.String { ge
 ToolUp.Platform.DataIngestionJobHandler+RunPayload.table : System.String { get }
 ToolUp.Platform.DataIngestor (class)
 ToolUp.Platform.DataIngestor.DataIngestionSourceModule : System.String (literal)
+ToolUp.Platform.DataIngestor.MaxResultNameLength : System.Int32 (literal)
 ToolUp.Platform.DataIngestor.create(ToolUp.Platform.IDataSourceConfigStore, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IEventStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataSource], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger) : ToolUp.Platform.IDataIngestor
 ToolUp.Platform.DataIngestor.createWithReaders(ToolUp.Platform.IDataSourceConfigStore, ToolUp.Platform.Secrets+ISecretStore, ToolUp.Platform.IDataObjectStore, ToolUp.Platform.IEventStore, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IDataSource], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IPayloadReader]) : ToolUp.Platform.IDataIngestor
 ToolUp.Platform.DataIngestor+DataIngestor (class)
@@ -5766,6 +5768,8 @@ ToolUp.Platform.IBuildOrchestrator.GetBuild(System.String) : Microsoft.FSharp.Co
 ToolUp.Platform.IBuildOrchestrator.GetBuildHistory(System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BuildSummary]]
 ToolUp.Platform.IBuildOrchestrator.GetQueueDepth() : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
 ToolUp.Platform.IBuildOrchestrator.ListActiveBuilds(Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.BuildSummary]]
+ToolUp.Platform.ICallerLabelledIngestor (interface)
+ToolUp.Platform.ICallerLabelledIngestor.RunLabelledIngestion(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IngestionLabel]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IngestionRun, ToolUp.Platform.IngestionError]]
 ToolUp.Platform.ICitableReferenceKind (interface)
 ToolUp.Platform.ICitableReferenceKind.Kind : System.String { get }
 ToolUp.Platform.ICitableReferenceKind.Resolve(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.CitableReferenceResolution]
@@ -5856,6 +5860,8 @@ ToolUp.Platform.IDataExporter+IErasureHandler.Preview(System.String, System.Stri
 ToolUp.Platform.IDataIngestor (interface)
 ToolUp.Platform.IDataIngestor.GetRecentRuns(System.String, System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IngestionRun]]
 ToolUp.Platform.IDataIngestor.RunIngestion(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IngestionRun, ToolUp.Platform.IngestionError]]
+ToolUp.Platform.IDataIngestorExtensions (class)
+ToolUp.Platform.IDataIngestorExtensions.IDataIngestor.RunIngestion(ToolUp.Platform.IDataIngestor, System.String, System.String, System.String, ToolUp.Platform.IngestionLabel) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IngestionRun, ToolUp.Platform.IngestionError]]
 ToolUp.Platform.IDataObjectStore (interface)
 ToolUp.Platform.IDataObjectStore.Delete(System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.Platform.DataObjectError]]
 ToolUp.Platform.IDataObjectStore.Erase(System.String, System.String, ToolUp.Platform.ErasurePolicy, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ErasureSummary, ToolUp.Platform.ErasureError]]
@@ -6825,6 +6831,33 @@ ToolUp.Platform.IngestedPayload.schemaObjectId(System.String, System.String) : S
 ToolUp.Platform.IngestedPayload.schemaRef(ToolUp.Platform.DataObject) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Platform.IngestedPayload.serializeSchema(ToolUp.Platform.TableSchema) : System.Byte[]
 ToolUp.Platform.IngestedPayload.tryParseSchema(System.Byte[]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TableSchema]
+ToolUp.Platform.IngestionLabel (class)
+ToolUp.Platform.IngestionLabel.Value : System.String { get }
+ToolUp.Platform.IngestionLabelError (class)
+ToolUp.Platform.IngestionLabelError.EmptyLabel : ToolUp.Platform.IngestionLabelError { get }
+ToolUp.Platform.IngestionLabelError.IsEmptyLabel : System.Boolean { get }
+ToolUp.Platform.IngestionLabelError.IsLabelHasInvalidCharacter : System.Boolean { get }
+ToolUp.Platform.IngestionLabelError.IsLabelIsDotSegment : System.Boolean { get }
+ToolUp.Platform.IngestionLabelError.IsLabelTooLong : System.Boolean { get }
+ToolUp.Platform.IngestionLabelError.Tag : System.Int32 { get }
+ToolUp.Platform.IngestionLabelError+LabelHasInvalidCharacter (class)
+ToolUp.Platform.IngestionLabelError+LabelHasInvalidCharacter.character : System.Char { get }
+ToolUp.Platform.IngestionLabelError+LabelHasInvalidCharacter.position : System.Int32 { get }
+ToolUp.Platform.IngestionLabelError+LabelIsDotSegment (class)
+ToolUp.Platform.IngestionLabelError+LabelIsDotSegment.label : System.String { get }
+ToolUp.Platform.IngestionLabelError+LabelTooLong (class)
+ToolUp.Platform.IngestionLabelError+LabelTooLong.actual : System.Int32 { get }
+ToolUp.Platform.IngestionLabelError+LabelTooLong.maximum : System.Int32 { get }
+ToolUp.Platform.IngestionLabelError+Tags (class)
+ToolUp.Platform.IngestionLabelError+Tags.EmptyLabel : System.Int32 (literal)
+ToolUp.Platform.IngestionLabelError+Tags.LabelHasInvalidCharacter : System.Int32 (literal)
+ToolUp.Platform.IngestionLabelError+Tags.LabelIsDotSegment : System.Int32 (literal)
+ToolUp.Platform.IngestionLabelError+Tags.LabelTooLong : System.Int32 (literal)
+ToolUp.Platform.IngestionLabelModule (class)
+ToolUp.Platform.IngestionLabelModule.MaxLength : System.Int32 (literal)
+ToolUp.Platform.IngestionLabelModule.describeError(ToolUp.Platform.IngestionLabelError) : System.String
+ToolUp.Platform.IngestionLabelModule.tryCreate(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IngestionLabel, ToolUp.Platform.IngestionLabelError]
+ToolUp.Platform.IngestionLabelModule.value(ToolUp.Platform.IngestionLabel) : System.String
 ToolUp.Platform.IngestionRecoverySweep (class)
 ToolUp.Platform.IngestionRecoverySweep.InterruptedReason : System.String (literal)
 ToolUp.Platform.IngestionRecoverySweep.hostedService(ToolUp.Platform.ILogger, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IIngestionRecoverySurface]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]]) : Microsoft.Extensions.Hosting.IHostedService

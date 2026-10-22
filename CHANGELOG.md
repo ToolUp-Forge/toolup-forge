@@ -17,6 +17,61 @@ applies. Where a release ships a migration note under `docs/migrations/`, it is 
 
 Migration notes:
 
+- [1041-ingestion-caller-label](docs/migrations/1041-ingestion-caller-label.md)
+
+_Surface since `v0.30.0`: **breaking** — 4 packages moved; 42 members added, 2 members changed, 0 members removed._
+
+### Added
+
+- `ToolUp.DataSources.Synapse` — 1 member:
+  - `ToolUp.DataSources.Synapse.SynapseCatalogue.describeStatementSql : System.String (literal)`
+- `ToolUp.Platform.Client` — 6 members:
+  - `ToolUp.Platform.Client+Msg+PlatformInfoLoaded (class)`
+  - `ToolUp.Platform.Client+Msg+PlatformInfoLoaded.Item : ToolUp.Platform.PlatformInfo { get }`
+  - `ToolUp.Platform.Client+Msg+Tags.PlatformInfoLoaded : System.Int32 (literal)`
+  - `ToolUp.Platform.Client+Msg.IsPlatformInfoLoaded : System.Boolean { get }`
+  - `ToolUp.Platform.SessionEpoch.fileApiMounted() : System.Boolean`
+  - `ToolUp.Platform.SessionEpoch.setFileApiMounted(System.Boolean) : System.Void`
+- `ToolUp.Platform.Core` — 1 member:
+  - `ToolUp.Platform.PlatformInfo.FileManagementMounted : System.Boolean { get }`
+- `ToolUp.Platform.Server` — 34 members:
+  - `ToolUp.Platform.BuildRouteHandlers.fileManagementMounted(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FileProcessor+DataType]) : System.Boolean`
+  - `ToolUp.Platform.DataIngestionJobHandler.payloadForLabelled(System.String, System.String, ToolUp.Platform.IngestionLabel) : System.String`
+  - `ToolUp.Platform.DataIngestor.MaxResultNameLength : System.Int32 (literal)`
+  - `ToolUp.Platform.ICallerLabelledIngestor (interface)`
+  - `ToolUp.Platform.ICallerLabelledIngestor.RunLabelledIngestion(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IngestionLabel]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IngestionRun, ToolUp.Platform.IngestionError]]`
+  - `ToolUp.Platform.IDataIngestorExtensions (class)`
+  - `ToolUp.Platform.IDataIngestorExtensions.IDataIngestor.RunIngestion(ToolUp.Platform.IDataIngestor, System.String, System.String, System.String, ToolUp.Platform.IngestionLabel) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IngestionRun, ToolUp.Platform.IngestionError]]`
+  - `ToolUp.Platform.IngestionLabel (class)`
+  - `ToolUp.Platform.IngestionLabel.Value : System.String { get }`
+  - `ToolUp.Platform.IngestionLabelError (class)`
+  - `ToolUp.Platform.IngestionLabelError+LabelHasInvalidCharacter (class)`
+  - `ToolUp.Platform.IngestionLabelError+LabelHasInvalidCharacter.character : System.Char { get }`
+  - `ToolUp.Platform.IngestionLabelError+LabelHasInvalidCharacter.position : System.Int32 { get }`
+  - `ToolUp.Platform.IngestionLabelError+LabelIsDotSegment (class)`
+  - `ToolUp.Platform.IngestionLabelError+LabelIsDotSegment.label : System.String { get }`
+  - `ToolUp.Platform.IngestionLabelError+LabelTooLong (class)`
+  - `ToolUp.Platform.IngestionLabelError+LabelTooLong.actual : System.Int32 { get }`
+  - `ToolUp.Platform.IngestionLabelError+LabelTooLong.maximum : System.Int32 { get }`
+  - `ToolUp.Platform.IngestionLabelError+Tags (class)`
+  - `ToolUp.Platform.IngestionLabelError+Tags.EmptyLabel : System.Int32 (literal)`
+  - … and 14 more — `git diff v0.30.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
+
+### Changed
+
+- `ToolUp.Platform.Core` — 1 member:
+  - `ToolUp.Platform.PlatformInfo..ctor` — `ToolUp.Platform.PlatformInfo..ctor(System.Boolean)` → `ToolUp.Platform.PlatformInfo..ctor(System.Boolean, System.Boolean)`
+- `ToolUp.Platform.Server` — 1 member:
+  - `ToolUp.Platform.PlatformApiHandler.platformInfoApiHandler` — `ToolUp.Platform.PlatformApiHandler.platformInfoApiHandler(ToolUp.Platform.ServerConfig) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]` → `ToolUp.Platform.PlatformApiHandler.platformInfoApiHandler(ToolUp.Platform.ServerConfig, System.Boolean) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]`
+
+## [0.30.0] — 2026-10-20
+
+_No public-surface change since `v0.29.1`._
+
+## [0.29.1] — 2026-10-20
+
+Migration notes:
+
 - [782-reflection-door](docs/migrations/782-reflection-door.md)
 
 _Surface since `v0.29.0`: **additive** — 3 packages moved; 87 members added, 0 members changed, 0 members removed._
@@ -46,7 +101,7 @@ _Surface since `v0.29.0`: **additive** — 3 packages moved; 87 members added, 0
   - `ToolUp.Cli.DescribeCommand+Options..ctor(System.Boolean, ToolUp.Cli.DescribeCommand+DescribeTarget, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32)`
   - `ToolUp.Cli.DescribeCommand+Options.Json : System.Boolean { get }`
   - `ToolUp.Cli.DescribeCommand+Options.Member : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }`
-  - … and 17 more — `git diff v0.29.0 -- api-baselines/ToolUp.Cli.approved.txt`
+  - … and 17 more — `git diff v0.29.0 v0.29.1 -- api-baselines/ToolUp.Cli.approved.txt`
 - `ToolUp.Platform.Server` — 49 members:
   - `ToolUp.Platform.CompositionInspectorHandler.canonicalJson`1(view) : System.String`
   - `ToolUp.Platform.CompositionInspectorHandler.panelJson(System.IServiceProvider, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshot], ToolUp.Platform.InspectorPanel) : Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]`
@@ -68,7 +123,7 @@ _Surface since `v0.29.0`: **additive** — 3 packages moved; 87 members added, 0
   - `ToolUp.Platform.ReflectionTools.ModuleReachTool : System.String (literal)`
   - `ToolUp.Platform.ReflectionTools.ObservedReachAbsentNote : System.String (literal)`
   - `ToolUp.Platform.ReflectionTools.SeamAuthorityNotComposedNote : System.String (literal)`
-  - … and 29 more — `git diff v0.29.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
+  - … and 29 more — `git diff v0.29.0 v0.29.1 -- api-baselines/ToolUp.Platform.Server.approved.txt`
 
 ## [0.29.0] — 2026-10-19
 
