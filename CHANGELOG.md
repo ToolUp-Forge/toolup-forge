@@ -13,7 +13,58 @@ same name in one release is reported once, as a signature change. Under this rep
 policy a `breaking` release is a MINOR bump and an `additive` one a PATCH; from 1.0.0 the ordinary table
 applies. Where a release ships a migration note under `docs/migrations/`, it is linked from the section.
 
-## [Unreleased] — unreleased
+## [0.31.0] — unreleased
+
+Migration notes:
+
+- [1040-fact-table-run-method](docs/migrations/1040-fact-table-run-method.md)
+
+_Surface since `v0.30.0`: **breaking** — 5 packages moved; 22 members added, 3 members changed, 0 members removed._
+
+### Added
+
+- `ToolUp.Facts.Core` — 12 members:
+  - `ToolUp.Facts.DeclaredMethod (class)`
+  - `ToolUp.Facts.DeclaredMethod..ctor(System.String, System.String)`
+  - `ToolUp.Facts.DeclaredMethod.MethodId : System.String { get }`
+  - `ToolUp.Facts.DeclaredMethod.MethodVersion : System.String { get }`
+  - `ToolUp.Facts.DeclaredMethodModule (class)`
+  - `ToolUp.Facts.DeclaredMethodModule.TokenPrefix : System.String (literal)`
+  - `ToolUp.Facts.DeclaredMethodModule.create(System.String, System.String) : ToolUp.Facts.DeclaredMethod`
+  - `ToolUp.Facts.DeclaredMethodModule.describe(ToolUp.Facts.DeclaredMethod) : System.String`
+  - `ToolUp.Facts.DeclaredMethodModule.ofEvidence(ToolUp.Facts.Evidence) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclaredMethod]`
+  - `ToolUp.Facts.DeclaredMethodModule.problem(ToolUp.Facts.DeclaredMethod) : Microsoft.FSharp.Core.FSharpOption`1[System.String]`
+  - `ToolUp.Facts.DeclaredMethodModule.token(ToolUp.Facts.DeclaredMethod) : System.String`
+  - `ToolUp.Facts.DeclaredMethodModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclaredMethod]`
+- `ToolUp.Facts.Server` — 2 members:
+  - `ToolUp.Facts.FactTableRunOptions.Method : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclaredMethod] { get }`
+  - `ToolUp.Facts.FactTableRunOptionsModule.withMethod(ToolUp.Facts.DeclaredMethod, ToolUp.Facts.FactTableRunOptions) : ToolUp.Facts.FactTableRunOptions`
+- `ToolUp.Platform.Client` — 6 members:
+  - `ToolUp.Platform.Client+Msg+PlatformInfoLoaded (class)`
+  - `ToolUp.Platform.Client+Msg+PlatformInfoLoaded.Item : ToolUp.Platform.PlatformInfo { get }`
+  - `ToolUp.Platform.Client+Msg+Tags.PlatformInfoLoaded : System.Int32 (literal)`
+  - `ToolUp.Platform.Client+Msg.IsPlatformInfoLoaded : System.Boolean { get }`
+  - `ToolUp.Platform.SessionEpoch.fileApiMounted() : System.Boolean`
+  - `ToolUp.Platform.SessionEpoch.setFileApiMounted(System.Boolean) : System.Void`
+- `ToolUp.Platform.Core` — 1 member:
+  - `ToolUp.Platform.PlatformInfo.FileManagementMounted : System.Boolean { get }`
+- `ToolUp.Platform.Server` — 1 member:
+  - `ToolUp.Platform.BuildRouteHandlers.fileManagementMounted(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FileProcessor+DataType]) : System.Boolean`
+
+### Changed
+
+- `ToolUp.Facts.Server` — 1 member:
+  - `ToolUp.Facts.FactTableRunOptions..ctor` — `ToolUp.Facts.FactTableRunOptions..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent])` → `ToolUp.Facts.FactTableRunOptions..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclaredMethod])`
+- `ToolUp.Platform.Core` — 1 member:
+  - `ToolUp.Platform.PlatformInfo..ctor` — `ToolUp.Platform.PlatformInfo..ctor(System.Boolean)` → `ToolUp.Platform.PlatformInfo..ctor(System.Boolean, System.Boolean)`
+- `ToolUp.Platform.Server` — 1 member:
+  - `ToolUp.Platform.PlatformApiHandler.platformInfoApiHandler` — `ToolUp.Platform.PlatformApiHandler.platformInfoApiHandler(ToolUp.Platform.ServerConfig) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]` → `ToolUp.Platform.PlatformApiHandler.platformInfoApiHandler(ToolUp.Platform.ServerConfig, System.Boolean) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]`
+
+## [0.30.0] — 2026-10-20
+
+_No public-surface change since `v0.29.1`._
+
+## [0.29.1] — 2026-10-20
 
 Migration notes:
 
@@ -46,7 +97,7 @@ _Surface since `v0.29.0`: **additive** — 3 packages moved; 87 members added, 0
   - `ToolUp.Cli.DescribeCommand+Options..ctor(System.Boolean, ToolUp.Cli.DescribeCommand+DescribeTarget, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32)`
   - `ToolUp.Cli.DescribeCommand+Options.Json : System.Boolean { get }`
   - `ToolUp.Cli.DescribeCommand+Options.Member : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }`
-  - … and 17 more — `git diff v0.29.0 -- api-baselines/ToolUp.Cli.approved.txt`
+  - … and 17 more — `git diff v0.29.0 v0.29.1 -- api-baselines/ToolUp.Cli.approved.txt`
 - `ToolUp.Platform.Server` — 49 members:
   - `ToolUp.Platform.CompositionInspectorHandler.canonicalJson`1(view) : System.String`
   - `ToolUp.Platform.CompositionInspectorHandler.panelJson(System.IServiceProvider, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.CompositionInspectorHandler+CompositionInspectorSnapshot], ToolUp.Platform.InspectorPanel) : Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]`
@@ -68,7 +119,7 @@ _Surface since `v0.29.0`: **additive** — 3 packages moved; 87 members added, 0
   - `ToolUp.Platform.ReflectionTools.ModuleReachTool : System.String (literal)`
   - `ToolUp.Platform.ReflectionTools.ObservedReachAbsentNote : System.String (literal)`
   - `ToolUp.Platform.ReflectionTools.SeamAuthorityNotComposedNote : System.String (literal)`
-  - … and 29 more — `git diff v0.29.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
+  - … and 29 more — `git diff v0.29.0 v0.29.1 -- api-baselines/ToolUp.Platform.Server.approved.txt`
 
 ## [0.29.0] — 2026-10-19
 

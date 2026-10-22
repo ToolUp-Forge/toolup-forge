@@ -423,6 +423,91 @@ module InputHash =
     let named (evidence: Evidence) : string list =
         evidence.InputHashes |> List.filter isContentHash
 
+/// The method a derived table's run declares it was produced by (Phase
+/// 1040): the derivation's stable id and the version of it that ran — as in
+/// `dailytrade.derive` at `v1`. Where `Evidence.InputHashes` names WHAT a fact
+/// was computed from, this names HOW.
+type DeclaredMethod = {
+    /// The method's stable id.
+    MethodId: string
+    /// The version of the method that ran.
+    MethodVersion: string
+}
+
+/// The form a declared method takes in a fact's evidence (Phase 1040).
+///
+/// A run that declares a method stamps every fact it writes with one token,
+/// `method:<id>@<version>`, among the fact's input hashes. That placement is
+/// deliberate: it puts the method in the fact's content address — so a run by
+/// another method mints a new fact rather than an idempotent skip — while
+/// leaving it OUT of the lineage key (`Fact.lineageKey`), so the facts two
+/// methods write for one table, subject and period are one lineage and the
+/// later supersedes the earlier. The method is evidence, never identity. The
+/// token is never in the `InputHash` form (it carries an `@`), so
+/// `InputHash.named` never mistakes it for an input.
+module DeclaredMethod =
+
+    /// The prefix of a declared method's evidence token.
+    [<Literal>]
+    let TokenPrefix = "method:"
+
+    let private wellFormed (part: string) =
+        not (String.IsNullOrEmpty part)
+        && part |> Seq.forall (fun c -> not (Char.IsWhiteSpace c || Char.IsControl c))
+
+    /// A declared method from its id and version.
+    let create (methodId: string) (methodVersion: string) : DeclaredMethod = {
+        MethodId = methodId
+        MethodVersion = methodVersion
+    }
+
+    /// Why a method cannot be declared, or `None` when it can: its id and
+    /// version are non-empty, free of whitespace and control characters, and
+    /// its id carries no `@` (the token's separator).
+    let problem (m: DeclaredMethod) : string option =
+        if isNull (box m) then
+            Some "the method is null"
+        elif not (wellFormed m.MethodId) || m.MethodId.Contains '@' then
+            Some(
+                sprintf
+                    "method id '%s' must be non-empty, without whitespace, control characters or '@'"
+                    (if isNull m.MethodId then "" else m.MethodId)
+            )
+        elif not (wellFormed m.MethodVersion) then
+            Some(
+                sprintf
+                    "method version '%s' must be non-empty, without whitespace or control characters"
+                    (if isNull m.MethodVersion then "" else m.MethodVersion)
+            )
+        else
+            None
+
+    /// The evidence token of a method: `method:<id>@<version>`.
+    let token (m: DeclaredMethod) : string =
+        sprintf "%s%s@%s" TokenPrefix m.MethodId m.MethodVersion
+
+    /// The method a token names, or `None` for anything else.
+    let tryParse (value: string) : DeclaredMethod option =
+        if isNull value || not (value.StartsWith(TokenPrefix, StringComparison.Ordinal)) then
+            None
+        else
+            let rest = value.Substring TokenPrefix.Length
+
+            match rest.IndexOf '@' with
+            | at when at > 0 ->
+                let m = create (rest.Substring(0, at)) (rest.Substring(at + 1))
+                if (problem m).IsNone then Some m else None
+            | _ -> None
+
+    /// The method a fact's evidence names, or `None` when it names none — a
+    /// fact written by a run that declared no method.
+    let ofEvidence (evidence: Evidence) : DeclaredMethod option =
+        evidence.InputHashes |> List.tryPick tryParse
+
+    /// The readable form a citation shows: `<id> <version>`.
+    let describe (m: DeclaredMethod) : string =
+        sprintf "%s %s" m.MethodId m.MethodVersion
+
 /// Derived freshness of a fact — never a stored mutable flag (law L1 /
 /// plan D2). `Stale` carries the instant the fact went stale (its `AsOf`
 /// plus the freshness window) so a caller can render "as of / stale
