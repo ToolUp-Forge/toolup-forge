@@ -656,6 +656,10 @@
         <Compile Include="Server\IPayloadReader.fs" />
         <Compile Include="Server\DataIngestor.fs" />
         <Compile Include="Server\DataIngestionJobHandler.fs" />
+        <!-- Phase 1042 - the delivery-completed hook: after IDataIngestor and
+             IJobHandler (it decorates the one and wraps the other), before
+             ComposeJobs (which applies both) and ServerApp (the compose surface). -->
+        <Compile Include="Server\DeliveryCompleted.fs" />
         <Compile Include="Server\Infra\EnvironmentSecretStore.fs" />
         <!-- Phase 10h — `IOAuthTokenRefresher` substrate (InProcessOAuthTokenRefresher
              uses ISecretStore + IRateLimiter; placed after the secret-store

@@ -96,14 +96,20 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
                 | true, (:? string as id) -> id
                 | _ -> "anonymous"
 
-            let teamId =
-                match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-                | true, (:? StorageScope as s) when s.Container.StartsWith "team-" -> Some s.ScopeId
-                | _ -> None
-
             AccessContext.unrestricted (AnonymousSession userId)
 
     let scopeOpt = AccessContext.configScope accessContext
+
+    // Phase 1042 — the scope the middleware resolved and recorded for this
+    // request (the same read as `JobApiHandler`'s: `ScopeResolution.forRequest`
+    // compiles after this file). A queued refresh scheduled under it runs
+    // under it, so the refresh's delivery reaches a delivery-completed hook
+    // under the scope the platform resolved. A type test, never a
+    // construction.
+    let requestScope =
+        match ctx.Items.TryGetValue "ToolUp.ResolvedScope" with
+        | true, (:? ResolvedScope as scope) -> Some scope
+        | _ -> None
 
     // Owner/Admin write gate — same shape as ConfigHandler.ensureWriteAllowed
     // and JobApiHandler.ensureWriteAllowed.
@@ -196,7 +202,13 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
                             Tags = Map.ofList [ "source-id", sourceId; "table", table ]
                         }
 
-                        match! s.Schedule registration with
+                        let! scheduled =
+                            match requestScope with
+                            | Some resolved when not resolved.IsAnonymous && resolved.ScopeId = scope.ScopeId ->
+                                s.Schedule(resolved, registration)
+                            | _ -> s.Schedule registration
+
+                        match scheduled with
                         | Ok jobId ->
                             // The scheduler treats Manual triggers as
                             // dispatch-on-TriggerOnce; immediately fire it
@@ -279,7 +291,7 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
 
         Disconnect =
             fun sourceId ->
-                withWriteScope (fun store scopeId -> async {
+                withWriteScope (fun _ scopeId -> async {
                     let blob =
                         match ctx.RequestServices.GetService(typeof<IBlobStorage>) with
                         | :? IBlobStorage as b -> Some b
@@ -366,10 +378,6 @@ let dataIngestionApi (ctx: HttpContext) : IDataIngestionApi =
                                     warn "OAuthDisconnected audit" ex
                             | _ -> ()
 
-                            // Suppress unused-binding warning when
-                            // the store argument isn't otherwise
-                            // touched in this branch.
-                            store |> ignore
                             return Ok()
                 })
 

@@ -2643,6 +2643,8 @@ let private registeredTests =
         AuditCallSiteFireAndForgetTests.tests
         // Phase 1046 - the client calls the file API only where the server mounts it.
         FileApiMountTests.tests
+        // Phase 1042 - a module registers a delivery-completed callback.
+        DeliveryCompletedTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

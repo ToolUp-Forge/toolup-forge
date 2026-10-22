@@ -638,6 +638,9 @@ let registerDataIngestion
             let payloadReaders =
                 sp.GetServices(typeof<IPayloadReader>) |> Seq.cast<IPayloadReader> |> List.ofSeq
 
+            // Phase 1042 — with a delivery-completed hook registered, every
+            // settled run is recorded into the delivery in progress; with
+            // none, this is the ingestor unchanged.
             let ingestor =
                 DataIngestor.createWithReaders
                     configStoreInstance
@@ -648,15 +651,20 @@ let registerDataIngestion
                     resolvedBlobStorage
                     resolvedLogger
                     payloadReaders
+                |> DeliveryCompleted.recording (DeliveryCompleted.hooksOf sp) sp resolvedLogger (Some eventStore)
 
             // When the job scheduler is also enabled, register the
             // ingestion handler against it so `IDataIngestionApi.
             // TriggerRefresh` can submit `Manual`-trigger jobs. Done
             // lazily here (inside the ingestor factory) so the scheduler
-            // is fully built before we touch it.
+            // is fully built before we touch it. Each attempt is a
+            // delivery (Phase 1042).
             match sp.GetService(typeof<IJobScheduler>) with
             | :? IJobScheduler as scheduler ->
-                let handler = DataIngestionJobHandler.create ingestor resolvedLogger
+                let handler =
+                    DataIngestionJobHandler.create ingestor resolvedLogger
+                    |> DeliveryCompleted.aroundJob DataIngestionJobHandler.JobHandlerName
+
                 scheduler.RegisterHandler(DataIngestionJobHandler.JobHandlerName, handler)
             | _ -> ()
 

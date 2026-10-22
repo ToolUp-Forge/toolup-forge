@@ -3226,6 +3226,56 @@ ToolUp.Platform.DegradedCapabilities+DegradedCapabilityRegistry.Clear(System.Str
 ToolUp.Platform.DegradedCapabilities+DegradedCapabilityRegistry.IsEmpty : System.Boolean { get }
 ToolUp.Platform.DegradedCapabilities+DegradedCapabilityRegistry.Register(ToolUp.Platform.DegradedCapability) : System.Void
 ToolUp.Platform.DegradedCapabilities+DegradedCapabilityRegistry.Snapshot() : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DegradedCapability]
+ToolUp.Platform.DeliveryCompleted (class)
+ToolUp.Platform.DeliveryCompleted.CallbackFailedEventType : System.String (literal)
+ToolUp.Platform.DeliveryCompleted.DeliverySourceModule : System.String (literal)
+ToolUp.Platform.DeliveryCompleted.aroundJob(System.String, ToolUp.Platform.IJobHandler) : ToolUp.Platform.IJobHandler
+ToolUp.Platform.DeliveryCompleted+DeliveredOutcome (class)
+ToolUp.Platform.DeliveryCompleted+DeliveredOutcome.Committed : ToolUp.Platform.DeliveryCompleted+DeliveredOutcome { get }
+ToolUp.Platform.DeliveryCompleted+DeliveredOutcome.IsCommitted : System.Boolean { get }
+ToolUp.Platform.DeliveryCompleted+DeliveredOutcome.IsFailed : System.Boolean { get }
+ToolUp.Platform.DeliveryCompleted+DeliveredOutcome.Tag : System.Int32 { get }
+ToolUp.Platform.DeliveryCompleted+DeliveredOutcome+Failed (class)
+ToolUp.Platform.DeliveryCompleted+DeliveredOutcome+Failed.Item : ToolUp.Platform.IngestionError { get }
+ToolUp.Platform.DeliveryCompleted+DeliveredOutcome+Tags (class)
+ToolUp.Platform.DeliveryCompleted+DeliveredOutcome+Tags.Committed : System.Int32 (literal)
+ToolUp.Platform.DeliveryCompleted+DeliveredOutcome+Tags.Failed : System.Int32 (literal)
+ToolUp.Platform.DeliveryCompleted+DeliveredRun (class)
+ToolUp.Platform.DeliveryCompleted+DeliveredRun..ctor(System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Guid], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTime, ToolUp.Platform.DeliveryCompleted+DeliveredOutcome)
+ToolUp.Platform.DeliveryCompleted+DeliveredRun.DataSourceId : System.String { get }
+ToolUp.Platform.DeliveryCompleted+DeliveredRun.Outcome : ToolUp.Platform.DeliveryCompleted+DeliveredOutcome { get }
+ToolUp.Platform.DeliveryCompleted+DeliveredRun.ResultObjectId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Platform.DeliveryCompleted+DeliveredRun.RunId : Microsoft.FSharp.Core.FSharpOption`1[System.Guid] { get }
+ToolUp.Platform.DeliveryCompleted+DeliveredRun.SettledAt : System.DateTime { get }
+ToolUp.Platform.DeliveryCompleted+DeliveredRun.Table : System.String { get }
+ToolUp.Platform.DeliveryCompleted+Delivery (class)
+ToolUp.Platform.DeliveryCompleted+Delivery..ctor(System.Guid, ToolUp.Platform.ResolvedScope, ToolUp.Platform.DeliveryCompleted+DeliveryOrigin, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeliveryCompleted+DeliveredRun], System.DateTime)
+ToolUp.Platform.DeliveryCompleted+Delivery.CompletedAt : System.DateTime { get }
+ToolUp.Platform.DeliveryCompleted+Delivery.DeliveryId : System.Guid { get }
+ToolUp.Platform.DeliveryCompleted+Delivery.Origin : ToolUp.Platform.DeliveryCompleted+DeliveryOrigin { get }
+ToolUp.Platform.DeliveryCompleted+Delivery.Runs : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeliveryCompleted+DeliveredRun] { get }
+ToolUp.Platform.DeliveryCompleted+Delivery.Scope : ToolUp.Platform.ResolvedScope { get }
+ToolUp.Platform.DeliveryCompleted+DeliveryCompletedHook (class)
+ToolUp.Platform.DeliveryCompleted+DeliveryCompletedHook..ctor(System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.IServiceProvider, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DeliveryCompleted+Delivery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]])
+ToolUp.Platform.DeliveryCompleted+DeliveryCompletedHook.Callback : Microsoft.FSharp.Core.FSharpFunc`2[System.IServiceProvider, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DeliveryCompleted+Delivery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]] { get }
+ToolUp.Platform.DeliveryCompleted+DeliveryCompletedHook.Name : System.String { get }
+ToolUp.Platform.DeliveryCompleted+DeliveryModule (class)
+ToolUp.Platform.DeliveryCompleted+DeliveryModule.committed(ToolUp.Platform.DeliveryCompleted+Delivery) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeliveryCompleted+DeliveredRun]
+ToolUp.Platform.DeliveryCompleted+DeliveryModule.failed(ToolUp.Platform.DeliveryCompleted+Delivery) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeliveryCompleted+DeliveredRun]
+ToolUp.Platform.DeliveryCompleted+DeliveryModule.isComplete(ToolUp.Platform.DeliveryCompleted+Delivery) : System.Boolean
+ToolUp.Platform.DeliveryCompleted+DeliveryOrigin (class)
+ToolUp.Platform.DeliveryCompleted+DeliveryOrigin.IsJob : System.Boolean { get }
+ToolUp.Platform.DeliveryCompleted+DeliveryOrigin.IsRequest : System.Boolean { get }
+ToolUp.Platform.DeliveryCompleted+DeliveryOrigin.Tag : System.Int32 { get }
+ToolUp.Platform.DeliveryCompleted+DeliveryOrigin+Job (class)
+ToolUp.Platform.DeliveryCompleted+DeliveryOrigin+Job.handler : System.String { get }
+ToolUp.Platform.DeliveryCompleted+DeliveryOrigin+Job.jobId : System.Guid { get }
+ToolUp.Platform.DeliveryCompleted+DeliveryOrigin+Request (class)
+ToolUp.Platform.DeliveryCompleted+DeliveryOrigin+Request.method : System.String { get }
+ToolUp.Platform.DeliveryCompleted+DeliveryOrigin+Request.path : System.String { get }
+ToolUp.Platform.DeliveryCompleted+DeliveryOrigin+Tags (class)
+ToolUp.Platform.DeliveryCompleted+DeliveryOrigin+Tags.Job : System.Int32 (literal)
+ToolUp.Platform.DeliveryCompleted+DeliveryOrigin+Tags.Request : System.Int32 (literal)
 ToolUp.Platform.DeployPipelinePlanning (class)
 ToolUp.Platform.DeployPipelinePlanning.IDeployPipeline.PlanDeploy(ToolUp.Platform.IDeployPipeline, ToolUp.Platform.IContainerScheduler, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ContainerSpec]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.DeployPlan, ToolUp.Platform.DeployPipelineError]]
 ToolUp.Platform.DeployPlaneDepsValidator (class)
@@ -10264,6 +10314,7 @@ ToolUp.Platform.ServerAppModule.withCspContributor(ToolUp.Platform.ICspContribut
 ToolUp.Platform.ServerAppModule.withCspSourceMode(ToolUp.Platform.SecurityHardening+CspSourceMode, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withDataExporter(ToolUp.Platform.IDataExporter+IDataExporter, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withDataObjectOrphanSweep(ToolUp.Platform.DataObjectOrphanSweep+DataObjectOrphanSweepPolicy, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.Platform.ServerAppModule.withDeliveryCompleted(System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.IServiceProvider, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DeliveryCompleted+Delivery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]], ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withDeploymentReadiness(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withDeploymentVerification(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
 ToolUp.Platform.ServerAppModule.withDeploymentVerificationEvidence(ToolUp.Platform.IDeploymentVerificationEvidence, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
@@ -10348,7 +10399,7 @@ ToolUp.Platform.ServerHost (class)
 ToolUp.Platform.ServerHost.createWebHost(Microsoft.AspNetCore.Builder.WebApplication, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Int32]) : ToolUp.Platform.IServerHost
 ToolUp.Platform.ServerHost.createWorkerHost(Microsoft.Extensions.Hosting.IHost, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.Int32]) : ToolUp.Platform.IServerHost
 ToolUp.Platform.ServerModule (class)
-ToolUp.Platform.ServerModule..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FileProcessor+DataType], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorisationTypes+VectorisationHandler], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleConfigSchema], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IConfigMigrator], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleQueryHandler], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.MetricDefinition], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], ToolUp.Platform.SurfaceRequirement, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Tuple`2[System.String, System.String], ToolUp.Platform.SurfaceRequirement]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Tuple`2[System.String, System.String], ToolUp.Platform.RouteEffectDeclaration]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ScheduledJobDeclaration], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleBindingStamp], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComponentId], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.MetricDefinition], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.SubjectDefinition], ToolUp.Platform.GrantPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleAIExposure], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.NotificationCategory], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableDefinition])
+ToolUp.Platform.ServerModule..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FileProcessor+DataType], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorisationTypes+VectorisationHandler], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleConfigSchema], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IConfigMigrator], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleQueryHandler], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Metrics.MetricDefinition], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.TimeSpan], ToolUp.Platform.SurfaceRequirement, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Tuple`2[System.String, System.String], ToolUp.Platform.SurfaceRequirement]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Tuple`2[System.String, System.String], ToolUp.Platform.RouteEffectDeclaration]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ScheduledJobDeclaration], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleBindingStamp], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ComponentId], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.MetricDefinition], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.SubjectDefinition], ToolUp.Platform.GrantPolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleAIExposure], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.NotificationCategory], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableDefinition], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeliveryCompleted+DeliveryCompletedHook])
 ToolUp.Platform.ServerModule.AIExposure : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleAIExposure] { get }
 ToolUp.Platform.ServerModule.AITools : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]] { get }
 ToolUp.Platform.ServerModule.BindingStamp : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleBindingStamp] { get }
@@ -10357,6 +10408,7 @@ ToolUp.Platform.ServerModule.ConfigMigrations : Microsoft.FSharp.Collections.FSh
 ToolUp.Platform.ServerModule.ConfigSchema : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleConfigSchema] { get }
 ToolUp.Platform.ServerModule.DataTypes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FileProcessor+DataType] { get }
 ToolUp.Platform.ServerModule.DefaultSurfaceRequirement : ToolUp.Platform.SurfaceRequirement { get }
+ToolUp.Platform.ServerModule.DeliveryCompletedHooks : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeliveryCompleted+DeliveryCompletedHook] { get }
 ToolUp.Platform.ServerModule.FactTables : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableDefinition] { get }
 ToolUp.Platform.ServerModule.GrantPolicy : ToolUp.Platform.GrantPolicy { get }
 ToolUp.Platform.ServerModule.Handlers : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]] { get }
@@ -10386,6 +10438,7 @@ ToolUp.Platform.ServerModuleModule.withConfigMigration(ToolUp.Platform.IConfigMi
 ToolUp.Platform.ServerModuleModule.withConfigMigrations(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IConfigMigrator], ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule
 ToolUp.Platform.ServerModuleModule.withDataTypes(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FileProcessor+DataType], ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule
 ToolUp.Platform.ServerModuleModule.withDefaultSurfaceRequirement(ToolUp.Platform.SurfaceRequirement, ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule
+ToolUp.Platform.ServerModuleModule.withDeliveryCompleted(System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.IServiceProvider, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.DeliveryCompleted+Delivery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]]], ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule
 ToolUp.Platform.ServerModuleModule.withGrantPolicy(ToolUp.Platform.GrantPolicy, ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule
 ToolUp.Platform.ServerModuleModule.withGuardedApi`1(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, T], ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule
 ToolUp.Platform.ServerModuleModule.withHandlers(Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]], ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule

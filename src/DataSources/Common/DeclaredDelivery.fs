@@ -817,7 +817,14 @@ module DeclaredDelivery =
                 WatchPoll = watchPoll
             }
 
-            scheduler.RegisterHandler(WatchJobHandlerName, watchHandler deps composed.Logger)
+            // Each poll is one delivery (Phase 1042): the objects it ingests
+            // reach a delivery-completed hook together, under the job's scope.
+            scheduler.RegisterHandler(
+                WatchJobHandlerName,
+                watchHandler deps composed.Logger
+                |> DeliveryCompleted.aroundJob WatchJobHandlerName
+            )
+
             Ok deps
 
     /// The startup service over what the deployment composes: at start it

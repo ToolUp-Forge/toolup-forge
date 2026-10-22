@@ -581,6 +581,45 @@ Components you write yourself can use the same mechanism under any store-bound p
 it changes. Migration notes and the measurement:
 [`docs/migrations/852-sliced-model-store.md`](../migrations/852-sliced-model-store.md).
 
+## Delivery-completed hooks
+
+A module that runs work after data arrives (a briefing, a change narrative, a notification) registers it on the
+**delivery-completed hook** instead of observing its own ingestion routes:
+
+```fsharp skip=fragment
+ServerModule.create "Trading"
+|> ServerModule.withDeliveryCompleted ("briefing", fun services delivery -> async {
+    if DeliveryCompleted.Delivery.isComplete delivery then
+        let scheduler = services.GetRequiredService<IJobScheduler>()
+        do! enqueueBriefing scheduler delivery.Scope })
+```
+
+A **delivery** is the ingestion one unit of work performs: every `IDataIngestor.RunIngestion` call one request
+makes (an upload, a derivation), or every call one ingestion job attempt makes (a declared scheduled pull, a
+watched location's poll, a refresh queued through `IDataIngestionApi.TriggerRefresh`). The hook is called **once**
+per delivery that recorded at least one run:
+
+- **when** the unit completes: after the request's response is written, or after the job attempt returns. Every
+  table of the delivery has settled by then.
+- **with** the delivery's runs (`Delivery.Runs`, in settling order), one per table: its data source, table, run id,
+  where its payload landed, and its outcome, `Committed` or `Failed` with the reason. A table that failed is
+  reported, so the hook decides whether a partial delivery is worth acting on (`Delivery.committed`,
+  `Delivery.failed`, `Delivery.isComplete`).
+- **under** the scope the platform resolved for the delivery (`Delivery.Scope`): the request's resolved scope, or
+  the scope the job carried. The hook never mints one. A delivery that resolved no scope (an anonymous request, a
+  job scheduled through the string `Schedule` overload) calls no hook, and the log says so. A run recorded for a
+  scope other than the delivery's is not reported to it.
+
+A hook that throws, synchronously or asynchronously, is caught. The failure is logged at `Warn` and audited as a
+`DeliveryCallbackFailed` event under the `_platform.delivery` source in the delivery's scope. It never reaches the
+response, the job's result or the other hooks, which still run. A composition root registers a hook with
+`ServerApp.withDeliveryCompleted (name, callback)`; a module's hooks are registered when the module is added.
+Registering none decorates nothing and mounts nothing.
+
+The hook sees the runs the platform's ingestor records. Rows a module writes some other way within the same
+request (a fact-table run, say) have committed by the time the hook runs, but they are not listed among
+`Delivery.Runs`.
+
 ## Module independence
 
 Modules:

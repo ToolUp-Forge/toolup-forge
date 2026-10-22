@@ -310,6 +310,10 @@ module ModuleSurface =
             // output it states it produces, on the `Metrics` / `Subjects`
             // precedent.
             c (nameof m.FactTables) ProvidesFacet
+            // Phase 1042 — the work the module runs once a delivery has
+            // completed. `Provides` on the `JobHandlers` precedent: code the
+            // module contributes for the platform to call.
+            c (nameof m.DeliveryCompletedHooks) ProvidesFacet
         ]
 
     let private serverProvides (m: ServerModule) : ModuleSurfaceEntry list =
@@ -493,6 +497,12 @@ module ModuleSurface =
             m.FactTables
             |> List.map (fun d -> entry (nameof m.FactTables) "fact-table" d.Id d.ProducingOperation None)
 
+        // Phase 1042 — one entry per registered hook, keyed by its name; a
+        // module that registers none emits nothing.
+        let deliveryHooks =
+            m.DeliveryCompletedHooks
+            |> List.map (fun h -> entry (nameof m.DeliveryCompletedHooks) "delivery-hook" h.Name "" None)
+
         List.concat [
             dataTypes
             vectorisation
@@ -514,6 +524,7 @@ module ModuleSurface =
             subjects
             notificationCategories
             factTables
+            deliveryHooks
         ]
 
     /// The substrate a module's own registrations IMPLY. Not a per-module

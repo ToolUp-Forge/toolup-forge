@@ -226,6 +226,13 @@ type ServerModule = {
     /// byte-for-byte as before (GP 13). Declare via
     /// `ServerModule.declareFactTables`.
     FactTables: Grounding.FactTableDefinition list
+    /// Phase 1042 — the work this module runs once a DELIVERY has
+    /// completed: every table one request or one ingestion job attempt
+    /// ingested has settled. `addModule` registers each with the app
+    /// (`ServerApp.withDeliveryCompleted`). Empty (the default) — a module
+    /// that registers none composes byte-for-byte as before (GP 13).
+    /// Register via `ServerModule.withDeliveryCompleted`.
+    DeliveryCompletedHooks: DeliveryCompleted.DeliveryCompletedHook list
 }
 
 module ServerModule =
@@ -253,6 +260,7 @@ module ServerModule =
         AIExposure = None
         NotificationCategories = []
         FactTables = []
+        DeliveryCompletedHooks = []
     }
 
     /// Phase 551 — declare the module's grant policy: the precondition
@@ -634,6 +642,38 @@ module ServerModule =
         m with
             JobHandlers = m.JobHandlers @ [ declaration ]
     }
+
+    /// Phase 1042 — run `callback` once each delivery completes: after the
+    /// response of a request that ingested data, or after an ingestion job
+    /// attempt (a declared scheduled pull, a watched location's poll, a
+    /// queued refresh) returns. It receives the application's services and
+    /// the delivery — every table's run, committed or failed — under the
+    /// scope the platform resolved for it, so post-delivery work needs no
+    /// route of its own. A throwing callback is logged and audited under
+    /// `name` and never reaches the delivery. See
+    /// `docs/platform/modules.md#delivery-completed-hooks`.
+    ///
+    /// ```fsharp
+    /// ServerModule.create "Trading"
+    /// |> ServerModule.withDeliveryCompleted ("briefing", fun services delivery -> async {
+    ///     if DeliveryCompleted.Delivery.isComplete delivery then
+    ///         do! enqueueBriefing services delivery.Scope })
+    /// ```
+    let withDeliveryCompleted
+        (name: string, callback: DeliveryCompleted.DeliveryCompletedCallback)
+        (m: ServerModule)
+        : ServerModule =
+        {
+            m with
+                DeliveryCompletedHooks =
+                    m.DeliveryCompletedHooks
+                    @ [
+                        {
+                            DeliveryCompleted.DeliveryCompletedHook.Name = name
+                            DeliveryCompleted.DeliveryCompletedHook.Callback = callback
+                        }
+                    ]
+        }
 
     /// Phase 165 — attach an opt-in module-binding stamp. The stamp is
     /// checked at `addModule` time against the deployment's configured
@@ -2096,6 +2136,73 @@ module ServerApp =
             ScheduledJobs = app.ScheduledJobs @ [ declaration ]
     }
 
+    /// Phase 1042 — the key the delivery middleware marks the application
+    /// builder with, so it is mounted once however many hooks register.
+    let private deliveryMiddlewareMounted = "ToolUp.DeliveryCompleted.Mounted"
+
+    /// Phase 1042 — a request as a delivery: the runs it ingests are
+    /// delivered after its response is written, under the scope the platform
+    /// resolved for it (read at completion, after scope resolution ran). A
+    /// request already inside a delivery (a batch element) adds to it.
+    let internal deliveryRequest (ctx: HttpContext) (next: Func<Threading.Tasks.Task>) : Threading.Tasks.Task =
+        match DeliveryCompleted.DeliveryScope.current () with
+        | Some _ -> next.Invoke()
+        | None ->
+            let collector =
+                DeliveryCompleted.DeliveryCollector(
+                    DeliveryCompleted.DeliveryOrigin.Request(ctx.Request.Method, string ctx.Request.Path)
+                )
+
+            ctx.Response.OnCompleted(fun () ->
+                Async.StartAsTask(
+                    DeliveryCompleted.complete collector (StorageScopeResolver.ScopeResolution.forRequest ctx)
+                )
+                :> Threading.Tasks.Task)
+
+            task {
+                use _ = DeliveryCompleted.DeliveryScope.push collector
+                do! next.Invoke()
+            }
+
+    /// Phase 1042 — run `callback` once each delivery completes: after the
+    /// response of a request that ingested data, or after an ingestion job
+    /// attempt (a declared scheduled pull, a watched location's poll, a
+    /// queued refresh) returns — every table of it settled, committed or
+    /// failed. It runs under the scope the platform resolved for the
+    /// delivery (never a minted one) and is handed the application's
+    /// services. A throwing callback is logged and audited as
+    /// `DeliveryCallbackFailed` under `name`; the response, the job result
+    /// and every other callback are unaffected. A module registers through
+    /// `ServerModule.withDeliveryCompleted`; not calling either registers
+    /// nothing and mounts nothing (GP 13).
+    let withDeliveryCompleted
+        (name: string, callback: DeliveryCompleted.DeliveryCompletedCallback)
+        (app: ServerApp)
+        : ServerApp =
+        let hook: DeliveryCompleted.DeliveryCompletedHook = { Name = name; Callback = callback }
+
+        let register (s: IServiceCollection) =
+            s.AddSingleton<DeliveryCompleted.DeliveryCompletedHook>(hook)
+
+        let mount (builder: IApplicationBuilder) =
+            if builder.Properties.ContainsKey deliveryMiddlewareMounted then
+                builder
+            else
+                builder.Properties[deliveryMiddlewareMounted] <- box true
+                builder.Use(Func<HttpContext, Func<Threading.Tasks.Task>, Threading.Tasks.Task>(deliveryRequest))
+
+        {
+            app with
+                Extensions = {
+                    app.Extensions with
+                        ServiceConfig =
+                            match app.Extensions.ServiceConfig with
+                            | None -> Some register
+                            | Some baseFn -> Some(fun s -> register (baseFn s))
+                        PreMiddleware = app.Extensions.PreMiddleware @ [ mount ]
+                }
+        }
+
     /// Phase 9b.A — opt into back-fill of `OnEvent`-triggered jobs on
     /// detected scheduler tick drift. Default: off. When enabled, a
     /// detected drift (`now - expectedTickTime > 60s` on wake-up) re-
@@ -2895,6 +3002,10 @@ module ServerApp =
                 }
                 |> withRouteEffectObserver m
                 |> withDeclaredRouteEffects resolvedComponentId m
+                // Phase 1042 — the module's delivery-completed hooks.
+                |> fun composed ->
+                    m.DeliveryCompletedHooks
+                    |> List.fold (fun a hook -> withDeliveryCompleted (hook.Name, hook.Callback) a) composed
 
     let addModules (modules: ServerModule list) (app: ServerApp) : ServerApp =
         modules |> List.fold (fun a m -> addModule m a) app
