@@ -667,6 +667,22 @@
       facts as one lineage; a run that declares none is byte-identical. The
       delegate writer now accepts a method-only option set. Migration recipe:
       `docs/migrations/1040-fact-table-run-method.md`.
+
+      Rides this draft, in the BREAKING class it already carries: Phase 1042
+      lets a module register a delivery-completed callback. `ServerModule`
+      (Platform.Server) gains `DeliveryCompletedHooks`, a record widening that
+      retypes its constructor (a full literal needs the field; `create` and
+      `with` copies are unaffected). Additive (Platform.Server): the
+      `DeliveryCompleted` module (`Delivery`, `DeliveredRun`,
+      `DeliveredOutcome`, `DeliveryOrigin`, `DeliveryCompletedCallback`,
+      `DeliveryCompletedHook`, `aroundJob`, `Delivery.committed` / `failed` /
+      `isComplete`, `DeliverySourceModule`, `CallbackFailedEventType`),
+      `ServerModule.withDeliveryCompleted` and
+      `ServerApp.withDeliveryCompleted`. Behaviour: with no hook registered
+      the deployment is byte-identical; `IDataIngestionApi.TriggerRefresh` now
+      schedules through the typed overload under the request's resolved scope
+      (its `ScopeId` unchanged). Migration recipe:
+      `docs/migrations/1042-delivery-completed-hook.md`.
     -->
     <Version>0.31.0</Version>
     <!--
