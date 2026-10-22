@@ -13,16 +13,20 @@ same name in one release is reported once, as a signature change. Under this rep
 policy a `breaking` release is a MINOR bump and an `additive` one a PATCH; from 1.0.0 the ordinary table
 applies. Where a release ships a migration note under `docs/migrations/`, it is linked from the section.
 
-## [Unreleased] — unreleased
+## [0.31.0] — unreleased
 
 Migration notes:
 
 - [1039-unknown-layout-refused](docs/migrations/1039-unknown-layout-refused.md)
+- [1041-ingestion-caller-label](docs/migrations/1041-ingestion-caller-label.md)
+- [1047-stream-auth-both-sign-ins](docs/migrations/1047-stream-auth-both-sign-ins.md)
 
-_Surface since `v0.30.0`: **breaking** — 4 packages moved; 43 members added, 3 members changed, 0 members removed._
+_Surface since `v0.30.0`: **breaking** — 5 packages moved; 77 members added, 3 members changed, 0 members removed._
 
 ### Added
 
+- `ToolUp.DataSources.Synapse` — 1 member:
+  - `ToolUp.DataSources.Synapse.SynapseCatalogue.describeStatementSql : System.String (literal)`
 - `ToolUp.Platform.Client` — 6 members:
   - `ToolUp.Platform.Client+Msg+PlatformInfoLoaded (class)`
   - `ToolUp.Platform.Client+Msg+PlatformInfoLoaded.Item : ToolUp.Platform.PlatformInfo { get }`
@@ -32,8 +36,28 @@ _Surface since `v0.30.0`: **breaking** — 4 packages moved; 43 members added, 3
   - `ToolUp.Platform.SessionEpoch.setFileApiMounted(System.Boolean) : System.Void`
 - `ToolUp.Platform.Core` — 1 member:
   - `ToolUp.Platform.PlatformInfo.FileManagementMounted : System.Boolean { get }`
-- `ToolUp.Platform.Server` — 1 member:
+- `ToolUp.Platform.Server` — 34 members:
   - `ToolUp.Platform.BuildRouteHandlers.fileManagementMounted(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FileProcessor+DataType]) : System.Boolean`
+  - `ToolUp.Platform.DataIngestionJobHandler.payloadForLabelled(System.String, System.String, ToolUp.Platform.IngestionLabel) : System.String`
+  - `ToolUp.Platform.DataIngestor.MaxResultNameLength : System.Int32 (literal)`
+  - `ToolUp.Platform.ICallerLabelledIngestor (interface)`
+  - `ToolUp.Platform.ICallerLabelledIngestor.RunLabelledIngestion(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IngestionLabel]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IngestionRun, ToolUp.Platform.IngestionError]]`
+  - `ToolUp.Platform.IDataIngestorExtensions (class)`
+  - `ToolUp.Platform.IDataIngestorExtensions.IDataIngestor.RunIngestion(ToolUp.Platform.IDataIngestor, System.String, System.String, System.String, ToolUp.Platform.IngestionLabel) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IngestionRun, ToolUp.Platform.IngestionError]]`
+  - `ToolUp.Platform.IngestionLabel (class)`
+  - `ToolUp.Platform.IngestionLabel.Value : System.String { get }`
+  - `ToolUp.Platform.IngestionLabelError (class)`
+  - `ToolUp.Platform.IngestionLabelError+LabelHasInvalidCharacter (class)`
+  - `ToolUp.Platform.IngestionLabelError+LabelHasInvalidCharacter.character : System.Char { get }`
+  - `ToolUp.Platform.IngestionLabelError+LabelHasInvalidCharacter.position : System.Int32 { get }`
+  - `ToolUp.Platform.IngestionLabelError+LabelIsDotSegment (class)`
+  - `ToolUp.Platform.IngestionLabelError+LabelIsDotSegment.label : System.String { get }`
+  - `ToolUp.Platform.IngestionLabelError+LabelTooLong (class)`
+  - `ToolUp.Platform.IngestionLabelError+LabelTooLong.actual : System.Int32 { get }`
+  - `ToolUp.Platform.IngestionLabelError+LabelTooLong.maximum : System.Int32 { get }`
+  - `ToolUp.Platform.IngestionLabelError+Tags (class)`
+  - `ToolUp.Platform.IngestionLabelError+Tags.EmptyLabel : System.Int32 (literal)`
+  - … and 14 more — `git diff v0.30.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
 - `ToolUp.PublicRendering` — 35 members:
   - `ToolUp.PublicRendering.LayoutRefusal (class)`
   - `ToolUp.PublicRendering.LayoutRefusal+NoDefaultLayout (class)`
