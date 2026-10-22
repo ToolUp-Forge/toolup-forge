@@ -1,6 +1,7 @@
 module ToolUp.Platform.DataIngestionJobHandler
 
 open System.Text.Json
+open System.Text.Json.Nodes
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 
@@ -19,6 +20,14 @@ open ToolUp.Platform
 // `JobResult.PermanentFailure` so the scheduler skips remaining
 // retries and dead-letters — these errors do not recover by
 // retrying.
+//
+// Phase 1041 — a scheduled pull may carry a caller label:
+// `{ "sourceId": "...", "table": "...", "label": "..." }`, written by
+// `payloadForLabelled`. The label names the result (payload object,
+// schema object, run record) while `table` — a statement, typically —
+// is what the connector runs. A payload without `label` is the pre-1041
+// shape and runs exactly as before; a label that is not a safe path
+// component is a `PermanentFailure` naming why.
 
 [<Literal>]
 let JobHandlerName = "_platform.dataingestion.run"
@@ -37,8 +46,29 @@ module private Json =
         with _ ->
             None
 
+    /// The optional `label` member, read beside `RunPayload` so the
+    /// payload record keeps its shape. `None` when absent or null.
+    let tryLabel (json: string) : string option =
+        try
+            use document = JsonDocument.Parse json
+
+            match document.RootElement.TryGetProperty "label" with
+            | true, label when label.ValueKind = JsonValueKind.String -> Some(label.GetString())
+            | _ -> None
+        with _ ->
+            None
+
 let payloadFor (sourceId: DataSourceId) (table: string) : string =
     Json.serialize { sourceId = sourceId; table = table }
+
+/// Phase 1041 — the payload of a pull whose result is named by `label`
+/// rather than by `table`.
+let payloadForLabelled (sourceId: DataSourceId) (table: string) (label: IngestionLabel) : string =
+    let payload = JsonObject()
+    payload["sourceId"] <- JsonValue.Create sourceId
+    payload["table"] <- JsonValue.Create table
+    payload["label"] <- JsonValue.Create label.Value
+    payload.ToJsonString()
 
 type DataIngestionJobHandler(ingestor: IDataIngestor, logger: ILogger) =
     interface IJobHandler with
@@ -51,35 +81,49 @@ type DataIngestionJobHandler(ingestor: IDataIngestor, logger: ILogger) =
                 logger.Warn msg
                 return JobResult.PermanentFailure msg
             | Some payload ->
-                let! result = ingestor.RunIngestion(ctx.ScopeId, payload.sourceId, payload.table)
-
-                match result with
-                | Error err ->
+                match Json.tryLabel ctx.Payload |> Option.map IngestionLabel.tryCreate with
+                | Some(Error refusal) ->
                     let msg =
                         sprintf
-                            "DataIngestionJobHandler: setup error for source=%s table=%s — %A"
-                            payload.sourceId
-                            payload.table
-                            err
+                            "DataIngestionJobHandler: invalid caller label for job %A — %s"
+                            ctx.JobId
+                            (IngestionLabel.describeError refusal)
 
                     logger.Warn msg
-                    // Setup errors (config missing, connector unregistered)
-                    // do not recover by retrying — escalate to dead-letter.
                     return JobResult.PermanentFailure msg
-                | Ok run ->
-                    match run.Status, run.Error with
-                    | IngestionStatus.Succeeded, _ -> return JobResult.Success
-                    | _, Some(CredentialMissing _) ->
-                        // Operator must rotate the credential — retrying
-                        // without intervention will not recover.
-                        return JobResult.PermanentFailure(sprintf "%A" run.Error)
-                    | _, Some(SchemaMismatch _) -> return JobResult.PermanentFailure(sprintf "%A" run.Error)
-                    | _, Some err ->
-                        // SourceUnreachable, StorageFailure,
-                        // UnexpectedFailure are typically transient
-                        // (rate limits, network blips, throttling).
-                        return JobResult.TransientFailure(sprintf "%A" err)
-                    | _ -> return JobResult.TransientFailure "ingestion run did not succeed; status unset"
+                | label ->
+                    let! result =
+                        match label with
+                        | Some(Ok label) -> ingestor.RunIngestion(ctx.ScopeId, payload.sourceId, payload.table, label)
+                        | _ -> ingestor.RunIngestion(ctx.ScopeId, payload.sourceId, payload.table)
+
+                    match result with
+                    | Error err ->
+                        let msg =
+                            sprintf
+                                "DataIngestionJobHandler: setup error for source=%s table=%s — %A"
+                                payload.sourceId
+                                payload.table
+                                err
+
+                        logger.Warn msg
+                        // Setup errors (config missing, connector unregistered)
+                        // do not recover by retrying — escalate to dead-letter.
+                        return JobResult.PermanentFailure msg
+                    | Ok run ->
+                        match run.Status, run.Error with
+                        | IngestionStatus.Succeeded, _ -> return JobResult.Success
+                        | _, Some(CredentialMissing _) ->
+                            // Operator must rotate the credential — retrying
+                            // without intervention will not recover.
+                            return JobResult.PermanentFailure(sprintf "%A" run.Error)
+                        | _, Some(SchemaMismatch _) -> return JobResult.PermanentFailure(sprintf "%A" run.Error)
+                        | _, Some err ->
+                            // SourceUnreachable, StorageFailure,
+                            // UnexpectedFailure are typically transient
+                            // (rate limits, network blips, throttling).
+                            return JobResult.TransientFailure(sprintf "%A" err)
+                        | _ -> return JobResult.TransientFailure "ingestion run did not succeed; status unset"
         }
 
 let create (ingestor: IDataIngestor) (logger: ILogger) : IJobHandler =

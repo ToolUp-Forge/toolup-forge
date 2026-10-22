@@ -101,6 +101,13 @@ module SynapseCatalogue =
                 + $"WHERE TABLE_SCHEMA = '%s{SqlIdentifier.quoteLiteral schema}' AND TABLE_NAME = '%s{SqlIdentifier.quoteLiteral table}' "
                 + "ORDER BY ORDINAL_POSITION"))
 
+    /// Phase 1041 — T-SQL describing a STATEMENT's first result set without
+    /// running it. The statement is bound as the `@tsql` parameter, never
+    /// interpolated; the result names each column's `name`,
+    /// `system_type_name` and `is_nullable`.
+    [<Literal>]
+    let describeStatementSql = "EXEC sp_describe_first_result_set @tsql = @tsql"
+
     /// T-SQL selecting a whole table — the expansion applied when
     /// `Query` is handed a bare identifier.
     let selectAllSql (schema: string) (table: string) : Result<string, IngestionError> =
@@ -302,6 +309,7 @@ module SynapseDataSource =
             (ctx: DataSourceCallContext)
             (context: string)
             (buildSql: SynapseSourceSettings -> Result<string, IngestionError>)
+            (configure: DbCommand -> unit)
             (project: DbDataReader -> 'T)
             : Async<Result<'T list, IngestionError>> =
             Errors.guard context (fun () -> async {
@@ -317,6 +325,7 @@ module SynapseDataSource =
                             use connection = connection
                             let! ct = Async.CancellationToken
                             use command = newCommand settings connection sql
+                            configure command
                             use! reader = command.ExecuteReaderAsync ct |> Async.AwaitTask
 
                             let rows = ResizeArray<'T>()
@@ -360,27 +369,53 @@ module SynapseDataSource =
                     ctx
                     "Synapse ListTables"
                     (fun settings -> SynapseCatalogue.listTablesSql settings.Schema)
+                    ignore
                     (fun reader -> reader.GetValue 0 |> Csv.renderValue)
 
+            // Phase 1041 — a statement-shaped "table" (what `Query` passes
+            // through verbatim) is described by its first result set through
+            // `sp_describe_first_result_set`, the statement bound as a
+            // parameter and never executed, so a statement ingested under a
+            // caller label keeps its schema record and drift detection. A
+            // bare identifier reads `INFORMATION_SCHEMA` exactly as before.
             member _.GetSchema(ctx, table) = async {
+                let statementShaped = not (SqlIdentifier.isSafe table)
+
                 let! rows =
                     readCatalogue
                         ctx
                         "Synapse GetSchema"
-                        (fun settings -> SynapseCatalogue.columnsSql settings.Schema table)
+                        (fun settings ->
+                            if statementShaped then
+                                Ok SynapseCatalogue.describeStatementSql
+                            else
+                                SynapseCatalogue.columnsSql settings.Schema table)
+                        (fun command ->
+                            if statementShaped then
+                                let parameter = command.CreateParameter()
+                                parameter.ParameterName <- "@tsql"
+                                parameter.DbType <- DbType.String
+                                parameter.Size <- -1
+                                parameter.Value <- table
+                                command.Parameters.Add parameter |> ignore)
                         (fun reader ->
-                            let name = reader.GetValue 0 |> Csv.renderValue
-                            let nativeType = reader.GetValue 1 |> Csv.renderValue
-                            let nullToken = reader.GetValue 2 |> Csv.renderValue
-                            name, nativeType, nullToken)
+                            if statementShaped then
+                                let text (column: string) =
+                                    reader.GetValue(reader.GetOrdinal column) |> Csv.renderValue
 
-                return
-                    rows
-                    |> Result.map (fun rows ->
-                        rows
-                        |> List.map (fun (name, nativeType, nullToken) ->
-                            TypeMap.column name nativeType (SynapseCatalogue.nullableFromToken nullToken))
-                        |> TypeMap.schema table)
+                                let nullable =
+                                    match reader.GetValue(reader.GetOrdinal "is_nullable") with
+                                    | :? bool as flag -> flag
+                                    | _ -> true
+
+                                TypeMap.column (text "name") (text "system_type_name") nullable
+                            else
+                                let name = reader.GetValue 0 |> Csv.renderValue
+                                let nativeType = reader.GetValue 1 |> Csv.renderValue
+                                let nullToken = reader.GetValue 2 |> Csv.renderValue
+                                TypeMap.column name nativeType (SynapseCatalogue.nullableFromToken nullToken))
+
+                return rows |> Result.map (TypeMap.schema table)
             }
 
             member _.Query(ctx, sql) =

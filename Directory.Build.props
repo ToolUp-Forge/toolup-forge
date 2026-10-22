@@ -652,6 +652,23 @@
       `DeclaredPrincipal.missingGrant`. Behaviour is unchanged. Migration
       recipe: `docs/migrations/1029-one-declared-principal-shape.md`.
     -->
+    <!--
+      Next draft slot (v0.30.0 is tagged; the version act cuts it), additive:
+      Phase 1041 lets an ingestion name its result by a caller label instead
+      of by the statement it runs. Additive (Platform.Server): `IngestionLabel`
+      (`tryCreate`, `value`, `describeError`, `MaxLength`),
+      `IngestionLabelError`, `ICallerLabelledIngestor`, the
+      `IDataIngestor.RunIngestion(scopeId, sourceId, table, label)` extension
+      overload, `DataIngestor.MaxResultNameLength` and
+      `DataIngestionJobHandler.payloadForLabelled`. Additive (DataSources.Synapse):
+      `SynapseCatalogue.describeStatementSql`. No member is removed or
+      retyped. Behaviour: the three-argument form names its result exactly as
+      before; an unlabelled run whose payload name would pass 255 characters
+      is refused before the source is queried (it used to fail at the save);
+      the Sql and Synapse connectors' `GetSchema` now describe a
+      statement-shaped table instead of refusing it. Migration recipe:
+      `docs/migrations/1041-ingestion-caller-label.md`.
+    -->
     <Version>0.30.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
