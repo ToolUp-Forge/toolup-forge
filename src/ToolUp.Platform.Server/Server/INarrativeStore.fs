@@ -247,8 +247,9 @@ type INarrativePagePublisher =
     /// Description distinct from the document's own (most relevant for
     /// AI-emitted narratives where the document's analytics-shape title
     /// differs from the desired marketing title). `layoutHint` selects
-    /// a registered layout name; implementations fall back to the
-    /// first-registered layout when `None` or unknown. `collisionPolicy`
+    /// a registered layout name; `None` publishes a page naming no layout,
+    /// which renders under the deployment's declared default, and an
+    /// unregistered name is refused (Phase 1039). `collisionPolicy`
     /// controls behaviour when the slug already has a page — see
     /// `SlugCollisionPolicy` for the semantics; pass `OverwriteExisting`
     /// to preserve the Phase 80a default.
@@ -270,7 +271,7 @@ type INarrativePagePublisher =
 /// Implementations are pure read views over the registered map; calls
 /// are cheap and stateless.
 type ILayoutCatalog =
-    /// Names of every registered layout in insertion order. Empty list
+    /// Names of every registered layout, in name order. Empty list
     /// when no layouts have been registered (an unusual but valid
     /// compose-time state).
     abstract member ListLayoutNames: unit -> string list

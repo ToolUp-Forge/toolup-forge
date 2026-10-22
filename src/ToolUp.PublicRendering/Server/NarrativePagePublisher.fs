@@ -56,8 +56,9 @@ type NarrativePublishGuardrails = {
     ForceDraft: bool
     /// When `Some names`, an explicit `layoutHint` must be one of `names`
     /// or the publish is refused. `None` (default) → any registered layout
-    /// is accepted (Phase 80a behaviour). A `None` hint always falls back
-    /// to the first-registered layout and is not allow-list-checked.
+    /// is accepted (Phase 80a behaviour). A `None` hint renders under the
+    /// deployment's declared default layout (Phase 1039) and is not
+    /// allow-list-checked.
     AllowedLayouts: Set<string> option
     /// The audience every AI-published page is pinned to. Default
     /// `PageAudience.Public` (Phase 80a behaviour).
@@ -104,15 +105,6 @@ module NarrativePublishGuardrails =
             MaxSections = Some n
     }
 
-/// Optional layouts hint passed by `PublicRenderingCompose.run` so the
-/// publisher can fall back to the first-registered layout when the
-/// caller's `layoutHint` is `None` or doesn't match. Empty when the
-/// deployment has registered no layouts (an unusual but valid
-/// configuration when the deployment's pages all use a single
-/// implicit shape — Save still succeeds, the PublicPageHandler will
-/// surface "no layout registered" at render time).
-type internal LayoutHint = LayoutHint of LayoutName list
-
 type PublicRenderingNarrativePagePublisher
     (
         entityStore: IEntityStore,
@@ -126,18 +118,21 @@ type PublicRenderingNarrativePagePublisher
         indexNowService: IIndexNowService option
     ) =
 
-    let resolveLayout (hint: string option) : LayoutName =
-        match hint with
-        | Some name when registeredLayouts |> List.contains (LayoutName name) -> LayoutName name
-        | _ ->
-            match registeredLayouts with
-            | first :: _ -> first
-            // No layouts registered — write a placeholder layout name.
-            // PublicPageHandler will surface the missing-layout error
-            // at render time (a more useful place to fail than at
-            // publish time, since the operator can register a layout
-            // and immediately make published pages work).
-            | [] -> LayoutName ""
+    // Phase 1039 — no hint writes `LayoutName ""`: the page names no
+    // layout and takes the deployment's declared default when it renders.
+    // A hint naming a layout nobody registered is refused; it used to be
+    // replaced by the alphabetically first registered layout.
+    let resolveLayout (hint: string option) : Result<LayoutName, string> =
+        match hint |> Option.filter (System.String.IsNullOrWhiteSpace >> not) with
+        | None -> Ok(LayoutName "")
+        | Some name when registeredLayouts |> List.contains (LayoutName name) -> Ok(LayoutName name)
+        | Some name ->
+            Error(
+                sprintf
+                    "layout '%s' is not registered (registered: %s)"
+                    name
+                    (registeredLayouts |> List.map LayoutName.value |> String.concat ", ")
+            )
 
     let sanitiseSlug (raw: string) : string =
         // Strip a leading slash (caller may pass with or without) and
@@ -187,10 +182,13 @@ type PublicRenderingNarrativePagePublisher
                 // access). An explicit layout hint outside the allow-list, or a
                 // document exceeding the section cap, is refused before any
                 // slug-collision work.
+                let layout = resolveLayout layoutHint
+
                 let guardrailViolation =
-                    match guardrails.AllowedLayouts, layoutHint with
-                    | Some allowed, Some h when not (Set.contains h allowed) ->
+                    match guardrails.AllowedLayouts, layoutHint, layout with
+                    | Some allowed, Some h, _ when not (Set.contains h allowed) ->
                         Some(sprintf "layout '%s' is not permitted for AI publishing (guardrail allow-list)" h)
+                    | _, _, Error refusal -> Some refusal
                     | _ ->
                         match guardrails.MaxSections with
                         | Some n when List.length document.Sections > n ->
@@ -255,7 +253,7 @@ type PublicRenderingNarrativePagePublisher
                             Title = title
                             Description = description
                             Body = Narrative document
-                            Layout = resolveLayout layoutHint
+                            Layout = layout |> Result.defaultValue (LayoutName "")
                             Frontmatter = Map.empty
                             PublishedAt = Some DateTimeOffset.UtcNow
                             Collection = None

@@ -49,9 +49,15 @@ open ToolUp.Platform.Server
 type PublicRenderingServerApp = {
     Base: ServerApp
     /// Compose-time-registered layouts keyed by `LayoutName`. The
-    /// page's `Layout` field selects one; unknown names fall back to
-    /// the first-registered layout at render time.
+    /// page's `Layout` field selects one; a page naming none takes
+    /// `DefaultLayout`. A name nobody registered is refused (Phase 1039,
+    /// `PublicLayouts.resolve`), never replaced by another layout.
     Layouts: Map<LayoutName, PublicPage -> XmlNode>
+    /// Phase 1039 — the layout a page naming none is framed in. `None`
+    /// (default): with exactly one layout registered that layout is the
+    /// default implicitly; with two or more, compose raises
+    /// `LayoutRefusedException` naming them. Set via `withDefaultLayout`.
+    DefaultLayout: LayoutName option
     /// Additional redirects on top of any read from
     /// `<contentRoot>/redirects.csv` at startup. Compose-registered
     /// entries are appended after file-loaded entries (file wins on
@@ -249,9 +255,18 @@ type PublicRenderingServerApp = {
 
 module PublicRenderingServerApp =
 
-    let create () : PublicRenderingServerApp = {
-        Base = ServerApp.empty
+    /// Phase 80c composition seam — lift an existing `ServerApp` into a
+    /// `PublicRenderingServerApp` so the additive
+    /// `PublicRenderingCompose.withPublicRendering` extension can stack
+    /// public-rendering contributions onto whatever the input
+    /// `ServerApp` already carries. The input `ServerApp` becomes the
+    /// `Base` field; all public-rendering-specific fields initialise
+    /// empty (the configurator passed to `withPublicRendering`
+    /// populates them via `withLayout` / `withRedirects` / etc.).
+    let createFrom (baseApp: ServerApp) : PublicRenderingServerApp = {
+        Base = baseApp
         Layouts = Map.empty
+        DefaultLayout = None
         Redirects = []
         StructuredDataBuilders = Map.empty
         HotReload = true
@@ -282,46 +297,8 @@ module PublicRenderingServerApp =
         RenderCoalescer = None
     }
 
-    /// Phase 80c composition seam — lift an existing `ServerApp` into a
-    /// `PublicRenderingServerApp` so the additive
-    /// `PublicRenderingCompose.withPublicRendering` extension can stack
-    /// public-rendering contributions onto whatever the input
-    /// `ServerApp` already carries. The input `ServerApp` becomes the
-    /// `Base` field; all public-rendering-specific fields initialise
-    /// empty (the configurator passed to `withPublicRendering`
-    /// populates them via `withLayout` / `withRedirects` / etc.).
-    let createFrom (baseApp: ServerApp) : PublicRenderingServerApp = {
-        Base = baseApp
-        Layouts = Map.empty
-        Redirects = []
-        StructuredDataBuilders = Map.empty
-        HotReload = true
-        ContentApiOverride = None
-        AIPublishEnabled = false
-        AIPublishAuthoriser = None
-        Feeds = []
-        ContentSources = []
-        RenderCache = None
-        RenderCacheDefaultPolicy = CachePolicy.NoCache
-        RenderCacheInvalidation = None
-        EdgeCache = None
-        EdgeCachePathsForSlug = None
-        TaxonomyEnabled = false
-        Nav = []
-        SemanticSearch = None
-        AIPublishGuardrails = NarrativePublishGuardrails.defaults
-        IndexNow = IndexNowOptions.defaults
-        Sites = []
-        ConditionalGet = None
-        SelfCanonical = false
-        SitemapResponseCache = false
-        SitemapDefaultLastmod = None
-        SitemapShardThreshold = 50_000
-        SitemapClusterKey = None
-        SitemapExcludeNoindex = false
-        SearchIndex = None
-        RenderCoalescer = None
-    }
+    /// A `PublicRenderingServerApp` over an empty base `ServerApp`.
+    let create () : PublicRenderingServerApp = createFrom ServerApp.empty
 
     // ─── Delegating helpers (mirror every `ServerApp.with*`) ─────
 
@@ -418,9 +395,10 @@ module PublicRenderingServerApp =
     // ─── Public-rendering-specific helpers ───────────────────────
 
     /// Register a layout function. At least one layout must be
-    /// registered when `PublicRendering = EnabledPublicRendering`;
-    /// the first-registered layout becomes the fallback for any
-    /// page whose `Layout` doesn't match a registered name.
+    /// registered when `PublicRendering = EnabledPublicRendering`. A page
+    /// naming a layout nobody registered is refused, never framed by
+    /// another layout (Phase 1039); with two or more layouts, declare the
+    /// one a page naming none takes with `withDefaultLayout`.
     let withLayout
         (name: LayoutName)
         (layout: PublicPage -> XmlNode)
@@ -431,10 +409,19 @@ module PublicRenderingServerApp =
                 Layouts = Map.add name layout app.Layouts
         }
 
+    /// Phase 1039 — declare the layout a page naming none is framed in.
+    /// Required once two or more layouts are registered; the name must be
+    /// registered (by `withLayout` / `withFelizLayout`, in any order) or
+    /// compose raises `LayoutRefusedException`.
+    let withDefaultLayout (name: LayoutName) (app: PublicRenderingServerApp) : PublicRenderingServerApp = {
+        app with
+            DefaultLayout = Some name
+    }
+
     /// Phase 92 — register a layout authored in the Feliz DSL
     /// (`Feliz.ViewEngine`). Slots into the same registry as Giraffe
     /// layouts via `FelizLayout.toGiraffe` — same naming, same
-    /// fallback semantics, same render path (the adapter's output is
+    /// resolution, same render path (the adapter's output is
     /// raw pre-rendered HTML; the handler still adds the doctype and
     /// runs head injection). Giraffe.ViewEngine remains the default
     /// layout DSL; this helper is the opt-in for deployments sharing
@@ -976,6 +963,51 @@ module PublicRenderingServerApp =
                     return ConfigValidation.Ok
             }
 
+    /// Phase 1039 — every published, public file-tier page names a
+    /// registered layout (or none, with a default to take). Error: such a
+    /// page would 500 on every request. It reads the gated enumeration
+    /// (`ListPagesPublic`, Phase 632), so a draft or an audience-gated page
+    /// is not checked here; it, and every page a request-time source
+    /// produces, is refused per request by the handlers instead.
+    type private LayoutNameResolvedValidator
+        (root: ContentRoot, layouts: Map<LayoutName, PublicPage -> XmlNode>, logger: ILogger) =
+        interface ConfigValidation.IConfigValidator with
+            member _.Name = "public-rendering-layout-name-resolved"
+            member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
+
+            member _.Validate() = async {
+                use loader = new MarkdownContentLoader(root, logger, hotReload = false)
+                let api = PublicContentApiImpl.create loader None []
+                let! pages = api.ListPagesPublic(System.DateTimeOffset.UtcNow, "")
+
+                match PublicLayouts.refusedPages layouts pages with
+                | [] -> return ConfigValidation.Ok
+                | refused -> return ConfigValidation.Error("PublicRendering: " + LayoutRefusal.describeAll refused)
+            }
+
+    /// Phase 1039 — the compose-registered layouts with the default bound
+    /// (`PublicLayouts.withDefault`); raises `LayoutRefusedException` when
+    /// two or more layouts are registered and none is declared the default,
+    /// or the declared default is not registered.
+    let private resolvedLayouts (app: PublicRenderingServerApp) : Map<LayoutName, PublicPage -> XmlNode> =
+        match PublicLayouts.withDefault app.DefaultLayout app.Layouts with
+        | Ok layouts -> layouts
+        | Error refusal -> raise (LayoutRefusedException [ "PublicRenderingServerApp", refusal ])
+
+    /// Phase 1039 — a satellite site's own layouts (empty → the shared,
+    /// resolved ones), refused the same way: a site with two or more
+    /// layouts binds its default under `PublicLayouts.unnamed`.
+    let private siteLayoutsOf
+        (sharedLayouts: Map<LayoutName, PublicPage -> XmlNode>)
+        (site: PublicSiteDef)
+        : Map<LayoutName, PublicPage -> XmlNode> =
+        if Map.isEmpty site.Layouts then
+            sharedLayouts
+        else
+            match PublicLayouts.withDefault None site.Layouts with
+            | Ok layouts -> layouts
+            | Error refusal -> raise (LayoutRefusedException [ sprintf "site '%s'" site.Name, refusal ])
+
     /// Phase 80c composition seam — apply every public-rendering-specific
     /// contribution (DI registrations, sitemap + redirect + export +
     /// feed + page handlers, `PublicPageEntity` registration, optional
@@ -1042,8 +1074,23 @@ module PublicRenderingServerApp =
                 |> withConfigValidator (
                     SitemapShardThresholdValidator(app.SitemapShardThreshold) :> ConfigValidation.IConfigValidator
                 )
+                |> fun app ->
+                    // Phase 1039 — the file-tier page set is known at startup;
+                    // a supplied content API owns its own pages.
+                    match app.ContentApiOverride with
+                    | Some _ -> app
+                    | None ->
+                        let logger =
+                            app.Base.Logger
+                            |> Option.defaultWith (fun () -> ConsoleLogger.ConsoleLogger() :> ILogger)
 
-            let layouts = app.Layouts
+                        withConfigValidator
+                            (LayoutNameResolvedValidator(root, resolvedLayouts app, logger)
+                            :> ConfigValidation.IConfigValidator)
+                            app
+
+            // Phase 1039 — the default bound, or compose refuses here.
+            let layouts = resolvedLayouts app
             let composeRedirects = app.Redirects
             let hotReload = app.HotReload
             let explicitApi = app.ContentApiOverride
@@ -1056,6 +1103,20 @@ module PublicRenderingServerApp =
             let taxonomyEnabled = app.TaxonomyEnabled // Phase 100
             let navTree = app.Nav // Phase 100
             let semanticSearch = app.SemanticSearch // Phase 91
+
+            // Phase 1039 — the search page's configured layout is known at
+            // compose, so a name nobody registered is refused here.
+            match semanticSearch |> Option.bind _.Layout with
+            | Some name ->
+                match PublicLayouts.resolve layouts name with
+                | Ok _ -> ()
+                | Error refusal -> raise (LayoutRefusedException [ "SemanticSearchConfig.Layout", refusal ])
+            | None -> ()
+
+            // Phase 1039 — every satellite site's own layouts resolve a default.
+            for site in app.Sites do
+                siteLayoutsOf layouts site |> ignore
+
             let renderCache = app.RenderCache
             let renderCacheDefaultPolicy = app.RenderCacheDefaultPolicy
             let renderCoalescer = app.RenderCoalescer
@@ -1231,7 +1292,7 @@ module PublicRenderingServerApp =
                 | _ -> []
 
             // ─── DI registrations ────────────────────────────────
-            let registeredLayoutNames = layouts |> Map.toList |> List.map fst
+            let registeredLayoutNames = PublicLayouts.registered layouts
 
             let publicRenderingServiceConfig (services: IServiceCollection) =
                 // Phase 988 — the page handler owns extensionless GETs, so
@@ -1898,9 +1959,16 @@ module PublicRenderingServerApp =
     /// `StaticExport.run` for the output layout and behaviour.
     ///
     /// Requires `ServerConfig.PublicRendering = EnabledPublicRendering`
-    /// and at least one registered layout — same invariants as `run`.
+    /// and at least one registered layout — same invariants as `run`,
+    /// including the declared default (Phase 1039).
     let exportStatic (outputDir: string) (app: PublicRenderingServerApp) : Async<int> =
-        StaticExport.run app.Base.Config app.Layouts app.ContentApiOverride app.ContentSources app.Base.Logger outputDir
+        StaticExport.run
+            app.Base.Config
+            (resolvedLayouts app)
+            app.ContentApiOverride
+            app.ContentSources
+            app.Base.Logger
+            outputDir
 
     /// Phase 93 — static export with operational extensions: per-locale
     /// trees, host-config emission (`staticwebapp.config.json` / `_redirects`
@@ -1939,7 +2007,7 @@ module PublicRenderingServerApp =
             }
             app.Redirects
             app.Base.Config
-            app.Layouts
+            (resolvedLayouts app)
             app.ContentApiOverride
             app.ContentSources
             app.Base.Logger
@@ -1971,11 +2039,7 @@ module PublicRenderingServerApp =
                         PublicBaseUrl = Some site.BaseUrl
                 }
 
-                let siteLayouts =
-                    if Map.isEmpty site.Layouts then
-                        app.Layouts
-                    else
-                        site.Layouts
+                let siteLayouts = siteLayoutsOf (resolvedLayouts app) site
 
                 let siteDir = System.IO.Path.Combine(outputDir, "sites", site.Name)
 

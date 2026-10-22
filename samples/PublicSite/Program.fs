@@ -41,4 +41,7 @@ let main _ =
     |> PublicRenderingCompose.PublicRenderingServerApp.withFelizLayout
         (LayoutName "feliz")
         Layouts.FelizPageLayout.render
+    // Phase 1039 — with several layouts registered, the one a page naming
+    // none is framed in is declared, never picked by name order.
+    |> PublicRenderingCompose.PublicRenderingServerApp.withDefaultLayout (LayoutName "page")
     |> PublicRenderingCompose.PublicRenderingServerApp.run
