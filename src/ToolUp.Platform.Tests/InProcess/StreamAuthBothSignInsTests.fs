@@ -626,21 +626,34 @@ let private wiringTests =
         testCase "setAuthToken sends a dropped default-path write through the server"
         <| fun _ ->
             let body = bindingBody (userSessionSource ()) "setAuthToken"
-            Expect.stringContains body "authCookieCarries" "setAuthToken checks its own cookie write"
+            Expect.stringContains body "cookieMissing token" "setAuthToken checks its own cookie write"
             Expect.stringContains body "reflectTokenToServer token" "and reflects the token when it did not land"
 
         testCase "getAuthToken restores a missing default-path cookie without a network call"
         <| fun _ ->
             let body = bindingBody (userSessionSource ()) "getAuthToken"
-            Expect.stringContains body "authCookieCarries" "getAuthToken checks the cookie"
+            Expect.stringContains body "cookieMissing token" "getAuthToken checks the cookie"
             Expect.stringContains body "setAuthCookie" "and re-writes it from script"
             Expect.isFalse (body.Contains "reflectTokenToServer") "and never sends the token anywhere"
 
         testCase "clearAuthToken clears a cookie the script cannot see"
         <| fun _ ->
             let body = bindingBody (userSessionSource ()) "clearAuthToken"
-            Expect.stringContains body "authCookieCarries" "clearAuthToken checks whether the server holds the cookie"
+            Expect.stringContains body "cookieMissing held" "clearAuthToken checks whether the server holds the cookie"
             Expect.stringContains body "clearServerCookie ()" "and asks the server to clear it"
+
+        testCase "the cookie checks read document.cookie only where a document exists"
+        <| fun _ ->
+            let source = userSessionSource ()
+
+            Expect.stringContains
+                source
+                "typeof document === 'undefined' ? null : document.cookie"
+                "the one cookie read is guarded for a host with no DOM"
+
+            Expect.isFalse
+                (source.Contains "authCookieCarries Browser.Dom.document.cookie")
+                "no check reads document.cookie unguarded (getAuthToken runs before every stream connect)"
     ]
 
 let tests =
