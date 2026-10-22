@@ -492,9 +492,59 @@ let private configTests =
         ]
     )
 
+/// Phase 1049 — validate `token` through a fresh OIDC provider pointed at
+/// `s`. The provider's JWKS and discovery caches are PROCESS-wide and keyed
+/// by URL, so this provider shares them with every other in the run.
+let private validateAgainst (s: MockOidcServer.MockOidcServer) (token: string) = async {
+    use http = new HttpClient()
+
+    let config = {
+        Issuer = Some s.IssuerUrl
+        Audience = None
+        KeySource = JwksDiscovery s.IssuerUrl
+        TokenLocation = BearerHeader
+        ClockSkewSeconds = None
+        AcceptedAlgorithms = None
+        PreferOidWhenPresent = None
+        ClaimMapping = None
+    }
+
+    let provider = ToolUp.AuthProviders.OidcAuthProvider.fromConfigWith http None config
+
+    let ctx = DefaultHttpContext()
+    ctx.Request.Headers["Authorization"] <- Microsoft.Extensions.Primitives.StringValues("Bearer " + token)
+    return! provider.ValidateRequest(RequestContextBuilder.ofHttpContext ctx)
+}
+
+/// Phase 1049 — the full Platform pack starts many mock issuers on
+/// OS-assigned ports, and a later issuer can be handed a port an earlier
+/// one released. Its URLs must still differ, or the URL-keyed caches serve
+/// it the earlier issuer's keys and every token it mints is refused (the
+/// intermittent 401 in this file's composed-pipeline list). The port is
+/// pinned here so the reuse is certain rather than probable.
+let private reusedPortTests =
+    testList "Phase 1049 — a reused port does not share cached keys" [
+        testCaseAsync "a second issuer on a released port validates against its OWN keys"
+        <| async {
+            let first = MockOidcServer.start MockOidcServer.MockOidcConfig.defaults
+            let firstUrl = first.IssuerUrl
+            let port = Uri(firstUrl).Port
+            let! warmed = validateAgainst first (first.MintAccessToken())
+            (first :> IDisposable).Dispose()
+            Expect.isOk warmed "the first issuer's token validates, warming the process-wide caches"
+
+            use second = MockOidcServer.startOnPort MockOidcServer.MockOidcConfig.defaults port
+            Expect.equal (Uri(second.IssuerUrl).Port) port "the second issuer holds the first one's port"
+            let! got = validateAgainst second (second.MintAccessToken())
+            Expect.isOk got "the second issuer's token validates against the second issuer's keys"
+            Expect.notEqual second.IssuerUrl firstUrl "two issuers on one port never share an issuer URL"
+        }
+    ]
+
 let tests =
     testList "Phase 993 — directory roles gate pages; API roles only by allow-list" [
         mappingTests
         pipelineTests
         configTests
+        reusedPortTests
     ]

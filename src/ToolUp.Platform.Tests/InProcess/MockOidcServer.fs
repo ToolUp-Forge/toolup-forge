@@ -8,10 +8,10 @@ module ToolUp.Platform.Tests.InProcess.MockOidcServer
 // A real Kestrel server (not an HttpMessageHandler stub) exposing the
 // four endpoints a minimal OIDC issuer needs:
 //
-//   GET  /.well-known/openid-configuration   discovery document
-//   GET  /jwks                               RS256 public key (JWKS)
-//   GET  /authorize                          deterministic auth code
-//   POST /token                              RS256-signed token bundle
+//   GET  /<instance>/.well-known/openid-configuration   discovery document
+//   GET  /<instance>/jwks                               RS256 public key (JWKS)
+//   GET  /<instance>/authorize                          deterministic auth code
+//   POST /<instance>/token                              RS256-signed token bundle
 //
 // Why a real socket when `AuthProviderTests` already validates
 // `OidcAuthProvider` through a `StubHttpMessageHandler`: the stub
@@ -22,9 +22,13 @@ module ToolUp.Platform.Tests.InProcess.MockOidcServer
 // complementary, not redundant.
 //
 // CI-safety: binds `http://127.0.0.1:0` so the OS assigns a free port
-// (no fixed-port clash across parallel test processes). Claims are
-// seeded deterministically from `MockOidcConfig` so callers can assert
-// exact `sub` / `email` / `name`. A fresh RSA key per instance backs
+// (no fixed-port clash across parallel test processes). Every endpoint
+// sits under a per-instance path segment (Phase 1049): the OIDC
+// provider caches discovery and JWKS process-wide by URL, and a later
+// issuer handed a port an earlier one released would otherwise have
+// byte-identical URLs and be validated against the earlier issuer's
+// cached keys. Claims are seeded deterministically from
+// `MockOidcConfig` so callers can assert exact `sub` / `email` / `name`. A fresh RSA key per instance backs
 // the JWKS it publishes — "fixed key" in the sense the phase intends:
 // stable for the issuer's lifetime, self-published, never rotated.
 
@@ -105,9 +109,13 @@ let private Kid = "mock-oidc-key"
 [<Literal>]
 let private AuthCode = "mock-auth-code"
 
-type MockOidcServer(cfg: MockOidcConfig) =
+type MockOidcServer(cfg: MockOidcConfig, port: int) =
     let rsa = RSA.Create 2048
     let mutable issuerUrl = ""
+
+    /// Phase 1049 — the path segment every endpoint sits under, unique
+    /// per instance so two issuers never share a URL even on one port.
+    let basePath = "/" + Guid.NewGuid().ToString "N"
 
     let jwksJson () =
         let p = rsa.ExportParameters false
@@ -119,12 +127,6 @@ type MockOidcServer(cfg: MockOidcConfig) =
     let discoveryJson () =
         $"""{{"issuer":"{issuerUrl}","jwks_uri":"{issuerUrl}/jwks","authorization_endpoint":"{issuerUrl}/authorize","token_endpoint":"{issuerUrl}/token","end_session_endpoint":"{issuerUrl}/logout","id_token_signing_alg_values_supported":["RS256"],"response_types_supported":["code"],"subject_types_supported":["public"]}}"""
 
-    /// RS256 JWT carrying the seeded claims. A negative `lifetime`
-    /// yields an already-expired token (used for the expired-credential
-    /// contract case). `audience` populates the `aud` claim when the
-    /// config asks for one; `jti` makes successive mints textually
-    /// distinct so a test can prove a refresh actually ROTATED the
-    /// bearer rather than re-storing the same string.
     // Phase 987 — the identity and extra claims the NEXT interactive
     // sign-in mints into its id_token, and the nonce / PKCE challenge the
     // last `/authorize` call carried. Set by `SetSignInIdentity`; the
@@ -134,6 +136,12 @@ type MockOidcServer(cfg: MockOidcConfig) =
     let mutable pendingNonce: string option = None
     let mutable pendingChallenge: string option = None
 
+    /// RS256 JWT carrying the seeded claims. A negative `lifetime`
+    /// yields an already-expired token (used for the expired-credential
+    /// contract case). `audience` populates the `aud` claim when the
+    /// config asks for one; `jti` makes successive mints textually
+    /// distinct so a test can prove a refresh actually ROTATED the
+    /// bearer rather than re-storing the same string.
     let mintTokenFull
         (lifetime: TimeSpan)
         (audience: string option)
@@ -166,10 +174,8 @@ type MockOidcServer(cfg: MockOidcConfig) =
         let sg = rsa.SignData(msg, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)
         $"{hB}.{pB}.{b64url sg}"
 
-    let mintTokenWith (lifetime: TimeSpan) (audience: string option) (jti: string option) =
-        mintTokenFull lifetime audience jti cfg.Subject []
-
-    let mintToken (lifetime: TimeSpan) = mintTokenWith lifetime None None
+    let mintToken (lifetime: TimeSpan) =
+        mintTokenFull lifetime None None cfg.Subject []
 
     /// A random non-JWT string, the shape an opaque access token
     /// actually takes. Prefixed the way Google's are so a failure
@@ -180,11 +186,11 @@ type MockOidcServer(cfg: MockOidcConfig) =
     let app =
         let builder = WebApplication.CreateBuilder()
         builder.Logging.ClearProviders() |> ignore
-        builder.WebHost.UseUrls "http://127.0.0.1:0" |> ignore
+        builder.WebHost.UseUrls $"http://127.0.0.1:{port}" |> ignore
         let a = builder.Build()
 
         a.MapGet(
-            "/.well-known/openid-configuration",
+            basePath + "/.well-known/openid-configuration",
             Func<HttpContext, Task>(fun ctx ->
                 ctx.Response.ContentType <- "application/json"
                 ctx.Response.WriteAsync(discoveryJson ()))
@@ -192,7 +198,7 @@ type MockOidcServer(cfg: MockOidcConfig) =
         |> ignore
 
         a.MapGet(
-            "/jwks",
+            basePath + "/jwks",
             Func<HttpContext, Task>(fun ctx ->
                 ctx.Response.ContentType <- "application/json"
                 ctx.Response.WriteAsync(jwksJson ()))
@@ -200,7 +206,7 @@ type MockOidcServer(cfg: MockOidcConfig) =
         |> ignore
 
         a.MapGet(
-            "/authorize",
+            basePath + "/authorize",
             Func<HttpContext, Task>(fun ctx ->
                 let q = ctx.Request.Query
                 let redirectUri = string q["redirect_uri"]
@@ -220,7 +226,7 @@ type MockOidcServer(cfg: MockOidcConfig) =
         |> ignore
 
         a.MapPost(
-            "/token",
+            basePath + "/token",
             Func<HttpContext, Task>(fun ctx -> task {
                 // The grant type decides whether this is the initial
                 // code exchange or a refresh; the id_token-reissue
@@ -301,12 +307,14 @@ type MockOidcServer(cfg: MockOidcConfig) =
     member _.StartAsync() : Task = task {
         do! (app :> IHost).StartAsync()
 
-        issuerUrl <-
+        let address =
             app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>().Addresses
             |> Seq.head
+
+        issuerUrl <- address.TrimEnd '/' + basePath
     }
 
-    /// Base issuer URL (e.g. `http://127.0.0.1:54321`). Valid only
+    /// Base issuer URL (e.g. `http://127.0.0.1:54321/<instance>`). Valid only
     /// after `StartAsync`. Feed this to `AuthConfig.Issuer` +
     /// `KeySource = JwksDiscovery issuerUrl`.
     member _.IssuerUrl = issuerUrl
@@ -337,6 +345,9 @@ type MockOidcServer(cfg: MockOidcConfig) =
         signInSubject <- Some subject
         signInClaims <- claims
 
+    /// An issuer on an OS-assigned port (the default for every fixture).
+    new(cfg: MockOidcConfig) = new MockOidcServer(cfg, 0)
+
     interface IDisposable with
         member _.Dispose() =
             (app :> IHost).StopAsync().GetAwaiter().GetResult()
@@ -347,5 +358,13 @@ type MockOidcServer(cfg: MockOidcConfig) =
 /// Kestrel is torn down when the test list completes.
 let start (cfg: MockOidcConfig) : MockOidcServer =
     let server = new MockOidcServer(cfg)
+    server.StartAsync().GetAwaiter().GetResult()
+    server
+
+/// Phase 1049 — `start` on a PINNED port. Only the reused-port
+/// regression pins one; every other fixture takes `start`'s
+/// OS-assigned port.
+let startOnPort (cfg: MockOidcConfig) (port: int) : MockOidcServer =
+    let server = new MockOidcServer(cfg, port)
     server.StartAsync().GetAwaiter().GetResult()
     server
