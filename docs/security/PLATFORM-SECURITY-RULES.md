@@ -406,7 +406,13 @@ carelessly.
 > **Evidence:** `src/ToolUp.Platform.Server/Server/AuthSessionHandler.fs` ·
 > `docs/migrations/133-httponly-auth-cookie.md` (Phase 133) ·
 > `src/AuthProviders/Oidc/OidcSsrSignIn.fs` (the server-side SSR sign-in sets
-> the same cookie `HttpOnly`, `SameSite=Lax`; Phase 987)
+> the same cookie `HttpOnly`, `SameSite=Lax`, Phase 987; its `Max-Age` is the
+> token's remaining life, and composing it mounts the reflection routes so the
+> SPA replaces it server-side rather than being shadowed by it, Phase 1047) ·
+> `src/ToolUp.Platform.Client/Client/UserSession.fs` (`authCookieCarries`: a
+> script write an `HttpOnly` cookie shadows is re-sent through the server) ·
+> `src/ToolUp.Platform.Tests/InProcess/StreamAuthBothSignInsTests.fs` ·
+> `docs/migrations/1047-stream-auth-both-sign-ins.md` (Phase 1047)
 
 > **AN-6 — State-changing API requests from session-bearing subjects carry a
 > synchroniser CSRF token, and an internet-facing authenticated deployment

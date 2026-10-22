@@ -79,7 +79,7 @@ ToolUp.DataSources.Parquet 15/19
 ToolUp.DataSources.Redshift 17/19
 ToolUp.DataSources.Snowflake 26/36
 ToolUp.DataSources.Sql 25/48
-ToolUp.DataSources.Synapse 23/36
+ToolUp.DataSources.Synapse 27/37
 ToolUp.EmbeddingCaches.Redis 33/63
 ToolUp.EmbeddingProviders.Local 19/23
 ToolUp.EmbeddingProviders.OpenAI 26/58
@@ -137,11 +137,11 @@ ToolUp.OpenXml.SvgRasterizer.Skia 3/3
 ToolUp.Platform.Build 313/567
 ToolUp.Platform.Client 2851/7017
 ToolUp.Platform.Core 7177/15224
-ToolUp.Platform.Server 6939/12616
+ToolUp.Platform.Server 6954/12649
 ToolUp.Platform.Testing 118/264
 ToolUp.Platform.Transport 44/90
 ToolUp.Platform.UI 71/183
-ToolUp.PublicRendering 635/1110
+ToolUp.PublicRendering 653/1145
 ToolUp.RAG.Core 82/133
 ToolUp.RAG.Server 294/515
 ToolUp.RAG.StaticCorpus.Build 23/40

@@ -79,11 +79,29 @@ let private declaring (format: PayloadFormat) (queried: bool ref) (inner: IDataS
           member _.PayloadFormat = format
     }
 
+/// A delegating connector recording every string its `GetSchema` and
+/// `Query` were handed (Phase 1041: the statement must arrive untouched).
+let private recording (handed: ResizeArray<string>) (inner: IDataSource) =
+    { new IDataSource with
+        member _.Kind = inner.Kind
+        member _.Connect ctx = inner.Connect ctx
+        member _.ListTables ctx = inner.ListTables ctx
+
+        member _.GetSchema(ctx, t) =
+            handed.Add $"GetSchema:{t}"
+            inner.GetSchema(ctx, t)
+
+        member _.Query(ctx, sql) =
+            handed.Add $"Query:{sql}"
+            inner.Query(ctx, sql)
+    }
+
 type private Rig = {
     Ingestor: IDataIngestor
     Store: IDataObjectStore
     Blobs: IBlobStorage
     Source: InMemoryDataSource.InMemoryDataSource
+    Events: IEventStore
 }
 
 let private rigWith (wrap: IDataSource -> IDataSource) =
@@ -91,6 +109,7 @@ let private rigWith (wrap: IDataSource -> IDataSource) =
     let store = DataObjectStore.DataObjectStore(blobs) :> IDataObjectStore
     let configs = DataSourceConfigStore.create blobs
     let source = InMemoryDataSource.create ()
+    let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
     configs.Save(
         scopeId,
@@ -107,20 +126,14 @@ let private rigWith (wrap: IDataSource -> IDataSource) =
     |> Async.RunSynchronously
 
     let ingestor =
-        DataIngestor.create
-            configs
-            noSecrets
-            store
-            (InMemoryEventStore.InMemoryEventStore() :> IEventStore)
-            [ wrap (source :> IDataSource) ]
-            blobs
-            nullLogger
+        DataIngestor.create configs noSecrets store events [ wrap (source :> IDataSource) ] blobs nullLogger
 
     {
         Ingestor = ingestor
         Store = store
         Blobs = blobs
         Source = source
+        Events = events
     }
 
 let private rig () = rigWith id
@@ -171,6 +184,19 @@ let private schemaBlobCount (r: Rig) =
 
 let private readSchema (r: Rig) (payload: DataObject) =
     IngestedPayload.readSchema r.Store payload |> Async.RunSynchronously
+
+/// Phase 1041 — a statement whose naming-by-table would be past a path
+/// component: 300-odd characters of ordinary SQL.
+let private longStatement =
+    "SELECT o.order_id, o.customer_id, o.amount, o.region, c.segment, c.created_at FROM sales.orders o "
+    + "JOIN sales.customers c ON c.customer_id = o.customer_id "
+    + "WHERE o.created_at >= DATEADD(day, -30, CURRENT_TIMESTAMP) AND o.status IN ('settled', 'refunded') "
+    + "AND c.segment <> 'internal' ORDER BY o.created_at DESC, o.order_id ASC"
+
+let private callerLabel () =
+    match IngestionLabel.tryCreate "orders-last-30-days" with
+    | Ok label -> label
+    | Error e -> failtest $"the test label was refused: {e}"
 
 let tests =
     testList "DataIngestor — payload carries its schema (Phase 832)" [
@@ -406,6 +432,234 @@ let tests =
                     |> Result.defaultWith (fun e -> failtest $"save failed: {e}")
 
                 Expect.equal (IngestedPayload.contentFormat legacy) None "no declaration recorded"
+            }
+        ]
+
+        testList "the caller label (Phase 1041)" [
+
+            test "the statement really is past a path component" {
+                Expect.isGreaterThan longStatement.Length 255 "longer than a path component on its own"
+            }
+
+            test "a >255-character statement ingests under a label with its run record, events and schema object" {
+                let handed = ResizeArray<string>()
+                let r = rigWith (recording handed)
+                r.Source.Seed(sourceId, longStatement, Encoding.UTF8.GetBytes "id,amount\n1,2.5\n", baseSchema)
+
+                let run =
+                    match
+                        r.Ingestor.RunIngestion(scopeId, sourceId, longStatement, callerLabel ())
+                        |> Async.RunSynchronously
+                    with
+                    | Ok run -> run
+                    | Error e -> failtest $"ingestion refused: {e}"
+
+                Expect.equal run.Status IngestionStatus.Succeeded $"the run succeeds (error: {run.Error})"
+                Expect.equal run.Table "orders-last-30-days" "the run record is filed under the label"
+
+                Expect.equal
+                    run.ResultObjectId
+                    (Some "_dataingestion__sales__orders-last-30-days")
+                    "the payload object is named by the label"
+
+                Expect.equal
+                    (List.ofSeq handed)
+                    [ $"GetSchema:{longStatement}"; $"Query:{longStatement}" ]
+                    "GetSchema and Query received the statement untouched"
+
+                let payload =
+                    match r.Store.Get(scopeId, run.ResultObjectId.Value) |> Async.RunSynchronously with
+                    | Ok(payload, _) -> payload
+                    | Error e -> failtest $"payload unreadable: {e}"
+
+                Expect.equal
+                    (Map.tryFind "table" payload.Metadata)
+                    (Some "orders-last-30-days")
+                    "metadata names the label"
+
+                let schemaVersions =
+                    r.Store.ListVersions(scopeId, IngestedPayload.schemaObjectId sourceId "orders-last-30-days")
+                    |> Async.RunSynchronously
+
+                Expect.equal
+                    (schemaVersions |> List.map _.ContentHash)
+                    [ (IngestedPayload.schemaRef payload).Value ]
+                    "the schema object is named by the label and referenced by the payload"
+
+                let runs = r.Ingestor.GetRecentRuns(scopeId, sourceId, 5) |> Async.RunSynchronously
+                Expect.equal (runs |> List.map _.RunId) [ run.RunId ] "the run record is persisted"
+
+                let completed =
+                    r.Events.ReadByType(scopeId, "IngestionRunCompleted") |> Async.RunSynchronously
+
+                Expect.equal completed.Length 1 "one completion event"
+                Expect.equal completed.Head.SourceModule DataIngestor.DataIngestionSourceModule "from the ingestor"
+                Expect.stringContains completed.Head.Payload (string run.RunId) "the event carries the run"
+            }
+
+            test "a second labelled run detects schema drift" {
+                let r = rig ()
+                r.Source.Seed(sourceId, longStatement, Encoding.UTF8.GetBytes "id\n1\n", baseSchema)
+
+                let run () =
+                    match
+                        r.Ingestor.RunIngestion(scopeId, sourceId, longStatement, callerLabel ())
+                        |> Async.RunSynchronously
+                    with
+                    | Ok run when run.Status = IngestionStatus.Succeeded ->
+                        match r.Store.Get(scopeId, run.ResultObjectId.Value) |> Async.RunSynchronously with
+                        | Ok(payload, _) -> payload
+                        | Error e -> failtest $"payload unreadable: {e}"
+                    | other -> failtest $"expected a successful run, got {other}"
+
+                Expect.equal (IngestedPayload.schemaDrift (run ())) None "first run: nothing to compare"
+                Expect.equal (IngestedPayload.schemaDrift (run ())) (Some false) "unchanged schema: no drift"
+
+                let retyped =
+                    schemaOf [ "id", "INT64", false; "amount", "STRING", true; "region", "STRING", true ]
+
+                r.Source.Seed(sourceId, longStatement, Encoding.UTF8.GetBytes "id\n1\n", retyped)
+                Expect.equal (IngestedPayload.schemaDrift (run ())) (Some true) "a retyped column is drift"
+            }
+
+            test "no label gives today's naming, byte-identical" {
+                let r = rig ()
+                seed r "id,amount,region\n1,2.5,EU\n" baseSchema
+
+                let run =
+                    match r.Ingestor.RunIngestion(scopeId, sourceId, table) |> Async.RunSynchronously with
+                    | Ok run -> run
+                    | Error e -> failtest $"ingestion refused: {e}"
+
+                Expect.equal run.Table "orders" "the run record is filed under the table"
+                Expect.equal run.ResultObjectId (Some "_dataingestion__sales__orders") "the pre-1041 payload id"
+
+                let schemaVersions =
+                    r.Store.ListVersions(scopeId, "_dataingestion_schema__sales__orders")
+                    |> Async.RunSynchronously
+
+                Expect.equal schemaVersions.Length 1 "the pre-1041 schema object id"
+
+                let payload =
+                    match r.Store.Get(scopeId, run.ResultObjectId.Value) |> Async.RunSynchronously with
+                    | Ok(payload, _) -> payload
+                    | Error e -> failtest $"payload unreadable: {e}"
+
+                Expect.equal (Map.tryFind "table" payload.Metadata) (Some "orders") "metadata names the table"
+
+                let viaSeam =
+                    match
+                        (r.Ingestor :?> ICallerLabelledIngestor).RunLabelledIngestion(scopeId, sourceId, table, None)
+                        |> Async.RunSynchronously
+                    with
+                    | Ok run -> run
+                    | Error e -> failtest $"ingestion refused: {e}"
+
+                Expect.equal
+                    (viaSeam.Table, viaSeam.ResultObjectId)
+                    (run.Table, run.ResultObjectId)
+                    "an absent label is the three-argument form"
+            }
+
+            test "an unlabelled statement past the path limit is refused up front, naming the label option" {
+                let handed = ResizeArray<string>()
+                let r = rigWith (recording handed)
+                r.Source.Seed(sourceId, longStatement, Encoding.UTF8.GetBytes "id\n1\n", baseSchema)
+
+                match
+                    r.Ingestor.RunIngestion(scopeId, sourceId, longStatement)
+                    |> Async.RunSynchronously
+                with
+                | Error(SchemaMismatch message) ->
+                    Expect.stringContains message "caller label" "names the label option"
+                    Expect.stringContains message "IngestionLabel" "names the type to pass"
+                    Expect.stringContains message "255" "names the limit"
+                | other -> failtest $"expected the up-front refusal, got {other}"
+
+                Expect.isEmpty handed "neither GetSchema nor Query was called"
+
+                let objects = r.Blobs.List(scopeId, "objects/") |> Async.RunSynchronously
+                Expect.isEmpty objects "nothing was persisted"
+
+                let runs = r.Ingestor.GetRecentRuns(scopeId, sourceId, 5) |> Async.RunSynchronously
+                Expect.equal (runs |> List.map _.Status) [ IngestionStatus.Failed ] "the refusal is on record"
+
+                let failed =
+                    r.Events.ReadByType(scopeId, "IngestionRunFailed") |> Async.RunSynchronously
+
+                Expect.equal failed.Length 1 "a failure event"
+            }
+
+            test "a label that is not a safe path component is refused with a typed reason" {
+                Expect.equal (IngestionLabel.tryCreate "") (Error EmptyLabel) "empty"
+                Expect.equal (IngestionLabel.tryCreate "   ") (Error EmptyLabel) "whitespace"
+                Expect.equal (IngestionLabel.tryCreate "a/b") (Error(LabelHasInvalidCharacter('/', 1))) "a slash"
+                Expect.equal (IngestionLabel.tryCreate "a b") (Error(LabelHasInvalidCharacter(' ', 1))) "a space"
+                Expect.equal (IngestionLabel.tryCreate "..") (Error(LabelIsDotSegment "..")) "a dot segment"
+
+                Expect.equal
+                    (IngestionLabel.tryCreate (String.replicate 129 "x"))
+                    (Error(LabelTooLong(128, 129)))
+                    "too long"
+
+                Expect.equal
+                    (IngestionLabel.tryCreate "Orders_v2.daily-1" |> Result.map IngestionLabel.value)
+                    (Ok "Orders_v2.daily-1")
+                    "letters, digits, '-', '_' and '.' are accepted"
+
+                Expect.stringContains
+                    (IngestionLabel.describeError (LabelHasInvalidCharacter('/', 1)))
+                    "'/'"
+                    "the description names the character"
+            }
+
+            test "a scheduled pull carries the label, and an unlabelled payload is unchanged" {
+                Expect.equal
+                    (DataIngestionJobHandler.payloadFor sourceId table)
+                    """{"sourceId":"sales","table":"orders"}"""
+                    "the pre-1041 payload, byte for byte"
+
+                let r = rig ()
+                r.Source.Seed(sourceId, longStatement, Encoding.UTF8.GetBytes "id\n1\n", baseSchema)
+                let handler = DataIngestionJobHandler.create r.Ingestor nullLogger
+
+                let ctx (payload: string) : JobContext = {
+                    JobId = System.Guid.NewGuid()
+                    ScopeId = scopeId
+                    AccessContext = AccessContext.unrestricted (AuthenticatedUser "system")
+                    Attempt = 1
+                    Trigger = Manual
+                    Scope = ResolvedScope.anonymous
+                    TriggerSource = ScheduledManually "system"
+                    ScheduledAt = System.DateTime.UtcNow
+                    RunningAt = System.DateTime.UtcNow
+                    Payload = payload
+                    DeadLetterDestination = None
+                }
+
+                let labelled =
+                    DataIngestionJobHandler.payloadForLabelled sourceId longStatement (callerLabel ())
+
+                Expect.equal
+                    (handler.Execute(ctx labelled) |> Async.RunSynchronously)
+                    Success
+                    "the labelled pull succeeds"
+
+                let runs = r.Ingestor.GetRecentRuns(scopeId, sourceId, 5) |> Async.RunSynchronously
+                Expect.equal (runs |> List.map _.Table) [ "orders-last-30-days" ] "filed under the label"
+
+                let invalid = """{"sourceId":"sales","table":"orders","label":"a/b"}"""
+
+                match handler.Execute(ctx invalid) |> Async.RunSynchronously with
+                | PermanentFailure message -> Expect.stringContains message "'/'" "names the reason"
+                | other -> failtest $"an invalid label must be a PermanentFailure; got {other}"
+
+                match
+                    handler.Execute(ctx (DataIngestionJobHandler.payloadFor sourceId longStatement))
+                    |> Async.RunSynchronously
+                with
+                | PermanentFailure message -> Expect.stringContains message "caller label" "names the option"
+                | other -> failtest $"an over-long unlabelled pull must be a PermanentFailure; got {other}"
             }
         ]
     ]

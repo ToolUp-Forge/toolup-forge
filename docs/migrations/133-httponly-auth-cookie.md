@@ -36,6 +36,12 @@ identical until it opts in (GP 11).
 | Pure `Authorization: Bearer` SPA that must keep a JS-readable token | **Stay on the default and ship a CSP.** The XSS exposure is accepted-risk; the mitigation is the Phase 9j / Phase 129 header baseline (`SecurityHeaders = StrictSecurityHeaders` with a CSP that blocks injected script). |
 | Clerk / OIDC hosted-UI where the IdP already issues an HttpOnly session | **N-A** — the SDK isn't minting the cookie. |
 
+**Beside the server-rendered sign-in (Phase 1047).** `OidcSsrSignIn` also writes `toolup-auth-token` `HttpOnly`, which
+silently drops the default path's script write. The default path now detects that and sends its token to
+`POST /api/auth/session`, so a deployment on the default stays on it. Composing the server sign-in mounts the endpoint
+even without `EnabledAuthCookieIssuance`. See
+[`1047-stream-auth-both-sign-ins.md`](1047-stream-auth-both-sign-ins.md).
+
 ## Diff to apply (bridge-based production)
 
 ### Server composition root

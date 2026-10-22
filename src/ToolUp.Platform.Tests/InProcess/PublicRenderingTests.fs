@@ -2364,6 +2364,382 @@ let private spaFallbackPrecedenceTests =
                 "one registration however many compositions ask"
     ]
 
+// ─── Phase 1039 — a page's layout is a declared fact, not map order ──
+//
+// Two layouts whose alphabetical order ("alpha" < "zeta") differs from
+// their registration order (zeta, then alpha). Before Phase 1039 every
+// resolver fell back to `layouts |> Map.toSeq |> Seq.tryHead` on a miss,
+// so an unnamed or misnamed page rendered in the ALPHABETICALLY first
+// frame ("alpha"), whatever the deployment registered first or meant.
+
+let private zetaThenAlpha (app: PublicRenderingCompose.PublicRenderingServerApp) =
+    app
+    |> PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "zeta") (fun p ->
+        html [] [ body [] [ str ("ZETA:" + p.Title) ] ])
+    |> PublicRenderingCompose.PublicRenderingServerApp.withLayout (LayoutName "alpha") (fun p ->
+        html [] [ body [] [ str ("ALPHA:" + p.Title) ] ])
+
+let private twoLayouts: Map<LayoutName, PublicPage -> XmlNode> =
+    (PublicRenderingCompose.PublicRenderingServerApp.create () |> zetaThenAlpha).Layouts
+
+/// A content tree with one page per case: an unnamed page (no `layout:`
+/// frontmatter), a page naming a registered layout, and a page naming a
+/// layout nobody registered.
+let private seedLayoutCases (dir: string) =
+    writeFile
+        (Path.Combine(dir, "pages/plain.md"))
+        "---
+title: Plain
+---
+
+Body."
+
+    writeFile
+        (Path.Combine(dir, "pages/named.md"))
+        "---
+title: Named
+layout: zeta
+---
+
+Body."
+
+    writeFile
+        (Path.Combine(dir, "pages/ghosted.md"))
+        "---
+title: Ghosted
+layout: ghost
+---
+
+Body."
+
+let private layoutCasesApi (dir: string) : IPublicContentApi =
+    let loader =
+        new MarkdownContentLoader(ContentRoot dir, ConsoleLogger.ConsoleLogger() :> ILogger, hotReload = false)
+
+    PublicContentApiImpl.create loader None []
+
+/// Serve `path` through the page handler; returns the status and body.
+let private serveWith (api: IPublicContentApi) (layouts: Map<LayoutName, PublicPage -> XmlNode>) (path: string) =
+    let ctx = DefaultHttpContext()
+    ctx.RequestServices <- mkProvider []
+    ctx.Request.Path <- PathString path
+    let buffer = new MemoryStream()
+    ctx.Response.Body <- buffer
+
+    let next: Giraffe.Core.HttpFunc =
+        fun c -> System.Threading.Tasks.Task.FromResult(Some c)
+
+    PublicPageHandler.handler api layouts next ctx
+    |> Async.AwaitTask
+    |> Async.RunSynchronously
+    |> ignore
+
+    ctx.Response.StatusCode, Text.Encoding.UTF8.GetString(buffer.ToArray())
+
+let private layoutResolution1039Tests =
+    testList "PublicRendering — Phase 1039 layout name resolution" [
+
+        testCase "a page naming an unregistered layout is refused at request time, never framed by another layout"
+        <| fun _ ->
+            let dir = mkFixtureDir ()
+            seedLayoutCases dir
+
+            let status, body = serveWith (layoutCasesApi dir) twoLayouts "/ghosted"
+
+            Expect.equal status 500 "an unknown layout name is a typed server error"
+            Expect.stringContains body "ghost" "the refusal names the layout the page asked for"
+            Expect.isFalse (body.Contains "ALPHA:") "never the alphabetically first layout's frame"
+            Expect.isFalse (body.Contains "ZETA:") "never the first-registered layout's frame either"
+
+        testCase "an unnamed page with two layouts and no declared default is refused, not framed alphabetically"
+        <| fun _ ->
+            let dir = mkFixtureDir ()
+            seedLayoutCases dir
+
+            let status, body = serveWith (layoutCasesApi dir) twoLayouts "/plain"
+
+            Expect.equal status 500 "no declared default → the page has no frame to take"
+            Expect.isFalse (body.Contains "ALPHA:") "never the alphabetically first layout's frame"
+
+        testCase "a page naming a registered layout renders in exactly that layout"
+        <| fun _ ->
+            let dir = mkFixtureDir ()
+            seedLayoutCases dir
+
+            let status, body = serveWith (layoutCasesApi dir) twoLayouts "/named"
+
+            Expect.equal status 200 "a registered name resolves"
+            Expect.stringContains body "ZETA:Named" "the named layout's frame"
+
+        testCase "static export refuses a page naming an unregistered layout instead of writing another frame"
+        <| fun _ ->
+            let dir = mkFixtureDir ()
+            seedLayoutCases dir
+
+            let config = {
+                ServerConfig.defaults with
+                    PublicRendering = EnabledPublicRendering(ContentRoot dir)
+            }
+
+            let outDir = mkFixtureDir ()
+
+            let raised =
+                try
+                    StaticExport.run config twoLayouts None [] None outDir
+                    |> Async.RunSynchronously
+                    |> ignore
+
+                    None
+                with ex ->
+                    Some ex.Message
+
+            Expect.isSome raised "the export refuses"
+            Expect.stringContains raised.Value "ghost" "the refusal names the unknown layout"
+
+            Expect.isFalse
+                (File.Exists(Path.Combine(outDir, "ghosted", "index.html")))
+                "no page written in another frame"
+
+        testCase "an unnamed page takes the declared default, not the alphabetically first layout"
+        <| fun _ ->
+            let dir = mkFixtureDir ()
+            seedLayoutCases dir
+
+            let app =
+                PublicRenderingCompose.PublicRenderingServerApp.create ()
+                |> zetaThenAlpha
+                |> PublicRenderingCompose.PublicRenderingServerApp.withDefaultLayout (LayoutName "zeta")
+
+            let layouts =
+                match PublicLayouts.withDefault app.DefaultLayout app.Layouts with
+                | Ok resolved -> resolved
+                | Error refusal -> failtestf "a registered default must resolve; got %A" refusal
+
+            let status, body = serveWith (layoutCasesApi dir) layouts "/plain"
+
+            Expect.equal status 200 "the declared default frames an unnamed page"
+            Expect.stringContains body "ZETA:Plain" "the declared default's frame"
+            Expect.isFalse (body.Contains "ALPHA:") "not the alphabetically first layout"
+
+        testCase "with one layout registered it is the default implicitly (single-layout apps unchanged)"
+        <| fun _ ->
+            let dir = mkFixtureDir ()
+            seedLayoutCases dir
+
+            let single =
+                Map[(LayoutName "base", (fun (p: PublicPage) -> html [] [ body [] [ str ("BASE:" + p.Title) ] ]))]
+
+            let status, body = serveWith (layoutCasesApi dir) single "/plain"
+
+            Expect.equal status 200 "a single layout frames an unnamed page"
+            Expect.stringContains body "BASE:Plain" "the one registered layout"
+
+            Expect.equal
+                (PublicLayouts.withDefault None single |> Result.map PublicLayouts.registered)
+                (Ok [ LayoutName "base" ])
+                "binding the implicit default registers no extra name"
+
+        testCase "PublicLayouts.withDefault refuses two layouts with no declaration, and an unregistered default"
+        <| fun _ ->
+            Expect.equal
+                (PublicLayouts.withDefault None twoLayouts |> Result.map ignore)
+                (Error(LayoutRefusal.NoDefaultLayout [ LayoutName "alpha"; LayoutName "zeta" ]))
+                "two layouts, no declaration → refused naming both"
+
+            Expect.equal
+                (PublicLayouts.withDefault (Some(LayoutName "ghost")) twoLayouts
+                 |> Result.map ignore)
+                (Error(
+                    LayoutRefusal.UnknownDefaultLayout(LayoutName "ghost", [ LayoutName "alpha"; LayoutName "zeta" ])
+                ))
+                "a declared default nobody registered → refused"
+
+            Expect.equal
+                (PublicLayouts.resolve twoLayouts (LayoutName "ghost") |> Result.map ignore)
+                (Error(LayoutRefusal.UnknownLayout(LayoutName "ghost", [ LayoutName "alpha"; LayoutName "zeta" ])))
+                "an unknown name resolves to a typed refusal"
+
+            Expect.equal
+                (PublicLayouts.resolve Map.empty PublicLayouts.unnamed |> Result.map ignore)
+                (Error LayoutRefusal.NoLayoutRegistered)
+                "no layouts at all"
+
+        testCase "compose refuses two layouts with no declared default, naming them"
+        <| fun _ ->
+            let baseApp =
+                ServerApp.empty
+                |> ServerApp.withConfig {
+                    ServerConfig.defaults with
+                        PublicRendering = EnabledPublicRendering(mkContentRoot ())
+                }
+
+            let raised =
+                try
+                    baseApp |> PublicRenderingCompose.withPublicRendering zetaThenAlpha |> ignore
+                    None
+                with :? LayoutRefusedException as ex ->
+                    Some ex.Message
+
+            Expect.isSome raised "the app does not compose"
+            Expect.stringContains raised.Value "alpha, zeta" "the refusal names the registered layouts"
+            Expect.stringContains raised.Value "withDefaultLayout" "the refusal names the remedy"
+
+            let composed =
+                baseApp
+                |> PublicRenderingCompose.withPublicRendering (
+                    zetaThenAlpha
+                    >> PublicRenderingCompose.PublicRenderingServerApp.withDefaultLayout (LayoutName "zeta")
+                )
+
+            Expect.isTrue
+                (composed.ComposedCompanions |> List.contains "ToolUp.PublicRendering")
+                "a declared default composes"
+
+        testCase "compose refuses a declared default or a search layout nobody registered"
+        <| fun _ ->
+            let baseApp =
+                ServerApp.empty
+                |> ServerApp.withConfig {
+                    ServerConfig.defaults with
+                        PublicRendering = EnabledPublicRendering(mkContentRoot ())
+                }
+
+            let refuses configure =
+                try
+                    baseApp |> PublicRenderingCompose.withPublicRendering configure |> ignore
+                    None
+                with :? LayoutRefusedException as ex ->
+                    Some ex.Message
+
+            let badDefault =
+                refuses (
+                    zetaThenAlpha
+                    >> PublicRenderingCompose.PublicRenderingServerApp.withDefaultLayout (LayoutName "ghost")
+                )
+
+            Expect.isSome badDefault "an unregistered default is refused"
+            Expect.stringContains badDefault.Value "ghost" "naming it"
+
+            let badSearch =
+                refuses (
+                    zetaThenAlpha
+                    >> PublicRenderingCompose.PublicRenderingServerApp.withDefaultLayout (LayoutName "zeta")
+                    >> PublicRenderingCompose.PublicRenderingServerApp.withSemanticSearch (
+                        SemanticSearchConfig.create []
+                        |> SemanticSearchConfig.withLayout (LayoutName "ghost")
+                    )
+                )
+
+            Expect.isSome badSearch "a search layout nobody registered is refused at compose"
+            Expect.stringContains badSearch.Value "ghost" "naming it"
+
+        testCase "the startup validator refuses a markdown page naming an unregistered layout"
+        <| fun _ ->
+            let dir = mkFixtureDir ()
+            seedLayoutCases dir
+
+            let composed =
+                ServerApp.empty
+                |> ServerApp.withConfig {
+                    ServerConfig.defaults with
+                        PublicRendering = EnabledPublicRendering(ContentRoot dir)
+                }
+                |> PublicRenderingCompose.withPublicRendering (
+                    zetaThenAlpha
+                    >> PublicRenderingCompose.PublicRenderingServerApp.withDefaultLayout (LayoutName "zeta")
+                )
+
+            let validator =
+                composed.ConfigValidators
+                |> List.find (fun v -> v.Name = "public-rendering-layout-name-resolved")
+
+            match validator.Validate() |> Async.RunSynchronously with
+            | ConfigValidation.Error message ->
+                Expect.stringContains message "page 'ghosted'" "names the page"
+                Expect.stringContains message "layout 'ghost'" "names the layout"
+                Expect.isFalse (message.Contains "page 'plain'") "an unnamed page takes the default"
+            | other -> failtestf "expected the validator to refuse; got %A" other
+
+        testCase "static export frames an unnamed page in the declared default"
+        <| fun _ ->
+            let dir = mkFixtureDir ()
+            writeFile (Path.Combine(dir, "pages/plain.md")) "---\ntitle: Plain\n---\n\nBody."
+
+            let app =
+                PublicRenderingCompose.PublicRenderingServerApp.create ()
+                |> PublicRenderingCompose.PublicRenderingServerApp.withConfig {
+                    ServerConfig.defaults with
+                        PublicRendering = EnabledPublicRendering(ContentRoot dir)
+                }
+                |> zetaThenAlpha
+                |> PublicRenderingCompose.PublicRenderingServerApp.withDefaultLayout (LayoutName "zeta")
+
+            let outDir = mkFixtureDir ()
+
+            let count =
+                PublicRenderingCompose.PublicRenderingServerApp.exportStatic outDir app
+                |> Async.RunSynchronously
+
+            Expect.equal count 1 "the page is written"
+
+            Expect.stringContains
+                (File.ReadAllText(Path.Combine(outDir, "plain", "index.html")))
+                "ZETA:Plain"
+                "in the declared default's frame"
+
+        testCase "the narrative publisher refuses an unregistered layout hint and leaves an omitted one unnamed"
+        <| fun _ ->
+            let blob =
+                ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.InMemoryBlobStorage()
+                :> ToolUp.Platform.BlobStorage.IBlobStorage
+
+            let dos =
+                ToolUp.Platform.DataObjectStore.DataObjectStore(blob) :> ToolUp.Platform.IDataObjectStore
+
+            let registry = ToolUp.Platform.EntityStore.EntityRegistry()
+            registry.Register<PublicPageEntity>(PublicPageEntity.registration)
+
+            let store =
+                ToolUp.Platform.EntityStore.BlobEntityStore(dos, blob, registry, None)
+                :> ToolUp.Platform.IEntityStore.IEntityStore
+
+            let publisher =
+                PublicRenderingNarrativePagePublisher.create
+                    store
+                    [ LayoutName "alpha"; LayoutName "zeta" ]
+                    None
+                    NarrativePublishGuardrails.defaults
+                    None
+
+            let publishWith hint =
+                publisher.PublishAsync(
+                    ToolUp.Platform.EntityTypes.EntityPrincipal.ofPrincipal "author",
+                    "story",
+                    None,
+                    None,
+                    hint,
+                    OverwriteExisting,
+                    Narrative.create "Story"
+                )
+                |> Async.RunSynchronously
+
+            match publishWith (Some "ghost") with
+            | PublishFailed reason -> Expect.stringContains reason "ghost" "the refusal names the layout"
+            | other -> failtestf "an unregistered hint must be refused; got %A" other
+
+            match publishWith None with
+            | PublishSucceeded slug ->
+                let stored =
+                    store.Get<PublicPageEntity>(PublicPageEntity.PublicScope, PublicPageEntity.EntityTypeName, slug)
+                    |> Async.RunSynchronously
+
+                match stored with
+                | Ok entity ->
+                    Expect.equal entity.Page.Layout PublicLayouts.unnamed "names no layout: renders under the default"
+                | Error err -> failtestf "expected the page stored; got %A" err
+            | other -> failtestf "an omitted hint publishes; got %A" other
+    ]
+
 let tests =
     testList "PublicRendering" [
         contractTests
@@ -2383,4 +2759,5 @@ let tests =
         hreflang154Tests
         ragCoHostTests
         spaFallbackPrecedenceTests
+        layoutResolution1039Tests
     ]

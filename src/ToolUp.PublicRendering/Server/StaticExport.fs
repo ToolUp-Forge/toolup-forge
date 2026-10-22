@@ -191,17 +191,6 @@ module StaticHostConfig =
         | None -> ""
 
 module StaticExport =
-    /// Layout resolution mirrors `PublicPageHandler.resolveLayout`:
-    /// try the page's `Layout` name; fall back to the first-registered
-    /// layout when the name is unknown.
-    let private resolveLayout
-        (layouts: Map<LayoutName, PublicPage -> XmlNode>)
-        (page: PublicPage)
-        : (PublicPage -> XmlNode) option =
-        match Map.tryFind page.Layout layouts with
-        | Some f -> Some f
-        | None -> layouts |> Map.toSeq |> Seq.tryHead |> Option.map snd
-
     /// Slug → relative output path. The root `index` slug writes to
     /// `<root>/index.html`; every other slug writes to
     /// `<root>/<slug>/index.html`. Directory-index shape works
@@ -257,18 +246,20 @@ module StaticExport =
         (troot: string)
         (sharding: SitemapGenerator.SitemapShardingOptions)
         (universeOptions: SitemapGenerator.SitemapUniverseOptions)
-        (logger: ILogger)
         : Async<int> =
         async {
             Directory.CreateDirectory troot |> ignore
             let mutable rendered = 0
-            let mutable skipped = 0
 
+            // Phase 1039 — layouts resolve through the one shared resolver.
+            // The file-backed set was checked before anything was written
+            // (`runWith`); a content-source page whose layout is refused
+            // stops the export here rather than land in another frame.
             let writePage (page: PublicPage) (slug: string) =
                 let localised = withLocale locale page
 
-                match resolveLayout layouts localised with
-                | Some layout ->
+                match PublicLayouts.resolvePage layouts localised with
+                | Ok layout ->
                     // Phase 111 — inject any per-request head metadata so
                     // the exported document matches what the live handler
                     // serves byte-for-byte.
@@ -284,9 +275,7 @@ module StaticExport =
 
                     File.WriteAllText(full, html)
                     rendered <- rendered + 1
-                | None ->
-                    logger.Warn(sprintf "StaticExport: no layout registered for '%s'" slug)
-                    skipped <- skipped + 1
+                | Error refusal -> raise (LayoutRefusedException [ sprintf "page '%s'" slug, refusal ])
 
             for page in pages do
                 writePage page (Slug.value page.Slug)
@@ -342,9 +331,6 @@ module StaticExport =
                         Path.Combine(troot, sprintf "sitemap-%s.xml" name),
                         SitemapGenerator.generateUrlSetFrom publicBaseUrl shardEntries
                     )
-
-            if skipped > 0 then
-                logger.Warn(sprintf "StaticExport: skipped %d page(s) with no registered layout in '%s'" skipped troot)
 
             return rendered
         }
@@ -441,11 +427,6 @@ module StaticExport =
                 return 0
 
             | EnabledPublicRendering root ->
-                if Directory.Exists outputDir then
-                    Directory.Delete(outputDir, recursive = true)
-
-                Directory.CreateDirectory outputDir |> ignore
-
                 // Same MarkdownContentLoader + PublicContentApiImpl the
                 // runtime path builds. `hotReload = false` — no point
                 // watching files for a one-shot build pass.
@@ -471,6 +452,18 @@ module StaticExport =
                 // now rides the seam, so the ungated set never enters this
                 // scope at all and cannot be reached by a later edit.
                 let! pages = api.ListPagesPublic(exportNow, "")
+
+                // Phase 1039 — every page's layout resolves, or the export
+                // refuses before it touches `outputDir`: a page naming an
+                // unregistered layout is never written in another frame.
+                match PublicLayouts.refusedPages layouts pages with
+                | [] -> ()
+                | refused -> raise (LayoutRefusedException refused)
+
+                if Directory.Exists outputDir then
+                    Directory.Delete(outputDir, recursive = true)
+
+                Directory.CreateDirectory outputDir |> ignore
 
                 let! dynamicSlugs = ContentSource.enumerateAll contentSources
 
@@ -507,7 +500,6 @@ module StaticExport =
                             troot
                             options.SitemapSharding
                             options.SitemapUniverse
-                            logger
 
                     total <- total + n
 
@@ -538,7 +530,12 @@ module StaticExport =
     /// Back-compat single-tree export — `runWith` adds per-locale trees,
     /// host-config emission, and the link check.
     ///
-    /// Returns the count of pages successfully written.
+    /// Phase 1039 — raises `LayoutRefusedException` naming every page whose
+    /// layout is refused (an unregistered name, or no default among several
+    /// layouts) before writing anything; nothing is rendered in another
+    /// layout's frame.
+    ///
+    /// Returns the count of pages written.
     let run
         (config: ServerConfig)
         (layouts: Map<LayoutName, PublicPage -> XmlNode>)

@@ -2643,6 +2643,8 @@ let private registeredTests =
         AuditCallSiteFireAndForgetTests.tests
         // Phase 1046 - the client calls the file API only where the server mounts it.
         FileApiMountTests.tests
+        // Phase 1047 - the event streams authenticate whichever sign-in the user took.
+        StreamAuthBothSignInsTests.tests
         // Phase 1042 - a module registers a delivery-completed callback.
         DeliveryCompletedTests.tests
     ]
@@ -2704,6 +2706,9 @@ let private laneDeclaration: TestLaneFilter.LaneDeclaration = {
         ConfigValidatorAggregatorTests.tests
         // 10.0 s / 9 cases — a 10 s cancel-law defect probe.
         IExternalComputeDispatcherContract.selfTests
+        // 20.7 s / 11 cases — four cases outlive a 4 s server-token lifetime
+        // (Phase 1047, measured 2026-10-21); slowest case 4.9 s.
+        StreamAuthBothSignInsTests.tests
     ]
     // Deliberately EMPTY, and that is a declaration rather than an
     // omission. `pure` means "touches no filesystem, process, socket or

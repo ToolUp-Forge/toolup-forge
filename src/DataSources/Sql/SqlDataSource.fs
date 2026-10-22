@@ -215,6 +215,78 @@ type private SqlDataSourceImpl(kind: string, secretStore: ISecretStore option) =
                     return Ok(List.ofSeq rows)
         })
 
+    /// The catalogue's description of a bare table name.
+    let catalogueSchema (ctx: DataSourceCallContext) (table: string) = async {
+        let! rows =
+            readCatalogue
+                ctx
+                $"%s{kind} GetSchema"
+                (fun settings -> SqlDialect.columnsSql settings.Backend settings.Schema table)
+                (fun reader ->
+                    let name = reader.GetValue 0 |> Csv.renderValue
+                    let nativeType = reader.GetValue 1 |> Csv.renderValue
+                    let nullToken = reader.GetValue 2 |> Csv.renderValue
+                    name, nativeType, nullToken)
+
+        match rows with
+        | Error err -> return Error err
+        | Ok rows ->
+            // The backend is needed to interpret the nullability
+            // token, and re-reading settings here is cheaper than
+            // threading it out of the catalogue helper.
+            match readSettings ctx.Config.ConnectionScope with
+            | Error err -> return Error err
+            | Ok settings ->
+                let columns =
+                    rows
+                    |> List.map (fun (name, nativeType, nullToken) ->
+                        TypeMap.column name nativeType (SqlDialect.nullableFromToken settings.Backend nullToken))
+
+                return Ok(TypeMap.schema table columns)
+    }
+
+
+    /// Phase 1041 — the schema of a statement's result set, read without
+    /// fetching rows (`CommandBehavior.SchemaOnly`). A column whose
+    /// nullability the provider cannot say is recorded as nullable.
+    let describeStatement (ctx: DataSourceCallContext) (statement: string) =
+        Errors.guard $"%s{kind} GetSchema" (fun () -> async {
+            match! prepare ctx with
+            | Error err -> return Error err
+            | Ok(settings, connection) ->
+                use connection = connection
+                let! ct = Async.CancellationToken
+                use command = newCommand settings connection statement
+
+                try
+                    use! reader = command.ExecuteReaderAsync(CommandBehavior.SchemaOnly, ct) |> Async.AwaitTask
+
+                    let columns =
+                        reader.GetColumnSchema()
+                        |> Seq.map (fun column ->
+                            let nativeType =
+                                if isNull column.DataTypeName then
+                                    ""
+                                else
+                                    column.DataTypeName
+
+                            let nullable =
+                                if column.AllowDBNull.HasValue then
+                                    column.AllowDBNull.Value
+                                else
+                                    true
+
+                            TypeMap.column column.ColumnName nativeType nullable)
+
+                    return Ok(TypeMap.schema statement columns)
+                with ProviderException(ex: DbException) ->
+                    return
+                        Error(
+                            SchemaMismatch
+                                $"%s{kind} (%s{SqlDialect.backendName settings.Backend}) could not describe the statement: %s{ex.Message}"
+                        )
+        })
+
     // Phase 834 — `Query` emits RFC 4180 CSV; declared, not implied.
     interface IDeclaresPayloadFormat with
         member _.PayloadFormat = PayloadFormat.Csv
@@ -244,34 +316,16 @@ type private SqlDataSourceImpl(kind: string, secretStore: ISecretStore option) =
                 (fun settings -> SqlDialect.listTablesSql settings.Backend settings.Schema)
                 (fun reader -> reader.GetValue 0 |> Csv.renderValue)
 
-        member _.GetSchema(ctx, table) = async {
-            let! rows =
-                readCatalogue
-                    ctx
-                    $"%s{kind} GetSchema"
-                    (fun settings -> SqlDialect.columnsSql settings.Backend settings.Schema table)
-                    (fun reader ->
-                        let name = reader.GetValue 0 |> Csv.renderValue
-                        let nativeType = reader.GetValue 1 |> Csv.renderValue
-                        let nullToken = reader.GetValue 2 |> Csv.renderValue
-                        name, nativeType, nullToken)
-
-            match rows with
-            | Error err -> return Error err
-            | Ok rows ->
-                // The backend is needed to interpret the nullability
-                // token, and re-reading settings here is cheaper than
-                // threading it out of the catalogue helper.
-                match readSettings ctx.Config.ConnectionScope with
-                | Error err -> return Error err
-                | Ok settings ->
-                    let columns =
-                        rows
-                        |> List.map (fun (name, nativeType, nullToken) ->
-                            TypeMap.column name nativeType (SqlDialect.nullableFromToken settings.Backend nullToken))
-
-                    return Ok(TypeMap.schema table columns)
-        }
+        // Phase 1041 — a statement-shaped "table" (what `Query` passes
+        // through verbatim) is described by its result set, read with
+        // `CommandBehavior.SchemaOnly`, so a statement ingested under a
+        // caller label keeps its schema record and drift detection. A bare
+        // identifier reads the catalogue exactly as before.
+        member _.GetSchema(ctx, table) =
+            if not (SqlDialect.isSafeIdentifier table) then
+                describeStatement ctx table
+            else
+                catalogueSchema ctx table
 
         member _.Query(ctx, sql) =
             Errors.guard $"%s{kind} Query" (fun () -> async {

@@ -80,6 +80,36 @@ let private downloadAll<'T> (storage: IBlobStorage) (blobNames: string list) : A
 /// Mirrors the `ResultObjectId.make` pattern from Phase 8.
 let private resultObjectId (sourceId: DataSourceId) (table: string) = $"_dataingestion__{sourceId}__{table}"
 
+/// Phase 1041 — the longest result object id this ingestor derives: one
+/// path component on a file-backed or hierarchical blob store.
+[<Literal>]
+let MaxResultNameLength = 255
+
+/// Phase 1041 — refuse, before anything is queried, an ingestion whose
+/// derived result name is past the path-component limit. Unlabelled, the
+/// name is the table — for a statement-shaped table, the statement — so the
+/// refusal names the caller-label option; without it the run would fail
+/// only at the payload save, after the source had been queried.
+let private resultNameRefusal (sourceId: DataSourceId) (table: string) (label: IngestionLabel option) =
+    let objectId = resultObjectId sourceId table
+
+    if objectId.Length <= MaxResultNameLength then
+        None
+    else
+        match label with
+        | None ->
+            let preview = objectId.Substring(0, 60)
+
+            Some(
+                SchemaMismatch
+                    $"ingesting '{sourceId}' would name its result '{preview}...' ({objectId.Length} characters), past the {MaxResultNameLength}-character path-component limit. A statement used as the table names its result by a caller label: pass an IngestionLabel to RunIngestion(scopeId, sourceId, table, label), or a 'label' in a scheduled pull's payload. Nothing was queried or persisted"
+            )
+        | Some label ->
+            Some(
+                SchemaMismatch
+                    $"the caller label '{label.Value}' on source '{sourceId}' derives a result name of {objectId.Length} characters, past the {MaxResultNameLength}-character path-component limit; shorten the label or the source id. Nothing was queried or persisted"
+            )
+
 /// Phase 834 — the payload formats this ingestor stores. It holds payload
 /// bytes opaquely, so "handles" means "a format this SDK names and a
 /// reader can be told about": `Csv` and `Json`. `Other` is refused —
@@ -288,10 +318,21 @@ type DataIngestor
         ) =
         DataIngestor(configStore, secretStore, objectStore, eventStore, connectors, storage, logger, [])
 
-    interface IDataIngestor with
-        member _.RunIngestion(scopeId, sourceId, table) = async {
+    // Phase 1041 — `statement` is what the connector runs, and reaches
+    // `GetSchema` / `Query` untouched; `table` is what the ingestion is
+    // filed under: the caller label when one is given, else the statement,
+    // which is exactly the pre-1041 naming.
+    interface ICallerLabelledIngestor with
+        member _.RunLabelledIngestion(scopeId, sourceId, statement, label) = async {
             let runId = Guid.NewGuid()
             let startedAt = DateTime.UtcNow
+
+            let table =
+                match label with
+                | Some label -> label.Value
+                | None -> statement
+
+            let nameRefusal = resultNameRefusal sourceId table label
 
             // 1. Resolve config
             match! configStore.Get(scopeId, sourceId) with
@@ -309,6 +350,14 @@ type DataIngestor
                 match Map.tryFind config.Kind connectorByKind with
                 | None ->
                     let err = UnexpectedFailure $"No IDataSource registered for Kind '{config.Kind}'"
+                    let run = runFailed scopeId sourceId table runId startedAt err None
+                    do! recordRun run
+                    do! emitEvent scopeId RunFailedEventType run
+                    return Error err
+                // 2a. The result name (Phase 1041): one past the path
+                // limit is refused here, before any probe or query.
+                | Some _ when nameRefusal.IsSome ->
+                    let err = nameRefusal.Value
                     let run = runFailed scopeId sourceId table runId startedAt err None
                     do! recordRun run
                     do! emitEvent scopeId RunFailedEventType run
@@ -376,12 +425,12 @@ type DataIngestor
                         // 5. Fetch the schema (Phase 832) — between the probe
                         // and the query; persisted only once the query has
                         // produced a payload to attach it to.
-                        let! observedSchema = fetchSchema connector ctx table
+                        let! observedSchema = fetchSchema connector ctx statement
 
                         // 6. Run the query. Connector dialect varies — for
                         // in-memory the SQL string is the table name; for
                         // BigQuery / Redshift it is real SQL.
-                        match! query ctx table with
+                        match! query ctx statement with
                         | Error err ->
                             let run = runFailed scopeId sourceId table runId startedAt err None
                             do! recordRun run
@@ -463,6 +512,10 @@ type DataIngestor
                                 do! emitEvent scopeId RunCompletedEventType run
                                 return Ok run
         }
+
+    interface IDataIngestor with
+        member this.RunIngestion(scopeId, sourceId, table) =
+            (this :> ICallerLabelledIngestor).RunLabelledIngestion(scopeId, sourceId, table, None)
 
         member _.GetRecentRuns(scopeId, sourceId, count) = async {
             let! names = storage.List(platformContainer, runsPrefix scopeId sourceId)

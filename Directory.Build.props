@@ -653,7 +653,65 @@
       recipe: `docs/migrations/1029-one-declared-principal-shape.md`.
     -->
     <!--
-      0.31.0 (draft) - advances MINOR over the tagged 0.30.0. Phase 1040: a
+      Next draft 0.31.0 (v0.30.0 is tagged; cut by the version act), BREAKING:
+      Phase 1046 - the client calls the file API only where the server
+      mounts it. `PlatformInfo` (Platform.Core) gains
+      `FileManagementMounted: bool`, which retypes the record's constructor
+      (FS0764 for a full literal); the server advertises the mount on the
+      always-on PlatformInfo route and the client shell gains the
+      `PlatformInfoLoaded` Msg case. Behaviour: the boot snapshot prefetch,
+      the epoch seed and every SessionEpoch check run only where the server
+      mounts FileManagementApi.
+    -->
+    <!--
+      Rides the same draft, BREAKING: Phase 1039 - an
+      unknown page layout name is refused, not silently replaced by the
+      alphabetically first layout. `PublicRenderingServerApp`
+      (PublicRendering) gains `DefaultLayout: LayoutName option`, which
+      retypes the record's constructor (FS0764 for a full literal; `create` /
+      `createFrom` set it to `None`). Additive (PublicRendering):
+      `LayoutRefusal` and its module (`describe`, `describeAll`),
+      `LayoutRefusedException`, the `PublicLayouts` resolver (`unnamed`,
+      `registered`, `withDefault`, `resolve`, `resolvePage`, `refusedPages`)
+      and `PublicRenderingServerApp.withDefaultLayout`. Behaviour: compose
+      raises `LayoutRefusedException` for two or more layouts with no
+      declared default, an unregistered default, an unregistered
+      `SemanticSearchConfig.Layout`, or a satellite site with several
+      layouts and no default; a startup validator
+      (`public-rendering-layout-name-resolved`) refuses a markdown page
+      naming an unregistered layout; at request time the page, preview and
+      search handlers serve a 500 naming the refusal; static export raises
+      before writing; a markdown page with no `layout:` key now names none
+      (`LayoutName ""`, was `"page"`); the narrative publisher refuses an
+      unregistered layout hint and writes `LayoutName ""` for no hint. An app
+      with exactly one layout is unchanged. Migration recipe:
+      `docs/migrations/1039-unknown-layout-refused.md`.
+    -->
+    <!--
+      Rides the same draft, additive: Phase 1041 lets an ingestion name its result by a caller label instead
+      of by the statement it runs. Additive (Platform.Server): `IngestionLabel`
+      (`tryCreate`, `value`, `describeError`, `MaxLength`),
+      `IngestionLabelError`, `ICallerLabelledIngestor`, the
+      `IDataIngestor.RunIngestion(scopeId, sourceId, table, label)` extension
+      overload, `DataIngestor.MaxResultNameLength` and
+      `DataIngestionJobHandler.payloadForLabelled`. Additive (DataSources.Synapse):
+      `SynapseCatalogue.describeStatementSql`. No member is removed or
+      retyped. Behaviour: the three-argument form names its result exactly as
+      before; an unlabelled run whose payload name would pass 255 characters
+      is refused before the source is queried (it used to fail at the save);
+      the Sql and Synapse connectors' `GetSchema` now describe a
+      statement-shaped table instead of refusing it. Migration recipe:
+      `docs/migrations/1041-ingestion-caller-label.md`.
+    -->
+    <!--
+      Rides the same draft, no surface: Phase 1047 - the event streams
+      authenticate whichever sign-in the user took. The OIDC server-rendered
+      sign-in's session cookie expires with its token and the SPA replaces a
+      server-written cookie through `/api/auth/session`. Migration recipe:
+      `docs/migrations/1047-stream-auth-both-sign-ins.md`.
+    -->
+    <!--
+      Rides the same 0.31.0 draft, BREAKING: Phase 1040: a
       fact-table run can declare the method that produced it.
       `FactTableRunOptions` (Facts.Server) gains `Method: DeclaredMethod
       option`, a record widening that retypes its constructor (FS0764 for a

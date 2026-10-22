@@ -1111,6 +1111,12 @@ type AuthUIMode =
 /// EventSource-handshake path where no server callback exists, OR for a
 /// SPA-without-server-session that accepts the XSS exposure and ships a
 /// strict CSP (Phase 9j / Phase 129 header baseline) as the mitigation.
+/// Phase 1047: the server-rendered sign-in (`OidcSsrSignIn`) writes the same
+/// cookie name `HttpOnly`, which a browser never lets script overwrite. When
+/// the client's write does not land, it sends the token to
+/// `POST /api/auth/session` instead (mounted by that sign-in), so the event
+/// streams authenticate on the client's token rather than on a server token
+/// that expires first. This path therefore needs no change beside that sign-in.
 ///
 /// `ServerSetHttpOnlyCookie`: the production-shape BFF path. On token
 /// acquisition the client POSTs the JWT once to the server's
@@ -1120,7 +1126,8 @@ type AuthUIMode =
 /// transient in-memory JS state (lost on reload, re-acquired via the
 /// bridge), and the durable session credential is the HttpOnly cookie
 /// the browser sends automatically for SSE + same-origin XHR. Requires
-/// `ServerConfig.AuthCookieIssuance = EnabledAuthCookieIssuance` and an
+/// `ServerConfig.AuthCookieIssuance = EnabledAuthCookieIssuance` (or the
+/// server-rendered sign-in, which mounts the same endpoint; Phase 1047) and an
 /// `IAuthProvider` configured `TokenLocation = BearerOrCookie
 /// "toolup-auth-token"`. Pairs with the `IAuthBridge` refresh model
 /// (Clerk / MSAL / Auth0); the localStorage-based OidcClient PKCE

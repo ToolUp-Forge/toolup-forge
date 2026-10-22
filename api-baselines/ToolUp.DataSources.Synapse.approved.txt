@@ -17,6 +17,7 @@ ToolUp.DataSources.Synapse.SynapseAuth+Tags.AadToken : System.Int32 (literal)
 ToolUp.DataSources.Synapse.SynapseAuth+Tags.SqlLogin : System.Int32 (literal)
 ToolUp.DataSources.Synapse.SynapseCatalogue (class)
 ToolUp.DataSources.Synapse.SynapseCatalogue.columnsSql(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]
+ToolUp.DataSources.Synapse.SynapseCatalogue.describeStatementSql : System.String (literal)
 ToolUp.DataSources.Synapse.SynapseCatalogue.listTablesSql(System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]
 ToolUp.DataSources.Synapse.SynapseCatalogue.nullableFromToken(System.String) : System.Boolean
 ToolUp.DataSources.Synapse.SynapseCatalogue.selectAllSql(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, ToolUp.Platform.IngestionError]
