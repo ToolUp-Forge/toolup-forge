@@ -376,6 +376,51 @@ point *at* the artifact — the fact never inlines it. Likewise a `Series`
 value references a data-object *version* rather than inlining its points (a
 fact is an assertion *about* data, not a copy of it).
 
+## The method a derived table's run declares (Phase 1040)
+
+A declared fact table ([fact-tables.md](fact-tables.md)) writes every cell as a fact whose `Method`
+is the **table's** lineage — `Computed(producingOperation, "v<schemaVersion>", tableId)` — so the
+table's facts never merge with another producer's. When the table is *derived* (a run computes its
+rows from uploaded inputs by some derivation), the run can also say **which** derivation, and at
+which version, by declaring a method when it opens:
+
+```fsharp skip=fragment
+let options =
+    FactTableRunOptions.none
+    |> FactTableRunOptions.withInputs [ "sha256:" + fileHash ]
+    |> FactTableRunOptions.withMethod (DeclaredMethod.create "trade.derive" "v1")
+
+let! run = writer.OpenRun(scopeId, "trade-daily", options = options)
+```
+
+Every fact the run writes, absences included, then names that method in its evidence:
+`DeclaredMethod.ofEvidence fact.Evidence` is `Some { MethodId = "trade.derive"; MethodVersion = "v1" }`,
+and `DeclaredMethod.describe` renders it for a citation (`trade.derive v1`). A fact's evidence now
+names the method as well as the inputs (`InputHash.named`) — what it was computed *from*, and *how*.
+
+**The method is evidence, not identity.** It is stamped as one token, `method:<id>@<version>`, among
+the fact's input hashes. That puts it in the fact's **content address** but not in its **lineage
+key** (L3), which is exactly the pair of properties a re-derivation needs:
+
+- a run by another method (or another version of one) writes *new* facts — never an idempotent skip
+  that would leave the old method's name on an unchanged value;
+- those facts stay in the table's one lineage, so they **supersede** what the earlier method wrote
+  for the same subject and period, exactly as a same-method run does. Re-deriving a table never
+  leaves two current facts behind.
+
+That is the difference from D19's competing methods above: two *producers* computing one
+`(subject, metric, period)` are two lineages; two *derivations of one table* are one lineage whose
+facts say which derivation wrote them. A run that declares no method writes byte-for-byte what it
+wrote before (GP 11), and its facts name none. The token is never in the `InputHash` form, so
+`InputHash.named` never reads it as an input.
+
+Both writers honour it: `DefaultFactTableWriter` over any `IFactStore`, and the delegate writer,
+which keeps the method beside the run (`_delegate-tables/methods/<runId>.json`, only when declared)
+and stamps every row it mints under that run. A method whose id or version is empty, contains
+whitespace or a control character, or whose id contains `@`, is refused at open with
+`FactTableRunOptionsRefused`. The laws are in `IFactTableWriterContract.provenanceTests`, bound to
+every implementer. Migration: [`1040-fact-table-run-method.md`](../migrations/1040-fact-table-run-method.md).
+
 ## Disclosure at birth
 
 Every fact carries a `Disclosure` from its first assertion (plan D14).

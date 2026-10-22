@@ -38,6 +38,12 @@ open ToolUp.Facts
 // withdrawn per origin. `decoratorTests` binds to every decorator and pins
 // that the provenance it is handed reaches the writer it decorates
 // untouched, an omitted one staying omitted.
+//
+// **So is the declared method (Phase 1040)**, in the same pack and so bound
+// to the same implementers: a run that declares a method names it on every
+// fact it writes, absences included; a run that declares none writes exactly
+// what an unmarked run writes; and a run by another method supersedes the
+// table's facts as one table — the method is evidence, never identity.
 
 /// What a binding hands the pack.
 type FactTableWriterFixture = {
@@ -849,6 +855,17 @@ let provenanceTests (name: string) (factory: FactTableWriterFactory) =
         ok "write" (f.Writer.WriteRows(scope, run.RunId, rows)) |> ignore
         ok "commit" (f.Writer.Commit(scope, run.RunId))
 
+    let commitWithMethod (f: FactTableWriterFixture) scope tableId (method: DeclaredMethod) (rows: FactTableRow list) =
+        let options = FactTableRunOptions.none |> FactTableRunOptions.withMethod method
+        let run = ok "open" (f.Writer.OpenRun(scope, tableId, options = options))
+        ok "write" (f.Writer.WriteRows(scope, run.RunId, rows)) |> ignore
+        ok "commit" (f.Writer.Commit(scope, run.RunId))
+
+    let oneCurrent (f: FactTableWriterFixture) scope metricId path =
+        match cellFacts f.Facts scope metricId path with
+        | [ fact ] -> fact
+        | other -> failtestf "expected one current %s fact at %A, got %d" metricId path other.Length
+
     testList $"IFactTableWriter run provenance — {name}" [
 
         test "a computed run writes exactly what an unmarked run writes (GP 11)" {
@@ -973,6 +990,142 @@ let provenanceTests (name: string) (factory: FactTableWriterFactory) =
             let b1 = factAt "revenue" [ "beta"; "b1" ]
             Expect.equal b1.Value (Absent "withdrawn: beta left") "a withdrawn origin's removal names the withdrawal"
             Expect.equal b1.Method (Imported "cert:beta") "in the origin's own lineage"
+        }
+
+        // ── The declared method (Phase 1040) ─────────────────────────
+
+        test "a run that declares a method names it on every fact it writes, absences included" {
+            let table =
+                skuTable "sku-sales" FactTableHistoryMode.Replace FactTableRequirement.Required
+
+            let f = fixture [ table ]
+            let derive = DeclaredMethod.create "sales.derive" "v1"
+
+            let first =
+                commitWithMethod f f.ScopeA table.Id derive [ row "acme" "a1" 10m "core"; row "zeta" "z1" 5m "edge" ]
+
+            Expect.equal first.RowCount 2 "the run committed both rows"
+
+            for metricId in [ "revenue"; "segment" ] do
+                for path in [ [ "acme"; "a1" ]; [ "zeta"; "z1" ] ] do
+                    let fact = oneCurrent f f.ScopeA metricId path
+                    Expect.equal (DeclaredMethod.ofEvidence fact.Evidence) (Some derive) "the fact names the method"
+
+                    Expect.equal
+                        fact.Method
+                        (Computed("sales-rollup", "v1", table.Id))
+                        "and stays in the table's own lineage"
+
+            // zeta is dropped: its withdrawal is written by the run too.
+            commitWithMethod f f.ScopeA table.Id derive [ row "acme" "a1" 10m "core" ]
+            |> ignore
+
+            let z1 = oneCurrent f f.ScopeA "revenue" [ "zeta"; "z1" ]
+
+            match z1.Value with
+            | Absent _ -> ()
+            | other -> failtestf "expected zeta withdrawn, got %A" other
+
+            Expect.equal (DeclaredMethod.ofEvidence z1.Evidence) (Some derive) "the absence names the method"
+            Expect.isEmpty (InputHash.named z1.Evidence) "and the method is never read as an input"
+        }
+
+        test "a run that declares no method writes exactly what an unmarked run writes, and names none (GP 11)" {
+            let table =
+                skuTable "sku-sales" FactTableHistoryMode.Replace FactTableRequirement.Required
+
+            let f = fixture [ table ]
+            let rows = [ row "acme" "a1" 10m "core"; row "zeta" "z1" 5m "edge" ]
+
+            commitWith f f.ScopeA table.Id None rows |> ignore
+
+            let opened =
+                ok "open" (f.Writer.OpenRun(f.ScopeB, table.Id, options = FactTableRunOptions.none))
+
+            ok "write" (f.Writer.WriteRows(f.ScopeB, opened.RunId, rows)) |> ignore
+            ok "commit" (f.Writer.Commit(f.ScopeB, opened.RunId)) |> ignore
+
+            let written (scope: string) = [
+                for metricId in [ "revenue"; "segment" ] do
+                    for path in [ [ "acme"; "a1" ]; [ "zeta"; "z1" ] ] do
+                        // The trigger names the run, whose id differs by construction.
+                        for fact in cellFacts f.Facts scope metricId path ->
+                            fact.FactId, fact.Method, fact.Evidence.ResultRef, fact.Evidence.InputHashes
+            ]
+
+            let unmarked = written f.ScopeA
+            Expect.hasLength unmarked 4 "one fact per cell (the comparison below is not vacuous)"
+            Expect.equal (written f.ScopeB) unmarked "fact for fact, id for id, evidence for evidence"
+
+            for _, _, _, inputHashes in unmarked do
+                Expect.isNone
+                    (DeclaredMethod.ofEvidence {
+                        ResultRef = None
+                        InputHashes = inputHashes
+                        TriggerRef = None
+                    })
+                    "a run that declared none names none"
+        }
+
+        test "a run by another method supersedes the table's facts as one table: the method is evidence, not identity" {
+            let table =
+                skuTable "sku-sales" FactTableHistoryMode.Replace FactTableRequirement.Required
+
+            let f = fixture [ table ]
+            let m1 = DeclaredMethod.create "sales.derive" "v1"
+            let m2 = DeclaredMethod.create "sales.rederive" "v2"
+
+            commitWithMethod f f.ScopeA table.Id m1 [ row "acme" "a1" 10m "core"; row "zeta" "z1" 5m "edge" ]
+            |> ignore
+
+            let before = oneCurrent f f.ScopeA "revenue" [ "acme"; "a1" ]
+            let zetaBefore = oneCurrent f f.ScopeA "revenue" [ "zeta"; "z1" ]
+            Expect.equal (DeclaredMethod.ofEvidence before.Evidence) (Some m1) "M1 wrote the first run"
+
+            // M2 re-derives the same subject and period: a1 unchanged, z1 changed.
+            commitWithMethod f f.ScopeA table.Id m2 [ row "acme" "a1" 10m "core"; row "zeta" "z1" 6m "edge" ]
+            |> ignore
+
+            let after = oneCurrent f f.ScopeA "revenue" [ "acme"; "a1" ]
+            let zetaAfter = oneCurrent f f.ScopeA "revenue" [ "zeta"; "z1" ]
+
+            Expect.equal after.Value (Scalar 10m) "the unchanged value"
+            Expect.equal (DeclaredMethod.ofEvidence after.Evidence) (Some m2) "is now M2's fact"
+            Expect.notEqual after.FactId before.FactId "a new fact, not an idempotent skip"
+            Expect.equal after.Supersedes (Some before.FactId) "superseding M1's within one lineage"
+            Expect.equal after.Method before.Method "the lineage is the table's, whatever method wrote it"
+
+            Expect.equal zetaAfter.Value (Scalar 6m) "the changed value"
+            Expect.equal (DeclaredMethod.ofEvidence zetaAfter.Evidence) (Some m2) "names M2"
+            Expect.equal zetaAfter.Supersedes (Some zetaBefore.FactId) "and supersedes M1's"
+
+            // And exactly as a same-method run: M2 again, z1 changed again.
+            commitWithMethod f f.ScopeA table.Id m2 [ row "acme" "a1" 10m "core"; row "zeta" "z1" 7m "edge" ]
+            |> ignore
+
+            let zetaAgain = oneCurrent f f.ScopeA "revenue" [ "zeta"; "z1" ]
+            Expect.equal zetaAgain.Supersedes (Some zetaAfter.FactId) "a same-method run supersedes the same way"
+        }
+
+        test "a declared method that cannot be named is refused and holds nothing" {
+            let table =
+                skuTable "sku-sales" FactTableHistoryMode.Replace FactTableRequirement.Required
+
+            let f = fixture [ table ]
+
+            for bad in
+                [
+                    DeclaredMethod.create "" "v1"
+                    DeclaredMethod.create "a@b" "v1"
+                    DeclaredMethod.create "derive" " "
+                ] do
+                let options = FactTableRunOptions.none |> FactTableRunOptions.withMethod bad
+
+                match refused "open" (f.Writer.OpenRun(f.ScopeA, table.Id, options = options)) with
+                | FactTableRunOptionsRefused(tableId, _) -> Expect.equal tableId table.Id "names the table"
+                | e -> failtestf "expected FactTableRunOptionsRefused, got %s" (FactTableWriteError.describe e)
+
+            ok "the table is not held" (f.Writer.OpenRun(f.ScopeA, table.Id)) |> ignore
         }
     ]
 
@@ -1425,7 +1578,7 @@ let decoratorTests (name: string) (decorate: IFactTableWriter -> IFactTableWrite
                 "each provenance reached the inner writer as it was handed over; an omitted one stayed omitted"
         }
 
-        test "a decorator passes the run options through untouched (Phase 994)" {
+        test "a decorator passes the run options through untouched (Phases 994 and 1040)" {
             let recorder = RecordingWriter()
             let writer = decorate recorder
 
@@ -1433,6 +1586,7 @@ let decoratorTests (name: string) (decorate: IFactTableWriter -> IFactTableWrite
                 FactTableRunOptions.none
                 |> FactTableRunOptions.withInputs [ inputHash 'a' ]
                 |> FactTableRunOptions.forSlice (day 1)
+                |> FactTableRunOptions.withMethod (DeclaredMethod.create "sales.derive" "v1")
 
             ok "unmarked" (writer.OpenRun("scope", "sku-sales")) |> ignore
 

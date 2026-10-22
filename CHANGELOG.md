@@ -17,16 +17,28 @@ applies. Where a release ships a migration note under `docs/migrations/`, it is 
 
 Migration notes:
 
-- [1039-unknown-layout-refused](docs/migrations/1039-unknown-layout-refused.md)
-- [1041-ingestion-caller-label](docs/migrations/1041-ingestion-caller-label.md)
-- [1047-stream-auth-both-sign-ins](docs/migrations/1047-stream-auth-both-sign-ins.md)
+- [1040-fact-table-run-method](docs/migrations/1040-fact-table-run-method.md)
 
-_Surface since `v0.30.0`: **breaking** — 5 packages moved; 77 members added, 3 members changed, 0 members removed._
+_Surface since `v0.30.0`: **breaking** — 5 packages moved; 22 members added, 3 members changed, 0 members removed._
 
 ### Added
 
-- `ToolUp.DataSources.Synapse` — 1 member:
-  - `ToolUp.DataSources.Synapse.SynapseCatalogue.describeStatementSql : System.String (literal)`
+- `ToolUp.Facts.Core` — 12 members:
+  - `ToolUp.Facts.DeclaredMethod (class)`
+  - `ToolUp.Facts.DeclaredMethod..ctor(System.String, System.String)`
+  - `ToolUp.Facts.DeclaredMethod.MethodId : System.String { get }`
+  - `ToolUp.Facts.DeclaredMethod.MethodVersion : System.String { get }`
+  - `ToolUp.Facts.DeclaredMethodModule (class)`
+  - `ToolUp.Facts.DeclaredMethodModule.TokenPrefix : System.String (literal)`
+  - `ToolUp.Facts.DeclaredMethodModule.create(System.String, System.String) : ToolUp.Facts.DeclaredMethod`
+  - `ToolUp.Facts.DeclaredMethodModule.describe(ToolUp.Facts.DeclaredMethod) : System.String`
+  - `ToolUp.Facts.DeclaredMethodModule.ofEvidence(ToolUp.Facts.Evidence) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclaredMethod]`
+  - `ToolUp.Facts.DeclaredMethodModule.problem(ToolUp.Facts.DeclaredMethod) : Microsoft.FSharp.Core.FSharpOption`1[System.String]`
+  - `ToolUp.Facts.DeclaredMethodModule.token(ToolUp.Facts.DeclaredMethod) : System.String`
+  - `ToolUp.Facts.DeclaredMethodModule.tryParse(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclaredMethod]`
+- `ToolUp.Facts.Server` — 2 members:
+  - `ToolUp.Facts.FactTableRunOptions.Method : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclaredMethod] { get }`
+  - `ToolUp.Facts.FactTableRunOptionsModule.withMethod(ToolUp.Facts.DeclaredMethod, ToolUp.Facts.FactTableRunOptions) : ToolUp.Facts.FactTableRunOptions`
 - `ToolUp.Platform.Client` — 6 members:
   - `ToolUp.Platform.Client+Msg+PlatformInfoLoaded (class)`
   - `ToolUp.Platform.Client+Msg+PlatformInfoLoaded.Item : ToolUp.Platform.PlatformInfo { get }`
@@ -36,59 +48,17 @@ _Surface since `v0.30.0`: **breaking** — 5 packages moved; 77 members added, 3
   - `ToolUp.Platform.SessionEpoch.setFileApiMounted(System.Boolean) : System.Void`
 - `ToolUp.Platform.Core` — 1 member:
   - `ToolUp.Platform.PlatformInfo.FileManagementMounted : System.Boolean { get }`
-- `ToolUp.Platform.Server` — 34 members:
+- `ToolUp.Platform.Server` — 1 member:
   - `ToolUp.Platform.BuildRouteHandlers.fileManagementMounted(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FileProcessor+DataType]) : System.Boolean`
-  - `ToolUp.Platform.DataIngestionJobHandler.payloadForLabelled(System.String, System.String, ToolUp.Platform.IngestionLabel) : System.String`
-  - `ToolUp.Platform.DataIngestor.MaxResultNameLength : System.Int32 (literal)`
-  - `ToolUp.Platform.ICallerLabelledIngestor (interface)`
-  - `ToolUp.Platform.ICallerLabelledIngestor.RunLabelledIngestion(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IngestionLabel]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IngestionRun, ToolUp.Platform.IngestionError]]`
-  - `ToolUp.Platform.IDataIngestorExtensions (class)`
-  - `ToolUp.Platform.IDataIngestorExtensions.IDataIngestor.RunIngestion(ToolUp.Platform.IDataIngestor, System.String, System.String, System.String, ToolUp.Platform.IngestionLabel) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.IngestionRun, ToolUp.Platform.IngestionError]]`
-  - `ToolUp.Platform.IngestionLabel (class)`
-  - `ToolUp.Platform.IngestionLabel.Value : System.String { get }`
-  - `ToolUp.Platform.IngestionLabelError (class)`
-  - `ToolUp.Platform.IngestionLabelError+LabelHasInvalidCharacter (class)`
-  - `ToolUp.Platform.IngestionLabelError+LabelHasInvalidCharacter.character : System.Char { get }`
-  - `ToolUp.Platform.IngestionLabelError+LabelHasInvalidCharacter.position : System.Int32 { get }`
-  - `ToolUp.Platform.IngestionLabelError+LabelIsDotSegment (class)`
-  - `ToolUp.Platform.IngestionLabelError+LabelIsDotSegment.label : System.String { get }`
-  - `ToolUp.Platform.IngestionLabelError+LabelTooLong (class)`
-  - `ToolUp.Platform.IngestionLabelError+LabelTooLong.actual : System.Int32 { get }`
-  - `ToolUp.Platform.IngestionLabelError+LabelTooLong.maximum : System.Int32 { get }`
-  - `ToolUp.Platform.IngestionLabelError+Tags (class)`
-  - `ToolUp.Platform.IngestionLabelError+Tags.EmptyLabel : System.Int32 (literal)`
-  - … and 14 more — `git diff v0.30.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
-- `ToolUp.PublicRendering` — 35 members:
-  - `ToolUp.PublicRendering.LayoutRefusal (class)`
-  - `ToolUp.PublicRendering.LayoutRefusal+NoDefaultLayout (class)`
-  - `ToolUp.PublicRendering.LayoutRefusal+NoDefaultLayout.registered : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.LayoutName] { get }`
-  - `ToolUp.PublicRendering.LayoutRefusal+Tags (class)`
-  - `ToolUp.PublicRendering.LayoutRefusal+Tags.NoDefaultLayout : System.Int32 (literal)`
-  - `ToolUp.PublicRendering.LayoutRefusal+Tags.NoLayoutRegistered : System.Int32 (literal)`
-  - `ToolUp.PublicRendering.LayoutRefusal+Tags.UnknownDefaultLayout : System.Int32 (literal)`
-  - `ToolUp.PublicRendering.LayoutRefusal+Tags.UnknownLayout : System.Int32 (literal)`
-  - `ToolUp.PublicRendering.LayoutRefusal+UnknownDefaultLayout (class)`
-  - `ToolUp.PublicRendering.LayoutRefusal+UnknownDefaultLayout.declared : ToolUp.PublicRendering.LayoutName { get }`
-  - `ToolUp.PublicRendering.LayoutRefusal+UnknownDefaultLayout.registered : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.LayoutName] { get }`
-  - `ToolUp.PublicRendering.LayoutRefusal+UnknownLayout (class)`
-  - `ToolUp.PublicRendering.LayoutRefusal+UnknownLayout.registered : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.LayoutName] { get }`
-  - `ToolUp.PublicRendering.LayoutRefusal+UnknownLayout.requested : ToolUp.PublicRendering.LayoutName { get }`
-  - `ToolUp.PublicRendering.LayoutRefusal.IsNoDefaultLayout : System.Boolean { get }`
-  - `ToolUp.PublicRendering.LayoutRefusal.IsNoLayoutRegistered : System.Boolean { get }`
-  - `ToolUp.PublicRendering.LayoutRefusal.IsUnknownDefaultLayout : System.Boolean { get }`
-  - `ToolUp.PublicRendering.LayoutRefusal.IsUnknownLayout : System.Boolean { get }`
-  - `ToolUp.PublicRendering.LayoutRefusal.NoLayoutRegistered : ToolUp.PublicRendering.LayoutRefusal { get }`
-  - `ToolUp.PublicRendering.LayoutRefusal.Tag : System.Int32 { get }`
-  - … and 15 more — `git diff v0.30.0 -- api-baselines/ToolUp.PublicRendering.approved.txt`
 
 ### Changed
 
+- `ToolUp.Facts.Server` — 1 member:
+  - `ToolUp.Facts.FactTableRunOptions..ctor` — `ToolUp.Facts.FactTableRunOptions..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent])` → `ToolUp.Facts.FactTableRunOptions..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclaredMethod])`
 - `ToolUp.Platform.Core` — 1 member:
   - `ToolUp.Platform.PlatformInfo..ctor` — `ToolUp.Platform.PlatformInfo..ctor(System.Boolean)` → `ToolUp.Platform.PlatformInfo..ctor(System.Boolean, System.Boolean)`
 - `ToolUp.Platform.Server` — 1 member:
   - `ToolUp.Platform.PlatformApiHandler.platformInfoApiHandler` — `ToolUp.Platform.PlatformApiHandler.platformInfoApiHandler(ToolUp.Platform.ServerConfig) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]` → `ToolUp.Platform.PlatformApiHandler.platformInfoApiHandler(ToolUp.Platform.ServerConfig, System.Boolean) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]`
-- `ToolUp.PublicRendering` — 1 member:
-  - `ToolUp.PublicRendering.PublicRenderingCompose+PublicRenderingServerApp..ctor` — `ToolUp.PublicRendering.PublicRenderingCompose+PublicRenderingServerApp..ctor(ToolUp.Platform.ServerApp, Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.PublicRendering.LayoutName, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.PublicRendering.PublicPage, Giraffe.ViewEngine.HtmlElements+XmlNode]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.Redirect], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.PublicRendering.PublicPage, System.String]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.PublicRendering.IPublicContentApi], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AIPublishAuthoriser], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.NarrativeFeedConfig], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.IContentSource], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.PublicRendering.IRenderCache], ToolUp.PublicRendering.CachePolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.PublicRendering.IRenderCacheInvalidation], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEdgeCache], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]]], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.NavNode], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.PublicRendering.SemanticSearchConfig], ToolUp.PublicRendering.NarrativePublishGuardrails, ToolUp.PublicRendering.IndexNowOptions, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.PublicSiteDef], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.PublicRendering.ConditionalGetSettings], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset], System.Int32, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.PublicRendering.Slug, System.String]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.PublicRendering.SearchIndexConfig], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.PublicRendering.IRenderCoalescer])` → `ToolUp.PublicRendering.PublicRenderingCompose+PublicRenderingServerApp..ctor(ToolUp.Platform.ServerApp, Microsoft.FSharp.Collections.FSharpMap`2[ToolUp.PublicRendering.LayoutName, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.PublicRendering.PublicPage, Giraffe.ViewEngine.HtmlElements+XmlNode]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.PublicRendering.LayoutName], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.Redirect], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.PublicRendering.PublicPage, System.String]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.PublicRendering.IPublicContentApi], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.AIPublishAuthoriser], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.NarrativeFeedConfig], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.IContentSource], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.PublicRendering.IRenderCache], ToolUp.PublicRendering.CachePolicy, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.PublicRendering.IRenderCacheInvalidation], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEdgeCache], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]]], System.Boolean, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.NavNode], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.PublicRendering.SemanticSearchConfig], ToolUp.PublicRendering.NarrativePublishGuardrails, ToolUp.PublicRendering.IndexNowOptions, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.PublicSiteDef], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.PublicRendering.ConditionalGetSettings], System.Boolean, System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[System.DateTimeOffset], System.Int32, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.PublicRendering.Slug, System.String]], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.PublicRendering.SearchIndexConfig], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.PublicRendering.IRenderCoalescer])`
 
 ## [0.30.0] — 2026-10-20
 
