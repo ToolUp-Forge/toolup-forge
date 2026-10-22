@@ -345,6 +345,23 @@ let private decodeJwtIdentity (token: string) : DecodedIdentity option =
 /// `AuthTokenStorage = ServerSetHttpOnlyCookie`, where the server sets
 /// an `HttpOnly` cookie and the JWT never enters JS-readable storage
 /// (Phase 133).
+[<Emit("(typeof document === 'undefined' ? null : document.cookie)")>]
+let private rawDocumentCookie () : string = jsNative
+
+/// Phase 1047 — the page's `document.cookie`, or `None` on a host with no
+/// DOM (a worker, a Node test host). The cookie checks below read through
+/// this, so `getAuthToken` — called before every stream connect — never
+/// throws where there is no document to restore a cookie into.
+let private documentCookie () : string option =
+    match rawDocumentCookie () with
+    | null -> None
+    | cookie -> Some cookie
+
+/// Phase 1047 — a cookie jar exists and does not carry `token`.
+let private cookieMissing (token: string) : bool =
+    documentCookie ()
+    |> Option.exists (fun cookie -> not (authCookieCarries cookie token))
+
 let private setAuthCookie (token: string) =
     let isHttps =
         try
@@ -532,7 +549,7 @@ let setAuthToken (token: string) =
         // drops that write, and the event streams would keep riding the
         // server's token. Replace it the one way a browser allows: through
         // the server, which validates the token before writing it.
-        if not (authCookieCarries Browser.Dom.document.cookie token) then
+        if cookieMissing token then
             reflectTokenToServer token
     | ServerSetHttpOnlyCookie ->
         // Never touch localStorage / document.cookie for the token.
@@ -561,7 +578,7 @@ let clearAuthToken () =
         match Browser.Dom.window.localStorage.getItem tokenKey with
         | null
         | "" -> false
-        | held -> not (authCookieCarries Browser.Dom.document.cookie held)
+        | held -> cookieMissing held
 
     // Phase 854 — sign-out drops every cached read result (Phase 908:
     // through the one identity-change seam).
@@ -632,8 +649,7 @@ let getAuthToken () =
         | "" -> None
         | token ->
             match tokenState.Strategy with
-            | ClientCookieAndLocalStorage when not (authCookieCarries Browser.Dom.document.cookie token) ->
-                setAuthCookie token
+            | ClientCookieAndLocalStorage when cookieMissing token -> setAuthCookie token
             | _ -> ()
 
             Some token
