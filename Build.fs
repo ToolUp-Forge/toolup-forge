@@ -2535,9 +2535,13 @@ let main args =
                     |> List.mapi (fun i line -> start + i, stripDocLiterals line)
                     |> List.filter (fun (_, t) -> not (isDeclarationLine t))
                     |> List.collect (fun (ln, t) ->
+                        // An F# identifier admits `'` after its first character
+                        // (`CompanionCapability.pure'`), and the baseline renders
+                        // the member with it; cutting the prime looks up a name
+                        // that does not exist (Phase 1048).
                         System.Text.RegularExpressions.Regex.Matches(
                             t,
-                            @"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+"
+                            @"[A-Za-z_][A-Za-z0-9_']*(?:\.[A-Za-z_][A-Za-z0-9_']*)+"
                         )
                         |> Seq.map (fun m -> ln, m.Value)
                         |> List.ofSeq)
