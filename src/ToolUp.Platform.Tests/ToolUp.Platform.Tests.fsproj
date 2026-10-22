@@ -57,6 +57,7 @@
         <Compile Include="Contracts\IDataSourceContract.fs" />
         <!-- Phase 1042 - the IDataIngestor seam's pack (two implementations). -->
         <Compile Include="Contracts\IDataIngestorContract.fs" />
+        <Compile Include="Contracts\ICallerLabelledIngestorContract.fs" />
         <!-- Phase 128 — outbound API connector kit contract (paged fetch, retry
              as data, outbound rate budget, incremental sync cursors). -->
         <Compile Include="Contracts\IExternalApiConnectorContract.fs" />

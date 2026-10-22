@@ -651,7 +651,11 @@ let registerDataIngestion
                     resolvedBlobStorage
                     resolvedLogger
                     payloadReaders
-                |> DeliveryCompleted.recording (DeliveryCompleted.hooksOf sp) sp resolvedLogger (Some eventStore)
+                |> DeliveryCompleted.recording
+                    (sp.GetServices<DeliveryCompleted.DeliveryCompletedHook>() |> List.ofSeq)
+                    sp
+                    resolvedLogger
+                    (Some eventStore)
 
             // When the job scheduler is also enabled, register the
             // ingestion handler against it so `IDataIngestionApi.

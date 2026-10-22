@@ -427,6 +427,33 @@ let private requestTests =
                 "the anonymous delivery says why it was not delivered"
         }
 
+        testCaseAsync "a labelled ingestion (Phase 1041) is delivered under its label"
+        <| async {
+            let seen = Seen()
+            let scopeId = newScopeId ()
+            let app = ServerApp.empty |> ServerApp.withDeliveryCompleted ("seen", seen.Callback)
+
+            let label =
+                match IngestionLabel.tryCreate "daily-orders" with
+                | Ok l -> l
+                | Error e -> failtestf "the test label was refused: %A" e
+
+            let labelledRoute (r: Rig) : HttpHandler =
+                route "/deliver"
+                >=> fun next ctx -> task {
+                    ScopeResolution.remember ctx (storage scopeId) |> ignore
+                    seedScope r.Configs r.Source scopeId
+                    let! _ = r.Ingestor.RunIngestion(scopeId, sourceId, "orders", label) |> Async.StartAsTask
+                    return! text "delivered" next ctx
+                }
+
+            let! (status, _), _ = hosted app labelledRoute post
+            Expect.equal status HttpStatusCode.OK "answered"
+            let! delivery = seen.First
+            Expect.equal (delivery.Runs |> List.map _.Table) [ "daily-orders" ] "filed under the label"
+            Expect.isTrue (Delivery.isComplete delivery) "and committed — the decorator did not refuse it"
+        }
+
         testCaseAsync "two hooks each fire once — the middleware is mounted once however many register"
         <| async {
             let a = Seen()
@@ -647,7 +674,7 @@ let private compositionTests =
         test "registering no hook leaves the platform ingestor undecorated (GP 13)" {
             let r = rig ServerApp.empty
             Expect.equal (r.Ingestor.GetType().Name) "DataIngestor" "the ingestor itself, not a decorator"
-            Expect.isEmpty (DeliveryCompleted.hooksOf r.Services) "and no hook is registered"
+            Expect.isEmpty (r.Services.GetServices<DeliveryCompletedHook>()) "and no hook is registered"
         }
 
         test "a module's hook is registered by addModule, and mounts the request seam once" {
@@ -666,7 +693,7 @@ let private compositionTests =
             let provider = services.BuildServiceProvider()
 
             Expect.equal
-                (DeliveryCompleted.hooksOf provider |> List.map _.Name)
+                (provider.GetServices<DeliveryCompletedHook>() |> Seq.map _.Name |> List.ofSeq)
                 [ "module-hook" ]
                 "the module's hook is registered with the app"
 
@@ -777,17 +804,20 @@ let private conformanceTests =
         Callback = fun _ _ -> async { return () }
     }
 
+    let recorded =
+        ingestorUnderTest (
+            DeliveryCompleted.recording
+                [ recordingHook ]
+                (ServiceCollection().BuildServiceProvider())
+                (RecordingLogger())
+                None
+        )
+
     testList "IDataIngestor conformance" [
         IDataIngestorContract.tests "DataIngestor" (ingestorUnderTest id)
-        IDataIngestorContract.tests
-            "DeliveryCompleted.recording"
-            (ingestorUnderTest (
-                DeliveryCompleted.recording
-                    [ recordingHook ]
-                    (ServiceCollection().BuildServiceProvider())
-                    (RecordingLogger())
-                    None
-            ))
+        IDataIngestorContract.tests "DeliveryCompleted.recording" recorded
+        ICallerLabelledIngestorContract.tests "DataIngestor" (ingestorUnderTest id)
+        ICallerLabelledIngestorContract.tests "DeliveryCompleted.recording" recorded
     ]
 
 [<Tests>]

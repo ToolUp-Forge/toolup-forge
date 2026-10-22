@@ -354,23 +354,33 @@ let internal recording
             Events = events
         }
 
+        let record scopeId sourceId table result =
+            match DeliveryScope.current () with
+            | Some collector -> collector.Record(scopeId, deliveredRun sourceId table result, sink)
+            | None -> ()
+
         { new IDataIngestor with
             member _.RunIngestion(scopeId, sourceId, table) = async {
                 let! result = inner.RunIngestion(scopeId, sourceId, table)
-
-                match DeliveryScope.current () with
-                | Some collector -> collector.Record(scopeId, deliveredRun sourceId table result, sink)
-                | None -> ()
-
+                record scopeId sourceId table result
                 return result
             }
 
             member _.GetRecentRuns(scopeId, sourceId, count) =
                 inner.GetRecentRuns(scopeId, sourceId, count)
-        }
+          // Phase 1041's labelled ingestion is reached by a type test on the
+          // composed ingestor, so the decorator forwards it — and records it —
+          // rather than hiding it. Over an ingestor that cannot label, it
+          // refuses exactly as the `RunIngestion(…, label)` extension does.
+          interface ICallerLabelledIngestor with
+              member _.RunLabelledIngestion(scopeId, sourceId, table, label) = async {
+                  let! result =
+                      match label with
+                      | Some l -> inner.RunIngestion(scopeId, sourceId, table, l)
+                      | None -> inner.RunIngestion(scopeId, sourceId, table)
 
-/// The hooks registered with `services` (`ServerApp.withDeliveryCompleted`).
-let internal hooksOf (services: IServiceProvider) : DeliveryCompletedHook list =
-    match services.GetService(typeof<Collections.Generic.IEnumerable<DeliveryCompletedHook>>) with
-    | :? Collections.Generic.IEnumerable<DeliveryCompletedHook> as hooks -> List.ofSeq hooks
-    | _ -> []
+                  let filedUnder = label |> Option.map _.Value |> Option.defaultValue table
+                  record scopeId sourceId filedUnder result
+                  return result
+              }
+        }
