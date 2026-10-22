@@ -45,6 +45,7 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.DeliveryCompleted
 open ToolUp.Platform.Secrets
 open ToolUp.Platform.StorageScopeResolver
+open ToolUp.Platform.Tests.Contracts
 open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 
 // ─── Fixtures ─────────────────────────────────────────────────────────
@@ -730,6 +731,65 @@ let private compositionTests =
         }
     ]
 
+/// The platform ingestor over fresh in-memory stores, for the
+/// `IDataIngestor` contract pack; `wrap` decorates it.
+let private ingestorUnderTest (wrap: IDataIngestor -> IDataIngestor) () : IDataIngestorContract.IngestorUnderTest =
+    let blobs = InMemoryBlobStorage() :> IBlobStorage
+    let configs = DataSourceConfigStore.create blobs
+    let source = InMemoryDataSource.create ()
+
+    let ingestor =
+        DataIngestor.create
+            configs
+            noSecrets
+            (DataObjectStore.DataObjectStore(blobs) :> IDataObjectStore)
+            (InMemoryEventStore.InMemoryEventStore() :> IEventStore)
+            [ source :> IDataSource ]
+            blobs
+            (RecordingLogger())
+
+    {
+        Ingestor = wrap ingestor
+        Seed =
+            fun scopeId id tables ->
+                configs.Save(
+                    scopeId,
+                    {
+                        Id = id
+                        Name = id
+                        Kind = "InMemory"
+                        ConnectionScope = Map.empty
+                        CredentialKey = "unused"
+                        Tables = Some tables
+                        Tags = Map.empty
+                    }
+                )
+                |> Async.RunSynchronously
+
+                for t in tables do
+                    source.SeedText(id, t, "id,value\n1,10\n")
+    }
+
+/// The seam's two production implementations, each bound to its pack.
+let private conformanceTests =
+    let recordingHook: DeliveryCompletedHook = {
+        Name = "contract"
+        Callback = fun _ _ -> async { return () }
+    }
+
+    testList "IDataIngestor conformance" [
+        IDataIngestorContract.tests "DataIngestor" (ingestorUnderTest id)
+        IDataIngestorContract.tests
+            "DeliveryCompleted.recording"
+            (ingestorUnderTest (
+                DeliveryCompleted.recording
+                    [ recordingHook ]
+                    (ServiceCollection().BuildServiceProvider())
+                    (RecordingLogger())
+                    None
+            ))
+    ]
+
 [<Tests>]
 let tests =
     testList "Phase 1042 — a module registers a delivery-completed callback" [
@@ -737,4 +797,5 @@ let tests =
         failureTests
         jobTests
         compositionTests
+        conformanceTests
     ]
