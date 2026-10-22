@@ -141,7 +141,7 @@ ToolUp.Platform.Server 6916/12563
 ToolUp.Platform.Testing 118/264
 ToolUp.Platform.Transport 44/90
 ToolUp.Platform.UI 71/183
-ToolUp.PublicRendering 635/1110
+ToolUp.PublicRendering 653/1145
 ToolUp.RAG.Core 82/133
 ToolUp.RAG.Server 294/515
 ToolUp.RAG.StaticCorpus.Build 23/40

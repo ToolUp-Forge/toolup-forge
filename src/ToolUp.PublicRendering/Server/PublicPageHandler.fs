@@ -8,6 +8,125 @@ open Microsoft.Extensions.Primitives
 open ToolUp.Platform
 open ToolUp.Platform.Metrics
 
+/// Phase 1039 — why a page's layout could not be resolved. Every site that
+/// frames a page (the page handler, `/preview`, `/search`, static export,
+/// compose) refuses through this one type rather than substituting another
+/// layout's frame.
+[<RequireQualifiedAccess>]
+type LayoutRefusal =
+    /// No layout is registered at all.
+    | NoLayoutRegistered
+    /// The page names a layout nobody registered.
+    | UnknownLayout of requested: LayoutName * registered: LayoutName list
+    /// The page names no layout, two or more are registered, and none was
+    /// declared the default.
+    | NoDefaultLayout of registered: LayoutName list
+    /// The declared default names a layout nobody registered.
+    | UnknownDefaultLayout of declared: LayoutName * registered: LayoutName list
+
+[<RequireQualifiedAccess>]
+module LayoutRefusal =
+    let private names (registered: LayoutName list) =
+        match registered with
+        | [] -> "none"
+        | _ -> registered |> List.map LayoutName.value |> String.concat ", "
+
+    /// One sentence naming the refusal and the registered layouts.
+    let describe (refusal: LayoutRefusal) : string =
+        match refusal with
+        | LayoutRefusal.NoLayoutRegistered -> "no layout registered"
+        | LayoutRefusal.UnknownLayout(requested, registered) ->
+            sprintf "layout '%s' is not registered (registered: %s)" (LayoutName.value requested) (names registered)
+        | LayoutRefusal.NoDefaultLayout registered ->
+            sprintf
+                "the page names no layout and no default layout is declared among the registered layouts (%s); declare one with PublicRenderingServerApp.withDefaultLayout"
+                (names registered)
+        | LayoutRefusal.UnknownDefaultLayout(declared, registered) ->
+            sprintf
+                "the declared default layout '%s' is not registered (registered: %s)"
+                (LayoutName.value declared)
+                (names registered)
+
+    /// Each `(subject, refusal)` pair as `subject: description`, joined.
+    let describeAll (refusals: (string * LayoutRefusal) list) : string =
+        refusals
+        |> List.map (fun (subject, refusal) -> sprintf "%s: %s" subject (describe refusal))
+        |> String.concat "; "
+
+/// Phase 1039 — raised where a layout refusal cannot be answered with a
+/// response: at compose, and by a static export. Each refusal is paired
+/// with the subject it concerns (a page, a site, the compose root).
+type LayoutRefusedException(refusals: (string * LayoutRefusal) list) =
+    inherit InvalidOperationException("PublicRendering: " + LayoutRefusal.describeAll refusals)
+    member _.Refusals = refusals
+
+/// Phase 1039 — the one layout resolver. A layout map resolved by
+/// `withDefault` binds the declared default under `unnamed`, so a page
+/// naming no layout is a plain lookup; nothing resolves by map order.
+[<RequireQualifiedAccess>]
+module PublicLayouts =
+    /// The name a page carries when it names no layout, and the key the
+    /// declared default is bound under in a resolved layout map.
+    let unnamed = LayoutName ""
+
+    /// The registered layout names, excluding the default binding.
+    let registered (layouts: Map<LayoutName, PublicPage -> XmlNode>) : LayoutName list =
+        layouts |> Map.toList |> List.map fst |> List.filter ((<>) unnamed)
+
+    /// Bind the default layout under `unnamed`. A declared default must be
+    /// registered. Undeclared, a single registered layout is the default
+    /// implicitly; two or more are refused unless the map already binds
+    /// `unnamed`. An empty map is returned unchanged.
+    let withDefault
+        (declared: LayoutName option)
+        (layouts: Map<LayoutName, PublicPage -> XmlNode>)
+        : Result<Map<LayoutName, PublicPage -> XmlNode>, LayoutRefusal> =
+        match declared with
+        | Some name ->
+            match Map.tryFind name layouts with
+            | Some layout when name <> unnamed -> Ok(Map.add unnamed layout layouts)
+            | _ -> Error(LayoutRefusal.UnknownDefaultLayout(name, registered layouts))
+        | None when Map.containsKey unnamed layouts -> Ok layouts
+        | None ->
+            match registered layouts with
+            | [] -> Ok layouts
+            | [ only ] -> Ok(Map.add unnamed (Map.find only layouts) layouts)
+            | names -> Error(LayoutRefusal.NoDefaultLayout names)
+
+    /// Resolve a layout name: the registered layout of that name, or for
+    /// `unnamed` the declared (or single, implicit) default; otherwise a
+    /// typed refusal.
+    let resolve
+        (layouts: Map<LayoutName, PublicPage -> XmlNode>)
+        (name: LayoutName)
+        : Result<PublicPage -> XmlNode, LayoutRefusal> =
+        match Map.tryFind name layouts with
+        | Some layout -> Ok layout
+        | None ->
+            match registered layouts with
+            | [] -> Error LayoutRefusal.NoLayoutRegistered
+            | [ only ] when name = unnamed -> Ok(Map.find only layouts)
+            | names when name = unnamed -> Error(LayoutRefusal.NoDefaultLayout names)
+            | names -> Error(LayoutRefusal.UnknownLayout(name, names))
+
+    /// `resolve` over the layout the page names.
+    let resolvePage
+        (layouts: Map<LayoutName, PublicPage -> XmlNode>)
+        (page: PublicPage)
+        : Result<PublicPage -> XmlNode, LayoutRefusal> =
+        resolve layouts page.Layout
+
+    /// Every page whose layout is refused, as `("page '<slug>'", refusal)`.
+    let refusedPages
+        (layouts: Map<LayoutName, PublicPage -> XmlNode>)
+        (pages: PublicPage list)
+        : (string * LayoutRefusal) list =
+        pages
+        |> List.choose (fun page ->
+            match resolvePage layouts page with
+            | Ok _ -> None
+            | Error refusal -> Some(sprintf "page '%s'" (Slug.value page.Slug), refusal))
+
 /// Catch-all `GET /{slug}` handler. The slug derives from the
 /// request path with leading `/` stripped; root path `/` resolves
 /// against the page slug `"index"`. Resolution goes through
@@ -19,12 +138,11 @@ open ToolUp.Platform.Metrics
 /// `RedirectMap` handler is expected to own the 301 fall-through
 /// before a 404 lands.
 ///
-/// Layout resolution: looks up `PublicPage.Layout` in the registered
-/// layout map; falls back to the first-registered layout when the
-/// named layout is unknown. A page with no layouts at all returns
-/// a 500 ("no layout registered") — compose-time invariant rather
-/// than a runtime expectation, surfaced as a hard error so a
-/// mis-registered layout map can't masquerade as an empty page.
+/// Layout resolution (Phase 1039): `PublicLayouts.resolvePage`. A page
+/// naming a registered layout gets it; a page naming none gets the
+/// declared default; anything else (an unknown name, no default among
+/// several layouts, no layouts at all) is a typed `LayoutRefusal`
+/// served as a 500 naming it, never another layout's frame.
 ///
 /// Phase 84 — when an `IRenderCache` is registered in DI (the deployment
 /// called `withRenderCache`), the handler activates the ISR tier: it
@@ -35,14 +153,6 @@ open ToolUp.Platform.Metrics
 /// no cache is registered the handler is byte-for-byte the pre-84 path
 /// (no headers, no lookup, no allocation) per GP 11 / GP 13.
 module PublicPageHandler =
-    let private resolveLayout
-        (layouts: Map<LayoutName, PublicPage -> XmlNode>)
-        (page: PublicPage)
-        : (PublicPage -> XmlNode) option =
-        match Map.tryFind page.Layout layouts with
-        | Some f -> Some f
-        | None -> layouts |> Map.toSeq |> Seq.tryHead |> Option.map snd
-
     /// Phase 199 — a process-shared default coalescer, used only when a
     /// render cache is composed without its DI-registered coalescer (a
     /// custom-wired cache). `withRenderCache` always registers a per-app
@@ -59,7 +169,8 @@ module PublicPageHandler =
     /// `layouts`, the slug, and the `AccessContext` — all values).
     type private RenderOutcome =
         | Rendered of html: string * page: PublicPage
-        | NoLayoutRegistered
+        /// Phase 1039 - the page's layout is refused (500 naming it).
+        | LayoutRefused of LayoutRefusal
         | PageNotFound
         /// Phase 86 — audience requires a resolved principal (→ 401).
         | Unauthorized
@@ -82,7 +193,7 @@ module PublicPageHandler =
     /// relies on.
     type private CoalescedMiss =
         | MissRendered of page: RenderedPage * policy: CachePolicy
-        | MissNoLayout
+        | MissLayoutRefused of LayoutRefusal
         | MissNotFound
 
     /// Phase 996 — `AudienceGate.evaluate`, audited. Every decision on a
@@ -133,8 +244,8 @@ module PublicPageHandler =
                 | AudienceDecision.RequireAuthentication -> return Unauthorized
                 | AudienceDecision.Forbidden -> return AccessForbidden
                 | AudienceDecision.Allow ->
-                    match resolveLayout layouts page with
-                    | Some layout ->
+                    match PublicLayouts.resolvePage layouts page with
+                    | Ok layout ->
                         // Phase 111 — inject any per-request head metadata
                         // (the `head:*` frontmatter envelope a resolved-
                         // content source attached) into the rendered
@@ -150,7 +261,7 @@ module PublicPageHandler =
                             |> PageHeadInjection.injectFromPage page
 
                         return Rendered(html, page)
-                    | None -> return NoLayoutRegistered
+                    | Error refusal -> return LayoutRefused refusal
             | None -> return PageNotFound
         }
 
@@ -231,6 +342,16 @@ module PublicPageHandler =
     /// navigation, not a script or a crawler fetching a resource), and never
     /// for a `403` — a signed-in principal who is refused would only be sent
     /// round the sign-in again.
+    /// Phase 1039 — a refused layout is a server misconfiguration: a 500
+    /// naming the refusal, never another layout's frame. The one write
+    /// shared by every serve path (uncached, conditional, cached).
+    let private writeLayoutRefused
+        (ctx: HttpContext)
+        (refusal: LayoutRefusal)
+        : System.Threading.Tasks.Task<HttpContext option> =
+        ctx.Response.StatusCode <- 500
+        ctx.WriteStringAsync("PublicRendering: " + LayoutRefusal.describe refusal)
+
     let private writeDenied
         (ctx: HttpContext)
         (code: int)
@@ -284,9 +405,7 @@ module PublicPageHandler =
             | Rendered(html, _page) ->
                 ctx.Response.ContentType <- "text/html; charset=utf-8"
                 return! ctx.WriteStringAsync html
-            | NoLayoutRegistered ->
-                ctx.Response.StatusCode <- 500
-                return! ctx.WriteStringAsync "PublicRendering: no layout registered"
+            | LayoutRefused refusal -> return! writeLayoutRefused ctx refusal
             | Unauthorized -> return! writeDenied ctx 401 "Unauthorized"
             | AccessForbidden -> return! writeDenied ctx 403 "Forbidden"
             | PageNotFound -> return None
@@ -326,9 +445,7 @@ module PublicPageHandler =
                     ConditionalGet.setValidators ctx hash lastModified settings.CacheControl
                     ctx.Response.ContentType <- "text/html; charset=utf-8"
                     return! ctx.WriteStringAsync html
-            | NoLayoutRegistered ->
-                ctx.Response.StatusCode <- 500
-                return! ctx.WriteStringAsync "PublicRendering: no layout registered"
+            | LayoutRefused refusal -> return! writeLayoutRefused ctx refusal
             | Unauthorized -> return! writeDenied ctx 401 "Unauthorized"
             | AccessForbidden -> return! writeDenied ctx 403 "Forbidden"
             | PageNotFound -> return None
@@ -509,9 +626,7 @@ module PublicPageHandler =
 
                             ctx.Response.ContentType <- "text/html; charset=utf-8"
                             return! ctx.WriteStringAsync html
-                    | NoLayoutRegistered ->
-                        ctx.Response.StatusCode <- 500
-                        return! ctx.WriteStringAsync "PublicRendering: no layout registered"
+                    | LayoutRefused refusal -> return! writeLayoutRefused ctx refusal
                     | Unauthorized -> return! writeDenied ctx 401 "Unauthorized"
                     | AccessForbidden -> return! writeDenied ctx 403 "Forbidden"
                     | PageNotFound -> return None
@@ -532,9 +647,9 @@ module PublicPageHandler =
                         match visiblePage with
                         | None -> return MissNotFound
                         | Some page ->
-                            match resolveLayout layouts page with
-                            | None -> return MissNoLayout
-                            | Some layout ->
+                            match PublicLayouts.resolvePage layouts page with
+                            | Error refusal -> return MissLayoutRefused refusal
+                            | Ok layout ->
                                 let html =
                                     layout page
                                     |> RenderView.AsString.htmlDocument
@@ -577,9 +692,7 @@ module PublicPageHandler =
                                     rendered.ContentHash
                                     (entryLastModified rendered)
                                     (cacheControlValue policy)
-                    | MissNoLayout ->
-                        ctx.Response.StatusCode <- 500
-                        return! ctx.WriteStringAsync "PublicRendering: no layout registered"
+                    | MissLayoutRefused refusal -> return! writeLayoutRefused ctx refusal
                     | MissNotFound -> return None
         }
 

@@ -33,7 +33,8 @@ open ToolUp.Platform
 /// Frontmatter (well-known keys):
 ///   - `title`        → `PublicPage.Title`         (defaults to the slug)
 ///   - `description`  → `PublicPage.Description`   (defaults to `""`)
-///   - `layout`       → `PublicPage.Layout`        (defaults to `"page"`)
+///   - `layout`       → `PublicPage.Layout`        (absent → `LayoutName ""`: the page names
+///                      no layout and takes the declared default, Phase 1039)
 ///   - `slug`         → overrides the path-derived slug (see above)
 ///   - `date`         → `PublicPage.PublishedAt`   (ISO 8601 / `DateTimeOffset.Parse`)
 ///   - `sitemap`      → controls inclusion (`"exclude"` drops the page from `/sitemap.xml`)
@@ -119,7 +120,7 @@ type MarkdownContentLoader(root: ContentRoot, logger: ILogger, hotReload: bool) 
         let description = frontmatter |> Map.tryFind "description" |> Option.defaultValue ""
 
         let layout =
-            frontmatter |> Map.tryFind "layout" |> Option.defaultValue "page" |> LayoutName
+            frontmatter |> Map.tryFind "layout" |> Option.defaultValue "" |> LayoutName
 
         let publishedAt =
             frontmatter

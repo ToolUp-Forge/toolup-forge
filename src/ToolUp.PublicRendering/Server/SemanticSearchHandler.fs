@@ -60,8 +60,9 @@ type SemanticSearchConfig = {
     /// injected function so PublicRendering stays free of a KB dependency
     /// (GP 1).
     ResultLink: (VectorMatch -> string option) option
-    /// Layout to render the search page under. `None` → first-registered
-    /// layout (same fallback as `PublicPageHandler`).
+    /// Layout to render the search page under. `None` → the declared
+    /// default layout (Phase 1039, `PublicLayouts.resolve`); a name nobody
+    /// registered is refused at compose.
     Layout: LayoutName option
 }
 
@@ -214,32 +215,22 @@ module SemanticSearch =
 
 module SemanticSearchHandler =
 
-    /// Layout resolution mirrors `PublicPageHandler.resolveLayout`: try the
-    /// configured layout name; fall back to the first-registered layout.
-    let private resolveLayout
-        (layouts: Map<LayoutName, PublicPage -> XmlNode>)
-        (name: LayoutName option)
-        : (PublicPage -> XmlNode) option =
-        let chosen = name |> Option.bind (fun n -> Map.tryFind n layouts)
-
-        match chosen with
-        | Some f -> Some f
-        | None -> layouts |> Map.toSeq |> Seq.tryHead |> Option.map snd
-
     /// Wrap a Narrative body in a `PublicPage` and render it through the
-    /// resolved layout. Returns `None` (→ 500 written by caller) when no
-    /// layout is registered at all.
+    /// configured layout (or the declared default). Returns the typed
+    /// refusal (→ 500 written by caller) when the layout cannot be
+    /// resolved (Phase 1039 — `PublicLayouts.resolvePage`, the resolver
+    /// every page path shares).
     let private renderDoc
         (config: SemanticSearchConfig)
         (layouts: Map<LayoutName, PublicPage -> XmlNode>)
         (doc: NarrativeDocument)
-        : string option =
+        : Result<string, LayoutRefusal> =
         let page: PublicPage = {
             Slug = Slug "search"
             Title = doc.Title
             Description = doc.Subtitle |> Option.defaultValue ""
             Body = ContentBody.Narrative doc
-            Layout = config.Layout |> Option.defaultValue (LayoutName "")
+            Layout = config.Layout |> Option.defaultValue PublicLayouts.unnamed
             Frontmatter = Map.empty
             PublishedAt = None
             Collection = None
@@ -249,8 +240,8 @@ module SemanticSearchHandler =
             Audience = PageAudience.Public
         }
 
-        resolveLayout layouts config.Layout
-        |> Option.map (fun layout -> layout page |> RenderView.AsString.htmlDocument)
+        PublicLayouts.resolvePage layouts page
+        |> Result.map (fun layout -> layout page |> RenderView.AsString.htmlDocument)
 
     let private writeHtml
         (ctx: HttpContext)
@@ -264,16 +255,16 @@ module SemanticSearchHandler =
         ctx.Response.Headers["Cache-Control"] <- Microsoft.Extensions.Primitives.StringValues "no-store"
         ctx.WriteStringAsync html
 
-    let private writeOrNoLayout
+    let private writeOrRefused
         (ctx: HttpContext)
         (statusCode: int)
-        (rendered: string option)
+        (rendered: Result<string, LayoutRefusal>)
         : System.Threading.Tasks.Task<HttpContext option> =
         match rendered with
-        | Some html -> writeHtml ctx statusCode html
-        | None ->
+        | Ok html -> writeHtml ctx statusCode html
+        | Error refusal ->
             ctx.Response.StatusCode <- 500
-            ctx.WriteStringAsync "PublicRendering: no layout registered"
+            ctx.WriteStringAsync("PublicRendering: " + LayoutRefusal.describe refusal)
 
     /// The `/search` handler core (no route binding — the compose root
     /// wraps it with `route "/search"`). Resolves the per-request
@@ -301,12 +292,12 @@ module SemanticSearchHandler =
                 ctx.Response.StatusCode <- 403
                 return! ctx.WriteStringAsync "Forbidden"
             | SemanticSearch.EmptyQuery ->
-                return! writeOrNoLayout ctx 200 (renderDoc config layouts SemanticSearch.emptyQueryDoc)
+                return! writeOrRefused ctx 200 (renderDoc config layouts SemanticSearch.emptyQueryDoc)
             | SemanticSearch.QueryTooLong maxChars ->
-                return! writeOrNoLayout ctx 400 (renderDoc config layouts (SemanticSearch.queryTooLongDoc maxChars))
+                return! writeOrRefused ctx 400 (renderDoc config layouts (SemanticSearch.queryTooLongDoc maxChars))
             | SemanticSearch.Search query ->
                 let! matches = pipeline.Retrieve (SemanticSearch.retrievalRequest config query) accessContext
                 let ranked = matches |> List.filter (fun m -> m.Score >= config.MinScore)
                 let doc = SemanticSearch.buildResultsDoc config query ranked
-                return! writeOrNoLayout ctx 200 (renderDoc config layouts doc)
+                return! writeOrRefused ctx 200 (renderDoc config layouts doc)
         }

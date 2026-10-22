@@ -42,11 +42,6 @@ let resourceKind = "PublicPage"
 [<Literal>]
 let mintGuard = "content:can-approve"
 
-let private resolveLayout (layouts: Map<LayoutName, PublicPage -> XmlNode>) (page: PublicPage) =
-    match Map.tryFind page.Layout layouts with
-    | Some f -> Some f
-    | None -> layouts |> Map.toSeq |> Seq.tryHead |> Option.map snd
-
 /// The site-relative `/preview` path carrying `token`. The single place
 /// the preview URL shape is spelled — every mint path and every doc
 /// example goes through it, so there is one preview-link format to
@@ -266,17 +261,19 @@ let previewHandler (api: IPublicContentApi) (layouts: Map<LayoutName, PublicPage
             | Ok claim when claim.ResourceKind = resourceKind ->
                 match! api.GetPage claim.ResourceId |> Async.StartAsTask with
                 | Some page ->
-                    match resolveLayout layouts page with
-                    | Some layout ->
+                    match PublicLayouts.resolvePage layouts page with
+                    | Ok layout ->
                         let html = layout page |> RenderView.AsString.htmlDocument
                         ctx.Response.ContentType <- "text/html; charset=utf-8"
                         // Preview pages must never be indexed or cached.
                         ctx.Response.Headers["X-Robots-Tag"] <- StringValues "noindex, nofollow"
                         ctx.Response.Headers["Cache-Control"] <- StringValues "no-store"
                         return! ctx.WriteStringAsync html
-                    | None ->
+                    | Error refusal ->
+                        // Phase 1039 — a refused layout previews as the
+                        // typed error, never in another layout's frame.
                         ctx.SetStatusCode 500
-                        return! ctx.WriteStringAsync "PublicRendering: no layout registered"
+                        return! ctx.WriteStringAsync("PublicRendering: " + LayoutRefusal.describe refusal)
                 | None -> return None
             | Ok _ ->
                 ctx.SetStatusCode 403

@@ -59,8 +59,8 @@ type PublicContentApiImpl
     ///   carry its own `<head>` shape in the fragment or rely on the
     ///   layout's defaults.
     ///
-    /// `Layout` is left unset (`LayoutName ""`) so `PublicPageHandler`'s
-    /// resolver falls back to the first-registered layout — a source does
+    /// `Layout` is left unset (`LayoutName ""`) so the page takes the
+    /// deployment's declared default layout (Phase 1039) — a source does
     /// not pick a layout (out of scope for Phase 83; layout selection
     /// stays a compose-time concern).
     static member private pageFromBody(slug: string, body: ContentBody) : PublicPage =

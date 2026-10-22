@@ -460,7 +460,7 @@ let private publishDefinition: AIToolDefinition = {
             Name = "layout"
             Type = "string"
             Description =
-                "Optional layout name to render under. Must match a layout registered via `PublicRenderingServerApp.withLayout`. Unknown / omitted layouts fall back to the first-registered layout."
+                "Optional layout name to render under. Must match a layout registered via `PublicRenderingServerApp.withLayout`. Omitted → the deployment's default layout; a name that is not registered is refused."
             Required = false
             Default = None
         }
@@ -681,7 +681,7 @@ let private executePublish (ctx: HttpContext) (argsJson: string) : Async<string>
 let private listLayoutsDefinition: AIToolDefinition = {
     Name = "list_layouts"
     Description =
-        "List the public-rendering layout names registered for this deployment. Use this before `publish_narrative` to pick an appropriate `layout` argument (otherwise the publisher silently falls back to the first-registered layout). Returns an empty array when no `ILayoutCatalog` is registered (PublicRendering not wired in)."
+        "List the public-rendering layout names registered for this deployment. Use this before `publish_narrative` to pick an appropriate `layout` argument (omitting it publishes under the deployment's default layout; a name that is not registered is refused). Returns an empty array when no `ILayoutCatalog` is registered (PublicRendering not wired in)."
     Parameters = []
     SourceModule = "ToolUp.Platform"
     EmitsActions = None

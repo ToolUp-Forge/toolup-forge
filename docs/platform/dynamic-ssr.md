@@ -237,7 +237,7 @@ let pageLayout (page: PublicPage) : XmlNode =
     ]
 ```
 
-The synthesised page leaves `Layout` unset, so `PublicPageHandler` falls back to the first-registered layout. Layout selection stays a compose-time concern — a source picks the body, not the chrome.
+The synthesised page leaves `Layout` unset (`LayoutName ""`), so it renders under the deployment's declared default layout (Phase 1039). Layout selection stays a compose-time concern — a source picks the body, not the chrome.
 
 ## Per-request head metadata — `ResolvedContent` (Phase 111)
 
