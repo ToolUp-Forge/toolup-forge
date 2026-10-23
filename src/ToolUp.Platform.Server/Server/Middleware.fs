@@ -444,6 +444,63 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
 
         AnonymousSession sid
 
+    /// Auth-observability A1 — log and audit (`AuthScopeResolutionFailed`,
+    /// under `_platform`) a failure in the scope-resolution pipeline.
+    /// `outcome` says what became of the request; `message` is the row's
+    /// message, truncated to 512 chars. Every observability call is itself
+    /// guarded — a logger / audit failure during the auth-failure path MUST
+    /// NOT itself bring the request down.
+    let observeResolutionFailure (ctx: HttpContext) (ex: exn) (outcome: string) (message: string) =
+        let exceptionKind = ex.GetType().Name
+        let methodName = ctx.Request.Method
+        let pathStr = string ctx.Request.Path
+
+        let logger = Background.requestLogger ctx
+
+        try
+            logger
+            |> Option.iter (fun log ->
+                log.Error(
+                    sprintf
+                        "ScopeResolutionMiddleware caught %s on %s %s — %s: %s"
+                        exceptionKind
+                        methodName
+                        pathStr
+                        outcome
+                        message,
+                    Some ex
+                ))
+        with _ ->
+            ()
+
+        let warn = Background.writeFailureWarner "ScopeResolutionMiddleware" logger ctx
+
+        try
+            match ctx.RequestServices.GetService(typeof<IAuditLog>) with
+            | :? IAuditLog as auditLog ->
+                let truncatedMessage =
+                    if isNull message then "(null)"
+                    elif message.Length <= 512 then message
+                    else message.Substring(0, 512)
+
+                let correlationId = ToolUp.Remoting.Server.CallContext.correlationId ()
+
+                auditLog.Record(
+                    "_platform",
+                    AuthScopeResolutionFailed {
+                        Method = methodName
+                        Path = pathStr
+                        ExceptionKind = exceptionKind
+                        Message = truncatedMessage
+                        CorrelationId = correlationId
+                        OccurredAt = DateTimeOffset.UtcNow
+                    }
+                )
+                |> Background.startAudit warn "scope-resolution-failure audit"
+            | _ -> ()
+        with writeEx ->
+            warn "scope-resolution-failure audit" writeEx
+
     member _.InvokeAsync(ctx: HttpContext) =
         task {
             // Phase 9a: also resolve scope for `/dev/*` so the dev
@@ -486,6 +543,10 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
             let spanName = sprintf "HTTP %s %s" ctx.Request.Method (string ctx.Request.Path)
 
             let rootActivityOpt = activitySink.StartActivity(spanName, parentContext)
+
+            // Phase 1059 — set when the team permission read faults; the
+            // request is then refused after the catch-all, never run.
+            let permissionFault: (string * exn) option ref = ref None
 
             try
                 try
@@ -701,125 +762,142 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                         if scope.Container.StartsWith "team-" then
                             match ctx.RequestServices.GetService(typeof<IPermissionStore>) with
                             | :? IPermissionStore as permStore ->
-                                let! perms = runAsync (permStore.GetEffectivePermissions(user.UserId, scope.ScopeId))
+                                // Phase 1059 — a fault reading this team's permission state
+                                // REFUSES the request (below, after the catch-all): left to
+                                // the catch-all it was swallowed, the permission map was never
+                                // stamped, and the empty map the access-context factory then
+                                // reads admits every module.
+                                try
+                                    let! perms =
+                                        runAsync (permStore.GetEffectivePermissions(user.UserId, scope.ScopeId))
 
-                                ctx.Items["ToolUp.ModulePermissions"] <- box perms
+                                    ctx.Items["ToolUp.ModulePermissions"] <- box perms
 
-                                // Phase 245 — the team's per-module exposure
-                                // (tri-state) map, alongside the permission
-                                // map, so the AccessContext factory sees a
-                                // populated `ModuleExposure`.
-                                let! exposure = runAsync (permStore.GetModuleExposure scope.ScopeId)
+                                    // Phase 245 — the team's per-module exposure
+                                    // (tri-state) map, alongside the permission
+                                    // map, so the AccessContext factory sees a
+                                    // populated `ModuleExposure`.
+                                    let! exposure = runAsync (permStore.GetModuleExposure scope.ScopeId)
 
-                                ctx.Items["ToolUp.ModuleExposure"] <- box exposure
+                                    ctx.Items["ToolUp.ModuleExposure"] <- box exposure
 
-                                // Phase 551 — the subject's grant
-                                // records, so the module-access gate
-                                // can re-verify a declared
-                                // `GrantPolicy` ON USE rather than
-                                // trusting that the write path
-                                // enforced it.
-                                //
-                                // Loaded ONLY when at least one module
-                                // declares a policy stricter than
-                                // `AdminDiscretion`. A deployment that
-                                // declares none registers no registry,
-                                // so this is one failed `GetService`
-                                // and no extra store read (GP 13) —
-                                // and the dispatch gate answers
-                                // `AdminDiscretion` for every module,
-                                // which is unconditionally live.
-                                match
-                                    ctx.RequestServices.GetService(typeof<GrantPolicyGuard.ModuleGrantPolicyRegistry>)
-                                with
-                                | :? GrantPolicyGuard.ModuleGrantPolicyRegistry as registry when
-                                    not (GrantPolicyGuard.ModuleGrantPolicyRegistry.isEmpty registry)
-                                    ->
-                                    let! doc = runAsync (permStore.GetTeamPermissions scope.ScopeId)
+                                    // Phase 551 — the subject's grant
+                                    // records, so the module-access gate
+                                    // can re-verify a declared
+                                    // `GrantPolicy` ON USE rather than
+                                    // trusting that the write path
+                                    // enforced it.
+                                    //
+                                    // Loaded ONLY when at least one module
+                                    // declares a policy stricter than
+                                    // `AdminDiscretion`. A deployment that
+                                    // declares none registers no registry,
+                                    // so this is one failed `GetService`
+                                    // and no extra store read (GP 13) —
+                                    // and the dispatch gate answers
+                                    // `AdminDiscretion` for every module,
+                                    // which is unconditionally live.
+                                    match
+                                        ctx.RequestServices.GetService(
+                                            typeof<GrantPolicyGuard.ModuleGrantPolicyRegistry>
+                                        )
+                                    with
+                                    | :? GrantPolicyGuard.ModuleGrantPolicyRegistry as registry when
+                                        not (GrantPolicyGuard.ModuleGrantPolicyRegistry.isEmpty registry)
+                                        ->
+                                        let! doc = runAsync (permStore.GetTeamPermissions scope.ScopeId)
 
-                                    let subjectGrants = TeamPermissions.grantsFor user.UserId doc
+                                        let subjectGrants = TeamPermissions.grantsFor user.UserId doc
 
-                                    ctx.Items[GrantPolicyGuard.ModuleGrantsItemsKey] <- box subjectGrants
+                                        ctx.Items[GrantPolicyGuard.ModuleGrantsItemsKey] <- box subjectGrants
 
-                                    // Phase 552 — resolve the consent
-                                    // verdict for each module the
-                                    // subject holds a grant record on
-                                    // that declares
-                                    // `RequiresCounterpartyApproval`.
-                                    // Resolved PER REQUEST rather than
-                                    // cached, which is the whole of
-                                    // 552.D: a revocation takes effect
-                                    // at the very next call, not at the
-                                    // next sweep. The set is bounded by
-                                    // the subject's own counterparty
-                                    // grants — typically none, and never
-                                    // more than the modules that
-                                    // deployment declared — so the cost
-                                    // is zero for every deployment that
-                                    // declares no counterparty arm, and
-                                    // one registry read per genuinely
-                                    // counterparty-gated module
-                                    // otherwise (GP 13).
-                                    let counterpartyModules =
-                                        subjectGrants
-                                        |> Map.toList
-                                        |> List.choose (fun (moduleName, _) ->
-                                            match
-                                                GrantPolicyGuard.ModuleGrantPolicyRegistry.resolve registry moduleName
-                                            with
-                                            | GrantPolicy.RequiresCounterpartyApproval party -> Some(moduleName, party)
-                                            | _ -> None)
+                                        // Phase 552 — resolve the consent
+                                        // verdict for each module the
+                                        // subject holds a grant record on
+                                        // that declares
+                                        // `RequiresCounterpartyApproval`.
+                                        // Resolved PER REQUEST rather than
+                                        // cached, which is the whole of
+                                        // 552.D: a revocation takes effect
+                                        // at the very next call, not at the
+                                        // next sweep. The set is bounded by
+                                        // the subject's own counterparty
+                                        // grants — typically none, and never
+                                        // more than the modules that
+                                        // deployment declared — so the cost
+                                        // is zero for every deployment that
+                                        // declares no counterparty arm, and
+                                        // one registry read per genuinely
+                                        // counterparty-gated module
+                                        // otherwise (GP 13).
+                                        let counterpartyModules =
+                                            subjectGrants
+                                            |> Map.toList
+                                            |> List.choose (fun (moduleName, _) ->
+                                                match
+                                                    GrantPolicyGuard.ModuleGrantPolicyRegistry.resolve
+                                                        registry
+                                                        moduleName
+                                                with
+                                                | GrantPolicy.RequiresCounterpartyApproval party ->
+                                                    Some(moduleName, party)
+                                                | _ -> None)
 
-                                    if not (List.isEmpty counterpartyModules) then
-                                        let consentStore =
-                                            match
-                                                ctx.RequestServices.GetService(
-                                                    typeof<GrantConsentStore.IGrantConsentStore>
-                                                )
-                                            with
-                                            | :? GrantConsentStore.IGrantConsentStore as s -> Some s
-                                            | _ -> None
+                                        if not (List.isEmpty counterpartyModules) then
+                                            let consentStore =
+                                                match
+                                                    ctx.RequestServices.GetService(
+                                                        typeof<GrantConsentStore.IGrantConsentStore>
+                                                    )
+                                                with
+                                                | :? GrantConsentStore.IGrantConsentStore as s -> Some s
+                                                | _ -> None
 
-                                        let verifier =
-                                            match
-                                                ctx.RequestServices.GetService(
-                                                    typeof<GrantConsentStore.IGrantConsentVerifier>
-                                                )
-                                            with
-                                            | :? GrantConsentStore.IGrantConsentVerifier as v -> v
-                                            // No verifier composed ⇒
-                                            // nothing can be checked ⇒
-                                            // nothing is admitted. Never
-                                            // a fall-through to "trust
-                                            // the record".
-                                            | _ -> GrantConsentStore.denyingVerifier
+                                            let verifier =
+                                                match
+                                                    ctx.RequestServices.GetService(
+                                                        typeof<GrantConsentStore.IGrantConsentVerifier>
+                                                    )
+                                                with
+                                                | :? GrantConsentStore.IGrantConsentVerifier as v -> v
+                                                // No verifier composed ⇒
+                                                // nothing can be checked ⇒
+                                                // nothing is admitted. Never
+                                                // a fall-through to "trust
+                                                // the record".
+                                                | _ -> GrantConsentStore.denyingVerifier
 
-                                        let auditLog =
-                                            match ctx.RequestServices.GetService(typeof<IAuditLog>) with
-                                            | :? IAuditLog as log -> Some log
-                                            | _ -> None
+                                            let auditLog =
+                                                match ctx.RequestServices.GetService(typeof<IAuditLog>) with
+                                                | :? IAuditLog as log -> Some log
+                                                | _ -> None
 
-                                        let mutable verdicts = Map.empty<string, Result<unit, ConsentDenial>>
+                                            let mutable verdicts = Map.empty<string, Result<unit, ConsentDenial>>
 
-                                        for moduleName, party in counterpartyModules do
-                                            let subject = ConsentSubject.create scope.ScopeId user.UserId moduleName
+                                            for moduleName, party in counterpartyModules do
+                                                let subject = ConsentSubject.create scope.ScopeId user.UserId moduleName
 
-                                            let! resolved =
-                                                runAsync (
-                                                    GrantConsentStore.resolveLive
-                                                        consentStore
-                                                        verifier
-                                                        auditLog
-                                                        (Background.startAudit warn "grant-consent trust-denial audit")
-                                                        DateTimeOffset.UtcNow
-                                                        subject
-                                                        party
-                                                )
+                                                let! resolved =
+                                                    runAsync (
+                                                        GrantConsentStore.resolveLive
+                                                            consentStore
+                                                            verifier
+                                                            auditLog
+                                                            (Background.startAudit
+                                                                warn
+                                                                "grant-consent trust-denial audit")
+                                                            DateTimeOffset.UtcNow
+                                                            subject
+                                                            party
+                                                    )
 
-                                            verdicts <- verdicts |> Map.add moduleName (resolved |> Result.map ignore)
+                                                verdicts <-
+                                                    verdicts |> Map.add moduleName (resolved |> Result.map ignore)
 
-                                        ctx.Items[GrantConsentStore.ModuleGrantConsentsItemsKey] <- box verdicts
-                                | _ -> ()
+                                            ctx.Items[GrantConsentStore.ModuleGrantConsentsItemsKey] <- box verdicts
+                                    | _ -> ()
+                                with ex ->
+                                    permissionFault.Value <- Some(permStore.GetType().Name, ex)
                             | _ -> ()
 
                         // Phase 4b — resolve PlatformRole per request.
@@ -831,7 +909,7 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                         // the AccessContext factory and any handler
                         // touching `canModifyPlatformConfig` reads
                         // the same value without re-querying.
-                        if not (AuthenticatedUser.isAnonymous user) then
+                        if permissionFault.Value.IsNone && not (AuthenticatedUser.isAnonymous user) then
                             match ctx.RequestServices.GetService(typeof<IPlatformAdminStore>) with
                             | :? IPlatformAdminStore as adminStore ->
                                 let! isAdmin = runAsync (adminStore.IsPlatformAdmin user.UserId)
@@ -842,95 +920,44 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                     | Error _ -> ()
                 with ex ->
                     // Auth-observability A1 — infrastructure error in
-                    // the scope-resolution pipeline (DI hiccup, store
-                    // throw, cache miss-and-throw). Pre-A1 this catch
-                    // was silent: handlers downstream saw missing
-                    // Items and fell back to anonymous, and operators
-                    // had no signal to distinguish "no credentials"
-                    // from "resolver crashed."
+                    // the scope-resolution pipeline (DI hiccup, resolver
+                    // throw, cache miss-and-throw), observed through a
+                    // structured log + best-effort audit event so a spike
+                    // in `ScopeResolutionFailed` is visible on dashboards.
                     //
-                    // This catch does NOT re-raise — bringing the
-                    // request path down for a DI hiccup would be
-                    // worse — and what changes here is observability:
-                    // structured log + best-effort audit event so a
-                    // spike in `ScopeResolutionFailed` is visible on
-                    // dashboards and per-incident triage has a query
-                    // path.
+                    // What this catch protects: a fault BEFORE the subject
+                    // is stamped. It leaves `ToolUp.Subject` unset, and
+                    // `SurfaceEnforcementMiddleware` ([Phase 336],
+                    // `db622f5f`) treats a missing Subject on an `/api/*`
+                    // path as fail-closed — a fresh `AnonymousSession`
+                    // judged by the SAME surface gate — so a crashed
+                    // resolver yields an anonymous-privilege request.
                     //
-                    // **Swallowing is not by itself fail-closed, and
-                    // this comment used to say it was.** All the
-                    // catch does is leave the `HttpContext.Items`
-                    // entries unset; what makes that SAFE is
-                    // downstream, in [Phase 336] (`db622f5f`):
-                    // `SurfaceEnforcementMiddleware` treats a missing
-                    // Subject on an `/api/*` path as fail-closed,
-                    // synthesising a fresh `AnonymousSession` and
-                    // running the SAME surface gate over it, so a
-                    // crashed resolver yields an anonymous-privilege
-                    // request rather than an unjudged one. Before
-                    // 336 the fall-through was to whatever each
-                    // handler did with absent Items, which is not a
-                    // property this middleware could promise on its
-                    // own. Read the guarantee there; do not conclude
-                    // from this catch alone that it holds.
-                    //
-                    // Every observability call is itself wrapped in a
-                    // local try/with — a logger / audit failure
-                    // during the auth-failure path MUST NOT itself
-                    // bring the request down.
+                    // What it does NOT protect: a fault AFTER the subject
+                    // and scope are stamped. There the subject is not
+                    // missing, so the surface gate passes a valid member,
+                    // and any per-request grant the fault left unstamped
+                    // reads as its permissive default. That is why the
+                    // permission read is NOT left to this catch (Phase
+                    // 1059): it refuses with a 503 below. A new read of
+                    // authorisation state placed after the stamps must do
+                    // the same, never rely on this swallow.
+                    observeResolutionFailure ctx ex "request fell through to anonymous" ex.Message
 
-                    let exceptionKind = ex.GetType().Name
-                    let methodName = ctx.Request.Method
-                    let pathStr = string ctx.Request.Path
+                match permissionFault.Value with
+                | Some(storeName, ex) ->
+                    // Phase 1059 — the team's permission state could not be
+                    // read: refuse rather than run the request with an empty
+                    // (unrestricted) map. A 503, because the store is
+                    // unavailable, not the caller unauthorised.
+                    observeResolutionFailure
+                        ctx
+                        ex
+                        "request refused with 503"
+                        (sprintf "IPermissionStore (%s) fault: %s" storeName ex.Message)
 
-                    let logger = Background.requestLogger ctx
-
-                    try
-                        logger
-                        |> Option.iter (fun log ->
-                            log.Error(
-                                sprintf
-                                    "ScopeResolutionMiddleware swallowed %s on %s %s — request fell through to anonymous: %s"
-                                    exceptionKind
-                                    methodName
-                                    pathStr
-                                    ex.Message,
-                                Some ex
-                            ))
-                    with _ ->
-                        ()
-
-                    let warn = Background.writeFailureWarner "ScopeResolutionMiddleware" logger ctx
-
-                    try
-                        match ctx.RequestServices.GetService(typeof<IAuditLog>) with
-                        | :? IAuditLog as auditLog ->
-                            let truncatedMessage =
-                                let m = ex.Message
-
-                                if isNull m then "(null)"
-                                elif m.Length <= 512 then m
-                                else m.Substring(0, 512)
-
-                            let correlationId = ToolUp.Remoting.Server.CallContext.correlationId ()
-
-                            auditLog.Record(
-                                "_platform",
-                                AuthScopeResolutionFailed {
-                                    Method = methodName
-                                    Path = pathStr
-                                    ExceptionKind = exceptionKind
-                                    Message = truncatedMessage
-                                    CorrelationId = correlationId
-                                    OccurredAt = DateTimeOffset.UtcNow
-                                }
-                            )
-                            |> Background.startAudit warn "scope-resolution-failure audit"
-                        | _ -> ()
-                    with writeEx ->
-                        warn "scope-resolution-failure audit" writeEx
-
-                do! next.Invoke(ctx)
+                    ctx.Response.StatusCode <- StatusCodes.Status503ServiceUnavailable
+                | None -> do! next.Invoke(ctx)
             finally
                 rootActivityOpt |> Option.iter _.Dispose()
         }

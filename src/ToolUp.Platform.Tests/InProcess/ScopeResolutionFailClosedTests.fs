@@ -112,7 +112,20 @@ let private run (store: IPermissionStore) = async {
         Middleware.ScopeResolutionMiddleware(handler, ServerConfig.defaults)
 
     do! middleware.InvokeAsync ctx |> Async.AwaitTask
-    return ctx.Response.StatusCode, reached.Value, List.ofSeq rows
+    return ctx.Response.StatusCode, reached.Value, rows
+}
+
+/// Poll `probe` until it finds something (or 3 s pass).
+let private settleOn (attempts: int) (probe: unit -> 'a list) = async {
+    let rec go attempt = async {
+        match probe () with
+        | [] when attempt < attempts ->
+            do! Async.Sleep 50
+            return! go (attempt + 1)
+        | found -> return found
+    }
+
+    return! go 0
 }
 
 let private isResolutionFailure (_, event) =
@@ -138,7 +151,10 @@ let tests =
             Expect.isFalse reached "a request whose permissions could not be read must not reach a module handler"
             Expect.equal status 503 "the refusal is a 503 — the store is unavailable, the caller is not unauthorised"
 
-            match rows |> List.filter isResolutionFailure with
+            // The row is fire-and-forget (Phase 1024): wait for it to land.
+            let! failures = settleOn 60 (fun () -> List.ofSeq rows |> List.filter isResolutionFailure)
+
+            match failures with
             | [ _, AuthScopeResolutionFailed payload ] ->
                 Expect.equal payload.ExceptionKind "PermissionStoreUnavailableException" "the row names the fault"
                 Expect.stringContains payload.Message "IPermissionStore" "the row names the store"
