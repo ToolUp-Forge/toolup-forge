@@ -886,6 +886,45 @@ let expiredInviteVisibilityTests =
             | Ok rows -> Expect.isEmpty rows "a re-issued email leaves the expired list"
         }
 
+        // Phase 1059 — the reader keys the stream as every bare-id writer
+        // does: a lapse recorded under the bare team id is listed.
+        testCaseAsync "a TeamInviteExpired row under the bare team id is listed"
+        <| async {
+            do! CacheReset.invalidateAll ()
+            let storage = InMemoryBlobStorage() :> IBlobStorage
+            let ts = freshTeamStore ()
+            let sts = freshShareTokenStore ()
+            let audit = TrailAuditLog()
+            let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
+
+            let store =
+                ToolUp.Platform.Teams.InMemoryPendingInviteStore(storage, silentLogger, Some(audit :> IAuditLog))
+                :> IPendingInviteStore
+
+            do!
+                (audit :> IAuditLog)
+                    .Record(
+                        teamId,
+                        TeamInviteExpired {
+                            TeamId = teamId
+                            InviteeEmail = "bare@x.com"
+                            InviterUserId = "alice@example.com"
+                            Role = Member
+                            IssuedAt = DateTime.UtcNow.AddDays -9.0
+                            ExpiredAt = DateTime.UtcNow.AddDays -2.0
+                        }
+                    )
+
+            let ctx = ctxWithPendingStore storage store "alice@example.com"
+            let api = teamInvitationApi sts ts (audit :> IAuditLog) cfg ctx
+
+            let! listed = api.ListRecentlyExpiredInvites teamId
+
+            match listed with
+            | Ok [ row ] -> Expect.equal row.InviteeEmail "bare@x.com" "the bare-key row is read"
+            | other -> failtestf "expected the one bare-key lapse, got %A" other
+        }
+
         testCaseAsync "a lapse older than the 30-day window is not listed"
         <| async {
             do! CacheReset.invalidateAll ()

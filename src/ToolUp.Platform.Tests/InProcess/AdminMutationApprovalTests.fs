@@ -911,6 +911,44 @@ let tests =
             Expect.isFalse applied.Value "nothing may be applied when the queue cannot be read"
         }
 
+        // Phase 1059 — removing the record before applying is what stops a
+        // second approver applying the same mutation again. A refused
+        // `Remove` therefore refuses the approval: nothing is applied, by
+        // this approver or the next.
+        test "a refused Remove applies nothing, and a second approver cannot apply it either" {
+            let _, _, _, approvals = freshFixture ()
+
+            let stuck =
+                { new IAdminMutationApprovalStore with
+                    member _.Propose p = approvals.Propose p
+                    member _.TryGet(t, r) = approvals.TryGet(t, r)
+                    member _.List t = approvals.List t
+                    member _.Remove(_, _) = async { return Error "remove refused" }
+                }
+
+            let mutation = AdminMutation.SetMemberPermissions("bob", "reports", [ Read; Write ])
+
+            let queued =
+                match propose stuck settingsAll None runNow t0 "acme" "admin-a" mutation |> run with
+                | Ok q -> q
+                | Error r -> failtestf "propose refused: %s" (AdminMutationRefusal.describe r)
+
+            let applied = ref 0
+
+            let apply _ = async {
+                applied.Value <- applied.Value + 1
+                return Ok()
+            }
+
+            for approver in [ "admin-b"; "admin-c" ] do
+                match approve stuck apply None runNow t0 "acme" queued.RequestId approver |> run with
+                | Error _ -> ()
+                | other ->
+                    failtestf "%s's approval must be refused while the record cannot be removed; got %A" approver other
+
+            Expect.equal applied.Value 0 "a mutation whose record could not be removed is never applied"
+        }
+
         test "an unknown request is refused and applies nothing" {
             let _, _, _, approvals = freshFixture ()
             let audit = RecordingAuditLog()

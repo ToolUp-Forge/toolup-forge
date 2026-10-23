@@ -934,6 +934,7 @@ let private registeredTests =
         PermissionStoreFailClosedTests.tests
         ScopeResolutionFailClosedTests.tests
         AccessContextFactoryTests.tests
+        AuditStreamKeyTests.tests
         SmokeTestDefaultsTests.tests
         InProcessRateLimiterTests.tests
         // Phase 128 — the outbound API connector kit contract.
