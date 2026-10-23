@@ -104,7 +104,7 @@ type TeamDeletedPayload = {
 /// caller who performed the transfer — always equal to `FromUserId` under
 /// the current gate (the outgoing Owner transfers their own team), carried
 /// as a distinct field so a future admin-driven reassignment path stays
-/// wire-compatible. Recorded under the `team-{TeamId}` audit scope (GP 6).
+/// wire-compatible. Recorded under the team's audit stream, `AuditStreamKey.ofTeam` (GP 6).
 type TeamOwnershipTransferredPayload = {
     TeamId: string
     /// Outgoing Owner, demoted to `Admin` by the transfer.
@@ -528,6 +528,25 @@ type EncryptionKeyEventPayload = {
     /// deployments can confirm which resolver produced each lifecycle
     /// event.
     Resolver: string
+}
+
+/// Phase 1059 — a stored encryption key could not be used: its material did
+/// not decode, or decoded to the wrong length. Emitted by `PerScopeKeyResolver`,
+/// which REFUSES the resolution rather than minting a replacement over it — a
+/// replacement would leave every blob encrypted under the stored key
+/// undecryptable, and the stored value is left exactly as found.
+type EncryptionKeyUnreadablePayload = {
+    /// Scope the key belongs to.
+    ScopeId: string
+    /// Stable key identifier, as on `EncryptionKeyEventPayload`.
+    KeyId: string
+    /// Resolver class name.
+    Resolver: string
+    /// Byte length the stored material decoded to; `None` when it was not
+    /// valid base64 at all.
+    LengthSeen: int option
+    /// What was wrong, for the operator reading the row.
+    Reason: string
 }
 
 /// Phase 22b — one replica's acknowledgement that it evicted its cached

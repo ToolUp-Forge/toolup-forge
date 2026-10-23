@@ -376,6 +376,14 @@ let internal auditEventCodecs: AuditEventCodec list = [
         Decode = fun j -> EncryptionKeyDestroyAcknowledged(fromAuditJson<EncryptionKeyDestroyAckPayload> j)
     }
     {
+        EventType = "EncryptionKeyUnreadable"
+        TryEncode =
+            (function
+            | EncryptionKeyUnreadable p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> EncryptionKeyUnreadable(fromAuditJson<EncryptionKeyUnreadablePayload> j)
+    }
+    {
         EventType = "EntityCreated"
         TryEncode =
             (function

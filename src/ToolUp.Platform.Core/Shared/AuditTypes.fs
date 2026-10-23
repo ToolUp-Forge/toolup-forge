@@ -82,6 +82,9 @@ type AuditEvent =
     /// replica records `EncryptionKeyDestroyed` and does not
     /// self-acknowledge.
     | EncryptionKeyDestroyAcknowledged of EncryptionKeyDestroyAckPayload
+    /// Phase 1059 — a stored encryption key was refused as unreadable (wrong
+    /// length, or not decodable); nothing was regenerated over it.
+    | EncryptionKeyUnreadable of EncryptionKeyUnreadablePayload
     /// Entity created (first version saved).
     | EntityCreated of EntityLifecycleEventPayload
     /// Entity updated (subsequent version saved).
@@ -313,14 +316,14 @@ type AuditEvent =
     | TeamDeleted of TeamDeletedPayload
     /// Phase 304 — team ownership transferred (`TeamApi.TransferOwnership`).
     /// Outgoing Owner demoted to `Admin`, incoming member promoted to
-    /// `Owner`. Recorded under the `team-{TeamId}` scope.
+    /// `Owner`. Recorded under the team audit stream.
     | TeamOwnershipTransferred of TeamOwnershipTransferredPayload
     /// Phase 3d — `ITeamInviteApi.IssueInvite` succeeded. Reserved
     /// `SourceModule = "_platform.team_invites"`. Recorded under
-    /// `team-{TeamId}` scope.
+    /// team audit stream.
     | TeamInviteIssued of TeamInviteIssuedPayload
     /// Phase 3d — `ITeamInviteApi.AcceptInvite` succeeded. Recorded
-    /// under `team-{TeamId}` scope alongside the per-use
+    /// under the team audit stream alongside the per-use
     /// `TeamInviteRedeemed` event.
     | TeamInviteAccepted of TeamInviteAcceptedPayload
     /// Phase 3d — `ScopeResolutionMiddleware` consumed a pending-
@@ -343,7 +346,7 @@ type AuditEvent =
     | TeamInviteRedeemed of TeamInviteRedeemedPayload
     /// Phase 547 — an email-keyed pending invite expired unconsumed and
     /// was swept from the store. One row per dropped entry, recorded
-    /// under `team-{TeamId}` scope. Makes the previously-silent expiry
+    /// under the team audit stream. Makes the previously-silent expiry
     /// sweep observable so an operator can see (and re-issue) an invite
     /// that lapsed before the invitee signed in (GP 6).
     | TeamInviteExpired of TeamInviteExpiredPayload
@@ -850,6 +853,7 @@ module AuditEvent =
         | EncryptionKeyRotated _ -> "EncryptionKeyRotated"
         | EncryptionKeyDestroyed _ -> "EncryptionKeyDestroyed"
         | EncryptionKeyDestroyAcknowledged _ -> "EncryptionKeyDestroyAcknowledged"
+        | EncryptionKeyUnreadable _ -> "EncryptionKeyUnreadable"
         | EntityCreated _ -> "EntityCreated"
         | EntityUpdated _ -> "EntityUpdated"
         | EntityDeleted _ -> "EntityDeleted"

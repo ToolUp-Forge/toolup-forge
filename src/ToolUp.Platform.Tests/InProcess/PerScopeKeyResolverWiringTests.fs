@@ -476,3 +476,90 @@ let wiringDiagnosticsTests =
             Expect.equal (contributorCount withNothing) 0 "no encryption at all, no panel"
         }
     ]
+// ─── Phase 1059 — stored key material of the wrong length refuses ────
+//
+// A stored per-scope key that is not 32 bytes (or not base64 at all) used to
+// be replaced: the resolver minted a NEW key, persisted it over the old one
+// (discarding the `SetSecret` result) and handed it out, so every blob
+// encrypted under the previous key became undecryptable and no row said
+// why. The resolver now refuses — nothing is regenerated, the stored value
+// is untouched — and records one row naming the scope and what it saw.
+
+/// A resolver over a real secret store pre-seeded with `stored` as this
+/// scope's key material, and the audit rows it records.
+let private resolverOver (stored: string) = async {
+    let secrets = newSecretStore ()
+    let! seeded = secrets.SetSecret("_platform", "encryption/scopes/" + scopeId + ".key", stored)
+    Expect.isOk seeded "seeded the stored key"
+    let rows = ConcurrentQueue<string * AuditEvent>()
+
+    let audit =
+        { new IAuditLog with
+            member _.Record(scope, event) = async { rows.Enqueue(scope, event) }
+            member _.GetAuditTrail(_, _, _) = async { return [] }
+        }
+
+    let resolver =
+        PerScopeKeyResolver.PerScopeKeyResolver(secrets, newCache (), Some audit)
+
+    return secrets, resolver :> IBlobEncryptionKeyResolver, rows
+}
+
+let private storedValue (secrets: ISecretStore) =
+    secrets.GetSecret("_platform", "encryption/scopes/" + scopeId + ".key")
+    |> Async.RunSynchronously
+
+let private tryResolve (resolver: IBlobEncryptionKeyResolver) = async {
+    try
+        let! key =
+            resolver.ResolveKey {
+                ScopeId = scopeId
+                Container = "team-" + scopeId
+                Persist = true
+            }
+
+        return Result.Ok key
+    with ex ->
+        return Result.Error ex.Message
+}
+
+let keyMaterialTests =
+    testList "Phase 1059 — unreadable stored key material refuses" [
+
+        for name, stored, lengthSeen in
+            [
+                "a 16-byte key", Convert.ToBase64String(Array.create 16 7uy), Some 16
+                "a value that is not base64", "not*base64*at*all", None
+            ] do
+            testCaseAsync (sprintf "%s is refused, not replaced" name)
+            <| async {
+                let! secrets, resolver, rows = resolverOver stored
+                let! result = tryResolve resolver
+
+                Expect.isError result "a key of the wrong length must not be handed out"
+
+                Expect.equal
+                    (storedValue secrets)
+                    (Some stored)
+                    "the stored material is untouched — no new key over the old"
+
+                let unreadable =
+                    rows
+                    |> List.ofSeq
+                    |> List.filter (fun (_, e) -> AuditEvent.eventTypeName e = "EncryptionKeyUnreadable")
+
+                match unreadable, lengthSeen with
+                | [ _, EncryptionKeyUnreadable p ], Some n ->
+                    Expect.equal p.ScopeId scopeId "the row names the scope"
+                    Expect.equal p.LengthSeen (Some n) "the row names the length it saw"
+                | [ _, EncryptionKeyUnreadable p ], None ->
+                    Expect.equal p.ScopeId scopeId "the row names the scope"
+                    Expect.equal p.LengthSeen None "no length when the value did not decode"
+                | other, _ -> failtestf "expected exactly one EncryptionKeyUnreadable row, got %A" other
+
+                Expect.isFalse
+                    (rows
+                     |> Seq.exists (fun (_, e) -> AuditEvent.eventTypeName e = "EncryptionKeyCreated"))
+                    "no key was created"
+            }
+    ]
