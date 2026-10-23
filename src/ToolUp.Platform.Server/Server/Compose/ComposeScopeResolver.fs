@@ -20,6 +20,116 @@ open ToolUp.Platform.SurfaceEnforcement
 // definition captured and returns the same shape. Zero behaviour
 // change.
 
+/// The `AccessContext` a request carries, read from the `HttpContext.Items`
+/// `ScopeResolutionMiddleware` stamped. The scoped factory below is this
+/// function over the request's context; it is separate so the reading is
+/// testable without composing a server (Phase 1059).
+let internal accessContextOf (ctx: HttpContext) : AccessContext =
+    let userId =
+        match ctx.Items.TryGetValue "ToolUp.UserId" with
+        | true, (:? string as id) -> id
+        | _ -> "anonymous"
+
+    let teamId =
+        match ctx.Items.TryGetValue "ToolUp.StorageScope" with
+        | true, (:? StorageScope as scope) when scope.Container.StartsWith "team-" -> Some scope.ScopeId
+        | _ -> None
+
+    // Phase 527 — a validated service-account token's effective
+    // permission map takes precedence over the team-derived one.
+    //
+    // Precedence rather than merge, and stated here rather than
+    // left to middleware ordering: the machine principal's
+    // declared set IS its authority, and merging it with whatever
+    // the owning team grants its human members would silently
+    // widen a credential that was deliberately scoped narrower.
+    // The overlay is written by `ServiceAccountTokenMiddleware`,
+    // which runs BEFORE `ScopeResolutionMiddleware` (the claim has
+    // to exist for the subject to resolve) and so would otherwise
+    // be overwritten by the team-derived map written after it.
+    //
+    // The overlay is never empty by construction — the store
+    // refuses an empty declared set, `ValidateToken` refuses an
+    // empty effective set, and the middleware refuses to write
+    // one — which matters because an empty map reads as
+    // UNRESTRICTED in `AccessContext.canAccessModule`. The
+    // `IsEmpty` guard below is the last of those three checks,
+    // placed where the value is actually consumed: falling
+    // through to the team map on an empty overlay is strictly
+    // safer than adopting it.
+    let serviceAccountPermissions =
+        match ctx.Items.TryGetValue ServiceAccountTokenHandler.ServiceAccountPermissionsItemsKey with
+        | true, (:? Map<string, ModulePermission list> as perms) when not perms.IsEmpty -> Some perms
+        | _ -> None
+
+    let modulePermissions =
+        match serviceAccountPermissions with
+        | Some perms -> perms
+        | None ->
+            match ctx.Items.TryGetValue "ToolUp.ModulePermissions" with
+            | true, (:? Map<string, ModulePermission list> as perms) -> perms
+            | _ -> Map.empty
+
+    let moduleExposure =
+        match ctx.Items.TryGetValue "ToolUp.ModuleExposure" with
+        | true, (:? Map<string, ModuleExposure> as exposure) -> exposure
+        | _ -> Map.empty
+
+    let platformRole =
+        match ctx.Items.TryGetValue "ToolUp.PlatformRole" with
+        | true, (:? PlatformRole as role) -> Some role
+        | _ -> None
+
+    // Phase 66 A.6 stashed a resolved `Subject` on
+    // `HttpContext.Items["ToolUp.Subject"]` upstream
+    // (`ScopeResolutionMiddleware` → `ISubjectResolver`).
+    // That is the only source of a principal.
+    //
+    // Phase 989 — when no Subject was resolved the request is
+    // ANONYMOUS, whatever the deployment's surfaces say (this
+    // branch used to derive a subject from the surfaces). A
+    // missing Subject means the resolver did not run or did not
+    // finish, and neither is evidence of identity, so the
+    // context also carries none of the per-request grants read
+    // above: no permissions, no exposure overrides, no platform
+    // role.
+    //
+    // Phase 987 — the provider-asserted roles of the request's
+    // user (written by the same middleware) ride along as
+    // `TokenRoles`, for a signed-in human principal only: an
+    // anonymous session and a share-token bearer carry none,
+    // whatever the request's user says. Phase 993 — the page
+    // roles are the user's API roles PLUS its directory roles
+    // (`AuthenticatedUser.pageRoles`); `[<RequiresRole>]` reads
+    // only the former.
+    let providerRoles =
+        match ctx.Items.TryGetValue "ToolUp.User" with
+        | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) ->
+            ToolUp.Platform.Auth.AuthenticatedUser.pageRoles user
+        | _ -> []
+
+    // Phase 996 — the admission the provider decided rides along
+    // under the same rule as the roles: a signed-in human
+    // principal only. `Member` everywhere a publication audience
+    // is not configured.
+    let providerAdmission =
+        match ctx.Items.TryGetValue "ToolUp.User" with
+        | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) -> user.Admission
+        | _ -> ToolUp.Platform.Auth.PrincipalAdmission.Member
+
+    match ctx.Items.TryGetValue "ToolUp.Subject" with
+    | true, (:? Subject as subject) -> {
+        UserId = userId
+        TeamId = teamId
+        Subject = subject
+        ModulePermissions = modulePermissions
+        ModuleExposure = moduleExposure
+        PlatformRole = platformRole
+        TokenRoles = AccessContext.tokenRolesFor subject providerRoles
+        Admission = AccessContext.admissionFor subject providerAdmission
+      }
+    | _ -> AccessContext.unrestricted (AnonymousSession "anonymous")
+
 /// Build + register the per-request scope-resolution substrate:
 ///
 ///   - `IStorageScopeResolver` — picked from the deployment's
@@ -171,111 +281,7 @@ let registerScopeResolution
                 // attribute, and an unrestricted anonymous context is
                 // the safe default for the rare out-of-request resolve.
                 AccessContext.unrestricted (AnonymousSession "anonymous")
-            | ctx ->
-                let userId =
-                    match ctx.Items.TryGetValue "ToolUp.UserId" with
-                    | true, (:? string as id) -> id
-                    | _ -> "anonymous"
-
-                let teamId =
-                    match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-                    | true, (:? StorageScope as scope) when scope.Container.StartsWith "team-" -> Some scope.ScopeId
-                    | _ -> None
-
-                // Phase 527 — a validated service-account token's effective
-                // permission map takes precedence over the team-derived one.
-                //
-                // Precedence rather than merge, and stated here rather than
-                // left to middleware ordering: the machine principal's
-                // declared set IS its authority, and merging it with whatever
-                // the owning team grants its human members would silently
-                // widen a credential that was deliberately scoped narrower.
-                // The overlay is written by `ServiceAccountTokenMiddleware`,
-                // which runs BEFORE `ScopeResolutionMiddleware` (the claim has
-                // to exist for the subject to resolve) and so would otherwise
-                // be overwritten by the team-derived map written after it.
-                //
-                // The overlay is never empty by construction — the store
-                // refuses an empty declared set, `ValidateToken` refuses an
-                // empty effective set, and the middleware refuses to write
-                // one — which matters because an empty map reads as
-                // UNRESTRICTED in `AccessContext.canAccessModule`. The
-                // `IsEmpty` guard below is the last of those three checks,
-                // placed where the value is actually consumed: falling
-                // through to the team map on an empty overlay is strictly
-                // safer than adopting it.
-                let serviceAccountPermissions =
-                    match ctx.Items.TryGetValue ServiceAccountTokenHandler.ServiceAccountPermissionsItemsKey with
-                    | true, (:? Map<string, ModulePermission list> as perms) when not perms.IsEmpty -> Some perms
-                    | _ -> None
-
-                let modulePermissions =
-                    match serviceAccountPermissions with
-                    | Some perms -> perms
-                    | None ->
-                        match ctx.Items.TryGetValue "ToolUp.ModulePermissions" with
-                        | true, (:? Map<string, ModulePermission list> as perms) -> perms
-                        | _ -> Map.empty
-
-                let moduleExposure =
-                    match ctx.Items.TryGetValue "ToolUp.ModuleExposure" with
-                    | true, (:? Map<string, ModuleExposure> as exposure) -> exposure
-                    | _ -> Map.empty
-
-                let platformRole =
-                    match ctx.Items.TryGetValue "ToolUp.PlatformRole" with
-                    | true, (:? PlatformRole as role) -> Some role
-                    | _ -> None
-
-                // Phase 66 A.6 stashed a resolved `Subject` on
-                // `HttpContext.Items["ToolUp.Subject"]` upstream
-                // (`ScopeResolutionMiddleware` → `ISubjectResolver`).
-                // That is the only source of a principal.
-                //
-                // Phase 989 — when no Subject was resolved the request is
-                // ANONYMOUS, whatever the deployment's surfaces say (this
-                // branch used to derive a subject from the surfaces). A
-                // missing Subject means the resolver did not run or did not
-                // finish, and neither is evidence of identity, so the
-                // context also carries none of the per-request grants read
-                // above: no permissions, no exposure overrides, no platform
-                // role.
-                //
-                // Phase 987 — the provider-asserted roles of the request's
-                // user (written by the same middleware) ride along as
-                // `TokenRoles`, for a signed-in human principal only: an
-                // anonymous session and a share-token bearer carry none,
-                // whatever the request's user says. Phase 993 — the page
-                // roles are the user's API roles PLUS its directory roles
-                // (`AuthenticatedUser.pageRoles`); `[<RequiresRole>]` reads
-                // only the former.
-                let providerRoles =
-                    match ctx.Items.TryGetValue "ToolUp.User" with
-                    | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) ->
-                        ToolUp.Platform.Auth.AuthenticatedUser.pageRoles user
-                    | _ -> []
-
-                // Phase 996 — the admission the provider decided rides along
-                // under the same rule as the roles: a signed-in human
-                // principal only. `Member` everywhere a publication audience
-                // is not configured.
-                let providerAdmission =
-                    match ctx.Items.TryGetValue "ToolUp.User" with
-                    | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) -> user.Admission
-                    | _ -> ToolUp.Platform.Auth.PrincipalAdmission.Member
-
-                match ctx.Items.TryGetValue "ToolUp.Subject" with
-                | true, (:? Subject as subject) -> {
-                    UserId = userId
-                    TeamId = teamId
-                    Subject = subject
-                    ModulePermissions = modulePermissions
-                    ModuleExposure = moduleExposure
-                    PlatformRole = platformRole
-                    TokenRoles = AccessContext.tokenRolesFor subject providerRoles
-                    Admission = AccessContext.admissionFor subject providerAdmission
-                  }
-                | _ -> AccessContext.unrestricted (AnonymousSession "anonymous"))
+            | ctx -> accessContextOf ctx)
         .AddHttpContextAccessor()
         .AddSession()
     |> ignore

@@ -79,6 +79,17 @@ let tests =
                 "a corrupt RBAC document must not be treated as unrestricted"
         }
 
+        // Phase 1059 — the raise reaches the caller of the read the request
+        // path actually makes (`GetEffectivePermissions`), so the
+        // middleware sees it and can refuse.
+        test "GetEffectivePermissions over an unreadable document raises (the caller observes the fault)" {
+            let s = store (FakeBlob(Result.Error "transient storage error", Ok true))
+
+            Expect.throwsT<PermissionStoreUnavailableException>
+                (fun () -> s.GetEffectivePermissions("u-1", "team-x") |> Async.RunSynchronously |> ignore)
+                "the effective-permission read must surface the fault, not an empty (unrestricted) map"
+        }
+
         test "Present and valid (Download ok, parseable) → returns parsed permissions" {
             let valid = System.Text.Encoding.UTF8.GetBytes """{"defaults":{},"members":{}}"""
 
