@@ -273,50 +273,55 @@ type PerScopeKeyResolver
             let! resolvedKey =
                 match stored with
                 | Some base64 -> async {
-                    try
-                        let material = Convert.FromBase64String base64
+                    let decoded =
+                        try
+                            Some(Convert.FromBase64String base64)
+                        with _ ->
+                            None
 
-                        if material.Length = KeyByteLength then
-                            return {
-                                KeyId = keyIdFor scopeId
-                                Material = material
-                            }
-                        else
-                            // Stored key wrong length — fall through to
-                            // regenerate. Logging the corruption is the
-                            // caller's responsibility (typically through
-                            // ILogger); we don't accept silent bad keys.
-                            let material' = generateKey ()
-                            let base64' = Convert.ToBase64String material'
-                            let! _ = secretStore.SetSecret(SecretScope, secretKeyFor scopeId, base64')
-
-                            match auditLog with
-                            | Some log ->
-                                do!
-                                    log.Record(
-                                        scopeId,
-                                        EncryptionKeyCreated {
-                                            UserId = "system"
-                                            ScopeId = scopeId
-                                            KeyId = keyIdFor scopeId
-                                            Resolver = ResolverName
-                                        }
-                                    )
-                            | None -> ()
-
-                            return {
-                                KeyId = keyIdFor scopeId
-                                Material = material'
-                            }
-                    with _ ->
-                        let material' = generateKey ()
-                        let base64' = Convert.ToBase64String material'
-                        let! _ = secretStore.SetSecret(SecretScope, secretKeyFor scopeId, base64')
-
+                    match decoded with
+                    | Some material when material.Length = KeyByteLength ->
                         return {
                             KeyId = keyIdFor scopeId
-                            Material = material'
+                            Material = material
                         }
+                    | _ ->
+                        // Phase 1059 — stored material that does not decode,
+                        // or decodes to the wrong length, is REFUSED. It used to
+                        // be replaced by a freshly minted key persisted over it
+                        // (the `SetSecret` result discarded), which made every
+                        // blob encrypted under the stored key undecryptable and
+                        // left no row saying why. Nothing is regenerated: the
+                        // stored value stays exactly as found for an operator to
+                        // repair, the row names the scope and what was seen, and
+                        // the resolution fails as an unpersistable key does below.
+                        let lengthSeen = decoded |> Option.map _.Length
+
+                        let reason =
+                            match lengthSeen with
+                            | Some n -> sprintf "stored key is %d bytes, expected %d" n KeyByteLength
+                            | None -> "stored key is not valid base64"
+
+                        match auditLog with
+                        | Some log ->
+                            do!
+                                log.Record(
+                                    scopeId,
+                                    EncryptionKeyUnreadable {
+                                        ScopeId = scopeId
+                                        KeyId = keyIdFor scopeId
+                                        Resolver = ResolverName
+                                        LengthSeen = lengthSeen
+                                        Reason = reason
+                                    }
+                                )
+                        | None -> ()
+
+                        return
+                            failwithf
+                                "PerScopeKeyResolver: refusing the stored key for scope %s (%s); nothing was regenerated over it"
+                                scopeId
+                                reason
                   }
                 | None -> async {
                     let material = generateKey ()
