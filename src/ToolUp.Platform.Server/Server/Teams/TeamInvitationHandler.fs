@@ -82,21 +82,22 @@ let private parseAttribution (claim: ShareTokenClaim) : Result<TeamRole * string
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
+/// The caller's `AccessContext`: the DI one, else one built from the
+/// `ToolUp.Subject` the middleware stamped. Phase 1059 — never an
+/// `AnonymousSession` carrying a signed-in user's id, which made every
+/// signed-in caller read as anonymous. The `ToolUp.UserId` read remains only
+/// for a request no middleware resolved (the fallback Phase 882 removes).
 let private resolveAccessContext (ctx: HttpContext) : AccessContext =
     match ctx.RequestServices.GetService(typeof<AccessContext>) with
     | :? AccessContext as ac -> ac
     | _ ->
-        let userId =
+        match ctx.Items.TryGetValue "ToolUp.Subject" with
+        | true, (:? Subject as subject) -> AccessContext.unrestricted subject
+        | _ ->
             match ctx.Items.TryGetValue "ToolUp.UserId" with
-            | true, (:? string as id) -> id
-            | _ -> "anonymous"
-
-        let teamId =
-            match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-            | true, (:? StorageScope as s) when s.Container.StartsWith "team-" -> Some s.ScopeId
-            | _ -> None
-
-        AccessContext.unrestricted (AnonymousSession userId)
+            | true, (:? string as id) when id <> "anonymous" ->
+                AccessContext.unrestricted (Subject.AuthenticatedUser id)
+            | _ -> AccessContext.unrestricted (AnonymousSession "anonymous")
 
 /// The share-token store scope a team's invitations live under. NOT its
 /// audit stream key: audit rows go through `AuditStreamKey.ofTeam`.
@@ -330,12 +331,7 @@ let teamInvitationApi
 
         AcceptInvite =
             fun token -> async {
-                if
-                    AuthenticatedUser.isAnonymous {
-                        AuthenticatedUser.anonymous with
-                            UserId = access.UserId
-                    }
-                then
+                if AccessContext.isAnonymous access then
                     return Error "You must sign in before accepting an invitation."
                 else
                     match! shareTokenStore.Validate token with
@@ -522,36 +518,17 @@ let teamInvitationApi
 
         IssuePendingInviteByEmail =
             fun req -> async {
-                // 0.5.9 — Unconditional stderr breadcrumbs, no DI / no try/with.
-                // The 0.5.8 ILogger-based breadcrumbs did not appear in the App
-                // Service log, which leaves two hypotheses on the table: the
-                // 0.5.8 code didn't ship (CI/NuGet cache hit) or the silent
-                // no-op ILogger fallback was selected and our exception
-                // escaped before any logger.Info ran. eprintfn writes to
-                // stderr unconditionally — Docker captures stderr into the
-                // default_docker log so it shows up regardless of DI state,
-                // regardless of forge's logger plumbing.
-                eprintfn "[invite] HANDLER ENTRY 0.5.9: Email=%s TeamId=%s Role=%A" req.Email req.TeamId req.Role
-
                 if req.Role = Owner then
-                    eprintfn "[invite] EXIT: Owner role refused"
-
                     return
                         Error
                             "Owner role cannot be granted via a pending-by-email invitation. \
                              Use the team ownership-transfer flow instead."
                 elif System.String.IsNullOrWhiteSpace req.Email then
-                    eprintfn "[invite] EXIT: Email empty"
                     return Error "Email is required for a pending-by-email invitation."
                 else
-                    eprintfn "[invite] calling ensureManageMembers"
-
                     match! ensureManageMembers teamStore access.UserId req.TeamId with
-                    | Error msg ->
-                        eprintfn "[invite] ensureManageMembers Error: %s" msg
-                        return Error msg
+                    | Error msg -> return Error msg
                     | Ok() ->
-                        eprintfn "[invite] ensureManageMembers Ok"
                         let expiresIn = req.ExpiresIn |> Option.defaultValue TeamInviteTypes.DefaultExpiry
                         let expiresAt = DateTime.UtcNow.Add expiresIn
 

@@ -165,6 +165,42 @@ let tests =
             | Ok _ -> failtest "expected Error for Owner role"
         }
 
+        // Phase 1059 — the handler's context for a signed-in caller is the
+        // stamped Subject, not an AnonymousSession carrying their id: a
+        // caller the middleware resolved (Subject stamped, no DI context)
+        // is not refused as anonymous.
+        testCaseAsync "a signed-in caller's context is not anonymous — the stamped Subject decides"
+        <| async {
+            let ts = freshTeamStore ()
+            let sts = freshShareTokenStore ()
+            let audit = CapturingAuditLog()
+            let! teamId = provisionTeam ts "alice@example.com" "bob@example.com"
+            let issuerApi = mkApi ts sts (audit :> IAuditLog) "alice@example.com"
+
+            let! issued =
+                issuerApi.IssueInvite {
+                    TeamId = teamId
+                    Role = Member
+                    ExpiresIn = Some(TimeSpan.FromDays 1.0)
+                    EmailHint = None
+                    MaxUses = Some 1
+                }
+
+            match issued with
+            | Error msg -> failtestf "issue failed: %s" msg
+            | Ok r ->
+                let token = r.InviteUrl.Substring(r.InviteUrl.LastIndexOf('/') + 1)
+                let ctx = DefaultHttpContext() :> HttpContext
+                ctx.RequestServices <- ServiceCollection().BuildServiceProvider()
+                ctx.Items["ToolUp.Subject"] <- box (Subject.AuthenticatedUser "dana@example.com")
+                let recipient = teamInvitationApi sts ts (audit :> IAuditLog) cfg ctx
+                let! accepted = recipient.AcceptInvite token
+
+                match accepted with
+                | Ok accept -> Expect.equal accept.TeamId teamId "the resolved caller joined"
+                | Error msg -> failtestf "a resolved, signed-in caller must not be refused as anonymous: %s" msg
+        }
+
         testCaseAsync "Recipient can accept — joins team with the baked-in role; audit chain emitted"
         <| async {
             let ts = freshTeamStore ()
