@@ -360,7 +360,7 @@ let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfi
                                     return Ok()
                                   }
 
-                            let! _ =
+                            let! _ = // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
                                 match priorSecret with
                                 | Some previous -> secretStore.SetSecret(scope.Container, keyName, previous)
                                 | None -> secretStore.DeleteSecret(scope.Container, keyName)

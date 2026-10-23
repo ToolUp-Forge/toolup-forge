@@ -187,7 +187,7 @@ let resolveSigningSecret (secrets: ISecretStore) : Async<string> = async {
     | _ ->
         let generated = Convert.ToBase64String(RandomNumberGenerator.GetBytes 32)
 
-        let! _ = secrets.SetSecret(PasskeyConfig.PlatformContainer, PasskeyConfig.SigningKeySecretName, generated)
+        let! _ = secrets.SetSecret(PasskeyConfig.PlatformContainer, PasskeyConfig.SigningKeySecretName, generated) // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
 
         match! secrets.GetSecret(PasskeyConfig.PlatformContainer, PasskeyConfig.SigningKeySecretName) with
         | Some s when s <> "" -> return s

@@ -322,7 +322,7 @@ module RecomputeJobHandler =
                         // actually runs (invalidation is the trigger). The
                         // scope id here is the job's LOOKUP key, never a
                         // scope the job runs under.
-                        let! _ = scheduler.TriggerOnce(scopeId, jobId, Actor)
+                        let! _ = scheduler.TriggerOnce(scopeId, jobId, Actor) // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
                         outcomes <- Enqueued(fact.FactId, jobId) :: outcomes
                     | Error err -> outcomes <- ScheduleFailed(fact.FactId, sprintf "%A" err) :: outcomes
                 | Grounding.OnQuery -> outcomes <- DeferredToQuery fact.FactId :: outcomes

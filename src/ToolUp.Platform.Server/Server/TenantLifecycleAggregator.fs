@@ -472,16 +472,18 @@ let enqueue
         match! scheduler.Schedule registration with
         | Error err -> return Error(sprintf "failed to schedule offboard job: %A" err)
         | Ok jobId ->
-            // Fire immediately (Manual trigger) so the offboard does not
-            // wait for the next scheduler tick.
-            let! _ = scheduler.TriggerOnce(scopeId, jobId, actorUserId)
-
-            return
-                Ok {
-                    JobId = jobId
-                    ScopeId = scopeId
-                    Phase = phase
-                }
+            // Fire it now: a `Manual` job never fires on its own. Phase 1059 —
+            // a refused trigger is reported, not discarded: discarded, the
+            // caller held a handle to an offboard that would never start.
+            match! scheduler.TriggerOnce(scopeId, jobId, actorUserId) with
+            | Error err -> return Error(sprintf "scheduled offboard job %A but could not trigger it: %s" jobId err)
+            | Ok() ->
+                return
+                    Ok {
+                        JobId = jobId
+                        ScopeId = scopeId
+                        Phase = phase
+                    }
     }
 
 // ─── Phase 54f — scheduled / grace-period offboard ───────────────────

@@ -443,7 +443,7 @@ let create
                                 // Fire immediately (Manual trigger) so the
                                 // export does not wait for the next scheduler
                                 // tick. TriggerOnce enqueues the attempt now.
-                                let! _ = deps.Scheduler.TriggerOnce(scopeId, jobId, actorUserId)
+                                let! _ = deps.Scheduler.TriggerOnce(scopeId, jobId, actorUserId) // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
                                 return Result.Ok ticket
                         with ex ->
                             return Result.Error ex.Message

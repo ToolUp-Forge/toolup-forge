@@ -1090,7 +1090,7 @@ type MicrosoftGraphCalendarBridge
                         WindowEnd = windowEnd
                     }
 
-                    let! _ = secretStore.SetSecret(link.ScopeId, deltaStateKey link, writeDeltaState state)
+                    let! _ = secretStore.SetSecret(link.ScopeId, deltaStateKey link, writeDeltaState state) // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
                     ()
                 | _ -> ()
 
@@ -1113,7 +1113,7 @@ type MicrosoftGraphCalendarBridge
                 | Ok(Some(ids, deltaLink)) ->
                     match deltaLink with
                     | Some l when l <> state.DeltaLink ->
-                        let! _ =
+                        let! _ = // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
                             secretStore.SetSecret(
                                 link.ScopeId,
                                 deltaStateKey link,
@@ -1178,7 +1178,7 @@ type MicrosoftGraphCalendarBridge
                         match tryStr "id" doc.RootElement with
                         | None -> return Error(MalformedPayload "Graph subscription response carried no id")
                         | Some id ->
-                            let! _ = secretStore.SetSecret(link.ScopeId, subscriptionKey link, id)
+                            let! _ = secretStore.SetSecret(link.ScopeId, subscriptionKey link, id) // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
                             return Ok()
                     with :? JsonException as ex ->
                         return

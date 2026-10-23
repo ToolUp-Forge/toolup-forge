@@ -4014,14 +4014,25 @@ let main args =
             yield! Directory.EnumerateFiles(dir, "*.fs")
         }
 
+        // Phase 1059 — the result-bearing writes. An upload was the first
+        // shape to ship discarded; the same discard of a store `Remove`, a
+        // secret `SetSecret`, a team-store `SetActiveTeam` / `DeleteTeam` or a
+        // scheduler `TriggerOnce` hid a refused write beside a comment that
+        // relied on it (dual-control approval applied a mutation whose record
+        // it could not remove). Each returns a `Result` its caller must see,
+        // so each is held to the upload rule: one line, two lines, or a
+        // fan-out. `Delete` keeps its own branches below (Phases 965–971).
+        let resultWrite =
+            @"\.(Upload|UploadWithETag|Remove|SetSecret|SetActiveTeam|DeleteTeam|TriggerOnce)\s*\("
+
         let oneLine =
-            System.Text.RegularExpressions.Regex(@"^\s*let!\s+_\s*=\s*\S.*\.Upload(WithETag)?\s*\(")
+            System.Text.RegularExpressions.Regex(@"^\s*let!\s+_\s*=\s*\S.*" + resultWrite)
 
         // A trailing comment is allowed after the `=`: that is where the
         // best-effort marker sits on the multi-line form (Phase 966), and an
         // unrelated comment there must not let a discard slip past the walk.
         let bindOnly = System.Text.RegularExpressions.Regex(@"^\s*let!\s+_\s*=\s*(//.*)?$")
-        let uploadCall = System.Text.RegularExpressions.Regex(@"\.Upload(WithETag)?\s*\(")
+        let uploadCall = System.Text.RegularExpressions.Regex(resultWrite)
         let marker = System.Text.RegularExpressions.Regex(@"//\s*best-effort-write:\s*\S")
 
         let isComment (line: string) =
@@ -4080,7 +4091,10 @@ let main args =
         // shape this keeps out).
         let consumedCall =
             System.Text.RegularExpressions.Regex(
-                @"\b(let|use)!\s+(?!_\s*=)[^=]*=\s*\S.*\.Upload(WithETag)?\s*\(|\bmatch!\s.*\.Upload(WithETag)?\s*\("
+                @"\b(let|use)!\s+(?!_\s*=)[^=]*=\s*\S.*"
+                + resultWrite
+                + @"|\bmatch!\s.*"
+                + resultWrite
             )
 
         let namedBindOnly =
@@ -4260,13 +4274,13 @@ let main args =
                 Trace.traceError (sprintf "    %s:%d: %s" rel line text)
 
             failwithf
-                "VerifyUploadResults: %d site(s) discard the Result of an `Upload`, or of a `Delete` (single call or fan-out). A failed write or delete must reach its caller: propagate it (match on the Result; raise where the enclosing signature carries no failure), or — where best-effort is the DESIGN — match the Error and log it at Warn. A discard that must stay a discard says why with `// best-effort-write: <why>` on the line. See docs/platform/storage-write-results.md."
+                "VerifyUploadResults: %d site(s) discard the Result of a result-bearing write — `Upload` / `UploadWithETag` / `Remove` / `SetSecret` / `SetActiveTeam` / `DeleteTeam` / `TriggerOnce`, or a `Delete` (single call or fan-out). A failed write or delete must reach its caller: propagate it (match on the Result; raise where the enclosing signature carries no failure), or — where best-effort is the DESIGN — match the Error and log it at Warn. A discard that must stay a discard says why with `// best-effort-write: <why>` on the line. See docs/platform/storage-write-results.md."
                 unmarked.Length
 
         Trace.tracefn ""
 
         Trace.tracefn
-            "VerifyUploadResults: OK — no unmarked discarded upload or delete result (%d marked best-effort)."
+            "VerifyUploadResults: OK — no unmarked discarded write or delete result (%d marked best-effort)."
             marked.Length)
 
     // App-specific target: Azure deployment

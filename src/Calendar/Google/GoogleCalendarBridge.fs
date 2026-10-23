@@ -1143,7 +1143,7 @@ type GoogleCalendarBridge
             | Ok(Some(events, nextSyncToken)) ->
                 match nextSyncToken with
                 | Some token ->
-                    let! _ = secretStore.SetSecret(link.ScopeId, syncTokenKey link, token)
+                    let! _ = secretStore.SetSecret(link.ScopeId, syncTokenKey link, token) // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
                     ()
                 | None -> ()
 

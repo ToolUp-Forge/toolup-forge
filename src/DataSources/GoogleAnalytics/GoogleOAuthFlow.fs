@@ -404,7 +404,7 @@ let create
                     // not invalidate the access token we just minted.
                     match g.RefreshToken with
                     | Some rotated when rotated <> refreshToken ->
-                        let! _ = secretStore.SetSecret(ctx.ScopeId, refreshTokenKey flowName ctx.DataSourceId, rotated)
+                        let! _ = secretStore.SetSecret(ctx.ScopeId, refreshTokenKey flowName ctx.DataSourceId, rotated) // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
                         ()
                     | _ -> ()
 

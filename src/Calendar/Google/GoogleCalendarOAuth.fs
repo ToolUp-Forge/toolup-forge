@@ -339,7 +339,7 @@ let create
                     // the rotation cannot surface later as invalid_grant.
                     match grant.RefreshToken with
                     | Some rotated when rotated <> refreshToken ->
-                        let! _ = secretStore.SetSecret(ctx.ScopeId, refreshTokenKey flowName ctx.DataSourceId, rotated)
+                        let! _ = secretStore.SetSecret(ctx.ScopeId, refreshTokenKey flowName ctx.DataSourceId, rotated) // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
 
                         ()
                     | _ -> ()

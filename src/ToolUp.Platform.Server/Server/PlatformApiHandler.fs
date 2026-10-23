@@ -453,8 +453,16 @@ let teamApi (config: ServerConfig) (ctx: HttpContext) : TeamApi =
                             // in the no-active-team personal scope on first
                             // sign-in.
                             if ownerUserId = userId then
-                                let! _ = ts.SetActiveTeam(userId, teamId)
-                                ()
+                                // Phase 1059 — best-effort like `ensureActiveTeam`
+                                // (the team and its Owner are already durable),
+                                // and reported through the same channel rather
+                                // than discarded.
+                                match! ts.SetActiveTeam(userId, teamId) with
+                                | Ok() -> ()
+                                | Error e ->
+                                    ActiveTeamPolicy.errorReporter
+                                        userId
+                                        (exn (sprintf "SetActiveTeam(%s, %s) refused: %s" userId teamId e))
                             else
                                 do! ActiveTeamPolicy.ensureActiveTeam ts ownerUserId teamId
 

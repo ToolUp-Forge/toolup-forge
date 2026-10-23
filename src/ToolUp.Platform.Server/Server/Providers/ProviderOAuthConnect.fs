@@ -135,14 +135,14 @@ let internal completeConnectObserved
                 do!
                     match credentials.AccessToken, credentials.ExpiresAt with
                     | Some token, Some expiry -> async {
-                        let! _ =
+                        let! _ = // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
                             secretStore.SetSecret(
                                 scope.Container,
                                 ProviderOAuthKeys.accessTokenKey flow.Name correlation,
                                 token
                             )
 
-                        let! _ =
+                        let! _ = // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
                             secretStore.SetSecret(
                                 scope.Container,
                                 ProviderOAuthKeys.accessExpiryKey flow.Name correlation,
@@ -361,14 +361,14 @@ let refreshEntry
 
                     match result with
                     | Ok minted ->
-                        let! _ =
+                        let! _ = // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
                             secretStore.SetSecret(
                                 scope.Container,
                                 ProviderOAuthKeys.accessTokenKey flow.Name correlation,
                                 minted.Token
                             )
 
-                        let! _ =
+                        let! _ = // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
                             secretStore.SetSecret(
                                 scope.Container,
                                 expiryKey,

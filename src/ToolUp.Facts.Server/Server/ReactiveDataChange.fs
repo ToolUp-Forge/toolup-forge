@@ -469,7 +469,7 @@ module GroundedNarrativeTrigger =
 
                     match scheduled with
                     | Ok jobId ->
-                        let! _ = scheduler.TriggerOnce(scopeId, jobId, Actor)
+                        let! _ = scheduler.TriggerOnce(scopeId, jobId, Actor) // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
                         enqueued <- definition.Key :: enqueued
                     | Error _ -> ()
 

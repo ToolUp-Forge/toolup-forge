@@ -458,7 +458,7 @@ let createFlow
                         // on the next refresh.
                         match g.RefreshToken with
                         | Some rotated when rotated <> refreshToken ->
-                            let! _ = secretStore.SetSecret(ctx.ScopeId, refreshTokenKey ctx.DataSourceId, rotated)
+                            let! _ = secretStore.SetSecret(ctx.ScopeId, refreshTokenKey ctx.DataSourceId, rotated) // best-effort-write: UNREVIEWED - Phase 1105 propagates this or states why it is best-effort
 
                             ()
                         | _ -> ()

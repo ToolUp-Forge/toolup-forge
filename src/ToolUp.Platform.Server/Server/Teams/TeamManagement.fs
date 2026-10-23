@@ -922,8 +922,11 @@ module ActiveTeamPolicy =
             match current with
             | Some _ -> ()
             | None ->
-                let! _ = store.SetActiveTeam(userId, teamId)
-                ()
+                // Phase 1059 — a refused write is reported like a thrown one,
+                // not discarded: the comment below relies on the report.
+                match! store.SetActiveTeam(userId, teamId) with
+                | Ok() -> ()
+                | Error e -> errorReporter userId (exn (sprintf "SetActiveTeam(%s, %s) refused: %s" userId teamId e))
         with ex ->
             // Best-effort: don't fail the membership add. But report it —
             // the user lands in the no-active-team state (recoverable via
