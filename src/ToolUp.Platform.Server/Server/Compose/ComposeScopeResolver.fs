@@ -25,16 +25,6 @@ open ToolUp.Platform.SurfaceEnforcement
 /// function over the request's context; it is separate so the reading is
 /// testable without composing a server (Phase 1059).
 let internal accessContextOf (ctx: HttpContext) : AccessContext =
-    let userId =
-        match ctx.Items.TryGetValue "ToolUp.UserId" with
-        | true, (:? string as id) -> id
-        | _ -> "anonymous"
-
-    let teamId =
-        match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-        | true, (:? StorageScope as scope) when scope.Container.StartsWith "team-" -> Some scope.ScopeId
-        | _ -> None
-
     // Phase 527 — a validated service-account token's effective
     // permission map takes precedence over the team-derived one.
     //
@@ -118,16 +108,25 @@ let internal accessContextOf (ctx: HttpContext) : AccessContext =
         | _ -> ToolUp.Platform.Auth.PrincipalAdmission.Member
 
     match ctx.Items.TryGetValue "ToolUp.Subject" with
-    | true, (:? Subject as subject) -> {
-        UserId = userId
-        TeamId = teamId
-        Subject = subject
-        ModulePermissions = modulePermissions
-        ModuleExposure = moduleExposure
-        PlatformRole = platformRole
-        TokenRoles = AccessContext.tokenRolesFor subject providerRoles
-        Admission = AccessContext.admissionFor subject providerAdmission
-      }
+    | true, (:? Subject as subject) ->
+        // Phase 1059 — `UserId` and `TeamId` come from the Subject, by
+        // `AccessContext.unrestricted`'s rule: a claim's attributed handle
+        // (else its issuer), a session id, a user id; the team of a
+        // `TeamMember` only. Never from `ToolUp.UserId` — the auth
+        // provider's user, which is `"anonymous"` for a service-account
+        // bearer it does not recognise — nor from a container prefix.
+        let identity = AccessContext.unrestricted subject
+
+        {
+            UserId = identity.UserId
+            TeamId = identity.TeamId
+            Subject = subject
+            ModulePermissions = modulePermissions
+            ModuleExposure = moduleExposure
+            PlatformRole = platformRole
+            TokenRoles = AccessContext.tokenRolesFor subject providerRoles
+            Admission = AccessContext.admissionFor subject providerAdmission
+        }
     | _ -> AccessContext.unrestricted (AnonymousSession "anonymous")
 
 /// Build + register the per-request scope-resolution substrate:

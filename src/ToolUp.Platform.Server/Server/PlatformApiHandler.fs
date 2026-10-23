@@ -55,12 +55,18 @@ let private defaultsSummary (defaults: Map<string, ModulePermission list>) =
 
 /// `userId` is read from `HttpContext.Items` (populated by
 /// `ScopeResolutionMiddleware`) to avoid a second async auth call per
-/// request; falls back to `"anonymous"` if the middleware did not run
-/// (e.g. in tests that bypass `compose`).
+/// request. Phase 1059 — the resolved `Subject` decides it, by the
+/// `AccessContext` rule, so a service-account call is attributed to the
+/// account rather than to the auth provider's `"anonymous"`; the
+/// `ToolUp.UserId` stamp, then `"anonymous"`, remain only for a request
+/// the middleware did not resolve (e.g. tests that bypass `compose`).
 let internal resolveUserId (ctx: HttpContext) =
-    match ctx.Items.TryGetValue "ToolUp.UserId" with
-    | true, (:? string as id) -> id
-    | _ -> "anonymous"
+    match ctx.Items.TryGetValue "ToolUp.Subject" with
+    | true, (:? Subject as subject) -> (AccessContext.unrestricted subject).UserId
+    | _ ->
+        match ctx.Items.TryGetValue "ToolUp.UserId" with
+        | true, (:? string as id) -> id
+        | _ -> "anonymous"
 
 let private resolveTeamStore (ctx: HttpContext) =
     match ctx.RequestServices.GetService(typeof<ITeamStore>) with
