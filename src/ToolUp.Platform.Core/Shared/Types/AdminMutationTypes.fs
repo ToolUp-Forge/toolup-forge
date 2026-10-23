@@ -258,6 +258,11 @@ type AdminMutationRefusal =
     /// admitted: a two-person rule that fails open on a storage blip is
     /// a single-person rule with extra steps.
     | ApprovalStoreUnavailable of detail: string
+    /// Phase 1059 — the pending record could not be removed before
+    /// applying it. Removing first is what stops a second approver
+    /// applying the same mutation again, so a refused removal refuses the
+    /// approval: nothing is applied.
+    | RecordNotRemoved of detail: string
 
 module AdminMutationRefusal =
     /// The stable discriminator an audit row and an operator dashboard
@@ -270,6 +275,7 @@ module AdminMutationRefusal =
         | AdminMutationRefusal.UnattributedProposer -> "unattributed-proposer"
         | AdminMutationRefusal.FingerprintMismatch _ -> "fingerprint-mismatch"
         | AdminMutationRefusal.ApprovalStoreUnavailable _ -> "approval-store-unavailable"
+        | AdminMutationRefusal.RecordNotRemoved _ -> "record-not-removed"
 
     /// Human-readable rendering, prefixed with a stable machine-greppable
     /// code. Interface members that return `Result<unit, string>` carry
@@ -289,6 +295,8 @@ module AdminMutationRefusal =
             $"DUAL-CONTROL-FINGERPRINT-MISMATCH: pending admin mutation '{id}' does not hash to its recorded fingerprint; it will not be applied."
         | AdminMutationRefusal.ApprovalStoreUnavailable detail ->
             $"DUAL-CONTROL-STORE-UNAVAILABLE: the pending-approval store could not be reached ({detail}); the write is refused rather than applied unreviewed."
+        | AdminMutationRefusal.RecordNotRemoved detail ->
+            $"DUAL-CONTROL-RECORD-NOT-REMOVED: the pending record could not be removed ({detail}); the mutation is not applied, so no second approval can apply it again."
 
 /// What an approval or rejection actually did.
 [<RequireQualifiedAccess>]

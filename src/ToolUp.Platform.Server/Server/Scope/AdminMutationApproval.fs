@@ -417,7 +417,7 @@ let private emit (auditLog: IAuditLog option) (schedule: Async<unit> -> unit) (t
         schedule (
             async {
                 try
-                    do! log.Record($"team-{teamId}", event)
+                    do! log.Record(AuditStreamKey.ofTeam teamId, event)
                 with _ ->
                     ()
             }
@@ -528,20 +528,27 @@ let private loadDecidable
                 // removed at the moment someone touches it, so a
                 // `DualControl` deployment needs no sweeper hosted
                 // service (GP 13).
-                let! _ = store.Remove(teamId, requestId)
-
-                emit
-                    auditLog
-                    schedule
-                    teamId
-                    (AdminMutationExpired {
-                        RequestId = requestId
-                        TeamId = teamId
-                        ProposerId = pending.ProposedBy
-                        MutationKind = AdminMutationKind.toToken (AdminMutation.kind pending.Mutation)
-                        Fingerprint = pending.Fingerprint
-                        ExpiredAtUtc = pending.ExpiresAtUtc
-                    })
+                //
+                // Phase 1059 — the expiry row records the DISCARD, so it is
+                // written only once the record is gone. A refused removal
+                // leaves an expired record, which is never decidable (this
+                // branch re-checks expiry on every touch) and is swept, and
+                // recorded, at the next one.
+                match! store.Remove(teamId, requestId) with
+                | Error _ -> ()
+                | Ok() ->
+                    emit
+                        auditLog
+                        schedule
+                        teamId
+                        (AdminMutationExpired {
+                            RequestId = requestId
+                            TeamId = teamId
+                            ProposerId = pending.ProposedBy
+                            MutationKind = AdminMutationKind.toToken (AdminMutation.kind pending.Mutation)
+                            Fingerprint = pending.Fingerprint
+                            ExpiredAtUtc = pending.ExpiresAtUtc
+                        })
 
                 return refuse (Some pending) (AdminMutationRefusal.Expired(requestId, pending.ExpiresAtUtc))
             elif fingerprint pending.Mutation <> pending.Fingerprint then
@@ -580,26 +587,47 @@ let approve
             match! loadDecidable store auditLog schedule now teamId requestId approverId true with
             | Error refusal -> return Error refusal
             | Ok pending ->
-                let! _ = store.Remove(teamId, requestId)
-                let! applied = apply pending.Mutation
+                // Phase 1059 — the removal is what makes a double approval
+                // unable to apply twice (above), so a refused removal
+                // refuses the approval and applies nothing.
+                match! store.Remove(teamId, requestId) with
+                | Error e ->
+                    let refusal = AdminMutationRefusal.RecordNotRemoved e
 
-                emit
-                    auditLog
-                    schedule
-                    teamId
-                    (AdminMutationApproved {
-                        RequestId = requestId
-                        TeamId = teamId
-                        ProposerId = pending.ProposedBy
-                        ApproverId = approverId.Trim()
-                        MutationKind = AdminMutationKind.toToken (AdminMutation.kind pending.Mutation)
-                        Fingerprint = pending.Fingerprint
-                        Applied = Result.isOk applied
-                    })
+                    emit
+                        auditLog
+                        schedule
+                        teamId
+                        (AdminMutationApprovalRefused {
+                            RequestId = requestId
+                            TeamId = teamId
+                            ProposerId = pending.ProposedBy
+                            AttemptedApproverId = approverId
+                            MutationKind = AdminMutationKind.toToken (AdminMutation.kind pending.Mutation)
+                            RefusalCode = AdminMutationRefusal.code refusal
+                        })
 
-                match applied with
-                | Ok() -> return Ok(AdminMutationDecision.Applied requestId)
-                | Error e -> return Error(AdminMutationRefusal.ApprovalStoreUnavailable e)
+                    return Error refusal
+                | Ok() ->
+                    let! applied = apply pending.Mutation
+
+                    emit
+                        auditLog
+                        schedule
+                        teamId
+                        (AdminMutationApproved {
+                            RequestId = requestId
+                            TeamId = teamId
+                            ProposerId = pending.ProposedBy
+                            ApproverId = approverId.Trim()
+                            MutationKind = AdminMutationKind.toToken (AdminMutation.kind pending.Mutation)
+                            Fingerprint = pending.Fingerprint
+                            Applied = Result.isOk applied
+                        })
+
+                    match applied with
+                    | Ok() -> return Ok(AdminMutationDecision.Applied requestId)
+                    | Error e -> return Error(AdminMutationRefusal.ApprovalStoreUnavailable e)
     }
 
 /// Turn a pending mutation down. Nothing is applied and the record is
@@ -625,23 +653,27 @@ let reject
         match! loadDecidable store auditLog schedule now teamId requestId actorId false with
         | Error refusal -> return Error refusal
         | Ok pending ->
-            let! _ = store.Remove(teamId, requestId)
+            // Phase 1059 — a rejection IS the removal: a record still in the
+            // queue can still be approved, so a refused removal is not
+            // reported (or recorded) as a rejection.
+            match! store.Remove(teamId, requestId) with
+            | Error e -> return Error(AdminMutationRefusal.RecordNotRemoved e)
+            | Ok() ->
+                emit
+                    auditLog
+                    schedule
+                    teamId
+                    (AdminMutationRejected {
+                        RequestId = requestId
+                        TeamId = teamId
+                        ProposerId = pending.ProposedBy
+                        ApproverId = (if isNull (box actorId) then "" else actorId.Trim())
+                        MutationKind = AdminMutationKind.toToken (AdminMutation.kind pending.Mutation)
+                        Fingerprint = pending.Fingerprint
+                        Reason = (if isNull (box reason) then "" else reason)
+                    })
 
-            emit
-                auditLog
-                schedule
-                teamId
-                (AdminMutationRejected {
-                    RequestId = requestId
-                    TeamId = teamId
-                    ProposerId = pending.ProposedBy
-                    ApproverId = (if isNull (box actorId) then "" else actorId.Trim())
-                    MutationKind = AdminMutationKind.toToken (AdminMutation.kind pending.Mutation)
-                    Fingerprint = pending.Fingerprint
-                    Reason = (if isNull (box reason) then "" else reason)
-                })
-
-            return Ok(AdminMutationDecision.Rejected requestId)
+                return Ok(AdminMutationDecision.Rejected requestId)
     }
 
 /// The still-open proposals for a team, with lapsed records discarded
@@ -662,20 +694,23 @@ let listPending
             let expired, live = all |> List.partition (PendingAdminMutation.isExpired now)
 
             for pending in expired do
-                let! _ = store.Remove(teamId, pending.RequestId)
-
-                emit
-                    auditLog
-                    schedule
-                    teamId
-                    (AdminMutationExpired {
-                        RequestId = pending.RequestId
-                        TeamId = teamId
-                        ProposerId = pending.ProposedBy
-                        MutationKind = AdminMutationKind.toToken (AdminMutation.kind pending.Mutation)
-                        Fingerprint = pending.Fingerprint
-                        ExpiredAtUtc = pending.ExpiresAtUtc
-                    })
+                // Phase 1059 — recorded once actually discarded, as in
+                // `loadDecidable`; a refused removal is swept at the next read.
+                match! store.Remove(teamId, pending.RequestId) with
+                | Error _ -> ()
+                | Ok() ->
+                    emit
+                        auditLog
+                        schedule
+                        teamId
+                        (AdminMutationExpired {
+                            RequestId = pending.RequestId
+                            TeamId = teamId
+                            ProposerId = pending.ProposedBy
+                            MutationKind = AdminMutationKind.toToken (AdminMutation.kind pending.Mutation)
+                            Fingerprint = pending.Fingerprint
+                            ExpiredAtUtc = pending.ExpiresAtUtc
+                        })
 
             return Ok live
     }
