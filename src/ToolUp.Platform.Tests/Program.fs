@@ -933,6 +933,7 @@ let private registeredTests =
         HnswFidelityTests.tests
         PermissionStoreFailClosedTests.tests
         ScopeResolutionFailClosedTests.tests
+        AccessContextFactoryTests.tests
         SmokeTestDefaultsTests.tests
         InProcessRateLimiterTests.tests
         // Phase 128 — the outbound API connector kit contract.

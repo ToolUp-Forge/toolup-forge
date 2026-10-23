@@ -57,7 +57,7 @@ let private defaultsSummary (defaults: Map<string, ModulePermission list>) =
 /// `ScopeResolutionMiddleware`) to avoid a second async auth call per
 /// request; falls back to `"anonymous"` if the middleware did not run
 /// (e.g. in tests that bypass `compose`).
-let private resolveUserId (ctx: HttpContext) =
+let internal resolveUserId (ctx: HttpContext) =
     match ctx.Items.TryGetValue "ToolUp.UserId" with
     | true, (:? string as id) -> id
     | _ -> "anonymous"
