@@ -727,6 +727,7 @@ ToolUp.Platform.AdminMutationRefusal (class)
 ToolUp.Platform.AdminMutationRefusal.IsApprovalStoreUnavailable : System.Boolean { get }
 ToolUp.Platform.AdminMutationRefusal.IsExpired : System.Boolean { get }
 ToolUp.Platform.AdminMutationRefusal.IsFingerprintMismatch : System.Boolean { get }
+ToolUp.Platform.AdminMutationRefusal.IsRecordNotRemoved : System.Boolean { get }
 ToolUp.Platform.AdminMutationRefusal.IsSelfApprovalRefused : System.Boolean { get }
 ToolUp.Platform.AdminMutationRefusal.IsUnattributedProposer : System.Boolean { get }
 ToolUp.Platform.AdminMutationRefusal.IsUnknownRequest : System.Boolean { get }
@@ -739,6 +740,8 @@ ToolUp.Platform.AdminMutationRefusal+Expired.expiredAtUtc : System.DateTimeOffse
 ToolUp.Platform.AdminMutationRefusal+Expired.requestId : System.String { get }
 ToolUp.Platform.AdminMutationRefusal+FingerprintMismatch (class)
 ToolUp.Platform.AdminMutationRefusal+FingerprintMismatch.requestId : System.String { get }
+ToolUp.Platform.AdminMutationRefusal+RecordNotRemoved (class)
+ToolUp.Platform.AdminMutationRefusal+RecordNotRemoved.detail : System.String { get }
 ToolUp.Platform.AdminMutationRefusal+SelfApprovalRefused (class)
 ToolUp.Platform.AdminMutationRefusal+SelfApprovalRefused.actorId : System.String { get }
 ToolUp.Platform.AdminMutationRefusal+SelfApprovalRefused.requestId : System.String { get }
@@ -746,6 +749,7 @@ ToolUp.Platform.AdminMutationRefusal+Tags (class)
 ToolUp.Platform.AdminMutationRefusal+Tags.ApprovalStoreUnavailable : System.Int32 (literal)
 ToolUp.Platform.AdminMutationRefusal+Tags.Expired : System.Int32 (literal)
 ToolUp.Platform.AdminMutationRefusal+Tags.FingerprintMismatch : System.Int32 (literal)
+ToolUp.Platform.AdminMutationRefusal+Tags.RecordNotRemoved : System.Int32 (literal)
 ToolUp.Platform.AdminMutationRefusal+Tags.SelfApprovalRefused : System.Int32 (literal)
 ToolUp.Platform.AdminMutationRefusal+Tags.UnattributedProposer : System.Int32 (literal)
 ToolUp.Platform.AdminMutationRefusal+Tags.UnknownRequest : System.Int32 (literal)
@@ -1065,6 +1069,7 @@ ToolUp.Platform.AuditEvent.IsEncryptionKeyCreated : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEncryptionKeyDestroyAcknowledged : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEncryptionKeyDestroyed : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEncryptionKeyRotated : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsEncryptionKeyUnreadable : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEntityCreated : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEntityDeleted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsEntityUpdated : System.Boolean { get }
@@ -1337,6 +1342,8 @@ ToolUp.Platform.AuditEvent+EncryptionKeyDestroyed (class)
 ToolUp.Platform.AuditEvent+EncryptionKeyDestroyed.Item : ToolUp.Platform.EncryptionKeyEventPayload { get }
 ToolUp.Platform.AuditEvent+EncryptionKeyRotated (class)
 ToolUp.Platform.AuditEvent+EncryptionKeyRotated.Item : ToolUp.Platform.EncryptionKeyEventPayload { get }
+ToolUp.Platform.AuditEvent+EncryptionKeyUnreadable (class)
+ToolUp.Platform.AuditEvent+EncryptionKeyUnreadable.Item : ToolUp.Platform.EncryptionKeyUnreadablePayload { get }
 ToolUp.Platform.AuditEvent+EntityCreated (class)
 ToolUp.Platform.AuditEvent+EntityCreated.Item : ToolUp.Platform.EntityLifecycleEventPayload { get }
 ToolUp.Platform.AuditEvent+EntityDeleted (class)
@@ -1624,6 +1631,7 @@ ToolUp.Platform.AuditEvent+Tags.EncryptionKeyCreated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EncryptionKeyDestroyAcknowledged : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EncryptionKeyDestroyed : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EncryptionKeyRotated : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.EncryptionKeyUnreadable : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EntityCreated : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EntityDeleted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.EntityUpdated : System.Int32 (literal)
@@ -1892,6 +1900,9 @@ ToolUp.Platform.AuditSinkFailedPayload.FailedAt : System.DateTime { get }
 ToolUp.Platform.AuditSinkFailedPayload.SinkName : System.String { get }
 ToolUp.Platform.AuditSourceModule (class)
 ToolUp.Platform.AuditSourceModule.value : System.String (literal)
+ToolUp.Platform.AuditStreamKey (class)
+ToolUp.Platform.AuditStreamKey.ofScope(ToolUp.Platform.StorageScope) : System.String
+ToolUp.Platform.AuditStreamKey.ofTeam(System.String) : System.String
 ToolUp.Platform.AuditSubject (class)
 ToolUp.Platform.AuditSubject.IsAnonymousAudit : System.Boolean { get }
 ToolUp.Platform.AuditSubject.IsClaimAudit : System.Boolean { get }
@@ -5438,6 +5449,13 @@ ToolUp.Platform.EncryptionKeyEventPayload.KeyId : System.String { get }
 ToolUp.Platform.EncryptionKeyEventPayload.Resolver : System.String { get }
 ToolUp.Platform.EncryptionKeyEventPayload.ScopeId : System.String { get }
 ToolUp.Platform.EncryptionKeyEventPayload.UserId : System.String { get }
+ToolUp.Platform.EncryptionKeyUnreadablePayload (class)
+ToolUp.Platform.EncryptionKeyUnreadablePayload..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.String)
+ToolUp.Platform.EncryptionKeyUnreadablePayload.KeyId : System.String { get }
+ToolUp.Platform.EncryptionKeyUnreadablePayload.LengthSeen : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Platform.EncryptionKeyUnreadablePayload.Reason : System.String { get }
+ToolUp.Platform.EncryptionKeyUnreadablePayload.Resolver : System.String { get }
+ToolUp.Platform.EncryptionKeyUnreadablePayload.ScopeId : System.String { get }
 ToolUp.Platform.EncryptionTypes (class)
 ToolUp.Platform.EncryptionTypes+EncryptionEnvelope (class)
 ToolUp.Platform.EncryptionTypes+EncryptionEnvelope.KeyIdLengthBytes : System.Int32 { get }

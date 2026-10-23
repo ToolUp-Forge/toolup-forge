@@ -598,10 +598,20 @@ section eliminates structurally.
 > cannot disagree, and an unresolvable entry is treated as unclassified, i.e.
 > denied. The property is covered by a dedicated adversarial test suite and a
 > contract pack an external implementation can run against itself.
+> The same holds where the authorisation STATE is read: a team member's
+> permission document that cannot be read (`PermissionStoreUnavailableException`,
+> or any other permission-store fault) refuses the request with a 503 and an
+> `AuthScopeResolutionFailed` audit row naming the store. It never runs the
+> request with an empty permission map, which would read as unrestricted
+> (Phase 1059).
 > **Evidence:** `src/ToolUp.Platform.Server/Server/Remoting/Auth.fs` ·
 > `src/ToolUp.Platform.Server/Server/RemotingHelpers.fs` ·
+> `src/ToolUp.Platform.Server/Server/Middleware.fs` (`ScopeResolutionMiddleware`,
+> the permission-read refusal) ·
 > `src/ToolUp.Platform.Tests/Contracts/FailClosedContract.fs` ·
 > `src/ToolUp.Platform.Tests/InProcess/AdversarialFailClosedTests.fs` ·
+> `src/ToolUp.Platform.Tests/InProcess/ScopeResolutionFailClosedTests.fs` ·
+> `src/ToolUp.Platform.Tests/InProcess/PermissionStoreFailClosedTests.fs` ·
 > `docs/migrations/132-fail-closed-authz-defaults.md` (Phase 132)
 
 > **AZ-3 — Every API route is gated against a declared surface requirement, and

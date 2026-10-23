@@ -742,7 +742,20 @@
       (its `ScopeId` unchanged). Migration recipe:
       `docs/migrations/1042-delivery-completed-hook.md`.
     -->
-    <Version>0.31.0</Version>
+    <!--
+      Next draft 0.32.0 (v0.31.0 is tagged; cut by the version act), BREAKING
+      for an exhaustive match: Phase 1059 adds two closed-DU cases (Core),
+      `AuditEvent.EncryptionKeyUnreadable` (payload
+      `EncryptionKeyUnreadablePayload`) and `AdminMutationRefusal.RecordNotRemoved`
+      (code `record-not-removed`). Additive: `AuditStreamKey.ofTeam` / `ofScope`.
+      Behaviour: a permission-store fault during scope resolution refuses
+      with 503; a service-account context's `UserId` is the account id; one
+      team's audit rows share one stream (the bare team id; `team-{id}` rows
+      at rest are history); a dual-control approval whose record cannot be
+      removed applies nothing; a stored per-scope key of the wrong length is
+      refused, never replaced.
+    -->
+    <Version>0.32.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
       DLL. Non-publishable projects (App composition roots, modules,

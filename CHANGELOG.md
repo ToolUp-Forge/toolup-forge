@@ -13,7 +13,33 @@ same name in one release is reported once, as a signature change. Under this rep
 policy a `breaking` release is a MINOR bump and an `additive` one a PATCH; from 1.0.0 the ordinary table
 applies. Where a release ships a migration note under `docs/migrations/`, it is linked from the section.
 
-## [0.31.0] — unreleased
+## [0.32.0] — unreleased
+
+_Surface since `v0.31.0`: **additive** — 1 package moved; 18 members added, 0 members changed, 0 members removed._
+
+### Added
+
+- `ToolUp.Platform.Core` — 18 members:
+  - `ToolUp.Platform.AdminMutationRefusal+RecordNotRemoved (class)`
+  - `ToolUp.Platform.AdminMutationRefusal+RecordNotRemoved.detail : System.String { get }`
+  - `ToolUp.Platform.AdminMutationRefusal+Tags.RecordNotRemoved : System.Int32 (literal)`
+  - `ToolUp.Platform.AdminMutationRefusal.IsRecordNotRemoved : System.Boolean { get }`
+  - `ToolUp.Platform.AuditEvent+EncryptionKeyUnreadable (class)`
+  - `ToolUp.Platform.AuditEvent+EncryptionKeyUnreadable.Item : ToolUp.Platform.EncryptionKeyUnreadablePayload { get }`
+  - `ToolUp.Platform.AuditEvent+Tags.EncryptionKeyUnreadable : System.Int32 (literal)`
+  - `ToolUp.Platform.AuditEvent.IsEncryptionKeyUnreadable : System.Boolean { get }`
+  - `ToolUp.Platform.AuditStreamKey (class)`
+  - `ToolUp.Platform.AuditStreamKey.ofScope(ToolUp.Platform.StorageScope) : System.String`
+  - `ToolUp.Platform.AuditStreamKey.ofTeam(System.String) : System.String`
+  - `ToolUp.Platform.EncryptionKeyUnreadablePayload (class)`
+  - `ToolUp.Platform.EncryptionKeyUnreadablePayload..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.String)`
+  - `ToolUp.Platform.EncryptionKeyUnreadablePayload.KeyId : System.String { get }`
+  - `ToolUp.Platform.EncryptionKeyUnreadablePayload.LengthSeen : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }`
+  - `ToolUp.Platform.EncryptionKeyUnreadablePayload.Reason : System.String { get }`
+  - `ToolUp.Platform.EncryptionKeyUnreadablePayload.Resolver : System.String { get }`
+  - `ToolUp.Platform.EncryptionKeyUnreadablePayload.ScopeId : System.String { get }`
+
+## [0.31.0] — 2026-10-22
 
 Migration notes:
 
@@ -75,7 +101,7 @@ _Surface since `v0.30.0`: **breaking** — 7 packages moved; 144 members added, 
   - `ToolUp.Platform.DeliveryCompleted+DeliveredRun.Outcome : ToolUp.Platform.DeliveryCompleted+DeliveredOutcome { get }`
   - `ToolUp.Platform.DeliveryCompleted+DeliveredRun.ResultObjectId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }`
   - `ToolUp.Platform.DeliveryCompleted+DeliveredRun.RunId : Microsoft.FSharp.Core.FSharpOption`1[System.Guid] { get }`
-  - … and 67 more — `git diff v0.30.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
+  - … and 67 more — `git diff v0.30.0 v0.31.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
 - `ToolUp.PublicRendering` — 35 members:
   - `ToolUp.PublicRendering.LayoutRefusal (class)`
   - `ToolUp.PublicRendering.LayoutRefusal+NoDefaultLayout (class)`
@@ -97,7 +123,7 @@ _Surface since `v0.30.0`: **breaking** — 7 packages moved; 144 members added, 
   - `ToolUp.PublicRendering.LayoutRefusal.IsUnknownLayout : System.Boolean { get }`
   - `ToolUp.PublicRendering.LayoutRefusal.NoLayoutRegistered : ToolUp.PublicRendering.LayoutRefusal { get }`
   - `ToolUp.PublicRendering.LayoutRefusal.Tag : System.Int32 { get }`
-  - … and 15 more — `git diff v0.30.0 -- api-baselines/ToolUp.PublicRendering.approved.txt`
+  - … and 15 more — `git diff v0.30.0 v0.31.0 -- api-baselines/ToolUp.PublicRendering.approved.txt`
 
 ### Changed
 
