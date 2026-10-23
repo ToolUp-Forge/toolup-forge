@@ -98,6 +98,8 @@ let private resolveAccessContext (ctx: HttpContext) : AccessContext =
 
         AccessContext.unrestricted (AnonymousSession userId)
 
+/// The share-token store scope a team's invitations live under. NOT its
+/// audit stream key: audit rows go through `AuditStreamKey.ofTeam`.
 let private teamScopeId (teamId: string) : string = $"team-{teamId}"
 
 let private ensureManageMembers (ts: ITeamStore) (callerUserId: string) (teamId: string) : Async<Result<unit, string>> = async {
@@ -226,7 +228,7 @@ let tryConsumePendingForUser
                     | Error reason ->
                         do!
                             auditLog.Record(
-                                teamScopeId entry.TeamId,
+                                AuditStreamKey.ofTeam entry.TeamId,
                                 TeamInviteAcceptedFromPendingFailed {
                                     TeamId = entry.TeamId
                                     InviteeUserId = user.UserId
@@ -245,7 +247,7 @@ let tryConsumePendingForUser
 
                         do!
                             auditLog.Record(
-                                teamScopeId entry.TeamId,
+                                AuditStreamKey.ofTeam entry.TeamId,
                                 TeamInviteAcceptedFromPending {
                                     TeamId = entry.TeamId
                                     InviteeUserId = user.UserId
@@ -317,7 +319,7 @@ let teamInvitationApi
                                     MaxUses = maxUses
                                 }
 
-                                do! auditLog.Record(scopeOf req.TeamId, TeamInviteIssued payload)
+                                do! auditLog.Record(AuditStreamKey.ofTeam req.TeamId, TeamInviteIssued payload)
 
                                 return
                                     Ok {
@@ -417,7 +419,7 @@ let teamInvitationApi
 
                                 do!
                                     auditLog.Record(
-                                        scope,
+                                        AuditStreamKey.ofTeam teamId,
                                         TeamInviteAccepted {
                                             TeamId = teamId
                                             TokenId = claim.TokenId
@@ -429,7 +431,7 @@ let teamInvitationApi
 
                                 do!
                                     auditLog.Record(
-                                        scope,
+                                        AuditStreamKey.ofTeam teamId,
                                         TeamInviteRedeemed {
                                             TeamId = teamId
                                             TokenId = claim.TokenId
@@ -497,7 +499,7 @@ let teamInvitationApi
                         | Ok() ->
                             do!
                                 auditLog.Record(
-                                    scopeOf teamId,
+                                    AuditStreamKey.ofTeam teamId,
                                     TeamInviteRevoked {
                                         TeamId = teamId
                                         TokenId = claim.TokenId
@@ -617,7 +619,7 @@ let teamInvitationApi
                             logger.Info "[invite] audit Record: starting"
 
                             try
-                                do! auditLog.Record(scopeOf req.TeamId, TeamInviteIssued payload)
+                                do! auditLog.Record(AuditStreamKey.ofTeam req.TeamId, TeamInviteIssued payload)
                                 logger.Info "[invite] audit Record: ok"
                             with ex ->
                                 logger.Error(
@@ -811,7 +813,7 @@ let teamInvitationApi
                                 | Error PendingInviteStoreError.NotFound ->
                                     do!
                                         auditLog.Record(
-                                            scopeOf entry.TeamId,
+                                            AuditStreamKey.ofTeam entry.TeamId,
                                             TeamInviteRevoked {
                                                 TeamId = entry.TeamId
                                                 TokenId = sprintf "pending:%s" normalised
@@ -843,7 +845,11 @@ let teamInvitationApi
                     let windowStart = now - TeamInviteTypes.ExpiredInviteWindow
 
                     let! trail =
-                        auditLog.GetAuditTrail(scopeOf teamId, Some(windowStart, now), Some "TeamInviteExpired")
+                        auditLog.GetAuditTrail(
+                            AuditStreamKey.ofTeam teamId,
+                            Some(windowStart, now),
+                            Some "TeamInviteExpired"
+                        )
 
                     let expired =
                         trail

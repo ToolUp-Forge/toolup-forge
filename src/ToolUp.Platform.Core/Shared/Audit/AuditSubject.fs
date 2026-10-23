@@ -163,6 +163,14 @@ module AuditSubject =
     /// - Anything else → `UserAudit scopeId` as a last-resort
     ///   fallback so the envelope always has a subject (downstream
     ///   sinks can tag-route on the unprefixed scope id).
+    ///
+    /// **A known misreading (Phase 1059).** A team's audit stream key is
+    /// its BARE id (`AuditStreamKey.ofTeam`), and a bare team id cannot be
+    /// told from a bare user id by the key alone — so a team's rows fall
+    /// into the last-resort arm and are filed as `UserAudit teamId`. The
+    /// `team-` arm now matches only rows written before that phase. The
+    /// fix is not a better guess here: Phase 1062 makes the envelope carry
+    /// the actor and deletes this function.
     let fromScopeId (scopeId: string) : AuditSubject =
         if System.String.IsNullOrWhiteSpace scopeId then
             UserAudit PlatformSentinelUserId

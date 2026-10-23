@@ -439,7 +439,7 @@ let private substrateTests =
                 audit.Rows
                 |> List.choose (fun (scope, evt) ->
                     match evt with
-                    | TeamInviteExpired p when scope = "team-team-audit" -> Some p
+                    | TeamInviteExpired p when scope = "team-audit" -> Some p
                     | _ -> None)
 
             Expect.equal expiredRows.Length 1 "one TeamInviteExpired row under the team scope"

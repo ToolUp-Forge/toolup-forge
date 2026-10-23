@@ -478,7 +478,7 @@ let private emit (auditLog: IAuditLog option) (schedule: Async<unit> -> unit) (s
             }
         )
 
-let private scopeOf (teamId: string) = $"team-{teamId}"
+
 
 /// The tamper alert (552.E). Fires ONLY for a trust failure — a record
 /// presenting itself as consent that is not. An ordinary revocation,
@@ -498,7 +498,7 @@ let private emitTrustDenial
         emit
             auditLog
             schedule
-            (scopeOf subject.TeamId)
+            (AuditStreamKey.ofTeam subject.TeamId)
             (GrantConsentVerificationDenied {
                 ConsentId =
                     match record with
@@ -630,7 +630,7 @@ module GrantConsents =
                     match written with
                     | Error e -> return Error(ConsentDenial.StoreUnavailable e)
                     | Ok() ->
-                        emit auditLog schedule (scopeOf record.Subject.TeamId) (event record)
+                        emit auditLog schedule (AuditStreamKey.ofTeam record.Subject.TeamId) (event record)
                         return Ok record
         }
 

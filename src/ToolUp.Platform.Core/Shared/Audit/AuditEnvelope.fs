@@ -151,6 +151,26 @@ type IAuditLog =
     abstract GetAuditTrail:
         scopeId: string * dateRange: (DateTime * DateTime) option * eventType: string option -> Async<AuditEvent list>
 
+/// Phase 1059 — the ONE rendering of an audit stream key: the `scopeId` an
+/// `IAuditLog.Record` / `GetAuditTrail` call passes for a team or a storage
+/// scope. The event store keys a stream on that string verbatim, so a team
+/// whose writers spelled its key four ways (`teamId`, `team-{teamId}`,
+/// `scope.ScopeId`, `scope.Container`) had its trail split across several
+/// streams, and a reader of one spelling never saw rows written under
+/// another.
+///
+/// The key is the BARE id — what every event already at rest under the
+/// request middleware, the platform admin API and file management carries
+/// (GP 11). Rows written under a `team-{id}` key before this phase are
+/// history: readable under their own key, not migrated.
+module AuditStreamKey =
+    /// The audit stream key for a team: its bare id.
+    let ofTeam (teamId: string) : string = teamId
+
+    /// The audit stream key for a storage scope: its `ScopeId` (the bare
+    /// user, team or session id), never its `Container`.
+    let ofScope (scope: StorageScope) : string = scope.ScopeId
+
 // ─── Phase 120 — IAuthAuditHook (structured authz-denial trail) ──────
 //
 // A single write-side seam every authorization-denial emission point

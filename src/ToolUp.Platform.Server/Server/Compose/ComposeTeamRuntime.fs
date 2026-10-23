@@ -124,7 +124,7 @@ let registerTeamPermissionStores
     // mode-conditional fallback — non-team modes never call into the
     // store.
     // Phase 547 — pass the resolved `IAuditLog` so either default store
-    // emits `TeamInviteExpired` under `team-{TeamId}` scope on every
+    // emits `TeamInviteExpired` under the team audit stream on every
     // expiry sweep (GP 6). A consumer-supplied override owns its own
     // audit wiring; the defaults get the log (and the Phase 547.C
     // notifier, when opted in) via their 4-arg constructors.

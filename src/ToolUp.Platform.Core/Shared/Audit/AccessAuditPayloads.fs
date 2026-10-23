@@ -71,12 +71,12 @@ type AssetDeletedPayload = {
 // ─── Phase 3d — team-invitation audit payloads ───────────────────────
 //
 // One payload per audit lifecycle event for the team-invitation
-// substrate. All five emit under `team-{TeamId}` scope with reserved
+// substrate. All five emit under the team's audit stream (`AuditStreamKey.ofTeam`) with reserved
 // `SourceModule = "_platform.team_invites"` so admin queries filtering
 // on the source module surface the invitation trail in isolation.
 
 /// `ITeamInviteApi.IssueInvite` succeeded. Recorded under
-/// `team-{TeamId}` scope with `SourceModule = "_platform.team_invites"`.
+/// the team audit stream with `SourceModule = "_platform.team_invites"`.
 type TeamInviteIssuedPayload = {
     TeamId: string
     TokenId: string
@@ -150,7 +150,7 @@ type TeamInviteRedeemedPayload = {
 /// swept from `IPendingInviteStore`. Emitted once per dropped entry by
 /// every sweep site in the store impl (`SweepExpired`, the opportunistic
 /// compaction inside `Upsert`, and the expired-branch of
-/// `TryConsumeForEmail`), recorded under the `team-{TeamId}` scope.
+/// `TryConsumeForEmail`), recorded under the team audit stream.
 /// Without it the sweep is silent — the invitee ends up in neither the
 /// Members panel nor Pending Invites and nobody is told, so the
 /// operator's mental model diverges permanently from system state

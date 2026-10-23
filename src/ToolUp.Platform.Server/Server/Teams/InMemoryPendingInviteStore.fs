@@ -383,7 +383,7 @@ module PendingInviteStore =
 module internal PendingInviteExpiryHook =
 
     /// Per-expiry audit hook. Emits one `TeamInviteExpired` under the
-    /// entry's `team-{TeamId}` scope for every entry a sweep drops.
+    /// entry's team audit stream (`AuditStreamKey.ofTeam`) for every entry a sweep drops.
     /// Best-effort: a throwing `IAuditLog.Record` (misconfigured sink,
     /// unreachable `IEventStore`) must never fail the sweep — the entry
     /// is already durably gone — so each emission is guarded and a
@@ -401,7 +401,7 @@ module internal PendingInviteExpiryHook =
                     try
                         do!
                             log.Record(
-                                $"team-{entry.TeamId}",
+                                AuditStreamKey.ofTeam entry.TeamId,
                                 TeamInviteExpired {
                                     TeamId = entry.TeamId
                                     InviteeEmail = email

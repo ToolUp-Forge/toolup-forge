@@ -695,7 +695,7 @@ let pendingInviteExpiryAuditTests =
             Expect.equal (List.length rows) 3 "exactly one TeamInviteExpired per dropped entry"
 
             Expect.isTrue
-                (rows |> List.forall (fun (scope, _) -> scope = "team-teamA"))
+                (rows |> List.forall (fun (scope, _) -> scope = "teamA"))
                 "each row recorded under the team scope"
 
             let emails = rows |> List.map (fun (_, p) -> p.InviteeEmail) |> List.sort
@@ -732,7 +732,7 @@ let pendingInviteExpiryAuditTests =
             Expect.equal (List.length rows) 1 "exactly one expiry row on the consume path"
 
             let scope, payload = rows.Head
-            Expect.equal scope "team-teamB" "recorded under the team scope"
+            Expect.equal scope "teamB" "recorded under the team audit stream (the bare id)"
             Expect.equal payload.InviteeEmail "late@x.com" "names the invitee email"
             Expect.equal payload.InviterUserId "alice@example.com" "names the inviter"
             Expect.equal payload.Role Member "carries the role"
@@ -944,7 +944,7 @@ let expiredInviteVisibilityTests =
             do!
                 (audit :> IAuditLog)
                     .Record(
-                        $"team-{teamId}",
+                        teamId,
                         TeamInviteExpired {
                             TeamId = teamId
                             InviteeEmail = "old@x.com"

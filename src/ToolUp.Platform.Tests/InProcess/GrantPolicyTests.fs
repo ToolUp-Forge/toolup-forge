@@ -524,7 +524,7 @@ let tests =
 
                 match audit.Recorded with
                 | [ scope, GrantPolicyRefused payload ] ->
-                    Expect.equal scope "team-t1" "recorded under the team scope"
+                    Expect.equal scope "t1" "recorded under the team audit stream (the bare id)"
                     Expect.equal payload.ActorId "admin-7" "attributes the acting administrator"
                     Expect.equal payload.SubjectId "alice" "names the subject"
                     Expect.equal payload.ModuleName "Partner" "names the module"

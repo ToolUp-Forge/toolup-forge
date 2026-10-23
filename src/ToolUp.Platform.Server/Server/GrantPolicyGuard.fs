@@ -492,7 +492,7 @@ type GrantPolicyPermissionStore
             // fires regardless of whether the row lands.
             async {
                 try
-                    do! log.Record($"team-{teamId}", GrantPolicyRefused payload)
+                    do! log.Record(AuditStreamKey.ofTeam teamId, GrantPolicyRefused payload)
                 with _ ->
                     ()
             }
@@ -544,7 +544,7 @@ type GrantPolicyPermissionStore
             // successful grant into an error.
             async {
                 try
-                    do! log.Record($"team-{teamId}", GrantRecorded payload)
+                    do! log.Record(AuditStreamKey.ofTeam teamId, GrantRecorded payload)
                 with _ ->
                     ()
             }

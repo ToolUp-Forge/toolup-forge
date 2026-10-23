@@ -64,10 +64,11 @@ module ClassificationGate =
         policy classification.Level ctx
 
     /// Scope under which classification audit is recorded — the caller's
-    /// config scope when resolvable, else the reserved `_platform` scope.
+    /// config scope's audit stream (`AuditStreamKey.ofScope` — its bare id, never
+    /// its container) when resolvable, else the reserved `_platform` scope.
     let private auditScope (ctx: AccessContext) : string =
         AccessContext.configScope ctx
-        |> Option.map _.Container
+        |> Option.map AuditStreamKey.ofScope
         |> Option.defaultValue "_platform"
 
     let private recordRead (audit: IAuditLog) (ctx: AccessContext) (c: FieldClassification) (redacted: bool) = async {

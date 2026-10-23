@@ -197,7 +197,7 @@ let tests =
 
                 match audit.Recorded with
                 | [ scope, AdminMutationProposed p ] ->
-                    Expect.equal scope "team-acme" "recorded under the team scope"
+                    Expect.equal scope "acme" "recorded under the team audit stream (the bare id)"
                     Expect.equal p.RequestId queued.RequestId "the row names the queued request"
                     Expect.equal p.ProposerId "admin-a" "the row names the proposer"
                     Expect.equal p.MutationKind "member-permissions" "the row carries the mutation kind token"
