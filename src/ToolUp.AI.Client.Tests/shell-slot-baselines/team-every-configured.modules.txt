@@ -14,6 +14,7 @@ _sdk.PermissionsAdmin | My permissions | Team Management | TeamOwnerAdmin | prod
 _sdk.UsageDashboard | My usage | Team Management | TeamOwnerAdmin | product | -UTC
 _sdk.AuditLog | My audit | Team Management | TeamOwnerAdmin | product | -UTC
 _sdk.DataIngestion | My ingestion | Team Management | TeamOwnerAdmin | product | -UTC
+_sdk.Jobs | My jobs | Team Management | TeamOwnerAdmin | product | -UTC
 _sdk.PlatformAdmin | My platform | Platform Management | PlatformAdminOnly | product | -UTC
 _sdk.HealthMonitor | My health | Observability | PlatformAdminOnly | product | -UTC
 _sdk.ServiceStatusBoard | My status | Platform Management | PlatformAdminOnly | product | -UTC

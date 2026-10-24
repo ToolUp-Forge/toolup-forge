@@ -74,6 +74,9 @@
              lives in Platform.Client, reached transitively; same precedent
              as TenantLifecycleAdminUITests). -->
         <Compile Include="ModuleVisibilityAdminUITests.fs" />
+        <!-- Phase 1106 - background-jobs admin MVU (JobsAdminUI lives in
+             Platform.Client, reached transitively). -->
+        <Compile Include="JobsAdminUITests.fs" />
         <!-- Sidebar admin-group role gate — the 4f.2 platform-scoped
              vs team-scoped group split (Platform.Client tier). -->
         <Compile Include="SidebarAdminGroupGateTests.fs" />

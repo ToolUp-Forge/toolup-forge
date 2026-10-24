@@ -1343,6 +1343,15 @@ module PublicRenderingServerApp =
                             else
                                 api)
                     )
+                    // Phase 1107 — the reader roles each publishing scope's
+                    // publications declare, for the platform's publication
+                    // reader admin (a grant may name no other role).
+                    .AddSingleton<IPublicationReaderRoleSource>(
+                        System.Func<System.IServiceProvider, IPublicationReaderRoleSource>(fun sp ->
+                            PublicationReaderRoles.fromApi (
+                                sp.GetService(typeof<IPublicContentApi>) :?> IPublicContentApi
+                            ))
+                    )
                     .AddSingleton<ILayoutCatalog>(
                         // Phase 80b — always exposed when public
                         // rendering is enabled. Read-only view; no

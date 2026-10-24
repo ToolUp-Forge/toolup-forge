@@ -136,6 +136,9 @@ let private reconstructAccess (ctx: HttpContext) : AccessContext =
             | _ -> ToolUp.Platform.Auth.PrincipalAdmission.Member
         ModuleExposure = moduleExposure
         PlatformRole = platformRole
+        // Phase 1107 — grants are read only by the `Publication` page
+        // audience, which this path never evaluates.
+        PublicationGrants = []
     }
 
 /// Phase 730 — the grant / consent gate for the `_platform.*` family.

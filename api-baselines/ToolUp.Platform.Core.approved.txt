@@ -472,11 +472,12 @@ ToolUp.Platform.AIToolResultBudget+Tags.DefaultResultBudget : System.Int32 (lite
 ToolUp.Platform.AIToolResultBudget+Tags.NoResultBudget : System.Int32 (literal)
 ToolUp.Platform.AIToolResultBudget+Tags.ResultBudgetChars : System.Int32 (literal)
 ToolUp.Platform.AccessContext (class)
-ToolUp.Platform.AccessContext..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Subject, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.Auth+PrincipalAdmission)
+ToolUp.Platform.AccessContext..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Subject, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.Auth+PrincipalAdmission, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublicationReaderGrant])
 ToolUp.Platform.AccessContext.Admission : ToolUp.Platform.Auth+PrincipalAdmission { get }
 ToolUp.Platform.AccessContext.ModuleExposure : Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure] { get }
 ToolUp.Platform.AccessContext.ModulePermissions : Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]] { get }
 ToolUp.Platform.AccessContext.PlatformRole : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole] { get }
+ToolUp.Platform.AccessContext.PublicationGrants : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublicationReaderGrant] { get }
 ToolUp.Platform.AccessContext.Subject : ToolUp.Platform.Subject { get }
 ToolUp.Platform.AccessContext.TeamId : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.AccessContext.TokenRoles : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
@@ -499,6 +500,7 @@ ToolUp.Platform.AccessContextModule.isModuleAvailable(System.String, ToolUp.Plat
 ToolUp.Platform.AccessContextModule.isModuleExposed(System.String, ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.isPublicationReader(ToolUp.Platform.AccessContext) : System.Boolean
 ToolUp.Platform.AccessContextModule.kindLabel(ToolUp.Platform.AccessContext) : System.String
+ToolUp.Platform.AccessContextModule.publicationGrantsFor(ToolUp.Platform.Subject, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublicationReaderGrant]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublicationReaderGrant]
 ToolUp.Platform.AccessContextModule.tokenRolesFor(ToolUp.Platform.Subject, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.Platform.AccessContextModule.unrestricted(ToolUp.Platform.Subject) : ToolUp.Platform.AccessContext
 ToolUp.Platform.AccessibilityApi (class)
@@ -1154,6 +1156,8 @@ ToolUp.Platform.AuditEvent.IsPlatformDocumentDeleted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsPlatformDocumentUploaded : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsPremiumGranted : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsPremiumRevoked : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsPublicationReaderGranted : System.Boolean { get }
+ToolUp.Platform.AuditEvent.IsPublicationReaderRevoked : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsPublicationReaderSignedIn : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsRateLimitRefused : System.Boolean { get }
 ToolUp.Platform.AuditEvent.IsRateLimitWaited : System.Boolean { get }
@@ -1518,6 +1522,10 @@ ToolUp.Platform.AuditEvent+PremiumRevoked.grantor : System.String { get }
 ToolUp.Platform.AuditEvent+PremiumRevoked.occurredAt : System.DateTimeOffset { get }
 ToolUp.Platform.AuditEvent+PremiumRevoked.reason : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.AuditEvent+PremiumRevoked.subjectUserId : System.String { get }
+ToolUp.Platform.AuditEvent+PublicationReaderGranted (class)
+ToolUp.Platform.AuditEvent+PublicationReaderGranted.Item : ToolUp.Platform.PublicationReaderGrantChangedPayload { get }
+ToolUp.Platform.AuditEvent+PublicationReaderRevoked (class)
+ToolUp.Platform.AuditEvent+PublicationReaderRevoked.Item : ToolUp.Platform.PublicationReaderGrantChangedPayload { get }
 ToolUp.Platform.AuditEvent+PublicationReaderSignedIn (class)
 ToolUp.Platform.AuditEvent+PublicationReaderSignedIn.Item : ToolUp.Platform.PublicationReaderSignedInPayload { get }
 ToolUp.Platform.AuditEvent+RateLimitRefused (class)
@@ -1716,6 +1724,8 @@ ToolUp.Platform.AuditEvent+Tags.PlatformDocumentDeleted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.PlatformDocumentUploaded : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.PremiumGranted : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.PremiumRevoked : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.PublicationReaderGranted : System.Int32 (literal)
+ToolUp.Platform.AuditEvent+Tags.PublicationReaderRevoked : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.PublicationReaderSignedIn : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.RateLimitRefused : System.Int32 (literal)
 ToolUp.Platform.AuditEvent+Tags.RateLimitWaited : System.Int32 (literal)
@@ -7574,6 +7584,11 @@ ToolUp.Platform.IProviderProfileApi.RemoveEntry : Microsoft.FSharp.Core.FSharpFu
 ToolUp.Platform.IProviderProfileApi.SaveEntry : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.ProviderEntryInput, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.IProviderProfileApi.SetFallback : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.IProviderProfileApi.SetRoute : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.RoutingRule, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
+ToolUp.Platform.IPublicationReaderApi (class)
+ToolUp.Platform.IPublicationReaderApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PublicationReaderRoster, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PublicationReaderEntry, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PublicationReaderEntry, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]])
+ToolUp.Platform.IPublicationReaderApi.GrantReader : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PublicationReaderEntry, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
+ToolUp.Platform.IPublicationReaderApi.ListReaders : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PublicationReaderRoster, System.String]]] { get }
+ToolUp.Platform.IPublicationReaderApi.RevokeReader : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.PublicationReaderEntry, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]] { get }
 ToolUp.Platform.IRateLimiter (interface)
 ToolUp.Platform.IRateLimiter.Wait(ToolUp.Platform.RateLimitKey) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Platform.RateLimitDecision]
 ToolUp.Platform.IRuntimeAttestor (interface)
@@ -10943,6 +10958,28 @@ ToolUp.Platform.PublicRenderingMode+EnabledPublicRendering.root : ToolUp.Platfor
 ToolUp.Platform.PublicRenderingMode+Tags (class)
 ToolUp.Platform.PublicRenderingMode+Tags.EnabledPublicRendering : System.Int32 (literal)
 ToolUp.Platform.PublicRenderingMode+Tags.NoPublicRendering : System.Int32 (literal)
+ToolUp.Platform.PublicationReaderApi (class)
+ToolUp.Platform.PublicationReaderApi.routeBuilder(System.String, System.String) : System.String
+ToolUp.Platform.PublicationReaderEntry (class)
+ToolUp.Platform.PublicationReaderEntry..ctor(System.String, System.String)
+ToolUp.Platform.PublicationReaderEntry.Role : System.String { get }
+ToolUp.Platform.PublicationReaderEntry.UserId : System.String { get }
+ToolUp.Platform.PublicationReaderGrant (class)
+ToolUp.Platform.PublicationReaderGrant..ctor(System.String, System.String)
+ToolUp.Platform.PublicationReaderGrant.PublishingScope : System.String { get }
+ToolUp.Platform.PublicationReaderGrant.Role : System.String { get }
+ToolUp.Platform.PublicationReaderGrantChangedPayload (class)
+ToolUp.Platform.PublicationReaderGrantChangedPayload..ctor(System.String, System.String, System.String, System.String, System.DateTimeOffset)
+ToolUp.Platform.PublicationReaderGrantChangedPayload.ActorId : System.String { get }
+ToolUp.Platform.PublicationReaderGrantChangedPayload.OccurredAt : System.DateTimeOffset { get }
+ToolUp.Platform.PublicationReaderGrantChangedPayload.PublishingScope : System.String { get }
+ToolUp.Platform.PublicationReaderGrantChangedPayload.ReaderId : System.String { get }
+ToolUp.Platform.PublicationReaderGrantChangedPayload.Role : System.String { get }
+ToolUp.Platform.PublicationReaderRoster (class)
+ToolUp.Platform.PublicationReaderRoster..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublicationReaderEntry])
+ToolUp.Platform.PublicationReaderRoster.DeclaredRoles : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.PublicationReaderRoster.PublishingScope : System.String { get }
+ToolUp.Platform.PublicationReaderRoster.Readers : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublicationReaderEntry] { get }
 ToolUp.Platform.PublicationReaderSignedInPayload (class)
 ToolUp.Platform.PublicationReaderSignedInPayload..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.DateTimeOffset)
 ToolUp.Platform.PublicationReaderSignedInPayload.AuthProvider : System.String { get }
@@ -14788,6 +14825,7 @@ ToolUp.Remoting.Json.PlatformJsonDecoders.presenceLocation : Microsoft.FSharp.Co
 ToolUp.Remoting.Json.PlatformJsonDecoders.providerEntryInput : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ProviderEntryInput, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Json.PlatformJsonDecoders.providerVerificationOutcome : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ProviderVerificationOutcome, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Json.PlatformJsonDecoders.provisioningRequest : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ProvisioningRequest, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Json.PlatformJsonDecoders.publicationReaderEntry : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PublicationReaderEntry, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Json.PlatformJsonDecoders.quietHours : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.QuietHours, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Json.PlatformJsonDecoders.recordOptInRequest : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.RecordOptInRequest, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Json.PlatformJsonDecoders.registerAll() : System.Void
@@ -15127,6 +15165,8 @@ ToolUp.Remoting.PlatformDecoders.providerHealth : Microsoft.FSharp.Core.FSharpFu
 ToolUp.Remoting.PlatformDecoders.providerHealthStatus : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ProviderHealthStatus, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.providerOrigin : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Usage.ProviderOrigin, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.providerProfileView : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ProviderProfileView, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.publicationReaderEntry : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PublicationReaderEntry, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.PlatformDecoders.publicationReaderRoster : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PublicationReaderRoster, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.pushVariant : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.NotificationKind+PushVariant, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.quietHours : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.QuietHours, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.PlatformDecoders.readinessVerdict : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.MsgPack.Value, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ReadinessVerdict, ToolUp.Remoting.DecodeError]] { get }

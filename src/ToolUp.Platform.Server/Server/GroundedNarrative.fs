@@ -277,6 +277,15 @@ type GroundedNarrativeOutcome =
     /// missing; the failure is on the audit trail as a failed row whose
     /// outcome is `unfunded`.
     | GroundedNarrativeUnfunded of reason: string
+    /// The model was still writing the narrative when a provider call
+    /// reached the run's call budget (Phase 1109). Nothing was published.
+    /// Like `GroundedNarrativeUnfunded` this does not pass by waiting:
+    /// another attempt over the same facts meets the same budget, and each
+    /// attempt is a paid, partial model call — so a trigger treats it as
+    /// permanent. `reason` names the budget and how a deployment raises it;
+    /// the failure is on the audit trail as a failed row whose outcome is
+    /// `over-budget`.
+    | GroundedNarrativeOverBudget of reason: string
 
 module GroundedNarrativeOutcome =
     /// One-paragraph description, for a subscription's last-run outcome or
@@ -297,6 +306,7 @@ module GroundedNarrativeOutcome =
             |> sprintf "refused, %d ungrounded claim(s): %s" (List.length offences)
         | GroundedNarrativeFailed reason -> sprintf "failed: %s" reason
         | GroundedNarrativeUnfunded reason -> sprintf "unfunded: no usable AI provider for the run's scope: %s" reason
+        | GroundedNarrativeOverBudget reason -> sprintf "over budget: %s" reason
 
 /// The generation run (seam:GroundedNarrativeRun). Implemented beside the
 /// agent loop; both triggers call it.

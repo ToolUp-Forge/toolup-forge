@@ -310,6 +310,20 @@ type TeamManagerMessages = {
     InviteExpires: string -> string -> string
     /// …and the same for one that has already expired.
     InviteExpired: string -> string -> string
+    // Phase 1107 — the publication-readers panel of the team details view.
+    PublicationReadersPanel: string
+    PublicationReadersHelp: string
+    /// Shown on a team that is not the caller's active team: the panel
+    /// manages the active team's readers only.
+    PublicationReadersActiveTeamOnly: string
+    PublicationReadersLoading: string
+    /// No publication of the team declares a reader role, so nothing can be granted.
+    PublicationReadersNoRoles: string
+    PublicationReadersNone: string
+    PublicationReaderRoleLabel: string
+    PublicationReaderUserPlaceholder: string
+    PublicationReaderAdd: string
+    PublicationReaderRemove: string
 }
 
 /// The built-in health-monitor module (`HealthMonitorUI`).
@@ -2956,6 +2970,56 @@ type ObservabilityMessages = {
     AlertsFootnote: string
 }
 
+/// The built-in jobs admin module (`JobsAdminUI`, Phase 1106).
+type JobsAdminMessages = {
+    Heading: string
+    Subheading: string
+    Refresh: string
+    Refreshing: string
+    Loading: string
+    Dismiss: string
+    /// Shown when the scope has no scheduled jobs.
+    NoJobs: string
+    ColumnJob: string
+    ColumnLastRun: string
+    ColumnStatus: string
+    ColumnActions: string
+    /// Last-run cell for a job that has never run.
+    NeverRun: string
+    /// Label above a failed job's recorded error, which follows verbatim.
+    ReasonLabel: string
+    /// `DeadLettered` — the job failed and the scheduler will not retry it.
+    StandingPermanentlyFailed: string
+    /// `Failed` — the last attempt failed and the scheduler will retry it.
+    StandingFailingWillRetry: string
+    /// `Pending` / `Running` / `AwaitingExternal`.
+    StandingInProgress: string
+    StandingSucceeded: string
+    /// `ExternallyCancelled` — an attempt the compute backend cancelled.
+    StandingAttemptCancelled: string
+    StandingNotYetRun: string
+    /// Badge beside a disabled job.
+    JobDisabled: string
+    /// Badge beside a cancelled job.
+    JobCancelled: string
+    RerunButton: string
+    /// The confirmation prompt. The argument is the job's handler name.
+    RerunConfirmPrompt: string -> string
+    RerunConfirm: string
+    RerunCancel: string
+    RerunStarting: string
+    RerunAwaiting: string
+    /// The new attempt finished. The argument is its status label.
+    RerunLanded: string -> string
+    RerunStillRunning: string
+    /// The re-run request was refused. The argument is the server's reason.
+    RerunRefused: string -> string
+    /// In place of the re-run action on a failed job that is disabled.
+    RerunUnavailableDisabled: string
+    /// In place of the re-run action on a failed job that is cancelled.
+    RerunUnavailableCancelled: string
+}
+
 
 /// The closed set of strings the SDK's own shell and built-in modules
 /// render. One nested record per surface; `Locale` carries the BCP 47
@@ -3017,4 +3081,5 @@ type MessageCatalog = {
     ProviderProfile: ProviderProfileMessages
     DatadogReadback: DatadogReadbackMessages
     Observability: ObservabilityMessages
+    JobsAdmin: JobsAdminMessages
 }

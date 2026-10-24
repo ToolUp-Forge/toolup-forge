@@ -211,6 +211,67 @@ let private LatencyWriteTimeoutMs = 5_000
 [<Literal>]
 let private ProviderSendTimeoutMs = 50_000
 
+// ─── Phase 1109 — the caller's call budget ───────────────────────
+//
+// The 50 s cap above is right for chat, where a client watchdog is waiting,
+// and wrong for a background run nobody is waiting on: a long report is cut
+// mid-stream at the same 50 s. So the budget is the CALLER's: the
+// interactive entry point passes `AgentCallBudget.interactive` (exactly the
+// cap above, the reply length left to the provider), and a background
+// caller passes its own — still finite, since `RetryPolicy.clampTimeoutMs`
+// bounds every per-call timeout a provider applies (1 s to 600 s).
+
+/// The budget every provider call one agent loop makes runs under.
+type AgentCallBudget = {
+    /// The per-call cap on `provider.SendMessage`, carried to the provider
+    /// as the call's `RetryPolicy.Timeout`.
+    CallTimeout: TimeSpan
+    /// The reply-length budget (output tokens) carried through the call as
+    /// `AIProviderCallOptions.MaxTokens`. `None` leaves the provider's own
+    /// cap, and the call is sent exactly as before this budget existed.
+    MaxTokens: int option
+    /// How a deployment raises this budget, named in the error when a call
+    /// runs out of it. `None` (the interactive budget) keeps the provider's
+    /// error as the loop's error, unchanged.
+    RaiseWith: string option
+}
+
+module AgentCallBudget =
+    /// The interactive assistant's budget: 50 s a call, the provider's own
+    /// reply cap — what every call made before Phase 1109 ran under.
+    let interactive: AgentCallBudget = {
+        CallTimeout = TimeSpan.FromMilliseconds(float ProviderSendTimeoutMs)
+        MaxTokens = None
+        RaiseWith = None
+    }
+
+    /// The timeout a provider actually applies for this budget.
+    let effectiveTimeout (budget: AgentCallBudget) : TimeSpan =
+        TimeSpan.FromMilliseconds(float (RetryPolicy.clampTimeoutMs (int budget.CallTimeout.TotalMilliseconds)))
+
+    /// One phrase naming the budget, for an error or a log line.
+    let describe (budget: AgentCallBudget) : string =
+        let reply =
+            match budget.MaxTokens with
+            | Some n -> sprintf " and a reply of up to %d tokens" n
+            | None -> ""
+
+        sprintf "a call budget of %.0f s%s" (effectiveTimeout budget).TotalSeconds reply
+
+/// Phase 1109 — a provider call reached the end of a background caller's
+/// call budget with the reply still streaming. Raised only under a budget
+/// that names `RaiseWith`; the message names the budget and how to raise it.
+/// Another attempt under the same budget meets the same cap, so a caller
+/// treats this as permanent rather than as an outage.
+exception AgentCallBudgetExceeded of budget: AgentCallBudget * elapsed: TimeSpan * detail: string with
+    override this.Message =
+        sprintf
+            "the model was still writing when the call reached %s (it ran %.0f s): %s. To give it longer, %s."
+            (AgentCallBudget.describe this.budget)
+            this.elapsed.TotalSeconds
+            this.detail
+            (this.budget.RaiseWith |> Option.defaultValue "raise the call budget")
+
 // ─── Phase 6i.A — per-turn latency telemetry ─────────────────────
 //
 // One `AILatencyRecord` per agent-loop iteration is written through
@@ -285,6 +346,7 @@ let private runFullAgentLoop
     (cancelToken: System.Threading.CancellationToken)
     (messages: AIProviderMessage list)
     (modelInput: ModelInput)
+    (budget: AgentCallBudget)
     (onEvent: AIStreamEvent -> unit)
     : Async<AIProviderMessage list> =
     async {
@@ -674,9 +736,11 @@ let private runFullAgentLoop
             // (5 min instance-wide). The client watchdog is 60 s; we
             // want the provider error to win the race so chat shows
             // the real cause instead of the generic watchdog.
+            // Phase 1109 — the cap is the caller's budget; the
+            // interactive budget is that same 50 s.
             let providerCallPolicy = {
                 RetryPolicy.defaults with
-                    Timeout = Some(TimeSpan.FromMilliseconds(float ProviderSendTimeoutMs))
+                    Timeout = Some budget.CallTimeout
             }
 
             let rec loop outerRetriesUsed = async {
@@ -699,7 +763,24 @@ let private runFullAgentLoop
                 // `withMessages` keeps its tool-result record in step.
                 let turnInput = ModelInput.withMessages msgs modelInput
 
-                let! result = provider.SendMessage(turnInput, tools, Some streamCb, providerCallPolicy)
+                // Phase 1109 — a budget naming a reply length sends it
+                // through the call; one that does not sends the call
+                // exactly as before.
+                let! result =
+                    match budget.MaxTokens with
+                    | None -> provider.SendMessage(turnInput, tools, Some streamCb, providerCallPolicy)
+                    | Some maxTokens -> async {
+                        let! sent =
+                            provider.SendMessageWith(
+                                AIProviderCallOptions.withMaxTokens maxTokens AIProviderCallOptions.none,
+                                turnInput,
+                                tools,
+                                Some streamCb,
+                                providerCallPolicy
+                            )
+
+                        return sent |> Result.map _.Response
+                      }
 
                 Logger.trace
                     logger
@@ -710,6 +791,22 @@ let private runFullAgentLoop
                 | Ok response -> return response
                 | Error err ->
                     match classifyForAgentLoop err with
+                    // Phase 1109 — the reply was still streaming when the
+                    // call reached a background caller's budget: name the
+                    // budget, typed, so the caller does not retry into the
+                    // same cap.
+                    | Fatal when
+                        budget.RaiseWith.IsSome
+                        && (match err with
+                            | StreamingAborted _ -> sw.Elapsed >= AgentCallBudget.effectiveTimeout budget
+                            | _ -> false)
+                        ->
+                        logger.Error(
+                            $"AI agent loop call budget exceeded (conversation={conversationId}, provider={providerName}/{providerModel}, {AgentCallBudget.describe budget}): {AIProviderError.toMessage err}",
+                            None
+                        )
+
+                        return raise (AgentCallBudgetExceeded(budget, sw.Elapsed, AIProviderError.toMessage err))
                     | Fatal ->
                         logger.Error(
                             $"AI agent loop fatal provider error (conversation={conversationId}, provider={providerName}/{providerModel}): {AIProviderError.toMessage err}",
@@ -1456,7 +1553,11 @@ let private runFullAgentLoop
 /// everything the provider will be shown; `messages` remains separate
 /// because the loop grows it turn by turn and folds each growth back
 /// into the value before rendering.
-let runAgentLoopWithInput
+///
+/// Phase 1109 — `budget` is the per-call budget every provider call runs
+/// under: `AgentCallBudget.interactive` for a conversation a client is
+/// waiting on, a caller's own (still finite) budget for a background run.
+let runAgentLoopWithBudget
     (provider: IAIProvider)
     (registry: AIToolRegistry)
     (dispatchRegistry: ClientToolDispatch.ClientToolDispatchRegistry)
@@ -1469,6 +1570,7 @@ let runAgentLoopWithInput
     (cancelToken: System.Threading.CancellationToken)
     (messages: AIProviderMessage list)
     (modelInput: ModelInput)
+    (budget: AgentCallBudget)
     (onEvent: AIStreamEvent -> unit)
     : Async<AIProviderMessage list> =
     async {
@@ -1507,8 +1609,42 @@ let runAgentLoopWithInput
                     cancelToken
                     messages
                     modelInput
+                    budget
                     onEvent
     }
+
+/// The loop under the interactive budget (`AgentCallBudget.interactive`):
+/// the entry point the assistant uses, unchanged by Phase 1109.
+let runAgentLoopWithInput
+    (provider: IAIProvider)
+    (registry: AIToolRegistry)
+    (dispatchRegistry: ClientToolDispatch.ClientToolDispatchRegistry)
+    (ctx: HttpContext)
+    (taskId: Guid)
+    (conversationId: Guid)
+    (surface: AISurface)
+    (activeModule: string option)
+    (activePage: string option)
+    (cancelToken: System.Threading.CancellationToken)
+    (messages: AIProviderMessage list)
+    (modelInput: ModelInput)
+    (onEvent: AIStreamEvent -> unit)
+    : Async<AIProviderMessage list> =
+    runAgentLoopWithBudget
+        provider
+        registry
+        dispatchRegistry
+        ctx
+        taskId
+        conversationId
+        surface
+        activeModule
+        activePage
+        cancelToken
+        messages
+        modelInput
+        AgentCallBudget.interactive
+        onEvent
 
 /// The pre-791 string-shaped entry point, kept for one release so an
 /// out-of-tree composition root upgrades without a same-commit edit

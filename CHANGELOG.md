@@ -15,29 +15,122 @@ applies. Where a release ships a migration note under `docs/migrations/`, it is 
 
 ## [0.32.0] — unreleased
 
-_Surface since `v0.31.0`: **additive** — 1 package moved; 18 members added, 0 members changed, 0 members removed._
+Migration notes:
+
+- [1106-jobs-admin-slot](docs/migrations/1106-jobs-admin-slot.md)
+- [1107-publication-readers-granted-in-platform](docs/migrations/1107-publication-readers-granted-in-platform.md)
+
+_Surface since `v0.31.0`: **breaking** — 8 packages moved; 282 members added, 6 members changed, 0 members removed._
 
 ### Added
 
-- `ToolUp.Platform.Core` — 18 members:
+- `ToolUp.AI.Server` — 20 members:
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudget (class)`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudget..ctor(System.TimeSpan, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.String])`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudget.CallTimeout : System.TimeSpan { get }`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudget.MaxTokens : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudget.RaiseWith : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudgetExceeded (class)`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudgetExceeded..ctor()`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudgetExceeded..ctor(ToolUp.AI.AIAgentEngine+AgentCallBudget, System.TimeSpan, System.String)`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudgetExceeded.Message : System.String { get }`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudgetExceeded.budget : ToolUp.AI.AIAgentEngine+AgentCallBudget { get }`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudgetExceeded.detail : System.String { get }`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudgetExceeded.elapsed : System.TimeSpan { get }`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudgetModule (class)`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudgetModule.describe(ToolUp.AI.AIAgentEngine+AgentCallBudget) : System.String`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudgetModule.effectiveTimeout(ToolUp.AI.AIAgentEngine+AgentCallBudget) : System.TimeSpan`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudgetModule.interactive : ToolUp.AI.AIAgentEngine+AgentCallBudget { get }`
+  - `ToolUp.AI.AIAgentEngine.runAgentLoopWithBudget(ToolUp.Platform.AI.IAIProvider, ToolUp.AI.AIToolRegistry+AIToolRegistry, ToolUp.AI.ClientToolDispatch+ClientToolDispatchRegistry, Microsoft.AspNetCore.Http.HttpContext, System.Guid, System.Guid, ToolUp.AI.AISurface, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Threading.CancellationToken, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], ToolUp.AI.ModelInput, ToolUp.AI.AIAgentEngine+AgentCallBudget, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIStreamEvent, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage]]`
+  - `ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions.CallBudget : ToolUp.AI.AIAgentEngine+AgentCallBudget { get }`
+  - `ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptionsModule.defaultCallBudget : ToolUp.AI.AIAgentEngine+AgentCallBudget { get }`
+  - `ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptionsModule.withCallBudget(ToolUp.AI.AIAgentEngine+AgentCallBudget, ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions) : ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions`
+- `ToolUp.AI.Wire` — 2 members:
+  - `ToolUp.Platform.AI.AIProviderCallOptions.MaxTokens : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }`
+  - `ToolUp.Platform.AI.AIProviderCallOptionsModule.withMaxTokens(System.Int32, ToolUp.Platform.AI.AIProviderCallOptions) : ToolUp.Platform.AI.AIProviderCallOptions`
+- `ToolUp.AIProviders.Claude` — 1 member:
+  - `ClaudeAIProvider.resolveCallMaxTokens(System.Int32, ToolUp.Platform.AI.AIProviderCallOptions) : System.Int32`
+- `ToolUp.AuthProviders.Oidc` — 1 member:
+  - `ToolUp.AuthProviders.OidcAuthProvider.applyAdmissionWithGrant(System.Boolean, ToolUp.Platform.ClaimMapping, ToolUp.Platform.Auth+AuthenticatedUser) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Auth+AuthenticatedUser, System.String]`
+- `ToolUp.Platform.Client` — 180 members:
+  - `JobsAdminUI (class)`
+  - `JobsAdminUI+JobStanding (class)`
+  - `JobsAdminUI+JobStanding+Tags (class)`
+  - `JobsAdminUI+JobStanding+Tags.AttemptCancelled : System.Int32 (literal)`
+  - `JobsAdminUI+JobStanding+Tags.FailingWillRetry : System.Int32 (literal)`
+  - `JobsAdminUI+JobStanding+Tags.InProgress : System.Int32 (literal)`
+  - `JobsAdminUI+JobStanding+Tags.NotYetRun : System.Int32 (literal)`
+  - `JobsAdminUI+JobStanding+Tags.PermanentlyFailed : System.Int32 (literal)`
+  - `JobsAdminUI+JobStanding+Tags.Succeeded : System.Int32 (literal)`
+  - `JobsAdminUI+JobStanding.AttemptCancelled : JobsAdminUI+JobStanding { get }`
+  - `JobsAdminUI+JobStanding.FailingWillRetry : JobsAdminUI+JobStanding { get }`
+  - `JobsAdminUI+JobStanding.InProgress : JobsAdminUI+JobStanding { get }`
+  - `JobsAdminUI+JobStanding.IsAttemptCancelled : System.Boolean { get }`
+  - `JobsAdminUI+JobStanding.IsFailingWillRetry : System.Boolean { get }`
+  - `JobsAdminUI+JobStanding.IsInProgress : System.Boolean { get }`
+  - `JobsAdminUI+JobStanding.IsNotYetRun : System.Boolean { get }`
+  - `JobsAdminUI+JobStanding.IsPermanentlyFailed : System.Boolean { get }`
+  - `JobsAdminUI+JobStanding.IsSucceeded : System.Boolean { get }`
+  - `JobsAdminUI+JobStanding.NotYetRun : JobsAdminUI+JobStanding { get }`
+  - `JobsAdminUI+JobStanding.PermanentlyFailed : JobsAdminUI+JobStanding { get }`
+  - … and 160 more — `git diff v0.31.0 -- api-baselines/ToolUp.Platform.Client.approved.txt`
+- `ToolUp.Platform.Core` — 58 members:
+  - `ToolUp.Platform.AccessContext.PublicationGrants : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublicationReaderGrant] { get }`
+  - `ToolUp.Platform.AccessContextModule.publicationGrantsFor(ToolUp.Platform.Subject, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublicationReaderGrant]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublicationReaderGrant]`
   - `ToolUp.Platform.AdminMutationRefusal+RecordNotRemoved (class)`
   - `ToolUp.Platform.AdminMutationRefusal+RecordNotRemoved.detail : System.String { get }`
   - `ToolUp.Platform.AdminMutationRefusal+Tags.RecordNotRemoved : System.Int32 (literal)`
   - `ToolUp.Platform.AdminMutationRefusal.IsRecordNotRemoved : System.Boolean { get }`
   - `ToolUp.Platform.AuditEvent+EncryptionKeyUnreadable (class)`
   - `ToolUp.Platform.AuditEvent+EncryptionKeyUnreadable.Item : ToolUp.Platform.EncryptionKeyUnreadablePayload { get }`
+  - `ToolUp.Platform.AuditEvent+PublicationReaderGranted (class)`
+  - `ToolUp.Platform.AuditEvent+PublicationReaderGranted.Item : ToolUp.Platform.PublicationReaderGrantChangedPayload { get }`
+  - `ToolUp.Platform.AuditEvent+PublicationReaderRevoked (class)`
+  - `ToolUp.Platform.AuditEvent+PublicationReaderRevoked.Item : ToolUp.Platform.PublicationReaderGrantChangedPayload { get }`
   - `ToolUp.Platform.AuditEvent+Tags.EncryptionKeyUnreadable : System.Int32 (literal)`
+  - `ToolUp.Platform.AuditEvent+Tags.PublicationReaderGranted : System.Int32 (literal)`
+  - `ToolUp.Platform.AuditEvent+Tags.PublicationReaderRevoked : System.Int32 (literal)`
   - `ToolUp.Platform.AuditEvent.IsEncryptionKeyUnreadable : System.Boolean { get }`
+  - `ToolUp.Platform.AuditEvent.IsPublicationReaderGranted : System.Boolean { get }`
+  - `ToolUp.Platform.AuditEvent.IsPublicationReaderRevoked : System.Boolean { get }`
   - `ToolUp.Platform.AuditStreamKey (class)`
   - `ToolUp.Platform.AuditStreamKey.ofScope(ToolUp.Platform.StorageScope) : System.String`
-  - `ToolUp.Platform.AuditStreamKey.ofTeam(System.String) : System.String`
-  - `ToolUp.Platform.EncryptionKeyUnreadablePayload (class)`
-  - `ToolUp.Platform.EncryptionKeyUnreadablePayload..ctor(System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], System.String)`
-  - `ToolUp.Platform.EncryptionKeyUnreadablePayload.KeyId : System.String { get }`
-  - `ToolUp.Platform.EncryptionKeyUnreadablePayload.LengthSeen : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }`
-  - `ToolUp.Platform.EncryptionKeyUnreadablePayload.Reason : System.String { get }`
-  - `ToolUp.Platform.EncryptionKeyUnreadablePayload.Resolver : System.String { get }`
-  - `ToolUp.Platform.EncryptionKeyUnreadablePayload.ScopeId : System.String { get }`
+  - … and 38 more — `git diff v0.31.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
+- `ToolUp.Platform.Server` — 17 members:
+  - `ToolUp.Platform.BlobPublicationReaderGrantStore (class)`
+  - `ToolUp.Platform.BlobPublicationReaderGrantStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])`
+  - `ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeOverBudget (class)`
+  - `ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeOverBudget.reason : System.String { get }`
+  - `ToolUp.Platform.GroundedNarrativeOutcome+Tags.GroundedNarrativeOverBudget : System.Int32 (literal)`
+  - `ToolUp.Platform.GroundedNarrativeOutcome.IsGroundedNarrativeOverBudget : System.Boolean { get }`
+  - `ToolUp.Platform.IPublicationReaderGrantStore (interface)`
+  - `ToolUp.Platform.IPublicationReaderGrantStore.Grant(System.String, ToolUp.Platform.PublicationReaderEntry, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]`
+  - `ToolUp.Platform.IPublicationReaderGrantStore.GrantsFor(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublicationReaderGrant]]`
+  - `ToolUp.Platform.IPublicationReaderGrantStore.ListScope(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublicationReaderEntry]]`
+  - `ToolUp.Platform.IPublicationReaderGrantStore.Revoke(System.String, ToolUp.Platform.PublicationReaderEntry) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String]]`
+  - `ToolUp.Platform.IPublicationReaderRoleSource (interface)`
+  - `ToolUp.Platform.IPublicationReaderRoleSource.DeclaredRoles(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]]`
+  - `ToolUp.Platform.PublicationReaderApiHandler (class)`
+  - `ToolUp.Platform.PublicationReaderApiHandler.publicationReaderApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.Platform.IPublicationReaderApi`
+  - `ToolUp.Platform.PublicationReaderGrants (class)`
+  - `ToolUp.Platform.PublicationReaderGrants.validateToken(System.String, System.String) : Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]`
+- `ToolUp.PublicRendering` — 3 members:
+  - `ToolUp.PublicRendering.PublicationReaderRoles (class)`
+  - `ToolUp.PublicRendering.PublicationReaderRoles.declaredIn(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.PublicPage], System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]`
+  - `ToolUp.PublicRendering.PublicationReaderRoles.fromApi(ToolUp.PublicRendering.IPublicContentApi) : ToolUp.Platform.IPublicationReaderRoleSource`
+
+### Changed
+
+- `ToolUp.AI.Server` — 1 member:
+  - `ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions..ctor` — `ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])` → `ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset], ToolUp.AI.AIAgentEngine+AgentCallBudget)`
+- `ToolUp.AI.Wire` — 1 member:
+  - `ToolUp.Platform.AI.AIProviderCallOptions..ctor` — `ToolUp.Platform.AI.AIProviderCallOptions..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String])` → `ToolUp.Platform.AI.AIProviderCallOptions..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])`
+- `ToolUp.Platform.Client` — 3 members:
+  - `ToolUp.Platform.MessageCatalog..ctor` — `ToolUp.Platform.MessageCatalog..ctor(System.String, ToolUp.Platform.ShellMessages, ToolUp.Platform.BootDegradationMessages, ToolUp.Platform.ToastMessages, ToolUp.Platform.NotAuthorisedMessages, ToolUp.Platform.ModuleBoundaryMessages, ToolUp.Platform.CommandPaletteMessages, ToolUp.Platform.SidebarMessages, ToolUp.Platform.TeamManagerMessages, ToolUp.Platform.HealthMonitorMessages, ToolUp.Platform.DataIngestionMessages, ToolUp.Platform.AdminHomeMessages, ToolUp.Platform.AuthMessages, ToolUp.Platform.RateLimitedMessages, ToolUp.Platform.ConsentMessages, ToolUp.Platform.OAuth1aCredentialMessages, ToolUp.Platform.NoActiveTeamLandingMessages, ToolUp.Platform.PlatformAdminMessages, ToolUp.Platform.PlatformUsersMessages, ToolUp.Platform.PermissionsAdminMessages, ToolUp.Platform.WebhookAdminMessages, ToolUp.Platform.NarrativeRendererMessages, ToolUp.Platform.ServiceAccountMessages, ToolUp.Platform.ExternalContactMessages, ToolUp.Platform.NotificationPreferencesMessages, ToolUp.Platform.DataSubjectRequestAdminMessages, ToolUp.Platform.TeamConfigMessages, ToolUp.Platform.TenantLifecycleAdminMessages, ToolUp.Platform.ModuleVisibilityAdminMessages, ToolUp.Platform.MigrationStatusMessages, ToolUp.Platform.SessionSecurityMessages, ToolUp.Platform.HomeMessages, ToolUp.Platform.InviteAcceptMessages, ToolUp.Platform.PublicUtilityWidgetsMessages, ToolUp.Platform.FileManagerMessages, ToolUp.Platform.ServiceStatusBoardMessages, ToolUp.Platform.UsageDashboardMessages, ToolUp.Platform.AuditLogMessages, ToolUp.Platform.CompositionInspectorMessages, ToolUp.Platform.MappingDataManagerMessages, ToolUp.Platform.KnowledgeBaseMessages, ToolUp.Platform.ProviderProfileMessages, ToolUp.Platform.DatadogReadbackMessages, ToolUp.Platform.ObservabilityMessages)` → `ToolUp.Platform.MessageCatalog..ctor(System.String, ToolUp.Platform.ShellMessages, ToolUp.Platform.BootDegradationMessages, ToolUp.Platform.ToastMessages, ToolUp.Platform.NotAuthorisedMessages, ToolUp.Platform.ModuleBoundaryMessages, ToolUp.Platform.CommandPaletteMessages, ToolUp.Platform.SidebarMessages, ToolUp.Platform.TeamManagerMessages, ToolUp.Platform.HealthMonitorMessages, ToolUp.Platform.DataIngestionMessages, ToolUp.Platform.AdminHomeMessages, ToolUp.Platform.AuthMessages, ToolUp.Platform.RateLimitedMessages, ToolUp.Platform.ConsentMessages, ToolUp.Platform.OAuth1aCredentialMessages, ToolUp.Platform.NoActiveTeamLandingMessages, ToolUp.Platform.PlatformAdminMessages, ToolUp.Platform.PlatformUsersMessages, ToolUp.Platform.PermissionsAdminMessages, ToolUp.Platform.WebhookAdminMessages, ToolUp.Platform.NarrativeRendererMessages, ToolUp.Platform.ServiceAccountMessages, ToolUp.Platform.ExternalContactMessages, ToolUp.Platform.NotificationPreferencesMessages, ToolUp.Platform.DataSubjectRequestAdminMessages, ToolUp.Platform.TeamConfigMessages, ToolUp.Platform.TenantLifecycleAdminMessages, ToolUp.Platform.ModuleVisibilityAdminMessages, ToolUp.Platform.MigrationStatusMessages, ToolUp.Platform.SessionSecurityMessages, ToolUp.Platform.HomeMessages, ToolUp.Platform.InviteAcceptMessages, ToolUp.Platform.PublicUtilityWidgetsMessages, ToolUp.Platform.FileManagerMessages, ToolUp.Platform.ServiceStatusBoardMessages, ToolUp.Platform.UsageDashboardMessages, ToolUp.Platform.AuditLogMessages, ToolUp.Platform.CompositionInspectorMessages, ToolUp.Platform.MappingDataManagerMessages, ToolUp.Platform.KnowledgeBaseMessages, ToolUp.Platform.ProviderProfileMessages, ToolUp.Platform.DatadogReadbackMessages, ToolUp.Platform.ObservabilityMessages, ToolUp.Platform.JobsAdminMessages)`
+  - `ToolUp.Platform.ShellSlotFills..ctor` — `ToolUp.Platform.ShellSlotFills..ctor(ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.DataManagerChoice], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel])` → `ToolUp.Platform.ShellSlotFills..ctor(ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.DataManagerChoice], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel])`
+  - `ToolUp.Platform.TeamManagerMessages..ctor` — `ToolUp.Platform.TeamManagerMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]])` → `ToolUp.Platform.TeamManagerMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)`
+- `ToolUp.Platform.Core` — 1 member:
+  - `ToolUp.Platform.AccessContext..ctor` — `ToolUp.Platform.AccessContext..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Subject, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.Auth+PrincipalAdmission)` → `ToolUp.Platform.AccessContext..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.Platform.Subject, Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModulePermission]], Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.ModuleExposure], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.PlatformRole], Microsoft.FSharp.Collections.FSharpList`1[System.String], ToolUp.Platform.Auth+PrincipalAdmission, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublicationReaderGrant])`
 
 ## [0.31.0] — 2026-10-22
 

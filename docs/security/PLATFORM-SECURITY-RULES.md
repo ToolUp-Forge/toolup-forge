@@ -768,7 +768,17 @@ section eliminates structurally.
 > it; its sign-in consumes no pending team invite. A `Publication` page admits
 > its named readers and nobody else, with no bypass for app members or platform
 > administrators, and reads the publishing scope's content on the reader's
-> behalf without handing the reader that scope. Every publication page
+> behalf without handing the reader that scope. **Since Phase 1107 a reader
+> role is held either as a provider-asserted role or as an explicit in-platform
+> grant** (`PublicationReaderGrant`: one principal, one publishing scope, one
+> reader role the scope's publications declare, never a wildcard), made and
+> revoked only by an Owner or Admin of the publishing team, each change audited
+> (`PublicationReaderGranted` / `PublicationReaderRevoked`) under that team. A
+> grant is read only by the `Publication` audience of its own scope, per
+> request (a revocation bites at the next one), and is never implied by team
+> membership, module permissions or the platform-admin role; a principal the
+> member rule refuses who holds a grant is admitted as a `PublicationReader`
+> and confined exactly as above. Every publication page
 > decision, and every page decision for a reader, is audited with the reader,
 > the publishing scope and the page; the narrative read re-checks disclosure at
 > the narrative-publication surface and withholds a narrative citing a fact
@@ -819,7 +829,15 @@ section eliminates structurally.
 > the teamless-member pin) ·
 > `docs/migrations/996-publication-audience.md` (Phase 996) ·
 > `docs/migrations/1002-publication-reader-subject.md` (Phase 1002) ·
-> `docs/migrations/1006-reader-refusal-audit.md` (Phase 1006)
+> `docs/migrations/1006-reader-refusal-audit.md` (Phase 1006) ·
+> `src/ToolUp.Platform.Server/Server/Scope/PublicationReaderGrantStore.fs` ·
+> `src/ToolUp.Platform.Server/Server/PublicationReaderApiHandler.fs` (the
+> Owner/Admin gate, the declared-role check, the grant audit) ·
+> `src/ToolUp.Platform.Core/Shared/Types/AccessContext.fs`
+> (`PublicationGrants`) · `src/AuthProviders/Oidc/OidcAuthProvider.fs`
+> (`applyAdmissionWithGrant`) · `GatedSsrTests.fs` (Phase 1107's grant truth
+> table, admission, confinement and revocation) ·
+> `docs/migrations/1107-publication-readers-granted-in-platform.md` (Phase 1107)
 
 ---
 

@@ -128,7 +128,26 @@ Then:
   — `GroundedNarrativeFailed`; nothing is published.
 
 Every outcome writes one audit row, source `_narratives`: `GroundedNarrativePublished`,
-`GroundedNarrativeRefused` (naming each offence) or `GroundedNarrativeFailed`.
+`GroundedNarrativeRefused` (naming each offence) or `GroundedNarrativeFailed` (whose outcome field
+also tells `unfunded` and `over-budget` apart).
+
+**The run's call budget (Phase 1109).** No client waits on a run, so it is not held to the
+interactive assistant's 50-second call cap. Every model call the run makes runs under
+`GroundedNarrativeRunOptions.CallBudget` — by default `defaultCallBudget`: 300 s a call and a
+16,384-token reply, passed through the call as `AIProviderCallOptions.MaxTokens`. A deployment sets
+its own at composition:
+
+```fsharp skip=fragment
+GroundedNarrativeRunOptions.create NarrativeGrounding.factTools
+|> GroundedNarrativeRunOptions.withCallBudget
+    { CallTimeout = TimeSpan.FromSeconds 600.0; MaxTokens = Some 32_000; RaiseWith = None }
+```
+
+The timeout is clamped to the transport's 600 s per-call ceiling, so the budget stays finite. A
+reply still streaming when a call reaches the budget is `GroundedNarrativeOverBudget`, whose reason
+names the budget and how to raise it. It is written to the audit trail as a failed row with the
+outcome `over-budget`. A trigger treats it as permanent, because another attempt over the same facts
+meets the same budget and pays for another partial reply.
 
 **Why the scope must be resolved.** The model reads facts through the request-path fact tools,
 which take only a scope the platform resolved (Phase 797). A run is handed one — a job passes its

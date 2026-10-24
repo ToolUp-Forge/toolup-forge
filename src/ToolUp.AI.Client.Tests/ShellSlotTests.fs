@@ -59,6 +59,7 @@ let private everyExternal = {
             DataIngestionAdmin = SlotFill.External(replacement "DataIngestionAdmin")
             MigrationAdmin = SlotFill.External(replacement "MigrationAdmin")
             DataSubjectRequestAdmin = SlotFill.External(replacement "DataSubjectRequestAdmin")
+            JobsAdmin = SlotFill.External(replacement "JobsAdmin")
         }
 }
 
@@ -94,6 +95,7 @@ let private everyConfigured = {
             DataIngestionAdmin = SlotFill.Configured(label "ingestion")
             MigrationAdmin = SlotFill.Configured(label "migrations")
             DataSubjectRequestAdmin = SlotFill.Configured(label "dsr")
+            JobsAdmin = SlotFill.Configured(label "jobs")
         }
 }
 
@@ -131,6 +133,7 @@ let tests =
                     "UsageDashboard"
                     "AuditViewer"
                     "DataIngestionAdmin"
+                    "JobsAdmin"
                     "PlatformAdmin"
                     "HealthMonitor"
                     "ServiceStatusBoard"
@@ -138,9 +141,9 @@ let tests =
                     "MigrationAdmin"
                     "CompositionInspector"
                 ]
-                "the twenty slots, in composition order"
+                "the twenty-one slots, in composition order"
 
-        testCase "every one of the twenty slots accepts a deployment's own module"
+        testCase "every one of the twenty-one slots accepts a deployment's own module"
         <| fun () ->
             for slot in ShellSlots.all do
                 let filled = slot.Fill(ctxOf everyExternal) |> Option.map _.Definition.Id

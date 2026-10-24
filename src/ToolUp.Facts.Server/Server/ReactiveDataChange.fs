@@ -569,6 +569,12 @@ module GroundedNarrativeTrigger =
                             // spend the backoff and publish nothing.
                             | GroundedNarrativeUnfunded _ ->
                                 return PermanentFailure(GroundedNarrativeOutcome.describe outcome)
+                            // A reply cut at the run's call budget (Phase
+                            // 1109) is cut at the same budget next time,
+                            // and each attempt is a paid, partial model
+                            // call: permanent, naming how to raise it.
+                            | GroundedNarrativeOverBudget _ ->
+                                return PermanentFailure(GroundedNarrativeOutcome.describe outcome)
             }
 
     /// Register the job handler with the composed scheduler at startup —

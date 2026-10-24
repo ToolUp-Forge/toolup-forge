@@ -13,6 +13,7 @@ ClaudeAIProvider.create(ToolUp.Platform.Secrets+ISecretStore) : ToolUp.Platform.
 ClaudeAIProvider.createWithApiKey(System.String) : ToolUp.Platform.AI.IAIProvider
 ClaudeAIProvider.createWithApiKeyAndModel(System.String, System.String) : ToolUp.Platform.AI.IAIProvider
 ClaudeAIProvider.createWithModel(ToolUp.Platform.Secrets+ISecretStore, System.String) : ToolUp.Platform.AI.IAIProvider
+ClaudeAIProvider.resolveCallMaxTokens(System.Int32, ToolUp.Platform.AI.AIProviderCallOptions) : System.Int32
 ClaudeAIProvider.resolveCallModel(System.String, ToolUp.Platform.AI.AIProviderCallOptions) : System.Tuple`2[System.String, ToolUp.Platform.AI.ModelOverrideOutcome]
 ClaudeAIProvider+ClaudeAIProvider (class)
 ClaudeAIProvider+ClaudeAIProvider..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])

@@ -785,6 +785,22 @@ let buildRouteHandlers
             Api.make (ServiceAccountApiHandler.serviceAccountApi, routeBuilder = ServiceAccountApi.routeBuilder)
           ]
 
+    // Phase 1107 — `IPublicationReaderApi`: a publishing team's Owner or
+    // Admin grants and revokes in-platform publication readers. Mounted
+    // where the deployment serves teams (a publishing scope is a team);
+    // every gate is inside the handler. Route shape:
+    // `/api/IPublicationReaderApi/*`.
+    let publicationReaderApiHandler: HttpHandler list =
+        if DeploymentConfig.hasTeamScope config then
+            [
+                Api.make (
+                    PublicationReaderApiHandler.publicationReaderApi,
+                    routeBuilder = PublicationReaderApi.routeBuilder
+                )
+            ]
+        else
+            []
+
     // Phase 441 — `INotificationPreferenceApi` (the surface behind the
     // built-in `NotificationPreferencesUI`). Mounted only when
     // `NotificationPreferences` is enabled, so a default deployment gains
@@ -871,6 +887,7 @@ let buildRouteHandlers
             @ dataSubjectRequestApiHandler
             @ platformTenantApiHandler
             @ serviceAccountApiHandler
+            @ publicationReaderApiHandler
             @ notificationPreferenceApiHandler
             @ externalContactApiHandler
             @ devRoutes

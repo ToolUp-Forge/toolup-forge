@@ -395,14 +395,26 @@ type AIProviderCallOptions = {
     /// its configured model and reports `OverrideFellBack` rather than
     /// failing the call; see `ModelOverrideOutcome`.
     Model: string option
+    /// Phase 1109 — the reply-length budget (output tokens) for THIS call.
+    /// `None` is today's behaviour: the provider's own constructed cap. A
+    /// connector that sends a reply cap (Anthropic's `max_tokens`) sends
+    /// this one instead; a connector that sends none leaves the reply
+    /// uncapped either way. A value below 1 is ignored.
+    MaxTokens: int option
 }
 
 module AIProviderCallOptions =
     /// No per-call options — the configured model, unchanged bytes.
-    let none: AIProviderCallOptions = { Model = None }
+    let none: AIProviderCallOptions = { Model = None; MaxTokens = None }
 
     /// Ask for one call on `model`.
-    let forModel (model: string) : AIProviderCallOptions = { Model = Some model }
+    let forModel (model: string) : AIProviderCallOptions = { none with Model = Some model }
+
+    /// Phase 1109 — give one call a reply-length budget of `maxTokens`.
+    let withMaxTokens (maxTokens: int) (options: AIProviderCallOptions) : AIProviderCallOptions = {
+        options with
+            MaxTokens = Some maxTokens
+    }
 
 /// What the provider did about `AIProviderCallOptions.Model` on one
 /// call — the response metadata a caller reads to tell a triage turn

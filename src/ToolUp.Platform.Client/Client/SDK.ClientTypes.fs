@@ -1836,6 +1836,14 @@ type ShellSlotFills = {
     /// registers the snapshot; a host composed through `compose` directly
     /// registers none, and each panel says so.
     CompositionInspector: SlotFill<ModuleLabel>
+    /// Phase 1106 — the jobs admin: every background job in the caller's
+    /// scope with its last run, permanently failed jobs first with the
+    /// recorded reason, and a confirmed re-run (`JobApi.TriggerOnce`).
+    /// Gated on any authenticated surface. **Default `Empty`** — pair with
+    /// a `ServerConfig.JobScheduler` other than `NoJobScheduler`, the only
+    /// configuration that mounts `JobApi`. Carries the "Background jobs"
+    /// administration tile.
+    JobsAdmin: SlotFill<ModuleLabel>
 }
 
 /// Phase 879 — the slot map's defaults.
@@ -1866,6 +1874,7 @@ module ShellSlotFills =
         DataSubjectRequestAdmin = SlotFill.Empty
         MigrationAdmin = SlotFill.Empty
         CompositionInspector = SlotFill.Default
+        JobsAdmin = SlotFill.Empty
     }
 
 type ClientConfig = {

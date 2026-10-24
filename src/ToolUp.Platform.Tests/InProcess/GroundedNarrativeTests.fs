@@ -27,7 +27,13 @@ module ToolUp.Platform.Tests.InProcess.GroundedNarrativeTests
 //   D. both triggers: the report producer and the data-arrival reaction;
 //   E. who pays (Phase 995): the run's provider resolves under the scope it
 //      carries, so a team's own key funds it, and a scope with no usable key
-//      is a typed, permanent failure.
+//      is a typed, permanent failure;
+//   F. its call budget (Phase 1109): a report that streams for longer than
+//      the chat's 50 s completes under the run's own budget, the interactive
+//      loop still stops at 50 s, a reply cut at the run's budget is a typed
+//      permanent outcome naming how to raise it, the reply-length budget
+//      reaches the provider call, and a transient failure IS retried by the
+//      in-process scheduler.
 
 open System
 open System.Collections.Concurrent
@@ -571,7 +577,6 @@ let private answer (paragraph: string) =
 /// The model: one `query_facts` call, then the writer's answer. It records
 /// the tools it was offered.
 type private ScriptedModel(write: Writer) =
-    let mutable turns = 0
     member val OfferedTools: string list = [] with get, set
 
     interface IAIProvider with
@@ -587,11 +592,10 @@ type private ScriptedModel(write: Writer) =
         }
 
         member this.SendMessage(messages, tools, _systemPrompt, _onStream, _retryPolicy) = async {
-            turns <- turns + 1
             this.OfferedTools <- tools |> List.map _.Name
 
-            match turns with
-            | 1 ->
+            match messages |> List.exists (fun m -> not (List.isEmpty m.ToolResults)) with
+            | false ->
                 return
                     Ok {
                         Content = ""
@@ -789,7 +793,11 @@ type private Deployment = {
 /// A deployment as one is written: a RAG app with the fact tier composed in
 /// one call, grounded narratives composed over it, booted — its AI provider
 /// factory built over the scripted model by `factoryFor`.
-let private deployWith (factoryFor: ScriptedModel -> IAIProviderFactory) (write: Writer) : Deployment =
+let private deployComposed
+    (options: GroundedNarrativeRunOptions)
+    (factoryFor: ScriptedModel -> IAIProviderFactory)
+    (write: Writer)
+    : Deployment =
     let storage = InMemoryBlobStorage() :> IBlobStorage
     let model = ScriptedModel write
 
@@ -798,7 +806,7 @@ let private deployWith (factoryFor: ScriptedModel -> IAIProviderFactory) (write:
         |> RAGServerApp.withStorage storage
         |> RAGServerApp.withFacts FactsCompose.withFactTier
         |> composeRAG
-        |> GroundedNarratives.compose (GroundedNarrativeRunOptions.create NarrativeGrounding.factTools) [ summaryRun ]
+        |> GroundedNarratives.compose options [ summaryRun ]
 
     let services = ServiceCollection() :> IServiceCollection
     let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
@@ -854,6 +862,9 @@ let private deployWith (factoryFor: ScriptedModel -> IAIProviderFactory) (write:
         TeamId = teamId
         Scope = ScopeResolution.ofStorageScope (storageFor teamId)
     }
+
+let private deployWith (factoryFor: ScriptedModel -> IAIProviderFactory) (write: Writer) : Deployment =
+    deployComposed (GroundedNarrativeRunOptions.create NarrativeGrounding.factTools) factoryFor write
 
 /// A deployment whose factory hands every request the scripted model.
 let private deploy (write: Writer) : Deployment =
@@ -1654,6 +1665,336 @@ let scopedProviderTests =
         }
     ]
 
+// ── F. The run's call budget (Phase 1109) ─────────────────────────
+
+/// Wraps a model so its final reply "streams" for `streamFor` of FAKE time:
+/// under a per-call timeout shorter than that, the reply is cut mid-stream
+/// exactly as a connector's per-call timeout cuts one — partial content,
+/// `StreamingAborted` — and otherwise it arrives whole. A timeout of a few
+/// seconds is waited out for real, so the loop measures the call reaching
+/// its budget as it would against a live connector. Records the timeout
+/// and the reply-length budget every call was sent with.
+type private StreamingFor(inner: IAIProvider, streamFor: TimeSpan) =
+    let timeouts = ConcurrentQueue<TimeSpan option>()
+    let maxTokens = ConcurrentQueue<int option>()
+
+    member _.Timeouts = List.ofSeq timeouts
+    member _.MaxTokens = List.ofSeq maxTokens
+
+    member _.Send
+        (
+            messages,
+            tools,
+            systemPrompt,
+            onStream: (string -> unit) option,
+            retryPolicy: ToolUp.Platform.Transport.RetryPolicy
+        ) =
+        async {
+            timeouts.Enqueue retryPolicy.Timeout
+            let! result = inner.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy)
+
+            match result, retryPolicy.Timeout with
+            | Ok reply, Some timeout when List.isEmpty reply.ToolCalls && timeout < streamFor ->
+                if timeout <= TimeSpan.FromSeconds 5.0 then
+                    do! Async.Sleep(int timeout.TotalMilliseconds + 50)
+
+                let partial = reply.Content.Substring(0, min 12 reply.Content.Length)
+                onStream |> Option.iter (fun stream -> stream partial)
+
+                return
+                    Error(
+                        StreamingAborted(
+                            partial,
+                            $"Timed out after {ToolUp.Platform.Transport.RetryPolicy.timeoutDescription retryPolicy} with partial content delivered"
+                        )
+                    )
+            | _ -> return result
+        }
+
+    interface IAIProvider with
+        member _.Capabilities = inner.Capabilities
+
+        member this.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy) =
+            this.Send(messages, tools, systemPrompt, onStream, retryPolicy)
+
+        member _.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) =
+            inner.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy)
+
+    interface IAIProviderModelOverride with
+        member this.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy) =
+            maxTokens.Enqueue options.MaxTokens
+
+            this.Send(messages, tools, systemPrompt, onStream, retryPolicy)
+            |> AIProviderCallResponse.attach (ConfiguredModel inner.Capabilities.Model)
+
+        member _.SendStructuredMessageWith(_options, messages, tools, systemPrompt, schema, retryPolicy) =
+            inner.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy)
+            |> AIProviderCallResponse.attach (ConfiguredModel inner.Capabilities.Model)
+
+/// A deployment whose model's report streams for `streamFor` of fake time.
+let private deployStreaming (options: GroundedNarrativeRunOptions) (streamFor: TimeSpan) =
+    let mutable streaming = None
+
+    let factoryFor (model: ScriptedModel) =
+        let provider = StreamingFor(model, streamFor)
+        streaming <- Some provider
+        ScriptedFactory(provider) :> IAIProviderFactory
+
+    let deployment = deployComposed options factoryFor citingWriter
+    deployment, streaming.Value
+
+/// A model that answers at once with `content`, no tools.
+let private replyOnly (content: string) =
+    { new IAIProvider with
+        member _.Capabilities = {
+            Streaming = true
+            ToolUse = false
+            Vision = false
+            SupportsPromptCaching = false
+            SupportsTriage = false
+            TriageModelId = None
+            ProviderName = "scripted-reply"
+            Model = "scripted-reply-model"
+        }
+
+        member _.SendMessage(_messages, _tools, _systemPrompt, _onStream, _retryPolicy) = async {
+            return
+                Ok {
+                    Content = content
+                    ToolCalls = []
+                    StopReason = "end_turn"
+                    Usage = None
+                }
+        }
+
+        member this.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) =
+            IAIProviderDefaults.sendStructuredViaFallback this messages tools systemPrompt schema retryPolicy
+    }
+
+let private seventySeconds = TimeSpan.FromSeconds 70.0
+
+let budgetTests =
+    testList "Phase 1109 F — a background run has its own call budget" [
+
+        test "a report that streams for 70 s of fake time completes under the run's default budget" {
+            let deployment, model =
+                deployStreaming (GroundedNarrativeRunOptions.create NarrativeGrounding.factTools) seventySeconds
+
+            withRevenueFact deployment
+
+            match run deployment with
+            | GroundedNarrativePublished _ -> ()
+            | other -> failtestf "expected the narrative published, got %s" (GroundedNarrativeOutcome.describe other)
+
+            Expect.isNonEmpty model.Timeouts "the model was called"
+
+            Expect.allEqual
+                model.Timeouts
+                (Some(TimeSpan.FromSeconds 300.0))
+                "every call ran under the run's 300 s budget, not the chat's 50 s"
+
+            Expect.equal
+                GroundedNarrativeRunOptions.defaultCallBudget.CallTimeout
+                (TimeSpan.FromSeconds 300.0)
+                "the stated default"
+        }
+
+        test "the reply-length budget reaches the provider call" {
+            let deployment, model =
+                deployStreaming (GroundedNarrativeRunOptions.create NarrativeGrounding.factTools) TimeSpan.Zero
+
+            withRevenueFact deployment
+            run deployment |> ignore
+
+            Expect.isNonEmpty model.MaxTokens "the calls carried per-call options"
+            Expect.allEqual model.MaxTokens (Some 16_384) "every call carried the run's 16,384-token reply budget"
+
+            Expect.equal
+                (ClaudeAIProvider.resolveCallMaxTokens
+                    ClaudeAIProvider.DefaultMaxTokens
+                    (AIProviderCallOptions.withMaxTokens 16_384 AIProviderCallOptions.none))
+                16_384
+                "and the Anthropic connector sends that budget as the call's reply cap"
+
+            Expect.equal
+                (ClaudeAIProvider.resolveCallMaxTokens ClaudeAIProvider.DefaultMaxTokens AIProviderCallOptions.none)
+                ClaudeAIProvider.DefaultMaxTokens
+                "a call naming no budget keeps the connector's own cap"
+
+            Expect.equal
+                (ClaudeAIProvider.resolveCallMaxTokens
+                    ClaudeAIProvider.DefaultMaxTokens
+                    (AIProviderCallOptions.withMaxTokens 0 AIProviderCallOptions.none))
+                ClaudeAIProvider.DefaultMaxTokens
+                "and a budget below 1 is ignored"
+        }
+
+        test "the interactive loop still stops a call at 50 s, with the provider's own error" {
+            let model =
+                StreamingFor(replyOnly "A reply that takes seventy seconds to write.", seventySeconds)
+
+            let services = ServiceCollection()
+            services.AddSingleton<ILogger>(silentLogger) |> ignore
+            let ctx = DefaultHttpContext()
+            ctx.RequestServices <- services.BuildServiceProvider()
+            let messages = [ AIProviderMessage.text "user" "hello" ]
+
+            let outcome =
+                AIAgentEngine.runAgentLoopWithInput
+                    model
+                    (AIToolRegistry.AIToolRegistry())
+                    (ClientToolDispatch.ClientToolDispatchRegistry())
+                    ctx
+                    (Guid.NewGuid())
+                    (Guid.NewGuid())
+                    AISurface.FullPage
+                    None
+                    None
+                    CancellationToken.None
+                    messages
+                    ModelInput.empty
+                    ignore
+                |> Async.Catch
+                |> Async.RunSynchronously
+
+            Expect.equal model.Timeouts [ Some(TimeSpan.FromSeconds 50.0) ] "one call, under the chat's 50 s"
+            Expect.isEmpty model.MaxTokens "sent exactly as before: no per-call options"
+
+            match outcome with
+            | Choice1Of2 _ -> failtest "a reply cut at 50 s must fail the conversation"
+            | Choice2Of2(:? AIAgentEngine.AgentCallBudgetExceeded) ->
+                failtest "the interactive budget names no remedy, so its error stays the provider's"
+            | Choice2Of2 ex -> Expect.stringContains ex.Message "Timed out after 50000 ms" "the provider's own error"
+        }
+
+        test
+            "a reply still streaming at the run's budget: over budget, permanent, naming the budget and how to raise it" {
+            let budget: AIAgentEngine.AgentCallBudget = {
+                CallTimeout = TimeSpan.FromSeconds 1.0
+                MaxTokens = Some 2048
+                RaiseWith = None
+            }
+
+            let options =
+                GroundedNarrativeRunOptions.create NarrativeGrounding.factTools
+                |> GroundedNarrativeRunOptions.withCallBudget budget
+
+            let deployment, _ = deployStreaming options seventySeconds
+            withRevenueFact deployment
+
+            match run deployment with
+            | GroundedNarrativeOverBudget reason ->
+                Expect.stringContains reason "a call budget of 1 s and a reply of up to 2048 tokens" "names the budget"
+                Expect.stringContains reason "GroundedNarrativeRunOptions.withCallBudget" "and how to raise it"
+                Expect.stringContains reason "Timed out after 1000 ms" "carrying the provider's account"
+            | other -> failtestf "expected over budget, got %s" (GroundedNarrativeOutcome.describe other)
+
+            Expect.isEmpty (published deployment) "nothing was published"
+
+            let row = narrativeRows deployment |> List.exactlyOne
+            Expect.equal row.EventType GroundedNarrativeEvents.FailedType "one failed row on the audit trail"
+            Expect.stringContains row.Payload "over-budget" "whose outcome says why"
+
+            match narrativeJob deployment with
+            | PermanentFailure reason ->
+                Expect.stringContains reason "over budget" "the job is not retried into the same cap"
+            | other -> failtestf "expected a permanent failure, got %A" other
+        }
+
+        test "settling the retry question: a transient grounded-run failure IS retried by the in-process scheduler" {
+            // Attempt 1's model answer is not the narrative format (a
+            // `GroundedNarrativeFailed`, so the job's `TransientFailure`);
+            // attempt 2 writes the grounded narrative.
+            let mutable answers = 0
+
+            let flaky: Writer =
+                fun id rendering ->
+                    answers <- answers + 1
+
+                    if answers = 1 then
+                        "not a narrative"
+                    else
+                        citingWriter id rendering
+
+            let deployment = deploy flaky
+            withRevenueFact deployment
+
+            let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let jobStore = JobStore.create (InMemoryBlobStorage() :> IBlobStorage) events
+
+            use scheduler =
+                new JobScheduler.InProcessJobScheduler(
+                    jobStore,
+                    events,
+                    { new INotificationChannel with
+                        member _.Publish(_, _) = async { return () }
+                        member _.Subscribe(_, _) = async { return Guid.NewGuid() }
+                        member _.Unsubscribe(_) = async { return () }
+                    },
+                    ServerConfig.defaults,
+                    silentLogger,
+                    ToolUp.Platform.Tracing.NoOpActivitySink() :> ToolUp.Platform.Tracing.IActivitySink
+                )
+
+            let jobs = scheduler :> IJobScheduler
+
+            jobs.RegisterHandler(
+                GroundedNarrativeTrigger.HandlerName,
+                GroundedNarrativeTrigger.GroundedNarrativeJobHandler(
+                    deployment.Store,
+                    Some metrics,
+                    deployment.Services.GetRequiredService<GroundedNarrativeRegistry>(),
+                    deployment.Services.GetRequiredService<IGroundedNarrativeRun>()
+                )
+            )
+
+            // The data-arrival registration, its backoff shortened from 30 s
+            // so the test reads the history after the first backoff in
+            // milliseconds; attempts, shape and dispatch path are the job's.
+            let registration = {
+                GroundedNarrativeTrigger.registrationFor deployment.TeamId summaryRun.Key Set.empty with
+                    RetryPolicy = {
+                        GroundedNarrativeTrigger.retryPolicy with
+                            InitialBackoff = TimeSpan.FromMilliseconds 100.0
+                    }
+            }
+
+            let jobId =
+                match jobs.Schedule(deployment.Scope, registration) |> Async.RunSynchronously with
+                | Ok id -> id
+                | Error e -> failtestf "schedule refused: %A" e
+
+            match
+                jobs.TriggerOnce(deployment.TeamId, jobId, "_platform")
+                |> Async.RunSynchronously
+            with
+            | Ok() -> ()
+            | Error e -> failtestf "trigger refused: %s" e
+
+            let runs () =
+                jobs.GetRecentRuns(deployment.TeamId, jobId, 20) |> Async.RunSynchronously
+
+            let deadline = DateTime.UtcNow.AddSeconds 30.0
+
+            while DateTime.UtcNow < deadline
+                  && not (runs () |> List.exists (fun r -> r.Status = JobRunStatus.Succeeded)) do
+                Thread.Sleep 100
+
+            let history =
+                runs ()
+                |> List.filter (fun r -> r.Status <> JobRunStatus.Running)
+                |> List.map (fun r -> r.Attempt, r.Status)
+                |> List.sort
+
+            Expect.equal
+                history
+                [ 1, JobRunStatus.Failed; 2, JobRunStatus.Succeeded ]
+                "attempt 1 failed transiently and attempt 2 ran after the backoff, and published"
+
+            Expect.equal (published deployment).Length 1 "the retried attempt published the narrative"
+        }
+    ]
+
 let tests =
     testList "Phase 985 — grounded narrative generation" [
         pureGateTests
@@ -1661,4 +2002,5 @@ let tests =
         runTests
         triggerTests
         scopedProviderTests
+        budgetTests
     ]

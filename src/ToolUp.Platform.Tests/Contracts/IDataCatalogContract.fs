@@ -536,6 +536,7 @@ let tests (name: string) (factory: (string * DataType) list * IDataObjectStore -
                 ModulePermissions = Map.ofList [ "Sales", [ ModulePermission.SchemaOnly ] ]
                 TokenRoles = []
                 Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
+                PublicationGrants = []
                 ModuleExposure = Map.empty
                 PlatformRole = None
             }
@@ -552,6 +553,7 @@ let tests (name: string) (factory: (string * DataType) list * IDataObjectStore -
                 ModulePermissions = Map.ofList [ "Sales", [ ModulePermission.SchemaOnly; ModulePermission.Read ] ]
                 TokenRoles = []
                 Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
+                PublicationGrants = []
                 ModuleExposure = Map.empty
                 PlatformRole = None
             }
@@ -568,6 +570,7 @@ let tests (name: string) (factory: (string * DataType) list * IDataObjectStore -
                 ModulePermissions = Map.ofList [ "Sales", [ ModulePermission.Read ] ]
                 TokenRoles = []
                 Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
+                PublicationGrants = []
                 ModuleExposure = Map.empty
                 PlatformRole = None
             }

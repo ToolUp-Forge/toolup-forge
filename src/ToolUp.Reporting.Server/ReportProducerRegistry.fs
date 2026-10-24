@@ -237,6 +237,7 @@ module GroundedNarrativeProducer =
                 // an unfunded scope (Phase 995) is not retried here either.
                 | GroundedNarrativeRefused _
                 | GroundedNarrativeFailed _
-                | GroundedNarrativeUnfunded _ -> return Error(GroundedNarrativeOutcome.describe outcome)
+                | GroundedNarrativeUnfunded _
+                | GroundedNarrativeOverBudget _ -> return Error(GroundedNarrativeOutcome.describe outcome)
         })
         |> ReportProducer.withDescription "A model-written narrative, published only when every number in it is a Fact."

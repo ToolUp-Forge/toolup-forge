@@ -2545,6 +2545,432 @@ let private publicationPipelineTests =
             }
     ]
 
+// ─── Phase 1107 — publication readers granted inside the platform ─────
+
+let private boardGrant: PublicationReaderGrant = {
+    PublishingScope = "team-a"
+    Role = "board-readers"
+}
+
+/// A principal admitted on an in-platform grant alone: no asserted role.
+let private grantOnlyReader = {
+    AccessContext.unrestricted (AuthenticatedUser "gina") with
+        Admission = PrincipalAdmission.PublicationReader
+        PublicationGrants = [ boardGrant ]
+}
+
+/// A grant store over a fresh in-memory blob storage.
+let private freshGrantStore () =
+    BlobPublicationReaderGrantStore(ToolUp.Platform.Testing.Fakes.standardBlobStorage (), None)
+    :> IPublicationReaderGrantStore
+
+/// A role source that declares `roles` for `team-a` only.
+let private rolesFor (roles: string list) =
+    { new IPublicationReaderRoleSource with
+        member _.DeclaredRoles scope = async { return (if scope = "team-a" then roles else []) }
+    }
+
+let private inPlatformGrantTests =
+    testList "Phase 1107 — publication readers granted inside the platform" [
+        testCase "AudienceGate — the Publication arm admits an asserted role OR a grant of it, and nothing else"
+        <| fun _ ->
+            let page = PageAudience.Publication boardAudience
+            let signedIn = AccessContext.unrestricted (AuthenticatedUser "gina")
+
+            let cases = [
+                "grant only",
+                {
+                    signedIn with
+                        PublicationGrants = [ boardGrant ]
+                },
+                AudienceDecision.Allow
+                "asserted only",
+                {
+                    signedIn with
+                        TokenRoles = [ "board-readers" ]
+                },
+                AudienceDecision.Allow
+                "both",
+                {
+                    signedIn with
+                        TokenRoles = [ "board-readers" ]
+                        PublicationGrants = [ boardGrant ]
+                },
+                AudienceDecision.Allow
+                "neither", signedIn, AudienceDecision.Forbidden
+                "a grant of another role",
+                {
+                    signedIn with
+                        PublicationGrants = [
+                            {
+                                boardGrant with
+                                    Role = "other-readers"
+                            }
+                        ]
+                },
+                AudienceDecision.Forbidden
+                "the role granted in another scope",
+                {
+                    signedIn with
+                        PublicationGrants = [
+                            {
+                                boardGrant with
+                                    PublishingScope = "team-b"
+                            }
+                        ]
+                },
+                AudienceDecision.Forbidden
+                "grant revoked (the next request carries none)",
+                { signedIn with PublicationGrants = [] },
+                AudienceDecision.Forbidden
+            ]
+
+            for label, ctx, expected in cases do
+                Expect.equal (AudienceGate.evaluate ctx page) expected label
+
+            // Every existing refusal still refuses: a member of the publishing
+            // team with module permissions who is also the platform admin.
+            let teamMember = {
+                AccessContext.unrestricted (TeamMember("carol", "team-a")) with
+                    ModulePermissions = Map[("editor", [ ModulePermission.Read ])]
+                    PlatformRole = Some PlatformRole.PlatformAdmin
+            }
+
+            Expect.equal (AudienceGate.evaluate teamMember page) AudienceDecision.Forbidden "no team / admin bypass"
+            Expect.equal (AudienceGate.evaluate anon page) AudienceDecision.RequireAuthentication "anonymous: 401"
+
+        testCase "AudienceGate — a grant is read by the Publication arm only, and a grant-only reader is confined"
+        <| fun _ ->
+            for audience in
+                [
+                    PageAudience.Authenticated
+                    PageAudience.ScopeGated []
+                    PageAudience.ScopeGated [ "board-readers" ]
+                    PageAudience.ClientGated "gina"
+                    PageAudience.Publication otherAudience
+                ] do
+                Expect.equal
+                    (AudienceGate.evaluate grantOnlyReader audience)
+                    AudienceDecision.Forbidden
+                    $"%A{audience}: 403"
+
+            Expect.equal (AudienceGate.evaluate grantOnlyReader PageAudience.Public) AudienceDecision.Allow "public"
+
+            Expect.equal
+                (AudienceGate.evaluate grantOnlyReader (PageAudience.Publication boardAudience))
+                AudienceDecision.Allow
+                "its own publication"
+
+            // A member whose only connection to `board-readers` is a grant does
+            // not hold that role for a ScopeGated page: the grant widens nothing
+            // but the publication.
+            let memberWithGrant = {
+                AccessContext.unrestricted (AuthenticatedUser "gina") with
+                    ModulePermissions = Map[("viewer", [ ModulePermission.Read ])]
+                    PublicationGrants = [ boardGrant ]
+            }
+
+            Expect.equal
+                (AudienceGate.evaluate memberWithGrant (PageAudience.ScopeGated [ "board-readers" ]))
+                AudienceDecision.Forbidden
+                "a grant is not a ScopeGated role"
+
+        testCase "admission — a principal the member rule refuses is a reader on a grant, and refused without one"
+        <| fun _ ->
+            let admit granted payload =
+                match mapWith publicationMapping payload with
+                | Ok u ->
+                    ToolUp.AuthProviders.OidcAuthProvider.applyAdmissionWithGrant granted publicationMapping u
+                    |> Result.map _.Admission
+                | Error(claim, _) -> Error claim
+
+            Expect.equal
+                (admit true """{"roles":["viewer"]}""")
+                (Ok PrincipalAdmission.PublicationReader)
+                "no app role, a grant: a publication reader"
+
+            Expect.isError (admit false """{"roles":["viewer"]}""") "no app role, no grant: refused as today"
+
+            Expect.equal
+                (admit true """{"roles":["app-user"]}""")
+                (Ok PrincipalAdmission.Member)
+                "a member with a grant stays a member"
+
+            Expect.equal
+                (admit false """{"groups":["7f1c-board"]}""")
+                (Ok PrincipalAdmission.PublicationReader)
+                "the provider-asserted path is unchanged"
+
+            let tenanted = {
+                publicationMapping with
+                    TenantIdClaim = Some "tid"
+                    AllowedTenants = [ "t-ours" ]
+            }
+
+            let admitTenanted payload =
+                match mapWith tenanted payload with
+                | Ok u ->
+                    ToolUp.AuthProviders.OidcAuthProvider.applyAdmissionWithGrant true tenanted u
+                    |> Result.isOk
+                | Error _ -> false
+
+            Expect.isFalse
+                (admitTenanted """{"tid":"t-theirs","roles":["viewer"]}""")
+                "the tenant rule binds a grant-only reader"
+
+        testCaseAsync "the grant store — one scope, one role, one principal; idempotent; ids round-trip"
+        <| async {
+            let store = freshGrantStore ()
+
+            let entry = {
+                UserId = "gina@corp/x"
+                Role = "board-readers"
+            }
+
+            let other = {
+                PublishingScope = "team-b"
+                Role = "other-readers"
+            }
+
+            let! r1 = store.Grant("team-a", entry, "olive")
+            let! r2 = store.Grant("team-a", entry, "olive")
+            let! _ = store.Grant("team-b", { entry with Role = "other-readers" }, "olive")
+            Expect.isOk r1 "granted"
+            Expect.isOk r2 "idempotent"
+
+            let! grants = store.GrantsFor "gina@corp/x"
+
+            Expect.equal
+                (grants |> List.sortBy _.PublishingScope)
+                [ boardGrant; other ]
+                "every grant the principal holds, across scopes"
+
+            let! none = store.GrantsFor "gina@corp"
+            Expect.isEmpty none "a prefix of the user id holds nothing"
+
+            let! listed = store.ListScope "team-a"
+            Expect.equal listed [ entry ] "the scope's grants"
+
+            let! wildcard = store.Grant("team-a", { entry with Role = "*" }, "olive")
+            Expect.isError wildcard "a wildcard role is refused"
+            let! blank = store.Grant("team-a", { entry with UserId = " " }, "olive")
+            Expect.isError blank "a blank principal is refused"
+
+            let! _ = store.Revoke("team-a", entry)
+            let! after = store.GrantsFor "gina@corp/x"
+            Expect.equal after [ other ] "revoked in team-a only"
+        }
+
+        testCaseAsync
+            "the admin API — Owner or Admin of the publishing team only, declared roles only, every change audited"
+        <| async {
+            let blob = ToolUp.Platform.Testing.Fakes.standardBlobStorage ()
+            let notifications = InMemoryNotificationChannel(None) :> INotificationChannel
+
+            let teams =
+                TeamManagement.TeamStore(blob, notifications, silentLogger) :> TeamManagement.ITeamStore
+
+            let! _ = teams.CreateTeam("team-a", "Team A")
+            let! _ = teams.AddMember("team-a", "olive", TeamRole.Owner)
+            let! _ = teams.AddMember("team-a", "mo", TeamRole.Member)
+            let store = freshGrantStore ()
+            let rows, auditLog = recordingAuditLog ()
+
+            let apiFor (subject: Subject) (platformAdmin: bool) =
+                let services = ServiceCollection()
+
+                services.AddSingleton<AccessContext>(
+                    {
+                        AccessContext.unrestricted subject with
+                            PlatformRole =
+                                (if platformAdmin then
+                                     Some PlatformRole.PlatformAdmin
+                                 else
+                                     None)
+                    }
+                )
+                |> ignore
+
+                services.AddSingleton<TeamManagement.ITeamStore>(teams) |> ignore
+                services.AddSingleton<IPublicationReaderGrantStore>(store) |> ignore
+
+                services.AddSingleton<IPublicationReaderRoleSource>(rolesFor [ "board-readers" ])
+                |> ignore
+
+                services.AddSingleton<IAuditLog>(auditLog) |> ignore
+                let ctx = DefaultHttpContext()
+                ctx.RequestServices <- services.BuildServiceProvider()
+                PublicationReaderApiHandler.publicationReaderApi ctx
+
+            let owner = apiFor (TeamMember("olive", "team-a")) false
+
+            let entry = {
+                UserId = "gina"
+                Role = "board-readers"
+            }
+
+            let! granted = owner.GrantReader entry
+            Expect.isOk granted "the owner grants a declared role"
+
+            let! undeclared = owner.GrantReader { entry with Role = "other-readers" }
+            Expect.isError undeclared "a role no publication of the team declares is refused"
+
+            match! owner.ListReaders() with
+            | Ok r ->
+                Expect.equal r.PublishingScope "team-a" "the active team"
+                Expect.equal r.DeclaredRoles [ "board-readers" ] "declared roles"
+                Expect.equal r.Readers [ entry ] "the grant"
+            | Error e -> failtest e
+
+            let! byMember = (apiFor (TeamMember("mo", "team-a")) false).GrantReader entry
+            Expect.isError byMember "a plain member is refused"
+
+            let! byAdminOutside = (apiFor (AuthenticatedUser "root") true).GrantReader entry
+            Expect.isError byAdminOutside "the platform admin outside the team is refused"
+
+            let! byReader = (apiFor (PublicationReader "gina") false).ListReaders()
+            Expect.isError byReader "a reader is refused"
+
+            let! revoked = owner.RevokeReader entry
+            Expect.isOk revoked "revoked"
+            let! held = store.GrantsFor "gina"
+            Expect.isEmpty held "the grant is gone"
+
+            let audited =
+                rows
+                |> Seq.choose (fun (scope, evt) ->
+                    match evt with
+                    | PublicationReaderGranted p -> Some(scope, "granted", p.ActorId, p.ReaderId, p.Role)
+                    | PublicationReaderRevoked p -> Some(scope, "revoked", p.ActorId, p.ReaderId, p.Role)
+                    | _ -> None)
+                |> Seq.toList
+
+            Expect.equal
+                audited
+                [
+                    "team-a", "granted", "olive", "gina", "board-readers"
+                    "team-a", "revoked", "olive", "gina", "board-readers"
+                ]
+                "one row per change, under the publishing scope; refusals record nothing"
+        }
+
+        testCaseAsync
+            "through the pipeline: a grant-only principal signs in as a reader, reads its publication only, and loses it on revocation"
+        <| async {
+            let s = issuer.Force()
+            let narratives = InMemoryNarrativeStore() :> INarrativeStore
+            let events = ToolUp.Platform.Testing.Fakes.TestEventStore() :> IEventStore
+
+            let! _ =
+                narratives.PublishTagged(
+                    "team-a",
+                    "Board",
+                    None,
+                    reportDocument "Board report team-a" None,
+                    [ "run:board" ]
+                )
+
+            let store = freshGrantStore ()
+
+            let! _ =
+                store.Grant(
+                    "team-a",
+                    {
+                        UserId = "gina"
+                        Role = "board-readers"
+                    },
+                    "olive"
+                )
+
+            let! _ =
+                store.Grant(
+                    "team-a",
+                    {
+                        UserId = "carol"
+                        Role = "board-readers"
+                    },
+                    "olive"
+                )
+
+            let register (services: IServiceCollection) =
+                services.AddSingleton<IEventStore>(events) |> ignore
+                services.AddSingleton<IPublicationReaderGrantStore>(store) |> ignore
+
+            use! host =
+                startHostWithApi
+                    (publicationApi narratives events)
+                    Surfaces.team
+                    (oidcProviderWith publicationMapping)
+                    register
+                    (scopeProbeRoute :: appApiRoutes)
+
+            use client = host.GetTestClient()
+            let token sub (claims: (string * obj) list) = Some(s.MintTokenFor(sub, claims))
+            // gina: no app role, no directory group — only an in-platform grant
+            let gina = token "gina" [ "roles", box [| "viewer" |] ]
+            // carol: an app member of team-a with a grant
+            let carol = token "carol" [ "roles", box [| "app-user" |] ]
+
+            let cells = [
+                "gina", gina, HttpMethod.Get, "/reports/latest", 200
+                "gina", gina, HttpMethod.Get, "/other/latest", 403
+                "gina", gina, HttpMethod.Get, "/members", 403
+                "gina", gina, HttpMethod.Get, "/editors", 403
+                "gina", gina, HttpMethod.Get, "/open", 200
+                "gina", gina, HttpMethod.Get, "/api/x", 403
+                "gina", gina, HttpMethod.Post, "/api/TeamApi/CreateTeam", 403
+                "carol", carol, HttpMethod.Get, "/reports/latest", 200
+            ]
+
+            let! results =
+                cells
+                |> List.map (fun (label, tok, verb, path, expected) -> async {
+                    let! status, body = sendMethod client verb tok path
+                    return label, verb, path, expected, status, body
+                })
+                |> Async.Sequential
+
+            let! _ =
+                store.Revoke(
+                    "team-a",
+                    {
+                        UserId = "gina"
+                        Role = "board-readers"
+                    }
+                )
+
+            let! _ =
+                store.Revoke(
+                    "team-a",
+                    {
+                        UserId = "carol"
+                        Role = "board-readers"
+                    }
+                )
+
+            let! ginaAfter, _ = sendMethod client HttpMethod.Get gina "/reports/latest"
+            let! carolAfter, _ = sendMethod client HttpMethod.Get carol "/reports/latest"
+            do! host.StopAsync() |> Async.AwaitTask
+
+            let mismatches =
+                results
+                |> Array.choose (fun (label, verb, path, expected, status, _) ->
+                    if status <> expected then
+                        Some $"{label} {verb} {path}: expected {expected}, got {status}"
+                    else
+                        None)
+
+            Expect.isEmpty mismatches ("mismatched: " + String.concat "; " mismatches)
+
+            for label, _, path, _, status, body in results do
+                if path = "/reports/latest" && status = 200 then
+                    Expect.stringContains body "Board report team-a" $"{label}: the publishing team's narrative"
+
+            Expect.equal ginaAfter 401 "revoked: the grant-only principal is not admitted at its next request"
+            Expect.equal carolAfter 403 "revoked: the member is refused the publication at its next request"
+        }
+    ]
+
 let tests =
     testList "GatedSsr (Phase 86)" [
         parseTests
@@ -2560,4 +2986,5 @@ let tests =
         readerConfinementTests
         readerRefusalAuditTests
         publicationPipelineTests
+        inPlatformGrantTests
     ]

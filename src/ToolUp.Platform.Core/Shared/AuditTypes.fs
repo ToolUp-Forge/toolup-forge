@@ -823,6 +823,12 @@ type AuditEvent =
     /// Phase 1002 — a publication reader's sign-in, recorded under
     /// `_platform` (the reader holds no scope of its own).
     | PublicationReaderSignedIn of PublicationReaderSignedInPayload
+    /// Phase 1107 — a publication reader role granted in the platform,
+    /// recorded under the publishing scope.
+    | PublicationReaderGranted of PublicationReaderGrantChangedPayload
+    /// Phase 1107 — an in-platform publication reader grant revoked,
+    /// recorded under the publishing scope.
+    | PublicationReaderRevoked of PublicationReaderGrantChangedPayload
 
 module AuditEvent =
     /// Wire-format `EventType` discriminator for the given event. The
@@ -1042,3 +1048,5 @@ module AuditEvent =
         | NotificationDeliveryRefused _ -> "NotificationDeliveryRefused"
         | ConversationsPurged _ -> "ConversationsPurged"
         | PublicationReaderSignedIn _ -> "PublicationReaderSignedIn"
+        | PublicationReaderGranted _ -> "PublicationReaderGranted"
+        | PublicationReaderRevoked _ -> "PublicationReaderRevoked"

@@ -288,6 +288,9 @@ module ShellSlots =
             None
             "DataIngestionAdmin"
 
+    let private jobsAdmin =
+        authenticatedAdmin _.JobsAdmin JobsAdminUI.moduleId JobsAdminUI.create (Some JobsAdminUI.adminTile) "JobsAdmin"
+
     let private platformAdmin =
         everywhereAdmin
             _.PlatformAdmin
@@ -406,6 +409,7 @@ module ShellSlots =
         Row.Slot usageDashboard
         Row.Slot auditViewer
         Row.Slot dataIngestionAdmin
+        Row.Slot jobsAdmin
         // Platform Management
         Row.Slot platformAdmin
         Row.Slot healthMonitor
