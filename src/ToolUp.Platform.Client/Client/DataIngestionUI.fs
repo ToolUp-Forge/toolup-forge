@@ -751,7 +751,14 @@ let create (config: ModuleLabel option) : ErasedModule =
     }
     |> ToolUp.Platform.ClientModule.withId moduleId
     |> ToolUp.Platform.ClientModule.withFullWidthView view
-    |> ToolUp.Platform.ClientModule.withGroup "Team Management"
+    // Phase 1112 — ingesting data is not team administration. The module
+    // sits with the SDK's data managers ("Data Management", the group
+    // `FileManagerUI` and `MappingDataManagerUI` default to) rather than
+    // under "Team Management" with the people-and-permissions built-ins.
+    // The nav role is unchanged: who may see it is a separate axis from
+    // where it is filed. A deployment re-files it with
+    // `ErasedModule.withGroup` on the created module.
+    |> ToolUp.Platform.ClientModule.withGroup "Data Management"
     |> ToolUp.Platform.ClientModule.withNavRole ToolUp.Platform.NavRole.TeamOwnerAdmin
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register
