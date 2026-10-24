@@ -24,13 +24,24 @@ let private esbuildName =
         "esbuild"
 
 /// A long-running program to copy, and the arguments that keep it alive.
+///
+/// The copy runs under the name `esbuild`, so it must be a binary that does
+/// not read its own name. `sleep` is not one everywhere: on a system whose
+/// coreutils is a multi-call binary (uutils, the default on recent Ubuntu
+/// and so on the CI runner) the copy dispatches on `argv[0]`, finds no
+/// applet called `esbuild`, prints `coreutils: unknown program 'esbuild'`
+/// and exits at once — the decoy is gone before the stop runs, and both
+/// cases fail. `bash` only consults its name to decide whether it is `sh`,
+/// so a copy of it stays alive for the `sleep` child it runs, with the copy
+/// as the process's main module and `esbuild` as its name, which is what
+/// `StaleEsbuild.stopUnder` reads.
 let private longRunner () =
     if OperatingSystem.IsWindows() then
         Path.Combine(Environment.SystemDirectory, "ping.exe"), "-n 120 127.0.0.1"
     else
-        let sleep = [ "/bin/sleep"; "/usr/bin/sleep" ] |> List.find File.Exists
+        let shell = [ "/bin/bash"; "/usr/bin/bash"; "/bin/sh" ] |> List.find File.Exists
 
-        sleep, "120"
+        shell, "-c \"sleep 120\""
 
 /// Start a fake `esbuild` whose executable lives in `dir`.
 let private startEsbuildIn (dir: string) =
