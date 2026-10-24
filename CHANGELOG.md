@@ -15,10 +15,36 @@ applies. Where a release ships a migration note under `docs/migrations/`, it is 
 
 ## [0.32.0] — unreleased
 
-_Surface since `v0.31.0`: **additive** — 1 package moved; 18 members added, 0 members changed, 0 members removed._
+Migration notes:
+
+- [1106-jobs-admin-slot](docs/migrations/1106-jobs-admin-slot.md)
+
+_Surface since `v0.31.0`: **breaking** — 2 packages moved; 182 members added, 2 members changed, 0 members removed._
 
 ### Added
 
+- `ToolUp.Platform.Client` — 164 members:
+  - `JobsAdminUI (class)`
+  - `JobsAdminUI+JobStanding (class)`
+  - `JobsAdminUI+JobStanding+Tags (class)`
+  - `JobsAdminUI+JobStanding+Tags.AttemptCancelled : System.Int32 (literal)`
+  - `JobsAdminUI+JobStanding+Tags.FailingWillRetry : System.Int32 (literal)`
+  - `JobsAdminUI+JobStanding+Tags.InProgress : System.Int32 (literal)`
+  - `JobsAdminUI+JobStanding+Tags.NotYetRun : System.Int32 (literal)`
+  - `JobsAdminUI+JobStanding+Tags.PermanentlyFailed : System.Int32 (literal)`
+  - `JobsAdminUI+JobStanding+Tags.Succeeded : System.Int32 (literal)`
+  - `JobsAdminUI+JobStanding.AttemptCancelled : JobsAdminUI+JobStanding { get }`
+  - `JobsAdminUI+JobStanding.FailingWillRetry : JobsAdminUI+JobStanding { get }`
+  - `JobsAdminUI+JobStanding.InProgress : JobsAdminUI+JobStanding { get }`
+  - `JobsAdminUI+JobStanding.IsAttemptCancelled : System.Boolean { get }`
+  - `JobsAdminUI+JobStanding.IsFailingWillRetry : System.Boolean { get }`
+  - `JobsAdminUI+JobStanding.IsInProgress : System.Boolean { get }`
+  - `JobsAdminUI+JobStanding.IsNotYetRun : System.Boolean { get }`
+  - `JobsAdminUI+JobStanding.IsPermanentlyFailed : System.Boolean { get }`
+  - `JobsAdminUI+JobStanding.IsSucceeded : System.Boolean { get }`
+  - `JobsAdminUI+JobStanding.NotYetRun : JobsAdminUI+JobStanding { get }`
+  - `JobsAdminUI+JobStanding.PermanentlyFailed : JobsAdminUI+JobStanding { get }`
+  - … and 144 more — `git diff v0.31.0 -- api-baselines/ToolUp.Platform.Client.approved.txt`
 - `ToolUp.Platform.Core` — 18 members:
   - `ToolUp.Platform.AdminMutationRefusal+RecordNotRemoved (class)`
   - `ToolUp.Platform.AdminMutationRefusal+RecordNotRemoved.detail : System.String { get }`
@@ -38,6 +64,12 @@ _Surface since `v0.31.0`: **additive** — 1 package moved; 18 members added, 0 
   - `ToolUp.Platform.EncryptionKeyUnreadablePayload.Reason : System.String { get }`
   - `ToolUp.Platform.EncryptionKeyUnreadablePayload.Resolver : System.String { get }`
   - `ToolUp.Platform.EncryptionKeyUnreadablePayload.ScopeId : System.String { get }`
+
+### Changed
+
+- `ToolUp.Platform.Client` — 2 members:
+  - `ToolUp.Platform.MessageCatalog..ctor` — `ToolUp.Platform.MessageCatalog..ctor(System.String, ToolUp.Platform.ShellMessages, ToolUp.Platform.BootDegradationMessages, ToolUp.Platform.ToastMessages, ToolUp.Platform.NotAuthorisedMessages, ToolUp.Platform.ModuleBoundaryMessages, ToolUp.Platform.CommandPaletteMessages, ToolUp.Platform.SidebarMessages, ToolUp.Platform.TeamManagerMessages, ToolUp.Platform.HealthMonitorMessages, ToolUp.Platform.DataIngestionMessages, ToolUp.Platform.AdminHomeMessages, ToolUp.Platform.AuthMessages, ToolUp.Platform.RateLimitedMessages, ToolUp.Platform.ConsentMessages, ToolUp.Platform.OAuth1aCredentialMessages, ToolUp.Platform.NoActiveTeamLandingMessages, ToolUp.Platform.PlatformAdminMessages, ToolUp.Platform.PlatformUsersMessages, ToolUp.Platform.PermissionsAdminMessages, ToolUp.Platform.WebhookAdminMessages, ToolUp.Platform.NarrativeRendererMessages, ToolUp.Platform.ServiceAccountMessages, ToolUp.Platform.ExternalContactMessages, ToolUp.Platform.NotificationPreferencesMessages, ToolUp.Platform.DataSubjectRequestAdminMessages, ToolUp.Platform.TeamConfigMessages, ToolUp.Platform.TenantLifecycleAdminMessages, ToolUp.Platform.ModuleVisibilityAdminMessages, ToolUp.Platform.MigrationStatusMessages, ToolUp.Platform.SessionSecurityMessages, ToolUp.Platform.HomeMessages, ToolUp.Platform.InviteAcceptMessages, ToolUp.Platform.PublicUtilityWidgetsMessages, ToolUp.Platform.FileManagerMessages, ToolUp.Platform.ServiceStatusBoardMessages, ToolUp.Platform.UsageDashboardMessages, ToolUp.Platform.AuditLogMessages, ToolUp.Platform.CompositionInspectorMessages, ToolUp.Platform.MappingDataManagerMessages, ToolUp.Platform.KnowledgeBaseMessages, ToolUp.Platform.ProviderProfileMessages, ToolUp.Platform.DatadogReadbackMessages, ToolUp.Platform.ObservabilityMessages)` → `ToolUp.Platform.MessageCatalog..ctor(System.String, ToolUp.Platform.ShellMessages, ToolUp.Platform.BootDegradationMessages, ToolUp.Platform.ToastMessages, ToolUp.Platform.NotAuthorisedMessages, ToolUp.Platform.ModuleBoundaryMessages, ToolUp.Platform.CommandPaletteMessages, ToolUp.Platform.SidebarMessages, ToolUp.Platform.TeamManagerMessages, ToolUp.Platform.HealthMonitorMessages, ToolUp.Platform.DataIngestionMessages, ToolUp.Platform.AdminHomeMessages, ToolUp.Platform.AuthMessages, ToolUp.Platform.RateLimitedMessages, ToolUp.Platform.ConsentMessages, ToolUp.Platform.OAuth1aCredentialMessages, ToolUp.Platform.NoActiveTeamLandingMessages, ToolUp.Platform.PlatformAdminMessages, ToolUp.Platform.PlatformUsersMessages, ToolUp.Platform.PermissionsAdminMessages, ToolUp.Platform.WebhookAdminMessages, ToolUp.Platform.NarrativeRendererMessages, ToolUp.Platform.ServiceAccountMessages, ToolUp.Platform.ExternalContactMessages, ToolUp.Platform.NotificationPreferencesMessages, ToolUp.Platform.DataSubjectRequestAdminMessages, ToolUp.Platform.TeamConfigMessages, ToolUp.Platform.TenantLifecycleAdminMessages, ToolUp.Platform.ModuleVisibilityAdminMessages, ToolUp.Platform.MigrationStatusMessages, ToolUp.Platform.SessionSecurityMessages, ToolUp.Platform.HomeMessages, ToolUp.Platform.InviteAcceptMessages, ToolUp.Platform.PublicUtilityWidgetsMessages, ToolUp.Platform.FileManagerMessages, ToolUp.Platform.ServiceStatusBoardMessages, ToolUp.Platform.UsageDashboardMessages, ToolUp.Platform.AuditLogMessages, ToolUp.Platform.CompositionInspectorMessages, ToolUp.Platform.MappingDataManagerMessages, ToolUp.Platform.KnowledgeBaseMessages, ToolUp.Platform.ProviderProfileMessages, ToolUp.Platform.DatadogReadbackMessages, ToolUp.Platform.ObservabilityMessages, ToolUp.Platform.JobsAdminMessages)`
+  - `ToolUp.Platform.ShellSlotFills..ctor` — `ToolUp.Platform.ShellSlotFills..ctor(ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.DataManagerChoice], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel])` → `ToolUp.Platform.ShellSlotFills..ctor(ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.DataManagerChoice], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel])`
 
 ## [0.31.0] — 2026-10-22
 
