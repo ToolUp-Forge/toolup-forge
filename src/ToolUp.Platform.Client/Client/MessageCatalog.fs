@@ -1919,7 +1919,7 @@ module MessageCatalog =
         JobsAdmin = {
             Heading = "Background jobs"
             Subheading =
-                "Every scheduled job in this scope with its last run. Jobs that failed and will not be retried are listed first, with the reason the scheduler recorded."
+                "Every scheduled job in this scope with its last run and its recent attempts. Any active job can be run now. Jobs that failed and will not be retried are listed first, with the reason the scheduler recorded."
             Refresh = "Refresh"
             Refreshing = "Refreshing…"
             Loading = "Loading jobs…"
@@ -1942,7 +1942,7 @@ module MessageCatalog =
             RerunButton = "Re-run"
             RerunConfirmPrompt =
                 fun handler ->
-                    $"Run {handler} again now? Clear the cause of the failure first, or the new attempt will fail the same way."
+                    $"Run {handler} now? It runs once in addition to its schedule. If its last run failed, clear the cause first, or the new attempt will fail the same way."
             RerunConfirm = "Re-run now"
             RerunCancel = "Cancel"
             RerunStarting = "Starting…"
@@ -1953,6 +1953,19 @@ module MessageCatalog =
             RerunUnavailableDisabled =
                 "This job is disabled, and a disabled job refuses a manual run. Enable it before re-running."
             RerunUnavailableCancelled = "This job is cancelled and cannot be re-run."
+            ShowAttempts = "Show recent attempts"
+            HideAttempts = "Hide attempts"
+            AttemptsLoading = "Loading attempts…"
+            AttemptsLoadFailed = fun reason -> $"The attempts could not be read: {reason}"
+            NoAttempts = "No attempt has been recorded for this job."
+            AttemptNumber = fun attempt -> $"Attempt {attempt}"
+            AttemptStarted = fun time -> $"started {time}"
+            AttemptTook = fun duration -> $"took {duration}"
+            AttemptRetryPending = "Failed — retry pending"
+            AttemptFailed = "Failed"
+            NewerAttempt =
+                fun attempt time ->
+                    $"Attempt {attempt} started {time}, after this record. Its recent attempts say what it is doing now."
         }
     }
 
