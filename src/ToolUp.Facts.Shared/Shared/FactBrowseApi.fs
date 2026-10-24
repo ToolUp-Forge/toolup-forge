@@ -377,6 +377,120 @@ type FactDetailView = {
     ChainWithheldCount: int
 }
 
+// ─── The series read (Phase 1113) ────────────────────────────────────
+//
+// A chart needs a shape the ranked drill-down does not serve: one
+// metric's value for each subject in a branch at each period across a
+// range, as a NUMBER. `FactRowView` carries the value only rendered, and
+// `FactRowQuery` has no period range. The series read is that shape and
+// nothing more — forge serves the data; the consumer draws the chart in
+// whatever UI tier it uses.
+//
+// **One fact per point.** A point is the fact the store holds as the
+// current head for that subject and period — the head for THAT period,
+// not the table's latest run's head — so a figure revised by a later run
+// shows its revised value, and a period an earlier run wrote and a later
+// slice-scoped run left alone keeps the earlier value. A superseded fact
+// is never a point: it is reachable through `GetFact` on the head's
+// provenance chain, as every superseded fact is.
+//
+// **Under the same gate.** Every point passes the disclosure gate at
+// `FactBrowse` exactly as a drill-down row does. A withheld point keeps
+// its subject, its period and its fact id, and carries no value and no
+// rendering, marked withheld — so a chart draws a gap rather than a
+// silently shorter line. The result says how many were withheld, grouped
+// by policy. It carries no aggregate (no minimum, maximum or mean), so
+// there is no magnitude to reconstruct from what remains.
+//
+// **Bounded.** `FactBrowseApi.MaxSeriesPoints` is the most points any
+// one response carries, server-enforced; a range that would exceed it is
+// refused naming the cap, never silently truncated or paged — the caller
+// narrows the range or the prefix.
+
+/// A series request: one table, one of its metric columns, the subjects
+/// under a path prefix at one hierarchy level, across a half-open period
+/// range.
+type FactSeriesQuery = {
+    /// The table to read.
+    TableId: string
+    /// The metric column to plot. Must be one of the table's columns.
+    Metric: string
+    /// Subject path prefix (member ids from the hierarchy root). Empty
+    /// admits every subject of the table.
+    SubjectPrefix: string list
+    /// The hierarchy level the points sit at, by level name. `None` is the
+    /// table's declared level. A filter on the subject path's depth, never
+    /// an aggregation: a level with no published facts yields no points.
+    SubjectLevel: string option
+    /// Start of the period range (inclusive). A point is in range when its
+    /// period overlaps `[PeriodFrom, PeriodTo)`.
+    PeriodFrom: DateTime
+    /// End of the period range (exclusive).
+    PeriodTo: DateTime
+    /// The most points the caller wants. Clamped into
+    /// `[1, FactBrowseApi.MaxSeriesPoints]`; a series that would exceed
+    /// the clamped value is refused, naming it.
+    MaxPoints: int
+}
+
+/// One point of a series: the head fact for one subject and one period.
+type FactSeriesPoint = {
+    /// The readable subject (`hierarchy/member>member`).
+    Subject: string
+    /// The subject's member ids from the hierarchy root.
+    SubjectPath: string list
+    /// Start of the period the value describes (inclusive).
+    PeriodFrom: DateTime
+    /// End of the period (exclusive).
+    PeriodTo: DateTime
+    /// The period's label, when it has one.
+    PeriodLabel: string option
+    /// The numeric value. `None` when the point is withheld, or when the
+    /// fact's value is not a scalar (an absence, an interval).
+    Value: decimal option
+    /// The value rendered with the metric's display format. `None` when
+    /// the point is withheld.
+    Rendering: string option
+    /// The fact's id — what opens its provenance through `GetFact`.
+    FactId: string
+    /// When the fact was asserted.
+    AsOf: DateTime
+    /// `fresh` or `stale`, under the metric's staleness policy.
+    Freshness: string
+    /// Whether the disclosure gate withheld this point from the viewer.
+    Withheld: bool
+}
+
+/// A series: every point of one metric over a subject branch across a
+/// period range, ordered by subject then period, so a client can draw
+/// lines without sorting.
+type FactSeries = {
+    /// The table read.
+    TableId: string
+    /// The metric plotted.
+    Metric: string
+    /// The subject prefix applied.
+    SubjectPrefix: string list
+    /// The hierarchy level the points sit at.
+    SubjectLevel: string
+    /// The period range applied (inclusive start).
+    PeriodFrom: DateTime
+    /// The period range applied (exclusive end).
+    PeriodTo: DateTime
+    /// The metric's display format, so a client can render a derived
+    /// figure the way the facts are rendered. `""` renders verbatim.
+    DisplayFormat: string
+    /// The points, ordered by subject path then period start. A withheld
+    /// point keeps its place.
+    Points: FactSeriesPoint list
+    /// The point cap in force for this call, after the clamp.
+    MaxPoints: int
+    /// Points withheld from the viewer.
+    WithheldCount: int
+    /// The withheld points grouped by policy.
+    Withheld: FactWithheldCount list
+}
+
 /// The payload of the one notification a committed fact-table run
 /// publishes (`FactBrowseLinks.RunCommittedNotificationKey`) to the run's
 /// scope. Counts only — never a value, a subject or a fact id — and one
@@ -426,6 +540,11 @@ type IFactBrowseApi = {
     /// One fact and its provenance chain, by id.
     [<RequiresClaim "scope">]
     GetFact: string -> Async<Result<FactDetailView, string>>
+    /// One metric's series over a subject branch across a period range
+    /// (Phase 1113) — numbers, for a chart drawn elsewhere. Refused, naming
+    /// the cap, when the series would exceed `FactBrowseApi.MaxSeriesPoints`.
+    [<RequiresClaim "scope">]
+    QuerySeries: FactSeriesQuery -> Async<Result<FactSeries, string>>
 }
 
 /// Constants and helpers of the fact browse contract.
@@ -448,6 +567,20 @@ module FactBrowseApi =
 
     /// A requested page index clamped to be non-negative.
     let clampPage (requested: int) : int = max 0 requested
+
+    /// Phase 1113 — the most points one series response carries. Part of
+    /// the contract: a series that would exceed it is refused by name, and
+    /// every series reports the cap in force. Sized for a chart, not an
+    /// export — a fortnight by day across a hundred subjects is 1,400
+    /// points; a year by day across ten is 3,650.
+    [<Literal>]
+    let MaxSeriesPoints = 5000
+
+    /// A requested point cap clamped into `[1, MaxSeriesPoints]`.
+    let clampSeriesPoints (requested: int) : int =
+        if requested < 1 then 1
+        elif requested > MaxSeriesPoints then MaxSeriesPoints
+        else requested
 
     /// ToolUp.Remoting route builder: `/api/_facts/browse/<method>`.
     let routeBuilder (_typeName: string) (methodName: string) =

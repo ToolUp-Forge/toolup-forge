@@ -14,9 +14,10 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // ─── FactBrowseHandler (Phase 895) ───────────────────────────────────
 //
 // The server side of `IFactBrowseApi`: the tables a scope holds, their
-// run history, one run's largest movers, paged drill-down rows, and one
-// fact's provenance — every one a bounded answer, and every served fact
-// judged at the `FactBrowse` egress door.
+// run history, one run's largest movers, paged drill-down rows, one
+// fact's provenance and (Phase 1113) one metric's series over a period
+// range — every one a bounded answer, and every served fact judged at the
+// `FactBrowse` egress door.
 //
 // **The drill-down IS the population tool's read.** A page is answered
 // by `IFactStore.QueryPopulation` with `TopK` set to the end of the
@@ -268,7 +269,7 @@ module FactBrowseHandler =
             Freshness = freshness
         }
 
-    // ── The six reads ────────────────────────────────────────────
+    // ── The seven reads ──────────────────────────────────────────
 
     /// Every declared table with its standing, ordered by table id.
     let listTables (deps: FactBrowseDeps) (scope: ResolvedScope) : Async<Result<FactTableListing list, string>> = async {
@@ -676,6 +677,165 @@ module FactBrowseHandler =
                         }
         }
 
+    /// Phase 1113 — one metric's series over a subject branch across a
+    /// period range, as numbers. See the `FactBrowseApi` header for the
+    /// contract; what the handler decides is recorded here:
+    ///
+    /// - **The read is the store's own head read**, `IFactStore.Query`
+    ///   under the table's lineage (`OneMethod`-equivalent: `Method` is the
+    ///   table's `tableMethod`) with `IncludeSuperseded = false`, so each
+    ///   returned fact is the current head of its (subject, period)
+    ///   lineage. That is the "head for that period" rule: a later run
+    ///   that rewrote a cell superseded the old fact, and the head is the
+    ///   revision; a period a later slice-scoped run left alone keeps the
+    ///   head the earlier run wrote. A superseded fact is never served as
+    ///   a point — it is on the head's chain through `GetFact`.
+    /// - **Period membership is overlap**, `FactQuery.PeriodOverlaps` over
+    ///   `[PeriodFrom, PeriodTo)`: a period straddling the range's edge is
+    ///   a point, since a chart of the window wants it, and an aligned
+    ///   grain gives exactly the periods inside the window.
+    /// - **Level and prefix filter the subject path**; neither aggregates.
+    ///   A `SubjectLevel` the hierarchy lacks is refused; without a metric
+    ///   registry the level cannot be resolved to a depth, and the depth
+    ///   filter is not applied (the drill-down makes the same concession).
+    /// - **Should two heads ever share a subject and period** (two
+    ///   overlapping-but-unequal extents are two points; two equal ones
+    ///   cannot both be heads of one lineage), the later `AsOf` is the
+    ///   point. Stated so the rule is a rule and not an accident of order.
+    /// - **The cap is checked before the gate**, so a refusal reveals only
+    ///   a count — existence-level, like every count this surface serves.
+    let querySeries
+        (deps: FactBrowseDeps)
+        (scope: ResolvedScope)
+        (principal: string)
+        (request: FactSeriesQuery)
+        : Async<Result<FactSeries, string>> =
+        async {
+            match declared deps request.TableId with
+            | Error e -> return Error e
+            | Ok table when not (List.contains request.Metric (FactTableDefinition.metrics table)) ->
+                return Error(sprintf "Table '%s' has no metric column '%s'." table.Id request.Metric)
+            | Ok _ when request.PeriodFrom >= request.PeriodTo ->
+                return
+                    Error(
+                        sprintf
+                            "The period range %s..%s is not a half-open [from, to) extent: from must be before to."
+                            (request.PeriodFrom.ToString "o")
+                            (request.PeriodTo.ToString "o")
+                    )
+            | Ok table ->
+                let level = request.SubjectLevel |> Option.defaultValue table.Level
+
+                let subject =
+                    deps.Registry |> Option.bind (fun r -> r.TryGetSubject table.Hierarchy)
+
+                let depth = subject |> Option.bind (fun s -> FactTableDefinition.levelDepth s level)
+
+                match subject, depth with
+                | Some _, None -> return Error(sprintf "Hierarchy '%s' has no level '%s'." table.Hierarchy level)
+                | _ ->
+                    let cap = FactBrowseApi.clampSeriesPoints request.MaxPoints
+
+                    let query: FactQuery = {
+                        FactQuery.all with
+                            Metric = Some(MetricRef request.Metric)
+                            Method = Some(tableMethod table)
+                            PeriodOverlaps =
+                                Some {
+                                    From = request.PeriodFrom
+                                    To = request.PeriodTo
+                                    Label = None
+                                }
+                    }
+
+                    let! heads = deps.Store.Query(scope, query)
+
+                    let underPrefix (path: string list) =
+                        List.length path >= List.length request.SubjectPrefix
+                        && List.truncate (List.length request.SubjectPrefix) path = request.SubjectPrefix
+
+                    let atLevel (path: string list) =
+                        match depth with
+                        | Some d -> List.length path = d
+                        | None -> true
+
+                    let points =
+                        heads
+                        |> List.filter (fun f ->
+                            f.Subject.Hierarchy = table.Hierarchy
+                            && underPrefix f.Subject.Path
+                            && atLevel f.Subject.Path)
+                        |> List.groupBy (fun f -> f.Subject.Path, f.Period.From, f.Period.To)
+                        |> List.map (fun (_, facts) -> facts |> List.maxBy _.AsOf)
+                        |> List.sortBy (fun f -> f.Subject.Path, f.Period.From)
+
+                    if List.length points > cap then
+                        return
+                            Error(
+                                sprintf
+                                    "The series would hold %d points, over the cap of %d (FactBrowseApi.MaxSeriesPoints is %d). Narrow the period range or the subject prefix."
+                                    (List.length points)
+                                    cap
+                                    FactBrowseApi.MaxSeriesPoints
+                            )
+                    else
+                        let! verdictFor = judge deps scope principal (points |> List.map _.FactId)
+                        let now = deps.Clock().ToUniversalTime()
+                        let format = displayFormatOf deps request.Metric
+                        let staleness = stalenessOf deps request.Metric
+
+                        let pointOf (fact: Fact) : FactSeriesPoint =
+                            let withheld = verdictFor fact.FactId <> FactDisclosable
+
+                            let freshness =
+                                match Freshness.deriveAt staleness fact.AsOf true now with
+                                | FactFreshness.Fresh -> "fresh"
+                                | FactFreshness.Stale _ -> "stale"
+
+                            {
+                                Subject = SubjectRef.toString fact.Subject
+                                SubjectPath = fact.Subject.Path
+                                PeriodFrom = fact.Period.From
+                                PeriodTo = fact.Period.To
+                                PeriodLabel = fact.Period.Label
+                                Value =
+                                    match withheld, fact.Value with
+                                    | false, Scalar d -> Some d
+                                    | _ -> None
+                                Rendering =
+                                    if withheld then
+                                        None
+                                    else
+                                        Some(FactRendering.render format fact.Value)
+                                FactId = fact.FactId
+                                AsOf = fact.AsOf
+                                Freshness = freshness
+                                Withheld = withheld
+                            }
+
+                        let withheld =
+                            points
+                            |> List.choose (fun f ->
+                                match verdictFor f.FactId with
+                                | FactDisclosable -> None
+                                | FactNotDisclosable policy -> Some policy)
+
+                        return
+                            Ok {
+                                TableId = table.Id
+                                Metric = request.Metric
+                                SubjectPrefix = request.SubjectPrefix
+                                SubjectLevel = level
+                                PeriodFrom = request.PeriodFrom
+                                PeriodTo = request.PeriodTo
+                                DisplayFormat = format
+                                Points = points |> List.map pointOf
+                                MaxPoints = cap
+                                WithheldCount = List.length withheld
+                                Withheld = withheldCounts withheld
+                            }
+        }
+
     /// The API record over explicit dependencies, for one caller.
     let api (deps: FactBrowseDeps) (scope: ResolvedScope) (principal: string) : IFactBrowseApi = {
         ListTables = fun () -> listTables deps scope
@@ -684,6 +844,7 @@ module FactBrowseHandler =
         GetRunMovers = getRunMovers deps scope principal
         QueryRows = queryRows deps scope principal
         GetFact = getFact deps scope principal
+        QuerySeries = querySeries deps scope principal
     }
 
     // ── HttpContext adapter ──────────────────────────────────────
@@ -710,6 +871,7 @@ module FactBrowseHandler =
             GetRunMovers = fun _ -> refusal ()
             QueryRows = fun _ -> refusal ()
             GetFact = fun _ -> refusal ()
+            QuerySeries = fun _ -> refusal ()
         }
 
     /// The per-request API. The scope is the one the platform's scope

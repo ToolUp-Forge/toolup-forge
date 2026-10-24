@@ -590,6 +590,7 @@ ToolUp.Facts.FactBrowseHandler.listRuns(ToolUp.Facts.FactBrowseHandler+FactBrows
 ToolUp.Facts.FactBrowseHandler.listTables(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableListing], System.String]]
 ToolUp.Facts.FactBrowseHandler.notifyingWriter(ToolUp.Platform.INotificationChannel, ToolUp.Facts.IFactTableWriter) : ToolUp.Facts.IFactTableWriter
 ToolUp.Facts.FactBrowseHandler.queryRows(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, ToolUp.Facts.FactRowQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactRowPage, System.String]]
+ToolUp.Facts.FactBrowseHandler.querySeries(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, ToolUp.Facts.FactSeriesQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSeries, System.String]]
 ToolUp.Facts.FactBrowseHandler.runNotice(System.String, System.String, ToolUp.Platform.Grounding.FactTableCommit) : ToolUp.Facts.FactTableRunNotice
 ToolUp.Facts.FactBrowseHandler.runTrigger(System.String, System.String) : System.String
 ToolUp.Facts.FactBrowseHandler.tableMethod(ToolUp.Platform.Grounding.FactTableDefinition) : ToolUp.Facts.MethodRef
