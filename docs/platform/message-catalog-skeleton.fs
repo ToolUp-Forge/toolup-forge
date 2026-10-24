@@ -13,7 +13,7 @@
 // message is a FUNCTION field; it is left pointing at the English message until you
 // replace it with a lambda of the shape its comment names.
 //
-// Leaves: 1503 (217 parameterised).
+// Leaves: 1513 (217 parameterised).
 
 module ToolUp.Platform.Localization.Skeleton
 
@@ -319,6 +319,26 @@ let catalog (c: MessageCatalog) : MessageCatalog = {
                 // en (string -> string -> string): "{a} · expired {b}"
                 // translate as `fun (a: string) (b: string) -> $"…"`; left as the English message until you do
                 InviteExpired = c.TeamManager.InviteExpired
+                // en: "Publication readers"
+                PublicationReadersPanel = "Publication readers"
+                // en: "People added here can read this team's publications for the reader role chosen, and nothing else. Readers your identity provider assigns are managed in the directory."
+                PublicationReadersHelp = "People added here can read this team's publications for the reader role chosen, and nothing else. Readers your identity provider assigns are managed in the directory."
+                // en: "Switch to this team to manage its publication readers."
+                PublicationReadersActiveTeamOnly = "Switch to this team to manage its publication readers."
+                // en: "Loading publication readers…"
+                PublicationReadersLoading = "Loading publication readers…"
+                // en: "No publication of this team declares a reader role yet."
+                PublicationReadersNoRoles = "No publication of this team declares a reader role yet."
+                // en: "No readers have been added in the platform."
+                PublicationReadersNone = "No readers have been added in the platform."
+                // en: "Reader role"
+                PublicationReaderRoleLabel = "Reader role"
+                // en: "Sign-in user id"
+                PublicationReaderUserPlaceholder = "Sign-in user id"
+                // en: "Add reader"
+                PublicationReaderAdd = "Add reader"
+                // en: "Remove"
+                PublicationReaderRemove = "Remove"
         }
         HealthMonitor = {
             c.HealthMonitor with
