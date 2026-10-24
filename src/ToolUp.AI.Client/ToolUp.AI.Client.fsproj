@@ -39,6 +39,7 @@
         <Compile Include="Client\AIAssistantUI.fs" />
         <Compile Include="Client\AISettingsUI.fs" />
         <Compile Include="Client\PlatformAIKeysAdminUI.fs" />
+        <Compile Include="Client\NarrativePromptAdminUI.fs" />
         <Compile Include="Client\AIClientConfig.fs" />
     </ItemGroup>
     <ItemGroup>

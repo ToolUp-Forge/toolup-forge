@@ -528,6 +528,58 @@ ToolUp.AI.ModuleAIContext (class)
 ToolUp.AI.ModuleAIContext..ctor(System.String, System.String)
 ToolUp.AI.ModuleAIContext.ModuleName : System.String { get }
 ToolUp.AI.ModuleAIContext.SystemPrompt : System.String { get }
+ToolUp.AI.NarrativeDeclaredSection (class)
+ToolUp.AI.NarrativeDeclaredSection..ctor(System.String, System.String, System.String)
+ToolUp.AI.NarrativeDeclaredSection.Guidance : System.String { get }
+ToolUp.AI.NarrativeDeclaredSection.Heading : System.String { get }
+ToolUp.AI.NarrativeDeclaredSection.SectionId : System.String { get }
+ToolUp.AI.NarrativeLastRun (class)
+ToolUp.AI.NarrativeLastRun..ctor(System.String, System.String, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTime)
+ToolUp.AI.NarrativeLastRun.Detail : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.AI.NarrativeLastRun.OccurredAt : System.DateTime { get }
+ToolUp.AI.NarrativeLastRun.Outcome : System.String { get }
+ToolUp.AI.NarrativeLastRun.PromptVersion : System.Int32 { get }
+ToolUp.AI.NarrativeLastRun.Trigger : System.String { get }
+ToolUp.AI.NarrativePromptApi (class)
+ToolUp.AI.NarrativePromptApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativePromptSummary], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativePromptVersion], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SaveNarrativePromptRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, System.String]]])
+ToolUp.AI.NarrativePromptApi.GetNarrative : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String]]] { get }
+ToolUp.AI.NarrativePromptApi.ListNarratives : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativePromptSummary], System.String]]] { get }
+ToolUp.AI.NarrativePromptApi.ListVersions : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativePromptVersion], System.String]]] { get }
+ToolUp.AI.NarrativePromptApi.Regenerate : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, System.String]]] { get }
+ToolUp.AI.NarrativePromptApi.ResetPrompt : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String]]] { get }
+ToolUp.AI.NarrativePromptApi.SavePrompt : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SaveNarrativePromptRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String]]] { get }
+ToolUp.AI.NarrativePromptLimits (class)
+ToolUp.AI.NarrativePromptLimits.MaxGuidanceLength : System.Int32 (literal)
+ToolUp.AI.NarrativePromptLimits.MaxPromptLength : System.Int32 (literal)
+ToolUp.AI.NarrativePromptLimits.MaxVersions : System.Int32 (literal)
+ToolUp.AI.NarrativePromptSummary (class)
+ToolUp.AI.NarrativePromptSummary..ctor(System.String, System.String, System.Int32)
+ToolUp.AI.NarrativePromptSummary.CurrentVersion : System.Int32 { get }
+ToolUp.AI.NarrativePromptSummary.DisplayName : System.String { get }
+ToolUp.AI.NarrativePromptSummary.RunKey : System.String { get }
+ToolUp.AI.NarrativePromptVersion (class)
+ToolUp.AI.NarrativePromptVersion..ctor(System.Int32, System.Boolean, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeSectionGuidance], System.String, System.DateTime)
+ToolUp.AI.NarrativePromptVersion.Author : System.String { get }
+ToolUp.AI.NarrativePromptVersion.Guidance : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeSectionGuidance] { get }
+ToolUp.AI.NarrativePromptVersion.IsReset : System.Boolean { get }
+ToolUp.AI.NarrativePromptVersion.Prompt : System.String { get }
+ToolUp.AI.NarrativePromptVersion.SavedAt : System.DateTime { get }
+ToolUp.AI.NarrativePromptVersion.Version : System.Int32 { get }
+ToolUp.AI.NarrativePromptView (class)
+ToolUp.AI.NarrativePromptView..ctor(System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeDeclaredSection], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.NarrativePromptVersion], System.Int32, System.String, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.NarrativeLastRun])
+ToolUp.AI.NarrativePromptView.Current : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.NarrativePromptVersion] { get }
+ToolUp.AI.NarrativePromptView.DeclaredPrompt : System.String { get }
+ToolUp.AI.NarrativePromptView.DeclaredSections : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeDeclaredSection] { get }
+ToolUp.AI.NarrativePromptView.DisplayName : System.String { get }
+ToolUp.AI.NarrativePromptView.LastRun : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.NarrativeLastRun] { get }
+ToolUp.AI.NarrativePromptView.LatestVersion : System.Int32 { get }
+ToolUp.AI.NarrativePromptView.Rules : System.String { get }
+ToolUp.AI.NarrativePromptView.RunKey : System.String { get }
+ToolUp.AI.NarrativePromptView.Title : System.String { get }
+ToolUp.AI.NarrativeSectionGuidance (class)
+ToolUp.AI.NarrativeSectionGuidance..ctor(System.String, System.String)
+ToolUp.AI.NarrativeSectionGuidance.Guidance : System.String { get }
+ToolUp.AI.NarrativeSectionGuidance.SectionId : System.String { get }
 ToolUp.AI.NumericVerdict (class)
 ToolUp.AI.NumericVerdict.IsNoFactsInScope : System.Boolean { get }
 ToolUp.AI.NumericVerdict.IsNumberUnmatched : System.Boolean { get }
@@ -597,6 +649,12 @@ ToolUp.AI.ProviderResolutionError+UnknownProvider (class)
 ToolUp.AI.ProviderResolutionError+UnknownProvider.providerId : System.String { get }
 ToolUp.AI.ProviderResolutionErrorModule (class)
 ToolUp.AI.ProviderResolutionErrorModule.toMessage(ToolUp.AI.ProviderResolutionError) : System.String
+ToolUp.AI.SaveNarrativePromptRequest (class)
+ToolUp.AI.SaveNarrativePromptRequest..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeSectionGuidance], System.Int32)
+ToolUp.AI.SaveNarrativePromptRequest.BasedOnVersion : System.Int32 { get }
+ToolUp.AI.SaveNarrativePromptRequest.Guidance : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeSectionGuidance] { get }
+ToolUp.AI.SaveNarrativePromptRequest.Prompt : System.String { get }
+ToolUp.AI.SaveNarrativePromptRequest.RunKey : System.String { get }
 ToolUp.AI.SetPlatformAIKeyRequest (class)
 ToolUp.AI.SetPlatformAIKeyRequest..ctor(System.String, System.String)
 ToolUp.AI.SetPlatformAIKeyRequest.ApiKey : System.String { get }

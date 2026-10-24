@@ -917,6 +917,7 @@ ToolUp.AI.GroundedNarrativeRun (class)
 ToolUp.AI.GroundedNarrativeRun.assemble(ToolUp.Platform.GroundedNarrativeDefinition, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.InlineSpan]]]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeElement]]], ToolUp.Platform.Narrative.NarrativeProvenance) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.Narrative.NarrativeDocument, System.String]
 ToolUp.AI.GroundedNarrativeRun.parseOutput(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.InlineSpan]]]], System.String]
 ToolUp.AI.GroundedNarrativeRun.parseParagraph(System.String) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.InlineSpan]
+ToolUp.AI.GroundedNarrativeRun.rules : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.AI.GroundedNarrativeRun.systemPrompt(ToolUp.Platform.GroundedNarrativeDefinition, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
 ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions (class)
 ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset], ToolUp.AI.AIAgentEngine+AgentCallBudget)
@@ -941,6 +942,23 @@ ToolUp.AI.ICitationNormaliser.Normalise(Microsoft.FSharp.Collections.FSharpList`
 ToolUp.AI.LegacyAIConfigProviderProfile (class)
 ToolUp.AI.LegacyAIConfigProviderProfile.create(ToolUp.Platform.BlobStorage+IBlobStorage) : ToolUp.Platform.Providers+IProviderProfile
 ToolUp.AI.LegacyAIConfigProviderProfile.wrap(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.Providers+IProviderProfile) : ToolUp.Platform.Providers+IProviderProfile
+ToolUp.AI.NarrativePromptHandler (class)
+ToolUp.AI.NarrativePromptHandler.narrativePromptApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.AI.NarrativePromptApi
+ToolUp.AI.NarrativePromptHandler.withPromptAdmin(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp
+ToolUp.AI.NarrativePromptHandler+NarrativePromptAudit (class)
+ToolUp.AI.NarrativePromptHandler+NarrativePromptAudit.ResetKind : System.String (literal)
+ToolUp.AI.NarrativePromptHandler+NarrativePromptAudit.SavedKind : System.String (literal)
+ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob (class)
+ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob.HandlerName : System.String (literal)
+ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob.TriggerName : System.String (literal)
+ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob.hostedService(System.IServiceProvider) : Microsoft.Extensions.Hosting.IHostedService
+ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob.registrationFor(System.String, System.String, System.String) : ToolUp.Platform.JobRegistration
+ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob.tryParsePayload(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob+RegeneratePayload]
+ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob+RegenerateJobHandler (class)
+ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob+RegenerateJobHandler..ctor(ToolUp.Platform.IGroundedNarrativeRun)
+ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob+RegeneratePayload (class)
+ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob+RegeneratePayload..ctor(System.String)
+ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob+RegeneratePayload.RunKey : System.String { get }
 ToolUp.AI.NarrativeTools (class)
 ToolUp.AI.NarrativeTools.builtInTools : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIToolRegistry+RegisteredTool] { get }
 ToolUp.AI.NoOpCitationCounters (class)

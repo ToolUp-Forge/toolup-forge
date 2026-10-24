@@ -103,6 +103,10 @@
              only the tools passed in, its output through the fact tier's
              grounding gate, published only when every number is a Fact. -->
         <Compile Include="Server\GroundedNarrativeRun.fs" />
+        <!-- Phase 1111 - the narrative wording admin API and the regenerate job.
+             After GroundedNarrativeRun, whose wording store, rules and audit
+             row it reads. -->
+        <Compile Include="Server\NarrativePromptHandler.fs" />
         <Compile Include="Server\ICitationNormaliser.fs" />
         <!-- Phase 6k - the supervised agent-loop worker. Depends on the
              platform ILogger/Logger only; MUST precede AIAssistantHandler,

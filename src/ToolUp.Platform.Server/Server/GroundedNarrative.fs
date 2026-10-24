@@ -187,6 +187,59 @@ module GroundedNarrativeDefinition =
 
     let withTags (tags: string list) (definition: GroundedNarrativeDefinition) = { definition with Tags = tags }
 
+    /// Phase 1111 — the definition with an administrator's wording in place
+    /// of the declared wording: `prompt` replaces `Prompt`, and each
+    /// `(section id, guidance)` pair replaces that section's `Guidance`.
+    /// Nothing else moves: the key, the title, the section ids, headings and
+    /// order, the metrics, the projections, the principal and the surface
+    /// all stay the declaration's, and the grounding rules the run appends
+    /// are not part of a definition at all. A section the definition does
+    /// not declare, or one named twice, is refused by name and nothing is
+    /// applied.
+    let reword
+        (prompt: string)
+        (guidance: (string * string) list)
+        (definition: GroundedNarrativeDefinition)
+        : Result<GroundedNarrativeDefinition, string> =
+        let declared = definition.Sections |> List.map _.Id |> Set.ofList
+        let named = guidance |> List.map fst
+
+        let undeclared = named |> List.filter (declared.Contains >> not) |> List.distinct
+
+        let repeated =
+            named |> List.countBy id |> List.filter (fun (_, n) -> n > 1) |> List.map fst
+
+        if not (List.isEmpty undeclared) then
+            Error(
+                sprintf
+                    "grounded narrative '%s' declares no section %s; its sections are %s"
+                    definition.Key
+                    (undeclared |> List.map (sprintf "'%s'") |> String.concat ", ")
+                    (definition.Sections
+                     |> List.map (fun s -> sprintf "'%s'" s.Id)
+                     |> String.concat ", ")
+            )
+        elif not (List.isEmpty repeated) then
+            Error(
+                sprintf
+                    "grounded narrative '%s': section %s is given guidance more than once"
+                    definition.Key
+                    (repeated |> List.map (sprintf "'%s'") |> String.concat ", ")
+            )
+        else
+            let byId = Map.ofList guidance
+
+            Ok {
+                definition with
+                    Prompt = prompt
+                    Sections =
+                        definition.Sections
+                        |> List.map (fun shape ->
+                            match byId.TryFind shape.Id with
+                            | Some text -> { shape with Guidance = text }
+                            | None -> shape)
+            }
+
 /// Compose-time registry of grounded narrative runs. Written during
 /// composition, read by both triggers thereafter; the same posture as the
 /// report producer registry, including refusing a contested key.

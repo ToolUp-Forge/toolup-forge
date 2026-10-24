@@ -364,6 +364,127 @@ ToolUp.AI.Client.FastPathBridge+ResolveOutcome+Resolved.syntheticAssistant : Too
 ToolUp.AI.Client.FastPathBridge+ResolveOutcome+Tags (class)
 ToolUp.AI.Client.FastPathBridge+ResolveOutcome+Tags.NoResolution : System.Int32 (literal)
 ToolUp.AI.Client.FastPathBridge+ResolveOutcome+Tags.Resolved : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI (class)
+ToolUp.AI.Client.NarrativePromptAdminUI.adminTiles : ToolUp.Platform.IAdminTileContributor { get }
+ToolUp.AI.Client.NarrativePromptAdminUI.changedGuidance(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeDeclaredSection], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeSectionGuidance]
+ToolUp.AI.Client.NarrativePromptAdminUI.create() : ToolUp.Platform.ErasedModule
+ToolUp.AI.Client.NarrativePromptAdminUI.init() : System.Tuple`2[ToolUp.AI.Client.NarrativePromptAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.Client.NarrativePromptAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ToolUp.AI.Client.NarrativePromptAdminUI.maxPolls : System.Int32 { get }
+ToolUp.AI.Client.NarrativePromptAdminUI.moduleId : System.String { get }
+ToolUp.AI.Client.NarrativePromptAdminUI.pollIntervalMs : System.Int32 { get }
+ToolUp.AI.Client.NarrativePromptAdminUI.runLanded(Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], ToolUp.AI.NarrativePromptView) : System.Boolean
+ToolUp.AI.Client.NarrativePromptAdminUI.update(ToolUp.AI.Client.NarrativePromptAdminUI+Msg, ToolUp.AI.Client.NarrativePromptAdminUI+Model) : System.Tuple`2[ToolUp.AI.Client.NarrativePromptAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.Client.NarrativePromptAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+ToolUp.AI.Client.NarrativePromptAdminUI.wordingInForce(ToolUp.AI.NarrativePromptView) : System.Tuple`2[System.String, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]]
+ToolUp.AI.Client.NarrativePromptAdminUI+LoadState`1 (class)
+ToolUp.AI.Client.NarrativePromptAdminUI+LoadState`1.IsLoadError : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+LoadState`1.IsLoaded : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+LoadState`1.IsLoading : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+LoadState`1.Loading : ToolUp.AI.Client.NarrativePromptAdminUI+LoadState`1[T] { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+LoadState`1.Tag : System.Int32 { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+LoadState`1+LoadError (class)
+ToolUp.AI.Client.NarrativePromptAdminUI+LoadState`1+LoadError.Item : System.String { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+LoadState`1+Loaded (class)
+ToolUp.AI.Client.NarrativePromptAdminUI+LoadState`1+Loaded.Item : T { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+LoadState`1+Tags (class)
+ToolUp.AI.Client.NarrativePromptAdminUI+LoadState`1+Tags.LoadError : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI+LoadState`1+Tags.Loaded : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI+LoadState`1+Tags.Loading : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI+Model (class)
+ToolUp.AI.Client.NarrativePromptAdminUI+Model..ctor(ToolUp.AI.Client.NarrativePromptAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativePromptSummary]], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.Client.NarrativePromptAdminUI+LoadState`1[ToolUp.AI.NarrativePromptView]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativePromptVersion], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress], System.Boolean, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]])
+ToolUp.AI.Client.NarrativePromptAdminUI+Model.Banner : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]] { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Model.Busy : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Model.Narratives : ToolUp.AI.Client.NarrativePromptAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativePromptSummary]] { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Model.Open : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.Client.NarrativePromptAdminUI+LoadState`1[ToolUp.AI.NarrativePromptView]] { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Model.Regenerate : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress] { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Model.Versions : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativePromptVersion] { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg (class)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg.Back : ToolUp.AI.Client.NarrativePromptAdminUI+Msg { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg.DismissBanner : ToolUp.AI.Client.NarrativePromptAdminUI+Msg { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg.IsBack : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg.IsChanged : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg.IsDismissBanner : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg.IsNarrativeLoaded : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg.IsNarrativesLoaded : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg.IsOpenNarrative : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg.IsPoll : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg.IsPolled : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg.IsRefresh : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg.IsRegenerateAccepted : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg.IsRegenerateCancelled : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg.IsRegenerateConfirmed : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg.IsRegenerateRequested : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg.IsReset : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg.IsSave : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg.IsVersionsLoaded : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg.Refresh : ToolUp.AI.Client.NarrativePromptAdminUI+Msg { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg.RegenerateCancelled : ToolUp.AI.Client.NarrativePromptAdminUI+Msg { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg.RegenerateRequested : ToolUp.AI.Client.NarrativePromptAdminUI+Msg { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg.Tag : System.Int32 { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Changed (class)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Changed.Item2 : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String] { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Changed.what : System.String { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+NarrativeLoaded (class)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+NarrativeLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String] { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+NarrativesLoaded (class)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+NarrativesLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativePromptSummary], System.String] { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+OpenNarrative (class)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+OpenNarrative.runKey : System.String { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Poll (class)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Poll.runKey : System.String { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Polled (class)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Polled.Item : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String] { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+RegenerateAccepted (class)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+RegenerateAccepted.Item : Microsoft.FSharp.Core.FSharpResult`2[System.Guid, System.String] { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+RegenerateConfirmed (class)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+RegenerateConfirmed.runKey : System.String { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Reset (class)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Reset.runKey : System.String { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Save (class)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Save.Item : ToolUp.AI.SaveNarrativePromptRequest { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Tags (class)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Tags.Back : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Tags.Changed : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Tags.DismissBanner : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Tags.NarrativeLoaded : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Tags.NarrativesLoaded : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Tags.OpenNarrative : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Tags.Poll : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Tags.Polled : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Tags.Refresh : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Tags.RegenerateAccepted : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Tags.RegenerateCancelled : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Tags.RegenerateConfirmed : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Tags.RegenerateRequested : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Tags.Reset : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Tags.Save : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+Tags.VersionsLoaded : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+VersionsLoaded (class)
+ToolUp.AI.Client.NarrativePromptAdminUI+Msg+VersionsLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativePromptVersion], System.String] { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress (class)
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress.Confirming : ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress.IsAwaiting : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress.IsConfirming : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress.IsLanded : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress.IsRefused : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress.IsStarting : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress.IsStillRunning : System.Boolean { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress.Starting : ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress.StillRunning : ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress.Tag : System.Int32 { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress+Awaiting (class)
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress+Awaiting.polls : System.Int32 { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress+Awaiting.previous : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress+Landed (class)
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress+Landed.Item : ToolUp.AI.NarrativeLastRun { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress+Refused (class)
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress+Refused.Item : System.String { get }
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress+Tags (class)
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress+Tags.Awaiting : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress+Tags.Confirming : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress+Tags.Landed : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress+Tags.Refused : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress+Tags.Starting : System.Int32 (literal)
+ToolUp.AI.Client.NarrativePromptAdminUI+RegenerateProgress+Tags.StillRunning : System.Int32 (literal)
 ToolUp.AI.Client.PlatformAIKeysAdminUI (class)
 ToolUp.AI.Client.PlatformAIKeysAdminUI.create() : ToolUp.Platform.ErasedModule
 ToolUp.AI.Client.PlatformAIKeysAdminUI.init() : System.Tuple`2[ToolUp.AI.Client.PlatformAIKeysAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.Client.PlatformAIKeysAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
