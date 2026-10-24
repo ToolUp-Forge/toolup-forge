@@ -2715,6 +2715,8 @@ module ClientModule =
     /// pages share the `Model` and `Msg` types and state is preserved
     /// across page navigation. `Definition.Pages` is set from the keys
     /// of `pageViews`; `Definition.Pages` on the input module is ignored.
+    /// **Sets** the module's pages: a later call replaces them all, as
+    /// does `withView` / `withFullWidthView` (the module has ONE page shape).
     ///
     /// Usage (call before `register`):
     /// ```
@@ -2816,6 +2818,11 @@ module ClientModule =
     /// `ClientModuleQueryBus`. Construct entries with
     /// `ClientModuleQueryHandler.typed` to get typed request / response
     /// serialisation.
+    ///
+    /// **Sets** the module's client handler list: it REPLACES every
+    /// handler registered before it, including those `withQueryContract`
+    /// and `addQueryHandlers` added. (`ServerModule.withQueryHandlers`, its
+    /// server twin, appends.) Use `addQueryHandlers` to keep them.
     let withQueryHandlers
         (handlers: ModuleQueryHandler list)
         (m: ClientModule<'Model, 'Msg>)
@@ -2823,6 +2830,18 @@ module ClientModule =
         {
             m with
                 ClientQueryHandlers = handlers
+        }
+
+    /// Phase 1050 — attach more client-side `ModuleQueryBus` handlers.
+    /// **Adds** to the module's client handler list, keeping every handler
+    /// registered before it; `withQueryHandlers` is the replacing twin.
+    let addQueryHandlers
+        (handlers: ModuleQueryHandler list)
+        (m: ClientModule<'Model, 'Msg>)
+        : ClientModule<'Model, 'Msg> =
+        {
+            m with
+                ClientQueryHandlers = m.ClientQueryHandlers @ handlers
         }
 
     /// Answer a cross-module query declared as a `ModuleQueryContract`
@@ -2838,7 +2857,7 @@ module ClientModule =
     /// build, the Phase 579 duplicate rejection and the server-fallback
     /// path see exactly what `withQueryHandlers` produces (GP 11).
     /// Unlike `withQueryHandlers` (which sets the list) this one
-    /// *appends*, so several contracts compose.
+    /// **adds**, so several contracts compose.
     ///
     /// The module's `Definition.Id` must equal the contract's
     /// `TargetModule` — `SDK.Client.run` files client handlers under the
@@ -2879,6 +2898,9 @@ module ClientModule =
     /// out is the cheapest way to let a composition see that a tool's
     /// `EmitsActions` has a decoder waiting for it — without the audit
     /// having to guess candidate keys and probe.
+    ///
+    /// **Sets** the key list, as `withActionDecoder` sets the one decoder
+    /// the keys describe; a later call replaces it.
     let withActionKeys (keys: string list) (m: ClientModule<'Model, 'Msg>) : ClientModule<'Model, 'Msg> = {
         m with
             ActionKeys = Some keys
@@ -2898,11 +2920,24 @@ module ClientModule =
     /// the checkable direction: a declared target no composed module
     /// answers is a defect a composition can prove without running the
     /// module.
+    ///
+    /// **Sets** the declared list: a later call, or one after
+    /// `addQueryTargets`, replaces it. `addQueryTargets` is the appending
+    /// twin.
     let withQueryTargets
         (targets: ModuleQueryTarget list)
         (m: ClientModule<'Model, 'Msg>)
         : ClientModule<'Model, 'Msg> =
         { m with QueryTargets = Some targets }
+
+    /// Phase 1050 — declare more outbound module queries. **Adds** to the
+    /// declared list, keeping every target declared before it (on a module
+    /// that has declared none, it is the first declaration);
+    /// `withQueryTargets` is the replacing twin.
+    let addQueryTargets (targets: ModuleQueryTarget list) (m: ClientModule<'Model, 'Msg>) : ClientModule<'Model, 'Msg> = {
+        m with
+            QueryTargets = Some(Option.defaultValue [] m.QueryTargets @ targets)
+    }
 
     /// Subscribe this module to a cross-module client event topic. When
     /// any module publishes `topic` via `ModuleEvents.publish`, the shell
@@ -2914,8 +2949,8 @@ module ClientModule =
     ///
     /// Topics are plain strings namespaced by convention (`"<app>/<event>"`
     /// or bare); the publisher and subscriber never reference each other.
-    /// Chain multiple calls to subscribe to several topics; a repeated
-    /// topic replaces the prior mapper. A module receives its own
+    /// **Adds**: chain multiple calls to subscribe to several topics; a
+    /// repeated topic replaces the prior mapper. A module receives its own
     /// publications only when it also subscribes to that topic.
     ///
     /// ```fsharp
@@ -3049,11 +3084,23 @@ module ClientModule =
     /// Declare data types this module renders summaries for in the file
     /// manager. Each `DataTypeDisplay` pairs a shared `DataTypeInfo`
     /// (declared in the module's SharedTypes) with a `RenderSummary`
-    /// function that produces a Feliz `ReactElement` from a list of
-    /// type-erased Info objects.
+    /// function that renders the entries' typed summaries.
+    ///
+    /// **Sets** the module's data-type list: a second call, or a call after
+    /// `addDataTypes`, REPLACES every type declared before it. Use
+    /// `addDataTypes` when more than one party declares types on one
+    /// module (a generated module plus an authored addition) — Phase 1050.
     let withDataTypes (dataTypes: DataTypeDisplay list) (m: ClientModule<'Model, 'Msg>) : ClientModule<'Model, 'Msg> = {
         m with
             DataTypes = dataTypes
+    }
+
+    /// Phase 1050 — declare more data types this module renders summaries
+    /// for. **Adds** to the module's data-type list, keeping every type
+    /// declared before it; `withDataTypes` is the replacing twin.
+    let addDataTypes (dataTypes: DataTypeDisplay list) (m: ClientModule<'Model, 'Msg>) : ClientModule<'Model, 'Msg> = {
+        m with
+            DataTypes = m.DataTypes @ dataTypes
     }
 
     /// Declare which data types this module needs before it has
@@ -3077,7 +3124,8 @@ module ClientModule =
     /// descriptor, a composition audit), not a second gate. Where the
     /// predicate is exactly "every one of these ids is available", prefer
     /// `withRequiredDataTypes`, which derives both halves from one list
-    /// so they cannot drift apart.
+    /// so they cannot drift apart. **Sets** the list; a later call
+    /// replaces it, because it describes the one predicate.
     let withNeedsDataKeys
         (keys: DataManagementTypes.DataTypeId list)
         (m: ClientModule<'Model, 'Msg>)
@@ -3096,7 +3144,8 @@ module ClientModule =
     /// a conjunction (any-of, or a predicate over a computed property)
     /// keep `withNeedsData` and declare the ids they know about with
     /// `withNeedsDataKeys` — the declaration is a subset claim, so a
-    /// partial list is honest.
+    /// partial list is honest. **Sets** both halves; a later call
+    /// replaces them.
     let withRequiredDataTypes
         (keys: DataManagementTypes.DataTypeId list)
         (m: ClientModule<'Model, 'Msg>)
@@ -3118,9 +3167,21 @@ module ClientModule =
     /// Declare feature flags this module reads via `FeatureFlags.flag`
     /// or `FeatureFlags.variant`. Aggregating the declared-key set
     /// across modules lets the shell warn on typos at runtime.
+    ///
+    /// **Sets** the module's flag list: a later call, or one after
+    /// `addFeatureFlags`, replaces it. `addFeatureFlags` is the appending
+    /// twin.
     let withFeatureFlags (flags: FeatureFlag list) (m: ClientModule<'Model, 'Msg>) : ClientModule<'Model, 'Msg> = {
         m with
             FeatureFlags = flags
+    }
+
+    /// Phase 1050 — declare more feature flags this module reads. **Adds**
+    /// to the module's flag list, keeping every flag declared before it;
+    /// `withFeatureFlags` is the replacing twin.
+    let addFeatureFlags (flags: FeatureFlag list) (m: ClientModule<'Model, 'Msg>) : ClientModule<'Model, 'Msg> = {
+        m with
+            FeatureFlags = m.FeatureFlags @ flags
     }
 
     /// Expose processed data from the module's `Model`. The shell

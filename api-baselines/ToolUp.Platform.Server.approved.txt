@@ -10476,6 +10476,8 @@ ToolUp.Platform.ServerModule.SlowRequestThresholdOverrides : Microsoft.FSharp.Co
 ToolUp.Platform.ServerModule.Subjects : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.SubjectDefinition] { get }
 ToolUp.Platform.ServerModule.VectorisationHandlers : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorisationTypes+VectorisationHandler] { get }
 ToolUp.Platform.ServerModuleModule (class)
+ToolUp.Platform.ServerModuleModule.addDataTypes(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FileProcessor+DataType], ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule
+ToolUp.Platform.ServerModuleModule.addVectorisation(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorisationTypes+VectorisationHandler], ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule
 ToolUp.Platform.ServerModuleModule.create(System.String) : ToolUp.Platform.ServerModule
 ToolUp.Platform.ServerModuleModule.declareFactTables(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.FactTableDefinition], ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule
 ToolUp.Platform.ServerModuleModule.declareMetrics(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.MetricDefinition], ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule

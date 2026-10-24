@@ -851,6 +851,9 @@
              fields is the drift guard (a new registration field fails here
              until the descriptor learns it). -->
         <Compile Include="InProcess\ModuleSurfaceTests.fs" />
+        <!-- Phase 1050 — a module builder says whether it sets or adds: the
+             add* twins keep both sets, the with* builders still replace. -->
+        <Compile Include="InProcess\ModuleBuilderSemanticsTests.fs" />
         <!-- Phase 526 — composition introspection covers grounding declarations. -->
         <Compile Include="InProcess\CompositionGroundingTests.fs" />
         <!-- Phase 288 — component provenance: a first-party companion reports

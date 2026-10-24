@@ -13,16 +13,14 @@ same name in one release is reported once, as a signature change. Under this rep
 policy a `breaking` release is a MINOR bump and an `additive` one a PATCH; from 1.0.0 the ordinary table
 applies. Where a release ships a migration note under `docs/migrations/`, it is linked from the section.
 
-## [0.32.0] — unreleased
+## [Unreleased] — unreleased
 
 Migration notes:
 
-- [1106-jobs-admin-slot](docs/migrations/1106-jobs-admin-slot.md)
-- [1107-publication-readers-granted-in-platform](docs/migrations/1107-publication-readers-granted-in-platform.md)
+- [1050-module-builders-set-or-add](docs/migrations/1050-module-builders-set-or-add.md)
 - [1111-narrative-prompt-overrides](docs/migrations/1111-narrative-prompt-overrides.md)
-- [1113-fact-series-read](docs/migrations/1113-fact-series-read.md)
 
-_Surface since `v0.31.0`: **breaking** — 12 packages moved; 572 members added, 7 members changed, 0 members removed._
+_Surface since `v0.32.0`: **breaking** — 5 packages moved; 255 members added, 2 members changed, 3 members removed._
 
 ### Added
 
@@ -47,7 +45,7 @@ _Surface since `v0.31.0`: **breaking** — 12 packages moved; 572 members added,
   - `ToolUp.AI.Client.NarrativePromptAdminUI+Model.Banner : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]] { get }`
   - `ToolUp.AI.Client.NarrativePromptAdminUI+Model.Busy : System.Boolean { get }`
   - `ToolUp.AI.Client.NarrativePromptAdminUI+Model.Narratives : ToolUp.AI.Client.NarrativePromptAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativePromptSummary]] { get }`
-  - … and 101 more — `git diff v0.31.0 -- api-baselines/ToolUp.AI.Client.approved.txt`
+  - … and 101 more — `git diff v0.32.0 -- api-baselines/ToolUp.AI.Client.approved.txt`
 - `ToolUp.AI.Core` — 58 members:
   - `ToolUp.AI.NarrativeDeclaredSection (class)`
   - `ToolUp.AI.NarrativeDeclaredSection..ctor(System.String, System.String, System.String)`
@@ -69,8 +67,79 @@ _Surface since `v0.31.0`: **breaking** — 12 packages moved; 572 members added,
   - `ToolUp.AI.NarrativePromptApi.Regenerate : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, System.String]]] { get }`
   - `ToolUp.AI.NarrativePromptApi.ResetPrompt : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String]]] { get }`
   - `ToolUp.AI.NarrativePromptApi.SavePrompt : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SaveNarrativePromptRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String]]] { get }`
-  - … and 38 more — `git diff v0.31.0 -- api-baselines/ToolUp.AI.Core.approved.txt`
-- `ToolUp.AI.Server` — 38 members:
+  - … and 38 more — `git diff v0.32.0 -- api-baselines/ToolUp.AI.Core.approved.txt`
+- `ToolUp.AI.Server` — 18 members:
+  - `ToolUp.AI.GroundedNarrativeRun.rules : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }`
+  - `ToolUp.AI.NarrativePromptHandler (class)`
+  - `ToolUp.AI.NarrativePromptHandler+NarrativePromptAudit (class)`
+  - `ToolUp.AI.NarrativePromptHandler+NarrativePromptAudit.ResetKind : System.String (literal)`
+  - `ToolUp.AI.NarrativePromptHandler+NarrativePromptAudit.SavedKind : System.String (literal)`
+  - `ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob (class)`
+  - `ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob+RegenerateJobHandler (class)`
+  - `ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob+RegenerateJobHandler..ctor(ToolUp.Platform.IGroundedNarrativeRun)`
+  - `ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob+RegeneratePayload (class)`
+  - `ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob+RegeneratePayload..ctor(System.String)`
+  - `ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob+RegeneratePayload.RunKey : System.String { get }`
+  - `ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob.HandlerName : System.String (literal)`
+  - `ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob.TriggerName : System.String (literal)`
+  - `ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob.hostedService(System.IServiceProvider) : Microsoft.Extensions.Hosting.IHostedService`
+  - `ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob.registrationFor(System.String, System.String, System.String) : ToolUp.Platform.JobRegistration`
+  - `ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob.tryParsePayload(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.NarrativePromptHandler+NarrativeRegenerateJob+RegeneratePayload]`
+  - `ToolUp.AI.NarrativePromptHandler.narrativePromptApi(Microsoft.AspNetCore.Http.HttpContext) : ToolUp.AI.NarrativePromptApi`
+  - `ToolUp.AI.NarrativePromptHandler.withPromptAdmin(ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp`
+- `ToolUp.Platform.Client` — 55 members:
+  - `JobsAdminUI+AttemptReading (class)`
+  - `JobsAdminUI+AttemptReading+Tags (class)`
+  - `JobsAdminUI+AttemptReading+Tags.Cancelled : System.Int32 (literal)`
+  - `JobsAdminUI+AttemptReading+Tags.Failed : System.Int32 (literal)`
+  - `JobsAdminUI+AttemptReading+Tags.InProgress : System.Int32 (literal)`
+  - `JobsAdminUI+AttemptReading+Tags.PermanentlyFailed : System.Int32 (literal)`
+  - `JobsAdminUI+AttemptReading+Tags.RetryPending : System.Int32 (literal)`
+  - `JobsAdminUI+AttemptReading+Tags.Succeeded : System.Int32 (literal)`
+  - `JobsAdminUI+AttemptReading.Cancelled : JobsAdminUI+AttemptReading { get }`
+  - `JobsAdminUI+AttemptReading.Failed : JobsAdminUI+AttemptReading { get }`
+  - `JobsAdminUI+AttemptReading.InProgress : JobsAdminUI+AttemptReading { get }`
+  - `JobsAdminUI+AttemptReading.IsCancelled : System.Boolean { get }`
+  - `JobsAdminUI+AttemptReading.IsFailed : System.Boolean { get }`
+  - `JobsAdminUI+AttemptReading.IsInProgress : System.Boolean { get }`
+  - `JobsAdminUI+AttemptReading.IsPermanentlyFailed : System.Boolean { get }`
+  - `JobsAdminUI+AttemptReading.IsRetryPending : System.Boolean { get }`
+  - `JobsAdminUI+AttemptReading.IsSucceeded : System.Boolean { get }`
+  - `JobsAdminUI+AttemptReading.PermanentlyFailed : JobsAdminUI+AttemptReading { get }`
+  - `JobsAdminUI+AttemptReading.RetryPending : JobsAdminUI+AttemptReading { get }`
+  - `JobsAdminUI+AttemptReading.Succeeded : JobsAdminUI+AttemptReading { get }`
+  - … and 35 more — `git diff v0.32.0 -- api-baselines/ToolUp.Platform.Client.approved.txt`
+- `ToolUp.Platform.Server` — 3 members:
+  - `ToolUp.Platform.GroundedNarrativeDefinitionModule.reword(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], ToolUp.Platform.GroundedNarrativeDefinition) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.GroundedNarrativeDefinition, System.String]`
+  - `ToolUp.Platform.ServerModuleModule.addDataTypes(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FileProcessor+DataType], ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule`
+  - `ToolUp.Platform.ServerModuleModule.addVectorisation(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.VectorisationTypes+VectorisationHandler], ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule`
+
+### Changed
+
+- `ToolUp.Platform.Client` — 2 members:
+  - `JobsAdminUI+Model..ctor` — `JobsAdminUI+Model..ctor(JobsAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobDefinition]], Microsoft.FSharp.Core.FSharpOption`1[System.Guid], Microsoft.FSharp.Collections.FSharpMap`2[System.Guid, JobsAdminUI+RerunProgress], Microsoft.FSharp.Core.FSharpOption`1[System.String])` → `JobsAdminUI+Model..ctor(JobsAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobDefinition]], Microsoft.FSharp.Core.FSharpOption`1[System.Guid], Microsoft.FSharp.Collections.FSharpMap`2[System.Guid, JobsAdminUI+RerunProgress], Microsoft.FSharp.Collections.FSharpMap`2[System.Guid, JobsAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobRun]]], Microsoft.FSharp.Collections.FSharpSet`1[System.Guid], Microsoft.FSharp.Core.FSharpOption`1[System.String])`
+  - `ToolUp.Platform.JobsAdminMessages..ctor` — `ToolUp.Platform.JobsAdminMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String)` → `ToolUp.Platform.JobsAdminMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]])`
+
+### Removed
+
+- `ToolUp.Platform.Client` — 3 members:
+  - `JobsAdminUI+RerunOffer+Tags.NotApplicable : System.Int32 (literal)`
+  - `JobsAdminUI+RerunOffer.IsNotApplicable : System.Boolean { get }`
+  - `JobsAdminUI+RerunOffer.NotApplicable : JobsAdminUI+RerunOffer { get }`
+
+## [0.32.0] — 2026-10-24
+
+Migration notes:
+
+- [1106-jobs-admin-slot](docs/migrations/1106-jobs-admin-slot.md)
+- [1107-publication-readers-granted-in-platform](docs/migrations/1107-publication-readers-granted-in-platform.md)
+- [1113-fact-series-read](docs/migrations/1113-fact-series-read.md)
+
+_Surface since `v0.31.0`: **breaking** — 10 packages moved; 326 members added, 7 members changed, 0 members removed._
+
+### Added
+
+- `ToolUp.AI.Server` — 20 members:
   - `ToolUp.AI.AIAgentEngine+AgentCallBudget (class)`
   - `ToolUp.AI.AIAgentEngine+AgentCallBudget..ctor(System.TimeSpan, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.String])`
   - `ToolUp.AI.AIAgentEngine+AgentCallBudget.CallTimeout : System.TimeSpan { get }`
@@ -91,7 +160,6 @@ _Surface since `v0.31.0`: **breaking** — 12 packages moved; 572 members added,
   - `ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions.CallBudget : ToolUp.AI.AIAgentEngine+AgentCallBudget { get }`
   - `ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptionsModule.defaultCallBudget : ToolUp.AI.AIAgentEngine+AgentCallBudget { get }`
   - `ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptionsModule.withCallBudget(ToolUp.AI.AIAgentEngine+AgentCallBudget, ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions) : ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions`
-  - … and 18 more — `git diff v0.31.0 -- api-baselines/ToolUp.AI.Server.approved.txt`
 - `ToolUp.AI.Wire` — 2 members:
   - `ToolUp.Platform.AI.AIProviderCallOptions.MaxTokens : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }`
   - `ToolUp.Platform.AI.AIProviderCallOptionsModule.withMaxTokens(System.Int32, ToolUp.Platform.AI.AIProviderCallOptions) : ToolUp.Platform.AI.AIProviderCallOptions`
@@ -122,29 +190,29 @@ _Surface since `v0.31.0`: **breaking** — 12 packages moved; 572 members added,
   - `ToolUp.Facts.FactSeriesPoint.AsOf : System.DateTime { get }`
   - `ToolUp.Facts.FactSeriesPoint.FactId : System.String { get }`
   - `ToolUp.Facts.FactSeriesPoint.Freshness : System.String { get }`
-  - … and 18 more — `git diff v0.31.0 -- api-baselines/ToolUp.Facts.Shared.approved.txt`
-- `ToolUp.Platform.Client` — 233 members:
+  - … and 18 more — `git diff v0.31.0 v0.32.0 -- api-baselines/ToolUp.Facts.Shared.approved.txt`
+- `ToolUp.Platform.Client` — 185 members:
   - `JobsAdminUI (class)`
-  - `JobsAdminUI+AttemptReading (class)`
-  - `JobsAdminUI+AttemptReading+Tags (class)`
-  - `JobsAdminUI+AttemptReading+Tags.Cancelled : System.Int32 (literal)`
-  - `JobsAdminUI+AttemptReading+Tags.Failed : System.Int32 (literal)`
-  - `JobsAdminUI+AttemptReading+Tags.InProgress : System.Int32 (literal)`
-  - `JobsAdminUI+AttemptReading+Tags.PermanentlyFailed : System.Int32 (literal)`
-  - `JobsAdminUI+AttemptReading+Tags.RetryPending : System.Int32 (literal)`
-  - `JobsAdminUI+AttemptReading+Tags.Succeeded : System.Int32 (literal)`
-  - `JobsAdminUI+AttemptReading.Cancelled : JobsAdminUI+AttemptReading { get }`
-  - `JobsAdminUI+AttemptReading.Failed : JobsAdminUI+AttemptReading { get }`
-  - `JobsAdminUI+AttemptReading.InProgress : JobsAdminUI+AttemptReading { get }`
-  - `JobsAdminUI+AttemptReading.IsCancelled : System.Boolean { get }`
-  - `JobsAdminUI+AttemptReading.IsFailed : System.Boolean { get }`
-  - `JobsAdminUI+AttemptReading.IsInProgress : System.Boolean { get }`
-  - `JobsAdminUI+AttemptReading.IsPermanentlyFailed : System.Boolean { get }`
-  - `JobsAdminUI+AttemptReading.IsRetryPending : System.Boolean { get }`
-  - `JobsAdminUI+AttemptReading.IsSucceeded : System.Boolean { get }`
-  - `JobsAdminUI+AttemptReading.PermanentlyFailed : JobsAdminUI+AttemptReading { get }`
-  - `JobsAdminUI+AttemptReading.RetryPending : JobsAdminUI+AttemptReading { get }`
-  - … and 213 more — `git diff v0.31.0 -- api-baselines/ToolUp.Platform.Client.approved.txt`
+  - `JobsAdminUI+JobStanding (class)`
+  - `JobsAdminUI+JobStanding+Tags (class)`
+  - `JobsAdminUI+JobStanding+Tags.AttemptCancelled : System.Int32 (literal)`
+  - `JobsAdminUI+JobStanding+Tags.FailingWillRetry : System.Int32 (literal)`
+  - `JobsAdminUI+JobStanding+Tags.InProgress : System.Int32 (literal)`
+  - `JobsAdminUI+JobStanding+Tags.NotYetRun : System.Int32 (literal)`
+  - `JobsAdminUI+JobStanding+Tags.PermanentlyFailed : System.Int32 (literal)`
+  - `JobsAdminUI+JobStanding+Tags.Succeeded : System.Int32 (literal)`
+  - `JobsAdminUI+JobStanding.AttemptCancelled : JobsAdminUI+JobStanding { get }`
+  - `JobsAdminUI+JobStanding.FailingWillRetry : JobsAdminUI+JobStanding { get }`
+  - `JobsAdminUI+JobStanding.InProgress : JobsAdminUI+JobStanding { get }`
+  - `JobsAdminUI+JobStanding.IsAttemptCancelled : System.Boolean { get }`
+  - `JobsAdminUI+JobStanding.IsFailingWillRetry : System.Boolean { get }`
+  - `JobsAdminUI+JobStanding.IsInProgress : System.Boolean { get }`
+  - `JobsAdminUI+JobStanding.IsNotYetRun : System.Boolean { get }`
+  - `JobsAdminUI+JobStanding.IsPermanentlyFailed : System.Boolean { get }`
+  - `JobsAdminUI+JobStanding.IsSucceeded : System.Boolean { get }`
+  - `JobsAdminUI+JobStanding.NotYetRun : JobsAdminUI+JobStanding { get }`
+  - `JobsAdminUI+JobStanding.PermanentlyFailed : JobsAdminUI+JobStanding { get }`
+  - … and 165 more — `git diff v0.31.0 v0.32.0 -- api-baselines/ToolUp.Platform.Client.approved.txt`
 - `ToolUp.Platform.Core` — 58 members:
   - `ToolUp.Platform.AccessContext.PublicationGrants : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublicationReaderGrant] { get }`
   - `ToolUp.Platform.AccessContextModule.publicationGrantsFor(ToolUp.Platform.Subject, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublicationReaderGrant]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.PublicationReaderGrant]`
@@ -166,11 +234,10 @@ _Surface since `v0.31.0`: **breaking** — 12 packages moved; 572 members added,
   - `ToolUp.Platform.AuditEvent.IsPublicationReaderRevoked : System.Boolean { get }`
   - `ToolUp.Platform.AuditStreamKey (class)`
   - `ToolUp.Platform.AuditStreamKey.ofScope(ToolUp.Platform.StorageScope) : System.String`
-  - … and 38 more — `git diff v0.31.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
-- `ToolUp.Platform.Server` — 18 members:
+  - … and 38 more — `git diff v0.31.0 v0.32.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
+- `ToolUp.Platform.Server` — 17 members:
   - `ToolUp.Platform.BlobPublicationReaderGrantStore (class)`
   - `ToolUp.Platform.BlobPublicationReaderGrantStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])`
-  - `ToolUp.Platform.GroundedNarrativeDefinitionModule.reword(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], ToolUp.Platform.GroundedNarrativeDefinition) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.GroundedNarrativeDefinition, System.String]`
   - `ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeOverBudget (class)`
   - `ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeOverBudget.reason : System.String { get }`
   - `ToolUp.Platform.GroundedNarrativeOutcome+Tags.GroundedNarrativeOverBudget : System.Int32 (literal)`

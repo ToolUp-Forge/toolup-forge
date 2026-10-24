@@ -323,6 +323,7 @@ module ServerModule =
 
     /// Attach a permission-guarded ToolUp.Remoting api factory. Uses the
     /// module's `Name` as the RBAC key, so callers never duplicate it.
+    /// **Adds** one handler to the module's handler list.
     ///
     /// Phase 69d.tail — the module-access gate (`canAccessModule`) is
     /// module-level RBAC and survives per-method attribute adoption;
@@ -333,16 +334,35 @@ module ServerModule =
             Handlers = m.Handlers @ [ RemotingHelpers.permissionGuardedApiCore m.Name apiBuilder ]
     }
 
-    /// Attach an un-guarded handler (advanced — normally prefer `withGuardedApi`).
+    /// Attach un-guarded handlers (advanced — normally prefer `withGuardedApi`).
+    /// **Adds** to the module's handler list, despite the `with` prefix.
     let withHandlers (handlers: HttpHandler list) (m: ServerModule) : ServerModule = {
         m with
             Handlers = m.Handlers @ handlers
     }
 
+    /// Register the data types this module ingests. **Sets** the module's
+    /// data-type list: a second call, or a call after `addDataTypes`,
+    /// REPLACES every type registered before it. Use `addDataTypes` when
+    /// more than one party registers types into one module (a generated
+    /// module plus an authored addition) — Phase 1050.
     let withDataTypes (dts: DataType list) (m: ServerModule) : ServerModule = { m with DataTypes = dts }
 
+    /// Phase 1050 — register more data types on this module. **Adds** to
+    /// the module's data-type list, keeping every type registered before
+    /// it; `withDataTypes` is the replacing twin. Appending is all it
+    /// does — it de-duplicates nothing, so a type registered by both
+    /// parties is registered twice.
+    ///
+    /// ```fsharp
+    /// ServerModule.create "Trading"
+    /// |> ServerModule.withDataTypes generatedTypes
+    /// |> ServerModule.addDataTypes [ authoredType ]
+    /// ```
+    let addDataTypes (dts: DataType list) (m: ServerModule) : ServerModule = { m with DataTypes = m.DataTypes @ dts }
+
     /// Phase 441 — declare the notification categories this module
-    /// publishes under. Appends, so a module may declare in several
+    /// publishes under. **Adds** (appends), so a module may declare in several
     /// steps; a category id must be unique across the deployment and
     /// pass `NotificationCategory.isValidId`, and `Suppressible = false`
     /// marks the transactional / security class a user cannot mute,
@@ -361,15 +381,29 @@ module ServerModule =
                 NotificationCategories = m.NotificationCategories @ categories
         }
 
+    /// Register the vectorisation handlers that make this module's data
+    /// types retrievable. **Sets** the module's handler list: a second
+    /// call, or a call after `addVectorisation`, REPLACES every handler
+    /// registered before it. `addVectorisation` is the appending twin.
     let withVectorisation (vhs: VectorisationHandler list) (m: ServerModule) : ServerModule = {
         m with
             VectorisationHandlers = vhs
     }
 
+    /// Phase 1050 — register more vectorisation handlers on this module.
+    /// **Adds** to the module's handler list, keeping every handler
+    /// registered before it; `withVectorisation` is the replacing twin.
+    let addVectorisation (vhs: VectorisationHandler list) (m: ServerModule) : ServerModule = {
+        m with
+            VectorisationHandlers = m.VectorisationHandlers @ vhs
+    }
+
+    /// Declare the module's team-editable config schema. **Sets** the one
+    /// schema; a later call replaces it.
     let withConfig (schema: ModuleConfigSchema) (m: ServerModule) : ServerModule = { m with ConfigSchema = Some schema }
 
     /// Phase 10b — register one forward config-schema migration step.
-    /// Appends (like every other list field), so a module accumulates
+    /// **Adds** (appends), so a module accumulates
     /// its chain by calling this once per hop, oldest first by
     /// convention though order does not matter: the chain is resolved
     /// by `FromVersion`, not by registration order.
@@ -395,7 +429,7 @@ module ServerModule =
     }
 
     /// Register several forward config-schema migration steps at once.
-    /// Equivalent to folding `withConfigMigration` over the list.
+    /// **Adds**: equivalent to folding `withConfigMigration` over the list.
     let withConfigMigrations (migrators: IConfigMigrator list) (m: ServerModule) : ServerModule = {
         m with
             ConfigMigrations = m.ConfigMigrations @ migrators
@@ -405,7 +439,9 @@ module ServerModule =
     /// `ModuleQueryHandler.typed` to keep request and
     /// response types strongly typed at the registration site. The
     /// module's `Name` becomes the routing key — callers ask for
-    /// `("ThisModule", QueryKey)`.
+    /// `("ThisModule", QueryKey)`. **Adds** to the module's query-handler
+    /// list (unlike the client tier's `ClientModule.withQueryHandlers`,
+    /// which sets it).
     let withQueryHandlers (handlers: ModuleQueryHandler list) (m: ServerModule) : ServerModule = {
         m with
             QueryHandlers = m.QueryHandlers @ handlers
@@ -425,7 +461,8 @@ module ServerModule =
     /// (`ModuleQueryContract.handler`), so the registry, the Phase 579
     /// duplicate rejection, `ModuleSurface` and the bus's tracing spans
     /// see exactly what `withQueryHandlers` produces (GP 11). Stringly
-    /// registrations and contract registrations coexist on one module.
+    /// registrations and contract registrations coexist on one module:
+    /// this **adds** one handler to the list.
     ///
     /// The module's `Name` must equal the contract's `TargetModule` —
     /// the bus routes on the registering module's name, so a mismatch
@@ -452,7 +489,8 @@ module ServerModule =
     /// duplicate `Name` across modules raises a clear startup error.
     /// Helpers under `ToolUp.AI.ToolHelpers` (`requireString`,
     /// `requireDecimal`, `fableSerialize`, etc.) handle the recurring
-    /// argument-extraction and serialisation boilerplate.
+    /// argument-extraction and serialisation boilerplate. **Adds** to the
+    /// module's tool list.
     let withAITools
         (tools: (AIToolDefinition * (HttpContext -> string -> Async<string>)) list)
         (m: ServerModule)
@@ -469,6 +507,7 @@ module ServerModule =
     /// sink is constructed. Modules emit against the namespaced name by
     /// resolving `IMetricsSink` from DI. No-op unless the deployment
     /// opts into `ServerConfig.MetricsEndpoint = EnabledMetricsEndpoint`.
+    /// **Adds** to the module's metric list.
     let withMetrics (defs: Metrics.MetricDefinition list) (m: ServerModule) : ServerModule = {
         m with
             MetricDefinitions = m.MetricDefinitions @ defs
@@ -480,7 +519,7 @@ module ServerModule =
     /// by two modules fails compose with a naming-both-modules
     /// diagnostic. Distinct from `withMetrics` (observability / Prometheus
     /// signals). Optional — a module that declares none composes
-    /// unchanged (GP 13).
+    /// unchanged (GP 13). **Adds** to the module's metric declarations.
     let declareMetrics (defs: Grounding.MetricDefinition list) (m: ServerModule) : ServerModule = {
         m with
             Metrics = m.Metrics @ defs
@@ -488,7 +527,7 @@ module ServerModule =
 
     /// Phase 519 — declare one or more grounding **subject** hierarchies
     /// (the entity dimensions this module computes its metrics over).
-    /// Same fan-in + duplicate-id rejection as `declareMetrics`.
+    /// Same fan-in + duplicate-id rejection as `declareMetrics`; **adds**.
     let declareSubjects (defs: Grounding.SubjectDefinition list) (m: ServerModule) : ServerModule = {
         m with
             Subjects = m.Subjects @ defs
@@ -497,7 +536,7 @@ module ServerModule =
     /// Phase 887 — declare one or more **fact tables** this module
     /// produces: the population output it states as part of its contract,
     /// written through `IFactTableWriter` in one audited run per refresh.
-    /// Composes left to right beside `declareMetrics` / `declareSubjects`.
+    /// **Adds**, composing left to right beside `declareMetrics` / `declareSubjects`.
     /// Each column must be a registered metric and the hierarchy/level a
     /// registered subject level — checked at compose, together with
     /// duplicate table ids across modules and `Required` tables the
@@ -520,6 +559,9 @@ module ServerModule =
     /// Set the ceiling tighter than the observed p99 so a real
     /// regression still surfaces.
     ///
+    /// **Adds** one override to the module's map; a repeated
+    /// `routePrefix` replaces that prefix's earlier ceiling.
+    ///
     /// Example:
     /// ```
     /// ServerModule.create "ChannelAnalysis"
@@ -538,7 +580,7 @@ module ServerModule =
     /// `userOrTeam`, `teamScoped`, `anonymousOnly`, `claimBearerOnly`)
     /// or compose a custom admit set.
     ///
-    /// Calling this multiple times keeps the last value — the module
+    /// **Sets**: calling this multiple times keeps the last value — the module
     /// has a single module-level default, not a stack. Per-endpoint
     /// overrides live on `withRouteSurfaceRequirement`.
     let withDefaultSurfaceRequirement (requirement: SurfaceRequirement) (m: ServerModule) : ServerModule = {
@@ -556,7 +598,7 @@ module ServerModule =
     /// Modules that publish only `withRouteSurfaceRequirement`-style
     /// exact overrides need not declare a prefix here; the global
     /// fail-closed default (`SurfaceRequirement.userOrTeam`) applies
-    /// to non-overridden routes.
+    /// to non-overridden routes. **Adds** to the module's prefix list.
     let withRoutePrefix (prefix: string) (m: ServerModule) : ServerModule = {
         m with
             RoutePrefixes = m.RoutePrefixes @ [ prefix ]
@@ -573,7 +615,7 @@ module ServerModule =
     /// `withRouteSurfaceRequirement "POST" "/api/forms/public/submit"
     /// SurfaceRequirement.claimBearerOnly` while the module's
     /// `DefaultSurfaceRequirement` stays `userOrTeam` for its admin
-    /// routes.
+    /// routes. **Adds** to the module's override list.
     let withRouteSurfaceRequirement
         (httpMethod: string)
         (path: string)
@@ -593,7 +635,8 @@ module ServerModule =
     /// refused). Containment holds what the route reaches THROUGH THE
     /// PLATFORM — the registry `HostCapabilityRegistry.create` builds and
     /// the egress-policed clients — and nothing it reaches around them.
-    /// A later declaration of the same route replaces an earlier one.
+    /// **Adds** to the module's declaration list; at resolution a later
+    /// declaration of the same route replaces an earlier one.
     let withRouteEffect
         (httpMethod: string)
         (path: string)
@@ -624,7 +667,7 @@ module ServerModule =
     /// When `ServerConfig.JobScheduler = NoJobScheduler`, declarations
     /// emit a single startup `Warn` and skip registration — a module
     /// declaring jobs in an unscheduled deployment is a config mismatch,
-    /// not a crash.
+    /// not a crash. **Adds** to the module's job list.
     let withJobHandler (handlerName: string, handler: IJobHandler, trigger: Trigger) (m: ServerModule) : ServerModule =
         let declaration = ScheduledJobDeclaration.create handlerName handler trigger
 
@@ -637,7 +680,8 @@ module ServerModule =
     /// every `JobRegistration` knob (`Scopes`, `Payload`, `RetryPolicy`,
     /// `ShardKey`, `Precision`, `Idempotency`, `Tags`). Construct via
     /// `ScheduledJobDeclaration.create` + the fluent `with*` helpers;
-    /// see `withJobHandler` for the common tupled shorthand.
+    /// see `withJobHandler` for the common tupled shorthand. **Adds** to
+    /// the module's job list.
     let withScheduledJob (declaration: ScheduledJobDeclaration) (m: ServerModule) : ServerModule = {
         m with
             JobHandlers = m.JobHandlers @ [ declaration ]
@@ -650,7 +694,8 @@ module ServerModule =
     /// the delivery — every table's run, committed or failed — under the
     /// scope the platform resolved for it, so post-delivery work needs no
     /// route of its own. A throwing callback is logged and audited under
-    /// `name` and never reaches the delivery. See
+    /// `name` and never reaches the delivery. **Adds** to the module's
+    /// hook list. See
     /// `docs/platform/modules.md#delivery-completed-hooks`.
     ///
     /// ```fsharp
@@ -1326,7 +1371,7 @@ module ServerApp =
                 companionName
                 companionName
 
-    /// Phase 1h — append a companion marker to `ComposedCompanions`
+    /// Phase 1h — **add** a companion marker to `ComposedCompanions`
     /// after a successful compose emit. Paired with
     /// `ensureCompanionNotAlreadyComposed` at the top of the same
     /// compose seam.
@@ -1335,6 +1380,13 @@ module ServerApp =
             ComposedCompanions = app.ComposedCompanions @ [ companionName ]
     }
 
+    /// **Sets** the whole `ServerConfig`. The builders that append into
+    /// it — `withAlertRule` / `withAlertRules`, `withNotificationCategory` /
+    /// `withNotificationCategories`, `withPeerRoutePrefix` — and the ones
+    /// that set one field of it
+    /// (`withSeedData`, `withSecurityHardening`, …) write into the config
+    /// the app holds at that point, so a `withConfig` AFTER them discards
+    /// their work. Call it first.
     let withConfig (c: ServerConfig) (app: ServerApp) : ServerApp = { app with Config = c }
     let withAuth (a: IAuthProvider) (app: ServerApp) : ServerApp = { app with Auth = Some a }
 
@@ -1358,8 +1410,8 @@ module ServerApp =
     /// pack into DI and `SeedDataLoader` applies them once per
     /// `Name@Version` at end-of-compose, gated on `ServerConfig.SeedData`.
     /// Registering a pack is inert until the mode is enabled — a pack on
-    /// a `NoSeedData` composition is never resolved (GP 13). Append-only,
-    /// so several modules each add their own.
+    /// a `NoSeedData` composition is never resolved (GP 13). **Adds**
+    /// (append-only), so several modules each add their own.
     let withSeedPack (pack: ISeedPack) (app: ServerApp) : ServerApp = {
         app with
             SeedPacks = app.SeedPacks @ [ pack ]
@@ -1406,6 +1458,8 @@ module ServerApp =
     /// prefixes — a deployment can register `withPeerRoutePrefix
     /// "/api/peer/echo"` for the bearer flavour and a Phase 18
     /// substrate at `/api/peer/federated/` at the same time.
+    ///
+    /// **Adds** to `ServerConfig.PeerRoutePrefixes`.
     let withPeerRoutePrefix (prefix: string) (app: ServerApp) : ServerApp = {
         app with
             Config = {
@@ -1452,7 +1506,7 @@ module ServerApp =
     ///   * host `TransactionalDispatcher` as `IHostedService`.
     ///
     /// Apps without transactional delivery omit this call entirely
-    /// — zero runtime cost.
+    /// — zero runtime cost. **Adds** to the app's sink list.
     let withTransactionalSink (sink: INotificationSink) (app: ServerApp) : ServerApp = {
         app with
             TransactionalSinks = app.TransactionalSinks @ [ sink ]
@@ -1467,7 +1521,8 @@ module ServerApp =
     /// run it, `WebOnly` / `DispatcherOnly` / `ServerlessHost` skip). Apps
     /// without alerting omit the call entirely — zero runtime cost (GP 13).
     /// Rule `Name`s must be unique within a deployment (the engine keys its
-    /// per-rule breach window on the name).
+    /// per-rule breach window on the name). **Adds** to
+    /// `ServerConfig.AlertRules`.
     let withAlertRule (rule: AlertRule) (app: ServerApp) : ServerApp = {
         app with
             Config = {
@@ -1476,7 +1531,7 @@ module ServerApp =
             }
     }
 
-    /// Phase 178 — register several alert rules at once. Appends to any
+    /// Phase 178 — register several alert rules at once. **Adds** to any
     /// already registered; see `withAlertRule` for the hosting contract.
     let withAlertRules (rules: AlertRule list) (app: ServerApp) : ServerApp = {
         app with
@@ -1490,7 +1545,8 @@ module ServerApp =
     /// root (an app-level category no single module owns, e.g. a
     /// non-suppressible `security.password-reset`). Same validation and
     /// the same inert-until-enabled rule as
-    /// `ServerModule.withNotificationCategories`.
+    /// `ServerModule.withNotificationCategories`. **Adds** to
+    /// `ServerConfig.NotificationCategories`.
     let withNotificationCategory (category: NotificationCategory) (app: ServerApp) : ServerApp =
         if not (NotificationCategory.isValidId category.Id) then
             invalidArg
@@ -1506,7 +1562,7 @@ module ServerApp =
         }
 
     /// Phase 441 — declare several app-level notification categories at
-    /// once; see `withNotificationCategory`.
+    /// once; **adds**, like `withNotificationCategory`.
     let withNotificationCategories (categories: NotificationCategory list) (app: ServerApp) : ServerApp =
         categories |> List.fold (fun a c -> withNotificationCategory c a) app
 
@@ -1529,7 +1585,7 @@ module ServerApp =
     ///     holds them via constructor capture in `AuditReplicator`).
     ///
     /// Apps without external audit replication omit this call entirely
-    /// — zero runtime cost.
+    /// — zero runtime cost. **Adds** to the app's sink list.
     let withAuditSink (sink: IAuditSink) (app: ServerApp) : ServerApp = {
         app with
             AuditSinks = app.AuditSinks @ [ sink ]
@@ -1558,7 +1614,7 @@ module ServerApp =
     /// — emission sites resolve `IMetricsSink` to `NoOpMetricsSink`
     /// regardless of registered companion sinks, so the deployment
     /// must opt in to metrics through `MetricsEndpoint =
-    /// EnabledMetricsEndpoint` first.
+    /// EnabledMetricsEndpoint` first. **Adds** to the app's sink list.
     let withMetricsSink (sink: Metrics.IMetricsSink) (app: ServerApp) : ServerApp = {
         app with
             MetricsSinks = app.MetricsSinks @ [ sink ]
@@ -1577,7 +1633,8 @@ module ServerApp =
     /// rewrite via `Module = None`. Idempotent across multiple calls —
     /// the same registration appearing twice fails fast at
     /// `PrometheusMetricsSink` construction with a clear duplicate-name
-    /// error, so call once at compose-time per companion.
+    /// error, so call once at compose-time per companion. **Adds** to the
+    /// app's registration list.
     let withMetricRegistrations (regs: Metrics.MetricRegistration list) (app: ServerApp) : ServerApp = {
         app with
             MetricRegistrations = app.MetricRegistrations @ regs
@@ -1588,8 +1645,8 @@ module ServerApp =
     /// an `IFactTableWriter` calls this for the tables it serves (the facts
     /// companion's `withFactTableWriter` binds every declared table). The
     /// compose-time preflight refuses to start a composition with a
-    /// `Required` table no binding covers, naming the table. Bindings
-    /// accumulate; for one table an explicit `BindFactTable` wins over a
+    /// `Required` table no binding covers, naming the table. **Adds**:
+    /// bindings accumulate; for one table an explicit `BindFactTable` wins over a
     /// `BindAllFactTables`, and the last of a kind wins.
     let bindFactTables (binding: Grounding.FactTableBinding) (app: ServerApp) : ServerApp = {
         app with
@@ -1600,7 +1657,7 @@ module ServerApp =
     /// for the manifest projection. Called by the facts companion's
     /// purpose compose (which owns the typed taxonomy + the gate
     /// enforcement); the platform carries only the generic, readable
-    /// declaration (GP 1). Append-only across calls.
+    /// declaration (GP 1). **Adds** — append-only across calls.
     let withRegisteredPurposes (purposes: RegisteredPurpose list) (app: ServerApp) : ServerApp = {
         app with
             RegisteredPurposes = app.RegisteredPurposes @ purposes
@@ -1648,7 +1705,7 @@ module ServerApp =
     /// earlier one. Companion packages should expose one descriptor
     /// per upstream they consume; consumer apps pairing with a
     /// quota-bearing provider call `withRateLimitDescriptor` once
-    /// per provider at compose time.
+    /// per provider at compose time. **Adds** to the app's descriptor list.
     let withRateLimitDescriptor (descriptor: RateLimitDescriptor) (app: ServerApp) : ServerApp = {
         app with
             RateLimitDescriptors = app.RateLimitDescriptors @ [ descriptor ]
@@ -1663,7 +1720,7 @@ module ServerApp =
     /// their `Kind` so `/health` (Liveness only) and `/ready` (both
     /// kinds) partition correctly. Apps that don't register a probe
     /// for a given subsystem pay nothing — the empty list flows
-    /// through compose as a no-op.
+    /// through compose as a no-op. **Adds** to the app's probe list.
     let withHealthCheck (check: HealthChecks.IHealthCheck) (app: ServerApp) : ServerApp = {
         app with
             HealthChecks = app.HealthChecks @ [ check ]
@@ -1679,7 +1736,7 @@ module ServerApp =
     /// scope `"_smoke"` and clean up after themselves. Apps that
     /// don't register a smoke for a given subsystem pay nothing —
     /// the empty list flows through compose as a no-op when
-    /// `SmokeTest = NoSmokeTest`.
+    /// `SmokeTest = NoSmokeTest`. **Adds** to the app's smoke-test list.
     let withSmokeTest (test: SmokeTests.ISmokeTest) (app: ServerApp) : ServerApp = {
         app with
             SmokeTests = app.SmokeTests @ [ test ]
@@ -1697,7 +1754,7 @@ module ServerApp =
     /// route is mounted, so calling this in a shared composition
     /// helper doesn't force the DSR substrate on at the same time.
     /// Mirrors `withAuditSink` / `withMetricsSink` / `withSmokeTest`
-    /// shape: append-only accumulation, DI registration deferred to
+    /// shape: **adds** (append-only accumulation), DI registration deferred to
     /// `run`. Multi-registration is the design — every store gets its
     /// own exporter.
     let withDataExporter (exporter: IDataExporter) (app: ServerApp) : ServerApp = {
@@ -1715,7 +1772,7 @@ module ServerApp =
     /// ordering register handlers with sort-aware names (`01-events`,
     /// `02-data`, `99-audit`). Multi-registration is the design —
     /// every store gets its own handler. Mirrors `withDataExporter`
-    /// in shape and gating behaviour.
+    /// in shape and gating behaviour. **Adds** to the app's handler list.
     let withErasureHandler (handler: IErasureHandler) (app: ServerApp) : ServerApp = {
         app with
             ErasureHandlers = app.ErasureHandlers @ [ handler ]
@@ -1729,7 +1786,8 @@ module ServerApp =
     /// `compose` folds each into DI so `OAuthFlowHandler.findFlow`
     /// resolves it per-request. Routes only mount under
     /// `DataIngestion = EnabledDataIngestion`. Mirrors `withDataExporter`
-    /// / `withErasureHandler` in shape and gating behaviour.
+    /// / `withErasureHandler` in shape and gating behaviour. **Adds** to
+    /// the app's flow list.
     let withOAuthFlow (flow: IOAuthCredentialFlow) (app: ServerApp) : ServerApp = {
         app with
             OAuthCredentialFlows = app.OAuthCredentialFlows @ [ flow ]
@@ -1738,7 +1796,7 @@ module ServerApp =
     /// Phase 10g — register an OAuth 1.0a flow (one per 1.0a provider).
     /// `run` folds it into DI; the `/api/oauth1a/{name}/*` routes (mounted
     /// when `ServerConfig.OAuth1a = EnabledOAuth1a`) resolve it by `Name`.
-    /// Append-only, so several providers each add their own.
+    /// **Adds** (append-only), so several providers each add their own.
     let withOAuth1aFlow (flow: IOAuth1aFlow) (app: ServerApp) : ServerApp = {
         app with
             OAuth1aFlows = app.OAuth1aFlows @ [ flow ]
@@ -1754,7 +1812,7 @@ module ServerApp =
     /// `Error` abort startup with a `ConfigPreflightFailedException`;
     /// `Warning`s log + continue. Apps that don't register a validator
     /// for a given subsystem pay nothing — the empty list flows
-    /// through compose as a no-op.
+    /// through compose as a no-op. **Adds** to the app's validator list.
     let withConfigValidator (validator: ConfigValidation.IConfigValidator) (app: ServerApp) : ServerApp = {
         app with
             ConfigValidators = app.ConfigValidators @ [ validator ]
@@ -1784,7 +1842,8 @@ module ServerApp =
     /// inherit it without a per-wrapper forwarder. Use for a
     /// CDN-delivered bundle host (`AgGridCdnCspContributor`), a hosted
     /// embed origin, or any deployment-specific origin the first-party
-    /// defaults don't cover.
+    /// defaults don't cover. **Adds** one registration to the
+    /// `ServiceConfig` chain, so contributors accumulate.
     let withCspContributor (contributor: ICspContributor) (app: ServerApp) : ServerApp =
         let register (s: IServiceCollection) =
             s.AddSingleton<ICspContributor>(contributor)
@@ -1969,7 +2028,8 @@ module ServerApp =
     /// set; otherwise the registrations are accumulated but never
     /// flushed. (No runtime warning — silent for ergonomic reasons,
     /// since modules call this at module-load time before the
-    /// deployment knows which mode it's running in.)
+    /// deployment knows which mode it's running in.) **Adds** to the
+    /// app's registration list.
     let withEntity<'T> (registration: EntityTypes.EntityRegistration<'T>) (app: ServerApp) : ServerApp = {
         app with
             EntityRegistrations =
@@ -1996,9 +2056,15 @@ module ServerApp =
             }
     }
 
+    /// **Sets** the whole `ComposeExtensions` record. The builders that
+    /// accumulate into it — `withPreMiddleware`, `withPostMiddleware`,
+    /// `withRemotingBatching`, `withCspContributor`,
+    /// `withDeliveryCompleted` — write into the record the app holds at
+    /// that point, so a `withExtensions` AFTER them discards their work.
+    /// Call it first, or build `e` from `app.Extensions` with a copy-and-update.
     let withExtensions (e: ComposeExtensions) (app: ServerApp) : ServerApp = { app with Extensions = e }
 
-    /// Phase 1f composition seam. Accumulates an `IApplicationBuilder`
+    /// Phase 1f composition seam. **Adds** an `IApplicationBuilder`
     /// thunk that `compose` applies at the **pre** position — after
     /// CORS / security headers, before `ScopeResolutionMiddleware` /
     /// `AuthEnforcementMiddleware`. Use for IP allowlists, custom
@@ -2040,7 +2106,7 @@ module ServerApp =
                 }
                 builder)
 
-    /// Phase 1f composition seam. Accumulates an `IApplicationBuilder`
+    /// Phase 1f composition seam. **Adds** an `IApplicationBuilder`
     /// thunk that `compose` applies at the **post** position — AFTER
     /// `app.UseGiraffe router`, so consumers can register fallback
     /// handlers (custom 404 / catch-all rewrites / debug-only routes)
@@ -2083,7 +2149,7 @@ module ServerApp =
 
     /// Phase 66 Stream A.7 / C.6 — wrap the registered
     /// `IShareTokenStore` with a decorator that returns a new store.
-    /// Composable: every call appends to the chain; decorators apply
+    /// **Adds**: every call appends to the chain; decorators apply
     /// outside-in so the LAST `withShareTokenStoreDecorator` call
     /// wraps the others. The canonical first consumer is the
     /// `RevokeOnIssuerRemoved` companion (Phase 66 Stream C.5);
@@ -2116,7 +2182,8 @@ module ServerApp =
     ///
     /// When `ServerConfig.JobScheduler = NoJobScheduler`, declarations
     /// log a single `Warn` and skip — declaring jobs in an unscheduled
-    /// deployment is a config mismatch, not a crash.
+    /// deployment is a config mismatch, not a crash. **Adds** to the app's
+    /// job list.
     let withJobHandler (handlerName: string, handler: IJobHandler, trigger: Trigger) (app: ServerApp) : ServerApp =
         let declaration = ScheduledJobDeclaration.create handlerName handler trigger
 
@@ -2130,7 +2197,7 @@ module ServerApp =
     /// `Payload`, `RetryPolicy`, `ShardKey`, `Precision`, `Idempotency`,
     /// `Tags`). Construct via `ScheduledJobDeclaration.create` + the
     /// fluent `with*` helpers; see `withJobHandler` for the common
-    /// tupled shorthand.
+    /// tupled shorthand. **Adds** to the app's job list.
     let withScheduledJob (declaration: ScheduledJobDeclaration) (app: ServerApp) : ServerApp = {
         app with
             ScheduledJobs = app.ScheduledJobs @ [ declaration ]
@@ -2174,7 +2241,8 @@ module ServerApp =
     /// `DeliveryCallbackFailed` under `name`; the response, the job result
     /// and every other callback are unaffected. A module registers through
     /// `ServerModule.withDeliveryCompleted`; not calling either registers
-    /// nothing and mounts nothing (GP 13).
+    /// nothing and mounts nothing (GP 13). **Adds** one hook; the
+    /// delivery middleware is mounted once however many register.
     let withDeliveryCompleted
         (name: string, callback: DeliveryCompleted.DeliveryCompletedCallback)
         (app: ServerApp)

@@ -581,6 +581,9 @@ let private registeredTests =
         // derived from its own registrations; the coverage diff against the
         // reflected ServerModule / ErasedModule fields is the drift guard.
         ModuleSurfaceTests.tests
+        // Phase 1050 — module builders say whether they set or add: the add*
+        // twins keep both sets, and each with* that replaced still replaces.
+        ModuleBuilderSemanticsTests.tests
         // Phase 526 — composition introspection covers grounding: manifest
         // reports registered metric/subject ids + fact-store kind; the
         // composable-surface descriptor enumerates the grounding surface;
