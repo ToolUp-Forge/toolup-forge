@@ -60,6 +60,7 @@ open Microsoft.Extensions.DependencyInjection
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.AI
+open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Narrative
 open ToolUp.AI.AIToolRegistry
 
@@ -224,7 +225,21 @@ let assemble
             CanonicalUrl = None
         }
 
-/// The instruction the model works from.
+/// The grounding rules every run's instruction ends with, after the wording
+/// (Phase 1111: the part of the instruction no administrator edits). A
+/// report that breaks one is refused by the gate whatever the wording says.
+let rules: string list = [
+    "The report is REFUSED, and never published, if any of these is broken:"
+    "- Write every figure as a citation token [[label|value|reference]]: the label in words with no digits, the value exactly as the tool rendered it (or that figure rounded), the reference the fact's id (or kind:id for a declared reference)."
+    "- Write no other digits anywhere, and no numbers in words."
+    "- Cite only figures a tool returned. Do not compute differences, ratios or percentages yourself."
+    "- Tables and charts are added for you. Write prose only."
+    ""
+    "Answer with ONLY a JSON object: {\"sections\":[{\"id\":\"<section id>\",\"paragraphs\":[\"...\"]}]}"
+]
+
+/// The instruction the model works from: the definition's wording (the
+/// declared one, or an administrator's in its place), then `rules`.
 let systemPrompt (definition: GroundedNarrativeDefinition) (toolNames: string list) : string =
     let sb = StringBuilder()
     let line (s: string) = sb.AppendLine s |> ignore
@@ -252,16 +267,10 @@ let systemPrompt (definition: GroundedNarrativeDefinition) (toolNames: string li
     )
 
     line ""
-    line "The report is REFUSED, and never published, if any of these is broken:"
 
-    line
-        "- Write every figure as a citation token [[label|value|reference]]: the label in words with no digits, the value exactly as the tool rendered it (or that figure rounded), the reference the fact's id (or kind:id for a declared reference)."
+    for rule in rules do
+        line rule
 
-    line "- Write no other digits anywhere, and no numbers in words."
-    line "- Cite only figures a tool returned. Do not compute differences, ratios or percentages yourself."
-    line "- Tables and charts are added for you. Write prose only."
-    line ""
-    line "Answer with ONLY a JSON object: {\"sections\":[{\"id\":\"<section id>\",\"paragraphs\":[\"...\"]}]}"
     sb.ToString()
 
 // ── The run ──────────────────────────────────────────────────────
@@ -274,8 +283,9 @@ let private tryService<'T> (sp: IServiceProvider) : 'T option =
     | _ -> None
 
 /// The audit row's payload. Names references and policies, never a value
-/// the gate withheld.
-type private GroundedNarrativeAuditRow = {
+/// the gate withheld. Internal, not private, because the wording admin
+/// (`NarrativePromptHandler`) reads a narrative's last run back from it.
+type internal GroundedNarrativeAuditRow = {
     RunKey: string
     Trigger: string
     Outcome: string
@@ -284,7 +294,227 @@ type private GroundedNarrativeAuditRow = {
     Offences: string list
     CertificateDigest: string option
     Detail: string option
+    /// Phase 1111 — the wording version the run's instruction was built
+    /// from; 0 is the declaration. A row written before 1111 reads as 0,
+    /// which is what those runs used.
+    PromptVersion: int
+    /// Phase 1111 — set when a saved wording existed and could not be used
+    /// (unreadable, or it no longer fits the declaration), so the run fell
+    /// back to the declared wording.
+    PromptFallback: string option
 }
+
+module internal GroundedNarrativeAuditRow =
+    /// A row read back from the trail; `None` for a payload that is not one.
+    let tryParse (payload: string) : GroundedNarrativeAuditRow option =
+        try
+            let row =
+                JsonSerializer.Deserialize<GroundedNarrativeAuditRow>(payload, jsonOptions)
+
+            if isNull (box row) || String.IsNullOrEmpty row.RunKey then
+                None
+            else
+                Some row
+        with _ ->
+            None
+
+// ── Phase 1111 — the administrator's wording ─────────────────────
+//
+// A scope's saved wording for one narrative is one blob in the scope's own
+// container, `narrative-prompts/<run key>`, holding every saved version
+// (oldest first, at most `NarrativePromptLimits.MaxVersions`). It is written
+// through `BlobMapStore` — the guarded read-modify-write every one-document
+// blob store uses — so two admins saving at once cannot lose a version, and
+// an unreadable blob is never read as "no wording" and overwritten.
+//
+// Keyed by the scope's CONTAINER, which only the platform's scope resolution
+// produces: a run reads the wording of the scope it runs in, and the admin
+// API writes the wording of the scope its request resolved to, so one
+// team's wording cannot reach another team's run.
+
+/// Every saved version of one narrative's wording in one scope.
+type internal NarrativePromptHistory = {
+    Versions: NarrativePromptVersion list
+}
+
+/// The wording a run's instruction was built from.
+type internal ResolvedWording = {
+    Definition: GroundedNarrativeDefinition
+    /// 0 for the declaration.
+    Version: int
+    /// Why a saved wording was not used, when one existed.
+    Fallback: string option
+}
+
+type internal NarrativePromptStore(storage: IBlobStorage, logger: ILogger) =
+    let codec: BlobCodec<NarrativePromptHistory> = {
+        Encode = fun history -> Encoding.UTF8.GetBytes(JsonSerializer.Serialize(history, jsonOptions))
+        Decode =
+            fun bytes ->
+                try
+                    let history =
+                        JsonSerializer.Deserialize<NarrativePromptHistory>(Encoding.UTF8.GetString bytes, jsonOptions)
+
+                    if isNull (box history) then
+                        Error "the wording history is empty"
+                    elif isNull (box history.Versions) then
+                        Ok { Versions = [] }
+                    else
+                        Ok {
+                            Versions =
+                                history.Versions
+                                |> List.map (fun v ->
+                                    if isNull (box v.Guidance) then
+                                        { v with Guidance = [] }
+                                    else
+                                        v)
+                        }
+                with ex ->
+                    Error ex.Message
+    }
+
+    let docs = BlobMapStore<NarrativePromptHistory>(storage, codec, logger)
+
+    static member BlobName(runKey: string) =
+        "narrative-prompts/" + Uri.EscapeDataString runKey
+
+    /// Every saved version, oldest first. `Ok []` when none was ever saved;
+    /// `Error` when a saved history exists and cannot be read.
+    member _.Versions(container: string, runKey: string) : Async<Result<NarrativePromptVersion list, string>> = async {
+        match! docs.Read(container, NarrativePromptStore.BlobName runKey) with
+        | Ok None -> return Ok []
+        | Ok(Some history) -> return Ok history.Versions
+        | Error error -> return Error(BlobMapStoreError.describe error)
+    }
+
+    /// Append the version `make` builds from the stored versions. `make` may
+    /// refuse (`Error`) or decide there is nothing to write (`Ok None`);
+    /// nothing is written then. Keeps the newest `MaxVersions`. `make` may run
+    /// more than once: a lost race replays it over the fresh read.
+    member _.Append
+        (
+            container: string,
+            runKey: string,
+            make: NarrativePromptVersion list -> Result<NarrativePromptVersion option, string>
+        ) : Async<Result<NarrativePromptVersion option, string>> =
+        async {
+            let! result =
+                docs.Update(
+                    container,
+                    NarrativePromptStore.BlobName runKey,
+                    fun stored ->
+                        let versions = stored |> Option.map _.Versions |> Option.defaultValue []
+
+                        match make versions with
+                        | Error refusal -> BlobUpdate.Keep(Error refusal)
+                        | Ok None -> BlobUpdate.Keep(Ok None)
+                        | Ok(Some version) ->
+                            let kept =
+                                versions @ [ version ]
+                                |> List.rev
+                                |> List.truncate NarrativePromptLimits.MaxVersions
+                                |> List.rev
+
+                            BlobUpdate.Write({ Versions = kept }, Ok(Some version))
+                )
+
+            return
+                match result with
+                | Ok outcome -> outcome
+                | Error error -> Error(BlobMapStoreError.describe error)
+        }
+
+module internal NarrativeWording =
+    /// The saved version in force: the latest, unless it is a reset (or
+    /// there is none), when the declaration is.
+    let current (versions: NarrativePromptVersion list) : NarrativePromptVersion option =
+        match List.tryLast versions with
+        | Some latest when not latest.IsReset -> Some latest
+        | _ -> None
+
+    /// The latest version number saved, resets included; 0 when none.
+    let latestNumber (versions: NarrativePromptVersion list) : int =
+        versions |> List.tryLast |> Option.map _.Version |> Option.defaultValue 0
+
+    /// `definition` with `version`'s wording in place.
+    let apply
+        (definition: GroundedNarrativeDefinition)
+        (version: NarrativePromptVersion)
+        : Result<GroundedNarrativeDefinition, string> =
+        GroundedNarrativeDefinition.reword
+            version.Prompt
+            (version.Guidance |> List.map (fun g -> g.SectionId, g.Guidance))
+            definition
+
+    /// The store over `storage`; `None` when no blob storage is composed
+    /// (then no wording can have been saved).
+    let storeOver (storage: IBlobStorage option) (logger: ILogger option) : NarrativePromptStore option =
+        storage
+        |> Option.map (fun storage ->
+            let logger =
+                logger
+                |> Option.defaultValue
+                    { new ILogger with
+                        member _.Debug _ = ()
+                        member _.Info _ = ()
+                        member _.Warn _ = ()
+                        member _.Error(_, _) = ()
+                    }
+
+            NarrativePromptStore(storage, logger))
+
+    /// The store over the composed services.
+    let storeOf (services: IServiceProvider) : NarrativePromptStore option =
+        storeOver (tryService<IBlobStorage> services) (tryService<ILogger> services)
+
+    /// The wording a run in `scope` uses: the scope's saved version in force,
+    /// or the declaration — and, when a saved wording existed and could not
+    /// be used, the declaration with the reason.
+    let resolve
+        (store: NarrativePromptStore option)
+        (scope: StorageScope)
+        (definition: GroundedNarrativeDefinition)
+        : Async<ResolvedWording> =
+        async {
+            let declared fallback = {
+                Definition = definition
+                Version = 0
+                Fallback = fallback
+            }
+
+            match store with
+            | None -> return declared None
+            | Some store ->
+                match! store.Versions(scope.Container, definition.Key) with
+                | Error reason ->
+                    return
+                        declared (
+                            Some(
+                                sprintf "the saved wording could not be read (%s); the declared wording was used" reason
+                            )
+                        )
+                | Ok versions ->
+                    match current versions with
+                    | None -> return declared None
+                    | Some version ->
+                        match apply definition version with
+                        | Ok reworded ->
+                            return {
+                                Definition = reworded
+                                Version = version.Version
+                                Fallback = None
+                            }
+                        | Error reason ->
+                            return
+                                declared (
+                                    Some(
+                                        sprintf
+                                            "saved wording version %d no longer fits the declaration (%s); the declared wording was used"
+                                            version.Version
+                                            reason
+                                    )
+                                )
+        }
 
 /// Why a run has no provider (Phase 995). `ProviderUnfunded`: the factory
 /// ANSWERED that the scope holds no usable provider, which another attempt
@@ -322,13 +552,24 @@ type GroundedNarrativeRunner
                 ()
     }
 
+    /// Phase 1111 — which wording a row's run used: the version and any
+    /// fallback reason. A run that fails before its wording is resolved
+    /// used none, and records the declaration's 0.
+    let promptOf (wording: ResolvedWording option) =
+        match wording with
+        | Some w -> w.Version, w.Fallback
+        | None -> 0, None
+
     let failedAs
         (outcome: string)
         (result: string -> GroundedNarrativeOutcome)
+        (wording: ResolvedWording option)
         (request: GroundedNarrativeRequest)
         (reason: string)
         : Async<GroundedNarrativeOutcome> =
         async {
+            let version, fallback = promptOf wording
+
             do!
                 record request.Scope.ScopeId GroundedNarrativeEvents.FailedType {
                     RunKey = request.RunKey
@@ -339,6 +580,8 @@ type GroundedNarrativeRunner
                     Offences = []
                     CertificateDigest = None
                     Detail = Some reason
+                    PromptVersion = version
+                    PromptFallback = fallback
                 }
 
             return result reason
@@ -463,13 +706,14 @@ type GroundedNarrativeRunner
 
     let publish
         (request: GroundedNarrativeRequest)
-        (definition: GroundedNarrativeDefinition)
+        (wording: ResolvedWording)
         (gate: INarrativeGroundingGate)
         (scope: StorageScope)
         (document: NarrativeDocument)
         (citations: NarrativeCitation list)
         : Async<GroundedNarrativeOutcome> =
         async {
+            let definition = wording.Definition
             let tags = definition.Tags @ [ "grounded" ] |> List.distinct
 
             match!
@@ -484,6 +728,7 @@ type GroundedNarrativeRunner
             | None ->
                 return!
                     failed
+                        (Some wording)
                         request
                         "no narrative store is composed; the grounded narrative passed the gate and was not published"
             | Some narrativeId ->
@@ -519,6 +764,8 @@ type GroundedNarrativeRunner
                             match certificate with
                             | Ok _ -> None
                             | Error reason -> Some(sprintf "no certificate: %s" reason)
+                        PromptVersion = wording.Version
+                        PromptFallback = wording.Fallback
                     }
 
                 return GroundedNarrativePublished(narrativeId, document, citations, indexed, certificate)
@@ -526,12 +773,13 @@ type GroundedNarrativeRunner
 
     member _.Run(request: GroundedNarrativeRequest) : Async<GroundedNarrativeOutcome> = async {
         match registry.TryResolve request.RunKey with
-        | None -> return! failed request (sprintf "no grounded narrative run '%s' is registered" request.RunKey)
-        | Some definition ->
+        | None -> return! failed None request (sprintf "no grounded narrative run '%s' is registered" request.RunKey)
+        | Some declared ->
             match tryService<INarrativeGroundingGate> services with
             | None ->
                 return!
                     failed
+                        None
                         request
                         "no narrative grounding gate is composed (compose the fact tier); a narrative that cannot be checked is never published"
             | Some gate ->
@@ -539,11 +787,20 @@ type GroundedNarrativeRunner
                 | None ->
                     return!
                         failed
+                            None
                             request
                             "the run was given the anonymous scope; a grounded run reads facts through the request-path fact tools, which need a scope the platform resolved"
                 | Some scope ->
+                    // Phase 1111 — the wording in force in THIS scope: an
+                    // administrator's saved version, or the declaration.
+                    // Only `Prompt` and section guidance can differ from
+                    // `declared`; the rules come after it in `systemPrompt`.
+                    let! wording = NarrativeWording.resolve (NarrativeWording.storeOf services) scope declared
+                    let definition = wording.Definition
+                    let failed = failed (Some wording)
+
                     match! resolveProvider (providerAccess request definition scope) with
-                    | Error(ProviderUnfunded reason) -> return! unfunded request reason
+                    | Error(ProviderUnfunded reason) -> return! unfunded (Some wording) request reason
                     | Error(ProviderUnavailable reason) -> return! failed request reason
                     | Ok provider ->
                         match! definition.Project request.Scope.ScopeId with
@@ -551,7 +808,7 @@ type GroundedNarrativeRunner
                         | Ok projections ->
                             match! generate definition request.Scope scope provider with
                             | Error(GenerationFailed reason) -> return! failed request reason
-                            | Error(GenerationOverBudget reason) -> return! overBudget request reason
+                            | Error(GenerationOverBudget reason) -> return! overBudget (Some wording) request reason
                             | Ok prose ->
                                 let provenance = {
                                     ModuleId = definition.ModuleId
@@ -573,7 +830,7 @@ type GroundedNarrativeRunner
                                         )
                                     with
                                     | Grounded citations ->
-                                        return! publish request definition gate scope document citations
+                                        return! publish request wording gate scope document citations
                                     | Ungrounded offences ->
                                         do!
                                             record request.Scope.ScopeId GroundedNarrativeEvents.RefusedType {
@@ -585,6 +842,8 @@ type GroundedNarrativeRunner
                                                 Offences = offences |> List.map GroundingOffence.describe
                                                 CertificateDigest = None
                                                 Detail = None
+                                                PromptVersion = wording.Version
+                                                PromptFallback = wording.Fallback
                                             }
 
                                         return GroundedNarrativeRefused offences

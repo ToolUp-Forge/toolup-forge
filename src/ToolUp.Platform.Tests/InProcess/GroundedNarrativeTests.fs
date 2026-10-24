@@ -33,7 +33,13 @@ module ToolUp.Platform.Tests.InProcess.GroundedNarrativeTests
 //      loop still stops at 50 s, a reply cut at the run's budget is a typed
 //      permanent outcome naming how to raise it, the reply-length budget
 //      reaches the provider call, and a transient failure IS retried by the
-//      in-process scheduler.
+//      in-process scheduler;
+//   G. the wording is the admin's (Phase 1111): a team's saved wording
+//      changes the instruction's wording lines and nothing else, an
+//      undeclared section is refused by name, a reset restores the
+//      declaration, the audit row names the version, a wording that drops
+//      citations still meets the gate, and one team's wording does not reach
+//      another team's run.
 
 open System
 open System.Collections.Concurrent
@@ -807,6 +813,7 @@ let private deployComposed
         |> RAGServerApp.withFacts FactsCompose.withFactTier
         |> composeRAG
         |> GroundedNarratives.compose options [ summaryRun ]
+        |> NarrativePromptHandler.withPromptAdmin
 
     let services = ServiceCollection() :> IServiceCollection
     let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
@@ -1995,6 +2002,429 @@ let budgetTests =
         }
     ]
 
+// ── G. The wording is the admin's, the grounding rules are not (Phase 1111) ──
+
+/// Marker a wording carries to have `PromptRecording`'s model obey it.
+let private plainNumbersMarker = "WRITE PLAIN NUMBERS, NO CITATIONS"
+
+/// A model that records the instruction of every call, and — like a real
+/// model — follows a wording that tells it to drop citations: it then
+/// writes the figure as a plain number.
+type private PromptRecording(inner: IAIProvider) =
+    let prompts = ConcurrentQueue<string>()
+
+    member _.Prompts = List.ofSeq prompts |> List.distinct
+
+    interface IAIProvider with
+        member _.Capabilities = inner.Capabilities
+
+        member _.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy) = async {
+            systemPrompt |> Option.iter prompts.Enqueue
+            let! result = inner.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy)
+
+            match result, systemPrompt with
+            | Ok reply, Some prompt when List.isEmpty reply.ToolCalls && prompt.Contains plainNumbersMarker ->
+                return
+                    Ok {
+                        reply with
+                            Content = answer "Acme revenue was 1250 in September."
+                    }
+            | _ -> return result
+        }
+
+        member _.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) =
+            inner.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy)
+
+/// A deployment whose model records its instructions, with a revenue fact
+/// in the deployment's team, and that team in a team store with an owner
+/// (`olive`) and a member (`mo`).
+let private deployRecording () =
+    let mutable recording = None
+
+    let factoryFor (model: ScriptedModel) =
+        let provider = PromptRecording(model)
+        recording <- Some provider
+        ScriptedFactory(provider) :> IAIProviderFactory
+
+    let deployment = deployWith factoryFor citingWriter
+    withRevenueFact deployment
+
+    let teams =
+        TeamManagement.TeamStore(
+            InMemoryBlobStorage() :> IBlobStorage,
+            NotificationChannel.InMemoryNotificationChannel(None) :> INotificationChannel,
+            silentLogger
+        )
+        :> TeamManagement.ITeamStore
+
+    async {
+        let! _ = teams.CreateTeam(deployment.TeamId, "Team")
+        let! _ = teams.AddMember(deployment.TeamId, "olive", TeamRole.Owner)
+        let! _ = teams.AddMember(deployment.TeamId, "mo", TeamRole.Member)
+        return ()
+    }
+    |> Async.RunSynchronously
+
+    deployment, recording.Value, teams
+
+/// The wording admin API as `userId`, a member of `teamId`, on a request the
+/// platform resolved to `scope`. Audit rows land in `audit`.
+let private promptApi
+    (deployment: Deployment)
+    (teams: TeamManagement.ITeamStore)
+    (audit: ConcurrentQueue<string * AuditEvent>)
+    (userId: string)
+    (teamId: string)
+    (scope: ResolvedScope)
+    : NarrativePromptApi =
+    let services = ServiceCollection()
+
+    services.AddSingleton<AccessContext>(AccessContext.unrestricted (TeamMember(userId, teamId)))
+    |> ignore
+
+    services.AddSingleton<TeamManagement.ITeamStore>(teams) |> ignore
+
+    services.AddSingleton<IAuditLog>(
+        { new IAuditLog with
+            member _.Record(stream, event) = async { audit.Enqueue((stream, event)) }
+            member _.GetAuditTrail(_, _, _) = async { return [] }
+        }
+    )
+    |> ignore
+
+    services.AddSingleton<IBlobStorage>(deployment.Services.GetRequiredService<IBlobStorage>())
+    |> ignore
+
+    services.AddSingleton<GroundedNarrativeRegistry>(
+        deployment.Services.GetRequiredService<GroundedNarrativeRegistry>()
+    )
+    |> ignore
+
+    services.AddSingleton<IEventStore>(deployment.Events) |> ignore
+    services.AddSingleton<IJobScheduler>(deployment.Scheduler) |> ignore
+    let ctx = DefaultHttpContext()
+    ctx.RequestServices <- services.BuildServiceProvider()
+    ScopeResolution.carry ctx scope
+    NarrativePromptHandler.narrativePromptApi ctx
+
+let private ownerApi (deployment: Deployment) teams audit =
+    promptApi deployment teams audit "olive" deployment.TeamId deployment.Scope
+
+let private toolNames =
+    NarrativeGrounding.factTools |> List.map (fun (d, _) -> d.Name)
+
+let private reworded: SaveNarrativePromptRequest = {
+    RunKey = summaryRun.Key
+    Prompt = "Explain the month's brand revenue to the board, plainly."
+    Guidance = [
+        {
+            SectionId = "summary"
+            Guidance = "Two sentences, the headline figure first."
+        }
+    ]
+    BasedOnVersion = 0
+}
+
+let private ok (what: string) (result: Async<Result<'T, string>>) : 'T =
+    match Async.RunSynchronously result with
+    | Ok value -> value
+    | Error reason -> failtestf "%s was refused: %s" what reason
+
+let private lastRow (deployment: Deployment) : JsonElement =
+    let row =
+        narrativeRows deployment |> List.sortByDescending _.OccurredAt |> List.head
+
+    (JsonDocument.Parse row.Payload).RootElement
+
+let wordingTests =
+    testList "Phase 1111 G — a report's wording is edited in the platform; the grounding rules are not" [
+
+        test "an override changes the instruction the model receives — its wording lines and nothing else" {
+            let deployment, recording, teams = deployRecording ()
+            let api = ownerApi deployment teams (ConcurrentQueue())
+
+            match run deployment with
+            | GroundedNarrativePublished _ -> ()
+            | other -> failtestf "the declared run must publish, got %s" (GroundedNarrativeOutcome.describe other)
+
+            let declared = systemPrompt summaryRun toolNames
+            Expect.equal recording.Prompts [ declared ] "the declared run's instruction is the declaration's"
+
+            let view = api.SavePrompt reworded |> ok "the save"
+            Expect.equal (view.Current |> Option.map _.Version) (Some 1) "the save is version 1 and in force"
+
+            let document =
+                match run deployment with
+                | GroundedNarrativePublished(_, document, _, _, _) -> document
+                | other -> failtestf "the reworded run must publish, got %s" (GroundedNarrativeOutcome.describe other)
+
+            let overridden = recording.Prompts |> List.last
+
+            let expected =
+                match
+                    GroundedNarrativeDefinition.reword
+                        reworded.Prompt
+                        [ "summary", reworded.Guidance.Head.Guidance ]
+                        summaryRun
+                with
+                | Ok definition -> systemPrompt definition toolNames
+                | Error reason -> failtestf "reword refused: %s" reason
+
+            Expect.equal overridden expected "the model received the reworded instruction"
+
+            let lines (s: string) =
+                s.Split([| "\r\n"; "\n" |], StringSplitOptions.None) |> List.ofArray
+
+            let before, after = lines declared, lines overridden
+            Expect.equal after.Length before.Length "no line was added or removed"
+
+            let changed =
+                List.zip before after |> List.filter (fun (b, a) -> b <> a) |> List.map snd
+
+            Expect.equal
+                changed
+                [
+                    sprintf "Purpose: %s" reworded.Prompt
+                    sprintf "- summary (Summary): %s" reworded.Guidance.Head.Guidance
+                ]
+                "exactly the purpose line and the section's guidance line changed"
+
+            Expect.isTrue
+                (overridden.TrimEnd().EndsWith((String.concat Environment.NewLine rules).TrimEnd()))
+                "the grounding rules close the instruction unchanged"
+
+            Expect.equal document.Title summaryRun.Title "the title is the declaration's"
+
+            Expect.equal
+                (document.Sections |> List.map (fun s -> s.Id, s.Heading))
+                [ "summary", "Summary" ]
+                "the section structure is the declaration's"
+        }
+
+        test "an override naming a section the narrative does not declare is refused by name, and nothing is saved" {
+            let deployment, _, teams = deployRecording ()
+            let audit = ConcurrentQueue()
+            let api = ownerApi deployment teams audit
+
+            let refused =
+                api.SavePrompt {
+                    reworded with
+                        Guidance = [
+                            {
+                                SectionId = "outlook"
+                                Guidance = "Forecast next month."
+                            }
+                        ]
+                }
+                |> Async.RunSynchronously
+
+            match refused with
+            | Error reason -> Expect.stringContains reason "'outlook'" "the refusal names the undeclared section"
+            | Ok _ -> failtest "an undeclared section must be refused"
+
+            Expect.isEmpty (api.ListVersions summaryRun.Key |> ok "the version list") "nothing was saved"
+            Expect.isEmpty audit "and nothing was audited"
+        }
+
+        test
+            "a reset restores the declaration — the instruction, the view and the history all say so; both acts are audited" {
+            let deployment, recording, teams = deployRecording ()
+            let audit = ConcurrentQueue()
+            let api = ownerApi deployment teams audit
+
+            api.SavePrompt reworded |> ok "the save" |> ignore
+            let view = api.ResetPrompt summaryRun.Key |> ok "the reset"
+            Expect.isNone view.Current "the declaration is in force"
+            Expect.equal view.LatestVersion 2 "the reset is version 2"
+
+            match run deployment with
+            | GroundedNarrativePublished _ -> ()
+            | other -> failtestf "expected publication, got %s" (GroundedNarrativeOutcome.describe other)
+
+            Expect.equal
+                (recording.Prompts |> List.last)
+                (systemPrompt summaryRun toolNames)
+                "after the reset the model receives the declared instruction"
+
+            Expect.equal
+                ((lastRow deployment).GetProperty("PromptVersion").GetInt32())
+                0
+                "and the run records the declaration"
+
+            let history = api.ListVersions summaryRun.Key |> ok "the version list"
+
+            Expect.equal
+                (history |> List.map (fun v -> v.Version, v.IsReset, v.Author))
+                [ 2, true, "olive"; 1, false, "olive" ]
+                "both versions are kept, newest first, with their author"
+
+            Expect.equal
+                (audit
+                 |> List.ofSeq
+                 |> List.map (fun (stream, event) ->
+                     match event with
+                     | RemotingMethodAudited p -> stream, p.Kind, p.Payload["version"]
+                     | other -> failtestf "unexpected audit event %A" other))
+                [
+                    deployment.TeamId, NarrativePromptHandler.NarrativePromptAudit.SavedKind, "1"
+                    deployment.TeamId, NarrativePromptHandler.NarrativePromptAudit.ResetKind, "2"
+                ]
+                "the save and the reset are audited under the team"
+
+            let again = api.ResetPrompt summaryRun.Key |> ok "a second reset"
+            Expect.equal again.LatestVersion 2 "resetting the declaration again records nothing"
+        }
+
+        test "the published narrative's audit row names the prompt version that produced it" {
+            let deployment, _, teams = deployRecording ()
+            let api = ownerApi deployment teams (ConcurrentQueue())
+            api.SavePrompt reworded |> ok "the save" |> ignore
+
+            match run deployment with
+            | GroundedNarrativePublished _ -> ()
+            | other -> failtestf "expected publication, got %s" (GroundedNarrativeOutcome.describe other)
+
+            let row = lastRow deployment
+            Expect.equal (row.GetProperty("Outcome").GetString()) "published" "a publication row"
+            Expect.equal (row.GetProperty("PromptVersion").GetInt32()) 1 "naming version 1"
+
+            let view = api.GetNarrative summaryRun.Key |> ok "the narrative"
+
+            Expect.equal
+                (view.LastRun |> Option.map (fun r -> r.Outcome, r.PromptVersion))
+                (Some("published", 1))
+                "the narrative's page shows the run and its version"
+        }
+
+        test "a wording that tells the model to drop citations still meets the gate, which refuses the report" {
+            let deployment, recording, teams = deployRecording ()
+            let api = ownerApi deployment teams (ConcurrentQueue())
+
+            api.SavePrompt {
+                reworded with
+                    Prompt = sprintf "Summarise revenue. %s." plainNumbersMarker
+                    BasedOnVersion = 0
+            }
+            |> ok "the save"
+            |> ignore
+
+            match run deployment with
+            | GroundedNarrativeRefused offences ->
+                Expect.contains (offences |> List.map _.Reason) UnreferencedNumber "refused for the uncited figure"
+            | other -> failtestf "the gate must refuse, got %s" (GroundedNarrativeOutcome.describe other)
+
+            Expect.stringContains (recording.Prompts |> List.last) plainNumbersMarker "the model was given that wording"
+            Expect.isEmpty (published deployment) "and nothing was published"
+
+            let row = lastRow deployment
+            Expect.equal (row.GetProperty("Outcome").GetString()) "refused" "the refusal is on the trail"
+            Expect.equal (row.GetProperty("PromptVersion").GetInt32()) 1 "naming the wording that produced it"
+        }
+
+        test "one team's override does not reach another team's run" {
+            let deployment, recording, teams = deployRecording ()
+            let api = ownerApi deployment teams (ConcurrentQueue())
+            api.SavePrompt reworded |> ok "the save" |> ignore
+
+            let otherTeam = "team-" + Guid.NewGuid().ToString "N"
+            let otherScope = ScopeResolution.ofStorageScope (storageFor otherTeam)
+
+            assertOk deployment.Store otherTeam (assertedDraft "revenue" 1250m Surfaceable)
+            |> ignore
+
+            match runIn deployment otherScope with
+            | GroundedNarrativePublished _ -> ()
+            | other -> failtestf "expected publication, got %s" (GroundedNarrativeOutcome.describe other)
+
+            Expect.equal
+                (recording.Prompts |> List.last)
+                (systemPrompt summaryRun toolNames)
+                "the other team's run receives the declaration"
+
+            let otherRow =
+                deployment.Events.ReadBySource(otherTeam, GroundedNarrativeEvents.SourceModule)
+                |> Async.RunSynchronously
+                |> List.head
+
+            Expect.equal
+                ((JsonDocument.Parse otherRow.Payload).RootElement.GetProperty("PromptVersion").GetInt32())
+                0
+                "and records the declaration"
+        }
+
+        test "only an owner or admin of the team, on its own resolved scope, edits the wording" {
+            let deployment, _, teams = deployRecording ()
+            let audit = ConcurrentQueue()
+
+            let asMember =
+                promptApi deployment teams audit "mo" deployment.TeamId deployment.Scope
+
+            match asMember.SavePrompt reworded |> Async.RunSynchronously with
+            | Error reason -> Expect.stringContains reason "owners and admins" "a member is refused"
+            | Ok _ -> failtest "a member must not save"
+
+            let elsewhere =
+                promptApi
+                    deployment
+                    teams
+                    audit
+                    "olive"
+                    deployment.TeamId
+                    (ScopeResolution.ofStorageScope (storageFor "team-elsewhere"))
+
+            match elsewhere.SavePrompt reworded |> Async.RunSynchronously with
+            | Error _ -> ()
+            | Ok _ -> failtest "a request resolved to another scope must not save into it"
+
+            Expect.isEmpty audit "nothing was audited"
+
+            Expect.isEmpty
+                ((ownerApi deployment teams audit).ListVersions summaryRun.Key
+                 |> ok "the version list")
+                "nothing was saved"
+        }
+
+        test "a save over a version saved since is refused, naming it" {
+            let deployment, _, teams = deployRecording ()
+            let api = ownerApi deployment teams (ConcurrentQueue())
+            api.SavePrompt reworded |> ok "the first save" |> ignore
+
+            match api.SavePrompt reworded |> Async.RunSynchronously with
+            | Error reason ->
+                Expect.stringContains reason "Version 1 was saved by olive" "the stale save names version 1"
+            | Ok _ -> failtest "a save based on version 0 after version 1 must be refused"
+        }
+
+        test "regenerate runs the narrative through the scheduler's manual trigger, with the wording in force" {
+            let deployment, recording, teams = deployRecording ()
+            let api = ownerApi deployment teams (ConcurrentQueue())
+            api.SavePrompt reworded |> ok "the save" |> ignore
+
+            Expect.contains
+                deployment.Scheduler.RegisteredHandlers
+                NarrativePromptHandler.NarrativeRegenerateJob.HandlerName
+                "the regenerate handler is registered at boot"
+
+            api.Regenerate summaryRun.Key |> ok "the regeneration" |> ignore
+
+            Expect.equal deployment.Scheduler.Results [ Success ] "the job ran and the narrative published"
+            Expect.equal (published deployment).Length 1 "one narrative published"
+
+            let registration, scope = deployment.Scheduler.Scheduled |> List.last
+            Expect.equal scope.ScopeId deployment.TeamId "under the team's resolved scope"
+            Expect.equal registration.Trigger Trigger.Manual "as a manual job"
+
+            Expect.stringContains (recording.Prompts |> List.last) reworded.Prompt "with the saved wording"
+
+            let view = api.GetNarrative summaryRun.Key |> ok "the narrative"
+
+            Expect.equal
+                (view.LastRun |> Option.map (fun r -> r.Outcome, r.Trigger, r.PromptVersion))
+                (Some("published", NarrativePromptHandler.NarrativeRegenerateJob.TriggerName, 1))
+                "the page shows the regenerated run and its version"
+        }
+    ]
+
 let tests =
     testList "Phase 985 — grounded narrative generation" [
         pureGateTests
@@ -2003,4 +2433,5 @@ let tests =
         triggerTests
         scopedProviderTests
         budgetTests
+        wordingTests
     ]
