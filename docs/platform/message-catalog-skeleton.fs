@@ -13,7 +13,7 @@
 // message is a FUNCTION field; it is left pointing at the English message until you
 // replace it with a lambda of the shape its comment names.
 //
-// Leaves: 1471 (214 parameterised).
+// Leaves: 1503 (217 parameterised).
 
 module ToolUp.Platform.Localization.Skeleton
 
@@ -3364,5 +3364,75 @@ let catalog (c: MessageCatalog) : MessageCatalog = {
                 NoRules = "No alert rules are declared."
                 // en: "As this process's alert engine last evaluated each rule. A process that does not run the engine reports every rule as not evaluated."
                 AlertsFootnote = "As this process's alert engine last evaluated each rule. A process that does not run the engine reports every rule as not evaluated."
+        }
+        JobsAdmin = {
+            c.JobsAdmin with
+                // en: "Background jobs"
+                Heading = "Background jobs"
+                // en: "Every scheduled job in this scope with its last run. Jobs that failed and will not be retried are listed first, with the reason the scheduler recorded."
+                Subheading = "Every scheduled job in this scope with its last run. Jobs that failed and will not be retried are listed first, with the reason the scheduler recorded."
+                // en: "Refresh"
+                Refresh = "Refresh"
+                // en: "Refreshing…"
+                Refreshing = "Refreshing…"
+                // en: "Loading jobs…"
+                Loading = "Loading jobs…"
+                // en: "Dismiss"
+                Dismiss = "Dismiss"
+                // en: "No background jobs are scheduled in this scope."
+                NoJobs = "No background jobs are scheduled in this scope."
+                // en: "Job"
+                ColumnJob = "Job"
+                // en: "Last run"
+                ColumnLastRun = "Last run"
+                // en: "Status"
+                ColumnStatus = "Status"
+                // en: "Actions"
+                ColumnActions = "Actions"
+                // en: "Never"
+                NeverRun = "Never"
+                // en: "Reason:"
+                ReasonLabel = "Reason:"
+                // en: "Failed — will not retry"
+                StandingPermanentlyFailed = "Failed — will not retry"
+                // en: "Failed — will retry"
+                StandingFailingWillRetry = "Failed — will retry"
+                // en: "Running"
+                StandingInProgress = "Running"
+                // en: "Succeeded"
+                StandingSucceeded = "Succeeded"
+                // en: "Attempt cancelled"
+                StandingAttemptCancelled = "Attempt cancelled"
+                // en: "Not yet run"
+                StandingNotYetRun = "Not yet run"
+                // en: "Disabled"
+                JobDisabled = "Disabled"
+                // en: "Cancelled"
+                JobCancelled = "Cancelled"
+                // en: "Re-run"
+                RerunButton = "Re-run"
+                // en (string -> string): "Run {a} again now? Clear the cause of the failure first, or the new attempt will fail the same way."
+                // translate as `fun (a: string) -> $"…"`; left as the English message until you do
+                RerunConfirmPrompt = c.JobsAdmin.RerunConfirmPrompt
+                // en: "Re-run now"
+                RerunConfirm = "Re-run now"
+                // en: "Cancel"
+                RerunCancel = "Cancel"
+                // en: "Starting…"
+                RerunStarting = "Starting…"
+                // en: "Re-run started — waiting for the attempt to finish…"
+                RerunAwaiting = "Re-run started — waiting for the attempt to finish…"
+                // en (string -> string): "Re-run finished: {a}"
+                // translate as `fun (a: string) -> $"…"`; left as the English message until you do
+                RerunLanded = c.JobsAdmin.RerunLanded
+                // en: "The re-run has not finished yet. Refresh to see its result."
+                RerunStillRunning = "The re-run has not finished yet. Refresh to see its result."
+                // en (string -> string): "Re-run refused: {a}"
+                // translate as `fun (a: string) -> $"…"`; left as the English message until you do
+                RerunRefused = c.JobsAdmin.RerunRefused
+                // en: "This job is disabled, and a disabled job refuses a manual run. Enable it before re-running."
+                RerunUnavailableDisabled = "This job is disabled, and a disabled job refuses a manual run. Enable it before re-running."
+                // en: "This job is cancelled and cannot be re-run."
+                RerunUnavailableCancelled = "This job is cancelled and cannot be re-run."
         }
 }
