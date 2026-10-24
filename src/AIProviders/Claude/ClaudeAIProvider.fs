@@ -94,6 +94,13 @@ let canServeModel (modelId: string) : bool = ModelIdFamily.isAnthropic modelId
 let resolveCallModel (configured: string) (options: AIProviderCallOptions) : string * ModelOverrideOutcome =
     ModelOverrideOutcome.resolve canServeModel "not an Anthropic (claude-*) model id" configured options
 
+/// Phase 1109 — the reply cap one call is sent with: `options.MaxTokens`
+/// when it names a positive budget, else the provider's constructed cap.
+let resolveCallMaxTokens (configured: int) (options: AIProviderCallOptions) : int =
+    match options.MaxTokens with
+    | Some budget when budget > 0 -> budget
+    | _ -> configured
+
 type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, model: string, maxTokens: int) =
     let client = sharedClient.Value
 
@@ -539,28 +546,30 @@ type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
     // a second registered instance would have emitted, with no second
     // instance for a composition root to wire. `options.Model = None`
     // delegates to this instance's own `SendMessage`, so the request
-    // bytes are unchanged.
+    // bytes are unchanged. Phase 1109 — the per-call reply cap
+    // (`options.MaxTokens`) is served the same way: a sibling bound to that
+    // cap, and this instance when neither the model nor the cap moves.
+    member private this.TargetFor(options: AIProviderCallOptions) : IAIProvider * ModelOverrideOutcome =
+        let served, outcome = resolveCallModel model options
+        let cap = resolveCallMaxTokens maxTokens options
+
+        let target =
+            if served = model && cap = maxTokens then
+                this :> IAIProvider
+            else
+                ClaudeAIProvider(apiKeyFetcher, served, cap) :> IAIProvider
+
+        target, outcome
+
     interface IAIProviderModelOverride with
         member this.SendMessageWith(options, messages, tools, systemPrompt, onStream, retryPolicy) =
-            let served, outcome = resolveCallModel model options
-
-            let target =
-                if served = model then
-                    this :> IAIProvider
-                else
-                    ClaudeAIProvider(apiKeyFetcher, served, maxTokens) :> IAIProvider
+            let target, outcome = this.TargetFor options
 
             target.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy)
             |> AIProviderCallResponse.attach outcome
 
         member this.SendStructuredMessageWith(options, messages, tools, systemPrompt, schema, retryPolicy) =
-            let served, outcome = resolveCallModel model options
-
-            let target =
-                if served = model then
-                    this :> IAIProvider
-                else
-                    ClaudeAIProvider(apiKeyFetcher, served, maxTokens) :> IAIProvider
+            let target, outcome = this.TargetFor options
 
             target.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy)
             |> AIProviderCallResponse.attach outcome

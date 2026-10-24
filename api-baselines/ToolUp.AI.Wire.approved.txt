@@ -79,11 +79,13 @@ ToolUp.Platform.AI.AIContentPartModule (class)
 ToolUp.Platform.AI.AIContentPartModule.exportPlaceholder(System.Int32, ToolUp.Platform.AI.AIContentPart) : System.String
 ToolUp.Platform.AI.AIContentPartModule.redactedSummary(ToolUp.Platform.AI.AIContentPart) : System.String
 ToolUp.Platform.AI.AIProviderCallOptions (class)
-ToolUp.Platform.AI.AIProviderCallOptions..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Platform.AI.AIProviderCallOptions..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
+ToolUp.Platform.AI.AIProviderCallOptions.MaxTokens : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
 ToolUp.Platform.AI.AIProviderCallOptions.Model : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Platform.AI.AIProviderCallOptionsModule (class)
 ToolUp.Platform.AI.AIProviderCallOptionsModule.forModel(System.String) : ToolUp.Platform.AI.AIProviderCallOptions
 ToolUp.Platform.AI.AIProviderCallOptionsModule.none : ToolUp.Platform.AI.AIProviderCallOptions { get }
+ToolUp.Platform.AI.AIProviderCallOptionsModule.withMaxTokens(System.Int32, ToolUp.Platform.AI.AIProviderCallOptions) : ToolUp.Platform.AI.AIProviderCallOptions
 ToolUp.Platform.AI.AIProviderCallResponse (class)
 ToolUp.Platform.AI.AIProviderCallResponse..ctor(ToolUp.Platform.AI.AIProviderResponse, ToolUp.Platform.AI.ModelOverrideOutcome)
 ToolUp.Platform.AI.AIProviderCallResponse.Model : ToolUp.Platform.AI.ModelOverrideOutcome { get }

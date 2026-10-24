@@ -5276,12 +5276,15 @@ ToolUp.Platform.GroundedNarrativeEvents.RefusedType : System.String (literal)
 ToolUp.Platform.GroundedNarrativeEvents.SourceModule : System.String (literal)
 ToolUp.Platform.GroundedNarrativeOutcome (class)
 ToolUp.Platform.GroundedNarrativeOutcome.IsGroundedNarrativeFailed : System.Boolean { get }
+ToolUp.Platform.GroundedNarrativeOutcome.IsGroundedNarrativeOverBudget : System.Boolean { get }
 ToolUp.Platform.GroundedNarrativeOutcome.IsGroundedNarrativePublished : System.Boolean { get }
 ToolUp.Platform.GroundedNarrativeOutcome.IsGroundedNarrativeRefused : System.Boolean { get }
 ToolUp.Platform.GroundedNarrativeOutcome.IsGroundedNarrativeUnfunded : System.Boolean { get }
 ToolUp.Platform.GroundedNarrativeOutcome.Tag : System.Int32 { get }
 ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeFailed (class)
 ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeFailed.reason : System.String { get }
+ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeOverBudget (class)
+ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeOverBudget.reason : System.String { get }
 ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativePublished (class)
 ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativePublished.certificate : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.NarrativeGroundingCertificate, System.String] { get }
 ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativePublished.citations : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Narrative.NarrativeCitation] { get }
@@ -5294,6 +5297,7 @@ ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeUnfunded (class)
 ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeUnfunded.reason : System.String { get }
 ToolUp.Platform.GroundedNarrativeOutcome+Tags (class)
 ToolUp.Platform.GroundedNarrativeOutcome+Tags.GroundedNarrativeFailed : System.Int32 (literal)
+ToolUp.Platform.GroundedNarrativeOutcome+Tags.GroundedNarrativeOverBudget : System.Int32 (literal)
 ToolUp.Platform.GroundedNarrativeOutcome+Tags.GroundedNarrativePublished : System.Int32 (literal)
 ToolUp.Platform.GroundedNarrativeOutcome+Tags.GroundedNarrativeRefused : System.Int32 (literal)
 ToolUp.Platform.GroundedNarrativeOutcome+Tags.GroundedNarrativeUnfunded : System.Int32 (literal)
