@@ -4005,7 +4005,7 @@ module PlatformDecoders =
         "IPresenceApi", [ typeof<PresencePeer list>.FullName; typeof<unit>.FullName; typeof<LockOutcome>.FullName; typeof<LockLease option>.FullName ], true
         "IProvenanceQueryApi", [ typeof<WireProvenanceCaps>.FullName; typeof<WireProvenanceNodeAnswer>.FullName; typeof<WireProvenanceEdgeSet>.FullName; typeof<Result<WireProvenanceChainPage, ProvenanceQueryError>>.FullName ], true
         "IProviderProfileApi", [ typeof<Result<ProviderProfileView, string>>.FullName; typeof<Result<unit, string>>.FullName; typeof<Result<(string * ProviderHealth) list, string>>.FullName ], true
-        "IPublicationReaderApi", [ typeof<Result<PublicationReaderRoster, string>>.FullName; typeof<Result<unit, string>>.FullName ], false
+        "IPublicationReaderApi", [ typeof<Result<PublicationReaderRoster, string>>.FullName; typeof<Result<unit, string>>.FullName ], true
         "IServiceAccountApi", [ typeof<Result<ServiceAccount list, string>>.FullName; typeof<Result<ServiceAccount, string>>.FullName; typeof<Result<ServiceAccountTokenView list, string>>.FullName; typeof<Result<MintedServiceAccountTokenView, string>>.FullName; typeof<Result<unit, string>>.FullName ], true
         "IServiceStatusBoardApi", [ typeof<Result<ServiceStatusSnapshot, string>>.FullName; typeof<Result<SectionSummary, string>>.FullName ], true
         "ISessionApi", [ typeof<Result<SessionRecord list, string>>.FullName; typeof<Result<unit, string>>.FullName; typeof<Result<int, string>>.FullName ], true
