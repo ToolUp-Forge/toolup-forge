@@ -253,6 +253,10 @@ let allowedRawReaders = [
     "NarrativeLayout.fs",
     "inner",
     "`SelfCanonical.wrap` is a decorator pass-through — it preserves whatever the inner impl does and enumerates nothing itself."
+
+    "PublicationReads.fs",
+    "api",
+    "Phase 1107 — `PublicationReaderRoles.fromApi` must see `Publication` pages, which are never publicly discoverable, so the gated set would declare no role. It returns only the reader-role NAMES of one scope's `Publication` audiences (no slug, title or body), and its only consumer is `IPublicationReaderApi`, gated to the publishing team's Owner or Admin — it is never served to a reader or an anonymous caller."
 ]
 
 /// Findings = call sites (not definitions, not comments) that are not

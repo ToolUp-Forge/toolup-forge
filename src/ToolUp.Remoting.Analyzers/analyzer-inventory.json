@@ -117,6 +117,7 @@
         "src/ToolUp.Platform.Server/Server/Premium/PremiumGate.fs": 2,
         "src/ToolUp.Platform.Server/Server/PresenceApiHandler.fs": 2,
         "src/ToolUp.Platform.Server/Server/ProviderProfileApiHandler.fs": 4,
+        "src/ToolUp.Platform.Server/Server/PublicationReaderApiHandler.fs": 1,
         "src/ToolUp.Platform.Server/Server/ReflectionTools.fs": 3,
         "src/ToolUp.Platform.Server/Server/Remoting/Giraffe/GiraffeAdapter.fs": 2,
         "src/ToolUp.Platform.Server/Server/Remoting/Giraffe/SharedReader.fs": 1,
