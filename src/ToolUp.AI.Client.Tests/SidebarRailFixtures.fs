@@ -70,11 +70,12 @@ type private JSDOM(html: string, options: obj) =
 let private createRoot (container: obj) : obj = jsNative
 
 /// React's own render-flush wrapper. Every mutation of a mounted tree —
-/// the initial render and the hover — runs inside it, so React has
-/// committed before the markup is read; without it the capture races the
-/// commit and intermittently reads the pre-render DOM.
+/// the initial render, the hover, and (Phase 1112) a pointer or keyboard
+/// event a pack drives itself — runs inside it, so React has committed
+/// before the markup is read; without it the capture races the commit and
+/// intermittently reads the pre-render DOM.
 [<Import("act", from = "react")>]
-let private act (body: unit -> unit) : unit = jsNative
+let act (body: unit -> unit) : unit = jsNative
 
 /// `globalThis.<name> = value`, via `defineProperty` because several of
 /// the names below (`navigator` above all) are getter-only on the Node
@@ -82,8 +83,10 @@ let private act (body: unit -> unit) : unit = jsNative
 [<Emit("Object.defineProperty(globalThis, $0, { value: $1, configurable: true, writable: true })")>]
 let private defineGlobal (name: string) (value: obj) : unit = jsNative
 
+/// `new <ctor>(kind, init)` — a DOM event built from the jsdom window's own
+/// constructor, so `instanceof` checks inside React and dnd-kit hold.
 [<Emit("new $0($1, $2)")>]
-let private newMouseEvent (ctor: obj) (kind: string) (init: obj) : obj = jsNative
+let newDomEvent (ctor: obj) (kind: string) (init: obj) : obj = jsNative
 
 /// The globals React 19 and dnd-kit read off the ambient scope. Installed
 /// from the jsdom window per render — `react-dom/client` reads them when
@@ -367,12 +370,15 @@ let railStates: RailState list = [
 
     // 8 + 9 — the no-active-team collapse: the post-sign-in / pre-team-pick
     // window, where `SidebarVisibility`'s stage-4 filter strips the rail to
-    // the landing module alone. This is the state that makes `_other` the
-    // only bucketed section, which is when `buildSections` DROPS its
-    // "Other" title — and an untitled collapsed section is exactly the
-    // shape whose narrow-rail icon used to resolve to an empty accessible
-    // name (`Option.defaultValue ""`), reachable in the shipped product
-    // and fixed by Phase 609 falling back to the lead module's name.
+    // the landing module alone. Until Phase 1112 this was the state that
+    // made `_other` the only bucketed section — untitled, collapsed, and
+    // the shape whose narrow-rail icon used to resolve to an empty
+    // accessible name (`Option.defaultValue ""`, fixed by Phase 609). The
+    // landing's id is not `_sdk.`-prefixed, so since 1112 it is an
+    // application row and sits in the untitled, always-visible `_app`
+    // section: its own button is on screen in both widths, named by its
+    // own name. The state stays in the list because it is still the one
+    // where a single ungrouped row is the whole functional rail.
     let awaitingModules = [ productLanding; awaitingTeam ]
 
     {
@@ -381,10 +387,7 @@ let railStates: RailState list = [
         Prefs = fresh
         Selected = HomeId
         Hovered = false
-        // "No team yet" is the LEAD MODULE's name standing in for the
-        // untitled section — the Phase 609 fallback, asserted rather than
-        // described.
-        MustName = [ HomeId, "Home"; OtherKey, "No team yet" ]
+        MustName = [ HomeId, "Home"; "AwaitingTeam", "No team yet" ]
     }
 
     {
@@ -394,10 +397,11 @@ let railStates: RailState list = [
         // either — so "No team yet" was genuinely ABSENT here rather than
         // unnamed, which is a reachability question for the renderer and not
         // an a11y-name one, and Phase 610 noted it rather than asserting it.
-        // `Sidebar.showsRowsInExpandedRail` now draws an untitled section's
-        // rows whatever its collapse flag says (no header ⇒ no toggle ⇒ show
-        // the rows), so the row IS here, and its name is demanded like any
-        // other reachable row.
+        // `Sidebar.showsRowsInExpandedRail` draws an untitled section's rows
+        // whatever its collapse flag says (no header ⇒ no toggle ⇒ show the
+        // rows) — and since Phase 1112 the row sits in `_app`, which is never
+        // collapsed at all — so the row IS here, and its name is demanded
+        // like any other reachable row.
         Name = "expanded rail — the no-active-team collapse"
         Modules = awaitingModules
         Prefs = fresh
@@ -414,8 +418,21 @@ let railStates: RailState list = [
 /// pure projection (e.g. `railStops`) against the rendered markup.
 let sectionsFor (state: RailState) = buildSections state.Modules state.Prefs
 
-/// Mount one rail state and return the markup the browser would have.
-let render (state: RailState) : string =
+/// A mounted rail: the jsdom window it lives in and the host element the
+/// component rendered into. Phase 1112 — exposed so a pack can drive
+/// pointer and keyboard events against the live tree rather than only
+/// read its markup once.
+type MountedRail = {
+    /// The jsdom `window` — the source of event constructors
+    /// (`window.MouseEvent`, `window.KeyboardEvent`) and of `document`.
+    Window: obj
+    /// The host `<div>` the rail is mounted into.
+    Host: obj
+}
+
+/// Mount one rail state into a fresh document. The rail is at rest
+/// (narrow) and nothing has been hovered or focused.
+let mount (state: RailState) : MountedRail =
     let dom =
         JSDOM("<!doctype html><html><body></body></html>", createObj [ "pretendToBeVisual" ==> true ])
 
@@ -432,27 +449,50 @@ let render (state: RailState) : string =
 
     let root = createRoot host
     act (fun () -> root?render element |> ignore)
+    { Window = dom.window; Host = host }
+
+/// Dispatch one DOM event of `kind` at `target`, inside React's `act`.
+/// `init` is the event-init dictionary; `bubbles` is set unless `init`
+/// says otherwise, because every event the rail listens for arrives at the
+/// `<aside>` by bubbling.
+let dispatch (rail: MountedRail) (ctorName: string) (kind: string) (init: (string * obj) list) (target: obj) : unit =
+    let event =
+        newDomEvent (rail.Window?(ctorName)) kind (createObj (("bubbles" ==> true) :: init))
+
+    act (fun () -> target?dispatchEvent event |> ignore)
+
+/// Move the pointer onto the rail. React synthesises `onMouseEnter` from
+/// the native `mouseover` / `mouseout` pair, so this is the event that
+/// drives it; a `relatedTarget` of null means "the pointer came from
+/// outside the document", which is what an enter is.
+let hover (rail: MountedRail) : unit =
+    dispatch rail "MouseEvent" "mouseover" [ "relatedTarget" ==> null ] (rail.Host?querySelector "aside")
+
+/// Move the pointer off the rail — the `mouseout` whose `relatedTarget` is
+/// outside the `<aside>`, which React reads as `onMouseLeave`.
+let unhover (rail: MountedRail) : unit =
+    dispatch
+        rail
+        "MouseEvent"
+        "mouseout"
+        [ "relatedTarget" ==> rail.Window?document?body ]
+        (rail.Host?querySelector "aside")
+
+/// The markup the browser would have for the mounted rail as it stands.
+/// The whole host, not just the <aside>: dnd-kit renders its keyboard
+/// instructions and its live region as siblings of the rail, and those
+/// are part of what assistive tech sees.
+let markup (rail: MountedRail) : string = rail.Host?innerHTML
+
+/// Mount one rail state and return the markup the browser would have,
+/// hover-expanded when the state says so.
+let render (state: RailState) : string =
+    let rail = mount state
 
     if state.Hovered then
-        // The rail expands on pointer-enter and nothing else. React
-        // synthesises `onMouseEnter` from the native `mouseover` /
-        // `mouseout` pair, so this is the event that drives it; a
-        // `relatedTarget` of null means "the pointer came from outside the
-        // document", which is what an enter is.
-        let aside = host?querySelector "aside"
+        hover rail
 
-        let event =
-            newMouseEvent
-                (dom.window?MouseEvent)
-                "mouseover"
-                (createObj [ "bubbles" ==> true; "relatedTarget" ==> null ])
-
-        act (fun () -> aside?dispatchEvent event |> ignore)
-
-    // The whole host, not just the <aside>: dnd-kit renders its keyboard
-    // instructions and its live region as siblings of the rail, and those
-    // are part of what assistive tech sees.
-    host?innerHTML
+    markup rail
 
 /// The rail width the markup actually rendered at, read from the `<aside>`
 /// class list. Asserted per state by both consuming packs, because a hover

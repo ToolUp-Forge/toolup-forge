@@ -134,8 +134,10 @@ type SidebarModule = {
 /// A section of the sidebar. `Key` is the stable identifier used
 /// for collapse lookups and reorder persistence. Reserved keys:
 /// `"_home"` (the leading placed section), `"_pinned"` (the pinned
-/// overlay — first among the grouped sections when non-empty),
-/// `"_other"` (ungrouped modules — last of the grouped sections),
+/// overlay — first among the grouped sections when non-empty), `"_app"`
+/// (the application's ungrouped modules — the untitled, always-open
+/// section that leads the grouped slot, Phase 1112), `"_other"` (the
+/// SDK built-ins that declare no group — last of the grouped sections),
 /// `"_trailing"` (the trailing placed section) and `"_hidden"` (the
 /// reveal list, rendered after every rail section). Any other value
 /// is a module-declared group name.
@@ -154,6 +156,33 @@ let PinnedKey = "_pinned"
 
 [<Literal>]
 let OtherKey = "_other"
+
+/// Phase 1112 — reserved key for the application's own ungrouped modules:
+/// the untitled section that leads the grouped slot, rendered open in both
+/// rail widths. The functional part of an application used to land in
+/// `_other` — last, collapsed, under every SDK support group — whenever it
+/// declared no group; this is where it lands now. Pinning, hiding and
+/// drag-reorder apply as in any grouped section (the reorder key is this
+/// constant), and `_other` is kept for the SDK built-ins that declare no
+/// group, which is what it was always mostly holding.
+[<Literal>]
+let AppKey = "_app"
+
+/// Phase 1112 — the id prefix every SDK built-in module registers under
+/// (`ClientModule.withId "_sdk.…"`, the convention `HomeId` below follows).
+/// It is how the fold tells the SDK's support tooling from the application's
+/// own modules, so the application leads: an explicit flag on each built-in
+/// was the alternative, and it would have been thirty registration-site
+/// edits restating a convention the ids already carry. A module a
+/// deployment supplies in place of a built-in (`SlotFill.External`) keeps
+/// its own id and therefore counts as the application's — which is what a
+/// deployment that wrote it would expect.
+[<Literal>]
+let SdkIdPrefix = "_sdk."
+
+/// Whether a module id names an SDK built-in — see `SdkIdPrefix`.
+let isSdkBuiltInId (id: string) : bool =
+    not (isNull id) && id.StartsWith SdkIdPrefix
 
 /// Reserved key for the always-visible Home section — the section
 /// `SidebarPlacement.LeadingSlot` resolves to.
@@ -278,19 +307,35 @@ let private applyOrder (order: string list) (modules: SidebarModule list) : Side
 /// Build the sidebar sections from the modules visible to this user
 /// and their personal overlay (pinned / collapsed / ordering).
 ///
-/// Section order (Phase 611 — the first and fourth are the *declared*
-/// slots; the middle three are the grouped slot's internal arrangement):
+/// Section order (Phase 611 — the first and the trailing one are the
+/// *declared* slots; everything between is the grouped slot's internal
+/// arrangement, which Phase 1112 made lead with the application):
 /// 1. `_home` — rows declaring `LeadingSlot`, always visible, never
 ///    collapsed.
 /// 2. Pinned (only when non-empty) — modules / pages in the user's
 ///    pinned order, suppressed from their home groups to avoid
 ///    duplicates.
-/// 3. Declared groups — in first-occurrence order across `modules`.
-/// 4. `_other` — grouped modules declaring no group, last of the
-///    grouped sections.
-/// 5. `_trailing` — rows declaring `TrailingSlot`, always visible, never
+/// 3. `_app` — the application's modules declaring no group: untitled,
+///    never collapsed, in both rail widths.
+/// 4. Declared groups holding at least one application module — in
+///    first-occurrence order across `modules`.
+/// 5. Declared groups holding only SDK built-ins (the support tooling:
+///    "Team Management", the admin groups) — in first-occurrence order.
+/// 6. `_other` — SDK built-ins declaring no group, last of the grouped
+///    sections.
+/// 7. `_trailing` — rows declaring `TrailingSlot`, always visible, never
 ///    collapsed.
-/// 6. `_hidden` — the reveal list, after every rail section.
+/// 8. `_hidden` — the reveal list, after every rail section.
+///
+/// **Phase 1112 — the application leads.** Every SDK built-in declares a
+/// group, so a consumer module that declared none used to land in
+/// `_other`, after every support group: the functional part of an
+/// application was at the foot of its own sidebar. An application module
+/// is one whose id is not `_sdk.`-prefixed (`isSdkBuiltInId`); its
+/// sections render before the built-ins' whether or not it declares a
+/// group. A user's own order within a section still wins (`ModuleOrder`),
+/// and an order a user saved for the ungrouped rows when they lived in
+/// `_other` is honoured in `_app` until one is saved there.
 ///
 /// A multi-page module renders as one collapsible parent entry (its
 /// pages nest under it); single-page modules render as a leaf. Pinning
@@ -441,8 +486,12 @@ let buildSectionsWith
             ]
 
     // Non-pinned modules — everything not in the pinned set. This is
-    // the set that gets partitioned into declared groups + "_other".
+    // the set that gets partitioned into `_app` + declared groups +
+    // `_other`.
     let nonPinned = groupable |> List.filter (fun m -> not (pinnedSet.Contains m.Id))
+
+    // Phase 1112 — the application's modules against the SDK's built-ins.
+    let isApplicationRow (m: SidebarModuleView) = not (isSdkBuiltInId m.Id)
 
     // Preserve first-occurrence order of group names across `modules`.
     // Set-based dedupe would lose ordering; fold keeps it.
@@ -456,27 +505,66 @@ let buildSectionsWith
             ([], Set.empty)
         |> fst
 
-    let declaredSections =
+    let declaredSection (groupName: string) =
+        let groupModules =
+            nonPinned
+            |> List.filter (fun m -> m.Group = Some groupName)
+            |> List.map (toSidebarModule pinnedSet expandedModules)
+
+        let ordered =
+            prefs.ModuleOrder
+            |> Map.tryFind groupName
+            |> Option.map (fun o -> applyOrder o groupModules)
+            |> Option.defaultValue groupModules
+
+        {
+            Key = groupName
+            Title = Some groupName
+            IsCollapsed = not (prefs.ExpandedGroups.Contains groupName)
+            IsPinnedSection = false
+            Modules = ordered
+        }
+
+    // Phase 1112 — a declared group holding at least one application
+    // module leads; a group holding only SDK built-ins is support tooling
+    // and follows. Each half keeps first-occurrence order.
+    let applicationGroups, supportGroups =
         groupOrder
-        |> List.map (fun groupName ->
-            let groupModules =
-                nonPinned
-                |> List.filter (fun m -> m.Group = Some groupName)
-                |> List.map (toSidebarModule pinnedSet expandedModules)
+        |> List.partition (fun groupName ->
+            nonPinned
+            |> List.exists (fun m -> m.Group = Some groupName && isApplicationRow m))
 
-            let ordered =
-                prefs.ModuleOrder
-                |> Map.tryFind groupName
-                |> Option.map (fun o -> applyOrder o groupModules)
-                |> Option.defaultValue groupModules
+    let declaredSections =
+        (applicationGroups @ supportGroups) |> List.map declaredSection
 
-            {
-                Key = groupName
-                Title = Some groupName
-                IsCollapsed = not (prefs.ExpandedGroups.Contains groupName)
-                IsPinnedSection = false
-                Modules = ordered
-            })
+    // Phase 1112 — the application's ungrouped modules: untitled and never
+    // collapsed, so there is no header to open and nothing to hide them
+    // behind in either rail width. A user's saved order for the rows wins;
+    // one saved under `_other` (where these rows lived before this
+    // section existed) is honoured until the user reorders here.
+    let appSection =
+        let rows =
+            nonPinned
+            |> List.filter (fun m -> m.Group = None && isApplicationRow m)
+            |> List.map (toSidebarModule pinnedSet expandedModules)
+
+        if List.isEmpty rows then
+            []
+        else
+            let order =
+                match Map.tryFind AppKey prefs.ModuleOrder with
+                | Some o -> Some o
+                | None -> Map.tryFind OtherKey prefs.ModuleOrder
+
+            [
+                {
+                    Key = AppKey
+                    Title = None
+                    IsCollapsed = false
+                    IsPinnedSection = false
+                    Modules = order |> Option.map (fun o -> applyOrder o rows) |> Option.defaultValue rows
+                }
+            ]
 
     // The reveal surface (572.B). Each hidden id is resolved back to a
     // flat leaf against the pre-hiding index — a bare module id to the
@@ -529,10 +617,12 @@ let buildSectionsWith
                 }
             ]
 
+    // The SDK built-ins that declare no group (Phase 1112 — the
+    // application's ungrouped rows now sit in `_app` above).
     let otherSection =
         let others =
             nonPinned
-            |> List.filter (fun m -> m.Group = None)
+            |> List.filter (fun m -> m.Group = None && not (isApplicationRow m))
             |> List.map (toSidebarModule pinnedSet expandedModules)
 
         if List.isEmpty others then
@@ -554,6 +644,7 @@ let buildSectionsWith
             let title =
                 if
                     List.isEmpty pinnedSection
+                    && List.isEmpty appSection
                     && List.isEmpty declaredSections
                     && List.isEmpty hiddenSection
                 then
@@ -573,6 +664,7 @@ let buildSectionsWith
 
     homeSection
     @ pinnedSection
+    @ appSection
     @ declaredSections
     @ otherSection
     @ trailingSection
@@ -700,9 +792,12 @@ type RailStop = {
 let private isPlacedSectionKey (key: string) = key = HomeKey || key = TrailingKey
 
 /// Is this section shown in FULL in the narrow (icon-only) rail, whatever
-/// its collapse state says? Mirrors the render layer's `alwaysVisible`.
+/// its collapse state says? Mirrors the render layer's `alwaysVisible`
+/// (Phase 1112 — including the application's `_app` section).
 let private alwaysVisibleInNarrowRail (section: SidebarSection) =
-    section.IsPinnedSection || isPlacedSectionKey section.Key
+    section.IsPinnedSection
+    || isPlacedSectionKey section.Key
+    || section.Key = AppKey
 
 /// Does the hover-expanded rail render this section's ROWS?
 ///
@@ -742,8 +837,9 @@ let private showsRowsInExpandedRail (section: SidebarSection) =
 ///
 /// Order, top to bottom:
 ///
-/// 1. Sections in `buildSections` order — `_home`, pinned, declared
-///    groups, `_other`, `_trailing`, `_hidden`.
+/// 1. Sections in `buildSections` order — `_home`, pinned, `_app`,
+///    declared groups (the application's, then the SDK's), `_other`,
+///    `_trailing`, `_hidden`.
 /// 2. In the **hover-expanded** rail: the section's header (when it has a
 ///    title), then its rows per `showsRowsInExpandedRail` — when the section
 ///    is open, or whenever it is untitled and so has no header to open it
@@ -1751,13 +1847,14 @@ let private renderSectionHeader
 
 /// Sidebar. Renders the sections in the order `buildSections` produced
 /// them: the leading placed section, a pinned overlay (if any pinned
-/// modules exist), each declared group as a collapsible section, "_other",
-/// then the trailing placed section. Section headers appear only when the
-/// sidebar is hover-expanded; in narrow mode (w-20) the sidebar is
-/// icons-only and mirrors per-section collapse state — a collapsed group
-/// shows a single default icon (its lead module's, click-to-expand)
-/// instead of its full icon set, while the two placed sections and the
-/// pinned overlay always stay fully visible.
+/// modules exist), the application's ungrouped rows (`_app`), each
+/// declared group as a collapsible section (the application's groups
+/// before the SDK's), "_other", then the trailing placed section. Section
+/// headers appear only when the sidebar is expanded; in narrow mode (w-20)
+/// the sidebar is icons-only and mirrors per-section collapse state — a
+/// collapsed group shows a single default icon (its lead module's,
+/// click-to-expand) instead of its full icon set, while the two placed
+/// sections, the pinned overlay and `_app` always stay fully visible.
 ///
 /// Drag-to-reorder is scoped per-section and operates on top-level
 /// modules only: each section wraps its module rows in a
@@ -1795,20 +1892,45 @@ let Sidebar
     // a harness mounting the rail alone renders exactly as before.
     let messages = (MessageCatalogProvider.useMessages ()).Sidebar
 
-    // The rail widens on hover — and, since Phase 612, on FOCUS. The two
-    // are separate flags rather than one `setIsExpanded` because they can
-    // be true at once and each has to be able to end without cancelling
-    // the other: a keyboard user mid-traversal must not have the rail
-    // close under them because the pointer happened to drift off it, and
-    // hover must still work while focus sits elsewhere.
+    // The rail widens on hover — and, since Phase 612, on KEYBOARD focus.
+    // The two are separate flags rather than one `setIsExpanded` because
+    // they can be true at once and each has to be able to end without
+    // cancelling the other: a keyboard user mid-traversal must not have
+    // the rail close under them because the pointer happened to drift off
+    // it, and hover must still work while focus sits elsewhere.
     //
     // Focus parity is not a nicety here, it is what makes 612.C possible:
     // the pin and hide affordances render only in the wide rail, so
     // without this there is no state in which a keyboard user can reach
     // them.
+    //
+    // Phase 1112 — only KEYBOARD focus holds the rail open. A mouse click
+    // on a row also focuses it, and before this the focus half kept the
+    // rail wide over the page after the pointer had left, until the user
+    // clicked into the page (`handleRailBlur` fires only then). The rail
+    // now tracks the input modality the way `:focus-visible` does, with a
+    // listener scoped to the rail rather than the selector, which jsdom and
+    // older engines do not resolve: a `mousedown` inside the rail marks the
+    // focus it is about to cause as pointer focus, which widens nothing;
+    // any keydown the rail sees marks focus as keyboard focus and widens
+    // it. `Tab` into the rail is a keydown the rail never sees (it fires on
+    // the element focus is leaving), so the default when no mousedown
+    // preceded a focus is keyboard — which is exactly 612's behaviour.
+    //
+    // Focus is deliberately NOT moved to the opened module's main region
+    // after a pointer navigation: the rail does not own that region, and a
+    // focus move a pointer user did not ask for changes what a screen
+    // reader announces next. The row keeps focus (invisibly, since
+    // `:focus-visible` does not fire for a pointer), and the rail collapses
+    // when the pointer leaves.
     let isHovered, setIsHovered = React.useState false
     let isFocusWithin, setIsFocusWithin = React.useState false
     let isExpanded = isHovered || isFocusWithin
+
+    // Set by a `mousedown` inside the rail, consumed by the focus it causes
+    // (and cleared again on `mouseup`, for a press on something that takes
+    // no focus), so the flag never outlives the gesture that set it.
+    let pointerFocusPending = React.useRef false
 
     // The remembered roving stop. `None` until the user moves; resolved
     // through `resolveActiveStop` on every render, which is what keeps the
@@ -1838,7 +1960,16 @@ let Sidebar
         [| box activeKey; box isFocusWithin |]
     )
 
-    let handleRailFocus (_: Browser.Types.FocusEvent) = setIsFocusWithin true
+    let handleRailFocus (_: Browser.Types.FocusEvent) =
+        // Phase 1112 — pointer focus widens nothing; see above.
+        if pointerFocusPending.current then
+            pointerFocusPending.current <- false
+        else
+            setIsFocusWithin true
+
+    let handleRailMouseDown (_: Browser.Types.MouseEvent) = pointerFocusPending.current <- true
+
+    let handleRailMouseUp (_: Browser.Types.MouseEvent) = pointerFocusPending.current <- false
 
     let handleRailBlur (e: Browser.Types.FocusEvent) =
         // React's `onBlur` is `focusout`, so it fires on every move BETWEEN
@@ -1857,6 +1988,14 @@ let Sidebar
             setIsFocusWithin false
 
     let handleRailKeyDown (e: Browser.Types.KeyboardEvent) =
+        // Phase 1112 — a keystroke inside the rail is keyboard use: the
+        // focus already inside it becomes keyboard focus and widens the
+        // rail, so a user who clicked a row and then reached for the arrow
+        // keys gets the wide rail the keys traverse (and the pin and hide
+        // affordances, which render only there).
+        pointerFocusPending.current <- false
+        setIsFocusWithin true
+
         // Yield to anything a descendant already claimed — specifically an
         // in-progress dnd-kit keyboard drag, whose sensor handles the arrow
         // keys itself and `preventDefault`s them. Its listener sits on the
@@ -2063,10 +2202,10 @@ let Sidebar
                     then
                         ()
                     else
-                        // The placed sections + the pinned overlay stay fully
-                        // visible; every other group collapses to its single
-                        // default icon, expanding to its module icons when the
-                        // user opens it.
+                        // The placed sections, the pinned overlay and the
+                        // application's own rows stay fully visible; every
+                        // other group collapses to its single default icon,
+                        // expanding to its module icons when the user opens it.
                         //
                         // Phase 611 — `TrailingKey` joins `HomeKey` here. Both
                         // are built with `IsCollapsed = false`, so the
@@ -2075,8 +2214,13 @@ let Sidebar
                         // guarantee is "a placed row is reachable in BOTH rail
                         // widths without expanding anything", and it should not
                         // rest on a value computed three hundred lines away.
+                        // Phase 1112 — `AppKey` joins them for the same reason:
+                        // the application's rows are what the rail is for.
                         let alwaysVisible =
-                            section.IsPinnedSection || section.Key = HomeKey || section.Key = TrailingKey
+                            section.IsPinnedSection
+                            || section.Key = HomeKey
+                            || section.Key = TrailingKey
+                            || section.Key = AppKey
 
                         if alwaysVisible || not section.IsCollapsed then
                             React.KeyedFragment(section.Key + "__body", [ renderSectionModules section ])
@@ -2096,6 +2240,9 @@ let Sidebar
         ]
         prop.onMouseEnter (fun _ -> setIsHovered true)
         prop.onMouseLeave (fun _ -> setIsHovered false)
+        // Phase 1112 — the input-modality half of the focus rule above.
+        prop.onMouseDown handleRailMouseDown
+        prop.onMouseUp handleRailMouseUp
         // Phase 612 — the rail's keyboard surface, bound HERE and nowhere
         // else. Scoping it to this subtree rather than to `document` is
         // what makes 612.D hold in the second direction with no code: the

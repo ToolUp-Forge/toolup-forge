@@ -1184,12 +1184,13 @@ let placementTests =
 
             Expect.stringContains
                 oneLine
-                "homeSection @ pinnedSection @ declaredSections @ otherSection @ trailingSection @ hiddenSection"
+                "homeSection @ pinnedSection @ appSection @ declaredSections @ otherSection @ trailingSection @ hiddenSection"
                 "the fold's final concatenation must read in rail order: the leading placed section, \
-                 pinned, declared groups, `_other`, the trailing placed section, then the Hidden \
-                 items reveal list. `_hidden` stays last so the Phase 572 invariant (\"rendered \
-                 after every rail section\") still holds, and `_trailing` sits after `_other` so a \
-                 placed row reads as rail chrome rather than as another destination."
+                 pinned, the application's ungrouped rows (`_app`, Phase 1112), declared groups, \
+                 `_other`, the trailing placed section, then the Hidden items reveal list. `_hidden` \
+                 stays last so the Phase 572 invariant (\"rendered after every rail section\") still \
+                 holds, and `_trailing` sits after `_other` so a placed row reads as rail chrome \
+                 rather than as another destination."
         }
     ]
 

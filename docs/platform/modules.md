@@ -217,6 +217,26 @@ full table — each slot's field, default, gate and built-in — is in
 [`docs/migrations/879-shell-slots.md`](../migrations/879-shell-slots.md#the-mode-to-slot-table), and
 `ShellSlots.all` is the same table as data.
 
+**Re-filing a built-in under another sidebar group** needs no replacement: create the SDK's own
+module and move it with `ErasedModule.withGroup`, then hand it to the slot as `External`. The slot's
+position, gate and tile are unchanged, and the module keeps its `_sdk.` id, so it still sorts with the
+SDK's support tooling rather than with your application's modules.
+
+```fsharp skip=fragment
+let config = {
+    ClientConfig.defaults with
+        Slots.DataIngestionAdmin =
+            SlotFill.External(DataIngestionUI.create None |> ErasedModule.withGroup "Operations")
+}
+```
+
+**Where the groups render.** Your application's modules lead the sidebar: a module of yours that
+declares no group sits in an untitled, always-open section at the top of the grouped list, and a
+group holding any module of yours renders before the SDK's own groups ("Team Management", "Data
+Management", the platform-administration groups). The SDK tells its built-ins from your modules by
+the `_sdk.` id prefix every built-in registers under, which is one more reason rule 3 below asks a
+replacement to carry its own id.
+
 **The contract a replacement honours:**
 
 1. **The server API behind the slot does not change.** Filling the team-manager slot with your module

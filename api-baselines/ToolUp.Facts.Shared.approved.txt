@@ -7,8 +7,10 @@ ToolUp.Facts.FactBrowseApi (class)
 ToolUp.Facts.FactBrowseApi.BulkExtractionNote : System.String (literal)
 ToolUp.Facts.FactBrowseApi.DefaultPageSize : System.Int32 (literal)
 ToolUp.Facts.FactBrowseApi.MaxPageSize : System.Int32 (literal)
+ToolUp.Facts.FactBrowseApi.MaxSeriesPoints : System.Int32 (literal)
 ToolUp.Facts.FactBrowseApi.clampPage(System.Int32) : System.Int32
 ToolUp.Facts.FactBrowseApi.clampPageSize(System.Int32) : System.Int32
+ToolUp.Facts.FactBrowseApi.clampSeriesPoints(System.Int32) : System.Int32
 ToolUp.Facts.FactBrowseApi.routeBuilder(System.String, System.String) : System.String
 ToolUp.Facts.FactChainEntry (class)
 ToolUp.Facts.FactChainEntry..ctor(System.String, System.String, System.DateTime, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
@@ -124,6 +126,41 @@ ToolUp.Facts.FactRunPage.PageSize : System.Int32 { get }
 ToolUp.Facts.FactRunPage.Runs : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableRunView] { get }
 ToolUp.Facts.FactRunPage.TableId : System.String { get }
 ToolUp.Facts.FactRunPage.TotalRuns : System.Int32 { get }
+ToolUp.Facts.FactSeries (class)
+ToolUp.Facts.FactSeries..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.DateTime, System.DateTime, System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactSeriesPoint], System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactWithheldCount])
+ToolUp.Facts.FactSeries.DisplayFormat : System.String { get }
+ToolUp.Facts.FactSeries.MaxPoints : System.Int32 { get }
+ToolUp.Facts.FactSeries.Metric : System.String { get }
+ToolUp.Facts.FactSeries.PeriodFrom : System.DateTime { get }
+ToolUp.Facts.FactSeries.PeriodTo : System.DateTime { get }
+ToolUp.Facts.FactSeries.Points : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactSeriesPoint] { get }
+ToolUp.Facts.FactSeries.SubjectLevel : System.String { get }
+ToolUp.Facts.FactSeries.SubjectPrefix : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.FactSeries.TableId : System.String { get }
+ToolUp.Facts.FactSeries.Withheld : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactWithheldCount] { get }
+ToolUp.Facts.FactSeries.WithheldCount : System.Int32 { get }
+ToolUp.Facts.FactSeriesPoint (class)
+ToolUp.Facts.FactSeriesPoint..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.DateTime, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.String, System.DateTime, System.String, System.Boolean)
+ToolUp.Facts.FactSeriesPoint.AsOf : System.DateTime { get }
+ToolUp.Facts.FactSeriesPoint.FactId : System.String { get }
+ToolUp.Facts.FactSeriesPoint.Freshness : System.String { get }
+ToolUp.Facts.FactSeriesPoint.PeriodFrom : System.DateTime { get }
+ToolUp.Facts.FactSeriesPoint.PeriodLabel : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactSeriesPoint.PeriodTo : System.DateTime { get }
+ToolUp.Facts.FactSeriesPoint.Rendering : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactSeriesPoint.Subject : System.String { get }
+ToolUp.Facts.FactSeriesPoint.SubjectPath : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.FactSeriesPoint.Value : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal] { get }
+ToolUp.Facts.FactSeriesPoint.Withheld : System.Boolean { get }
+ToolUp.Facts.FactSeriesQuery (class)
+ToolUp.Facts.FactSeriesQuery..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTime, System.DateTime, System.Int32)
+ToolUp.Facts.FactSeriesQuery.MaxPoints : System.Int32 { get }
+ToolUp.Facts.FactSeriesQuery.Metric : System.String { get }
+ToolUp.Facts.FactSeriesQuery.PeriodFrom : System.DateTime { get }
+ToolUp.Facts.FactSeriesQuery.PeriodTo : System.DateTime { get }
+ToolUp.Facts.FactSeriesQuery.SubjectLevel : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactSeriesQuery.SubjectPrefix : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.FactSeriesQuery.TableId : System.String { get }
 ToolUp.Facts.FactTableColumnView (class)
 ToolUp.Facts.FactTableColumnView..ctor(System.String, System.String, System.String)
 ToolUp.Facts.FactTableColumnView.Disclosure : System.String { get }
@@ -179,10 +216,11 @@ ToolUp.Facts.FactWithheldCount..ctor(System.String, System.Int32)
 ToolUp.Facts.FactWithheldCount.Count : System.Int32 { get }
 ToolUp.Facts.FactWithheldCount.PolicyRef : System.String { get }
 ToolUp.Facts.IFactBrowseApi (class)
-ToolUp.Facts.IFactBrowseApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableListing], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactTableDetail, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.Int32, System.Int32], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactRunPage, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactRunMovers, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactRowQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactRowPage, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactDetailView, System.String]]])
+ToolUp.Facts.IFactBrowseApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableListing], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactTableDetail, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.Int32, System.Int32], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactRunPage, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactRunMovers, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactRowQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactRowPage, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactDetailView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactSeriesQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSeries, System.String]]])
 ToolUp.Facts.IFactBrowseApi.GetFact : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactDetailView, System.String]]] { get }
 ToolUp.Facts.IFactBrowseApi.GetRunMovers : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactRunMovers, System.String]]] { get }
 ToolUp.Facts.IFactBrowseApi.GetTable : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactTableDetail, System.String]]] { get }
 ToolUp.Facts.IFactBrowseApi.ListRuns : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.Int32, System.Int32], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactRunPage, System.String]]] { get }
 ToolUp.Facts.IFactBrowseApi.ListTables : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableListing], System.String]]] { get }
 ToolUp.Facts.IFactBrowseApi.QueryRows : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactRowQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactRowPage, System.String]]] { get }
+ToolUp.Facts.IFactBrowseApi.QuerySeries : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactSeriesQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSeries, System.String]]] { get }

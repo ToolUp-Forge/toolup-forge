@@ -86,6 +86,7 @@ let private fakeApi: IFactBrowseApi = {
     GetRunMovers = fun _ -> noCall ()
     QueryRows = fun _ -> noCall ()
     GetFact = fun _ -> noCall ()
+    QuerySeries = fun _ -> noCall ()
 }
 
 let private step (msg: Msg) (model: Model) = updateWith fakeApi msg model |> fst

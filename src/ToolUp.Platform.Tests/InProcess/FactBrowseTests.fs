@@ -135,11 +135,19 @@ let private september: TemporalExtent = {
     Label = Some "2026-09"
 }
 
-let private row (brand: string) (sku: string) (revenue: decimal) : FactTableRow = {
+let private october: TemporalExtent = {
+    From = DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)
+    To = DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc)
+    Label = Some "2026-10"
+}
+
+let private rowIn (period: TemporalExtent) (brand: string) (sku: string) (revenue: decimal) : FactTableRow = {
     Subject = [ brand; sku ]
-    Period = september
+    Period = period
     Values = Map.ofList [ "revenue", Scalar revenue; "segment", Categorical "core" ]
 }
+
+let private row (brand: string) (sku: string) (revenue: decimal) : FactTableRow = rowIn september brand sku revenue
 
 /// A gate that consults the real one and additionally denies the ids a
 /// test names, recording every surface it was asked at.
@@ -223,6 +231,28 @@ let private tickingClock () : unit -> DateTime =
 let private world () =
     worldWith Set.empty (tickingClock ()) |> fst
 
+/// A run opened with options — Phase 1113's series cases open a run over
+/// one period slice so an earlier run's other periods stand.
+let private runWith (w: World) (options: FactTableRunOptions) (rows: FactTableRow list) : string * FactTableCommit =
+    let opened =
+        match
+            w.Writer.OpenRun(w.Scope.ScopeId, skuTable.Id, options = options)
+            |> Async.RunSynchronously
+        with
+        | Ok r -> r
+        | Error e -> failtestf "open: %s" (FactTableWriteError.describe e)
+
+    match
+        w.Writer.WriteRows(w.Scope.ScopeId, opened.RunId, rows)
+        |> Async.RunSynchronously
+    with
+    | Ok _ -> ()
+    | Error e -> failtestf "write: %s" (FactTableWriteError.describe e)
+
+    match w.Writer.Commit(w.Scope.ScopeId, opened.RunId) |> Async.RunSynchronously with
+    | Ok commit -> opened.RunId, commit
+    | Error e -> failtestf "commit: %s" (FactTableWriteError.describe e)
+
 let private run (w: World) (rows: FactTableRow list) : string * FactTableCommit =
     let opened =
         match w.Writer.OpenRun(w.Scope.ScopeId, skuTable.Id) |> Async.RunSynchronously with
@@ -252,6 +282,18 @@ let private query (metric: string) (direction: FactRowDirection) (page: int) (si
     SubjectPrefix = []
     Page = page
     PageSize = size
+}
+
+/// Phase 1113 — a series request over the whole table at its own level,
+/// under the contract's cap.
+let private series (metric: string) (from: DateTime) (``to``: DateTime) : FactSeriesQuery = {
+    TableId = skuTable.Id
+    Metric = metric
+    SubjectPrefix = []
+    SubjectLevel = None
+    PeriodFrom = from
+    PeriodTo = ``to``
+    MaxPoints = FactBrowseApi.MaxSeriesPoints
 }
 
 let private jsonOptions =
@@ -509,6 +551,10 @@ let private disclosureTests =
 
             let fact = revenueFacts w |> List.head
             ok "fact" (FactBrowseHandler.getFact w.Deps w.Scope "u" fact.FactId) |> ignore
+
+            ok "series" (FactBrowseHandler.querySeries w.Deps w.Scope "u" (series "revenue" september.From october.To))
+            |> ignore
+
             ignore runId
 
             Expect.isNonEmpty gate.Surfaces "the gate was consulted"
@@ -1303,7 +1349,261 @@ let private composedDemoTests =
         }
     ]
 
-/// Every Phase 895 server case.
+// ─── Phase 1113 — the series read ────────────────────────────────────
+
+let private seriesTests =
+    testList "Phase 1113 — a series serves numbers over a period, under the gate" [
+        test "a series over a seeded table returns each subject's number per period, ordered for charting" {
+            let w = world ()
+
+            run w [
+                rowIn september "zeta" "z1" 50m
+                rowIn october "zeta" "z1" 55m
+                rowIn september "acme" "a2" 20m
+                rowIn october "acme" "a2" 22m
+                rowIn september "acme" "a1" 10m
+                rowIn october "acme" "a1" 12m
+            ]
+            |> ignore
+
+            let s =
+                ok
+                    "series"
+                    (FactBrowseHandler.querySeries w.Deps w.Scope "u" (series "revenue" september.From october.To))
+
+            Expect.equal
+                (s.Points |> List.map (fun p -> p.SubjectPath, p.PeriodLabel, p.Value))
+                [
+                    [ "acme"; "a1" ], Some "2026-09", Some 10m
+                    [ "acme"; "a1" ], Some "2026-10", Some 12m
+                    [ "acme"; "a2" ], Some "2026-09", Some 20m
+                    [ "acme"; "a2" ], Some "2026-10", Some 22m
+                    [ "zeta"; "z1" ], Some "2026-09", Some 50m
+                    [ "zeta"; "z1" ], Some "2026-10", Some 55m
+                ]
+                "every point carries its number, ordered by subject then period whatever order the rows were written in"
+
+            Expect.equal s.SubjectLevel "sku" "the table's own level by default"
+            Expect.equal s.MaxPoints FactBrowseApi.MaxSeriesPoints "the cap in force is reported"
+            Expect.equal s.WithheldCount 0 "nothing withheld"
+            Expect.allEqual (s.Points |> List.map _.Withheld) false "and no point is marked so"
+            Expect.allEqual (s.Points |> List.map _.Freshness) "fresh" "current heads are fresh under UntilSuperseded"
+
+            Expect.equal
+                (s.Points |> List.map _.Rendering)
+                [ Some "10"; Some "12"; Some "20"; Some "22"; Some "50"; Some "55" ]
+                "each point is also rendered under the metric's display format"
+
+            for p in s.Points do
+                Expect.isSome
+                    (w.Store.Get(w.Scope, p.FactId) |> Async.RunSynchronously)
+                    "every point's fact id opens the fact it was drawn from"
+
+            // The range is a window: September alone leaves October out.
+            let septemberOnly =
+                ok
+                    "september"
+                    (FactBrowseHandler.querySeries w.Deps w.Scope "u" (series "revenue" september.From september.To))
+
+            Expect.equal
+                (septemberOnly.Points |> List.map _.PeriodLabel)
+                [ Some "2026-09"; Some "2026-09"; Some "2026-09" ]
+                "a period outside the range is not a point"
+
+            // A prefix narrows the branch.
+            let acme =
+                ok
+                    "acme"
+                    (FactBrowseHandler.querySeries w.Deps w.Scope "u" {
+                        series "revenue" september.From october.To with
+                            SubjectPrefix = [ "acme" ]
+                    })
+
+            Expect.equal
+                (acme.Points |> List.map _.Subject |> List.distinct)
+                [ "products/acme>a1"; "products/acme>a2" ]
+                "only the subjects under the prefix"
+        }
+
+        test "a period revised by a later run returns the revision, and a period it left alone keeps its value" {
+            let w = world ()
+
+            run w [ rowIn september "acme" "a1" 10m; rowIn october "acme" "a1" 12m ]
+            |> ignore
+
+            // A second run over the October slice only: it rewrites a1's
+            // October cell and leaves September standing.
+            runWith w (FactTableRunOptions.none |> FactTableRunOptions.forSlice october) [
+                rowIn october "acme" "a1" 99m
+            ]
+            |> ignore
+
+            let s =
+                ok
+                    "series"
+                    (FactBrowseHandler.querySeries w.Deps w.Scope "u" (series "revenue" september.From october.To))
+
+            Expect.equal
+                (s.Points |> List.map (fun p -> p.PeriodLabel, p.Value))
+                [ Some "2026-09", Some 10m; Some "2026-10", Some 99m ]
+                "October is the revision; September is the head the first run wrote — the head for THAT period, \
+                 not the latest run's"
+
+            // The superseded October fact is not a point; it is on the head's chain.
+            let octoberHead = s.Points |> List.find (fun p -> p.PeriodLabel = Some "2026-10")
+
+            let detail =
+                ok "fact" (FactBrowseHandler.getFact w.Deps w.Scope "u" octoberHead.FactId)
+
+            Expect.equal
+                (detail.Chain |> List.map _.Rendering)
+                [ "12" ]
+                "the superseded value is reachable through GetFact"
+
+            Expect.isFalse ((wire s).Contains(detail.Chain.Head.FactId)) "and its id is in no point"
+        }
+
+        test "a withheld point keeps its place with no value, and the series says how many" {
+            let w0 = world ()
+
+            run w0 [ rowIn september "acme" "a1" 10m; rowIn september "acme" "a2" 20.5m ]
+            |> ignore
+
+            let a2 = revenueFacts w0 |> List.find (fun f -> f.Subject.Path = [ "acme"; "a2" ])
+
+            let gated = {
+                w0.Deps with
+                    Gate = RecordingGate(FactDisclosureGate.create w0.Store w0.Events, Set.ofList [ a2.FactId ])
+            }
+
+            let s =
+                ok
+                    "series"
+                    (FactBrowseHandler.querySeries gated w0.Scope "u" (series "revenue" september.From october.To))
+
+            Expect.equal
+                (s.Points |> List.map _.SubjectPath)
+                [ [ "acme"; "a1" ]; [ "acme"; "a2" ] ]
+                "both points, in place"
+
+            let withheld = s.Points |> List.find (fun p -> p.SubjectPath = [ "acme"; "a2" ])
+            Expect.isTrue withheld.Withheld "marked withheld"
+            Expect.isNone withheld.Value "no value"
+            Expect.isNone withheld.Rendering "no rendering"
+            Expect.equal withheld.FactId a2.FactId "the fact id stays, so the gap can be explained through GetFact"
+            Expect.equal withheld.PeriodLabel (Some "2026-09") "and so does the period"
+            Expect.equal s.WithheldCount 1 "counted"
+            Expect.equal s.Withheld [ { PolicyRef = "licence-x"; Count = 1 } ] "grouped by policy"
+            Expect.isFalse ((wire s).Contains "20.5") "the withheld value is in no response"
+        }
+
+        test "the cap refuses by name; a request over the ceiling is clamped" {
+            let w = world ()
+
+            run w [ rowIn september "acme" "a1" 10m; rowIn september "acme" "a2" 20m ]
+            |> ignore
+
+            match
+                FactBrowseHandler.querySeries w.Deps w.Scope "u" {
+                    series "revenue" september.From october.To with
+                        MaxPoints = 1
+                }
+                |> Async.RunSynchronously
+            with
+            | Ok _ -> failtest "two points over a cap of one must be refused"
+            | Error message ->
+                Expect.stringContains message "2 points" "the refusal names the count"
+                Expect.stringContains message "cap of 1" "and the cap in force"
+                Expect.stringContains message "MaxSeriesPoints" "and the contract's ceiling"
+                Expect.isFalse (message.Contains "10") "and never a value"
+
+            let clamped =
+                ok
+                    "clamped"
+                    (FactBrowseHandler.querySeries w.Deps w.Scope "u" {
+                        series "revenue" september.From october.To with
+                            MaxPoints = 1_000_000
+                    })
+
+            Expect.equal
+                clamped.MaxPoints
+                FactBrowseApi.MaxSeriesPoints
+                "a request over the ceiling is clamped, not refused"
+        }
+
+        test "an unknown table, an unknown metric, a level the hierarchy lacks and an empty range refuse" {
+            let w = world ()
+            run w [ rowIn september "acme" "a1" 10m ] |> ignore
+
+            let refused (label: string) (q: FactSeriesQuery) =
+                match FactBrowseHandler.querySeries w.Deps w.Scope "u" q |> Async.RunSynchronously with
+                | Ok _ -> failtestf "%s: must be refused" label
+                | Error message -> message
+
+            let base' = series "revenue" september.From october.To
+
+            Expect.stringContains (refused "table" { base' with TableId = "nope" }) "nope" "names the table"
+            Expect.stringContains (refused "metric" { base' with Metric = "margin" }) "margin" "names the metric"
+
+            Expect.stringContains
+                (refused "level" {
+                    base' with
+                        SubjectLevel = Some "region"
+                })
+                "region"
+                "names the level"
+
+            Expect.stringContains
+                (refused "range" {
+                    base' with
+                        PeriodTo = base'.PeriodFrom
+                })
+                "half-open"
+                "names the shape the range must take"
+
+            // A level the hierarchy has, but no facts sit at, is an empty series — not a refusal.
+            let brand =
+                ok
+                    "brand"
+                    (FactBrowseHandler.querySeries w.Deps w.Scope "u" {
+                        base' with
+                            SubjectLevel = Some "brand"
+                    })
+
+            Expect.isEmpty brand.Points "no brand-level facts are published, so there is nothing to plot"
+            Expect.equal brand.SubjectLevel "brand" "the level applied is reported"
+        }
+
+        test "a scope sees only its own facts" {
+            let w = world ()
+            run w [ rowIn september "acme" "a1" 10m ] |> ignore
+
+            let other = resolved (newScope ())
+
+            let s =
+                ok
+                    "series"
+                    (FactBrowseHandler.querySeries w.Deps other "u" (series "revenue" september.From october.To))
+
+            Expect.isEmpty s.Points "another scope's facts are structurally unreachable"
+        }
+
+        test "the series travels the wire as the client decodes it" {
+            let w = world ()
+            run w [ rowIn september "acme" "a1" 10.25m ] |> ignore
+
+            let s =
+                ok
+                    "series"
+                    (FactBrowseHandler.querySeries w.Deps w.Scope "u" (series "revenue" september.From october.To))
+
+            let back = JsonSerializer.Deserialize<FactSeries>(wire s, jsonOptions)
+            Expect.equal back s "round-trips through the ToolUp.Remoting JSON converters"
+            Expect.equal (back.Points.Head.Value) (Some 10.25m) "the number arrives as a decimal"
+        }
+    ]
+
+/// Every Phase 895 server case, and Phase 1113's series cases.
 let tests =
     testList "Phase 895 — fact browse surface" [
         boundedTests
@@ -1313,4 +1613,5 @@ let tests =
         notificationTests
         compositionTests
         composedDemoTests
+        seriesTests
     ]

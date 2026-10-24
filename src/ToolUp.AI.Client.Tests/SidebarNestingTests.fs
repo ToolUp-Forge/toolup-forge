@@ -128,7 +128,8 @@ let tests =
             testCase "a multi-page module is collapsed by default" (fun () ->
                 let views = [ multiPage "Sales" "Sales" None [ "/a", "A"; "/b", "B" ] ]
                 let sections = buildSections views UserSidebarPreferences.empty
-                let m = moduleIn sections OtherKey "Sales"
+                // Phase 1112 — an ungrouped application row sits in `_app`.
+                let m = moduleIn sections AppKey "Sales"
 
                 Expect.isTrue
                     (m |> Option.map (fun x -> not x.IsExpanded) |> Option.defaultValue false)
@@ -143,7 +144,7 @@ let tests =
                 }
 
                 let sections = buildSections views prefs
-                let m = moduleIn sections OtherKey "Sales"
+                let m = moduleIn sections AppKey "Sales"
                 Expect.isTrue (m |> Option.map _.IsExpanded |> Option.defaultValue false) "expanded when in the set")
         ]
 
