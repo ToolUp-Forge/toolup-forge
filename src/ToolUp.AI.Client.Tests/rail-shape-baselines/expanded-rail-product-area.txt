@@ -5,6 +5,11 @@ tabstop = row:Analytics:sales
 section _home
   reorder _sdk.home            div    name="Reorder Home" role=button
   row     _sdk.home            button name="Home"
+section _app
+  reorder scratch              div    name="Reorder Scratch" role=button
+  row     scratch              button name="Scratch"
+  pin     scratch              button name="Pin Scratch" +title
+  hide    scratch              button name="Hide Scratch" +title
 section Analytics
   header  -                    button name="Analytics" expanded=true
   reorder sales                div    name="Reorder Sales" role=button
@@ -15,12 +20,6 @@ section Analytics
   row     reports              button name="Reports"
   pin     reports              button name="Pin Reports" +title
   hide    reports              button name="Hide Reports" +title
-section _other
-  header  -                    button name="Other" expanded=true
-  reorder scratch              div    name="Reorder Scratch" role=button
-  row     scratch              button name="Scratch"
-  pin     scratch              button name="Pin Scratch" +title
-  hide    scratch              button name="Hide Scratch" +title
 section _trailing
   reorder _area.admin          div    name="Reorder Administration" role=button
   row     _area.admin          button name="Administration"

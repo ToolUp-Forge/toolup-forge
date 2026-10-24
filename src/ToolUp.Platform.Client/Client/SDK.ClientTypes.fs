@@ -489,6 +489,29 @@ type ErasedModule = {
     InspectState: (obj -> UiStateReport) option
 }
 
+/// Phase 1112 — the one edit a deployment makes to an ALREADY-ERASED
+/// module: where the SDK's own built-in is filed. Everything else about a
+/// module is declared at its typed construction site (`ClientModule.with*`
+/// before `register`); the built-ins are constructed by the SDK, so a
+/// deployment that wants one under another sidebar group has only the
+/// erased value to work with. This re-files it without forking it:
+///
+/// ```fsharp
+/// Slots.DataIngestionAdmin =
+///     SlotFill.External(DataIngestionUI.create None |> ErasedModule.withGroup "Operations")
+/// ```
+///
+/// The slot's position, gate and tile are unchanged (`SlotFill.External`
+/// inherits all three), and the module keeps its `_sdk.` id, so it still
+/// sorts with the SDK's support tooling in the rail. Group is a display
+/// label and never an access gate (Phase 568): moving a built-in changes
+/// where it renders, not who may see it.
+module ErasedModule =
+
+    /// Assign the erased module to a sidebar group — the erased twin of
+    /// `ClientModule.withGroup`, for a module the SDK constructed.
+    let withGroup (group: string) (m: ErasedModule) : ErasedModule = { m with Group = Some group }
+
 /// Phase 66 Stream B.3 — smart constructors for the per-module
 /// `Visibility: SubjectKind -> bool` predicate. The default
 /// `visibleToAll` matches pre-B.3 behaviour (every module visible);

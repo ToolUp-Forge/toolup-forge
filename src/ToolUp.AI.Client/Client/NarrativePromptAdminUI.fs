@@ -23,7 +23,7 @@ open ToolUp.AI
 // **Off by default.** The API is mounted only by the server's
 // `NarrativePromptHandler.withPromptAdmin`, so the module is not appended by
 // any SDK default: a deployment that composes the server half adds `create`
-// to its module list and `adminTiles` to
+// to its module list and contributes `adminTile` through
 // `ClientConfig.Handlers.AdminTileContributors` (docs/migrations/1111).
 
 // ─── Pure decisions ─────────────────────────────────────────────────
@@ -703,24 +703,22 @@ let create () : ErasedModule =
     |> ToolUp.Platform.ClientModule.withVisibility ToolUp.Platform.Visibility.visibleToAuthenticated
     |> ToolUp.Platform.ClientModule.register
 
-/// The "Report wording" administration tile, through
-/// `ClientConfig.Handlers.AdminTileContributors`. It is shown only to a
-/// caller who can see the module.
-let adminTiles: IAdminTileContributor =
-    { new IAdminTileContributor with
-        member _.Tiles() = [
-            {
-                OwnerModuleId = moduleId
-                Widget = {
-                    Id = "_ai.tile.narrative-prompts"
-                    Title = "Report wording"
-                    Icon = ToolUp.AI.Icons.aiSettings
-                    Weight = 26
-                    Body =
-                        AdminTileBody.summary
-                            "_ai.admin.narrative-prompts"
-                            "The instruction and section guidance of each AI-written report, with earlier versions, a reset, and a regenerate."
-                }
-            }
-        ]
+/// The "Report wording" administration tile — a value, as
+/// `JobsAdminUI.adminTile` is: the platform's shell owns the
+/// `IAdminTileContributor` that carries tiles onto the landing page, and a
+/// deployment hands this one to it through
+/// `ClientConfig.Handlers.AdminTileContributors` (docs/migrations/1111). It
+/// is shown only to a caller who can reach the module it fronts.
+let adminTile: AdminTile = {
+    OwnerModuleId = moduleId
+    Widget = {
+        Id = "_ai.tile.narrative-prompts"
+        Title = "Report wording"
+        Icon = ToolUp.AI.Icons.aiSettings
+        Weight = 26
+        Body =
+            AdminTileBody.summary
+                "_ai.admin.narrative-prompts"
+                "The instruction and section guidance of each AI-written report, with earlier versions, a reset, and a regenerate."
     }
+}

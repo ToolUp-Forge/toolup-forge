@@ -53,6 +53,8 @@ module ToolUp.AI.Client.Tests.SidebarRailA11yTests
 // state is the property worth keeping, and two gates disagreeing about
 // which states exist is the failure mode the extraction was for.
 
+open Fable.Core.JsInterop
+open Toolup.Sidebar
 open ToolUp.Platform.Testing
 open ToolUp.AI.Client.Tests.NodeTest
 open ToolUp.AI.Client.Tests.SidebarRailFixtures
@@ -111,6 +113,10 @@ let private inState (state: string) (finding: Accessibility.A11yFinding) : Acces
 /// Every accessible name exposed by an interactive element in a tree.
 let private namesIn (node: Accessibility.A11yNode) =
     Accessibility.interactiveNames node |> List.choose snd
+
+/// The CSS selector for the rail control carrying one focus key — the same
+/// `querySelector`-by-attribute idiom the rail itself moves focus with.
+let private stopSelector (key: string) = $"[{RailStopAttr}='{key}']"
 
 let tests =
     testList "Phase 610 — a11y floor over the shell rail states" [
@@ -267,6 +273,110 @@ Every interactive control in `Sidebar.fs` sets `prop.ariaLabel` — that is     
                      + "leaving it in place exempts an element class that is now clean, and the "
                      + "next real instance of it would pass. The pin reads: "
                      + gap.Why))
+
+        // ─── Phase 1112 — only keyboard focus holds the rail open ────
+        //
+        // The rail widens on hover and (Phase 612) on focus, so a keyboard
+        // user can reach the pin and hide affordances, which render only in
+        // the wide rail. A mouse click on a row also focuses it, and before
+        // 1112 that focus kept the rail wide over the page after the pointer
+        // had left, until the user clicked into the page. These cases drive
+        // the shipped component with the real events — a `mousedown` and the
+        // `focus()` it causes, a `keydown` — and read the width off the
+        // rendered markup, so the modality rule is asserted on the tree a
+        // browser would have rather than on the handler in isolation.
+        testCase "a pointer click leaves the rail to collapse when the pointer leaves (Phase 1112)" (fun () ->
+            let state =
+                railStates
+                |> List.find (fun st -> st.Name = "narrow icon-only rail — Product area")
+
+            let rail = mount state
+            Expect.isFalse (isWideRail (markup rail)) "at rest the rail is narrow"
+
+            // The pointer arrives, so the rail widens (hover), and the user
+            // clicks the Sales row: mousedown, then the focus a click gives a
+            // button, then click.
+            hover rail
+            Expect.isTrue (isWideRail (markup rail)) "the hover widens it"
+
+            let row =
+                rail.Host?querySelector(stopSelector (RailFocus.rowKey "Analytics" "sales"))
+
+            Expect.isFalse (isNullOrUndefined row) "the Sales row is rendered"
+            dispatch rail "MouseEvent" "mousedown" [] row
+            act (fun () -> row?focus ())
+            dispatch rail "MouseEvent" "mouseup" [] row
+            dispatch rail "MouseEvent" "click" [] row
+
+            Expect.equal
+                (rail.Window?document?activeElement)
+                row
+                "the click did focus the row, as a click on a button does"
+
+            // The pointer leaves. Before 1112 the rail stayed wide here,
+            // because focus was still inside it.
+            unhover rail
+
+            Expect.isFalse
+                (isWideRail (markup rail))
+                "after a pointer click the rail collapses when the pointer leaves — the focus a click \
+                 gives a row is pointer focus and holds nothing open. If this is wide, the modality \
+                 rule in `Sidebar.fs` (`pointerFocusPending` / `handleRailFocus`) has regressed."
+
+            // And the keyboard takes over: an arrow key on the focused row is
+            // keyboard use, which widens the rail again for the traversal.
+            dispatch rail "KeyboardEvent" "keydown" [ "key" ==> "ArrowDown" ] row
+
+            Expect.isTrue
+                (isWideRail (markup rail))
+                "a keystroke on the row the user clicked makes its focus keyboard focus, and the rail \
+                 widens for the traversal (the pin and hide affordances render only there)")
+
+        testCase
+            "a keyboard entry still expands the rail, with every rail affordance reachable (Phase 1112 keeps 612)"
+            (fun () ->
+                let state =
+                    railStates
+                    |> List.find (fun st -> st.Name = "narrow icon-only rail — Product area")
+
+                let rail = mount state
+
+                // `Tab` into the rail: the focus arrives with no preceding
+                // mousedown inside the rail, which is what distinguishes it from
+                // a click. (The Tab keydown itself fires on the element focus is
+                // LEAVING, outside the rail, so the rail never sees it.)
+                let row =
+                    rail.Host?querySelector(stopSelector (RailFocus.rowKey "Analytics" "sales"))
+
+                act (fun () -> row?focus ())
+
+                Expect.isTrue
+                    (isWideRail (markup rail))
+                    "keyboard focus inside the rail widens it, exactly as Phase 612 specified — the \
+                 1112 modality rule only ever withholds the widening from a focus a mousedown caused"
+
+                let pin =
+                    rail.Host?querySelector(stopSelector (RailFocus.pinKey "Analytics" "sales"))
+
+                let hide =
+                    rail.Host?querySelector(stopSelector (RailFocus.hideKey "Analytics" "sales"))
+
+                Expect.isFalse (isNullOrUndefined pin) "the pin affordance is rendered for the keyboard user to reach"
+                Expect.isFalse (isNullOrUndefined hide) "and so is the hide affordance"
+
+                // A mousedown with no focus to consume it (a press on the rail's
+                // padding) must not poison the NEXT keyboard entry.
+                act (fun () -> row?blur ())
+                Expect.isFalse (isWideRail (markup rail)) "focus left the rail, so it collapsed"
+                let aside = rail.Host?querySelector "aside"
+                dispatch rail "MouseEvent" "mousedown" [] aside
+                dispatch rail "MouseEvent" "mouseup" [] aside
+                act (fun () -> row?focus ())
+
+                Expect.isTrue
+                    (isWideRail (markup rail))
+                    "a pointer press that focused nothing is forgotten on mouseup, so the next keyboard \
+                 entry still widens the rail")
 
         // The guard has to be able to fail, and the cheapest proof is to
         // feed it a tree that is wrong in exactly the Phase 609 way. Without

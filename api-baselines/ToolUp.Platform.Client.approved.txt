@@ -4151,6 +4151,8 @@ ToolUp.Platform.ErasedModule.QueryTargets : Microsoft.FSharp.Core.FSharpOption`1
 ToolUp.Platform.ErasedModule.Update : Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[System.Object, System.Tuple`2[System.Object, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]]] { get }
 ToolUp.Platform.ErasedModule.View : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[System.Object, Microsoft.FSharp.Core.Unit], System.Tuple`2[Fable.React.ReactElement, Fable.React.ReactElement]]]] { get }
 ToolUp.Platform.ErasedModule.Visibility : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.SubjectKind, System.Boolean] { get }
+ToolUp.Platform.ErasedModuleModule (class)
+ToolUp.Platform.ErasedModuleModule.withGroup(System.String, ToolUp.Platform.ErasedModule) : ToolUp.Platform.ErasedModule
 ToolUp.Platform.ErrorCategory (class)
 ToolUp.Platform.ErrorCategory.Auth : ToolUp.Platform.ErrorCategory { get }
 ToolUp.Platform.ErrorCategory.IsAuth : System.Boolean { get }
@@ -6912,6 +6914,7 @@ Toolup.NarrativeRenderer.render(ToolUp.Platform.Narrative.NarrativeDocument) : F
 Toolup.Sidebar (class)
 Toolup.Sidebar.AdminAreaId : System.String (literal)
 Toolup.Sidebar.AdminHomeId : System.String (literal)
+Toolup.Sidebar.AppKey : System.String (literal)
 Toolup.Sidebar.HiddenKey : System.String (literal)
 Toolup.Sidebar.HomeId : System.String (literal)
 Toolup.Sidebar.HomeKey : System.String (literal)
@@ -6919,11 +6922,13 @@ Toolup.Sidebar.OtherKey : System.String (literal)
 Toolup.Sidebar.PinnedKey : System.String (literal)
 Toolup.Sidebar.ProductAreaId : System.String (literal)
 Toolup.Sidebar.RailStopAttr : System.String (literal)
+Toolup.Sidebar.SdkIdPrefix : System.String (literal)
 Toolup.Sidebar.Sidebar(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarSection], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.Unit]]) : Fable.React.ReactElement
 Toolup.Sidebar.TrailingKey : System.String (literal)
 Toolup.Sidebar.buildSections(Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarModuleView], SidebarPreferences+UserSidebarPreferences) : Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarSection]
 Toolup.Sidebar.buildSectionsWith(ToolUp.Platform.SidebarMessages, Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarModuleView], SidebarPreferences+UserSidebarPreferences) : Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarSection]
 Toolup.Sidebar.flatten(Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarSection]) : Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarModule]
+Toolup.Sidebar.isSdkBuiltInId(System.String) : System.Boolean
 Toolup.Sidebar.moveHorizontal(Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+RailStop], System.String, System.Int32) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 Toolup.Sidebar.moveVertical(Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+RailStop], System.String, System.Int32) : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 Toolup.Sidebar.railKey(Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+RailStop], System.String, System.String, System.Boolean) : Toolup.Sidebar+RailKeyOutcome

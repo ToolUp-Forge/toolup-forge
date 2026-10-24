@@ -93,11 +93,14 @@ let private sectionOf (sections: SidebarSection list) (rowId: string) =
 let tests =
     testList "Phase 611 — declared rail placement" [
 
-        testCase "an undeclared row buckets exactly as before (GP 11)" (fun () ->
-            // The backward-compatibility floor: a composition that declares
-            // no placement must produce the pre-611 arrangement — declared
-            // groups in first-occurrence order, then `_other` for the
-            // ungrouped, and nothing else.
+        testCase "an undeclared row is grouped, and an application's ungrouped row leads (GP 11, Phase 1112)" (fun () ->
+            // The backward-compatibility floor, as Phase 1112 left it: a
+            // composition that declares no placement produces no placed
+            // section, its declared groups keep first-occurrence order and
+            // their members keep registration order — and its UNGROUPED
+            // rows, being the application's own, lead the grouped slot in
+            // the untitled `_app` section rather than trailing it in
+            // `_other`.
             let views = [
                 undeclared "Sales" (Some "Analytics")
                 undeclared "Marketing" (Some "Analytics")
@@ -109,21 +112,133 @@ let tests =
 
             Expect.equal
                 (keysOf sections)
-                [ "Analytics"; "Reports"; OtherKey ]
-                "an all-undeclared composition must produce declared groups in first-occurrence \
-                 order followed by `_other` — no placed section appears, because no row asked for one"
+                [ AppKey; "Analytics"; "Reports" ]
+                "an all-undeclared composition must produce `_app` for the ungrouped rows and then the \
+                 declared groups in first-occurrence order — no placed section appears, because no \
+                 row asked for one, and no `_other`, because no SDK built-in is present"
 
             Expect.equal (idsIn sections "Analytics") [ "Sales"; "Marketing" ] "group members keep registration order"
+            Expect.equal (idsIn sections AppKey) [ "Scratch" ] "an ungrouped application row lands in `_app`"
+
+            match sections |> List.tryFind (fun s -> s.Key = AppKey) with
+            | None -> Expect.isTrue false "`_app` is missing"
+            | Some app ->
+                Expect.isNone app.Title "`_app` is untitled — there is no header to open it with"
+                Expect.isFalse app.IsCollapsed "and never collapsed, so its rows are on screen in both rail widths"
+
+            Expect.isTrue
+                (sections |> List.filter (fun s -> s.Key <> AppKey) |> List.forall _.IsCollapsed)
+                "every declared group is still collapsed on a fresh profile — the pre-611 behaviour \
+                 that phase deliberately did NOT change for grouped rows")
+
+        testCase "the application's sections render before the SDK's support groups (Phase 1112)" (fun () ->
+            // The defect: every SDK built-in declares a group, so a
+            // consumer's module that declared none landed in `_other`, at
+            // the foot of its own sidebar under all the support tooling.
+            // The built-ins are registered FIRST here, so the result is not
+            // input order: an application group leads even when a built-in
+            // reached the fold before it, and a group holding both kinds
+            // counts as the application's.
+            let views = [
+                undeclared "_sdk.TeamManager" (Some "Team Management")
+                undeclared "_sdk.PermissionsAdmin" (Some "Team Management")
+                undeclared "_sdk.DataIngestion" (Some "Data Management")
+                undeclared "_sdk.DatadogReadback" None
+                undeclared "Trade" None
+                undeclared "Sales" (Some "Analytics")
+                undeclared "_sdk.UsageDashboard" (Some "Analytics")
+                undeclared "Finance" (Some "Reports")
+            ]
+
+            let sections = buildSections views freshProfile
+
+            Expect.equal
+                (keysOf sections)
+                [
+                    AppKey
+                    "Analytics"
+                    "Reports"
+                    "Team Management"
+                    "Data Management"
+                    OtherKey
+                ]
+                "the application's ungrouped rows, then the groups holding an application module (in \
+                 first-occurrence order), then the SDK-only groups (in theirs), then the SDK's \
+                 ungrouped built-ins in `_other`"
+
+            Expect.equal (idsIn sections AppKey) [ "Trade" ] "`_app` holds the application's ungrouped rows only"
 
             Expect.equal
                 (idsIn sections OtherKey)
-                [ "Scratch" ]
-                "an ungrouped row still lands in the `_other` catch-all"
+                [ "_sdk.DatadogReadback" ]
+                "`_other` holds the SDK's ungrouped built-ins only"
 
-            Expect.isTrue
-                (sections |> List.forall _.IsCollapsed)
-                "and every one of those sections is still collapsed on a fresh profile — the \
-                 pre-611 behaviour this phase deliberately did NOT change for grouped rows")
+            Expect.equal
+                (idsIn sections "Analytics")
+                [ "Sales"; "_sdk.UsageDashboard" ]
+                "a mixed group keeps every member and leads because one of them is the application's"
+
+            match sections |> List.tryFind (fun s -> s.Key = OtherKey) with
+            | None -> Expect.isTrue false "`_other` is missing"
+            | Some other ->
+                Expect.isTrue other.Title.IsSome "`_other` keeps its title when there are sections to contrast against")
+
+        testCase
+            "a user's own order wins inside `_app`, and an order saved under `_other` is honoured there (Phase 1112)"
+            (fun () ->
+                let views = [ undeclared "Trade" None; undeclared "Returns" None; undeclared "Stock" None ]
+
+                let reordered = {
+                    freshProfile with
+                        ModuleOrder = Map.ofList [ AppKey, [ "Stock"; "Trade" ] ]
+                }
+
+                Expect.equal
+                    (idsIn (buildSections views reordered) AppKey)
+                    [ "Stock"; "Trade"; "Returns" ]
+                    "the saved order leads and the rows it does not name keep registration order at the tail"
+
+                // Before 1112 these rows lived in `_other`, so that is where a
+                // user's saved order for them is. It applies here until an
+                // `_app` order is saved, which then wins.
+                let legacy = {
+                    freshProfile with
+                        ModuleOrder = Map.ofList [ OtherKey, [ "Returns"; "Stock" ] ]
+                }
+
+                Expect.equal
+                    (idsIn (buildSections views legacy) AppKey)
+                    [ "Returns"; "Stock"; "Trade" ]
+                    "an order saved when the rows were in `_other` still applies to them"
+
+                let both = {
+                    freshProfile with
+                        ModuleOrder = Map.ofList [ OtherKey, [ "Returns"; "Stock" ]; AppKey, [ "Stock" ] ]
+                }
+
+                Expect.equal
+                    (idsIn (buildSections views both) AppKey)
+                    [ "Stock"; "Trade"; "Returns" ]
+                    "…and an `_app` order, once saved, wins over it")
+
+        testCase
+            "Data Sources is filed with the data managers, and a deployment can re-file a built-in (Phase 1112)"
+            (fun () ->
+                let dataSources = DataIngestionUI.create None
+
+                Expect.equal
+                    dataSources.Group
+                    (Some "Data Management")
+                    "ingesting data is not team administration: the module declares the data managers' group"
+
+                Expect.isTrue
+                    (isSdkBuiltInId dataSources.Definition.Id)
+                    "and it is an SDK built-in by id, so it sorts with the support tooling"
+
+                let refiled = dataSources |> ToolUp.Platform.ErasedModule.withGroup "Operations"
+                Expect.equal refiled.Group (Some "Operations") "`ErasedModule.withGroup` re-files it"
+                Expect.equal refiled.Definition.Id dataSources.Definition.Id "without changing anything else about it"
+                Expect.equal refiled.NavRole dataSources.NavRole "the nav role is a separate axis and is untouched")
 
         testCase "declaring `GroupedSlot` is indistinguishable from declaring nothing" (fun () ->
             // The other half of the absent-means-today default: `None` and
@@ -159,7 +274,7 @@ let tests =
             // registered first and renders last.
             Expect.equal
                 (keysOf sections)
-                [ HomeKey; "Analytics"; OtherKey; TrailingKey ]
+                [ HomeKey; AppKey; "Analytics"; TrailingKey ]
                 "the leading placed section renders first and the trailing one last, whatever order \
                  the rows arrived in"
 
@@ -167,19 +282,20 @@ let tests =
             Expect.equal (idsIn sections TrailingKey) [ AdminAreaId ] "the switcher declared `TrailingSlot`"
 
             Expect.equal
-                (idsIn sections OtherKey)
+                (idsIn sections AppKey)
                 [ "Scratch" ]
-                "`_other` holds only the ungrouped GROUPED row — a placed row is lifted out before \
+                "`_app` holds only the ungrouped GROUPED row — a placed row is lifted out before \
                  any bucketing")
 
         testCase "no reserved row can resolve to `_other`" (fun () ->
             // The class this phase closes, in both areas. `_other` is
-            // populated in each case (an ungrouped consumer module is
-            // present), so a reserved row landing there would be a positive
+            // populated in each case (an ungrouped SDK built-in is present —
+            // since Phase 1112 an ungrouped APPLICATION row goes to `_app`
+            // instead), so a reserved row landing there would be a positive
             // result rather than an absent section.
             let areas = [
-                "administration area", [ adminLanding; productSwitcher; undeclared "AdminScratch" None ]
-                "product area", [ productLanding; adminSwitcher; undeclared "Scratch" None ]
+                "administration area", [ adminLanding; productSwitcher; undeclared "_sdk.AdminScratch" None ]
+                "product area", [ productLanding; adminSwitcher; undeclared "_sdk.Scratch" None ]
             ]
 
             for area, views in areas do
@@ -293,8 +409,12 @@ let tests =
             // other (the id special-case really is gone), and a consumer row
             // that DOES declare is placed like any reserved one (the model is
             // general, not a rename of the special case).
+            // Both landings carry `_sdk.` ids, so the grouped slot files
+            // them with the SDK's built-ins (`_other`, Phase 1112); the
+            // point stands — nothing about either id lifts it out of the
+            // grouped slot.
             let sections =
-                buildSections [ undeclared HomeId None; undeclared AdminAreaId None ] freshProfile
+                buildSections [ undeclared HomeId None; undeclared AdminHomeId None ] freshProfile
 
             Expect.equal
                 (keysOf sections)
@@ -367,6 +487,6 @@ let tests =
 
             Expect.equal
                 (keysOf (buildSections views prefs))
-                [ HomeKey; "Analytics"; OtherKey; TrailingKey; HiddenKey ]
+                [ HomeKey; AppKey; "Analytics"; TrailingKey; HiddenKey ]
                 "the full section order, with every reserved section populated at once")
     ]

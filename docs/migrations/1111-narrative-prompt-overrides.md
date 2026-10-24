@@ -38,8 +38,9 @@ app
 
 This mounts `NarrativePromptApi` and registers the regenerate job handler (`_narratives.regenerate`). Regenerate
 needs a `ServerConfig.JobScheduler` other than `NoJobScheduler`, and is refused with a reason without one. Client:
-add `NarrativePromptAdminUI.create ()` to the module list and `NarrativePromptAdminUI.adminTiles` to
-`ClientConfig.Handlers.AdminTileContributors`. The module is Team Management, `NavRole.TeamOwnerAdmin`.
+add `NarrativePromptAdminUI.create ()` to the module list, and contribute its tile with
+`AdminTileContributors = [ { new IAdminTileContributor with member _.Tiles() = [ NarrativePromptAdminUI.adminTile ] } ]`
+in `ClientConfig.Handlers`. The module is Team Management, `NavRole.TeamOwnerAdmin`.
 
 **Regenerate** schedules one manual job per narrative per team and fires it through `IJobScheduler.TriggerOnce`,
 so the run is published or refused exactly as a scheduled run would be. A run that fails for good is listed in the
