@@ -1341,6 +1341,17 @@ let private teamDetailsView (msgs: TeamManagerMessages) (teamId: string) (model:
             if canManage then
                 addMemberForm msgs teamId callerRole model dispatch
 
+            // Phase 1107 — the team's in-platform publication readers, for
+            // its real Owner or Admin (no platform-admin bypass, as on the
+            // server).
+            PublicationReadersAdminUI.panel
+                msgs
+                teamId
+                model.ActiveTeamId
+                (model.RoleInTeam
+                 |> Map.tryFind teamId
+                 |> Option.exists TeamRoles.canWriteTeamConfig)
+
             match model.TransferOwnershipModal with
             | Some state when state.TeamId = teamId -> transferOwnershipModalView msgs teamId state model dispatch
             | _ -> Html.none

@@ -363,6 +363,7 @@ let internal recordPublicationReaderSignIn
     (ctx: HttpContext)
     (authProv: IAuthProvider)
     (user: AuthenticatedUser)
+    (grants: PublicationReaderGrant list)
     (readerId: string)
     : unit =
     let warn =
@@ -386,7 +387,8 @@ let internal recordPublicationReaderSignIn
                     PublicationReaderSignedIn {
                         SubjectKind = AuditSubject.kindString ReaderAuditKind
                         ReaderId = readerId
-                        ReaderRoles = AuthenticatedUser.pageRoles user
+                        // Phase 1107 — plus the roles granted in the platform.
+                        ReaderRoles = AuthenticatedUser.pageRoles user @ (grants |> List.map _.Role) |> List.distinct
                         AuthProvider = authProv.GetType().Name
                         OccurredAt = DateTimeOffset.UtcNow
                     }
@@ -623,6 +625,28 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                     ctx.Items["ToolUp.Subject"] <- box subject
                     ctx.Items["ToolUp.ScopeResult"] <- box scopeResult
 
+                    // Phase 1107 — the principal's in-platform publication
+                    // reader grants, read per request so a revocation bites
+                    // at the next one. Only the `Publication` page audience
+                    // reads them, so a member's are read on page routes
+                    // only; a reader's on every route (its sign-in audit
+                    // names the roles it was admitted with). Nothing is read
+                    // where no grant store is composed.
+                    let grantHolder =
+                        match subject with
+                        | PublicationReader userId -> Some userId
+                        | AuthenticatedUser userId
+                        | TeamMember(userId, _) when isPageRoute -> Some userId
+                        | _ -> None
+
+                    let! publicationGrants =
+                        match grantHolder, ctx.RequestServices.GetService(typeof<IPublicationReaderGrantStore>) with
+                        | Some userId, (:? IPublicationReaderGrantStore as store) -> runAsync (store.GrantsFor userId)
+                        | _ -> System.Threading.Tasks.Task.FromResult []
+
+                    if not (List.isEmpty publicationGrants) then
+                        ctx.Items["ToolUp.PublicationGrants"] <- box publicationGrants
+
                     // Phase 337 — seal whatever anonymous session the
                     // request actually resolved to into the binding
                     // cookie, so this browser arrives verified (and
@@ -648,7 +672,8 @@ type ScopeResolutionMiddleware(next: RequestDelegate, config: ServerConfig) =
                     // under `_platform`: it holds no scope for the member's
                     // login audit below to run under.
                     match subject with
-                    | PublicationReader readerId -> recordPublicationReaderSignIn ctx authProv user readerId
+                    | PublicationReader readerId ->
+                        recordPublicationReaderSignIn ctx authProv user publicationGrants readerId
                     | _ -> ()
 
                     match scopeResult with

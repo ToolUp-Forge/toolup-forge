@@ -653,7 +653,17 @@ let applyValidatedClaimMapping
 /// but holds a `PublicationReaders` role is `Ok` with `Admission =
 /// PublicationReader`: admitted to publication pages only. Every other `Ok`
 /// carries the user's admission unchanged (`Member`).
-let applyAdmission (mapping: ClaimMapping) (user: AuthenticatedUser) : Result<AuthenticatedUser, string> =
+///
+/// Phase 1107 — `holdsReaderGrant` says whether the user holds at least one
+/// in-platform publication reader grant (`IPublicationReaderGrantStore`); a
+/// user the member rule refuses who holds one is admitted as a
+/// `PublicationReader` exactly as a `PublicationReaders` role admits it, the
+/// tenant rule binding it the same way. `applyAdmission` is this with no grant.
+let applyAdmissionWithGrant
+    (holdsReaderGrant: bool)
+    (mapping: ClaimMapping)
+    (user: AuthenticatedUser)
+    : Result<AuthenticatedUser, string> =
     let tenantOk =
         match mapping.AllowedTenants with
         | [] -> Result.Ok()
@@ -689,12 +699,38 @@ let applyAdmission (mapping: ClaimMapping) (user: AuthenticatedUser) : Result<Au
     |> Result.bind (fun () ->
         match rolesOk () with
         | Result.Ok() -> Result.Ok user
-        | Result.Error _ when holdsAny mapping.PublicationReaders ->
+        | Result.Error _ when holdsAny mapping.PublicationReaders || holdsReaderGrant ->
             Result.Ok {
                 user with
                     Admission = PrincipalAdmission.PublicationReader
             }
         | Result.Error reason -> Result.Error reason)
+
+/// Phase 987 / 996 — the admission gate with no in-platform reader grant
+/// (`applyAdmissionWithGrant false`).
+let applyAdmission (mapping: ClaimMapping) (user: AuthenticatedUser) : Result<AuthenticatedUser, string> =
+    applyAdmissionWithGrant false mapping user
+
+/// Phase 1107 — whether `userId` holds an in-platform publication reader
+/// grant, read from the request's composed `IPublicationReaderGrantStore`.
+/// `false` where none is composed, and on a store failure (fail closed: a
+/// grant that cannot be read admits nobody).
+let private holdsReaderGrant (ctx: HttpContext) (userId: string) : Async<bool> = async {
+    let store =
+        if isNull ctx || isNull ctx.RequestServices then
+            null
+        else
+            ctx.RequestServices.GetService(typeof<IPublicationReaderGrantStore>)
+
+    match store with
+    | :? IPublicationReaderGrantStore as grants ->
+        try
+            let! held = grants.GrantsFor userId
+            return not (List.isEmpty held)
+        with _ ->
+            return false
+    | _ -> return false
+}
 
 // ─── Validation pipeline ─────────────────────────────────────────────
 
@@ -853,7 +889,22 @@ let private validate
                                             | Some mapping ->
                                                 match applyValidatedClaimMapping mapping raw baseUser with
                                                 | Result.Ok mapped ->
-                                                    match applyAdmission mapping mapped with
+                                                    // Phase 1107 — a principal the
+                                                    // member rule refuses may still
+                                                    // hold an in-platform reader grant.
+                                                    let! admission = async {
+                                                        match applyAdmission mapping mapped with
+                                                        | Result.Error reason ->
+                                                            let! granted = holdsReaderGrant ctx mapped.UserId
+
+                                                            if granted then
+                                                                return applyAdmissionWithGrant true mapping mapped
+                                                            else
+                                                                return Result.Error reason
+                                                        | admitted -> return admitted
+                                                    }
+
+                                                    match admission with
                                                     | Result.Ok admitted ->
                                                         incr AuthMetrics.ValidateSuccess
                                                         return Ok admitted

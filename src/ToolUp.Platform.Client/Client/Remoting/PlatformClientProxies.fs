@@ -420,6 +420,14 @@ module PlatformClientProxies =
         | ProviderVerificationOutcome.Verified field -> JsonEncode.payload "Verified" ((JsonEncode.list JsonEncode.string) field)
         | ProviderVerificationOutcome.Failed field -> JsonEncode.payload "Failed" (JsonEncode.string field)
 
+    /// Generated JSON encoder for `PublicationReaderEntry` — members by name, cases by case name, as the writer emits them.
+    let encodePublicationReaderEntry: JsonEncoder<PublicationReaderEntry> =
+        fun (value: PublicationReaderEntry) ->
+            JsonEncode.record [
+                "UserId", JsonEncode.string value.UserId
+                "Role", JsonEncode.string value.Role
+            ]
+
     /// Generated JSON encoder for `ModulePermission` — members by name, cases by case name, as the writer emits them.
     let encodeModulePermission: JsonEncoder<ModulePermission> =
         function
@@ -2567,6 +2575,26 @@ module PlatformClientProxies =
         |> JsonDecode.apply (JsonDecode.field "Routing" (JsonDecode.list decodeRoutingRule))
         |> JsonDecode.apply (JsonDecode.field "Fallback" decodeFallbackChain)
 
+    /// Generated JSON decoder for `PublicationReaderEntry` — members by name, cases by case name, read off the type's own shape.
+    let decodePublicationReaderEntry: JsonDecoder<PublicationReaderEntry> =
+        JsonDecode.succeed (fun userId role -> ({
+            UserId = userId
+            Role = role
+        }: PublicationReaderEntry))
+        |> JsonDecode.apply (JsonDecode.field "UserId" JsonDecode.asString)
+        |> JsonDecode.apply (JsonDecode.field "Role" JsonDecode.asString)
+
+    /// Generated JSON decoder for `PublicationReaderRoster` — members by name, cases by case name, read off the type's own shape.
+    let decodePublicationReaderRoster: JsonDecoder<PublicationReaderRoster> =
+        JsonDecode.succeed (fun publishingScope declaredRoles readers -> ({
+            PublishingScope = publishingScope
+            DeclaredRoles = declaredRoles
+            Readers = readers
+        }: PublicationReaderRoster))
+        |> JsonDecode.apply (JsonDecode.field "PublishingScope" JsonDecode.asString)
+        |> JsonDecode.apply (JsonDecode.field "DeclaredRoles" (JsonDecode.list JsonDecode.asString))
+        |> JsonDecode.apply (JsonDecode.field "Readers" (JsonDecode.list decodePublicationReaderEntry))
+
     /// Generated JSON decoder for `ModulePermission` — members by name, cases by case name, read off the type's own shape.
     let decodeModulePermission: JsonDecoder<ModulePermission> =
         JsonDecode.union "ModulePermission" (function
@@ -3999,6 +4027,20 @@ module PlatformClientProxies =
             RecordVerification = fun a0 -> callRecordVerification (JsonEncode.arguments [ (JsonEncode.tuple2 JsonEncode.string encodeProviderVerificationOutcome) a0 ])
         }
 
+    /// Generated client proxy for `IPublicationReaderApi` — 3 method(s), each a closure over its
+    /// generated encoders, the transport and its generated response decoder.
+    let iPublicationReaderApiProxy (options: RemoteBuilderOptions) : IPublicationReaderApi =
+        let api = Proxy.generatedApi "ToolUp.Platform.IPublicationReaderApi" "IPublicationReaderApi" options
+        let callListReaders = Proxy.generatedMethod<Result<PublicationReaderRoster, string>> api "ListReaders" false (JsonDecode.result decodePublicationReaderRoster JsonDecode.asString)
+        let callGrantReader = Proxy.generatedMethod<Result<unit, string>> api "GrantReader" true (JsonDecode.result JsonDecode.asUnit JsonDecode.asString)
+        let callRevokeReader = Proxy.generatedMethod<Result<unit, string>> api "RevokeReader" true (JsonDecode.result JsonDecode.asUnit JsonDecode.asString)
+
+        {
+            ListReaders = fun () -> callListReaders "{}"
+            GrantReader = fun a0 -> callGrantReader (JsonEncode.arguments [ encodePublicationReaderEntry a0 ])
+            RevokeReader = fun a0 -> callRevokeReader (JsonEncode.arguments [ encodePublicationReaderEntry a0 ])
+        }
+
     /// Generated client proxy for `IServiceAccountApi` — 7 method(s), each a closure over its
     /// generated encoders, the transport and its generated response decoder.
     let iServiceAccountApiProxy (options: RemoteBuilderOptions) : IServiceAccountApi =
@@ -4324,6 +4366,7 @@ module PlatformClientProxies =
         "ToolUp.Platform.IPresenceApi"
         "ToolUp.Platform.IProvenanceQueryApi"
         "ToolUp.Platform.IProviderProfileApi"
+        "ToolUp.Platform.IPublicationReaderApi"
         "ToolUp.Platform.IServiceAccountApi"
         "ToolUp.Platform.IServiceStatusBoardApi"
         "ToolUp.Platform.ISessionApi"
@@ -4369,6 +4412,7 @@ module PlatformClientProxies =
         | "ToolUp.Platform.IPresenceApi" -> Some(box (iPresenceApiProxy options))
         | "ToolUp.Platform.IProvenanceQueryApi" -> Some(box (iProvenanceQueryApiProxy options))
         | "ToolUp.Platform.IProviderProfileApi" -> Some(box (iProviderProfileApiProxy options))
+        | "ToolUp.Platform.IPublicationReaderApi" -> Some(box (iPublicationReaderApiProxy options))
         | "ToolUp.Platform.IServiceAccountApi" -> Some(box (iServiceAccountApiProxy options))
         | "ToolUp.Platform.IServiceStatusBoardApi" -> Some(box (iServiceStatusBoardApiProxy options))
         | "ToolUp.Platform.ISessionApi" -> Some(box (iSessionApiProxy options))
@@ -4414,6 +4458,7 @@ module PlatformClientProxies =
         GeneratedProxies.register "ToolUp.Platform.IPresenceApi" (fun options -> box (iPresenceApiProxy options))
         GeneratedProxies.register "ToolUp.Platform.IProvenanceQueryApi" (fun options -> box (iProvenanceQueryApiProxy options))
         GeneratedProxies.register "ToolUp.Platform.IProviderProfileApi" (fun options -> box (iProviderProfileApiProxy options))
+        GeneratedProxies.register "ToolUp.Platform.IPublicationReaderApi" (fun options -> box (iPublicationReaderApiProxy options))
         GeneratedProxies.register "ToolUp.Platform.IServiceAccountApi" (fun options -> box (iServiceAccountApiProxy options))
         GeneratedProxies.register "ToolUp.Platform.IServiceStatusBoardApi" (fun options -> box (iServiceStatusBoardApiProxy options))
         GeneratedProxies.register "ToolUp.Platform.ISessionApi" (fun options -> box (iSessionApiProxy options))

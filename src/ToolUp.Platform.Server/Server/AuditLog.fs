@@ -2004,6 +2004,23 @@ let internal auditEventCodecs: AuditEventCodec list = [
             | _ -> None)
         Decode = fun j -> PublicationReaderSignedIn(fromAuditJson<PublicationReaderSignedInPayload> j)
     }
+    // Phase 1107 — in-platform publication reader grants (append-only registration).
+    {
+        EventType = "PublicationReaderGranted"
+        TryEncode =
+            (function
+            | PublicationReaderGranted p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> PublicationReaderGranted(fromAuditJson<PublicationReaderGrantChangedPayload> j)
+    }
+    {
+        EventType = "PublicationReaderRevoked"
+        TryEncode =
+            (function
+            | PublicationReaderRevoked p -> Some(toAuditJson p)
+            | _ -> None)
+        Decode = fun j -> PublicationReaderRevoked(fromAuditJson<PublicationReaderGrantChangedPayload> j)
+    }
 ]
 
 /// Decode lookup keyed by wire `EventType`. Built once at module init.

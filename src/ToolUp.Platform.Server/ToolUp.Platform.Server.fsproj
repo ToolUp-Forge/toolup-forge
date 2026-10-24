@@ -1046,6 +1046,8 @@
         <Compile Include="Server\MigrationRunner.fs" />
         <Compile Include="Server\MigrationApiHandler.fs" />
         <Compile Include="Server\Scope\PermissionStore.fs" />
+        <!-- Phase 1107 — in-platform publication reader grants. -->
+        <Compile Include="Server\Scope\PublicationReaderGrantStore.fs" />
         <!-- Phase 551 — module-declared grant policy: the compose-time
              registry, the IPermissionStore write-guard decorator, and the
              dispatch predicate. After PermissionStore.fs (it decorates
@@ -1162,6 +1164,9 @@
              (ITeamStore + TeamRoles are the role gate), which is why it sits
              here rather than beside ServiceAccountTokenHandler.fs. -->
         <Compile Include="Server\ServiceAccountApiHandler.fs" />
+        <!-- Phase 1107 — the Owner/Admin-gated publication-reader API
+             (same gate idiom as ServiceAccountApiHandler). -->
+        <Compile Include="Server\PublicationReaderApiHandler.fs" />
         <!-- Phase 441 — INotificationPreferenceApi handler (same AccessContext
              gate idiom as ServiceAccountApiHandler); before BuildRouteHandlers
              mounts it on the NotificationPreferences opt-in. -->

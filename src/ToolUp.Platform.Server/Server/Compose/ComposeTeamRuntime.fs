@@ -275,6 +275,15 @@ let registerTeamPermissionStores
             ))
         |> ignore
 
+    // Phase 1107 — in-platform publication reader grants, beside the
+    // permission store and on the same blob storage. A deployment that
+    // grants no reader holds no grant blob, so admission and every page
+    // gate are unchanged.
+    services.AddSingleton<IPublicationReaderGrantStore>(
+        BlobPublicationReaderGrantStore(resolvedBlobStorage, Some resolvedLogger) :> IPublicationReaderGrantStore
+    )
+    |> ignore
+
     services.AddSingleton<IPermissionStore>(fun (sp: System.IServiceProvider) ->
         let inner =
             match config.AdminMutationPolicy with

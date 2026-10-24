@@ -560,6 +560,15 @@ module PlatformJsonDecoders =
             | "Failed" -> Some(JsonDecode.payload (JsonDecode.asString |> JsonDecode.map ProviderVerificationOutcome.Failed))
             | _ -> None)
 
+    /// Generated JSON decoder for `PublicationReaderEntry` — members by name, cases by case name, read off the type's own shape.
+    let publicationReaderEntry: JsonDecoder<PublicationReaderEntry> =
+        JsonDecode.succeed (fun userId role -> ({
+            UserId = userId
+            Role = role
+        }: PublicationReaderEntry))
+        |> JsonDecode.apply (JsonDecode.field "UserId" JsonDecode.asString)
+        |> JsonDecode.apply (JsonDecode.field "Role" JsonDecode.asString)
+
     /// Generated JSON decoder for `ModulePermission` — members by name, cases by case name, read off the type's own shape.
     let modulePermission: JsonDecoder<ModulePermission> =
         JsonDecode.union "ModulePermission" (function
@@ -1020,6 +1029,7 @@ module PlatformJsonDecoders =
         Some "IProviderProfileApi", typeof<string * (string option)>.FullName
         Some "IProviderProfileApi", typeof<string list>.FullName
         Some "IProviderProfileApi", typeof<string * ProviderVerificationOutcome>.FullName
+        Some "IPublicationReaderApi", typeof<PublicationReaderEntry>.FullName
         Some "IServiceAccountApi", typeof<CreateServiceAccountRequest>.FullName
         Some "IServiceAccountApi", typeof<string * ServiceAccountStatus>.FullName
         Some "IServiceAccountApi", typeof<string * (Map<string, ModulePermission list>)>.FullName
@@ -1091,6 +1101,7 @@ module PlatformJsonDecoders =
         "IPresenceApi"
         "IProvenanceQueryApi"
         "IProviderProfileApi"
+        "IPublicationReaderApi"
         "IServiceAccountApi"
         "IServiceStatusBoardApi"
         "ISessionApi"
@@ -1162,6 +1173,7 @@ module PlatformJsonDecoders =
         JsonDecoders.registerFor<string * (string option)> "IProviderProfileApi" (JsonDecode.tuple2 JsonDecode.asString (JsonDecode.option JsonDecode.asString))
         JsonDecoders.registerFor<string list> "IProviderProfileApi" (JsonDecode.list JsonDecode.asString)
         JsonDecoders.registerFor<string * ProviderVerificationOutcome> "IProviderProfileApi" (JsonDecode.tuple2 JsonDecode.asString providerVerificationOutcome)
+        JsonDecoders.registerFor<PublicationReaderEntry> "IPublicationReaderApi" publicationReaderEntry
         JsonDecoders.registerFor<CreateServiceAccountRequest> "IServiceAccountApi" createServiceAccountRequest
         JsonDecoders.registerFor<string * ServiceAccountStatus> "IServiceAccountApi" (JsonDecode.tuple2 JsonDecode.asString serviceAccountStatus)
         JsonDecoders.registerFor<string * (Map<string, ModulePermission list>)> "IServiceAccountApi" (JsonDecode.tuple2 JsonDecode.asString (JsonDecode.asMap JsonDecode.Key.string (JsonDecode.list modulePermission)))
@@ -1264,6 +1276,7 @@ module PlatformJsonDecoders =
             (Some "IProviderProfileApi", typeof<string * (string option)>.FullName), JsonDecoders.verifyThrough<string * (string option)> gate draws seed (JsonDecode.tuple2 JsonDecode.asString (JsonDecode.option JsonDecode.asString))
             (Some "IProviderProfileApi", typeof<string list>.FullName), JsonDecoders.verifyThrough<string list> gate draws seed (JsonDecode.list JsonDecode.asString)
             (Some "IProviderProfileApi", typeof<string * ProviderVerificationOutcome>.FullName), JsonDecoders.verifyThrough<string * ProviderVerificationOutcome> gate draws seed (JsonDecode.tuple2 JsonDecode.asString providerVerificationOutcome)
+            (Some "IPublicationReaderApi", typeof<PublicationReaderEntry>.FullName), JsonDecoders.verifyThrough<PublicationReaderEntry> gate draws seed publicationReaderEntry
             (Some "IServiceAccountApi", typeof<CreateServiceAccountRequest>.FullName), JsonDecoders.verifyThrough<CreateServiceAccountRequest> gate draws seed createServiceAccountRequest
             (Some "IServiceAccountApi", typeof<string * ServiceAccountStatus>.FullName), JsonDecoders.verifyThrough<string * ServiceAccountStatus> gate draws seed (JsonDecode.tuple2 JsonDecode.asString serviceAccountStatus)
             (Some "IServiceAccountApi", typeof<string * (Map<string, ModulePermission list>)>.FullName), JsonDecoders.verifyThrough<string * (Map<string, ModulePermission list>)> gate draws seed (JsonDecode.tuple2 JsonDecode.asString (JsonDecode.asMap JsonDecode.Key.string (JsonDecode.list modulePermission)))
