@@ -313,6 +313,11 @@ module PublicationReaderRoles =
         |> List.sort
 
     /// An `IPublicationReaderRoleSource` over `api`'s full page listing.
+    /// Deliberately the RAW `ListPages`, not `ListPagesPublic`: a
+    /// `Publication` page is never publicly discoverable, so the gated set
+    /// would declare no role. Only role names leave this function, and its
+    /// one consumer is the Owner/Admin-gated `IPublicationReaderApi`
+    /// (allow-listed in the Phase 632 enumeration probe).
     let fromApi (api: IPublicContentApi) : IPublicationReaderRoleSource =
         { new IPublicationReaderRoleSource with
             member _.DeclaredRoles publishingScope = async {

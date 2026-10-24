@@ -21,6 +21,10 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.Platform.TeamManagement
 
+/// The handler's one read of the request's container: the per-request
+/// `AccessContext` and the substrate below are request-scoped, and
+/// `Api.make`'s builder is handed only the `HttpContext`, so they cannot be
+/// passed in from a registration factory. Every lookup goes through here.
 let private service<'T when 'T: not struct> (ctx: HttpContext) : 'T option =
     match ctx.RequestServices.GetService(typeof<'T>) with
     | :? 'T as s -> Some s
@@ -38,9 +42,8 @@ let private declaredRoles (ctx: HttpContext) (scope: string) : Async<string list
 
 let publicationReaderApi (ctx: HttpContext) : IPublicationReaderApi =
     let accessContext =
-        match ctx.RequestServices.GetService(typeof<AccessContext>) with
-        | :? AccessContext as ac -> ac
-        | _ -> AccessContext.unrestricted (AnonymousSession "anonymous")
+        service<AccessContext> ctx
+        |> Option.defaultWith (fun () -> AccessContext.unrestricted (AnonymousSession "anonymous"))
 
     let authorised (f: IPublicationReaderGrantStore -> string -> Async<Result<'T, string>>) = async {
         match service<IPublicationReaderGrantStore> ctx with
