@@ -15,10 +15,36 @@ applies. Where a release ships a migration note under `docs/migrations/`, it is 
 
 ## [0.32.0] — unreleased
 
-_Surface since `v0.31.0`: **additive** — 1 package moved; 18 members added, 0 members changed, 0 members removed._
+_Surface since `v0.31.0`: **breaking** — 5 packages moved; 45 members added, 2 members changed, 0 members removed._
 
 ### Added
 
+- `ToolUp.AI.Server` — 20 members:
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudget (class)`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudget..ctor(System.TimeSpan, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.String])`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudget.CallTimeout : System.TimeSpan { get }`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudget.MaxTokens : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudget.RaiseWith : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudgetExceeded (class)`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudgetExceeded..ctor()`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudgetExceeded..ctor(ToolUp.AI.AIAgentEngine+AgentCallBudget, System.TimeSpan, System.String)`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudgetExceeded.Message : System.String { get }`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudgetExceeded.budget : ToolUp.AI.AIAgentEngine+AgentCallBudget { get }`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudgetExceeded.detail : System.String { get }`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudgetExceeded.elapsed : System.TimeSpan { get }`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudgetModule (class)`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudgetModule.describe(ToolUp.AI.AIAgentEngine+AgentCallBudget) : System.String`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudgetModule.effectiveTimeout(ToolUp.AI.AIAgentEngine+AgentCallBudget) : System.TimeSpan`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudgetModule.interactive : ToolUp.AI.AIAgentEngine+AgentCallBudget { get }`
+  - `ToolUp.AI.AIAgentEngine.runAgentLoopWithBudget(ToolUp.Platform.AI.IAIProvider, ToolUp.AI.AIToolRegistry+AIToolRegistry, ToolUp.AI.ClientToolDispatch+ClientToolDispatchRegistry, Microsoft.AspNetCore.Http.HttpContext, System.Guid, System.Guid, ToolUp.AI.AISurface, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Threading.CancellationToken, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], ToolUp.AI.ModelInput, ToolUp.AI.AIAgentEngine+AgentCallBudget, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIStreamEvent, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage]]`
+  - `ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions.CallBudget : ToolUp.AI.AIAgentEngine+AgentCallBudget { get }`
+  - `ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptionsModule.defaultCallBudget : ToolUp.AI.AIAgentEngine+AgentCallBudget { get }`
+  - `ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptionsModule.withCallBudget(ToolUp.AI.AIAgentEngine+AgentCallBudget, ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions) : ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions`
+- `ToolUp.AI.Wire` — 2 members:
+  - `ToolUp.Platform.AI.AIProviderCallOptions.MaxTokens : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }`
+  - `ToolUp.Platform.AI.AIProviderCallOptionsModule.withMaxTokens(System.Int32, ToolUp.Platform.AI.AIProviderCallOptions) : ToolUp.Platform.AI.AIProviderCallOptions`
+- `ToolUp.AIProviders.Claude` — 1 member:
+  - `ClaudeAIProvider.resolveCallMaxTokens(System.Int32, ToolUp.Platform.AI.AIProviderCallOptions) : System.Int32`
 - `ToolUp.Platform.Core` — 18 members:
   - `ToolUp.Platform.AdminMutationRefusal+RecordNotRemoved (class)`
   - `ToolUp.Platform.AdminMutationRefusal+RecordNotRemoved.detail : System.String { get }`
@@ -38,6 +64,18 @@ _Surface since `v0.31.0`: **additive** — 1 package moved; 18 members added, 0 
   - `ToolUp.Platform.EncryptionKeyUnreadablePayload.Reason : System.String { get }`
   - `ToolUp.Platform.EncryptionKeyUnreadablePayload.Resolver : System.String { get }`
   - `ToolUp.Platform.EncryptionKeyUnreadablePayload.ScopeId : System.String { get }`
+- `ToolUp.Platform.Server` — 4 members:
+  - `ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeOverBudget (class)`
+  - `ToolUp.Platform.GroundedNarrativeOutcome+GroundedNarrativeOverBudget.reason : System.String { get }`
+  - `ToolUp.Platform.GroundedNarrativeOutcome+Tags.GroundedNarrativeOverBudget : System.Int32 (literal)`
+  - `ToolUp.Platform.GroundedNarrativeOutcome.IsGroundedNarrativeOverBudget : System.Boolean { get }`
+
+### Changed
+
+- `ToolUp.AI.Server` — 1 member:
+  - `ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions..ctor` — `ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset])` → `ToolUp.AI.GroundedNarrativeRun+GroundedNarrativeRunOptions..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTimeOffset], ToolUp.AI.AIAgentEngine+AgentCallBudget)`
+- `ToolUp.AI.Wire` — 1 member:
+  - `ToolUp.Platform.AI.AIProviderCallOptions..ctor` — `ToolUp.Platform.AI.AIProviderCallOptions..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String])` → `ToolUp.Platform.AI.AIProviderCallOptions..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])`
 
 ## [0.31.0] — 2026-10-22
 
