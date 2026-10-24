@@ -3014,10 +3014,32 @@ type JobsAdminMessages = {
     RerunStillRunning: string
     /// The re-run request was refused. The argument is the server's reason.
     RerunRefused: string -> string
-    /// In place of the re-run action on a failed job that is disabled.
+    /// In place of the re-run action on a job that is disabled.
     RerunUnavailableDisabled: string
-    /// In place of the re-run action on a failed job that is cancelled.
+    /// In place of the re-run action on a job that is cancelled.
     RerunUnavailableCancelled: string
+    /// Phase 1110 — the toggle that lists a job's recent attempts.
+    ShowAttempts: string
+    HideAttempts: string
+    AttemptsLoading: string
+    /// The attempts could not be read. The argument is the reason.
+    AttemptsLoadFailed: string -> string
+    /// A job with no attempt recorded.
+    NoAttempts: string
+    /// The argument is the attempt number.
+    AttemptNumber: int -> string
+    /// The argument is the attempt's start time.
+    AttemptStarted: string -> string
+    /// The argument is how long the ended attempt took.
+    AttemptTook: string -> string
+    /// A failed attempt whose dispatch is still waiting to retry it.
+    AttemptRetryPending: string
+    /// A failed attempt in a dispatch that has since ended.
+    AttemptFailed: string
+    /// Under the last-run cell when the newest attempt started after the
+    /// job's record last moved. The arguments are the attempt number and
+    /// its start time.
+    NewerAttempt: int -> string -> string
 }
 
 

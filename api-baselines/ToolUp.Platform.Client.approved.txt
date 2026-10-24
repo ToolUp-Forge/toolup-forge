@@ -878,16 +878,45 @@ Home+Msg+TogglePin.moduleId : System.String { get }
 Home+Msg+TogglePin.pinned : System.Boolean { get }
 JobsAdminUI (class)
 JobsAdminUI.adminTile(ToolUp.Platform.ModuleDefinition) : ToolUp.Platform.AdminTile
+JobsAdminUI.attemptDuration(ToolUp.Platform.JobRun) : Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan]
+JobsAdminUI.attemptInProgress(JobsAdminUI+AttemptReading) : System.Boolean
 JobsAdminUI.attemptLanded(Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], ToolUp.Platform.JobDefinition) : System.Boolean
+JobsAdminUI.attemptReading(ToolUp.Platform.JobDefinition, ToolUp.Platform.JobRun) : JobsAdminUI+AttemptReading
 JobsAdminUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule
+JobsAdminUI.formatDuration(System.TimeSpan) : System.String
 JobsAdminUI.init() : System.Tuple`2[JobsAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[JobsAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
 JobsAdminUI.maxPolls : System.Int32 { get }
 JobsAdminUI.moduleId : System.String { get }
+JobsAdminUI.newerThanRecord(ToolUp.Platform.JobDefinition, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobRun]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobRun]
+JobsAdminUI.newestFirst(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobRun]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobRun]
 JobsAdminUI.ordered(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobDefinition]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobDefinition]
 JobsAdminUI.pollIntervalMs : System.Int32 { get }
+JobsAdminUI.recentAttemptCount : System.Int32 { get }
 JobsAdminUI.rerunOffer(ToolUp.Platform.JobDefinition) : JobsAdminUI+RerunOffer
 JobsAdminUI.standingOf(ToolUp.Platform.JobDefinition) : JobsAdminUI+JobStanding
+JobsAdminUI.startedAfterRecord(ToolUp.Platform.JobDefinition, ToolUp.Platform.JobRun) : System.Boolean
 JobsAdminUI.update(JobsAdminUI+Msg, JobsAdminUI+Model) : System.Tuple`2[JobsAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[JobsAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+JobsAdminUI+AttemptReading (class)
+JobsAdminUI+AttemptReading.Cancelled : JobsAdminUI+AttemptReading { get }
+JobsAdminUI+AttemptReading.Failed : JobsAdminUI+AttemptReading { get }
+JobsAdminUI+AttemptReading.InProgress : JobsAdminUI+AttemptReading { get }
+JobsAdminUI+AttemptReading.IsCancelled : System.Boolean { get }
+JobsAdminUI+AttemptReading.IsFailed : System.Boolean { get }
+JobsAdminUI+AttemptReading.IsInProgress : System.Boolean { get }
+JobsAdminUI+AttemptReading.IsPermanentlyFailed : System.Boolean { get }
+JobsAdminUI+AttemptReading.IsRetryPending : System.Boolean { get }
+JobsAdminUI+AttemptReading.IsSucceeded : System.Boolean { get }
+JobsAdminUI+AttemptReading.PermanentlyFailed : JobsAdminUI+AttemptReading { get }
+JobsAdminUI+AttemptReading.RetryPending : JobsAdminUI+AttemptReading { get }
+JobsAdminUI+AttemptReading.Succeeded : JobsAdminUI+AttemptReading { get }
+JobsAdminUI+AttemptReading.Tag : System.Int32 { get }
+JobsAdminUI+AttemptReading+Tags (class)
+JobsAdminUI+AttemptReading+Tags.Cancelled : System.Int32 (literal)
+JobsAdminUI+AttemptReading+Tags.Failed : System.Int32 (literal)
+JobsAdminUI+AttemptReading+Tags.InProgress : System.Int32 (literal)
+JobsAdminUI+AttemptReading+Tags.PermanentlyFailed : System.Int32 (literal)
+JobsAdminUI+AttemptReading+Tags.RetryPending : System.Int32 (literal)
+JobsAdminUI+AttemptReading+Tags.Succeeded : System.Int32 (literal)
 JobsAdminUI+JobStanding (class)
 JobsAdminUI+JobStanding.AttemptCancelled : JobsAdminUI+JobStanding { get }
 JobsAdminUI+JobStanding.FailingWillRetry : JobsAdminUI+JobStanding { get }
@@ -924,13 +953,16 @@ JobsAdminUI+LoadState`1+Tags.LoadError : System.Int32 (literal)
 JobsAdminUI+LoadState`1+Tags.Loaded : System.Int32 (literal)
 JobsAdminUI+LoadState`1+Tags.Loading : System.Int32 (literal)
 JobsAdminUI+Model (class)
-JobsAdminUI+Model..ctor(JobsAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobDefinition]], Microsoft.FSharp.Core.FSharpOption`1[System.Guid], Microsoft.FSharp.Collections.FSharpMap`2[System.Guid, JobsAdminUI+RerunProgress], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+JobsAdminUI+Model..ctor(JobsAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobDefinition]], Microsoft.FSharp.Core.FSharpOption`1[System.Guid], Microsoft.FSharp.Collections.FSharpMap`2[System.Guid, JobsAdminUI+RerunProgress], Microsoft.FSharp.Collections.FSharpMap`2[System.Guid, JobsAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobRun]]], Microsoft.FSharp.Collections.FSharpSet`1[System.Guid], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+JobsAdminUI+Model.Attempts : Microsoft.FSharp.Collections.FSharpMap`2[System.Guid, JobsAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobRun]]] { get }
 JobsAdminUI+Model.Confirming : Microsoft.FSharp.Core.FSharpOption`1[System.Guid] { get }
+JobsAdminUI+Model.Expanded : Microsoft.FSharp.Collections.FSharpSet`1[System.Guid] { get }
 JobsAdminUI+Model.Jobs : JobsAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobDefinition]] { get }
 JobsAdminUI+Model.LastError : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 JobsAdminUI+Model.Reruns : Microsoft.FSharp.Collections.FSharpMap`2[System.Guid, JobsAdminUI+RerunProgress] { get }
 JobsAdminUI+Msg (class)
 JobsAdminUI+Msg.DismissError : JobsAdminUI+Msg { get }
+JobsAdminUI+Msg.IsAttemptsLoaded : System.Boolean { get }
 JobsAdminUI+Msg.IsDismissError : System.Boolean { get }
 JobsAdminUI+Msg.IsJobPolled : System.Boolean { get }
 JobsAdminUI+Msg.IsJobsLoaded : System.Boolean { get }
@@ -940,9 +972,13 @@ JobsAdminUI+Msg.IsRerunAccepted : System.Boolean { get }
 JobsAdminUI+Msg.IsRerunCancelled : System.Boolean { get }
 JobsAdminUI+Msg.IsRerunConfirmed : System.Boolean { get }
 JobsAdminUI+Msg.IsRerunRequested : System.Boolean { get }
+JobsAdminUI+Msg.IsToggleAttempts : System.Boolean { get }
 JobsAdminUI+Msg.Refresh : JobsAdminUI+Msg { get }
 JobsAdminUI+Msg.RerunCancelled : JobsAdminUI+Msg { get }
 JobsAdminUI+Msg.Tag : System.Int32 { get }
+JobsAdminUI+Msg+AttemptsLoaded (class)
+JobsAdminUI+Msg+AttemptsLoaded.Item1 : System.Guid { get }
+JobsAdminUI+Msg+AttemptsLoaded.Item2 : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobRun], System.String] { get }
 JobsAdminUI+Msg+JobPolled (class)
 JobsAdminUI+Msg+JobPolled.Item1 : System.Guid { get }
 JobsAdminUI+Msg+JobPolled.Item2 : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobDefinition], System.String] { get }
@@ -958,6 +994,7 @@ JobsAdminUI+Msg+RerunConfirmed.Item : System.Guid { get }
 JobsAdminUI+Msg+RerunRequested (class)
 JobsAdminUI+Msg+RerunRequested.Item : System.Guid { get }
 JobsAdminUI+Msg+Tags (class)
+JobsAdminUI+Msg+Tags.AttemptsLoaded : System.Int32 (literal)
 JobsAdminUI+Msg+Tags.DismissError : System.Int32 (literal)
 JobsAdminUI+Msg+Tags.JobPolled : System.Int32 (literal)
 JobsAdminUI+Msg+Tags.JobsLoaded : System.Int32 (literal)
@@ -967,18 +1004,18 @@ JobsAdminUI+Msg+Tags.RerunAccepted : System.Int32 (literal)
 JobsAdminUI+Msg+Tags.RerunCancelled : System.Int32 (literal)
 JobsAdminUI+Msg+Tags.RerunConfirmed : System.Int32 (literal)
 JobsAdminUI+Msg+Tags.RerunRequested : System.Int32 (literal)
+JobsAdminUI+Msg+Tags.ToggleAttempts : System.Int32 (literal)
+JobsAdminUI+Msg+ToggleAttempts (class)
+JobsAdminUI+Msg+ToggleAttempts.Item : System.Guid { get }
 JobsAdminUI+RerunOffer (class)
-JobsAdminUI+RerunOffer.IsNotApplicable : System.Boolean { get }
 JobsAdminUI+RerunOffer.IsOffered : System.Boolean { get }
 JobsAdminUI+RerunOffer.IsRefusedCancelled : System.Boolean { get }
 JobsAdminUI+RerunOffer.IsRefusedDisabled : System.Boolean { get }
-JobsAdminUI+RerunOffer.NotApplicable : JobsAdminUI+RerunOffer { get }
 JobsAdminUI+RerunOffer.Offered : JobsAdminUI+RerunOffer { get }
 JobsAdminUI+RerunOffer.RefusedCancelled : JobsAdminUI+RerunOffer { get }
 JobsAdminUI+RerunOffer.RefusedDisabled : JobsAdminUI+RerunOffer { get }
 JobsAdminUI+RerunOffer.Tag : System.Int32 { get }
 JobsAdminUI+RerunOffer+Tags (class)
-JobsAdminUI+RerunOffer+Tags.NotApplicable : System.Int32 (literal)
 JobsAdminUI+RerunOffer+Tags.Offered : System.Int32 (literal)
 JobsAdminUI+RerunOffer+Tags.RefusedCancelled : System.Int32 (literal)
 JobsAdminUI+RerunOffer+Tags.RefusedDisabled : System.Int32 (literal)
@@ -4478,17 +4515,27 @@ ToolUp.Platform.InviteAcceptMessages.SignInBody : System.String { get }
 ToolUp.Platform.InviteAcceptMessages.SignInHeading : System.String { get }
 ToolUp.Platform.InviteAcceptMessages.WelcomeHeading : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
 ToolUp.Platform.JobsAdminMessages (class)
-ToolUp.Platform.JobsAdminMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String)
+ToolUp.Platform.JobsAdminMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]])
+ToolUp.Platform.JobsAdminMessages.AttemptFailed : System.String { get }
+ToolUp.Platform.JobsAdminMessages.AttemptNumber : Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, System.String] { get }
+ToolUp.Platform.JobsAdminMessages.AttemptRetryPending : System.String { get }
+ToolUp.Platform.JobsAdminMessages.AttemptStarted : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
+ToolUp.Platform.JobsAdminMessages.AttemptTook : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
+ToolUp.Platform.JobsAdminMessages.AttemptsLoadFailed : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
+ToolUp.Platform.JobsAdminMessages.AttemptsLoading : System.String { get }
 ToolUp.Platform.JobsAdminMessages.ColumnActions : System.String { get }
 ToolUp.Platform.JobsAdminMessages.ColumnJob : System.String { get }
 ToolUp.Platform.JobsAdminMessages.ColumnLastRun : System.String { get }
 ToolUp.Platform.JobsAdminMessages.ColumnStatus : System.String { get }
 ToolUp.Platform.JobsAdminMessages.Dismiss : System.String { get }
 ToolUp.Platform.JobsAdminMessages.Heading : System.String { get }
+ToolUp.Platform.JobsAdminMessages.HideAttempts : System.String { get }
 ToolUp.Platform.JobsAdminMessages.JobCancelled : System.String { get }
 ToolUp.Platform.JobsAdminMessages.JobDisabled : System.String { get }
 ToolUp.Platform.JobsAdminMessages.Loading : System.String { get }
 ToolUp.Platform.JobsAdminMessages.NeverRun : System.String { get }
+ToolUp.Platform.JobsAdminMessages.NewerAttempt : Microsoft.FSharp.Core.FSharpFunc`2[System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]] { get }
+ToolUp.Platform.JobsAdminMessages.NoAttempts : System.String { get }
 ToolUp.Platform.JobsAdminMessages.NoJobs : System.String { get }
 ToolUp.Platform.JobsAdminMessages.ReasonLabel : System.String { get }
 ToolUp.Platform.JobsAdminMessages.Refresh : System.String { get }
@@ -4504,6 +4551,7 @@ ToolUp.Platform.JobsAdminMessages.RerunStarting : System.String { get }
 ToolUp.Platform.JobsAdminMessages.RerunStillRunning : System.String { get }
 ToolUp.Platform.JobsAdminMessages.RerunUnavailableCancelled : System.String { get }
 ToolUp.Platform.JobsAdminMessages.RerunUnavailableDisabled : System.String { get }
+ToolUp.Platform.JobsAdminMessages.ShowAttempts : System.String { get }
 ToolUp.Platform.JobsAdminMessages.StandingAttemptCancelled : System.String { get }
 ToolUp.Platform.JobsAdminMessages.StandingFailingWillRetry : System.String { get }
 ToolUp.Platform.JobsAdminMessages.StandingInProgress : System.String { get }

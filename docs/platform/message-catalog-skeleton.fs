@@ -13,7 +13,7 @@
 // message is a FUNCTION field; it is left pointing at the English message until you
 // replace it with a lambda of the shape its comment names.
 //
-// Leaves: 1513 (217 parameterised).
+// Leaves: 1524 (222 parameterised).
 
 module ToolUp.Platform.Localization.Skeleton
 
@@ -3389,8 +3389,8 @@ let catalog (c: MessageCatalog) : MessageCatalog = {
             c.JobsAdmin with
                 // en: "Background jobs"
                 Heading = "Background jobs"
-                // en: "Every scheduled job in this scope with its last run. Jobs that failed and will not be retried are listed first, with the reason the scheduler recorded."
-                Subheading = "Every scheduled job in this scope with its last run. Jobs that failed and will not be retried are listed first, with the reason the scheduler recorded."
+                // en: "Every scheduled job in this scope with its last run and its recent attempts. Any active job can be run now. Jobs that failed and will not be retried are listed first, with the reason the scheduler recorded."
+                Subheading = "Every scheduled job in this scope with its last run and its recent attempts. Any active job can be run now. Jobs that failed and will not be retried are listed first, with the reason the scheduler recorded."
                 // en: "Refresh"
                 Refresh = "Refresh"
                 // en: "Refreshing…"
@@ -3431,7 +3431,7 @@ let catalog (c: MessageCatalog) : MessageCatalog = {
                 JobCancelled = "Cancelled"
                 // en: "Re-run"
                 RerunButton = "Re-run"
-                // en (string -> string): "Run {a} again now? Clear the cause of the failure first, or the new attempt will fail the same way."
+                // en (string -> string): "Run {a} now? It runs once in addition to its schedule. If its last run failed, clear the cause first, or the new attempt will fail the same way."
                 // translate as `fun (a: string) -> $"…"`; left as the English message until you do
                 RerunConfirmPrompt = c.JobsAdmin.RerunConfirmPrompt
                 // en: "Re-run now"
@@ -3454,5 +3454,32 @@ let catalog (c: MessageCatalog) : MessageCatalog = {
                 RerunUnavailableDisabled = "This job is disabled, and a disabled job refuses a manual run. Enable it before re-running."
                 // en: "This job is cancelled and cannot be re-run."
                 RerunUnavailableCancelled = "This job is cancelled and cannot be re-run."
+                // en: "Show recent attempts"
+                ShowAttempts = "Show recent attempts"
+                // en: "Hide attempts"
+                HideAttempts = "Hide attempts"
+                // en: "Loading attempts…"
+                AttemptsLoading = "Loading attempts…"
+                // en (string -> string): "The attempts could not be read: {a}"
+                // translate as `fun (a: string) -> $"…"`; left as the English message until you do
+                AttemptsLoadFailed = c.JobsAdmin.AttemptsLoadFailed
+                // en: "No attempt has been recorded for this job."
+                NoAttempts = "No attempt has been recorded for this job."
+                // en (int -> string): "Attempt 1"
+                // translate as `fun (a: int) -> $"…"`; left as the English message until you do
+                AttemptNumber = c.JobsAdmin.AttemptNumber
+                // en (string -> string): "started {a}"
+                // translate as `fun (a: string) -> $"…"`; left as the English message until you do
+                AttemptStarted = c.JobsAdmin.AttemptStarted
+                // en (string -> string): "took {a}"
+                // translate as `fun (a: string) -> $"…"`; left as the English message until you do
+                AttemptTook = c.JobsAdmin.AttemptTook
+                // en: "Failed — retry pending"
+                AttemptRetryPending = "Failed — retry pending"
+                // en: "Failed"
+                AttemptFailed = "Failed"
+                // en (int -> string -> string): "Attempt 1 started {b}, after this record. Its recent attempts say what it is doing now."
+                // translate as `fun (a: int) (b: string) -> $"…"`; left as the English message until you do
+                NewerAttempt = c.JobsAdmin.NewerAttempt
         }
 }

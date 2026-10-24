@@ -185,6 +185,7 @@
         "src/ToolUp.AI.Server/Server/FastPathTelemetryHandler.fs": 1,
         "src/ToolUp.AI.Server/Server/FastPathTriageResolver.fs": 2,
         "src/ToolUp.AI.Server/Server/GroundedNarrativeRun.fs": 2,
+        "src/ToolUp.AI.Server/Server/NarrativePromptHandler.fs": 1,
         "src/ToolUp.AI.Server/Server/NarrativeTools.fs": 3,
         "src/ToolUp.AI.Server/Server/PlatformAIKeysHandler.fs": 4,
         "src/ToolUp.AI.Server/Server/PlatformAITools.fs": 4,
