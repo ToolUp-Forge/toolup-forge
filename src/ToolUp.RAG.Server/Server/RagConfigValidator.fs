@@ -548,7 +548,7 @@ type RAGHandlersRegisteredValidator
                 return
                     Warning(
                         sprintf
-                            "RAG is composed but NO module contributes a VectorisationHandler, while %d data type(s) are registered: %s. Nothing will ever be indexed — uploads succeed, the ingestion queue stays empty, and retrieval returns no matches with no error anywhere in the path, so the symptom looks like a broken embedder or vector store. Add a VectorisationHandler whose DataTypeId matches each type you want retrievable (ServerModule.withVectorisationHandlers), or compose a precomputed pipeline via RAGServerApp.withRetrievalPipeline if this deployment is retrieval-only by design. The /dev/inspect 'Vectorisation handlers' panel lists what is actually registered."
+                            "RAG is composed but NO module contributes a VectorisationHandler, while %d data type(s) are registered: %s. Nothing will ever be indexed — uploads succeed, the ingestion queue stays empty, and retrieval returns no matches with no error anywhere in the path, so the symptom looks like a broken embedder or vector store. Add a VectorisationHandler whose DataTypeId matches each type you want retrievable (ServerModule.withVectorisation), or compose a precomputed pipeline via RAGServerApp.withRetrievalPipeline if this deployment is retrieval-only by design. The /dev/inspect 'Vectorisation handlers' panel lists what is actually registered."
                             (List.length unhandled)
                             (String.concat ", " unhandled)
                     )
