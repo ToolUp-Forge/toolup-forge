@@ -1905,6 +1905,44 @@ module MessageCatalog =
             AlertsFootnote =
                 "As this process's alert engine last evaluated each rule. A process that does not run the engine reports every rule as not evaluated."
         }
+        JobsAdmin = {
+            Heading = "Background jobs"
+            Subheading =
+                "Every scheduled job in this scope with its last run. Jobs that failed and will not be retried are listed first, with the reason the scheduler recorded."
+            Refresh = "Refresh"
+            Refreshing = "Refreshing…"
+            Loading = "Loading jobs…"
+            Dismiss = "Dismiss"
+            NoJobs = "No background jobs are scheduled in this scope."
+            ColumnJob = "Job"
+            ColumnLastRun = "Last run"
+            ColumnStatus = "Status"
+            ColumnActions = "Actions"
+            NeverRun = "Never"
+            ReasonLabel = "Reason:"
+            StandingPermanentlyFailed = "Failed — will not retry"
+            StandingFailingWillRetry = "Failed — will retry"
+            StandingInProgress = "Running"
+            StandingSucceeded = "Succeeded"
+            StandingAttemptCancelled = "Attempt cancelled"
+            StandingNotYetRun = "Not yet run"
+            JobDisabled = "Disabled"
+            JobCancelled = "Cancelled"
+            RerunButton = "Re-run"
+            RerunConfirmPrompt =
+                fun handler ->
+                    $"Run {handler} again now? Clear the cause of the failure first, or the new attempt will fail the same way."
+            RerunConfirm = "Re-run now"
+            RerunCancel = "Cancel"
+            RerunStarting = "Starting…"
+            RerunAwaiting = "Re-run started — waiting for the attempt to finish…"
+            RerunLanded = fun status -> $"Re-run finished: {status}"
+            RerunStillRunning = "The re-run has not finished yet. Refresh to see its result."
+            RerunRefused = fun reason -> $"Re-run refused: {reason}"
+            RerunUnavailableDisabled =
+                "This job is disabled, and a disabled job refuses a manual run. Enable it before re-running."
+            RerunUnavailableCancelled = "This job is cancelled and cannot be re-run."
+        }
     }
 
     /// The built-in catalog re-stamped for `locale`. This is what a

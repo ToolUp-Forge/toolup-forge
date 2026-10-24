@@ -876,6 +876,134 @@ Home+Msg+Tags.TogglePin : System.Int32 (literal)
 Home+Msg+TogglePin (class)
 Home+Msg+TogglePin.moduleId : System.String { get }
 Home+Msg+TogglePin.pinned : System.Boolean { get }
+JobsAdminUI (class)
+JobsAdminUI.adminTile(ToolUp.Platform.ModuleDefinition) : ToolUp.Platform.AdminTile
+JobsAdminUI.attemptLanded(Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], ToolUp.Platform.JobDefinition) : System.Boolean
+JobsAdminUI.create(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ModuleLabel]) : ToolUp.Platform.ErasedModule
+JobsAdminUI.init() : System.Tuple`2[JobsAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[JobsAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+JobsAdminUI.maxPolls : System.Int32 { get }
+JobsAdminUI.moduleId : System.String { get }
+JobsAdminUI.ordered(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobDefinition]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobDefinition]
+JobsAdminUI.pollIntervalMs : System.Int32 { get }
+JobsAdminUI.rerunOffer(ToolUp.Platform.JobDefinition) : JobsAdminUI+RerunOffer
+JobsAdminUI.standingOf(ToolUp.Platform.JobDefinition) : JobsAdminUI+JobStanding
+JobsAdminUI.update(JobsAdminUI+Msg, JobsAdminUI+Model) : System.Tuple`2[JobsAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[JobsAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
+JobsAdminUI+JobStanding (class)
+JobsAdminUI+JobStanding.AttemptCancelled : JobsAdminUI+JobStanding { get }
+JobsAdminUI+JobStanding.FailingWillRetry : JobsAdminUI+JobStanding { get }
+JobsAdminUI+JobStanding.InProgress : JobsAdminUI+JobStanding { get }
+JobsAdminUI+JobStanding.IsAttemptCancelled : System.Boolean { get }
+JobsAdminUI+JobStanding.IsFailingWillRetry : System.Boolean { get }
+JobsAdminUI+JobStanding.IsInProgress : System.Boolean { get }
+JobsAdminUI+JobStanding.IsNotYetRun : System.Boolean { get }
+JobsAdminUI+JobStanding.IsPermanentlyFailed : System.Boolean { get }
+JobsAdminUI+JobStanding.IsSucceeded : System.Boolean { get }
+JobsAdminUI+JobStanding.NotYetRun : JobsAdminUI+JobStanding { get }
+JobsAdminUI+JobStanding.PermanentlyFailed : JobsAdminUI+JobStanding { get }
+JobsAdminUI+JobStanding.Succeeded : JobsAdminUI+JobStanding { get }
+JobsAdminUI+JobStanding.Tag : System.Int32 { get }
+JobsAdminUI+JobStanding+Tags (class)
+JobsAdminUI+JobStanding+Tags.AttemptCancelled : System.Int32 (literal)
+JobsAdminUI+JobStanding+Tags.FailingWillRetry : System.Int32 (literal)
+JobsAdminUI+JobStanding+Tags.InProgress : System.Int32 (literal)
+JobsAdminUI+JobStanding+Tags.NotYetRun : System.Int32 (literal)
+JobsAdminUI+JobStanding+Tags.PermanentlyFailed : System.Int32 (literal)
+JobsAdminUI+JobStanding+Tags.Succeeded : System.Int32 (literal)
+JobsAdminUI+LoadState`1 (class)
+JobsAdminUI+LoadState`1.IsLoadError : System.Boolean { get }
+JobsAdminUI+LoadState`1.IsLoaded : System.Boolean { get }
+JobsAdminUI+LoadState`1.IsLoading : System.Boolean { get }
+JobsAdminUI+LoadState`1.Loading : JobsAdminUI+LoadState`1[T] { get }
+JobsAdminUI+LoadState`1.Tag : System.Int32 { get }
+JobsAdminUI+LoadState`1+LoadError (class)
+JobsAdminUI+LoadState`1+LoadError.Item : System.String { get }
+JobsAdminUI+LoadState`1+Loaded (class)
+JobsAdminUI+LoadState`1+Loaded.Item : T { get }
+JobsAdminUI+LoadState`1+Tags (class)
+JobsAdminUI+LoadState`1+Tags.LoadError : System.Int32 (literal)
+JobsAdminUI+LoadState`1+Tags.Loaded : System.Int32 (literal)
+JobsAdminUI+LoadState`1+Tags.Loading : System.Int32 (literal)
+JobsAdminUI+Model (class)
+JobsAdminUI+Model..ctor(JobsAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobDefinition]], Microsoft.FSharp.Core.FSharpOption`1[System.Guid], Microsoft.FSharp.Collections.FSharpMap`2[System.Guid, JobsAdminUI+RerunProgress], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+JobsAdminUI+Model.Confirming : Microsoft.FSharp.Core.FSharpOption`1[System.Guid] { get }
+JobsAdminUI+Model.Jobs : JobsAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobDefinition]] { get }
+JobsAdminUI+Model.LastError : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+JobsAdminUI+Model.Reruns : Microsoft.FSharp.Collections.FSharpMap`2[System.Guid, JobsAdminUI+RerunProgress] { get }
+JobsAdminUI+Msg (class)
+JobsAdminUI+Msg.DismissError : JobsAdminUI+Msg { get }
+JobsAdminUI+Msg.IsDismissError : System.Boolean { get }
+JobsAdminUI+Msg.IsJobPolled : System.Boolean { get }
+JobsAdminUI+Msg.IsJobsLoaded : System.Boolean { get }
+JobsAdminUI+Msg.IsPollJob : System.Boolean { get }
+JobsAdminUI+Msg.IsRefresh : System.Boolean { get }
+JobsAdminUI+Msg.IsRerunAccepted : System.Boolean { get }
+JobsAdminUI+Msg.IsRerunCancelled : System.Boolean { get }
+JobsAdminUI+Msg.IsRerunConfirmed : System.Boolean { get }
+JobsAdminUI+Msg.IsRerunRequested : System.Boolean { get }
+JobsAdminUI+Msg.Refresh : JobsAdminUI+Msg { get }
+JobsAdminUI+Msg.RerunCancelled : JobsAdminUI+Msg { get }
+JobsAdminUI+Msg.Tag : System.Int32 { get }
+JobsAdminUI+Msg+JobPolled (class)
+JobsAdminUI+Msg+JobPolled.Item1 : System.Guid { get }
+JobsAdminUI+Msg+JobPolled.Item2 : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.JobDefinition], System.String] { get }
+JobsAdminUI+Msg+JobsLoaded (class)
+JobsAdminUI+Msg+JobsLoaded.Item : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.JobDefinition], System.String] { get }
+JobsAdminUI+Msg+PollJob (class)
+JobsAdminUI+Msg+PollJob.Item : System.Guid { get }
+JobsAdminUI+Msg+RerunAccepted (class)
+JobsAdminUI+Msg+RerunAccepted.Item1 : System.Guid { get }
+JobsAdminUI+Msg+RerunAccepted.Item2 : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, System.String] { get }
+JobsAdminUI+Msg+RerunConfirmed (class)
+JobsAdminUI+Msg+RerunConfirmed.Item : System.Guid { get }
+JobsAdminUI+Msg+RerunRequested (class)
+JobsAdminUI+Msg+RerunRequested.Item : System.Guid { get }
+JobsAdminUI+Msg+Tags (class)
+JobsAdminUI+Msg+Tags.DismissError : System.Int32 (literal)
+JobsAdminUI+Msg+Tags.JobPolled : System.Int32 (literal)
+JobsAdminUI+Msg+Tags.JobsLoaded : System.Int32 (literal)
+JobsAdminUI+Msg+Tags.PollJob : System.Int32 (literal)
+JobsAdminUI+Msg+Tags.Refresh : System.Int32 (literal)
+JobsAdminUI+Msg+Tags.RerunAccepted : System.Int32 (literal)
+JobsAdminUI+Msg+Tags.RerunCancelled : System.Int32 (literal)
+JobsAdminUI+Msg+Tags.RerunConfirmed : System.Int32 (literal)
+JobsAdminUI+Msg+Tags.RerunRequested : System.Int32 (literal)
+JobsAdminUI+RerunOffer (class)
+JobsAdminUI+RerunOffer.IsNotApplicable : System.Boolean { get }
+JobsAdminUI+RerunOffer.IsOffered : System.Boolean { get }
+JobsAdminUI+RerunOffer.IsRefusedCancelled : System.Boolean { get }
+JobsAdminUI+RerunOffer.IsRefusedDisabled : System.Boolean { get }
+JobsAdminUI+RerunOffer.NotApplicable : JobsAdminUI+RerunOffer { get }
+JobsAdminUI+RerunOffer.Offered : JobsAdminUI+RerunOffer { get }
+JobsAdminUI+RerunOffer.RefusedCancelled : JobsAdminUI+RerunOffer { get }
+JobsAdminUI+RerunOffer.RefusedDisabled : JobsAdminUI+RerunOffer { get }
+JobsAdminUI+RerunOffer.Tag : System.Int32 { get }
+JobsAdminUI+RerunOffer+Tags (class)
+JobsAdminUI+RerunOffer+Tags.NotApplicable : System.Int32 (literal)
+JobsAdminUI+RerunOffer+Tags.Offered : System.Int32 (literal)
+JobsAdminUI+RerunOffer+Tags.RefusedCancelled : System.Int32 (literal)
+JobsAdminUI+RerunOffer+Tags.RefusedDisabled : System.Int32 (literal)
+JobsAdminUI+RerunProgress (class)
+JobsAdminUI+RerunProgress.IsAwaiting : System.Boolean { get }
+JobsAdminUI+RerunProgress.IsLanded : System.Boolean { get }
+JobsAdminUI+RerunProgress.IsRefused : System.Boolean { get }
+JobsAdminUI+RerunProgress.IsStarting : System.Boolean { get }
+JobsAdminUI+RerunProgress.IsStillRunning : System.Boolean { get }
+JobsAdminUI+RerunProgress.Starting : JobsAdminUI+RerunProgress { get }
+JobsAdminUI+RerunProgress.StillRunning : JobsAdminUI+RerunProgress { get }
+JobsAdminUI+RerunProgress.Tag : System.Int32 { get }
+JobsAdminUI+RerunProgress+Awaiting (class)
+JobsAdminUI+RerunProgress+Awaiting.polls : System.Int32 { get }
+JobsAdminUI+RerunProgress+Awaiting.previousLastRunAt : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
+JobsAdminUI+RerunProgress+Landed (class)
+JobsAdminUI+RerunProgress+Landed.Item : JobsAdminUI+JobStanding { get }
+JobsAdminUI+RerunProgress+Refused (class)
+JobsAdminUI+RerunProgress+Refused.Item : System.String { get }
+JobsAdminUI+RerunProgress+Tags (class)
+JobsAdminUI+RerunProgress+Tags.Awaiting : System.Int32 (literal)
+JobsAdminUI+RerunProgress+Tags.Landed : System.Int32 (literal)
+JobsAdminUI+RerunProgress+Tags.Refused : System.Int32 (literal)
+JobsAdminUI+RerunProgress+Tags.Starting : System.Int32 (literal)
+JobsAdminUI+RerunProgress+Tags.StillRunning : System.Int32 (literal)
 MappingDataManagerUI (class)
 MappingDataManagerUI.create(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataTypeDisplay], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.DataManagerConfig]) : ToolUp.Platform.ErasedModule
 MappingDataManagerUI.init() : System.Tuple`2[MappingDataManagerUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[MappingDataManagerUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
@@ -4347,6 +4475,40 @@ ToolUp.Platform.InviteAcceptMessages.NoToken : System.String { get }
 ToolUp.Platform.InviteAcceptMessages.SignInBody : System.String { get }
 ToolUp.Platform.InviteAcceptMessages.SignInHeading : System.String { get }
 ToolUp.Platform.InviteAcceptMessages.WelcomeHeading : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
+ToolUp.Platform.JobsAdminMessages (class)
+ToolUp.Platform.JobsAdminMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String)
+ToolUp.Platform.JobsAdminMessages.ColumnActions : System.String { get }
+ToolUp.Platform.JobsAdminMessages.ColumnJob : System.String { get }
+ToolUp.Platform.JobsAdminMessages.ColumnLastRun : System.String { get }
+ToolUp.Platform.JobsAdminMessages.ColumnStatus : System.String { get }
+ToolUp.Platform.JobsAdminMessages.Dismiss : System.String { get }
+ToolUp.Platform.JobsAdminMessages.Heading : System.String { get }
+ToolUp.Platform.JobsAdminMessages.JobCancelled : System.String { get }
+ToolUp.Platform.JobsAdminMessages.JobDisabled : System.String { get }
+ToolUp.Platform.JobsAdminMessages.Loading : System.String { get }
+ToolUp.Platform.JobsAdminMessages.NeverRun : System.String { get }
+ToolUp.Platform.JobsAdminMessages.NoJobs : System.String { get }
+ToolUp.Platform.JobsAdminMessages.ReasonLabel : System.String { get }
+ToolUp.Platform.JobsAdminMessages.Refresh : System.String { get }
+ToolUp.Platform.JobsAdminMessages.Refreshing : System.String { get }
+ToolUp.Platform.JobsAdminMessages.RerunAwaiting : System.String { get }
+ToolUp.Platform.JobsAdminMessages.RerunButton : System.String { get }
+ToolUp.Platform.JobsAdminMessages.RerunCancel : System.String { get }
+ToolUp.Platform.JobsAdminMessages.RerunConfirm : System.String { get }
+ToolUp.Platform.JobsAdminMessages.RerunConfirmPrompt : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
+ToolUp.Platform.JobsAdminMessages.RerunLanded : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
+ToolUp.Platform.JobsAdminMessages.RerunRefused : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
+ToolUp.Platform.JobsAdminMessages.RerunStarting : System.String { get }
+ToolUp.Platform.JobsAdminMessages.RerunStillRunning : System.String { get }
+ToolUp.Platform.JobsAdminMessages.RerunUnavailableCancelled : System.String { get }
+ToolUp.Platform.JobsAdminMessages.RerunUnavailableDisabled : System.String { get }
+ToolUp.Platform.JobsAdminMessages.StandingAttemptCancelled : System.String { get }
+ToolUp.Platform.JobsAdminMessages.StandingFailingWillRetry : System.String { get }
+ToolUp.Platform.JobsAdminMessages.StandingInProgress : System.String { get }
+ToolUp.Platform.JobsAdminMessages.StandingNotYetRun : System.String { get }
+ToolUp.Platform.JobsAdminMessages.StandingPermanentlyFailed : System.String { get }
+ToolUp.Platform.JobsAdminMessages.StandingSucceeded : System.String { get }
+ToolUp.Platform.JobsAdminMessages.Subheading : System.String { get }
 ToolUp.Platform.KnowledgeAIContextMessages (class)
 ToolUp.Platform.KnowledgeAIContextMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], System.String, System.String, System.String)
 ToolUp.Platform.KnowledgeAIContextMessages.AnonymousUnavailable : System.String { get }
@@ -4690,7 +4852,7 @@ ToolUp.Platform.MappingDataManagerMessages.ValidateEveryRowNote : System.String 
 ToolUp.Platform.MappingDataManagerMessages.Validating : System.String { get }
 ToolUp.Platform.MappingDataManagerMessages.ValueLabel : System.String { get }
 ToolUp.Platform.MessageCatalog (class)
-ToolUp.Platform.MessageCatalog..ctor(System.String, ToolUp.Platform.ShellMessages, ToolUp.Platform.BootDegradationMessages, ToolUp.Platform.ToastMessages, ToolUp.Platform.NotAuthorisedMessages, ToolUp.Platform.ModuleBoundaryMessages, ToolUp.Platform.CommandPaletteMessages, ToolUp.Platform.SidebarMessages, ToolUp.Platform.TeamManagerMessages, ToolUp.Platform.HealthMonitorMessages, ToolUp.Platform.DataIngestionMessages, ToolUp.Platform.AdminHomeMessages, ToolUp.Platform.AuthMessages, ToolUp.Platform.RateLimitedMessages, ToolUp.Platform.ConsentMessages, ToolUp.Platform.OAuth1aCredentialMessages, ToolUp.Platform.NoActiveTeamLandingMessages, ToolUp.Platform.PlatformAdminMessages, ToolUp.Platform.PlatformUsersMessages, ToolUp.Platform.PermissionsAdminMessages, ToolUp.Platform.WebhookAdminMessages, ToolUp.Platform.NarrativeRendererMessages, ToolUp.Platform.ServiceAccountMessages, ToolUp.Platform.ExternalContactMessages, ToolUp.Platform.NotificationPreferencesMessages, ToolUp.Platform.DataSubjectRequestAdminMessages, ToolUp.Platform.TeamConfigMessages, ToolUp.Platform.TenantLifecycleAdminMessages, ToolUp.Platform.ModuleVisibilityAdminMessages, ToolUp.Platform.MigrationStatusMessages, ToolUp.Platform.SessionSecurityMessages, ToolUp.Platform.HomeMessages, ToolUp.Platform.InviteAcceptMessages, ToolUp.Platform.PublicUtilityWidgetsMessages, ToolUp.Platform.FileManagerMessages, ToolUp.Platform.ServiceStatusBoardMessages, ToolUp.Platform.UsageDashboardMessages, ToolUp.Platform.AuditLogMessages, ToolUp.Platform.CompositionInspectorMessages, ToolUp.Platform.MappingDataManagerMessages, ToolUp.Platform.KnowledgeBaseMessages, ToolUp.Platform.ProviderProfileMessages, ToolUp.Platform.DatadogReadbackMessages, ToolUp.Platform.ObservabilityMessages)
+ToolUp.Platform.MessageCatalog..ctor(System.String, ToolUp.Platform.ShellMessages, ToolUp.Platform.BootDegradationMessages, ToolUp.Platform.ToastMessages, ToolUp.Platform.NotAuthorisedMessages, ToolUp.Platform.ModuleBoundaryMessages, ToolUp.Platform.CommandPaletteMessages, ToolUp.Platform.SidebarMessages, ToolUp.Platform.TeamManagerMessages, ToolUp.Platform.HealthMonitorMessages, ToolUp.Platform.DataIngestionMessages, ToolUp.Platform.AdminHomeMessages, ToolUp.Platform.AuthMessages, ToolUp.Platform.RateLimitedMessages, ToolUp.Platform.ConsentMessages, ToolUp.Platform.OAuth1aCredentialMessages, ToolUp.Platform.NoActiveTeamLandingMessages, ToolUp.Platform.PlatformAdminMessages, ToolUp.Platform.PlatformUsersMessages, ToolUp.Platform.PermissionsAdminMessages, ToolUp.Platform.WebhookAdminMessages, ToolUp.Platform.NarrativeRendererMessages, ToolUp.Platform.ServiceAccountMessages, ToolUp.Platform.ExternalContactMessages, ToolUp.Platform.NotificationPreferencesMessages, ToolUp.Platform.DataSubjectRequestAdminMessages, ToolUp.Platform.TeamConfigMessages, ToolUp.Platform.TenantLifecycleAdminMessages, ToolUp.Platform.ModuleVisibilityAdminMessages, ToolUp.Platform.MigrationStatusMessages, ToolUp.Platform.SessionSecurityMessages, ToolUp.Platform.HomeMessages, ToolUp.Platform.InviteAcceptMessages, ToolUp.Platform.PublicUtilityWidgetsMessages, ToolUp.Platform.FileManagerMessages, ToolUp.Platform.ServiceStatusBoardMessages, ToolUp.Platform.UsageDashboardMessages, ToolUp.Platform.AuditLogMessages, ToolUp.Platform.CompositionInspectorMessages, ToolUp.Platform.MappingDataManagerMessages, ToolUp.Platform.KnowledgeBaseMessages, ToolUp.Platform.ProviderProfileMessages, ToolUp.Platform.DatadogReadbackMessages, ToolUp.Platform.ObservabilityMessages, ToolUp.Platform.JobsAdminMessages)
 ToolUp.Platform.MessageCatalog.AdminHome : ToolUp.Platform.AdminHomeMessages { get }
 ToolUp.Platform.MessageCatalog.AuditLog : ToolUp.Platform.AuditLogMessages { get }
 ToolUp.Platform.MessageCatalog.Auth : ToolUp.Platform.AuthMessages { get }
@@ -4706,6 +4868,7 @@ ToolUp.Platform.MessageCatalog.FileManager : ToolUp.Platform.FileManagerMessages
 ToolUp.Platform.MessageCatalog.HealthMonitor : ToolUp.Platform.HealthMonitorMessages { get }
 ToolUp.Platform.MessageCatalog.Home : ToolUp.Platform.HomeMessages { get }
 ToolUp.Platform.MessageCatalog.InviteAccept : ToolUp.Platform.InviteAcceptMessages { get }
+ToolUp.Platform.MessageCatalog.JobsAdmin : ToolUp.Platform.JobsAdminMessages { get }
 ToolUp.Platform.MessageCatalog.KnowledgeBase : ToolUp.Platform.KnowledgeBaseMessages { get }
 ToolUp.Platform.MessageCatalog.Locale : System.String { get }
 ToolUp.Platform.MessageCatalog.MappingDataManager : ToolUp.Platform.MappingDataManagerMessages { get }
@@ -5742,7 +5905,7 @@ ToolUp.Platform.ShellSlotContext..ctor(ToolUp.Platform.ClientConfig, Microsoft.F
 ToolUp.Platform.ShellSlotContext.Config : ToolUp.Platform.ClientConfig { get }
 ToolUp.Platform.ShellSlotContext.DataTypes : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DataTypeDisplay] { get }
 ToolUp.Platform.ShellSlotFills (class)
-ToolUp.Platform.ShellSlotFills..ctor(ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.DataManagerChoice], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel])
+ToolUp.Platform.ShellSlotFills..ctor(ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.DataManagerChoice], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel], ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel])
 ToolUp.Platform.ShellSlotFills.AuditViewer : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
 ToolUp.Platform.ShellSlotFills.CompositionInspector : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
 ToolUp.Platform.ShellSlotFills.DataIngestionAdmin : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
@@ -5751,6 +5914,7 @@ ToolUp.Platform.ShellSlotFills.DataSubjectRequestAdmin : ToolUp.Platform.SlotFil
 ToolUp.Platform.ShellSlotFills.ExternalContactManager : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
 ToolUp.Platform.ShellSlotFills.HealthMonitor : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
 ToolUp.Platform.ShellSlotFills.HomeModule : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
+ToolUp.Platform.ShellSlotFills.JobsAdmin : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
 ToolUp.Platform.ShellSlotFills.MigrationAdmin : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
 ToolUp.Platform.ShellSlotFills.ModuleVisibilityAdmin : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }
 ToolUp.Platform.ShellSlotFills.NotificationPreferences : ToolUp.Platform.SlotFill`1[ToolUp.Platform.ModuleLabel] { get }

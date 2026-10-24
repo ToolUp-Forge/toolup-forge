@@ -472,6 +472,11 @@
              the per-object failure log. Opt-in via
              ClientConfig.MigrationAdmin. -->
         <Compile Include="Client\MigrationStatusUI.fs" />
+        <!-- Phase 1106 - background-jobs admin over JobApi: permanently
+             failed jobs first with their recorded reason, and a confirmed
+             re-run. Opt-in via ClientConfig.Slots.JobsAdmin. Before
+             ShellSlots.fs (its slot builds the module and the tile). -->
+        <Compile Include="Client\JobsAdminUI.fs" />
         <Compile Include="Client\DataSubjectRequestAdminUI.fs" />
         <!-- Phase 54e — tenant-lifecycle diagnostics admin. Surfaces the
              durable last LifecycleSummary (IPlatformTenantApi.GetLifecycleSummary)

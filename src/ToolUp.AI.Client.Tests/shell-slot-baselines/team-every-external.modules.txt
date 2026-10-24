@@ -14,6 +14,7 @@ custom.permissionsAdmin | Custom permissionsAdmin | Replacements | - | product |
 custom.usageDashboard | Custom usageDashboard | Replacements | - | product | AUTC
 custom.auditViewer | Custom auditViewer | Replacements | - | product | AUTC
 custom.dataIngestionAdmin | Custom dataIngestionAdmin | Replacements | - | product | AUTC
+custom.jobsAdmin | Custom jobsAdmin | Replacements | - | product | AUTC
 custom.platformAdmin | Custom platformAdmin | Replacements | - | product | AUTC
 custom.healthMonitor | Custom healthMonitor | Replacements | - | product | AUTC
 custom.serviceStatusBoard | Custom serviceStatusBoard | Replacements | - | product | AUTC

@@ -192,6 +192,7 @@ let private everyDefault (config: ClientConfig) = {
             DataIngestionAdmin = SlotFill.Default
             MigrationAdmin = SlotFill.Default
             DataSubjectRequestAdmin = SlotFill.Default
+            JobsAdmin = SlotFill.Default
         }
 }
 
@@ -225,6 +226,7 @@ let private everyConfigured (config: ClientConfig) = {
             DataIngestionAdmin = SlotFill.Configured(label "My ingestion")
             MigrationAdmin = SlotFill.Configured(label "My migrations")
             DataSubjectRequestAdmin = SlotFill.Configured(label "My DSRs")
+            JobsAdmin = SlotFill.Configured(label "My jobs")
         }
 }
 
@@ -251,6 +253,7 @@ let private everyExternal (config: ClientConfig) = {
             DataIngestionAdmin = SlotFill.External(replacement "dataIngestionAdmin")
             MigrationAdmin = SlotFill.External(replacement "migrationAdmin")
             DataSubjectRequestAdmin = SlotFill.External(replacement "dataSubjectRequestAdmin")
+            JobsAdmin = SlotFill.External(replacement "jobsAdmin")
         }
 }
 
@@ -277,6 +280,7 @@ let private everyEmpty (config: ClientConfig) = {
             DataIngestionAdmin = SlotFill.Empty
             MigrationAdmin = SlotFill.Empty
             DataSubjectRequestAdmin = SlotFill.Empty
+            JobsAdmin = SlotFill.Empty
         }
 }
 
