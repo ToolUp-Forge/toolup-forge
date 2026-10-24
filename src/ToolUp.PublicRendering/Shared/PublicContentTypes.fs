@@ -57,9 +57,10 @@ module PublishStatus =
 ///   claims after the deployment's `ClaimMapping.GroupAliases`, so a page
 ///   names a group by its alias and the group's object id stays in
 ///   configuration). A principal holding any of them (`AccessContext.
-///   TokenRoles`) is admitted; nothing else admits — not team membership,
-///   not module permissions, not the platform-admin role. Empty admits
-///   nobody.
+///   TokenRoles`) is admitted, and so (Phase 1107) is one the scope's admin
+///   granted that role in the platform (`AccessContext.PublicationGrants`);
+///   nothing else admits — not team membership, not module permissions,
+///   not the platform-admin role. Empty admits nobody.
 /// - `PublishingScope` — the storage scope whose content the page reads
 ///   (a team's scope id, say). Fixed per page, or bound by the route: a
 ///   page producer that captures the scope from the slug sets it when it

@@ -5516,6 +5516,8 @@ ToolUp.Platform.PublicUtilityWidgetsMessages.Heading : System.String { get }
 ToolUp.Platform.PublicUtilityWidgetsMessages.PremiumUsers : ToolUp.Platform.PremiumUserWidgetMessages { get }
 ToolUp.Platform.PublicUtilityWidgetsMessages.RateLimits : ToolUp.Platform.RateLimitWidgetMessages { get }
 ToolUp.Platform.PublicUtilityWidgetsMessages.Traffic : ToolUp.Platform.TrafficWidgetMessages { get }
+ToolUp.Platform.PublicationReadersAdminUI (class)
+ToolUp.Platform.PublicationReadersAdminUI.panel(ToolUp.Platform.TeamManagerMessages, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Boolean) : Fable.React.ReactElement
 ToolUp.Platform.PwaManifest (class)
 ToolUp.Platform.PwaManifest..ctor(System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[System.String, System.String, System.String]])
 ToolUp.Platform.PwaManifest.BackgroundColor : System.String { get }
@@ -5937,7 +5939,7 @@ ToolUp.Platform.TeamConfigMessages.Saving : System.String { get }
 ToolUp.Platform.TeamConfigMessages.SelectModulePrompt : System.String { get }
 ToolUp.Platform.TeamConfigMessages.SidebarLoading : System.String { get }
 ToolUp.Platform.TeamManagerMessages (class)
-ToolUp.Platform.TeamManagerMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]])
+ToolUp.Platform.TeamManagerMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.TeamManagerMessages.ActiveBadge : System.String { get }
 ToolUp.Platform.TeamManagerMessages.Back : System.String { get }
 ToolUp.Platform.TeamManagerMessages.BreadcrumbMembers : System.String { get }
@@ -5971,6 +5973,16 @@ ToolUp.Platform.TeamManagerMessages.NoTeamsYet : System.String { get }
 ToolUp.Platform.TeamManagerMessages.PendingInvites : System.String { get }
 ToolUp.Platform.TeamManagerMessages.PendingInvitesLoading : System.String { get }
 ToolUp.Platform.TeamManagerMessages.PendingInvitesPanel : System.String { get }
+ToolUp.Platform.TeamManagerMessages.PublicationReaderAdd : System.String { get }
+ToolUp.Platform.TeamManagerMessages.PublicationReaderRemove : System.String { get }
+ToolUp.Platform.TeamManagerMessages.PublicationReaderRoleLabel : System.String { get }
+ToolUp.Platform.TeamManagerMessages.PublicationReaderUserPlaceholder : System.String { get }
+ToolUp.Platform.TeamManagerMessages.PublicationReadersActiveTeamOnly : System.String { get }
+ToolUp.Platform.TeamManagerMessages.PublicationReadersHelp : System.String { get }
+ToolUp.Platform.TeamManagerMessages.PublicationReadersLoading : System.String { get }
+ToolUp.Platform.TeamManagerMessages.PublicationReadersNoRoles : System.String { get }
+ToolUp.Platform.TeamManagerMessages.PublicationReadersNone : System.String { get }
+ToolUp.Platform.TeamManagerMessages.PublicationReadersPanel : System.String { get }
 ToolUp.Platform.TeamManagerMessages.RecentlyExpired : System.String { get }
 ToolUp.Platform.TeamManagerMessages.Reissue : System.String { get }
 ToolUp.Platform.TeamManagerMessages.Reissuing : System.String { get }
@@ -6376,6 +6388,8 @@ ToolUp.Remoting.Client.PlatformClientProxies.decodeProviderEntryView : Microsoft
 ToolUp.Remoting.Client.PlatformClientProxies.decodeProviderHealth : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ProviderHealth, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeProviderHealthStatus : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ProviderHealthStatus, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeProviderProfileView : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ProviderProfileView, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Client.PlatformClientProxies.decodePublicationReaderEntry : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PublicationReaderEntry, ToolUp.Remoting.DecodeError]] { get }
+ToolUp.Remoting.Client.PlatformClientProxies.decodePublicationReaderRoster : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.PublicationReaderRoster, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodePushVariant : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.NotificationKind+PushVariant, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeQuietHours : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.QuietHours, ToolUp.Remoting.DecodeError]] { get }
 ToolUp.Remoting.Client.PlatformClientProxies.decodeReadinessVerdict : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Remoting.Json.JsonValue, Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.ReadinessVerdict, ToolUp.Remoting.DecodeError]] { get }
@@ -6491,6 +6505,7 @@ ToolUp.Remoting.Client.PlatformClientProxies.encodePresenceLocation(ToolUp.Platf
 ToolUp.Remoting.Client.PlatformClientProxies.encodeProviderEntryInput(ToolUp.Platform.ProviderEntryInput) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeProviderVerificationOutcome(ToolUp.Platform.ProviderVerificationOutcome) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeProvisioningRequest(ToolUp.Platform.ProvisioningRequest) : ToolUp.Remoting.Json.JsonValue
+ToolUp.Remoting.Client.PlatformClientProxies.encodePublicationReaderEntry(ToolUp.Platform.PublicationReaderEntry) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeQuietHours(ToolUp.Platform.QuietHours) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeRecordOptInRequest(ToolUp.Platform.RecordOptInRequest) : ToolUp.Remoting.Json.JsonValue
 ToolUp.Remoting.Client.PlatformClientProxies.encodeRoutingRule(ToolUp.Platform.RoutingRule) : ToolUp.Remoting.Json.JsonValue
@@ -6531,6 +6546,7 @@ ToolUp.Remoting.Client.PlatformClientProxies.iPlatformTenantApiProxy(ToolUp.Remo
 ToolUp.Remoting.Client.PlatformClientProxies.iPresenceApiProxy(ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Platform.IPresenceApi
 ToolUp.Remoting.Client.PlatformClientProxies.iProvenanceQueryApiProxy(ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Platform.IProvenanceQueryApi
 ToolUp.Remoting.Client.PlatformClientProxies.iProviderProfileApiProxy(ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Platform.IProviderProfileApi
+ToolUp.Remoting.Client.PlatformClientProxies.iPublicationReaderApiProxy(ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Platform.IPublicationReaderApi
 ToolUp.Remoting.Client.PlatformClientProxies.iServiceAccountApiProxy(ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Platform.IServiceAccountApi
 ToolUp.Remoting.Client.PlatformClientProxies.iServiceStatusBoardApiProxy(ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Platform.IServiceStatusBoardApi
 ToolUp.Remoting.Client.PlatformClientProxies.iSessionApiProxy(ToolUp.Remoting.Client.RemoteBuilderOptions) : ToolUp.Platform.ISessionApi

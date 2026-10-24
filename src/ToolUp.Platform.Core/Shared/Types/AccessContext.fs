@@ -3,6 +3,19 @@
 
 namespace ToolUp.Platform
 
+/// Phase 1107 — an in-platform grant of one publication reader role: the
+/// holder may read the `Publication` pages of `PublishingScope` whose
+/// audience declares `Role` among its readers, exactly as if its identity
+/// provider had asserted that role — and nothing else. A grant names one
+/// scope and one role; there is no wildcard, and it is never implied by
+/// team membership, module permissions or the platform-admin role.
+type PublicationReaderGrant = {
+    /// The publishing scope (team id) whose publications the grant reads.
+    PublishingScope: string
+    /// The reader role granted — one the scope's publication audiences declare.
+    Role: string
+}
+
 /// Per-request access context, resolved from the authenticated user (or
 /// share-token claim, for `ClaimBearer` subjects) and the platform's
 /// permission configuration. Permissions are SDK-owned, not derived
@@ -73,6 +86,15 @@ type AccessContext = {
     /// readers it holds. Carried for `AuthenticatedUser` and `TeamMember`
     /// subjects only (`admissionFor`); `Member` for every other subject.
     Admission: ToolUp.Platform.Auth.PrincipalAdmission
+    /// Phase 1107 — the in-platform publication reader grants this
+    /// principal holds (`PublicationReaderGrant`), read per request so a
+    /// revocation takes effect at the next one. Read ONLY by the
+    /// `Publication` page audience, which admits on a provider-asserted
+    /// reader role OR a grant of that role for the page's publishing
+    /// scope. Carried for signed-in human principals only
+    /// (`publicationGrantsFor`); empty for every other subject, and empty
+    /// wherever no grant store is composed.
+    PublicationGrants: PublicationReaderGrant list
 }
 
 module AccessContext =
@@ -112,6 +134,7 @@ module AccessContext =
         PlatformRole = None
         TokenRoles = []
         Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
+        PublicationGrants = []
     }
 
     /// Phase 987 — the `TokenRoles` a context for `subject` carries, given
@@ -152,6 +175,19 @@ module AccessContext =
         | Subject.AuthenticatedUser _
         | Subject.TeamMember _
         | Subject.PublicationReader _ -> List.distinct providerRoles
+        | Subject.AnonymousSession _
+        | Subject.ClaimBearer _ -> []
+
+    /// Phase 1107 — the `PublicationGrants` a context for `subject` carries,
+    /// given the grants the store holds for its user: those grants,
+    /// de-duplicated, for a signed-in human principal (`AuthenticatedUser`
+    /// / `TeamMember` / `PublicationReader`); none for an anonymous session
+    /// or a share-token bearer (the same rule as `tokenRolesFor`).
+    let publicationGrantsFor (subject: Subject) (grants: PublicationReaderGrant list) : PublicationReaderGrant list =
+        match subject with
+        | Subject.AuthenticatedUser _
+        | Subject.TeamMember _
+        | Subject.PublicationReader _ -> List.distinct grants
         | Subject.AnonymousSession _
         | Subject.ClaimBearer _ -> []
 

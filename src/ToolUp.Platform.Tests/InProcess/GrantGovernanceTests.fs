@@ -207,6 +207,7 @@ let private accessFor (perms: (string * ModulePermission list) list) = {
     ModulePermissions = Map.ofList perms
     TokenRoles = []
     Admission = ToolUp.Platform.Auth.PrincipalAdmission.Member
+    PublicationGrants = []
     ModuleExposure = Map.empty
     PlatformRole = None
 }

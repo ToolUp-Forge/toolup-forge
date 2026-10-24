@@ -264,6 +264,17 @@ module MessageCatalog =
                     $"{newOwner} becomes the Owner and you become an Admin. Only the new Owner can transfer it back."
             InviteExpires = fun role at -> $"{role} · expires {at}"
             InviteExpired = fun role at -> $"{role} · expired {at}"
+            PublicationReadersPanel = "Publication readers"
+            PublicationReadersHelp =
+                "People added here can read this team's publications for the reader role chosen, and nothing else. Readers your identity provider assigns are managed in the directory."
+            PublicationReadersActiveTeamOnly = "Switch to this team to manage its publication readers."
+            PublicationReadersLoading = "Loading publication readers…"
+            PublicationReadersNoRoles = "No publication of this team declares a reader role yet."
+            PublicationReadersNone = "No readers have been added in the platform."
+            PublicationReaderRoleLabel = "Reader role"
+            PublicationReaderUserPlaceholder = "Sign-in user id"
+            PublicationReaderAdd = "Add reader"
+            PublicationReaderRemove = "Remove"
         }
         HealthMonitor = {
             LiveHealthTab = "Live health"

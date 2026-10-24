@@ -577,6 +577,8 @@
              ModulePermission map); Fable-safe (records, DUs and pure
              functions only — the hashing lives server-side). -->
         <Compile Include="Shared\ServiceAccountTypes.fs" />
+        <!-- Phase 1107 — the in-platform publication reader admin API. -->
+        <Compile Include="Shared\PublicationReaderTypes.fs" />
         <Compile Include="Shared\ResultTypes.fs" />
         <Compile Include="Shared\LineageTypes.fs" />
         <Compile Include="Shared\JobTypes.fs" />

@@ -107,6 +107,13 @@ let internal accessContextOf (ctx: HttpContext) : AccessContext =
         | true, (:? ToolUp.Platform.Auth.AuthenticatedUser as user) -> user.Admission
         | _ -> ToolUp.Platform.Auth.PrincipalAdmission.Member
 
+    // Phase 1107 — the in-platform publication reader grants the same
+    // middleware read for this principal, under the same rule.
+    let publicationGrants =
+        match ctx.Items.TryGetValue "ToolUp.PublicationGrants" with
+        | true, (:? (PublicationReaderGrant list) as grants) -> grants
+        | _ -> []
+
     match ctx.Items.TryGetValue "ToolUp.Subject" with
     | true, (:? Subject as subject) ->
         // Phase 1059 — `UserId` and `TeamId` come from the Subject, by
@@ -126,6 +133,7 @@ let internal accessContextOf (ctx: HttpContext) : AccessContext =
             PlatformRole = platformRole
             TokenRoles = AccessContext.tokenRolesFor subject providerRoles
             Admission = AccessContext.admissionFor subject providerAdmission
+            PublicationGrants = AccessContext.publicationGrantsFor subject publicationGrants
         }
     | _ -> AccessContext.unrestricted (AnonymousSession "anonymous")
 

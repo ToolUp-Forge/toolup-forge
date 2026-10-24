@@ -310,6 +310,20 @@ type TeamManagerMessages = {
     InviteExpires: string -> string -> string
     /// …and the same for one that has already expired.
     InviteExpired: string -> string -> string
+    // Phase 1107 — the publication-readers panel of the team details view.
+    PublicationReadersPanel: string
+    PublicationReadersHelp: string
+    /// Shown on a team that is not the caller's active team: the panel
+    /// manages the active team's readers only.
+    PublicationReadersActiveTeamOnly: string
+    PublicationReadersLoading: string
+    /// No publication of the team declares a reader role, so nothing can be granted.
+    PublicationReadersNoRoles: string
+    PublicationReadersNone: string
+    PublicationReaderRoleLabel: string
+    PublicationReaderUserPlaceholder: string
+    PublicationReaderAdd: string
+    PublicationReaderRemove: string
 }
 
 /// The built-in health-monitor module (`HealthMonitorUI`).

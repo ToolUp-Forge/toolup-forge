@@ -1892,6 +1892,26 @@ module PlatformDecoders =
         |> Decode.apply (Decode.field "Routing" 1 (Decode.list routingRule))
         |> Decode.apply (Decode.field "Fallback" 2 fallbackChain)
 
+    /// Generated decoder for `PublicationReaderEntry` — one combinator per field or case, read off the type's own shape.
+    let publicationReaderEntry: Decoder<PublicationReaderEntry> =
+        Decode.succeed (fun userId role -> ({
+            UserId = userId
+            Role = role
+        }: PublicationReaderEntry))
+        |> Decode.apply (Decode.field "UserId" 0 Decode.asString)
+        |> Decode.apply (Decode.field "Role" 1 Decode.asString)
+
+    /// Generated decoder for `PublicationReaderRoster` — one combinator per field or case, read off the type's own shape.
+    let publicationReaderRoster: Decoder<PublicationReaderRoster> =
+        Decode.succeed (fun publishingScope declaredRoles readers -> ({
+            PublishingScope = publishingScope
+            DeclaredRoles = declaredRoles
+            Readers = readers
+        }: PublicationReaderRoster))
+        |> Decode.apply (Decode.field "PublishingScope" 0 Decode.asString)
+        |> Decode.apply (Decode.field "DeclaredRoles" 1 (Decode.list Decode.asString))
+        |> Decode.apply (Decode.field "Readers" 2 (Decode.list publicationReaderEntry))
+
     /// Generated decoder for `ModulePermission` — one combinator per field or case, read off the type's own shape.
     let modulePermission: Decoder<ModulePermission> =
         Decode.union "ModulePermission" (function
@@ -3083,6 +3103,8 @@ module PlatformDecoders =
         typeof<RoutingRule>.FullName
         typeof<FallbackChain>.FullName
         typeof<ProviderProfileView>.FullName
+        typeof<PublicationReaderEntry>.FullName
+        typeof<PublicationReaderRoster>.FullName
         typeof<ModulePermission>.FullName
         typeof<ServiceAccountStatus>.FullName
         typeof<ServiceAccount>.FullName
@@ -3216,6 +3238,7 @@ module PlatformDecoders =
         typeof<Result<WireProvenanceChainPage, ProvenanceQueryError>>.FullName
         typeof<Result<ProviderProfileView, string>>.FullName
         typeof<Result<(string * ProviderHealth) list, string>>.FullName
+        typeof<Result<PublicationReaderRoster, string>>.FullName
         typeof<Result<ServiceAccount list, string>>.FullName
         typeof<Result<ServiceAccount, string>>.FullName
         typeof<Result<ServiceAccountTokenView list, string>>.FullName
@@ -3413,6 +3436,8 @@ module PlatformDecoders =
         RemotingDecoders.register<RoutingRule> routingRule
         RemotingDecoders.register<FallbackChain> fallbackChain
         RemotingDecoders.register<ProviderProfileView> providerProfileView
+        RemotingDecoders.register<PublicationReaderEntry> publicationReaderEntry
+        RemotingDecoders.register<PublicationReaderRoster> publicationReaderRoster
         RemotingDecoders.register<ModulePermission> modulePermission
         RemotingDecoders.register<ServiceAccountStatus> serviceAccountStatus
         RemotingDecoders.register<ServiceAccount> serviceAccount
@@ -3546,6 +3571,7 @@ module PlatformDecoders =
         RemotingDecoders.register<Result<WireProvenanceChainPage, ProvenanceQueryError>> (Decode.result wireProvenanceChainPage provenanceQueryError)
         RemotingDecoders.register<Result<ProviderProfileView, string>> (Decode.result providerProfileView Decode.asString)
         RemotingDecoders.register<Result<(string * ProviderHealth) list, string>> (Decode.result (Decode.list (Decode.tuple2 Decode.asString providerHealth)) Decode.asString)
+        RemotingDecoders.register<Result<PublicationReaderRoster, string>> (Decode.result publicationReaderRoster Decode.asString)
         RemotingDecoders.register<Result<ServiceAccount list, string>> (Decode.result (Decode.list serviceAccount) Decode.asString)
         RemotingDecoders.register<Result<ServiceAccount, string>> (Decode.result serviceAccount Decode.asString)
         RemotingDecoders.register<Result<ServiceAccountTokenView list, string>> (Decode.result (Decode.list serviceAccountTokenView) Decode.asString)
@@ -3744,6 +3770,8 @@ module PlatformDecoders =
         RemotingDecoders.verifyThrough<RoutingRule> gate draws seed routingRule
         RemotingDecoders.verifyThrough<FallbackChain> gate draws seed fallbackChain
         RemotingDecoders.verifyThrough<ProviderProfileView> gate draws seed providerProfileView
+        RemotingDecoders.verifyThrough<PublicationReaderEntry> gate draws seed publicationReaderEntry
+        RemotingDecoders.verifyThrough<PublicationReaderRoster> gate draws seed publicationReaderRoster
         RemotingDecoders.verifyThrough<ModulePermission> gate draws seed modulePermission
         RemotingDecoders.verifyThrough<ServiceAccountStatus> gate draws seed serviceAccountStatus
         RemotingDecoders.verifyThrough<ServiceAccount> gate draws seed serviceAccount
@@ -3877,6 +3905,7 @@ module PlatformDecoders =
         RemotingDecoders.verifyThrough<Result<WireProvenanceChainPage, ProvenanceQueryError>> gate draws seed (Decode.result wireProvenanceChainPage provenanceQueryError)
         RemotingDecoders.verifyThrough<Result<ProviderProfileView, string>> gate draws seed (Decode.result providerProfileView Decode.asString)
         RemotingDecoders.verifyThrough<Result<(string * ProviderHealth) list, string>> gate draws seed (Decode.result (Decode.list (Decode.tuple2 Decode.asString providerHealth)) Decode.asString)
+        RemotingDecoders.verifyThrough<Result<PublicationReaderRoster, string>> gate draws seed (Decode.result publicationReaderRoster Decode.asString)
         RemotingDecoders.verifyThrough<Result<ServiceAccount list, string>> gate draws seed (Decode.result (Decode.list serviceAccount) Decode.asString)
         RemotingDecoders.verifyThrough<Result<ServiceAccount, string>> gate draws seed (Decode.result serviceAccount Decode.asString)
         RemotingDecoders.verifyThrough<Result<ServiceAccountTokenView list, string>> gate draws seed (Decode.result (Decode.list serviceAccountTokenView) Decode.asString)
@@ -3976,6 +4005,7 @@ module PlatformDecoders =
         "IPresenceApi", [ typeof<PresencePeer list>.FullName; typeof<unit>.FullName; typeof<LockOutcome>.FullName; typeof<LockLease option>.FullName ], true
         "IProvenanceQueryApi", [ typeof<WireProvenanceCaps>.FullName; typeof<WireProvenanceNodeAnswer>.FullName; typeof<WireProvenanceEdgeSet>.FullName; typeof<Result<WireProvenanceChainPage, ProvenanceQueryError>>.FullName ], true
         "IProviderProfileApi", [ typeof<Result<ProviderProfileView, string>>.FullName; typeof<Result<unit, string>>.FullName; typeof<Result<(string * ProviderHealth) list, string>>.FullName ], true
+        "IPublicationReaderApi", [ typeof<Result<PublicationReaderRoster, string>>.FullName; typeof<Result<unit, string>>.FullName ], false
         "IServiceAccountApi", [ typeof<Result<ServiceAccount list, string>>.FullName; typeof<Result<ServiceAccount, string>>.FullName; typeof<Result<ServiceAccountTokenView list, string>>.FullName; typeof<Result<MintedServiceAccountTokenView, string>>.FullName; typeof<Result<unit, string>>.FullName ], true
         "IServiceStatusBoardApi", [ typeof<Result<ServiceStatusSnapshot, string>>.FullName; typeof<Result<SectionSummary, string>>.FullName ], true
         "ISessionApi", [ typeof<Result<SessionRecord list, string>>.FullName; typeof<Result<unit, string>>.FullName; typeof<Result<int, string>>.FullName ], true

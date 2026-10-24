@@ -833,6 +833,9 @@ ToolUp.PublicRendering.PublicationNarrative+Withheld.denied : Microsoft.FSharp.C
 ToolUp.PublicRendering.PublicationRead (class)
 ToolUp.PublicRendering.PublicationRead.latestNarrative(ToolUp.Platform.INarrativeStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEventStore], ToolUp.PublicRendering.PublicationAudience, System.String, System.String, ToolUp.Platform.AccessContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.PublicRendering.PublicationNarrative]
 ToolUp.PublicRendering.PublicationRead.latestNarrativeIn(System.IServiceProvider, ToolUp.PublicRendering.PublicationAudience, System.String, System.String, ToolUp.Platform.AccessContext) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.PublicRendering.PublicationNarrative]
+ToolUp.PublicRendering.PublicationReaderRoles (class)
+ToolUp.PublicRendering.PublicationReaderRoles.declaredIn(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.PublicRendering.PublicPage], System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
+ToolUp.PublicRendering.PublicationReaderRoles.fromApi(ToolUp.PublicRendering.IPublicContentApi) : ToolUp.Platform.IPublicationReaderRoleSource
 ToolUp.PublicRendering.PublishStatus (class)
 ToolUp.PublicRendering.PublishStatus.Archived : ToolUp.PublicRendering.PublishStatus { get }
 ToolUp.PublicRendering.PublishStatus.Draft : ToolUp.PublicRendering.PublishStatus { get }

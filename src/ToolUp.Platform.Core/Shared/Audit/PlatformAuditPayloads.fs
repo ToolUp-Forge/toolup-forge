@@ -47,6 +47,23 @@ type PublicationReaderSignedInPayload = {
     OccurredAt: DateTimeOffset
 }
 
+/// Phase 1107 — an Owner or Admin of a publishing scope granted, or revoked,
+/// one publication reader role to one principal in the platform. Recorded
+/// under the publishing scope. A revocation bites at the reader's next
+/// request (grants are read per request).
+type PublicationReaderGrantChangedPayload = {
+    /// The admin who made the change (`AccessContext.UserId`).
+    ActorId: string
+    /// The publishing scope (team id) the grant reads.
+    PublishingScope: string
+    /// The principal granted or revoked (its sign-in user id).
+    ReaderId: string
+    /// The reader role granted or revoked.
+    Role: string
+    /// When the change was made.
+    OccurredAt: DateTimeOffset
+}
+
 type TeamCreatedPayload = {
     UserId: string
     TeamId: string

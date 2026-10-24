@@ -294,3 +294,29 @@ module PublicationRead =
                 return PublicationNarrative.NothingPublished
             | decision -> return PublicationNarrative.Refused decision
           }
+
+/// Phase 1107 — the reader roles a publishing scope's publications declare,
+/// read off the pages the content API lists. The platform's publication
+/// reader admin refuses a grant naming any other role, so a grant can only
+/// ever name a role some page of that scope admits on.
+module PublicationReaderRoles =
+
+    /// The distinct readers of every listed `Publication` page whose
+    /// publishing scope is `publishingScope`, ordered.
+    let declaredIn (pages: PublicPage list) (publishingScope: string) : string list =
+        pages
+        |> List.collect (fun page ->
+            match page.Audience with
+            | PageAudience.Publication audience when audience.PublishingScope = publishingScope -> audience.Readers
+            | _ -> [])
+        |> List.distinct
+        |> List.sort
+
+    /// An `IPublicationReaderRoleSource` over `api`'s full page listing.
+    let fromApi (api: IPublicContentApi) : IPublicationReaderRoleSource =
+        { new IPublicationReaderRoleSource with
+            member _.DeclaredRoles publishingScope = async {
+                let! pages = api.ListPages ""
+                return declaredIn pages publishingScope
+            }
+        }

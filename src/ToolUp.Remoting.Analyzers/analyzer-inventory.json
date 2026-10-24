@@ -149,6 +149,7 @@
       "rule": "TUA001",
       "reason": "First-party modules and companions resolving substrate per request: the hand-resolution census the seam-aware service provider governs at runtime. Recorded so a new site is a finding; each moves to a registration factory as its module adopts the seam.",
       "sites": {
+        "src/AuthProviders/Oidc/OidcAuthProvider.fs": 2,
         "src/AuthProviders/Oidc/OidcSsrSignIn.fs": 3,
         "src/AuthProviders/Passkey/PasskeyAuthProvider.fs": 1,
         "src/AuthProviders/Passkey/PasskeyHost.fs": 2,
