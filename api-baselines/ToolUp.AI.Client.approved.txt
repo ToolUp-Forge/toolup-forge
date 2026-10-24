@@ -365,7 +365,7 @@ ToolUp.AI.Client.FastPathBridge+ResolveOutcome+Tags (class)
 ToolUp.AI.Client.FastPathBridge+ResolveOutcome+Tags.NoResolution : System.Int32 (literal)
 ToolUp.AI.Client.FastPathBridge+ResolveOutcome+Tags.Resolved : System.Int32 (literal)
 ToolUp.AI.Client.NarrativePromptAdminUI (class)
-ToolUp.AI.Client.NarrativePromptAdminUI.adminTiles : ToolUp.Platform.IAdminTileContributor { get }
+ToolUp.AI.Client.NarrativePromptAdminUI.adminTile : ToolUp.Platform.AdminTile { get }
 ToolUp.AI.Client.NarrativePromptAdminUI.changedGuidance(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeDeclaredSection], Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.String]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativeSectionGuidance]
 ToolUp.AI.Client.NarrativePromptAdminUI.create() : ToolUp.Platform.ErasedModule
 ToolUp.AI.Client.NarrativePromptAdminUI.init() : System.Tuple`2[ToolUp.AI.Client.NarrativePromptAdminUI+Model, Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.Client.NarrativePromptAdminUI+Msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]]
