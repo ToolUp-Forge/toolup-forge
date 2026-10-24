@@ -7,6 +7,16 @@ SemVer-on-0.x policy (see the repository `CLAUDE.md` "Versioning"
 section), during `0.x` a minor bump may carry breaking changes while a
 patch bump stays non-breaking.
 
+## [Unreleased]
+
+### Fixed
+
+- `KillStaleProcesses` (Phase 1108) now stops only `esbuild` processes whose executable lies under this
+  project's client `node_modules`, read from the process's main module path, instead of every `esbuild` on the
+  machine. Another project's Vite dev server is left running; a stale esbuild that would hold an `npm ci` lock
+  is still stopped. A process whose path cannot be read is left alone and reported in the build output. Same on
+  Windows and Linux. No consumer change: the target's name and place in the build graph are unchanged.
+
 ## [0.1.2]
 
 ### Added
