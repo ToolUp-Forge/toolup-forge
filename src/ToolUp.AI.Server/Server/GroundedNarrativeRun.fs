@@ -32,6 +32,14 @@ module ToolUp.AI.GroundedNarrativeRun
 // that holds no usable key is `GroundedNarrativeUnfunded`: a permanent,
 // typed outcome, because waiting does not configure a key.
 //
+// **Its call budget (Phase 1109).** No client waits on a run, so it is not
+// held to the interactive assistant's 50-second call cap: the agent loop
+// runs under `GroundedNarrativeRunOptions.CallBudget` —
+// `defaultCallBudget` (300 s a call, a 16,384-token reply) unless the
+// composition sets its own with `withCallBudget`. A reply still streaming
+// when a call reaches it is `GroundedNarrativeOverBudget`: permanent, since
+// another attempt meets the same budget, and its reason says how to raise it.
+//
 // **The format the model writes.** A JSON object
 //
 //     {"sections":[{"id":"summary","paragraphs":["Revenue was [[Revenue|1,250|<fact id>]] ..."]}]}
@@ -63,15 +71,48 @@ type GroundedNarrativeRunOptions = {
     Tools: (AIToolDefinition * (HttpContext -> string -> Async<string>)) list
     /// The clock the provenance stamp reads.
     Clock: unit -> DateTimeOffset
+    /// Phase 1109 — the budget every model call the run makes runs under.
+    CallBudget: AIAgentEngine.AgentCallBudget
 }
 
 module GroundedNarrativeRunOptions =
+    /// The call budget a run gets unless its composition sets one. 300 s a
+    /// call: a report written from a day's facts streams for minutes, not
+    /// the seconds a chat reply takes, and 300 s is the instance-wide
+    /// timeout of the shipped HTTP connectors (a value up to the 600 s
+    /// per-call ceiling is honoured). 16,384 reply tokens: four times the
+    /// shipped connectors' 4,096 default, room for a multi-section report,
+    /// and at typical streaming rates (~60 tokens/s) inside the 300 s.
+    let defaultCallBudget: AIAgentEngine.AgentCallBudget = {
+        CallTimeout = TimeSpan.FromSeconds 300.0
+        MaxTokens = Some 16_384
+        RaiseWith =
+            Some
+                "compose the run with GroundedNarrativeRunOptions.withCallBudget, raising CallTimeout (up to 600 s) or MaxTokens (up to the model's output limit)"
+    }
+
     let create
         (tools: (AIToolDefinition * (HttpContext -> string -> Async<string>)) list)
         : GroundedNarrativeRunOptions =
         {
             Tools = tools
             Clock = fun () -> DateTimeOffset.UtcNow
+            CallBudget = defaultCallBudget
+        }
+
+    /// Run under `budget` instead of `defaultCallBudget`. A budget with no
+    /// `RaiseWith` gets the default's, so an exhausted budget still says how
+    /// to raise it.
+    let withCallBudget
+        (budget: AIAgentEngine.AgentCallBudget)
+        (options: GroundedNarrativeRunOptions)
+        : GroundedNarrativeRunOptions =
+        {
+            options with
+                CallBudget = {
+                    budget with
+                        RaiseWith = budget.RaiseWith |> Option.orElse defaultCallBudget.RaiseWith
+                }
         }
 
 // ── The format ───────────────────────────────────────────────────
@@ -254,6 +295,12 @@ type private ProviderShortfall =
     | ProviderUnfunded of string
     | ProviderUnavailable of string
 
+/// Why the model produced no narrative: a failure that may pass, or a reply
+/// cut at the run's call budget (Phase 1109), which will not.
+type private GenerationShortfall =
+    | GenerationFailed of string
+    | GenerationOverBudget of string
+
 type GroundedNarrativeRunner
     (services: IServiceProvider, registry: GroundedNarrativeRegistry, options: GroundedNarrativeRunOptions) =
 
@@ -303,6 +350,9 @@ type GroundedNarrativeRunner
     /// The same audit row as any failure, with its own outcome, so a reader
     /// of the trail can tell "configure a key" from "try again".
     let unfunded = failedAs "unfunded" GroundedNarrativeUnfunded
+
+    /// Phase 1109 — the reply was cut at the run's call budget.
+    let overBudget = failedAs "over-budget" GroundedNarrativeOverBudget
 
     let resolveProvider (access: AccessContext) : Async<Result<IAIProvider, ProviderShortfall>> = async {
         match tryService<IAIProvider> services with
@@ -357,7 +407,7 @@ type GroundedNarrativeRunner
         (resolved: ResolvedScope)
         (scope: StorageScope)
         (provider: IAIProvider)
-        : Async<Result<(string * InlineSpan list list) list, string>> =
+        : Async<Result<(string * InlineSpan list list) list, GenerationShortfall>> =
         async {
             let tools = AIToolRegistry()
             tools.RegisterAll(options.Tools |> List.map (fun (def, exec) -> createTool def exec))
@@ -376,33 +426,37 @@ type GroundedNarrativeRunner
             let ctx, diScope = contextFor resolved scope definition.Principal
 
             try
-                let! final =
-                    AIAgentEngine.runAgentLoopWithInput
-                        provider
-                        tools
-                        (ClientToolDispatch.ClientToolDispatchRegistry())
-                        ctx
-                        (Guid.NewGuid())
-                        (Guid.NewGuid())
-                        AISurface.FullPage
-                        None
-                        None
-                        CancellationToken.None
-                        messages
-                        (ModelInput.ofSystemPrompt
-                            "GroundedNarrativeRun"
-                            (Some(systemPrompt definition toolNames))
-                            messages)
-                        ignore
+                try
+                    let! final =
+                        AIAgentEngine.runAgentLoopWithBudget
+                            provider
+                            tools
+                            (ClientToolDispatch.ClientToolDispatchRegistry())
+                            ctx
+                            (Guid.NewGuid())
+                            (Guid.NewGuid())
+                            AISurface.FullPage
+                            None
+                            None
+                            CancellationToken.None
+                            messages
+                            (ModelInput.ofSystemPrompt
+                                "GroundedNarrativeRun"
+                                (Some(systemPrompt definition toolNames))
+                                messages)
+                            options.CallBudget
+                            ignore
 
-                let answer =
-                    final
-                    |> List.rev
-                    |> List.tryFind (fun m -> m.Role = "assistant" && not (String.IsNullOrWhiteSpace m.Content))
+                    let answer =
+                        final
+                        |> List.rev
+                        |> List.tryFind (fun m -> m.Role = "assistant" && not (String.IsNullOrWhiteSpace m.Content))
 
-                match answer with
-                | Some message -> return parseOutput message.Content
-                | None -> return Error "the model returned no narrative"
+                    match answer with
+                    | Some message -> return parseOutput message.Content |> Result.mapError GenerationFailed
+                    | None -> return Error(GenerationFailed "the model returned no narrative")
+                with AIAgentEngine.AgentCallBudgetExceeded _ as exceeded ->
+                    return Error(GenerationOverBudget exceeded.Message)
             finally
                 diScope.Dispose()
         }
@@ -496,7 +550,8 @@ type GroundedNarrativeRunner
                         | Error reason -> return! failed request (sprintf "the run's projections failed: %s" reason)
                         | Ok projections ->
                             match! generate definition request.Scope scope provider with
-                            | Error reason -> return! failed request reason
+                            | Error(GenerationFailed reason) -> return! failed request reason
+                            | Error(GenerationOverBudget reason) -> return! overBudget request reason
                             | Ok prose ->
                                 let provenance = {
                                     ModuleId = definition.ModuleId
