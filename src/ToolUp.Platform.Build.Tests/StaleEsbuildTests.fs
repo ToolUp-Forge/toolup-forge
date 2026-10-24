@@ -35,13 +35,20 @@ let private esbuildName =
 /// so a copy of it stays alive for the `sleep` child it runs, with the copy
 /// as the process's main module and `esbuild` as its name, which is what
 /// `StaleEsbuild.stopUnder` reads.
+///
+/// The command is a compound one on purpose: given a single simple command,
+/// `bash -c` (and `dash`) exec it in place rather than forking, and the
+/// process would become `sleep` again — the first CI run of this fix showed
+/// exactly that, with the decoy surviving but the project's own copy never
+/// stopped. A trailing `:` makes it two commands, so the shell forks and
+/// stays the parent.
 let private longRunner () =
     if OperatingSystem.IsWindows() then
         Path.Combine(Environment.SystemDirectory, "ping.exe"), "-n 120 127.0.0.1"
     else
         let shell = [ "/bin/bash"; "/usr/bin/bash"; "/bin/sh" ] |> List.find File.Exists
 
-        shell, "-c \"sleep 120\""
+        shell, "-c \"sleep 120; :\""
 
 /// Start a fake `esbuild` whose executable lives in `dir`.
 let private startEsbuildIn (dir: string) =
