@@ -41,6 +41,7 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
+open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.RemotingHelpers
 open ToolUp.Platform.TeamManagement
 open ToolUp.AI
@@ -280,7 +281,8 @@ let narrativePromptApi (ctx: HttpContext) : NarrativePromptApi =
         serviceOf<AccessContext> ctx
         |> Option.defaultWith (fun () -> AccessContext.unrestricted (AnonymousSession "anonymous"))
 
-    let store = NarrativeWording.storeOf ctx.RequestServices
+    let store =
+        NarrativeWording.storeOver (serviceOf<IBlobStorage> ctx) (serviceOf<ILogger> ctx)
 
     let authorised (f: Caller -> Async<Result<'T, string>>) : Async<Result<'T, string>> = async {
         match serviceOf<GroundedNarrativeRegistry> ctx with

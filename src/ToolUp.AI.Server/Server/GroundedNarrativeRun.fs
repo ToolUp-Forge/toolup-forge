@@ -446,15 +446,14 @@ module internal NarrativeWording =
             (version.Guidance |> List.map (fun g -> g.SectionId, g.Guidance))
             definition
 
-    /// The composed store over the deployment's blob storage; `None` when no
-    /// blob storage is composed (then no wording can have been saved).
-    let storeOf (services: IServiceProvider) : NarrativePromptStore option =
-        match tryService<IBlobStorage> services with
-        | Some storage ->
+    /// The store over `storage`; `None` when no blob storage is composed
+    /// (then no wording can have been saved).
+    let storeOver (storage: IBlobStorage option) (logger: ILogger option) : NarrativePromptStore option =
+        storage
+        |> Option.map (fun storage ->
             let logger =
-                match tryService<ILogger> services with
-                | Some l -> l
-                | None ->
+                logger
+                |> Option.defaultValue
                     { new ILogger with
                         member _.Debug _ = ()
                         member _.Info _ = ()
@@ -462,8 +461,11 @@ module internal NarrativeWording =
                         member _.Error(_, _) = ()
                     }
 
-            Some(NarrativePromptStore(storage, logger))
-        | _ -> None
+            NarrativePromptStore(storage, logger))
+
+    /// The store over the composed services.
+    let storeOf (services: IServiceProvider) : NarrativePromptStore option =
+        storeOver (tryService<IBlobStorage> services) (tryService<ILogger> services)
 
     /// The wording a run in `scope` uses: the scope's saved version in force,
     /// or the declaration — and, when a saved wording existed and could not
