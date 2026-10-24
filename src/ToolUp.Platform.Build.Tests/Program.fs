@@ -81,6 +81,9 @@ let private registeredTests =
         // the bounded per-package retry, and the unpushed-remainder report.
         // A scripted fake runner; nothing is pushed, nothing sleeps.
         NugetPushTests.tests
+        // Phase 1108 - KillStaleProcesses stops only the esbuild under the
+        // project's own node_modules; a decoy elsewhere survives. Real processes.
+        StaleEsbuildTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

@@ -110,6 +110,7 @@
         <!-- Phase 1016 - the Publish push loop's timeout, bounded retry and
              remainder report, driven by a fake runner (no network). -->
         <Compile Include="NugetPushTests.fs" />
+        <Compile Include="StaleEsbuildTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

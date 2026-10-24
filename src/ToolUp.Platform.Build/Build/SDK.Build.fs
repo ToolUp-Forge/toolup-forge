@@ -624,6 +624,66 @@ module internal NugetPush =
                 outcome.Unpushed.Length
                 (outcome.Unpushed |> List.map name |> String.concat ", ")
 
+/// Phase 1108 - the `KillStaleProcesses` target's stop, scoped to one project.
+///
+/// A leftover `esbuild` can hold file locks inside the project's client
+/// `node_modules` and fail the next `npm ci`, but `esbuild` is also what Vite
+/// runs under the hood, so stopping every `esbuild` by name stops other
+/// projects' dev servers on a shared machine. This stops only the processes
+/// whose main module lies under the given `node_modules` directory. A process
+/// whose path cannot be read (access denied, already exited) is left alone and
+/// reported through `log`.
+///
+/// `internal` for the reason `NugetPush` is: reached by the Build test pack
+/// through `InternalsVisibleTo`, not part of the published surface.
+module internal StaleEsbuild =
+
+    open System.Diagnostics
+
+    /// True when `path` lies strictly under `root`. Windows paths compare
+    /// case-insensitively; elsewhere they compare ordinally.
+    let isUnder (root: string) (path: string) =
+        let comparison =
+            if OperatingSystem.IsWindows() then
+                StringComparison.OrdinalIgnoreCase
+            else
+                StringComparison.Ordinal
+
+        let sep = string IO.Path.DirectorySeparatorChar
+        let rootFull = IO.Path.GetFullPath root
+        let rootDir = if rootFull.EndsWith sep then rootFull else rootFull + sep
+        (IO.Path.GetFullPath path).StartsWith(rootDir, comparison)
+
+    /// Stop every `esbuild` process whose executable lies under `nodeModules`;
+    /// returns the number stopped.
+    let stopUnder (nodeModules: string) (log: string -> unit) : int =
+        let mutable stopped = 0
+
+        for p in Diagnostics.Process.GetProcessesByName "esbuild" do
+            use p = p
+
+            let path =
+                try
+                    Some p.MainModule.FileName
+                with e ->
+                    log
+                        $"KillStaleProcesses: left esbuild pid %d{p.Id} alone: its path could not be read (%s{e.Message})"
+
+                    None
+
+            match path with
+            | Some path when isUnder nodeModules path ->
+                try
+                    p.Kill()
+                    p.WaitForExit 5000 |> ignore
+                    stopped <- stopped + 1
+                    log $"KillStaleProcesses: stopped esbuild pid %d{p.Id} (%s{path})"
+                with e ->
+                    log $"KillStaleProcesses: could not stop esbuild pid %d{p.Id} (%s{e.Message})"
+            | _ -> ()
+
+        stopped
+
 type BuildConfig = {
     ServerProject: string
     ClientProject: string
@@ -665,14 +725,12 @@ let registerTargets (config: BuildConfig) =
         run dotnet [ "fable"; "clean"; "--yes" ] clientPath)
 
     Target.create "KillStaleProcesses" (fun _ ->
-        // Kill stale esbuild processes that may hold file locks in node_modules,
-        // which prevents npm ci from completing. Only kills esbuild (project-specific),
-        // not node (which could be running unrelated apps).
-        try
-            Trace.tracefn "Killing stale esbuild processes..."
-            Process.killAllByName "esbuild"
-        with _ ->
-            ())
+        // Stop stale esbuild processes that may hold file locks in THIS project's
+        // node_modules and so fail npm ci. Scoped by executable path (Phase 1108):
+        // another project's Vite dev server runs an esbuild too, and is left alone.
+        let nodeModules = IO.Path.Combine(clientPath, "node_modules")
+        Trace.tracefn "Stopping stale esbuild processes under %s..." nodeModules
+        StaleEsbuild.stopUnder nodeModules (Trace.tracefn "%s") |> ignore)
 
     Target.create "RestoreClientDependencies" (fun _ -> run npm [ "ci"; "--include=optional" ] clientPath)
 
