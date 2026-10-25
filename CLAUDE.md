@@ -314,7 +314,9 @@ NOT add a `ProjectReference` from any `ToolUp.Platform.*` project to `ToolUp.Tab
 the BCL-only CSV path — because it drags OpenXml into the SDK core's dependency graph. When SDK-core
 code needs Tabular-style behaviour, cut a dependency-free interface seam in `Platform.Server`, ship a
 BCL-only default over the coarse schema, and let a Tabular-backed implementation be composed over the
-seam (precedent: `IMappingDryRunValidator`).
+seam (precedent: `IMappingDryRunValidator`). The ban is on `ToolUp.Platform.*` only: a companion that
+already carries vendor dependencies of its own may reference `ToolUp.Tabular` directly (the KnowledgeBase
+server reads CSV through `ToolUp.Tabular.Csv.parseRecords`).
 
 **The remoting `IIdempotencyStore` is deliberately NOT composed by `ServerApp`.** Unlike
 `IOAuthStateStore`, forge never builds or DI-registers an idempotency store — it is wired per-API by

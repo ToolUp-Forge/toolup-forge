@@ -13,7 +13,35 @@ same name in one release is reported once, as a signature change. Under this rep
 policy a `breaking` release is a MINOR bump and an `additive` one a PATCH; from 1.0.0 the ordinary table
 applies. Where a release ships a migration note under `docs/migrations/`, it is linked from the section.
 
-## [0.33.0] — unreleased
+## [Unreleased] — unreleased
+
+Migration notes:
+
+- [1082-redesign-g-defects-rag-and-knowledge-base](docs/migrations/1082-redesign-g-defects-rag-and-knowledge-base.md)
+
+_Surface since `v0.33.0`: **additive** — 2 packages moved; 15 members added, 0 members changed, 0 members removed._
+
+### Added
+
+- `ToolUp.KnowledgeBase.Server` — 1 member:
+  - `KnowledgeBase.ServerIngestionObserver.publishTerminalStatus(ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger, System.String, System.String, System.String, SharedTypes+IngestionStatus) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]`
+- `ToolUp.Platform.Server` — 14 members:
+  - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality (class)`
+  - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality+Tags (class)`
+  - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality+Tags.InProcess : System.Int32 (literal)`
+  - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality+Tags.Shared : System.Int32 (literal)`
+  - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality.InProcess : ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality { get }`
+  - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality.IsInProcess : System.Boolean { get }`
+  - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality.IsShared : System.Boolean { get }`
+  - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality.Shared : ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality { get }`
+  - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality.Tag : System.Int32 { get }`
+  - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocalityModule (class)`
+  - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocalityModule.declared(System.Object) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality]`
+  - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocalityModule.isCrossReplica(System.Object) : System.Boolean`
+  - `ToolUp.Platform.IEmbeddingProvider+IEmbeddingCacheLocality (interface)`
+  - `ToolUp.Platform.IEmbeddingProvider+IEmbeddingCacheLocality.CacheLocality : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality] { get }`
+
+## [0.33.0] — 2026-10-24
 
 Migration notes:
 
@@ -45,7 +73,7 @@ _Surface since `v0.32.0`: **breaking** — 5 packages moved; 255 members added, 
   - `ToolUp.AI.Client.NarrativePromptAdminUI+Model.Banner : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]] { get }`
   - `ToolUp.AI.Client.NarrativePromptAdminUI+Model.Busy : System.Boolean { get }`
   - `ToolUp.AI.Client.NarrativePromptAdminUI+Model.Narratives : ToolUp.AI.Client.NarrativePromptAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativePromptSummary]] { get }`
-  - … and 101 more — `git diff v0.32.0 -- api-baselines/ToolUp.AI.Client.approved.txt`
+  - … and 101 more — `git diff v0.32.0 v0.33.0 -- api-baselines/ToolUp.AI.Client.approved.txt`
 - `ToolUp.AI.Core` — 58 members:
   - `ToolUp.AI.NarrativeDeclaredSection (class)`
   - `ToolUp.AI.NarrativeDeclaredSection..ctor(System.String, System.String, System.String)`
@@ -67,7 +95,7 @@ _Surface since `v0.32.0`: **breaking** — 5 packages moved; 255 members added, 
   - `ToolUp.AI.NarrativePromptApi.Regenerate : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, System.String]]] { get }`
   - `ToolUp.AI.NarrativePromptApi.ResetPrompt : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String]]] { get }`
   - `ToolUp.AI.NarrativePromptApi.SavePrompt : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SaveNarrativePromptRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String]]] { get }`
-  - … and 38 more — `git diff v0.32.0 -- api-baselines/ToolUp.AI.Core.approved.txt`
+  - … and 38 more — `git diff v0.32.0 v0.33.0 -- api-baselines/ToolUp.AI.Core.approved.txt`
 - `ToolUp.AI.Server` — 18 members:
   - `ToolUp.AI.GroundedNarrativeRun.rules : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }`
   - `ToolUp.AI.NarrativePromptHandler (class)`
@@ -108,7 +136,7 @@ _Surface since `v0.32.0`: **breaking** — 5 packages moved; 255 members added, 
   - `JobsAdminUI+AttemptReading.PermanentlyFailed : JobsAdminUI+AttemptReading { get }`
   - `JobsAdminUI+AttemptReading.RetryPending : JobsAdminUI+AttemptReading { get }`
   - `JobsAdminUI+AttemptReading.Succeeded : JobsAdminUI+AttemptReading { get }`
-  - … and 35 more — `git diff v0.32.0 -- api-baselines/ToolUp.Platform.Client.approved.txt`
+  - … and 35 more — `git diff v0.32.0 v0.33.0 -- api-baselines/ToolUp.Platform.Client.approved.txt`
 - `ToolUp.Platform.Server` — 3 members:
   - `ToolUp.Platform.GroundedNarrativeDefinitionModule.reword(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], ToolUp.Platform.GroundedNarrativeDefinition) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.GroundedNarrativeDefinition, System.String]`
   - `ToolUp.Platform.ServerModuleModule.addDataTypes(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FileProcessor+DataType], ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule`
