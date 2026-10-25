@@ -13,7 +13,46 @@ same name in one release is reported once, as a signature change. Under this rep
 policy a `breaking` release is a MINOR bump and an `additive` one a PATCH; from 1.0.0 the ordinary table
 applies. Where a release ships a migration note under `docs/migrations/`, it is linked from the section.
 
-## [0.33.0] — unreleased
+## [Unreleased] — unreleased
+
+_Surface since `v0.33.0`: **additive** — 2 packages moved; 39 members added, 0 members changed, 0 members removed._
+
+### Added
+
+- `ToolUp.Facts.Server` — 30 members:
+  - `ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Facts.FactSurfaceOptions, ToolUp.Facts.FactIndexOptions, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])`
+  - `ToolUp.Facts.BlobFactStore.ReadFaults : System.Int64 { get }`
+  - `ToolUp.Facts.DisclosureFanOut (class)`
+  - `ToolUp.Facts.DisclosureFanOut..ctor(System.Int32)`
+  - `ToolUp.Facts.DisclosureFanOut.MaxConcurrentReads : System.Int32 { get }`
+  - `ToolUp.Facts.DisclosureFanOutModule (class)`
+  - `ToolUp.Facts.DisclosureFanOutModule.DefaultMaxConcurrentReads : System.Int32 (literal)`
+  - `ToolUp.Facts.DisclosureFanOutModule.defaults : ToolUp.Facts.DisclosureFanOut { get }`
+  - `ToolUp.Facts.FactDisclosureGate.WithFanOut(ToolUp.Facts.DisclosureFanOut) : ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate`
+  - `ToolUp.Facts.FactReadFailed (class)`
+  - `ToolUp.Facts.FactReadFailed..ctor()`
+  - `ToolUp.Facts.FactReadFailed..ctor(ToolUp.Facts.FactReadFault)`
+  - `ToolUp.Facts.FactReadFailed.Message : System.String { get }`
+  - `ToolUp.Facts.FactReadFailed.fault : ToolUp.Facts.FactReadFault { get }`
+  - `ToolUp.Facts.FactReadFault (class)`
+  - `ToolUp.Facts.FactReadFault+FactDownloadFailed (class)`
+  - `ToolUp.Facts.FactReadFault+FactDownloadFailed.blobName : System.String { get }`
+  - `ToolUp.Facts.FactReadFault+FactDownloadFailed.reason : System.String { get }`
+  - `ToolUp.Facts.FactReadFault+FactUnparseable (class)`
+  - `ToolUp.Facts.FactReadFault+FactUnparseable.blobName : System.String { get }`
+  - … and 10 more — `git diff v0.33.0 -- api-baselines/ToolUp.Facts.Server.approved.txt`
+- `ToolUp.Platform.Server` — 9 members:
+  - `ToolUp.Platform.BoundedMemoIndex`2 (class)`
+  - `ToolUp.Platform.BoundedMemoIndex`2..ctor(System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit])`
+  - `ToolUp.Platform.BoundedMemoIndex`2.Count : System.Int32 { get }`
+  - `ToolUp.Platform.BoundedMemoIndex`2.Evictions : System.Int64 { get }`
+  - `ToolUp.Platform.BoundedMemoIndex`2.MaxEntries : System.Int32 { get }`
+  - `ToolUp.Platform.BoundedMemoIndex`2.Remove(K) : System.Void`
+  - `ToolUp.Platform.BoundedMemoIndex`2.Set(K, V) : System.Void`
+  - `ToolUp.Platform.BoundedMemoIndex`2.TryGet(K) : Microsoft.FSharp.Core.FSharpOption`1[V]`
+  - `ToolUp.Platform.BoundedMemoIndex`2.TryRemove(K) : Microsoft.FSharp.Core.FSharpOption`1[V]`
+
+## [0.33.0] — 2026-10-24
 
 Migration notes:
 
@@ -45,7 +84,7 @@ _Surface since `v0.32.0`: **breaking** — 5 packages moved; 255 members added, 
   - `ToolUp.AI.Client.NarrativePromptAdminUI+Model.Banner : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]] { get }`
   - `ToolUp.AI.Client.NarrativePromptAdminUI+Model.Busy : System.Boolean { get }`
   - `ToolUp.AI.Client.NarrativePromptAdminUI+Model.Narratives : ToolUp.AI.Client.NarrativePromptAdminUI+LoadState`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.NarrativePromptSummary]] { get }`
-  - … and 101 more — `git diff v0.32.0 -- api-baselines/ToolUp.AI.Client.approved.txt`
+  - … and 101 more — `git diff v0.32.0 v0.33.0 -- api-baselines/ToolUp.AI.Client.approved.txt`
 - `ToolUp.AI.Core` — 58 members:
   - `ToolUp.AI.NarrativeDeclaredSection (class)`
   - `ToolUp.AI.NarrativeDeclaredSection..ctor(System.String, System.String, System.String)`
@@ -67,7 +106,7 @@ _Surface since `v0.32.0`: **breaking** — 5 packages moved; 255 members added, 
   - `ToolUp.AI.NarrativePromptApi.Regenerate : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[System.Guid, System.String]]] { get }`
   - `ToolUp.AI.NarrativePromptApi.ResetPrompt : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String]]] { get }`
   - `ToolUp.AI.NarrativePromptApi.SavePrompt : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SaveNarrativePromptRequest, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.NarrativePromptView, System.String]]] { get }`
-  - … and 38 more — `git diff v0.32.0 -- api-baselines/ToolUp.AI.Core.approved.txt`
+  - … and 38 more — `git diff v0.32.0 v0.33.0 -- api-baselines/ToolUp.AI.Core.approved.txt`
 - `ToolUp.AI.Server` — 18 members:
   - `ToolUp.AI.GroundedNarrativeRun.rules : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }`
   - `ToolUp.AI.NarrativePromptHandler (class)`
@@ -108,7 +147,7 @@ _Surface since `v0.32.0`: **breaking** — 5 packages moved; 255 members added, 
   - `JobsAdminUI+AttemptReading.PermanentlyFailed : JobsAdminUI+AttemptReading { get }`
   - `JobsAdminUI+AttemptReading.RetryPending : JobsAdminUI+AttemptReading { get }`
   - `JobsAdminUI+AttemptReading.Succeeded : JobsAdminUI+AttemptReading { get }`
-  - … and 35 more — `git diff v0.32.0 -- api-baselines/ToolUp.Platform.Client.approved.txt`
+  - … and 35 more — `git diff v0.32.0 v0.33.0 -- api-baselines/ToolUp.Platform.Client.approved.txt`
 - `ToolUp.Platform.Server` — 3 members:
   - `ToolUp.Platform.GroundedNarrativeDefinitionModule.reword(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]], ToolUp.Platform.GroundedNarrativeDefinition) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Platform.GroundedNarrativeDefinition, System.String]`
   - `ToolUp.Platform.ServerModuleModule.addDataTypes(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.FileProcessor+DataType], ToolUp.Platform.ServerModule) : ToolUp.Platform.ServerModule`
