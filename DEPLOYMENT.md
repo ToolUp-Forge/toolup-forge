@@ -258,6 +258,74 @@ something on, and the lenient one when `true` switches a check off.
 Upgrading a deployment whose environment may hold a malformed strict value:
 [`docs/migrations/868-hardening-flags-fail-loud.md`](docs/migrations/868-hardening-flags-fail-loud.md).
 
+## Union keys — which ones refuse a typo
+
+The boolean rule above, applied to the keys whose value selects a case (Phase
+1051). Every one of them is matched after trimming surrounding whitespace,
+case-insensitively; a whitespace-only value counts as unset, and unset keeps
+the configured value. What differs is a value that is none of the key's
+tokens. The question is the boolean one: an unrecognised token keeps the
+configured value, so what could that leave?
+
+- **Protective** — a mistyped token could leave a protection or a behaviour
+  the operator asked for switched off (`TOOLUP_SECURITY_HARDENING=stric` would
+  boot unhardened, `TOOLUP_REQUIRE_DIRECTORY_PROOF_FOR_DIRECT_ADD=ture` with no
+  proof). The value **stops startup**, naming the key, the value as written and
+  the accepted tokens.
+- **Permissive** — every token the environment can select only switches
+  something off, so keeping the configured value is the safe failure. The value
+  logs a warning naming the accepted tokens, and the configured value stands.
+
+An unrecognised token on a `TOOLUP_ACCEPT_*` escape hatch is not a union key —
+it is a lenient boolean and still reads as `false` — but it is now reported as a
+`Warning` row in the startup preflight (`escape-hatch-token`), naming the key and
+the value, so the typo is on the first line an operator reads rather than
+inferred from the refusal it failed to acknowledge.
+
+| Key | Direction | Accepted tokens |
+|---|---|---|
+| `TOOLUP_SHARE_TOKEN_STORE` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_WEBHOOKS` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_AUDIT_LOG` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_SECURITY_HARDENING` | protective — **stops startup** | no, off, disabled, default, on, strict |
+| `TOOLUP_AUDIT_FAILURE_POLICY` | protective — **stops startup** | log, logandcontinue, refuse, refuseaction, degrade, degradetofile |
+| `TOOLUP_RESULT_STORE` | protective — **stops startup** | no, inmemory, in-memory, persistent |
+| `TOOLUP_LINEAGE` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_LINEAGE_DURABILITY` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_DATA_INGESTION` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_COLUMN_MAPPING` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_EXTERNAL_CONTACT_STORE` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_MAPPING_DRYRUN_BLOCK` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_OAUTH_REFRESHER` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_ENTITY_STORE` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_ENTITY_OUTBOX` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_USAGE_METERING` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_COMPUTE_BUDGET` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_METRICS_ENDPOINT` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_PLATFORM_KNOWLEDGE_BASE` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_CONFIG_DRIFT_DETECTION` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_RATE_LIMITER` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_SMOKE_TEST` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_DEPLOYMENT_READINESS` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_DEPLOYMENT_VERIFICATION` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_ASSET_STORE` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_CONSENT_AUDIT` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_AD_ANALYTICS` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_CONSENT_STATE_STORE` | protective — **stops startup** | no, off, disabled, inmemory, in-memory, entity, entity-backed |
+| `TOOLUP_SERVERLESS_HOST` | protective — **stops startup** | kestrel, serverless |
+| `TOOLUP_PROCESS_PROFILE` | protective — **stops startup** | allinone, all-in-one, web, webonly, worker, workeronly, dispatcher, dispatcheronly |
+| `TOOLUP_TEAM_CREATION_POLICY` | protective — **stops startup** | platformadminonly, platform-admin-only, admin, anyauthenticateduser, any, authenticated |
+| `TOOLUP_REQUIRE_DIRECTORY_PROOF_FOR_DIRECT_ADD` | protective — **stops startup** | 0, false, no, off, disabled, 1, true, yes, on, enabled |
+| `TOOLUP_JOB_SCHEDULER` | protective — **stops startup** | no, off, disabled, enabled, on, yes |
+| `TOOLUP_RATE_LIMIT_STORE` | protective — **stops startup** | no, off, disabled, inmemory, in-memory, external |
+| `TOOLUP_EVENT_STORE` | protective — **stops startup** | inmemory, in-memory, persistent |
+| `TOOLUP_CONVERSATION_STORE` | protective — **stops startup** | no, off, disabled, enabled |
+| `TOOLUP_PUBLIC_RENDERING` | protective — **stops startup** | no, off, disabled, enabled |
+| `TOOLUP_DATA_SUBJECT_REQUESTS` | permissive — warns, keeps the configured value | disabled, no, off, enabled |
+
+Upgrading a deployment whose environment may hold a mistyped union token:
+[`docs/migrations/1051-redesign-a-defects-composition-and-config.md`](docs/migrations/1051-redesign-a-defects-composition-and-config.md).
+
 ## Steady-state storage cost
 
 Two SDK subsystems produce residue that is **reclaimed only by a scheduled

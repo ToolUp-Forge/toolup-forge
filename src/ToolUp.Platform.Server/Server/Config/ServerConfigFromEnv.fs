@@ -36,7 +36,7 @@ module ServerConfig =
     /// and the coverage test holds the declaration to this call graph.
     let private envVar (name: string) = ConfigResolution.tryValue name
 
-    /// Phase 868 — the raw text of a boolean key, surrounding whitespace
+    /// Phase 868 — the raw text of a boolean or union key, surrounding whitespace
     /// trimmed. A value that is only whitespace reads as unset, like the
     /// empty string the seam already folds to `None`. Every boolean parser
     /// below matches on this, so they agree on what `"yes "` means.
@@ -455,12 +455,60 @@ module ServerConfig =
             |> Array.filter (fun s -> s <> "")
             |> Array.toList
 
+    // ── THE DIRECTION RULE FOR UNION KEYS (Phase 1051) ─────────────────
+    //
+    // The boolean rule above, applied to a key whose value selects a union
+    // case. An unrecognised token keeps the configured value, so ask what
+    // that leaves. If an operator who mistyped the token could be left
+    // with a protection or a behaviour OFF that they asked for
+    // (`TOOLUP_SECURITY_HARDENING=stric` would boot unhardened), the key is
+    // `Protective` and a malformed value stops startup, naming the key, the
+    // value as written and the accepted tokens. If every token the key
+    // accepts from the environment only switches something off, so that
+    // keeping the configured value is the safe failure, the key is
+    // `Permissive` and keeps the lenient path: a `Warn` and the configured
+    // value. Every union arm in `fromEnv` names its direction beside its
+    // tokens; the table is in DEPLOYMENT.md.
+
+    /// Phase 1051 — which way a union key's typo fails (the rule above).
+    type private UnionKeyDirection =
+        | Protective
+        | Permissive
+
+    /// Phase 1051 — what an unrecognised token on a union key does, by
+    /// direction: refuse the boot naming the key, the value as written and
+    /// the accepted tokens (`Protective`), or warn and keep `configured`
+    /// (`Permissive`).
+    let private unrecognisedUnionToken
+        (direction: UnionKeyDirection)
+        (logger: ILogger)
+        (name: string)
+        (raw: string)
+        (tokens: string list)
+        (configured: 'T)
+        : 'T =
+        let valid = String.concat ", " tokens
+
+        match direction with
+        | Protective ->
+            failwithf
+                "%s=%s is not a recognised value. Expected one of: %s (case-insensitive). Unset the variable to use the configured value."
+                name
+                raw
+                valid
+        | Permissive ->
+            logger.Warn $"{name}={raw} not recognised. Valid: {valid}. Using the configured value."
+            configured
+
     /// Phase 71.A.7 — generic flat-case-DU env reader. `cases` maps
     /// lowercase tokens → the (payload-free) DU value; precedence is
-    /// env > override > fallback. An unrecognised token warns (naming
-    /// the valid tokens) and falls through to the configured value, so
-    /// a typo never silently flips a subsystem on/off.
+    /// env > override > fallback. The value is trimmed and matched
+    /// case-insensitively; whitespace-only reads as unset. An
+    /// unrecognised token refuses the boot on a `Protective` key and, on
+    /// a `Permissive` one, warns (naming the valid tokens) and falls
+    /// through to the configured value (Phase 1051).
     let private parseFlatDuCase
+        (direction: UnionKeyDirection)
         (logger: ILogger)
         (name: string)
         (cases: (string * 'T) list)
@@ -469,15 +517,14 @@ module ServerConfig =
         : 'T =
         let configured = overrideVal |> Option.defaultValue fallback
 
-        match envVar name |> Option.map _.ToLowerInvariant() with
+        match envFlagText name with
         | None -> configured
         | Some raw ->
-            match cases |> List.tryFind (fun (tok, _) -> tok = raw) with
+            let token = raw.ToLowerInvariant()
+
+            match cases |> List.tryFind (fun (tok, _) -> tok = token) with
             | Some(_, v) -> v
-            | None ->
-                let valid = cases |> List.map fst |> String.concat ", "
-                logger.Warn $"{name}={raw} not recognised. Valid: {valid}. Using the configured value."
-                configured
+            | None -> unrecognisedUnionToken direction logger name raw (List.map fst cases) configured
 
     /// Phase 71.A.7 — the common `No* | Enabled*` binary shape. Accepts
     /// `no`/`off`/`disabled` and `enabled`/`on`/`yes` (case-insensitive).
@@ -491,18 +538,20 @@ module ServerConfig =
     ]
 
     let private parseEnabledDisabled
+        (direction: UnionKeyDirection)
         (logger: ILogger)
         (name: string)
         (disabledVal: 'T)
         (enabledVal: 'T)
         (fallback: 'T)
         : 'T =
-        parseFlatDuCase logger name (enabledDisabledTokens disabledVal enabledVal) None fallback
+        parseFlatDuCase direction logger name (enabledDisabledTokens disabledVal enabledVal) None fallback
 
     /// Phase 71.A.7 batch 2 — `parseEnabledDisabled` with an override-record
     /// middle tier (env > override > fallback) for binary toggles that ship
     /// a `ServerConfigOverrides` member.
     let private parseEnabledDisabledWith
+        (direction: UnionKeyDirection)
         (logger: ILogger)
         (name: string)
         (overrideVal: 'T option)
@@ -510,7 +559,7 @@ module ServerConfig =
         (enabledVal: 'T)
         (fallback: 'T)
         : 'T =
-        parseFlatDuCase logger name (enabledDisabledTokens disabledVal enabledVal) overrideVal fallback
+        parseFlatDuCase direction logger name (enabledDisabledTokens disabledVal enabledVal) overrideVal fallback
 
     /// Phase 71.A.11 — select a hybrid DU case from an env var. `cases`
     /// maps a token to either `Ok value` (a case that's constructible
@@ -519,24 +568,23 @@ module ServerConfig =
     /// `Error why` (the case carries a payload that can't be expressed via
     /// a single env var — `EnabledPublicRendering` needs a `ContentRoot`
     /// path; enabling DSR needs an explicit `ErasurePolicy`). An `Error`
-    /// token **fails loud** naming how to supply the payload; unset /
-    /// unrecognised → the configured value (GP 11).
+    /// token **fails loud** naming how to supply the payload; unset → the
+    /// configured value (GP 11); an unrecognised token follows the key's
+    /// direction (Phase 1051), with `parseFlatDuCase`'s trimming.
     let private parseHybridCase
+        (direction: UnionKeyDirection)
         (logger: ILogger)
         (name: string)
         (cases: (string * Result<'T, string>) list)
         (fallback: 'T)
         : 'T =
-        match envVar name |> Option.map _.ToLowerInvariant() with
+        match envFlagText name with
         | None -> fallback
         | Some raw ->
-            match cases |> List.tryFind (fun (tok, _) -> tok = raw) with
+            match cases |> List.tryFind (fun (tok, _) -> tok = raw.ToLowerInvariant()) with
             | Some(_, Ok v) -> v
             | Some(_, Error why) -> failwithf "%s=%s cannot be selected via env var: %s" name raw why
-            | None ->
-                let valid = cases |> List.map fst |> String.concat ", "
-                logger.Warn $"{name}={raw} not recognised. Valid: {valid}. Using the configured value."
-                fallback
+            | None -> unrecognisedUnionToken direction logger name raw (List.map fst cases) fallback
 
     /// Build a `ServerConfig` from `TOOLUP_*` env vars + a curated
     /// overrides record. Every env-var read, warning message, and
@@ -684,6 +732,7 @@ module ServerConfig =
                 // Phase 71.A.7 batch 2 — override-bearing toggles: env > override > default.
                 ShareTokenStore =
                     parseEnabledDisabledWith
+                        Protective
                         logger
                         ConfigKeys.Names.shareTokenStore
                         overrides.ShareTokenStore
@@ -692,6 +741,7 @@ module ServerConfig =
                         defaults.ShareTokenStore
                 Webhooks =
                     parseEnabledDisabledWith
+                        Protective
                         logger
                         ConfigKeys.Names.webhooks
                         overrides.Webhooks
@@ -700,6 +750,7 @@ module ServerConfig =
                         defaults.Webhooks
                 AuditLog =
                     parseEnabledDisabledWith
+                        Protective
                         logger
                         ConfigKeys.Names.auditLog
                         overrides.AuditLog
@@ -708,6 +759,7 @@ module ServerConfig =
                         defaults.AuditLog
                 SecurityHardening =
                     parseFlatDuCase
+                        Protective
                         logger
                         ConfigKeys.Names.securityHardening
                         [
@@ -796,6 +848,7 @@ module ServerConfig =
                 // member, no payload). Additive: unset → `defaults.X`.
                 AuditFailurePolicy =
                     parseFlatDuCase
+                        Protective
                         logger
                         ConfigKeys.Names.auditFailurePolicy
                         [
@@ -810,6 +863,7 @@ module ServerConfig =
                         defaults.AuditFailurePolicy
                 ResultStore =
                     parseFlatDuCase
+                        Protective
                         logger
                         ConfigKeys.Names.resultStore
                         [
@@ -822,6 +876,7 @@ module ServerConfig =
                         defaults.ResultStore
                 Lineage =
                     parseEnabledDisabled
+                        Protective
                         logger
                         ConfigKeys.Names.lineage
                         NoLineageStore
@@ -829,6 +884,7 @@ module ServerConfig =
                         defaults.Lineage
                 LineageDurability =
                     parseEnabledDisabled
+                        Protective
                         logger
                         ConfigKeys.Names.lineageDurability
                         NoDurableLineage
@@ -836,6 +892,7 @@ module ServerConfig =
                         defaults.LineageDurability
                 DataIngestion =
                     parseEnabledDisabled
+                        Protective
                         logger
                         ConfigKeys.Names.dataIngestion
                         NoDataIngestion
@@ -843,6 +900,7 @@ module ServerConfig =
                         defaults.DataIngestion
                 ColumnMapping =
                     parseEnabledDisabled
+                        Protective
                         logger
                         ConfigKeys.Names.columnMapping
                         NoColumnMapping
@@ -850,6 +908,7 @@ module ServerConfig =
                         defaults.ColumnMapping
                 ExternalContactStore =
                     parseEnabledDisabled
+                        Protective
                         logger
                         ConfigKeys.Names.externalContactStore
                         NoExternalContactStore
@@ -857,6 +916,7 @@ module ServerConfig =
                         defaults.ExternalContactStore
                 MappingDryRun =
                     parseEnabledDisabled
+                        Protective
                         logger
                         ConfigKeys.Names.mappingDryRunBlock
                         WarnOnValidationFailure
@@ -864,6 +924,7 @@ module ServerConfig =
                         defaults.MappingDryRun
                 OAuthRefresher =
                     parseEnabledDisabled
+                        Protective
                         logger
                         ConfigKeys.Names.oauthRefresher
                         NoOAuthRefresher
@@ -871,6 +932,7 @@ module ServerConfig =
                         defaults.OAuthRefresher
                 EntityStore =
                     parseEnabledDisabled
+                        Protective
                         logger
                         ConfigKeys.Names.entityStore
                         NoEntityStore
@@ -878,6 +940,7 @@ module ServerConfig =
                         defaults.EntityStore
                 EntityOutbox =
                     parseEnabledDisabled
+                        Protective
                         logger
                         ConfigKeys.Names.entityOutbox
                         NoEntityOutbox
@@ -885,6 +948,7 @@ module ServerConfig =
                         defaults.EntityOutbox
                 UsageMetering =
                     parseEnabledDisabled
+                        Protective
                         logger
                         ConfigKeys.Names.usageMetering
                         NoUsageMetering
@@ -892,6 +956,7 @@ module ServerConfig =
                         defaults.UsageMetering
                 ComputeBudget =
                     parseEnabledDisabled
+                        Protective
                         logger
                         ConfigKeys.Names.computeBudget
                         NoComputeBudget
@@ -899,6 +964,7 @@ module ServerConfig =
                         defaults.ComputeBudget
                 MetricsEndpoint =
                     parseEnabledDisabled
+                        Protective
                         logger
                         ConfigKeys.Names.metricsEndpoint
                         NoMetricsEndpoint
@@ -906,6 +972,7 @@ module ServerConfig =
                         defaults.MetricsEndpoint
                 PlatformKnowledgeBase =
                     parseEnabledDisabled
+                        Protective
                         logger
                         ConfigKeys.Names.platformKnowledgeBase
                         NoPlatformKnowledgeBase
@@ -913,6 +980,7 @@ module ServerConfig =
                         defaults.PlatformKnowledgeBase
                 ConfigDriftDetection =
                     parseEnabledDisabled
+                        Protective
                         logger
                         ConfigKeys.Names.configDriftDetection
                         NoConfigDriftDetection
@@ -920,6 +988,7 @@ module ServerConfig =
                         defaults.ConfigDriftDetection
                 RateLimiter =
                     parseEnabledDisabled
+                        Protective
                         logger
                         ConfigKeys.Names.rateLimiter
                         NoRateLimiter
@@ -927,6 +996,7 @@ module ServerConfig =
                         defaults.RateLimiter
                 SmokeTest =
                     parseEnabledDisabled
+                        Protective
                         logger
                         ConfigKeys.Names.smokeTest
                         NoSmokeTest
@@ -934,6 +1004,7 @@ module ServerConfig =
                         defaults.SmokeTest
                 DeploymentReadiness =
                     parseEnabledDisabled
+                        Protective
                         logger
                         ConfigKeys.Names.deploymentReadiness
                         NoReadinessReport
@@ -941,6 +1012,7 @@ module ServerConfig =
                         defaults.DeploymentReadiness
                 DeploymentVerification =
                     parseEnabledDisabled
+                        Protective
                         logger
                         ConfigKeys.Names.deploymentVerification
                         NoDeploymentVerification
@@ -948,6 +1020,7 @@ module ServerConfig =
                         defaults.DeploymentVerification
                 AssetStore =
                     parseEnabledDisabled
+                        Protective
                         logger
                         ConfigKeys.Names.assetStore
                         NoAssetStore
@@ -955,6 +1028,7 @@ module ServerConfig =
                         defaults.AssetStore
                 ConsentAudit =
                     parseEnabledDisabled
+                        Protective
                         logger
                         ConfigKeys.Names.consentAudit
                         NoConsentAudit
@@ -962,6 +1036,7 @@ module ServerConfig =
                         defaults.ConsentAudit
                 AdAnalytics =
                     parseEnabledDisabled
+                        Protective
                         logger
                         ConfigKeys.Names.adAnalytics
                         NoAdAnalytics
@@ -970,6 +1045,7 @@ module ServerConfig =
                 // Phase 159 — durable per-subject consent-state store mode.
                 ConsentStateStore =
                     parseFlatDuCase
+                        Protective
                         logger
                         ConfigKeys.Names.consentStateStore
                         [
@@ -985,6 +1061,7 @@ module ServerConfig =
                         defaults.ConsentStateStore
                 ServerlessHost =
                     parseFlatDuCase
+                        Protective
                         logger
                         ConfigKeys.Names.serverlessHost
                         [ "kestrel", KestrelHost; "serverless", ServerlessHost ]
@@ -992,6 +1069,7 @@ module ServerConfig =
                         defaults.ServerlessHost
                 ProcessProfile =
                     parseFlatDuCase
+                        Protective
                         logger
                         ConfigKeys.Names.processProfile
                         [
@@ -1009,6 +1087,7 @@ module ServerConfig =
                 // Phase 71.A.7 batch 2 — TeamCreationPolicy (no override member).
                 TeamCreationPolicy =
                     parseFlatDuCase
+                        Protective
                         logger
                         ConfigKeys.Names.teamCreationPolicy
                         [
@@ -1025,10 +1104,11 @@ module ServerConfig =
                 // boolean spellings an operator reaches for on a
                 // `REQUIRE_*` variable as well as the estate's
                 // enabled/disabled family, so neither reading is a silent
-                // miss; an unrecognised token warns and keeps the
-                // configured value (GP 11 — unset ⇒ `NoIdentityProof`).
+                // miss; an unrecognised token refuses the boot (Phase 1051 —
+                // a protective key). Unset ⇒ `NoIdentityProof` (GP 11).
                 DirectAddIdentityProof =
                     parseFlatDuCase
+                        Protective
                         logger
                         ConfigKeys.Names.requireDirectoryProofForDirectAdd
                         [
@@ -1049,6 +1129,7 @@ module ServerConfig =
                 // (the in-tree DU carries no payload): pure flat lifts.
                 JobScheduler =
                     parseEnabledDisabled
+                        Protective
                         logger
                         ConfigKeys.Names.jobScheduler
                         NoJobScheduler
@@ -1056,6 +1137,7 @@ module ServerConfig =
                         defaults.JobScheduler
                 RateLimitStore =
                     parseFlatDuCase
+                        Protective
                         logger
                         ConfigKeys.Names.rateLimitStore
                         [
@@ -1073,6 +1155,7 @@ module ServerConfig =
                 // must be supplied via overrides / a `defaults with` literal).
                 EventStore =
                     parseHybridCase
+                        Protective
                         logger
                         ConfigKeys.Names.eventStore
                         [
@@ -1083,6 +1166,7 @@ module ServerConfig =
                         defaults.EventStore
                 ConversationStore =
                     parseHybridCase
+                        Protective
                         logger
                         ConfigKeys.Names.conversationStore
                         [
@@ -1096,6 +1180,7 @@ module ServerConfig =
                         defaults.ConversationStore
                 PublicRendering =
                     parseHybridCase
+                        Protective
                         logger
                         ConfigKeys.Names.publicRendering
                         [
@@ -1107,8 +1192,12 @@ module ServerConfig =
                                 "EnabledPublicRendering requires a ContentRoot path; set ServerConfig.PublicRendering via overrides"
                         ]
                         defaults.PublicRendering
+                // Phase 1051 — the one permissive union key: the environment
+                // can only switch DSR OFF, so a typo that keeps the
+                // configured value leaves the compliance surface running.
                 DataSubjectRequests =
                     parseHybridCase
+                        Permissive
                         logger
                         ConfigKeys.Names.dataSubjectRequests
                         [
@@ -1125,4 +1214,66 @@ module ServerConfig =
                 DefaultTeamStorageQuotaBytes = parseDefaultTeamStorageQuotaBytes logger
                 SlowRequestThreshold = parseSlowRequestThreshold logger
                 MaxSseConnectionsPerScope = parseMaxSseConnectionsPerScope logger
+        }
+
+/// Phase 1051 — the preflight row for an unrecognised token on an escape
+/// hatch.
+///
+/// Every `TOOLUP_ACCEPT_*` acknowledgement is read by the lenient boolean
+/// parser: a typo reads as `false`, so the refusal it would have
+/// acknowledged keeps standing. That is the safe direction, which is why
+/// it does not refuse the boot — but until this row the only trace of the
+/// typo was the refusal itself, which names the check and not the
+/// variable the operator mistyped. This validator names it: a `Warning`
+/// listing each escape-hatch key whose value is not a recognised boolean
+/// token, so `TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX=ture` is reported as a typo
+/// on the line an operator reads first, not inferred from a refusal.
+module EscapeHatchTokenValidator =
+
+    /// The tokens the boolean parsers recognise (`1`/`true`/`yes`/`on`,
+    /// `0`/`false`/`no`/`off`), case-insensitive.
+    let private recognised = set [ "1"; "true"; "yes"; "on"; "0"; "false"; "no"; "off" ]
+
+    /// The escape-hatch keys: the registry's boolean descriptors under
+    /// `ConfigKeys.EscapeHatchCategory`, read off the registry so a new
+    /// hatch is covered the moment it is described.
+    let escapeHatchKeys: string list =
+        ConfigKeys.all
+        |> List.filter (fun d -> d.Category = ConfigKeys.EscapeHatchCategory && d.Type = ConfigKeys.BoolKey)
+        |> List.map _.EnvVar
+
+    /// The outcome over `read` (an environment lookup): `Ok` when every
+    /// set escape hatch holds a recognised token, else a `Warning` naming
+    /// each `KEY=value` as written. Whitespace is trimmed and a
+    /// whitespace-only value reads as unset, as the parsers read it.
+    let evaluate (read: string -> string option) : ConfigValidation.ValidationResult =
+        let malformed = [
+            for key in escapeHatchKeys do
+                match read key |> Option.map _.Trim() with
+                | Some raw when raw <> "" && not (recognised.Contains(raw.ToLowerInvariant())) ->
+                    sprintf "%s=%s" key raw
+                | _ -> ()
+        ]
+
+        match malformed with
+        | [] -> ConfigValidation.ValidationResult.Ok
+        | entries ->
+            ConfigValidation.ValidationResult.Warning(
+                sprintf
+                    "%d escape-hatch variable(s) hold a value that is not a recognised boolean token, so each reads as false and the refusal it acknowledges still stands: %s. Expected one of: 1, true, yes, on (case-insensitive) to acknowledge; 0, false, no, off or unset to leave the check running."
+                    entries.Length
+                    (String.concat ", " entries)
+            )
+
+    /// Stable registration name.
+    [<Literal>]
+    let Name = "escape-hatch-token"
+
+    /// The validator over the resolved configuration (environment, then
+    /// profile, then manifest — the ladder `fromEnv` reads).
+    let validator () : ConfigValidation.IConfigValidator =
+        { new ConfigValidation.IConfigValidator with
+            member _.Name = Name
+            member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
+            member _.Validate() = async { return evaluate ConfigResolution.tryValue }
         }

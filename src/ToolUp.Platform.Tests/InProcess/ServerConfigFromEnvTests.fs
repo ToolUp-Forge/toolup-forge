@@ -408,12 +408,15 @@ let tests =
                         Expect.equal cfg.ProcessProfile AllInOne "ProcessProfile default")
             }
 
-            test "Flat DUs: an unrecognised token warns and keeps the default" {
+            // Phase 1051 — was "warns and keeps the default". A protective
+            // union key now refuses (the cases below); the lenient path
+            // survives only on the permissive key, pinned further down.
+            test "Flat DUs: an unrecognised token on a protective key refuses the boot" {
                 withEnv [ "TOOLUP_PROCESS_PROFILE", Some "nonsense" ] (fun () ->
-                    let logger, warnings = capturingLogger ()
-                    let cfg = ServerConfig.fromEnv logger ServerConfigOverrides.empty
-                    Expect.equal cfg.ProcessProfile AllInOne "garbage → default"
-                    Expect.isTrue (warnings |> Seq.exists (fun w -> w.Contains "TOOLUP_PROCESS_PROFILE")) "must warn")
+                    match startupFailure () with
+                    | Some message ->
+                        Expect.stringContains message "TOOLUP_PROCESS_PROFILE=nonsense" "names the key and value"
+                    | None -> failtest "a typo'd process profile booted (on AllInOne)")
             }
 
             // ── 71.A.7 (batch 2) — override-bearing toggles + TeamCreationPolicy ──
@@ -675,6 +678,95 @@ let tests =
                         withEnv [ key, Some raw ] (fun () ->
                             let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
                             Expect.equal (read cfg) expected (sprintf "%s=%A" key raw))
+            }
+
+            // ── Phase 1051 — the direction rule reaches the union keys ──
+            test
+                "Phase 1051: a typo on a protective union key refuses the boot, naming the value as written and the accepted tokens" {
+                for key, typo, accepted in
+                    [
+                        "TOOLUP_SECURITY_HARDENING", "stric", "strict"
+                        "TOOLUP_AUDIT_FAILURE_POLICY", "refus", "refuse"
+                        "TOOLUP_REQUIRE_DIRECTORY_PROOF_FOR_DIRECT_ADD", "ture", "true"
+                    ] do
+                    withEnv [ key, Some typo ] (fun () ->
+                        match startupFailure () with
+                        | None -> failtestf "%s=%s booted; a protective key must refuse a typo" key typo
+                        | Some message ->
+                            Expect.stringContains
+                                message
+                                (sprintf "%s=%s" key typo)
+                                "names the key and the value as written"
+
+                            Expect.stringContains message accepted "names the accepted tokens")
+            }
+
+            test "Phase 1051: a protective union key still binds every accepted token, trimmed and case-insensitive" {
+                for key, raw, read, expected in
+                    [
+                        "TOOLUP_SECURITY_HARDENING",
+                        " Strict ",
+                        (fun (c: ServerConfig) -> box c.SecurityHardening),
+                        box StrictSecurityHardening
+                        "TOOLUP_AUDIT_FAILURE_POLICY", "REFUSE", (fun c -> box c.AuditFailurePolicy), box RefuseAction
+                        "TOOLUP_REQUIRE_DIRECTORY_PROOF_FOR_DIRECT_ADD",
+                        "true",
+                        (fun c -> box c.DirectAddIdentityProof),
+                        box RequireDirectoryProof
+                    ] do
+                    withEnv [ key, Some raw ] (fun () ->
+                        let cfg = ServerConfig.fromEnv silentLogger ServerConfigOverrides.empty
+                        Expect.equal (read cfg) expected (sprintf "%s=%A" key raw))
+            }
+
+            test
+                "Phase 1051: the permissive union key keeps the lenient path — a typo warns and keeps the configured value" {
+                let logger, warnings = capturingLogger ()
+
+                withEnv [ "TOOLUP_DATA_SUBJECT_REQUESTS", Some "disabld" ] (fun () ->
+                    let cfg = ServerConfig.fromEnv logger ServerConfigOverrides.empty
+
+                    Expect.equal
+                        cfg.DataSubjectRequests
+                        ServerConfig.defaults.DataSubjectRequests
+                        "the configured value stands"
+
+                    Expect.exists
+                        warnings
+                        (fun w -> w.Contains "TOOLUP_DATA_SUBJECT_REQUESTS=disabld")
+                        "and the typo is named in a warning")
+            }
+
+            test "Phase 1051: an unrecognised escape-hatch token is a preflight Warning row naming the key" {
+                let read (key: string) =
+                    if key = "TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX" then
+                        Some "ture"
+                    elif key = "TOOLUP_ACCEPT_UNSIGNED_PUBLISHABLE" then
+                        Some " YES "
+                    else
+                        None
+
+                match EscapeHatchTokenValidator.evaluate read with
+                | ConfigValidation.ValidationResult.Warning message ->
+                    Expect.stringContains
+                        message
+                        "TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX=ture"
+                        "names the mistyped key, value as written"
+
+                    Expect.isFalse
+                        (message.Contains "TOOLUP_ACCEPT_UNSIGNED_PUBLISHABLE")
+                        "a recognised token, trimmed and in any case, is not reported"
+                | other -> failtestf "expected a Warning row, got %A" other
+
+                Expect.equal
+                    (EscapeHatchTokenValidator.evaluate (fun _ -> None))
+                    ConfigValidation.ValidationResult.Ok
+                    "nothing set is Ok"
+
+                Expect.contains
+                    EscapeHatchTokenValidator.escapeHatchKeys
+                    "TOOLUP_ACCEPT_EPHEMERAL_RAG_INDEX"
+                    "the key set is read off the registry's escape-hatch category"
             }
         ]
     )

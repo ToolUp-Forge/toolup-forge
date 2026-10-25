@@ -56,6 +56,8 @@ let registerFirstPartyConfigValidators
     // health check — exactly as it was.
     addConfigValidator (UnknownConfigKeyValidator.validator ()) // Phase 695 — warn (refuse under TOOLUP_STRICT_CONFIG) on set TOOLUP_* variables that name no config key the SDK reads
 
+    addConfigValidator (EscapeHatchTokenValidator.validator ()) // Phase 1051 — warn on a TOOLUP_ACCEPT_* value that is not a recognised boolean token (it reads as false, so its refusal still stands; this row names the typo)
+
     addConfigValidator (TraceCategoriesValidator.validator config) // Phase 9m.C — warn on TOOLUP_TRACE_CATEGORIES values no composed emission site declared (the guard above sees key NAMES, so a misspelt VALUE inside a correctly-named key is outside its quantifier); Ok when nothing is configured or nothing registered
 
     addConfigValidator (ConfigValidator.BlobStorageValidator(resolvedBlobStorage)) // blob storage reachable
