@@ -477,6 +477,10 @@ let private registeredTests =
         // set.
         ContentScannerTests.tests
         KnowledgeUserScopeIsolationTests.tests
+        VectorisationHookTests.tests
+        RagTelemetryTests.tests
+        ExtractorTests.tests
+        IngestionStatusStreamTests.tests
         HealthyHealthCheckTests.tests
         DegradedHealthCheckTests.tests
         UnhealthyHealthCheckTests.tests

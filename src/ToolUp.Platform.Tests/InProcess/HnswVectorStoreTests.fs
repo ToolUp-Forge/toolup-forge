@@ -479,6 +479,61 @@ let tests =
                 Expect.isError (HnswVectorStore.HnswParameters.validate bad) (sprintf "%A must be refused" bad)
         }
 
+        // The scope map is read by `Search` / `Delete` / the flush path while
+        // `Upsert` inserts a new scope's state. Every read of it must be safe
+        // against that insert; a plain `Dictionary` read racing a resize can
+        // throw or miss a scope that exists.
+        testAsync "a first upsert into a new scope is safe against concurrent Search and ListScopes" {
+            let storage =
+                ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
+
+            use store =
+                new HnswVectorStore.HnswVectorStore(storage, logger = SilentLogger(), flushIntervalMs = 60000)
+
+            let vs = store :> IVectorStore
+            let scopeCount = 400
+            let scopeOf i = User(sprintf "u%d" i)
+
+            let writer = async {
+                for i in 0 .. scopeCount - 1 do
+                    do! vs.Upsert (scopeOf i) (sprintf "c%d" i) teamAVec (chunk "note" "U")
+            }
+
+            let reader (seed: int) = async {
+                let failures = ResizeArray<exn>()
+                let rnd = Random seed
+
+                for _ in 0..1500 do
+                    try
+                        let probe = [ for _ in 1..8 -> scopeOf (rnd.Next scopeCount) ]
+                        let! _ = vs.Search probe teamAVec 3
+                        let! _ = vs.ListScopes()
+                        ()
+                    with ex ->
+                        failures.Add ex
+
+                return List.ofSeq failures
+            }
+
+            let! results =
+                Async.Parallel [
+                    async {
+                        do! writer
+                        return []
+                    }
+                    reader 1
+                    reader 2
+                    reader 3
+                ]
+
+            let failures = results |> List.concat
+            Expect.isEmpty failures (sprintf "no concurrent read may fail: %A" (failures |> List.truncate 3))
+
+            for i in 0 .. scopeCount - 1 do
+                let! found = vs.Search [ scopeOf i ] teamAVec 1
+                Expect.equal (found |> List.map _.ChunkId) [ sprintf "c%d" i ] "every scope written is found"
+        }
+
         // Phase 861 — the restart laws: every mutation hydrates a lazily
         // loaded scope first, and an unreadable snapshot refuses it. Over
         // the in-memory blob double, because these laws are ABOUT reloading

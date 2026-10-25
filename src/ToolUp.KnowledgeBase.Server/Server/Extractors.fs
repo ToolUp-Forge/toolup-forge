@@ -558,28 +558,24 @@ let private extractXlsx (docId: string) (fileName: string) (bytes: byte[]) : (Te
 
     results |> Seq.toList
 
+/// The records of a CSV file, header first, each cell trimmed.
+let internal csvRows (text: string) : string[] list =
+    text.Split([| "\r\n"; "\n"; "\r" |], StringSplitOptions.RemoveEmptyEntries)
+    |> Array.map (fun line -> line.Split(',') |> Array.map _.Trim())
+    |> Array.toList
+
 /// Extract (TextChunk * SourceReference) pairs from a CSV file.
 let private extractCsv (docId: string) (fileName: string) (bytes: byte[]) : (TextChunk * SourceReference) list =
-    let text = Encoding.UTF8.GetString bytes
-
-    let lines =
-        text.Split([| "\r\n"; "\n"; "\r" |], StringSplitOptions.RemoveEmptyEntries)
-
-    if lines.Length < 2 then
-        []
-    else
+    match csvRows (Encoding.UTF8.GetString bytes) with
+    | []
+    | [ _ ] -> []
+    | headers :: records ->
         let results = System.Collections.Generic.List<TextChunk * SourceReference>()
 
-        let splitCsv (line: string) = line.Split(',') |> Array.map _.Trim()
-
-        let headers = splitCsv lines[0]
-        let dataLines = lines |> Array.skip 1
-
         let dataRows =
-            dataLines
+            records
             // 1-based source row index: header is row 1, first data row is 2.
-            |> Array.mapi (fun i l -> (i + 2, splitCsv l))
-            |> Array.toList
+            |> List.mapi (fun i values -> (i + 2, values))
 
         let sheetData: SheetData = {
             SheetName = "data"
@@ -622,7 +618,7 @@ let private extractCsv (docId: string) (fileName: string) (bytes: byte[]) : (Tex
             let startRow, endRow =
                 match parseRowRange groupContent with
                 | Some(s, e) -> s, e
-                | None -> 2, dataLines.Length + 1
+                | None -> 2, records.Length + 1
 
             let groupSrc: SourceReference = {
                 DocumentId = docId

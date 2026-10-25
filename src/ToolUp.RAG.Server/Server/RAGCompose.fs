@@ -300,7 +300,7 @@ let emitIngestionDrop
         | _ -> ()
     }
 
-let private makeVectorisationHook
+let internal makeVectorisationHook
     (handlers: VectorisationHandler list)
     (queue: IngestionQueue)
     (telemetry: IRagTelemetry)

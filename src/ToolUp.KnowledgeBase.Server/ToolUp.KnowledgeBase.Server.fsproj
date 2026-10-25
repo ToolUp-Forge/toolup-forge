@@ -24,6 +24,9 @@
         <!-- Phase 124 — opt-in structured DOCX extraction builds on the
              ToolUp.OpenXml structural model. -->
         <ProjectReference Include="..\ToolUp.OpenXml\ToolUp.OpenXml.fsproj" />
+        <!-- The CSV extractor reads records through the RFC 4180 reader. A companion
+             may reference ToolUp.Tabular; the vendor ban is on ToolUp.Platform.*. -->
+        <ProjectReference Include="..\ToolUp.Tabular\ToolUp.Tabular.fsproj" />
     </ItemGroup>
     <ItemGroup>
         <!-- Phase 124 — the KB default-path regression fixtures live in
