@@ -809,10 +809,88 @@ let zeroCostTests =
         }
     ]
 
+// ─── The double run's second site, pinned pending ───────────────────
+//
+// `RecomputeJobHandler.applyPolicies` schedules an `Eager` recompute and
+// then triggers the job it got back. A scheduler that coalesces on the
+// idempotency key hands back the job already pending, so a fact
+// invalidated twice inside the TTL triggers that one job twice. The caller
+// cannot tell a fresh job from a coalesced one until the scheduler says
+// which it returned (`ScheduleOutcome.Coalesced`, Phase 1066); the fix is
+// Phase 998's, which turns this case on. The first site is
+// `GroundedNarrativeTrigger.enqueueFor`, pinned in GroundedNarrativeTests.
+
+/// Coalesces on the idempotency key, as a real scheduler does, and counts
+/// the triggers each job receives.
+type private CoalescingScheduler() =
+    let byKey = ConcurrentDictionary<string, JobId>()
+    let triggers = ConcurrentDictionary<JobId, int>()
+
+    member _.Jobs = byKey.Count
+    member _.AllTriggers = triggers.Values |> Seq.sum
+
+    member private _.ScheduleKeyed(registration: JobRegistration) =
+        let key =
+            registration.Idempotency
+            |> Option.map _.Key
+            |> Option.defaultWith (fun () -> Guid.NewGuid().ToString "N")
+
+        Ok(byKey.GetOrAdd(key, fun _ -> Guid.NewGuid()))
+
+    interface IJobScheduler with
+        member _.RegisterHandler(_, _) = ()
+        member _.RegisterHandlerAsync(_, _) = async { return Ok() }
+
+        member this.Schedule(registration: JobRegistration) = async { return this.ScheduleKeyed registration }
+
+        member this.Schedule(_: ToolUp.Platform.ResolvedScope, registration: JobRegistration) = async {
+            return this.ScheduleKeyed registration
+        }
+
+        member _.Cancel(_, _) = async { return () }
+        member _.Disable(_, _) = async { return () }
+        member _.Enable(_, _) = async { return () }
+        member _.Get(_, _) = async { return None }
+        member _.ListJobs _ = async { return [] }
+        member _.GetRecentRuns(_, _, _) = async { return [] }
+
+        member _.TriggerOnce(_, jobId, _) = async {
+            triggers.AddOrUpdate(jobId, 1, fun _ n -> n + 1) |> ignore
+            return Ok()
+        }
+
+        member _.NotifyEventWritten(_, _, _) = async { return () }
+
+let doubleRunTests =
+    testList "double run, second site" [
+
+        ptestCaseAsync
+            "998: an Eager recompute coalesced onto its pending job is not triggered again (RecomputeJobHandler.applyPolicies)"
+        <| async {
+            let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let store = BlobFactStore.create (InMemoryBlobStorage()) events
+            let lineage = LineageStore.EventStoreLineageStore(events) :> ILineageStore
+            let scheduler = CoalescingScheduler()
+            let scope = newScope ()
+            let registry = registryWith [ metricDef "eager_m" UntilUpstreamChange (Some Eager) ]
+            let! _ = store.Assert(scope, draftFor "eager_m" InputObject 1m)
+
+            for _ in 1..2 do
+                let! _ =
+                    RecomputeJobHandler.reactToDataChange lineage store scheduler (Some registry) scope [ InputObject ]
+
+                ()
+
+            Expect.equal scheduler.Jobs 1 "the second invalidation coalesced onto the pending job"
+            Expect.equal scheduler.AllTriggers 1 "and that job was triggered once, not once per schedule call"
+        }
+    ]
+
 let tests =
     testList "Phase 623 reactive recomputation activation" [
         declarationTests
         readPathTests
         endToEndTests
         zeroCostTests
+        doubleRunTests
     ]

@@ -4,7 +4,6 @@
 namespace ToolUp.Facts
 
 open System
-open System.Collections.Concurrent
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.Grounding
@@ -304,29 +303,29 @@ type internal DelegateTableStore(storage: IBlobStorage) =
 
     // Parsed row images, keyed by the run's identity AND its content digest
     // — immutable once committed, so a cache entry can never go stale. A
-    // handful of entries: the current run of each hot table.
-    let cache =
-        ConcurrentDictionary<string * string * int64 * string, FactTableRow array>()
-
+    // handful of entries: the current run of each hot table. Every cache
+    // here is a `BoundedMemoIndex`, so at the cap the oldest entry goes and
+    // the rest stay — a ninth table never empties the other eight.
     let CacheCap = 8
+
+    let cache =
+        BoundedMemoIndex<string * string * int64 * string, FactTableRow array>(CacheCap, ignore)
 
     // A committed run's provenance, and the imported lineages as of a
     // committed run — keyed as the rows are, and immutable under that key
     // for the same reason.
     let provenanceCache =
-        ConcurrentDictionary<string * string * int64 * string, FactTableRunProvenance>()
+        BoundedMemoIndex<string * string * int64 * string, FactTableRunProvenance>(CacheCap, ignore)
 
     let lineageCache =
-        ConcurrentDictionary<string * string * int64 * string, string list>()
+        BoundedMemoIndex<string * string * int64 * string, string list>(CacheCap, ignore)
 
     let methodCache =
-        ConcurrentDictionary<string * string * int64 * string, DeclaredMethod option>()
+        BoundedMemoIndex<string * string * int64 * string, DeclaredMethod option>(CacheCap, ignore)
 
-    let remember (store: ConcurrentDictionary<_, _>) key value =
-        if store.Count >= CacheCap then
-            store.Clear()
-
-        store[key] <- value
+    /// How many row images the row cache holds now — never more than its
+    /// cap, and never emptied by reaching it.
+    member internal _.CachedRowImages = cache.Count
 
     member _.RecordName(runId: string) = sprintf "%sruns/%s.json" root runId
     member _.RecordsPrefix = sprintf "%sruns/" root
@@ -403,9 +402,9 @@ type internal DelegateTableStore(storage: IBlobStorage) =
     member this.Rows(scopeId: string, run: DelegateRun) : Async<Result<FactTableRow array, string>> = async {
         let key = scopeId, run.TableId, run.Watermark.Sequence, run.Watermark.ContentDigest
 
-        match cache.TryGetValue key with
-        | true, rows -> return Ok rows
-        | _ ->
+        match cache.TryGet key with
+        | Some rows -> return Ok rows
+        | None ->
             match!
                 FactTableBlobIo.tryGet<FactTableRow list>
                     storage
@@ -416,11 +415,7 @@ type internal DelegateTableStore(storage: IBlobStorage) =
             | Ok None -> return Error(sprintf "the rows of run %s are missing" (DelegateFact.token run.Watermark))
             | Ok(Some rows) ->
                 let image = List.toArray rows
-
-                if cache.Count >= CacheCap then
-                    cache.Clear()
-
-                cache[key] <- image
+                cache.Set(key, image)
                 return Ok image
     }
 
@@ -429,13 +424,13 @@ type internal DelegateTableStore(storage: IBlobStorage) =
     member this.Provenance(scopeId: string, run: DelegateRun) : Async<Result<FactTableRunProvenance, string>> = async {
         let key = scopeId, run.TableId, run.Watermark.Sequence, run.Watermark.ContentDigest
 
-        match provenanceCache.TryGetValue key with
-        | true, provenance -> return Ok provenance
-        | _ ->
+        match provenanceCache.TryGet key with
+        | Some provenance -> return Ok provenance
+        | None ->
             match! FactTableRunProvenance.read storage scopeId (this.ProvenanceName run.RunId) with
             | Error e -> return Error(FactTableWriteError.describe e)
             | Ok provenance ->
-                remember provenanceCache key provenance
+                provenanceCache.Set(key, provenance)
                 return Ok provenance
     }
 
@@ -443,13 +438,13 @@ type internal DelegateTableStore(storage: IBlobStorage) =
     member this.Method(scopeId: string, run: DelegateRun) : Async<Result<DeclaredMethod option, string>> = async {
         let key = scopeId, run.TableId, run.Watermark.Sequence, run.Watermark.ContentDigest
 
-        match methodCache.TryGetValue key with
-        | true, method -> return Ok method
-        | _ ->
+        match methodCache.TryGet key with
+        | Some method -> return Ok method
+        | None ->
             match! FactTableBlobIo.tryGet<DeclaredMethod> storage scopeId (this.MethodName run.RunId) with
             | Error e -> return Error(FactTableWriteError.describe e)
             | Ok method ->
-                remember methodCache key method
+                methodCache.Set(key, method)
                 return Ok method
     }
 
@@ -475,14 +470,14 @@ type internal DelegateTableStore(storage: IBlobStorage) =
         let key =
             scopeId, current.TableId, current.Watermark.Sequence, current.Watermark.ContentDigest
 
-        match lineageCache.TryGetValue key with
-        | true, lineages -> return Ok lineages
-        | _ ->
+        match lineageCache.TryGet key with
+        | Some lineages -> return Ok lineages
+        | None ->
             match! FactTableBlobIo.tryGet<string list> storage scopeId (this.LineagesName current.TableId) with
             | Error e -> return Error(FactTableWriteError.describe e)
             | Ok found ->
                 let lineages = found |> Option.defaultValue []
-                remember lineageCache key lineages
+                lineageCache.Set(key, lineages)
                 return Ok lineages
     }
 

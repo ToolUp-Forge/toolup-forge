@@ -153,35 +153,39 @@ type DatasetAssemblyExecutor
     /// `Null` and an all-null / non-numeric bucket folds to `Null` (never a
     /// silent zero). `Count` counts non-null cells; `First` / `Last` return
     /// the original typed cell.
+    ///
+    /// The match is exhaustive over `TimeSeriesAggregation` with no
+    /// wildcard, so a new aggregation is a compile-time incompleteness here
+    /// rather than a fold that quietly answers zero.
     let foldCells (agg: TimeSeriesAggregation) (cells: DatasetValue list) : DatasetValue =
+        let numeric (reduce: float list -> float) =
+            match cells |> List.choose numOf with
+            | [] -> DatasetValue.Null
+            | ns -> DatasetValue.Float(reduce ns)
+
         match agg with
         | TimeSeriesAggregation.Count ->
             DatasetValue.Int(int64 (cells |> List.filter (fun c -> c <> DatasetValue.Null) |> List.length))
         | TimeSeriesAggregation.First -> cells |> List.tryHead |> Option.defaultValue DatasetValue.Null
         | TimeSeriesAggregation.Last -> cells |> List.tryLast |> Option.defaultValue DatasetValue.Null
+        | TimeSeriesAggregation.Sum -> numeric List.sum
+        | TimeSeriesAggregation.Average -> numeric List.average
+        | TimeSeriesAggregation.Min -> numeric List.min
+        | TimeSeriesAggregation.Max -> numeric List.max
+
+    /// dtype an aggregate of a `source`-typed column produces (for the
+    /// output column def): the cell `foldCells` returns, case for case —
+    /// `Count` an `Int`, `First` / `Last` the source cell itself, the
+    /// numeric folds a `Float`.
+    let aggDType (source: DatasetDType) (agg: TimeSeriesAggregation) =
+        match agg with
+        | TimeSeriesAggregation.Count -> DatasetDType.Int
+        | TimeSeriesAggregation.First
+        | TimeSeriesAggregation.Last -> source
         | TimeSeriesAggregation.Sum
         | TimeSeriesAggregation.Average
         | TimeSeriesAggregation.Min
-        | TimeSeriesAggregation.Max ->
-            let ns = cells |> List.choose numOf
-
-            if List.isEmpty ns then
-                DatasetValue.Null
-            else
-                DatasetValue.Float(
-                    match agg with
-                    | TimeSeriesAggregation.Sum -> List.sum ns
-                    | TimeSeriesAggregation.Average -> List.average ns
-                    | TimeSeriesAggregation.Min -> List.min ns
-                    | TimeSeriesAggregation.Max -> List.max ns
-                    | _ -> 0.0
-                )
-
-    /// dtype an aggregate produces (for the output column def).
-    let aggDType =
-        function
-        | TimeSeriesAggregation.Count -> DatasetDType.Int
-        | _ -> DatasetDType.Float
+        | TimeSeriesAggregation.Max -> DatasetDType.Float
 
     // -- Ordering -----------------------------------------------------------
 
@@ -353,7 +357,12 @@ type DatasetAssemblyExecutor
                 @ (aggregations
                    |> List.map (fun a -> {
                        Name = a.As
-                       DType = aggDType a.Aggregation
+                       DType =
+                           aggDType
+                               (columnByName columns a.Column
+                                |> Option.map _.DType
+                                |> Option.defaultValue DatasetDType.Float)
+                               a.Aggregation
                        Nullable = true
                        Role = DatasetColumnRole.Plain
                    }))
@@ -448,6 +457,7 @@ type DatasetAssemblyExecutor
         (periodColumn: string)
         (sourceColumn: string)
         (asName: string)
+        (outputDType: DatasetDType -> DatasetDType)
         (compute: DatasetValue list -> int -> DatasetValue)
         : Result<DatasetColumn list * Map<string, DatasetValue> list, AssemblyError> =
         match requireColumn columns sourceColumn with
@@ -479,7 +489,7 @@ type DatasetAssemblyExecutor
                         @ [
                             {
                                 Name = asName
-                                DType = srcCol.DType
+                                DType = outputDType srcCol.DType
                                 Nullable = true
                                 Role = DatasetColumnRole.Plain
                             }
@@ -563,7 +573,7 @@ type DatasetAssemblyExecutor
                     else
                         List.item (i - by) values
 
-                match perPartitionOrdered columns rows partition periodColumn column asName compute with
+                match perPartitionOrdered columns rows partition periodColumn column asName id compute with
                 | Error e -> return Error e
                 | Ok(c, r) -> return Ok(c, r, sources)
             | AssemblyTransform.Window(column, size, aggregation, partition, periodColumn, asName) ->
@@ -571,7 +581,17 @@ type DatasetAssemblyExecutor
                     let lo = max 0 (i - size + 1)
                     foldCells aggregation values[lo..i]
 
-                match perPartitionOrdered columns rows partition periodColumn column asName compute with
+                match
+                    perPartitionOrdered
+                        columns
+                        rows
+                        partition
+                        periodColumn
+                        column
+                        asName
+                        (fun source -> aggDType source aggregation)
+                        compute
+                with
                 | Error e -> return Error e
                 | Ok(c, r) -> return Ok(c, r, sources)
             | AssemblyTransform.Filter filters ->
@@ -582,22 +602,30 @@ type DatasetAssemblyExecutor
 
     // -- Split --------------------------------------------------------------
 
-    /// Stable non-negative 63-bit hash of a value's canonical string, for
+    /// Stable non-negative 63-bit hash of a unit's canonical text, for
     /// deterministic unit-hash splitting (independent of process / runtime
-    /// hashcode).
-    let stableHash (s: string) : uint64 =
-        let bytes = SHA256.HashData(Encoding.UTF8.GetBytes s)
-        BitConverter.ToUInt64(bytes, 0)
+    /// hashcode). A missing unit (`None`) hashes a single `0xFF` byte —
+    /// a byte that never occurs in UTF-8 — so no text, whatever it spells,
+    /// can share a missing unit's hash input, while every present value
+    /// hashes exactly the UTF-8 bytes it always has.
+    let stableHash (value: string option) : uint64 =
+        let bytes =
+            match value with
+            | Some s -> Encoding.UTF8.GetBytes s
+            | None -> [| 0xFFuy |]
 
+        BitConverter.ToUInt64(SHA256.HashData bytes, 0)
+
+    /// A cell's canonical text, or `None` for a missing value.
     let cellText =
         function
         | DatasetValue.Text s
-        | DatasetValue.Categorical s -> s
-        | DatasetValue.Int i -> string i
-        | DatasetValue.Float f -> string f
-        | DatasetValue.Bool b -> string b
-        | DatasetValue.Timestamp t -> t.ToString("o")
-        | DatasetValue.Null -> " null"
+        | DatasetValue.Categorical s -> Some s
+        | DatasetValue.Int i -> Some(string i)
+        | DatasetValue.Float f -> Some(string f)
+        | DatasetValue.Bool b -> Some(string b)
+        | DatasetValue.Timestamp t -> Some(t.ToString("o"))
+        | DatasetValue.Null -> None
 
     let splitRows
         (columns: DatasetColumn list)
@@ -637,21 +665,44 @@ type DatasetAssemblyExecutor
                             ([], 0L)
                         |> fst
 
+                    // A hash no band covers refuses the split: assigning it
+                    // to some bucket anyway would put a row in a subset its
+                    // weights never gave it.
                     let bucketFor (r: Map<string, DatasetValue>) =
                         let v = Map.tryFind unitColumn r |> Option.defaultValue DatasetValue.Null
                         let h = int64 (stableHash (cellText v) % uint64 total)
 
-                        bands
-                        |> List.tryFind (fun (_, lo, hi) -> h >= lo && h < hi)
-                        |> Option.map (fun (n, _, _) -> n)
-                        |> Option.defaultValue (buckets |> List.last |> fst)
+                        match bands |> List.tryFind (fun (_, lo, hi) -> h >= lo && h < hi) with
+                        | Some(name, _, _) -> Ok name
+                        | None ->
+                            Error(
+                                AssemblyError.SchemaConflict(
+                                    sprintf
+                                        "unit-hash split on '%s': hash band %d of %d is covered by no bucket"
+                                        unitColumn
+                                        h
+                                        total
+                                )
+                            )
 
-                    let assigned = rows |> List.map (fun r -> bucketFor r, r)
+                    let assigned =
+                        rows
+                        |> List.fold
+                            (fun acc r ->
+                                match acc with
+                                | Error e -> Error e
+                                | Ok xs ->
+                                    match bucketFor r with
+                                    | Error e -> Error e
+                                    | Ok name -> Ok((name, r) :: xs))
+                            (Ok [])
+                        |> Result.map List.rev
 
-                    Ok [
+                    assigned
+                    |> Result.map (fun assigned -> [
                         for (name, _) in buckets ->
                             name, (assigned |> List.filter (fun (n, _) -> n = name) |> List.map snd)
-                    ]
+                    ])
 
     // -- Output -------------------------------------------------------------
 

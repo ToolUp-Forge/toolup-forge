@@ -1871,6 +1871,67 @@ let typedScopeTests =
         }
     ]
 
+// ─── The clause planner's retention is bounded and never wipes ──────
+//
+// Retention drained FIFO and, when a concurrent add left the queue empty
+// with the dictionary over its bound, cleared every retained plan: the
+// in-flight answers' `RecordPlanned` then returned `false` and their
+// provenance silently lacked the plan node. Under a concurrent burst the
+// bound must hold EXACTLY — the newest `retention` plans retained and each
+// one recordable — never fewer.
+
+/// A planner that hands back `template` under a fresh plan id per call.
+let private freshPlans (template: AnswerPlan) (recorded: System.Collections.Concurrent.ConcurrentBag<string>) =
+    let fresh () = {
+        template with
+            PlanId = "plan-" + Guid.NewGuid().ToString "N"
+    }
+
+    { new IAnswerPlanner with
+        member _.Plan(_: string, _: string, _: string) = async { return fresh () }
+        member _.Plan(_: ResolvedScope, _: string, _: string) = async { return fresh () }
+
+        member _.Record(_, _, plan) = async { recorded.Add plan.PlanId }
+    }
+
+let retentionTests =
+    testList "clause-planner retention" [
+
+        testCaseAsync "a concurrent burst leaves exactly the bound retained, and every retained plan records"
+        <| async {
+            let planner, inner, _ = recordedPlanner ()
+            let scopeId = newScope ()
+            assertFact inner scopeId (brandDraft "acme" (Scalar 300m)) |> ignore
+            let! template = planner.Plan(scopeId, "user-1", "acme revenue?")
+            let recorded = System.Collections.Concurrent.ConcurrentBag<string>()
+            let bound = 4
+
+            for round in 1..200 do
+                let feeder =
+                    AnswerPlanClausePlanner.createWithRetention (freshPlans template recorded) bound
+
+                let clauses = feeder :> IFactClausePlanner
+
+                let! planned =
+                    [ for _ in 1..32 -> clauses.PlanClauses(scopeId, "user-1", "acme revenue?") ]
+                    |> Async.Parallel
+
+                let retained =
+                    planned
+                    |> Array.filter (fun p -> (feeder.TryPlan p.PlanId).IsSome)
+                    |> Array.map _.PlanId
+
+                Expect.equal
+                    retained.Length
+                    bound
+                    (sprintf "round %d: the bound holds exactly — no plan is wiped below it" round)
+
+                for planId in retained do
+                    let! ok = (feeder :> IPlannedAnswerRecorder).RecordPlanned(scopeId, "msg-" + planId, planId)
+                    Expect.isTrue ok (sprintf "round %d: a retained plan records" round)
+        }
+    ]
+
 let tests =
     testList "Phase 560 grounded answer planner" [
         compilerTests
@@ -1883,4 +1944,5 @@ let tests =
         composeTests
         populationComposeTests
         typedScopeTests
+        retentionTests
     ]

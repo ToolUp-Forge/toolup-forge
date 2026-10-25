@@ -2425,6 +2425,96 @@ let wordingTests =
         }
     ]
 
+// ─── The double run's first site, pinned pending ────────────────────
+//
+// `GroundedNarrativeTrigger.enqueueFor` schedules the run's job and then
+// triggers the job it got back. A scheduler that coalesces on the
+// idempotency key hands back the job already pending, so a change replayed
+// inside the TTL triggers that one job twice. Pending until the scheduler
+// says which job it returned (`ScheduleOutcome.Coalesced`, Phase 1066);
+// Phase 998 fixes both sites and turns this on. The second site,
+// `RecomputeJobHandler.applyPolicies`, is pinned in
+// ReactiveRecomputeComposeTests.
+
+/// Coalesces on the idempotency key, as a real scheduler does, and counts
+/// the triggers its jobs receive.
+type private CoalescingScheduler() =
+    let byKey = ConcurrentDictionary<string, JobId>()
+    let triggers = ConcurrentDictionary<JobId, int>()
+
+    member _.Jobs = byKey.Count
+    member _.AllTriggers = triggers.Values |> Seq.sum
+
+    member private _.ScheduleKeyed(registration: JobRegistration) =
+        let key =
+            registration.Idempotency
+            |> Option.map _.Key
+            |> Option.defaultWith (fun () -> Guid.NewGuid().ToString "N")
+
+        Ok(byKey.GetOrAdd(key, fun _ -> Guid.NewGuid()))
+
+    interface IJobScheduler with
+        member _.RegisterHandler(_, _) = ()
+        member _.RegisterHandlerAsync(_, _) = async { return Ok() }
+
+        member this.Schedule(registration: JobRegistration) = async { return this.ScheduleKeyed registration }
+
+        member this.Schedule(_: ResolvedScope, registration: JobRegistration) = async {
+            return this.ScheduleKeyed registration
+        }
+
+        member _.Cancel(_, _) = async { return () }
+        member _.Disable(_, _) = async { return () }
+        member _.Enable(_, _) = async { return () }
+        member _.Get(_, _) = async { return None }
+        member _.ListJobs _ = async { return [] }
+        member _.GetRecentRuns(_, _, _) = async { return [] }
+
+        member _.TriggerOnce(_, jobId, _) = async {
+            triggers.AddOrUpdate(jobId, 1, fun _ n -> n + 1) |> ignore
+            return Ok()
+        }
+
+        member _.NotifyEventWritten(_, _, _) = async { return () }
+
+let doubleRunTests =
+    testList "double run, first site" [
+
+        ptestCaseAsync
+            "998: a replayed change coalesced onto its pending narrative job is not triggered again (GroundedNarrativeTrigger.enqueueFor)"
+        <| async {
+            let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let store = BlobFactStore.create (InMemoryBlobStorage()) events
+            let lineage = LineageStore.EventStoreLineageStore(events) :> ILineageStore
+            let scheduler = CoalescingScheduler()
+            let teamId = "team-" + Guid.NewGuid().ToString "N"
+
+            let computed = {
+                assertedDraft "revenue" 1250m Surfaceable with
+                    Method = Computed("rollup", "1", "p0")
+                    Evidence = {
+                        ResultRef = None
+                        InputHashes = [ "sales.rollup" ]
+                        TriggerRef = None
+                    }
+            }
+
+            assertOk store teamId computed |> ignore
+            let registry = GroundedNarrativeRegistry()
+            registry.Register summaryRun |> ignore
+
+            let scope =
+                DataChangeScope.Resolved(ScopeResolution.ofStorageScope (storageFor teamId))
+
+            for _ in 1..2 do
+                let! _ = GroundedNarrativeTrigger.enqueueFor lineage store scheduler registry scope [ "sales.rollup" ]
+                ()
+
+            Expect.equal scheduler.Jobs 1 "the replayed change coalesced onto the pending job"
+            Expect.equal scheduler.AllTriggers 1 "and that job was triggered once, not once per schedule call"
+        }
+    ]
+
 let tests =
     testList "Phase 985 — grounded narrative generation" [
         pureGateTests
@@ -2434,4 +2524,5 @@ let tests =
         scopedProviderTests
         budgetTests
         wordingTests
+        doubleRunTests
     ]

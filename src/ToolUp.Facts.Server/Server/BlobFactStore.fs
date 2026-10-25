@@ -7,6 +7,7 @@ open System
 open System.Collections.Generic
 open System.Text
 open System.Text.Json
+open System.Threading
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -322,6 +323,31 @@ type internal FactIndexState =
     /// order — the order the enumeration's stable sorts break ties by.
     | Complete of leaves: FactIndexLeaf list * census: Dictionary<string, int * string>
 
+/// Why one fact blob that exists could not be read. A blob that does not
+/// exist is an absence, not a fault.
+type FactReadFault =
+    /// The storage failed the download of a blob it holds.
+    | FactDownloadFailed of blobName: string * reason: string
+    /// The blob downloaded but does not parse as a fact.
+    | FactUnparseable of blobName: string * reason: string
+
+/// Rendering for `FactReadFault`.
+module FactReadFault =
+
+    /// One line naming the blob and the cause.
+    let describe =
+        function
+        | FactDownloadFailed(name, reason) -> sprintf "fact blob '%s' could not be downloaded: %s" name reason
+        | FactUnparseable(name, reason) -> sprintf "fact blob '%s' does not parse as a fact: %s" name reason
+
+/// A fact read that failed. `BlobFactStore` raises it out of the read that
+/// met the fault — a query, a population page, a supersession chain, a
+/// point read — rather than answering over fewer facts than the scope
+/// holds: a shorter answer is indistinguishable from a true one, a failed
+/// one is not.
+exception FactReadFailed of fault: FactReadFault with
+    override this.Message = FactReadFault.describe this.fault
+
 /// Every fact blob of one scope, read for export (Phase 941 — the
 /// migration into an indexed store reads its source through this). The
 /// query paths skip a blob that will not read or parse; an export must not
@@ -347,10 +373,15 @@ type BlobFactStore
         registry: Grounding.IMetricRegistry option,
         clock: unit -> DateTime,
         surfaceOptions: FactSurfaceOptions,
-        indexOptions: FactIndexOptions
+        indexOptions: FactIndexOptions,
+        logger: ILogger option
     ) =
 
     static let jsonOptions = FableConverters.create ()
+
+    // Every fact read that met a fault, counted and logged before the
+    // read fails with it.
+    let readFaults: int64[] = Array.zeroCreate 1
 
     // One blob per fact under the scope's `_facts/` prefix.
     let factsPrefix = "_facts/"
@@ -398,27 +429,49 @@ type BlobFactStore
     let deserialise (bytes: byte[]) : Fact =
         JsonSerializer.Deserialize<Fact>(Encoding.UTF8.GetString bytes, jsonOptions)
 
+    // One fact blob, read. `Ok None` only when the blob does not exist —
+    // a download that fails over a blob the store still holds, and a blob
+    // that does not parse, are faults.
+    let readBlob (scopeId: string) (name: string) : Async<Result<Fact option, FactReadFault>> = async {
+        match! storage.Download(scopeId, name) with
+        | Ok bytes ->
+            try
+                return Ok(Some(deserialise bytes))
+            with ex ->
+                return Error(FactUnparseable(name, ex.Message))
+        | Error reason ->
+            let! exists = storage.Exists(scopeId, name)
+
+            return
+                if exists then
+                    Error(FactDownloadFailed(name, reason))
+                else
+                    Ok None
+    }
+
+    // A faulted read fails the operation that made it: counted, logged,
+    // raised. Never a shorter answer.
+    let faulted (scopeId: string) (fault: FactReadFault) : 'T =
+        Interlocked.Increment(&readFaults[0]) |> ignore
+
+        logger
+        |> Option.iter (fun l ->
+            l.Error(sprintf "fact read failed in scope %s: %s" scopeId (FactReadFault.describe fault), None))
+
+        raise (FactReadFailed fault)
+
     // The facts behind the given blob names, in the given order. A blob
-    // that will not read or parse is skipped — the enumeration's rule, so
-    // every path that reads through here agrees with it.
+    // that no longer exists is absent; one that will not read or parse
+    // fails the read — every path that reads through here agrees.
     let loadNames (scopeId: string) (names: string list) : Async<Fact list> = async {
-        let! facts =
-            names
-            |> List.map (fun name -> async {
-                let! r = storage.Download(scopeId, name)
+        let! reads = names |> List.map (readBlob scopeId) |> BlobFanOut.run
 
-                return
-                    match r with
-                    | Ok bytes ->
-                        try
-                            Some(deserialise bytes)
-                        with _ ->
-                            None
-                    | Error _ -> None
-            })
-            |> BlobFanOut.run
-
-        return facts |> Array.choose id |> Array.toList
+        return
+            reads
+            |> Array.toList
+            |> List.choose (function
+                | Ok fact -> fact
+                | Error fault -> faulted scopeId fault)
     }
 
     // Every fact in scope, materialised. Stateless (recomputed per call).
@@ -428,16 +481,9 @@ type BlobFactStore
     }
 
     let load (scopeId: string) (factId: string) : Async<Fact option> = async {
-        let! r = storage.Download(scopeId, blobName factId)
-
-        return
-            match r with
-            | Ok bytes ->
-                try
-                    Some(deserialise bytes)
-                with _ ->
-                    None
-            | Error _ -> None
+        match! readBlob scopeId (blobName factId) with
+        | Ok fact -> return fact
+        | Error fault -> return faulted scopeId fault
     }
 
     let lineageKeyOf (f: Fact) : string =
@@ -1503,6 +1549,24 @@ type BlobFactStore
             surfaceOptions: FactSurfaceOptions
         ) =
         BlobFactStore(storage, events, registry, clock, surfaceOptions, FactIndexOptions.defaults)
+
+    /// The six-argument shape, with no logger: a faulted read is still
+    /// counted (`ReadFaults`) and still fails the read, it is just not
+    /// logged here.
+    new
+        (
+            storage: IBlobStorage,
+            events: IEventStore,
+            registry: Grounding.IMetricRegistry option,
+            clock: unit -> DateTime,
+            surfaceOptions: FactSurfaceOptions,
+            indexOptions: FactIndexOptions
+        ) =
+        BlobFactStore(storage, events, registry, clock, surfaceOptions, indexOptions, None)
+
+    /// How many fact reads have failed with a `FactReadFault` since this
+    /// store was built. Each one also failed the read that met it.
+    member _.ReadFaults = Interlocked.Read(&readFaults[0])
 
     /// Rebuild the point-read index (Phase 890) from the scope's facts —
     /// the Phase 9f `Rebuild` shape. Idempotent, safe to run concurrently

@@ -2365,6 +2365,197 @@ let private expectSameReads (enumerating: IFactStore) (indexed: IFactStore) (sco
 
 let private fixedClock () = baseAsOf.AddDays 30.0
 
+// ─── A fact read that fails is a fault, never an absence ────────────
+//
+// A download that fails over a blob the store still holds, or a blob that
+// will not parse, used to read as "no such fact": the fan-out dropped it,
+// so a query, a population page and a supersession chain all answered over
+// fewer facts than the scope holds, and the metric surface then folded its
+// census over the smaller set. Each case below reads through one injected
+// fault and requires the read to FAIL rather than answer short.
+
+/// An `IBlobStorage` decorator that fails the download of one named blob
+/// while the blob itself stays where it is.
+type private OneBlobOutage(inner: IBlobStorage) =
+    member val Failing: string option = None with get, set
+
+    interface IBlobStorage with
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            ToolUp.Platform.BlobStorage.composeNotSupported "test double"
+
+        member _.Upload(container, blobName, content) =
+            inner.Upload(container, blobName, content)
+
+        member this.Download(container, blobName) = async {
+            if this.Failing = Some blobName then
+                return Error "injected storage outage"
+            else
+                return! inner.Download(container, blobName)
+        }
+
+        member _.Delete(container, blobName) = inner.Delete(container, blobName)
+        member _.List(container, prefix) = inner.List(container, prefix)
+        member _.Exists(container, blobName) = inner.Exists(container, blobName)
+        member _.GetMetadata(container, blobName) = inner.GetMetadata(container, blobName)
+
+        member _.DownloadRange(container, blobName, offset, length) =
+            inner.DownloadRange(container, blobName, offset, length)
+
+        member _.Erase(container, prefix, policy, dryRun) =
+            inner.Erase(container, prefix, policy, dryRun)
+
+let private mapAsync (f: 'a -> 'b) (read: Async<'a>) : Async<'b> = async {
+    let! value = read
+    return f value
+}
+
+let private factBlob (factId: string) = sprintf "_facts/%s.json" factId
+
+/// The read either fails or answers over every fact; an answer over fewer
+/// is the defect.
+let private neverShorter (label: string) (expected: int) (read: Async<int>) = async {
+    match! Async.Catch read with
+    | Choice1Of2 answered ->
+        Expect.equal
+            answered
+            expected
+            (sprintf "%s: a read over a faulted blob must fail, never answer over fewer facts" label)
+    | Choice2Of2 _ -> ()
+}
+
+/// Three subjects of one metric, one fact each.
+let private seedThree (store: IFactStore) (scope: string) = async {
+    let facts = ResizeArray<Fact>()
+
+    for name in [ "a"; "b"; "c" ] do
+        match! store.Assert(scope, draftAt [ "eu"; name ] "elasticity" rollup (Scalar 10m) ("h-" + name)) with
+        | Ok f -> facts.Add f
+        | Error e -> failtestf "seed failed: %s" e
+
+    return List.ofSeq facts
+}
+
+let private rankedCount (r: Result<PopulationResult, string>) =
+    match r with
+    | Ok population -> population.Ranked.Length
+    | Error e -> failtestf "population read refused: %s" e
+
+let private readFaultTests =
+    testList "BlobFactStore read faults" [
+
+        testCaseAsync
+            "a failed download fails Query, QueryPopulation and the supersession chain instead of shortening them"
+        <| async {
+            let outage = OneBlobOutage(InMemoryBlobStorage.InMemoryBlobStorage())
+            let store = storeOver outage (steppingClock baseAsOf) FactSurfaceOptions.disabled
+            let scope = newScope ()
+            let! seeded = seedThree store scope
+
+            // A three-fact chain on one more subject.
+            let! d1 = store.Assert(scope, draftAt [ "eu"; "d" ] "elasticity" rollup (Scalar 1m) "d1")
+            let! d2 = store.Assert(scope, draftAt [ "eu"; "d" ] "elasticity" rollup (Scalar 2m) "d2")
+            let! d3 = store.Assert(scope, draftAt [ "eu"; "d" ] "elasticity" rollup (Scalar 3m) "d3")
+
+            let middle, head =
+                match d1, d2, d3 with
+                | Ok _, Ok b, Ok c -> b, c
+                | _ -> failtest "chain seed failed"
+
+            outage.Failing <- Some(factBlob seeded.Head.FactId)
+
+            do!
+                store.Query(scope, FactQuery.all)
+                |> mapAsync List.length
+                |> neverShorter "Query" 4
+
+            do!
+                store.QueryPopulation(scope, levelTwo)
+                |> mapAsync rankedCount
+                |> neverShorter "QueryPopulation" 4
+
+            outage.Failing <- Some(factBlob middle.FactId)
+
+            do!
+                store.QuerySupersessionChain(scope, head.FactId)
+                |> mapAsync List.length
+                |> neverShorter "QuerySupersessionChain" 3
+        }
+
+        testCaseAsync "a blob that does not parse fails the read instead of dropping out of it"
+        <| async {
+            let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
+            let store = storeOver storage (steppingClock baseAsOf) FactSurfaceOptions.disabled
+            let scope = newScope ()
+            let! seeded = seedThree store scope
+
+            let! corrupted = storage.Upload(scope, factBlob seeded.Head.FactId, Encoding.UTF8.GetBytes "{ not a fact")
+            Expect.isOk corrupted "the corruption was written"
+
+            do!
+                store.Query(scope, FactQuery.all)
+                |> mapAsync List.length
+                |> neverShorter "Query over a corrupt blob" 3
+        }
+
+        testCaseAsync "the surface never folds its census over a faulted load"
+        <| async {
+            let outage = OneBlobOutage(InMemoryBlobStorage.InMemoryBlobStorage())
+            let store = storeOver outage (steppingClock baseAsOf) FactSurfaceOptions.always
+            let scope = newScope ()
+            let! _ = seedThree store scope
+            let! first = store.QueryPopulation(scope, levelTwo)
+            Expect.equal (rankedCount first) 3 "the surface answers the seed"
+
+            // A fact reaches the log behind the surface, so the next read
+            // must reconcile, and its one download fails.
+            let late = syntheticFact 424242 (Scalar 20m)
+            do! writeRaw outage scope late
+            outage.Failing <- Some(factBlob late.FactId)
+
+            do!
+                store.QueryPopulation(scope, levelTwo)
+                |> mapAsync rankedCount
+                |> neverShorter "the reconciling read" 4
+
+            // The outage clears: the late fact must still be found, so the
+            // faulted reconcile cannot have absorbed it.
+            outage.Failing <- None
+            let! after = store.QueryPopulation(scope, levelTwo)
+            Expect.equal (rankedCount after) 4 "the late fact ranks once it can be read"
+        }
+
+        testCaseAsync
+            "the fault is typed, names the blob and is counted; a fact that does not exist is still an absence"
+        <| async {
+            let outage = OneBlobOutage(InMemoryBlobStorage.InMemoryBlobStorage())
+
+            let blob =
+                BlobFactStore(outage, InMemoryEventStore.InMemoryEventStore(), None, steppingClock baseAsOf)
+
+            let store = blob :> IFactStore
+            let scope = newScope ()
+            let! seeded = seedThree store scope
+
+            let! unknown = store.Get(scope, "no-such-fact")
+            Expect.isNone unknown "an id with no blob reads as absent"
+            Expect.equal blob.ReadFaults 0L "an absence is not a fault"
+
+            let target = factBlob seeded.Head.FactId
+            outage.Failing <- Some target
+
+            match! Async.Catch(store.Get(scope, seeded.Head.FactId)) with
+            | Choice1Of2 read -> failtestf "a faulted point read answered %A" read
+            | Choice2Of2(FactReadFailed(FactDownloadFailed(name, reason))) ->
+                Expect.equal name target "the fault names the blob"
+                Expect.stringContains reason "injected" "and carries the storage's reason"
+            | Choice2Of2 other -> failtestf "the fault was untyped: %O" other
+
+            Expect.equal blob.ReadFaults 1L "the fault was counted"
+        }
+    ]
+
 let pointReadIndexTests =
     testList "Phase 890 point-read index" [
 
@@ -2642,4 +2833,6 @@ let pointReadIndexTests =
             Expect.isGreaterThan probe.MaxInFlight 1 "the reads did overlap"
             Expect.isLessThanOrEqual probe.MaxInFlight 16 "and never more than BlobFanOut.Bound at once"
         }
+
+        readFaultTests
     ]

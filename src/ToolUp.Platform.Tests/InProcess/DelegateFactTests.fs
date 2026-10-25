@@ -1372,6 +1372,95 @@ let private orphanSweepTests =
         }
     ]
 
+// ─── The table store's caches are bounded and never wipe ─────────────
+
+/// Counts the downloads reaching the backing store.
+type private DownloadCounter(inner: IBlobStorage) =
+    let mutable downloads = 0
+
+    member _.Downloads = downloads
+    member _.Reset() = downloads <- 0
+
+    interface IBlobStorage with
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            ToolUp.Platform.BlobStorage.composeNotSupported "test double"
+
+        member _.Upload(container, blobName, content) =
+            inner.Upload(container, blobName, content)
+
+        member _.Download(container, blobName) =
+            downloads <- downloads + 1
+            inner.Download(container, blobName)
+
+        member _.Delete(container, blobName) = inner.Delete(container, blobName)
+        member _.List(container, prefix) = inner.List(container, prefix)
+        member _.Exists(container, blobName) = inner.Exists(container, blobName)
+        member _.GetMetadata(container, blobName) = inner.GetMetadata(container, blobName)
+
+        member _.DownloadRange(container, blobName, offset, length) =
+            inner.DownloadRange(container, blobName, offset, length)
+
+        member _.Erase(container, prefix, policy, dryRun) =
+            inner.Erase(container, prefix, policy, dryRun)
+
+let private committedRun (i: int) : DelegateRun = {
+    TableId = sprintf "table-%d" i
+    RunId = sprintf "run-%d" i
+    Watermark = {
+        TableId = sprintf "table-%d" i
+        Sequence = 1L
+        CommittedAt = t0
+        ContentDigest = sprintf "digest-%d" i
+    }
+    RowCount = 1
+    SubjectCount = 1
+    ComparableByColumn = Map.empty
+    PeriodFrom = None
+    PeriodTo = None
+}
+
+let private boundedCacheTests =
+    testList "the table store's caches are bounded" [
+
+        testCaseAsync "a ninth table's rows evict the oldest entry, not the other eight"
+        <| async {
+            let counting = DownloadCounter(InMemoryBlobStorage())
+            let tables = DelegateTableStore(counting)
+            let scope = newScope ()
+
+            for i in 1..9 do
+                let run = committedRun i
+
+                let! put =
+                    FactTableBlobIo.put counting scope (tables.RowsName run.TableId 1L) [
+                        row "brand" (sprintf "sku-%d" i) 1m
+                    ]
+
+                Expect.isOk put "the run's rows were written"
+
+            let read i = async {
+                match! tables.Rows(scope, committedRun i) with
+                | Ok rows -> Expect.equal rows.Length 1 "one row"
+                | Error e -> failtestf "rows of table %d: %s" i e
+            }
+
+            for i in 1..9 do
+                do! read i
+
+            counting.Reset()
+
+            for i in 2..9 do
+                do! read i
+
+            Expect.equal counting.Downloads 0 "the eight most recent tables' rows are still cached"
+
+            do! read 1
+            Expect.equal counting.Downloads 1 "and the oldest, evicted, is read again"
+        }
+    ]
+
 /// Every Phase 889 case.
 let tests =
     testList "Phase 889 — delegate facts" [
@@ -1385,4 +1474,5 @@ let tests =
         importedTests
         importedMethodTests
         orphanSweepTests
+        boundedCacheTests
     ]

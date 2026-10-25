@@ -323,11 +323,19 @@ module FactsCompose =
             // (GP 11).
             .AddSingleton<IFactStore>(
                 Func<IServiceProvider, IFactStore>(fun sp ->
+                    // A fact read that faults is logged through the composed
+                    // logger as well as failing the read.
                     let store =
-                        BlobFactStore.createWithRegistry
-                            (sp.GetRequiredService<IBlobStorage>())
-                            (sp.GetRequiredService<IEventStore>())
-                            (tryService<Grounding.IMetricRegistry> sp)
+                        BlobFactStore(
+                            sp.GetRequiredService<IBlobStorage>(),
+                            sp.GetRequiredService<IEventStore>(),
+                            tryService<Grounding.IMetricRegistry> sp,
+                            (fun () -> DateTime.UtcNow),
+                            FactSurfaceOptions.defaults,
+                            FactIndexOptions.defaults,
+                            tryService<ILogger> sp
+                        )
+                        :> IFactStore
 
                     // Phase 946 — remember the blob store this composition
                     // built, for the /dev/inspect index inspector below.
@@ -426,7 +434,16 @@ module FactsCompose =
                         | :? DeclassificationBudgetConfig as b -> Some b
                         | _ -> None
 
-                    FactDisclosureGate.createConfiguredWithBudgets taint purpose budgets store events)
+                    let gate =
+                        FactDisclosureGate.createConfiguredWithBudgets taint purpose budgets store events
+
+                    // The per-check read fan-out: an optional
+                    // `DisclosureFanOut` registration (the
+                    // `withDisclosureFanOut` compose below) replaces the
+                    // gate's default bound.
+                    match sp.GetService(typeof<DisclosureFanOut>), gate with
+                    | :? DisclosureFanOut as bound, (:? FactDisclosureGate as concrete) -> concrete.WithFanOut bound
+                    | _ -> gate)
             )
             // Phase 558 — the concrete fact resolver closes the Phase 522
             // seam, registered with the store + gate so the fact tier is
@@ -1029,6 +1046,39 @@ module FactsCompose =
         // believes it booted clean.
         withDeclassificationBudgetConfig (DeclassificationBudgetConfig.create ledger budgets) app
 
+    /// Bound how many fact reads one disclosure check holds in flight. A
+    /// deployment that does not compose this runs the gate at
+    /// `DisclosureFanOut.DefaultMaxConcurrentReads`; a bound below 1 is
+    /// raised to 1. A `NoFactStore` deployment is unchanged.
+    ///
+    /// ```fsharp skip=fragment
+    /// ServerApp.create config
+    /// |> FactsCompose.withFactStore
+    /// |> FactsCompose.withDisclosureFanOut 8
+    /// ```
+    let withDisclosureFanOut (maxConcurrentReads: int) (app: ServerApp) : ServerApp =
+        match app.Config.FactStore with
+        | NoFactStore -> app
+        | EnabledFactStore ->
+            let bound: DisclosureFanOut = {
+                MaxConcurrentReads = max 1 maxConcurrentReads
+            }
+
+            let register (s: IServiceCollection) = s.AddSingleton<DisclosureFanOut>(bound)
+
+            let serviceConfig =
+                match app.Extensions.ServiceConfig with
+                | None -> Some(fun s -> register s)
+                | Some existing -> Some(fun s -> register (existing s))
+
+            {
+                app with
+                    Extensions = {
+                        app.Extensions with
+                            ServiceConfig = serviceConfig
+                    }
+            }
+
     // ─── Phase 683 — certificate-verified fact import (opt-in) ────────
     //
     // A separate, explicit opt-in on top of the fact store, and separate
@@ -1339,7 +1389,11 @@ module FactsCompose =
             .AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
                 Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
                     { new Microsoft.Extensions.Hosting.IHostedService with
-                        member _.StartAsync(_ct) =
+                        // The schedule calls are awaited here, in the hosted
+                        // start, never run synchronously: a slow scheduler
+                        // delays this start step, not the thread that is
+                        // composing the container.
+                        member _.StartAsync(ct) =
                             let logger = sp.GetRequiredService<ILogger>()
 
                             match sp.GetService(typeof<IJobScheduler>) with
@@ -1358,39 +1412,43 @@ module FactsCompose =
 
                                 let effectiveScopes = if List.isEmpty scopes then [ "_platform" ] else scopes
 
-                                for scopeId in effectiveScopes do
-                                    let registration: JobRegistration = {
-                                        ScopeId = scopeId
-                                        Handler = CoherenceJobHandler.HandlerName
-                                        Payload = ""
-                                        Trigger = cadence
-                                        Idempotency =
-                                            Some {
-                                                Key = sprintf "coherence-%s" scopeId
-                                                TtlSeconds = 60 * 60 * 24 * 365
-                                            }
-                                        RetryPolicy = JobRetryPolicy.defaults
-                                        ShardKey = None
-                                        Precision = JobPrecision.Minute
-                                        CreatedBy = "_facts.coherence"
-                                        Tags = Map.ofList [ "origin", "fact-coherence" ]
-                                    }
+                                let scheduleAll = async {
+                                    for scopeId in effectiveScopes do
+                                        let registration: JobRegistration = {
+                                            ScopeId = scopeId
+                                            Handler = CoherenceJobHandler.HandlerName
+                                            Payload = ""
+                                            Trigger = cadence
+                                            Idempotency =
+                                                Some {
+                                                    Key = sprintf "coherence-%s" scopeId
+                                                    TtlSeconds = 60 * 60 * 24 * 365
+                                                }
+                                            RetryPolicy = JobRetryPolicy.defaults
+                                            ShardKey = None
+                                            Precision = JobPrecision.Minute
+                                            CreatedBy = "_facts.coherence"
+                                            Tags = Map.ofList [ "origin", "fact-coherence" ]
+                                        }
 
-                                    match scheduler.Schedule registration |> Async.RunSynchronously with
-                                    | Ok _ -> ()
-                                    | Error err ->
-                                        logger.Warn(
-                                            sprintf
-                                                "[Phase 563] Failed to schedule the coherence check in scope %s: %A"
-                                                scopeId
-                                                err
-                                        )
+                                        match! scheduler.Schedule registration with
+                                        | Ok _ -> ()
+                                        | Error err ->
+                                            logger.Warn(
+                                                sprintf
+                                                    "Failed to schedule the coherence check in scope %s: %A"
+                                                    scopeId
+                                                    err
+                                            )
+                                }
+
+                                Async.StartAsTask(scheduleAll, cancellationToken = ct) :> System.Threading.Tasks.Task
                             | _ ->
                                 logger.Warn(
-                                    "[Phase 563] Coherence checking enabled but JobScheduler = NoJobScheduler — the standing check is not scheduled (the on-demand path and the /ready health probe still work). Pair with JobScheduler = InProcessJobScheduler."
+                                    "Coherence checking enabled but JobScheduler = NoJobScheduler — the standing check is not scheduled (the on-demand path and the /ready health probe still work). Pair with JobScheduler = InProcessJobScheduler."
                                 )
 
-                            System.Threading.Tasks.Task.CompletedTask
+                                System.Threading.Tasks.Task.CompletedTask
 
                         member _.StopAsync(_ct) =
                             System.Threading.Tasks.Task.CompletedTask

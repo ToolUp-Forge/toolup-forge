@@ -1032,17 +1032,32 @@ type internal FactPublicationService(deps: FactPublicationDeps) =
     let grants = ConcurrentDictionary<string, GrantEntry>()
     let gate = obj ()
 
-    // Phase 935 — each grant's consent tokens, and the grants an earlier
-    // process persisted, restored before this service answers anything.
+    // Each grant's consent tokens, and the grants an earlier process
+    // persisted, restored before this service answers anything.
     let consentTokens = ConcurrentDictionary<string, GrantPersistence.ConsentTokens>()
 
-    do
-        match deps.Carrier with
-        | None -> ()
-        | Some carrier ->
-            for restored in GrantPersistence.restore deps carrier |> Async.RunSynchronously do
-                grants[restored.Entry.Grant.GrantId] <- restored.Entry
-                consentTokens[restored.Entry.Grant.GrantId] <- restored.Tokens
+    // The restore is started by the first call and awaited by every call,
+    // never run in the constructor: building the service does no I/O, so a
+    // slow blob store delays the first answer rather than the composition
+    // that built it. `Lazy` starts it exactly once however many callers
+    // arrive together.
+    let restoring =
+        lazy
+            (match deps.Carrier with
+             | None -> System.Threading.Tasks.Task.CompletedTask
+             | Some carrier ->
+                 Async.StartAsTask(
+                     async {
+                         let! restored = GrantPersistence.restore deps carrier
+
+                         for r in restored do
+                             grants[r.Entry.Grant.GrantId] <- r.Entry
+                             consentTokens[r.Entry.Grant.GrantId] <- r.Tokens
+                     }
+                 )
+                 :> System.Threading.Tasks.Task)
+
+    let restored () : Async<unit> = restoring.Force() |> Async.AwaitTask
 
     /// Phase 935 — one write at a time, so two owners acting on one grant at
     /// once cannot persist a record that has lost the other's token.
@@ -1119,6 +1134,8 @@ type internal FactPublicationService(deps: FactPublicationDeps) =
         (eventType: string)
         : Async<Result<PublicationGrant, PublicationRefusal>> =
         async {
+            do! restored ()
+
             match grants.TryGetValue grantId with
             | false, _ -> return Error(PublicationGrantUnknown grantId)
             | true, entry ->
@@ -1238,6 +1255,8 @@ type internal FactPublicationService(deps: FactPublicationDeps) =
         }
 
     let publish (source: ResolvedScope) (grantId: string) : Async<Result<PublicationReceipt, PublicationRefusal>> = async {
+        do! restored ()
+
         match grants.TryGetValue grantId with
         | false, _ -> return! refuse source None grantId (PublicationGrantUnknown grantId)
         | true, entry ->
@@ -1451,9 +1470,16 @@ type internal FactPublicationService(deps: FactPublicationDeps) =
                                             }
     }
 
+    /// Whether the persisted grants have been restored yet: `false` until
+    /// the first call starts the restore and it completes.
+    member internal _.Restored =
+        restoring.IsValueCreated && restoring.Value.IsCompletedSuccessfully
+
     interface IFactPublication with
 
         member _.Propose(scope, proposal) = async {
+            do! restored ()
+
             let side =
                 if scope.ScopeId = proposal.SourceTeam then
                     Some PublicationSide.Source
@@ -1574,6 +1600,8 @@ type internal FactPublicationService(deps: FactPublicationDeps) =
                 FactPublicationEvents.RevokedType
 
         member _.Grants(scope) = async {
+            do! restored ()
+
             return
                 grants.Values
                 |> Seq.map _.Grant
@@ -1585,6 +1613,8 @@ type internal FactPublicationService(deps: FactPublicationDeps) =
         member _.Publish(source, grantId) = publish source grantId
 
         member _.Refresh(target, tableId) = async {
+            do! restored ()
+
             if target.IsAnonymous then
                 return Error(PublicationWrongScope("(refresh)", PublicationSide.Target, tableId, target.ScopeId))
             else
