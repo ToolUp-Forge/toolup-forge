@@ -39,6 +39,11 @@ type InMemoryEmbeddingCache(?capacity: int) =
         order.Remove(node)
         order.AddFirst(node) |> ignore
 
+    /// Process-local by construction: each replica holds its own entries.
+    interface ToolUp.Platform.IEmbeddingProvider.IEmbeddingCacheLocality with
+        member _.CacheLocality =
+            Some ToolUp.Platform.IEmbeddingProvider.EmbeddingCacheLocality.InProcess
+
     interface IEmbeddingCache with
 
         member _.TryGet(key: EmbeddingCacheKey) = async {

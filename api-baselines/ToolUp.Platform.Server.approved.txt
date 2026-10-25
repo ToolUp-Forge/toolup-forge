@@ -6057,6 +6057,18 @@ ToolUp.Platform.IEmbeddingProvider+EmbedderRetryPolicyModule.baseDelayFor(ToolUp
 ToolUp.Platform.IEmbeddingProvider+EmbedderRetryPolicyModule.defaults : ToolUp.Platform.IEmbeddingProvider+EmbedderRetryPolicy { get }
 ToolUp.Platform.IEmbeddingProvider+EmbedderRetryPolicyModule.jitter(ToolUp.Platform.IEmbeddingProvider+EmbedderRetryPolicy, System.TimeSpan, System.Double) : System.TimeSpan
 ToolUp.Platform.IEmbeddingProvider+EmbedderRetryPolicyModule.noRetry : ToolUp.Platform.IEmbeddingProvider+EmbedderRetryPolicy { get }
+ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality (class)
+ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality.InProcess : ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality { get }
+ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality.IsInProcess : System.Boolean { get }
+ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality.IsShared : System.Boolean { get }
+ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality.Shared : ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality { get }
+ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality.Tag : System.Int32 { get }
+ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality+Tags (class)
+ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality+Tags.InProcess : System.Int32 (literal)
+ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality+Tags.Shared : System.Int32 (literal)
+ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocalityModule (class)
+ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocalityModule.declared(System.Object) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality]
+ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocalityModule.isCrossReplica(System.Object) : System.Boolean
 ToolUp.Platform.IEmbeddingProvider+EmbeddingProviderCircuitOpenException (class)
 ToolUp.Platform.IEmbeddingProvider+EmbeddingProviderCircuitOpenException..ctor()
 ToolUp.Platform.IEmbeddingProvider+EmbeddingProviderCircuitOpenException..ctor(System.String)
@@ -6080,6 +6092,8 @@ ToolUp.Platform.IEmbeddingProvider+EmbeddingVersionModule (class)
 ToolUp.Platform.IEmbeddingProvider+EmbeddingVersionModule.MetadataDimensionsKey : System.String (literal)
 ToolUp.Platform.IEmbeddingProvider+EmbeddingVersionModule.MetadataModelKey : System.String (literal)
 ToolUp.Platform.IEmbeddingProvider+EmbeddingVersionModule.MetadataProviderKey : System.String (literal)
+ToolUp.Platform.IEmbeddingProvider+IEmbeddingCacheLocality (interface)
+ToolUp.Platform.IEmbeddingProvider+IEmbeddingCacheLocality.CacheLocality : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality] { get }
 ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider (interface)
 ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider.Dimensions : System.Int32 { get }
 ToolUp.Platform.IEmbeddingProvider+IEmbeddingProvider.GenerateEmbedding(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Single[]]

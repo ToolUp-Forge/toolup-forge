@@ -794,6 +794,7 @@ let private persistAndIngest
                             let terminal = Complete chunks.Length
                             setStatus docId terminal
                             do! updateIndexStatus deps.Storage deps.Scope.Container docId terminal
+                            do! publishTerminalStatus deps.Notifications deps.Logger docId safeName deps.UserId terminal
 
                             deps.Logger.Info(
                                 sprintf
@@ -882,6 +883,7 @@ let private persistAndIngest
 
                         setStatus docId terminal
                         do! updateIndexStatus deps.Storage deps.Scope.Container docId terminal
+                        do! publishTerminalStatus deps.Notifications deps.Logger docId safeName deps.UserId terminal
 
                     do! deps.PublishInventory()
                 with ex ->
@@ -1207,7 +1209,7 @@ let uploadDocumentCore
 
                     // Phase 511 — suppressed under bulk import; the batch's
                     // one completion summary replaces N per-file toasts.
-                    if announceToUser && not (isNull (box deps.Notifications)) then
+                    if announceToUser then
                         try
                             do!
                                 deps.Notifications.Publish(
@@ -1491,20 +1493,19 @@ let importBatch (deps: KnowledgeApiDeps) (request: BulkImportRequest) : Async<Bu
     // best-effort on the request path: a notification failure must not
     // turn a completed import into a failed call, and the report the
     // caller already holds is the authoritative record either way.
-    if not (isNull (box deps.Notifications)) then
-        try
-            let summary: BulkImportSummary = {
-                BatchId = batchId
-                TotalItems = List.length report.Items
-                Imported = report.Imported
-                Refused = report.Refused
-                CompletedAt = report.CompletedAt
-                RequestedBy = deps.UserId
-            }
+    try
+        let summary: BulkImportSummary = {
+            BatchId = batchId
+            TotalItems = List.length report.Items
+            Imported = report.Imported
+            Refused = report.Refused
+            CompletedAt = report.CompletedAt
+            RequestedBy = deps.UserId
+        }
 
-            do! deps.Notifications.Publish(deps.UserId, CustomNotification(BulkImportNotificationKey, toJson summary))
-        with ex ->
-            deps.Logger.Error(sprintf "[KnowledgeBase] Failed to publish bulk-import summary for %s" batchId, Some ex)
+        do! deps.Notifications.Publish(deps.UserId, CustomNotification(BulkImportNotificationKey, toJson summary))
+    with ex ->
+        deps.Logger.Error(sprintf "[KnowledgeBase] Failed to publish bulk-import summary for %s" batchId, Some ex)
 
     return report
 }

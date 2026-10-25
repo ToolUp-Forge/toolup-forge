@@ -150,12 +150,9 @@ type EventStoreRetrievalTracer(eventStore: IEventStore, logger: ILogger) =
                     RewrittenQueryHash = trace.RewrittenQueryHash
                 }
 
-                // Persist to the caller's resolved scope when there is one;
+                // Persist to the caller's team stream when there is one;
                 // anonymous / unscoped requests fall back to `_platform`.
-                let scopeId =
-                    match ctx.TeamId with
-                    | Some teamId -> sprintf "team-%s" teamId
-                    | None -> "_platform"
+                let scopeId = callerAuditScopeId ctx
 
                 let evt =
                     Events.create scopeId RetrievalTraceSourceModule KnowledgeRetrievedEventType (toTraceJson payload)
@@ -176,10 +173,7 @@ type EventStoreRetrievalTracer(eventStore: IEventStore, logger: ILogger) =
                     TopScore = miss.TopScore
                 }
 
-                let scopeId =
-                    match ctx.TeamId with
-                    | Some teamId -> sprintf "team-%s" teamId
-                    | None -> "_platform"
+                let scopeId = callerAuditScopeId ctx
 
                 let evt =
                     Events.create

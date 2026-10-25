@@ -3,7 +3,8 @@
 
 module ToolUp.RAG.DataManagerIngestionObserver
 
-open System.Collections.Concurrent
+open System.Collections.Generic
+open System.Threading
 open System.Text.Json
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
@@ -31,6 +32,14 @@ open ToolUp.RAG.IngestionTypes
 // entry exists). A KB document has no entry in this store, so the
 // observer is a no-op for it — KB keeps its own observer.
 
+/// One document's progress while its job runs: the persisted chunk total
+/// (`0` for a document this store does not track), the distinct chunk ids
+/// indexed so far, and how many callbacks the attempt has delivered.
+type private DocumentProgress(total: int) =
+    member _.Total = total
+    member val Indexed = HashSet<string>()
+    member val Callbacks = 0 with get, set
+
 /// Build an `IIngestionStatusObserver` that drives the Data Manager
 /// `IIngestionStatusStore`. `notificationChannel` (when composed)
 /// publishes a `DataManagerIngestionStatusKey` `CustomNotification` on
@@ -45,25 +54,72 @@ let create
 
     let jsonOptions = FableConverters.create ()
 
-    // In-flight indexed-chunk count per document. Keyed by
-    // container + documentId so two scopes ingesting same-named files
-    // don't collide. The total comes from the persisted `Pending`
-    // entry (survives a restart); only the live progress count is
-    // in-memory.
+    // Per-document progress for the life of the job. The first callback
+    // for a document reads the store once to learn whether it is a Data
+    // Manager file (a `Pending` entry with a chunk total exists) and every
+    // later callback reads the remembered answer, so a knowledge-base
+    // document costs one read, not one per chunk.
     //
-    // Phase 509 — that used to read "which is correct — a restart
-    // re-drains the queue", and it was not true. On the DEFAULT
-    // in-memory queue a restart drops every queued job, so the document
-    // never re-drains and its `Pending` entry sits forever; that gap is
-    // closed from the other end by
-    // `RAGServerApp.withIngestionRecoverySweep`, which marks such
-    // entries `Failed` at startup. On a queue backed by an
-    // `IIngestionQueueStore` the job IS redelivered, so losing the live
-    // progress count is genuinely harmless — the redelivery re-indexes
-    // every chunk and the count rebuilds from zero against the same
-    // persisted total.
-    let progress = ConcurrentDictionary<string, int>()
+    // The count is of distinct indexed chunk ids, so it never decreases:
+    // a chunk failure records the failure and leaves the count alone, and
+    // the retried chunk's later success counts once. A chunk id indexed a
+    // second time is a redelivery of the whole document (a durable queue
+    // re-runs every chunk), so the entry is re-read and the count rebuilds
+    // from that chunk against the persisted total.
+    //
+    // The progress itself is process-local: on the default in-memory queue
+    // a restart drops every queued job and `withIngestionRecoverySweep`
+    // marks the stranded `Pending` entry `Failed`; on a durable queue the
+    // job is redelivered and the count rebuilds.
+    let documents =
+        System.Collections.Concurrent.ConcurrentDictionary<string, DocumentProgress>()
+
+    let gate = new SemaphoreSlim(1, 1)
     let keyOf (job: IngestionJob) = job.Container + "/" + job.DocumentId
+
+    /// The document's progress entry, reading the store on the first
+    /// callback for it (and on a redelivery).
+    let progressFor (job: IngestionJob) (indexedChunk: string option) = async {
+        do! gate.WaitAsync() |> Async.AwaitTask
+
+        try
+            let key = keyOf job
+
+            let redelivered =
+                match documents.TryGetValue key, indexedChunk with
+                | (true, entry), Some chunkId -> lock entry (fun () -> entry.Indexed.Contains chunkId)
+                | _ -> false
+
+            match documents.TryGetValue key with
+            | true, entry when not redelivered -> return key, entry
+            | _ ->
+                let! total = store.GetTotal(job.Container, job.DocumentId)
+                let entry = DocumentProgress(total)
+                documents[key] <- entry
+                return key, entry
+        finally
+            gate.Release() |> ignore
+    }
+
+    /// Forget a document whose job is over: a Data Manager file once it is
+    /// `Indexed`, any other document once its attempt's callbacks are in.
+    /// A Data Manager file left `Failed` keeps its entry, so the retried
+    /// chunk's success counts against what was already indexed.
+    let retire (key: string) (job: IngestionJob) (entry: DocumentProgress) (finished: bool) =
+        lock entry (fun () ->
+            entry.Callbacks <- entry.Callbacks + 1
+
+            // A document this store does not track is remembered only
+            // while its attempt's callbacks arrive; without an attempt
+            // there is no end to wait for, so it is not remembered at all.
+            let untrackedOver =
+                entry.Total = 0
+                && (match job.Attempt with
+                    | Some attempt -> entry.Callbacks >= attempt.EnqueuedChunks
+                    | None -> true)
+
+            if finished || untrackedOver then
+                documents.TryRemove key |> ignore)
 
     // Publish to the originating uploader's scope when known (matches
     // KB's publish-to-uploader posture); skip when the enqueue had no
@@ -91,20 +147,25 @@ let create
     { new IIngestionStatusObserver with
         member _.OnChunkIndexed(job: IngestionJob) = async {
             try
-                // Only Data Manager files carry a `Pending` entry (with a
-                // chunk total) written by the post-save hook. A `0` total
-                // ⇒ no entry ⇒ not a Data Manager file (e.g. a KB
-                // document) ⇒ this observer is a no-op for it.
-                let! total = store.GetTotal(job.Container, job.DocumentId)
+                let! key, entry = progressFor job (Some job.ChunkId)
 
-                if total > 0 then
-                    let key = keyOf job
-                    let indexed = progress.AddOrUpdate(key, 1, (fun _ n -> n + 1))
+                // Only Data Manager files carry a `Pending` entry with a
+                // chunk total; a `0` total is any other document (e.g. a
+                // KB document), for which this observer is a no-op.
+                if entry.Total > 0 then
+                    let indexed =
+                        lock entry (fun () ->
+                            entry.Indexed.Add job.ChunkId |> ignore
+                            entry.Indexed.Count)
 
-                    if indexed >= total then
-                        progress.TryRemove key |> ignore
+                    let finished = indexed >= entry.Total
+                    retire key job entry finished
+
+                    if finished then
                         do! store.Set(job.Container, job.DocumentId, Indexed)
                         do! publishTerminal job Indexed
+                else
+                    retire key job entry false
             with ex ->
                 logger.Error(
                     sprintf "[DataManagerIngestionObserver] OnChunkIndexed failed for %s/%s" job.DocumentId job.ChunkId,
@@ -114,17 +175,15 @@ let create
 
         member _.OnChunkFailed(job: IngestionJob, error: string) = async {
             try
-                // Same scoping guard — only mark a file this store is
-                // already tracking (a Data Manager file). KB documents
-                // have no entry, so leave them to KB's own observer.
-                let! existing = store.Get(job.Container, job.DocumentId)
+                let! key, entry = progressFor job None
+                retire key job entry false
 
-                match existing with
-                | Some _ ->
-                    progress.TryRemove(keyOf job) |> ignore
+                // Same scoping guard — only mark a file this store is
+                // tracking (a Data Manager file). The indexed count is
+                // kept: a later success of the retried chunk counts on it.
+                if entry.Total > 0 then
                     do! store.Set(job.Container, job.DocumentId, Failed error)
                     do! publishTerminal job (Failed error)
-                | None -> ()
             with ex ->
                 logger.Error(
                     sprintf

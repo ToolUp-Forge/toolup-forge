@@ -15,6 +15,7 @@ open SharedTypes
 open KnowledgeBase.ServerJsonHelpers
 open KnowledgeBase.ServerIndexStorage
 open KnowledgeBase.ServerInventory
+open KnowledgeBase.ServerIngestionObserver
 
 // ─── Per-request dependency record ───────────────────────────────
 //
@@ -248,8 +249,15 @@ module KnowledgeApiDeps =
             | :? ITableExtractor as t -> t
             | _ -> ToolUp.RAG.NoOpDocUnderstanding.createTableExtractor ()
 
+        // The base composition registers a channel unconditionally (a no-op
+        // one when notifications are off), so an absent one is a
+        // composition fault, refused here rather than carried as a null.
         let notifications =
-            services.GetService(typeof<INotificationChannel>) :?> INotificationChannel
+            match services.GetService(typeof<INotificationChannel>) with
+            | :? INotificationChannel as channel -> channel
+            | _ ->
+                invalidOp
+                    "KnowledgeApiDeps: no INotificationChannel is registered. The ServerApp composition registers one unconditionally (a no-op channel when notifications are off); a host that bypasses it must register one."
 
         let logger =
             match services.GetService(typeof<ILogger>) with
@@ -480,25 +488,7 @@ module KnowledgeApiDeps =
             // and a refused write raises `KnowledgeIndexWriteFailed`.
             do! updateIndexStatus storage scope.Container docId status
 
-            if not (isNull (box notifications)) then
-                try
-                    let payload: IngestionStatusUpdate = {
-                        DocumentId = docId
-                        FileName = fileName
-                        Outcome = "Failed"
-                        ChunkCount = 0
-                        ErrorReason = reason
-                        UploadedBy = userId
-                    }
-
-                    let payloadJson = toJson payload
-                    let notification = CustomNotification(IngestionStatusNotificationKey, payloadJson)
-                    do! notifications.Publish(userId, notification)
-                with ex ->
-                    logger.Error(
-                        sprintf "[KnowledgeBase] Failed to publish IngestionStatus notification for %s" docId,
-                        Some ex
-                    )
+            do! publishTerminalStatus notifications logger docId fileName userId status
         }
 
         let ensureContextWriteAllowed () : Async<Result<unit, string>> = async {

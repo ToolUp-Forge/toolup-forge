@@ -26,6 +26,7 @@ let private quotedReader (text: string) : string[] list =
     ToolUp.Tabular.Csv.parseRecords ',' reader
     |> Seq.choose (fun (_, record) ->
         match record with
+        | Ok [| "" |] -> None
         | Ok fields -> Some(fields |> Array.map _.Trim())
         | Error _ -> None)
     |> Seq.toList

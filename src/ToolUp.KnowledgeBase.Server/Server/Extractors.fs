@@ -558,11 +558,20 @@ let private extractXlsx (docId: string) (fileName: string) (bytes: byte[]) : (Te
 
     results |> Seq.toList
 
-/// The records of a CSV file, header first, each cell trimmed.
+/// The records of a CSV file, header first, each cell trimmed, read by the
+/// RFC 4180 reader so a quoted field keeps its delimiters and line breaks.
+/// A blank line is no record, and a record whose quoting is malformed is
+/// skipped, as the reader reports it rather than guessing at its cells.
 let internal csvRows (text: string) : string[] list =
-    text.Split([| "\r\n"; "\n"; "\r" |], StringSplitOptions.RemoveEmptyEntries)
-    |> Array.map (fun line -> line.Split(',') |> Array.map _.Trim())
-    |> Array.toList
+    use reader = new StringReader(text)
+
+    ToolUp.Tabular.Csv.parseRecords ',' reader
+    |> Seq.choose (fun (_, record) ->
+        match record with
+        | Ok [| "" |] -> None
+        | Ok fields -> Some(fields |> Array.map _.Trim())
+        | Error _ -> None)
+    |> Seq.toList
 
 /// Extract (TextChunk * SourceReference) pairs from a CSV file.
 let private extractCsv (docId: string) (fileName: string) (bytes: byte[]) : (TextChunk * SourceReference) list =

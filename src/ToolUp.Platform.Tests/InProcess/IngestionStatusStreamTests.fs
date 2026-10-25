@@ -1,4 +1,4 @@
-module ToolUp.Platform.Tests.InProcess.IngestionStatusStreamTests
+module ToolUp.Platform.Tests.InProcess.TerminalStatusAnnouncementTests
 
 // Every terminal ingestion status a knowledge-base document can reach is
 // announced on `"KnowledgeBase.IngestionStatus"` — including the five that

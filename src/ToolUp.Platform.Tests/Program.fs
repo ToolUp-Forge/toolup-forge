@@ -480,7 +480,7 @@ let private registeredTests =
         VectorisationHookTests.tests
         RagTelemetryTests.tests
         ExtractorTests.tests
-        IngestionStatusStreamTests.tests
+        TerminalStatusAnnouncementTests.tests
         HealthyHealthCheckTests.tests
         DegradedHealthCheckTests.tests
         UnhealthyHealthCheckTests.tests
