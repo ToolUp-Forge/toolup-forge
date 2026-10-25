@@ -254,6 +254,33 @@ module private Json =
     let serialize (value: 'T) : string =
         JsonSerializer.Serialize(value, options)
 
+// ─── Phase 1064 — a status transition that could not get the job ─
+
+/// How long `Cancel` / `Disable` / `Enable` wait for a job's lease before
+/// refusing. A dispatch holds that lease across its whole retry loop,
+/// backoff sleeps included (up to 30 min a gap under the default policy),
+/// so an unbounded wait parked an admin request behind the sleep. Five
+/// seconds covers every ordinary hold — a status transition, a reissue, a
+/// reconciliation write-back — and refuses only the long one.
+[<Literal>]
+let internal StatusTransitionLeaseCeilingMs = 5_000
+
+/// Phase 1064 — the typed "busy" refusal of a status transition: the job's
+/// lease is held by an in-flight dispatch (typically sleeping in its retry
+/// backoff) and was not released within `StatusTransitionLeaseCeilingMs`.
+/// Retryable: nothing was written. `IJobScheduler.Cancel` / `Disable` /
+/// `Enable` return `Async<unit>`, so the refusal is raised; the admin API
+/// (`JobApiHandler`) renders it as a retryable `Error`. Internal until the
+/// typed `TriggerError`-family unions land (Phase 1066); a caller outside
+/// the server tier sees an `InvalidOperationException`.
+type internal JobStatusBusyException(jobId: JobId, waited: TimeSpan) =
+    inherit
+        InvalidOperationException(
+            $"Job %O{jobId} is busy: an in-flight dispatch holds its lease (waited %.0f{waited.TotalMilliseconds} ms). Nothing was changed; retry shortly."
+        )
+
+    member _.JobId = jobId
+
 // ─── InProcessJobScheduler ───────────────────────────────────────
 //
 // Single-process default `IJobScheduler` + `BackgroundService`. Ticks
@@ -1078,31 +1105,62 @@ type InProcessJobScheduler
 
     // ─── Status transitions ──────────────────────────────────────
 
+    let statusTransitionCeiling =
+        TimeSpan.FromMilliseconds(float StatusTransitionLeaseCeilingMs)
+
+    /// Poll `TryAcquire` at the shared interval until the lease is held or
+    /// `ceiling` elapses — `acquireBlocking` with a bound.
+    let tryAcquireWithin (ceiling: TimeSpan) (lockId: string) (ttl: TimeSpan) : Async<Lease option> = async {
+        let deadline = DateTime.UtcNow + ceiling
+        let mutable held: Lease option = None
+        let mutable expired = false
+
+        while held.IsNone && not expired do
+            match! jobLock.TryAcquire(lockId, ttl) with
+            | Some lease -> held <- Some lease
+            | None ->
+                if DateTime.UtcNow >= deadline then
+                    expired <- true
+                else
+                    do! Async.Sleep DistributedLock.defaultPollInterval
+
+        return held
+    }
+
     let setStatus (scopeId: string) (jobId: JobId) (status: JobStatus) = async {
         // Phase 9i — same per-`JobId` lease as `dispatchOne`, so a status
         // transition can never interleave with an in-flight dispatch's
         // read-modify-write. A short TTL is right here (the section is one
         // store read + one write), unlike the dispatch hold.
-        let! lease = DistributedLock.acquireBlocking jobLock (jobLockId jobId) (TimeSpan.FromMinutes 1.0)
+        //
+        // Phase 1064 — `TryAcquire` under a ceiling, not `acquireBlocking`.
+        // A dispatch holds this lease across its whole retry loop, backoff
+        // sleeps included, so an unbounded wait parked an admin `Cancel`
+        // behind a sleep of up to 30 min. Past the ceiling the transition
+        // is refused, typed and retryable, with nothing written.
+        let! lease = tryAcquireWithin statusTransitionCeiling (jobLockId jobId) (TimeSpan.FromMinutes 1.0)
 
-        try
-            match! store.Get(scopeId, jobId) with
-            | None -> ()
-            | Some job when job.Status = status -> ()
-            | Some job ->
-                let updated = {
-                    job with
-                        Status = status
+        match lease with
+        | None -> return raise (JobStatusBusyException(jobId, statusTransitionCeiling))
+        | Some lease ->
+            try
+                match! store.Get(scopeId, jobId) with
+                | None -> ()
+                | Some job when job.Status = status -> ()
+                | Some job ->
+                    let updated = {
+                        job with
+                            Status = status
 
-                        NextRunAt =
-                            match status with
-                            | Active -> computeNextRunAt job.Trigger DateTime.UtcNow
-                            | _ -> None
-                }
+                            NextRunAt =
+                                match status with
+                                | Active -> computeNextRunAt job.Trigger DateTime.UtcNow
+                                | _ -> None
+                    }
 
-                do! store.Update updated
-        finally
-            releaseJobLease lease
+                    do! store.Update updated
+            finally
+                releaseJobLease lease
     }
 
     // ─── Build + persist a fresh job ─────────────────────────────
@@ -1267,13 +1325,16 @@ type InProcessJobScheduler
     // push or by poll" is Phase 320's, and two code paths that must stay
     // identical do not.
     //
-    // **The `MarkTerminal` claim is at the head of this function, which
-    // is what makes callback-vs-poll exactly-once.** Both callers reach
-    // the claim through here, so there is one gate rather than two that
-    // must agree, and every write below it happens only for the caller
-    // that won. `outcome` must be terminal — the non-terminal poll case
-    // is handled by the caller, because "still running" is a decision
-    // not to write at all rather than a way of resolving.
+    // **The `MarkTerminal` claim is what makes callback-vs-poll
+    // exactly-once.** Both callers reach the claim through here, so there
+    // is one gate rather than two that must agree, and every event and
+    // definition write below it happens only for the caller that won. The
+    // terminal ROW is the one write that precedes it (Phase 1064): it is
+    // idempotent, and written after the claim a failure between the two
+    // stranded the run for good. `outcome` must be terminal — the
+    // non-terminal poll case is handled by the caller, because "still
+    // running" is a decision not to write at all rather than a way of
+    // resolving.
     let applyExternalOutcome
         (scope: string)
         (job: JobDefinition)
@@ -1300,6 +1361,41 @@ type InProcessJobScheduler
 
                 return ExternalResolution.ScopeMismatch(handle.ScopeId, run.ScopeId)
             else
+                let awaitedMs = int64 (now - run.StartedAt).TotalMilliseconds
+
+                // Phase 1064 — the terminal ROW is written BEFORE the claim.
+                // `MarkTerminal` is a one-shot: written first, a process death
+                // (or a failed row write) between the claim and the row left
+                // the run `AwaitingExternal` with its handle already terminal,
+                // so every later poll lost the claim, answered
+                // `AlreadyResolved`, and wrote nothing — forever. Row first, a
+                // failure before the claim leaves the run awaiting and the
+                // handle claimable, and the next poll completes both. The
+                // write is idempotent (same `RunId` + `StartedAt` ⇒ same blob)
+                // and both callers reach here under the job's lease having
+                // re-verified the run is still awaiting, so the claim still
+                // decides who emits the events and updates the definition.
+                let rowStatus, rowError =
+                    match outcome with
+                    | ExternalOutcome.Succeeded _ -> Succeeded, None
+                    | ExternalOutcome.Failed error when error.Retriable && run.Attempt < job.RetryPolicy.MaxAttempts ->
+                        Failed, Some error.Message
+                    | ExternalOutcome.Failed error -> DeadLettered, Some error.Message
+                    | ExternalOutcome.Cancelled -> ExternallyCancelled, None
+                    | ExternalOutcome.Pending
+                    | ExternalOutcome.Running _ -> AwaitingExternal, None // unreachable: guarded at the head
+
+                // Overwrites the awaiting row in place, which is also what
+                // removes it from the store's awaiting index.
+                do!
+                    store.RecordRun {
+                        run with
+                            Status = rowStatus
+                            CompletedAt = Some now
+                            Error = rowError
+                            DurationMs = Some awaitedMs
+                    }
+
                 let! claimed = claimTerminal handle
 
                 if not claimed then
@@ -1315,23 +1411,6 @@ type InProcessJobScheduler
 
                     return ExternalResolution.AlreadyResolved
                 else
-
-                    let awaitedMs = int64 (now - run.StartedAt).TotalMilliseconds
-
-                    /// Write the terminal run row for this attempt.
-                    /// Overwrites the awaiting row in place (same `RunId` +
-                    /// `StartedAt` ⇒ same blob), which is also what removes
-                    /// it from the store's awaiting index.
-                    let recordTerminal status error = async {
-                        do!
-                            store.RecordRun {
-                                run with
-                                    Status = status
-                                    CompletedAt = Some now
-                                    Error = error
-                                    DurationMs = Some awaitedMs
-                            }
-                    }
 
                     /// The external-side companion event — emitted alongside
                     /// the standard terminal event, never instead of it.
@@ -1360,8 +1439,6 @@ type InProcessJobScheduler
                     /// same `Warning` notification, the same
                     /// `ConsecutiveFailures` bump.
                     let deadLetter (error: string) = async {
-                        do! recordTerminal DeadLettered (Some error)
-
                         do!
                             emitEvent scope "JobDeadLettered" {
                                 JobId = run.JobId
@@ -1385,8 +1462,6 @@ type InProcessJobScheduler
 
                     match outcome with
                     | ExternalOutcome.Succeeded resultRef ->
-                        do! recordTerminal Succeeded None
-
                         // Byte-identical to the in-process success path's
                         // event.
                         do!
@@ -1418,15 +1493,12 @@ type InProcessJobScheduler
                         let attemptsRemain = run.Attempt < job.RetryPolicy.MaxAttempts
 
                         if error.Retriable && attemptsRemain then
-                            // Record the attempt as `Failed` (not
-                            // dead-lettered) and continue the SAME retry
-                            // sequence at the next attempt number. The row
-                            // must be written before the re-dispatch so the
-                            // run leaves the awaiting index and the 319.E
-                            // guard does not mistake it for outstanding work
-                            // and refuse its own retry.
-                            do! recordTerminal Failed (Some error.Message)
-
+                            // The attempt's row is already `Failed` (not
+                            // dead-lettered), written above before the claim
+                            // — so the run has left the awaiting index and the
+                            // 319.E guard does not mistake it for outstanding
+                            // work and refuse its own retry. Continue the SAME
+                            // retry sequence at the next attempt number.
                             do!
                                 emitEvent scope "JobFailed" {
                                     JobId = run.JobId
@@ -1483,7 +1555,6 @@ type InProcessJobScheduler
                         // because a cancelled attempt says nothing about the
                         // job's health and must not push it toward an
                         // auto-disable threshold.
-                        do! recordTerminal ExternallyCancelled None
                         do! emitReconciled None None None
 
                         do!
@@ -2290,6 +2361,10 @@ type InProcessJobScheduler
             match! store.Get(scopeId, jobId) with
             | None -> return Error $"Job %A{jobId} not found in scope %s{scopeId}"
             | Some job when job.Status = Cancelled -> return Error "Cannot trigger a cancelled job"
+            // Phase 1064 — ruling 12: `Disable` stops dispatch, and a manual
+            // fire is a dispatch. This used to answer `Ok()` and start a
+            // dispatch that `dispatchHolding` then skipped silently.
+            | Some job when job.Status = Disabled -> return Error "Cannot trigger a disabled job; enable it first"
             | Some job ->
                 let source = ScheduledManually byUserId
                 startDispatch job source (dispatchOne job source (DateTime.UtcNow))
