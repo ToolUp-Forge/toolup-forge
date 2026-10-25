@@ -209,6 +209,13 @@ let buildAndRunHost
         // serving requests.
         app.Services.GetRequiredService<ILogger>() |> ignore
 
+        // Phase 1064 — materialise the factory / type-registered health
+        // probes `HealthCheckAggregator.register` deferred to the built
+        // provider (the restore drill under `Backup = BackupEnabled` is the
+        // platform's own), so one whose factory throws fails the boot here
+        // rather than the first `/ready` poll. A no-op when none was deferred.
+        HealthCheckAggregator.resolveDeferred app.Services
+
         // Phase 9q — opt-in startup-time config drift detector. When
         // `ConfigDriftDetection = EnabledConfigDriftDetection`, snapshots
         // the resolved `ServerConfig` (secrets redacted) + a hash of the
@@ -266,6 +273,7 @@ let buildAndRunHost
         let host = hb.Build()
 
         host.Services.GetRequiredService<ILogger>() |> ignore
+        HealthCheckAggregator.resolveDeferred host.Services
 
         match config.ConfigDriftDetection with
         | NoConfigDriftDetection -> ()

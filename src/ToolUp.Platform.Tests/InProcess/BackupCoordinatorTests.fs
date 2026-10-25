@@ -880,6 +880,127 @@ let private tests_compose =
         }
     ]
 
+// ─── Phase 1064 — a `BackupEnabled` deployment boots ─────────────────
+//
+// Defect 4: `registerBackupCoordinator` registers the restore-drill probe
+// by factory, and `HealthCheckAggregator.register` refused every factory
+// probe with `failwithf` at compose — so the documented configuration
+// never reached a running host, and no test composed it. This one does,
+// through the SDK's own terminal `ServerApp.run` on a loopback port.
+
+/// Captures the host's lifetime once it has started, so the test can stop
+/// the host `ServerApp.run` blocks on.
+type private LifetimeCapture
+    (
+        lifetime: Microsoft.Extensions.Hosting.IHostApplicationLifetime,
+        sink: Threading.Tasks.TaskCompletionSource<Microsoft.Extensions.Hosting.IHostApplicationLifetime>
+    ) =
+    interface Microsoft.Extensions.Hosting.IHostedService with
+        member _.StartAsync _ =
+            lifetime.ApplicationStarted.Register(fun () -> sink.TrySetResult lifetime |> ignore)
+            |> ignore
+
+            Threading.Tasks.Task.CompletedTask
+
+        member _.StopAsync _ = Threading.Tasks.Task.CompletedTask
+
+let private freePort () =
+    let listener = new Net.Sockets.TcpListener(Net.IPAddress.Loopback, 0)
+    listener.Start()
+    let port = (listener.LocalEndpoint :?> Net.IPEndPoint).Port
+    listener.Stop()
+    port
+
+let private quietLogger: ILogger =
+    { new ILogger with
+        member _.Debug _ = ()
+        member _.Info _ = ()
+        member _.Warn _ = ()
+        member _.Error(_, _) = ()
+    }
+
+let private tests_boot =
+    testList "boot" [
+        testCaseAsync "a compose with Backup = BackupEnabled reaches a running host and /ready lists the drill probe"
+        <| async {
+            let port = freePort ()
+
+            let started =
+                Threading.Tasks.TaskCompletionSource<Microsoft.Extensions.Hosting.IHostApplicationLifetime>(
+                    Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously
+                )
+
+            let extensions: ComposeExtensions = {
+                ComposeExtensions.empty with
+                    ServiceConfig =
+                        Some(fun services ->
+                            services.AddSingleton<IBackupTarget>(BackupTarget.ofStorage (InMemoryBlobStorage()))
+                            |> ignore
+
+                            services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
+                                LifetimeCapture(
+                                    sp.GetRequiredService<Microsoft.Extensions.Hosting.IHostApplicationLifetime>(),
+                                    started
+                                )
+                                :> Microsoft.Extensions.Hosting.IHostedService)
+                            |> ignore
+
+                            services)
+            }
+
+            let config = {
+                ServerConfig.defaults with
+                    Port = port
+                    TrustForwardedHeaders = false
+                    Backup = BackupEnabled BackupSettings.defaults
+            }
+
+            let app =
+                ServerApp.empty
+                |> ServerApp.withConfig config
+                |> ServerApp.withExtensions extensions
+                |> ServerApp.withStorage (ToolUp.Platform.Testing.Fakes.standardBlobStorage ())
+                |> ServerApp.withLogger quietLogger
+
+            let culture = Globalization.CultureInfo.DefaultThreadCurrentCulture
+            let uiCulture = Globalization.CultureInfo.DefaultThreadCurrentUICulture
+
+            let running =
+                Threading.Tasks.Task.Factory.StartNew(
+                    (fun () -> ServerApp.run app),
+                    Threading.Tasks.TaskCreationOptions.LongRunning
+                )
+
+            try
+                let! first =
+                    Threading.Tasks.Task.WhenAny(
+                        started.Task :> Threading.Tasks.Task,
+                        running :> Threading.Tasks.Task,
+                        Threading.Tasks.Task.Delay(TimeSpan.FromSeconds 60.0)
+                    )
+                    |> Async.AwaitTask
+
+                if not (obj.ReferenceEquals(first, started.Task)) then
+                    if running.IsFaulted then
+                        failtestf "the BackupEnabled host did not boot: %s" running.Exception.InnerException.Message
+
+                    failtest "the BackupEnabled host did not start"
+
+                use client = new Net.Http.HttpClient(BaseAddress = Uri $"http://127.0.0.1:{port}")
+                use! response = client.GetAsync "/ready" |> Async.AwaitTask
+                let! body = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+
+                Expect.stringContains body "backup_restore_drill" "/ready lists the restore-drill probe"
+            finally
+                if started.Task.IsCompletedSuccessfully then
+                    started.Task.Result.StopApplication()
+                    running.Wait(TimeSpan.FromSeconds 30.0) |> ignore
+
+                Globalization.CultureInfo.DefaultThreadCurrentCulture <- culture
+                Globalization.CultureInfo.DefaultThreadCurrentUICulture <- uiCulture
+        }
+    ]
+
 let tests =
     testList "Phase 445 — backup / restore coordinator" [
         tests_snapshot
@@ -887,4 +1008,5 @@ let tests =
         tests_encryption
         tests_drill
         tests_compose
+        tests_boot
     ]
