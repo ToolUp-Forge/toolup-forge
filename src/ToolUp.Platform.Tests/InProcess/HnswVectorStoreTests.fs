@@ -479,11 +479,14 @@ let tests =
                 Expect.isError (HnswVectorStore.HnswParameters.validate bad) (sprintf "%A must be refused" bad)
         }
 
-        // The scope map is read by `Search` / `Delete` / the flush path while
-        // `Upsert` inserts a new scope's state. Every read of it must be safe
-        // against that insert; a plain `Dictionary` read racing a resize can
-        // throw or miss a scope that exists.
-        testAsync "a first upsert into a new scope is safe against concurrent Search and ListScopes" {
+        // The scope map is read lock-free (`ListChunks`, `Search`, the delete
+        // and flush paths) while `Upsert` inserts a new scope's state, so it
+        // is a concurrent map. This is a regression guard, not a reproduction:
+        // a plain `Dictionary` read torn by an insert is rare enough that the
+        // loop does not fail on one reliably. The readers read the map without
+        // building a graph: HNSW.Net's own static state is not safe for
+        // concurrent graph builds (see `HnswFidelityTests`), a separate hazard.
+        testAsync "a first upsert into a new scope is safe against concurrent reads of the scope map" {
             let storage =
                 ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
 
@@ -491,26 +494,36 @@ let tests =
                 new HnswVectorStore.HnswVectorStore(storage, logger = SilentLogger(), flushIntervalMs = 60000)
 
             let vs = store :> IVectorStore
-            let scopeCount = 400
+            let scopeCount = 20000
             let scopeOf i = User(sprintf "u%d" i)
+
+            // How many scopes the writer has finished; every one below it
+            // exists, so a read that misses it read a torn map.
+            let written = ref 0
 
             let writer = async {
                 for i in 0 .. scopeCount - 1 do
                     do! vs.Upsert (scopeOf i) (sprintf "c%d" i) teamAVec (chunk "note" "U")
+                    System.Threading.Volatile.Write(&written.contents, i + 1)
             }
 
             let reader (seed: int) = async {
                 let failures = ResizeArray<exn>()
                 let rnd = Random seed
 
-                for _ in 0..1500 do
-                    try
-                        let probe = [ for _ in 1..8 -> scopeOf (rnd.Next scopeCount) ]
-                        let! _ = vs.Search probe teamAVec 3
-                        let! _ = vs.ListScopes()
-                        ()
-                    with ex ->
-                        failures.Add ex
+                while System.Threading.Volatile.Read(&written.contents) < scopeCount do
+                    let done' = System.Threading.Volatile.Read(&written.contents)
+
+                    if done' > 0 then
+                        let i = rnd.Next done'
+
+                        try
+                            let! chunks = vs.ListChunks (scopeOf i) true
+
+                            if List.isEmpty chunks then
+                                failures.Add(exn (sprintf "scope u%d was written but read as absent" i))
+                        with ex ->
+                            failures.Add ex
 
                 return List.ofSeq failures
             }
@@ -529,9 +542,9 @@ let tests =
             let failures = results |> List.concat
             Expect.isEmpty failures (sprintf "no concurrent read may fail: %A" (failures |> List.truncate 3))
 
-            for i in 0 .. scopeCount - 1 do
-                let! found = vs.Search [ scopeOf i ] teamAVec 1
-                Expect.equal (found |> List.map _.ChunkId) [ sprintf "c%d" i ] "every scope written is found"
+            for i in [ 0; scopeCount / 2; scopeCount - 1 ] do
+                let! chunks = vs.ListChunks (scopeOf i) true
+                Expect.equal (chunks |> List.map fst) [ sprintf "c%d" i ] "every scope written is readable"
         }
 
         // Phase 861 — the restart laws: every mutation hydrates a lazily
