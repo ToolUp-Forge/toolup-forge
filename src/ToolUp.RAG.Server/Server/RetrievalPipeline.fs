@@ -911,7 +911,11 @@ type RetrievalPipeline
                     let json =
                         System.Text.Json.JsonSerializer.Serialize(payload, queryRejectedJsonOptions)
 
-                    let scopeId = teamId |> Option.defaultValue "_platform"
+                    let scopeId =
+                        match teamId with
+                        | Some id -> ToolUp.RAG.RetrievalTracers.auditScopeId (Team id)
+                        | None -> ToolUp.RAG.RetrievalTracers.auditScopeId Platform
+
                     do! es.Write(Events.create scopeId "ToolUp.RAG" KnowledgeQueryRejectedEventType json)
                 with _ ->
                     ()

@@ -536,7 +536,13 @@ type HnswVectorStore(storage: IBlobStorage, ?logger: ILogger, ?flushIntervalMs: 
         | Ok() -> ()
         | Error msg -> invalidArg "parameters" (sprintf "HnswVectorStore: invalid HnswParameters — %s" msg)
 
-    let scopes = Dictionary<string, ScopeState>()
+    // The scope map is read lock-free (`Search`, `Delete*`, the flush path)
+    // while `getOrCreateScope` inserts, so it is a `ConcurrentDictionary`,
+    // the convention the two in-process RAG stores use. `scopesLock` still
+    // serialises the insert with the `loadedScopes` bookkeeping beside it.
+    let scopes =
+        System.Collections.Concurrent.ConcurrentDictionary<string, ScopeState>()
+
     let scopesLock = obj ()
 
     // Scope keys whose persisted snapshot has been read into memory (guarded

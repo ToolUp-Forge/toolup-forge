@@ -408,6 +408,120 @@ let private boundsTests =
         }
     ]
 
+// ─── The setters clamp; the arms catch what bypasses them ───────────
+
+let private stubFactory =
+    { new ToolUp.AI.IAIProviderFactory with
+        member _.Available = []
+        member _.PlatformDescriptors = []
+        member _.PlatformDescriptor = None
+
+        member _.Resolve _ = async { return Result.Error ToolUp.AI.NoProviderConfigured }
+
+        member _.TryResolveByLabel(_, _) = async { return Result.Error ToolUp.AI.NoProviderConfigured }
+
+        member _.BuildPlatform(_, _, _) = None
+    }
+
+let private stubProfile =
+    { new ToolUp.Platform.Providers.IProviderProfile with
+        member _.Get _ = async { return None }
+        member _.Set(_, _) = async { return Result.Ok() }
+        member _.Clear _ = async { return () }
+        member _.ResolveEntry(_, _, _) = async { return None }
+        member _.SetEntryHealth(_, _, _) = async { return Result.Ok() }
+    }
+
+let private newApp () =
+    ToolUp.RAG.RAGCompose.RAGServerApp.create stubFactory stubProfile hostedEmbedder
+
+let private boundsOf (app: ToolUp.RAG.RAGCompose.RAGServerApp) : RagConfigBounds = {
+    TopK = app.RetrievalDefaults.TopK
+    MinScore = app.RetrievalDefaults.MinScore
+    MmrLambda = app.MmrLambda
+    MmrEnabled = app.EnableMmr
+    SnippetCharLimit = app.RetrievalDefaults.SnippetCharLimit
+    IngestionConcurrency = app.IngestionConcurrency
+    IngestionQueueCapacity = app.IngestionQueueCapacity
+}
+
+let private clampTests =
+    testList "the setters clamp a lower bound; the bounds arms catch a record update" [
+        test "a lower-bound value through a setter is clamped and warned, never errored" {
+            let app =
+                newApp ()
+                |> ToolUp.RAG.RAGCompose.RAGServerApp.withTopK 0
+                |> ToolUp.RAG.RAGCompose.RAGServerApp.withMinScore (Some -0.5)
+                |> ToolUp.RAG.RAGCompose.RAGServerApp.withMmrLambda -2.0
+                |> ToolUp.RAG.RAGCompose.RAGServerApp.withIngestionConcurrency 0
+
+            Expect.equal (run (RAGConfigBoundsValidator(boundsOf app))) Ok "the clamped values are in bounds"
+
+            match run (RetrievalDefaultsValidator app.RetrievalDefaultsClampLog) with
+            | Warning message ->
+                for knob in [ "TopK"; "MinScore"; "MmrLambda"; "IngestionConcurrency" ] do
+                    Expect.stringContains message knob (sprintf "the %s clamp is reported" knob)
+            | other -> failtestf "expected the clamps to be warned, got %A" other
+        }
+
+        test "a value set by record update reaches the arm the setter would have clamped" {
+            // `RAGServerApp` is a public record, so `{ app with ... }` sets a
+            // knob without its setter. These arms are what refuses it.
+            let app = {
+                newApp () with
+                    IngestionConcurrency = 0
+                    MmrLambda = 5.0
+                    EnableMmr = true
+            }
+
+            RAGConfigBoundsValidator(boundsOf app)
+            |> run
+            |> expectErrorNaming [ "IngestionConcurrency = 0"; "MmrLambda = 5" ]
+        }
+
+        test "the live upper bounds still refuse through the setters" {
+            let app =
+                newApp ()
+                |> ToolUp.RAG.RAGCompose.RAGServerApp.withTopK 200
+                |> ToolUp.RAG.RAGCompose.RAGServerApp.withSnippetCharLimit 99999
+                |> ToolUp.RAG.RAGCompose.RAGServerApp.withIngestionQueueCapacity 10
+
+            RAGConfigBoundsValidator(boundsOf app)
+            |> run
+            |> expectErrorNaming [ "TopK = 200"; "SnippetCharLimit = 99999"; "IngestionQueueCapacity = 10" ]
+        }
+    ]
+
+// ─── The embedding cache's locality is declared ─────────────────────
+
+/// A decorator over a cache that forwards its inner cache's locality.
+type private ForwardingCache(inner: ToolUp.Platform.IEmbeddingCache.IEmbeddingCache) =
+    interface IEmbeddingCacheLocality with
+        member _.CacheLocality = EmbeddingCacheLocality.declared (box inner)
+
+    interface ToolUp.Platform.IEmbeddingCache.IEmbeddingCache with
+        member _.TryGet key = inner.TryGet key
+        member _.Set key value = inner.Set key value
+        member _.HitRate() = inner.HitRate()
+        member _.Clear() = inner.Clear()
+
+let private localityTests =
+    testList "embedding-cache locality is declared, not type-tested" [
+        test "a decorator over the in-memory cache keeps the cross-replica warning" {
+            let inner =
+                ToolUp.RAG.InMemoryEmbeddingCache.InMemoryEmbeddingCache()
+                :> ToolUp.Platform.IEmbeddingCache.IEmbeddingCache
+
+            let app =
+                newApp ()
+                |> ToolUp.RAG.RAGCompose.RAGServerApp.withEmbeddingCache (ForwardingCache inner)
+
+            Expect.isFalse
+                (ToolUp.RAG.RAGCompose.hasCrossReplicaEmbeddingCache app)
+                "the decorator forwards the in-process declaration, so the replica warning stays"
+        }
+    ]
+
 // ─── /dev/inspect contributors ──────────────────────────────────────
 
 let private contributorTests =
@@ -451,5 +565,7 @@ let tests =
         localEmbedderTests
         handlerTests
         boundsTests
+        clampTests
+        localityTests
         contributorTests
     ]

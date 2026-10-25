@@ -148,6 +148,57 @@ let private next (doc: KnowledgeDocument) (job: IngestionJob) (outcome: ChunkOut
             else
                 Some(Embedding(processed, target))
 
+// ─── Terminal-status announcement ─────────────────────────────────
+
+/// The `IngestionStatusUpdate` outcome, chunk count and reason for a
+/// terminal status, or `None` for a status the attempt has not settled.
+let private terminalOutcome (status: IngestionStatus) : (string * int * string) option =
+    match status with
+    | IngestionStatus.Complete n -> Some("Complete", n, "")
+    | IngestionStatus.Failed reason -> Some("Failed", 0, reason)
+    | UnsupportedFormat detail -> Some("UnsupportedFormat", 0, detail)
+    | OcrUnavailable detail -> Some("OcrUnavailable", 0, detail)
+    | UploadRejected reason -> Some("UploadRejected", 0, reason)
+    | Queued
+    | ExtractingText
+    | Embedding _ -> None
+
+/// Announce a document's terminal status on `IngestionStatusNotificationKey`
+/// to the uploader's user scope — the one publisher every terminal path
+/// calls, whether a chunk callback settled the document or the upload path
+/// set the status directly. A status that is not terminal publishes nothing.
+/// A publish failure is logged, never raised: the status itself is already
+/// persisted, and the client's status poll still reads it.
+let publishTerminalStatus
+    (channel: INotificationChannel)
+    (logger: ILogger)
+    (documentId: string)
+    (fileName: string)
+    (uploadedBy: string)
+    (status: IngestionStatus)
+    : Async<unit> =
+    async {
+        match terminalOutcome status with
+        | None -> ()
+        | Some(outcome, chunkCount, errorReason) ->
+            try
+                let payload: IngestionStatusUpdate = {
+                    DocumentId = documentId
+                    FileName = fileName
+                    Outcome = outcome
+                    ChunkCount = chunkCount
+                    ErrorReason = errorReason
+                    UploadedBy = uploadedBy
+                }
+
+                do! channel.Publish(uploadedBy, CustomNotification(IngestionStatusNotificationKey, toJson payload))
+            with ex ->
+                logger.Error(
+                    sprintf "[KnowledgeBase] Failed to publish IngestionStatus notification for %s" documentId,
+                    Some ex
+                )
+    }
+
 // ─── Ingestion status observer ────────────────────────────────────
 
 /// Builds an `IIngestionStatusObserver` that reflects RAG ingestion
@@ -163,13 +214,14 @@ let private next (doc: KnowledgeDocument) (job: IngestionJob) (outcome: ChunkOut
 /// `IngestionAttempt.EnqueuedChunks`, and a callback from a superseded
 /// attempt is dropped.
 ///
-/// When a `notificationChannel` is supplied, the observer publishes a
-/// `CustomNotification` keyed by `IngestionStatusNotificationKey` to
-/// the uploader's user scope on every terminal transition (`Complete`
-/// or `Failed`). The AI Assistant subscribes to it so the user sees
-/// ingestion finish without waiting for the next 2s status poll. A
-/// dropped callback publishes nothing, so each attempt publishes at most
-/// one terminal notification.
+/// When a `notificationChannel` is supplied, the observer announces each
+/// terminal transition a chunk callback settles (`Complete` or `Failed`)
+/// through `publishTerminalStatus`, the publisher the upload path's
+/// direct-set terminal statuses call too, so every terminal status reaches
+/// `IngestionStatusNotificationKey`. The AI Assistant subscribes to it so
+/// the user sees ingestion finish without waiting for the next 2s status
+/// poll. A dropped callback publishes nothing, so each attempt publishes at
+/// most one terminal notification.
 let makeIngestionStatusObserver
     (storage: IBlobStorage)
     (notificationChannel: INotificationChannel option)
@@ -203,32 +255,7 @@ let makeIngestionStatusObserver
         else
             match notificationChannel with
             | None -> ()
-            | Some channel ->
-                try
-                    let outcome, chunkCount, errorReason =
-                        match status with
-                        | IngestionStatus.Complete n -> "Complete", n, ""
-                        | IngestionStatus.Failed reason -> "Failed", 0, reason
-                        | _ -> "", 0, ""
-
-                    if outcome <> "" then
-                        let payload: IngestionStatusUpdate = {
-                            DocumentId = doc.Id
-                            FileName = doc.FileName
-                            Outcome = outcome
-                            ChunkCount = chunkCount
-                            ErrorReason = errorReason
-                            UploadedBy = doc.UploadedBy
-                        }
-
-                        let payloadJson = toJson payload
-                        let notification = CustomNotification(IngestionStatusNotificationKey, payloadJson)
-                        do! channel.Publish(doc.UploadedBy, notification)
-                with ex ->
-                    logger.Error(
-                        sprintf "[KnowledgeBase] Failed to publish IngestionStatus notification for %s" doc.Id,
-                        Some ex
-                    )
+            | Some channel -> do! publishTerminalStatus channel logger doc.Id doc.FileName doc.UploadedBy status
     }
 
     /// Apply one chunk outcome: read-modify-write of the persisted status
@@ -293,9 +320,7 @@ let makeIngestionStatusObserver
 
     let settle (job: IngestionJob) (outcome: ChunkOutcome) = async {
         match! apply job outcome with
-        | Some(doc, (IngestionStatus.Complete _ as status))
-        | Some(doc, (IngestionStatus.Failed _ as status)) -> do! publishTerminal doc status job.OriginatingUserId
-        | Some _
+        | Some(doc, status) -> do! publishTerminal doc status job.OriginatingUserId
         | None -> ()
     }
 

@@ -656,15 +656,22 @@ type IngestionQueue
             match store with
             | Some s ->
                 do! s.Release leaseId
-                // The job is back in the store's pending set, so the
-                // depth gauge is unchanged.
-                ()
+                // The store either returned the job to its pending set or
+                // dropped it at its delivery-attempt cap, and only the
+                // store knows which, so the gauge is re-read from it.
+                let! stillQueued = s.Depth()
+                System.Threading.Interlocked.Exchange(&depth, stillQueued) |> ignore
             | None -> ()
         }
 
         member _.RecoverStranded() = async {
             match store with
-            | Some s -> return! s.ReclaimExpired()
+            | Some s ->
+                // A reclaim can drop a job at its attempt cap too.
+                let! reclaimed = s.ReclaimExpired()
+                let! stillQueued = s.Depth()
+                System.Threading.Interlocked.Exchange(&depth, stillQueued) |> ignore
+                return reclaimed
             | None -> return 0
         }
 

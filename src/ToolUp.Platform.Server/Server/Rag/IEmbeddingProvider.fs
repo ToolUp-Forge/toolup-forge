@@ -179,6 +179,52 @@ let batchedFallback (single: string -> Async<float32 array>) (texts: string seq)
         return results
 }
 
+// ─── Where an embedding cache's entries live ──────────────────────
+
+/// Where an `IEmbeddingCache`'s entries live, as the cache itself declares
+/// it through `IEmbeddingCacheLocality` — the cache's twin of
+/// `VectorIndexLocality`.
+[<RequireQualifiedAccess>]
+type EmbeddingCacheLocality =
+    /// Entries live in this process's memory: each replica holds its own
+    /// cache, so two replicas embed and cache the same text independently.
+    | InProcess
+    /// Every replica reads one cache held outside the process (e.g. Redis).
+    | Shared
+
+/// Optional locality declaration, SEPARATE from `IEmbeddingCache` so the
+/// cache interface gains no member and no implementation breaks. A cache
+/// implements it beside `IEmbeddingCache`; readers reach it through
+/// `EmbeddingCacheLocality.declared`.
+///
+/// **A decorator forwards its inner cache's declaration**
+/// (`member _.CacheLocality = EmbeddingCacheLocality.declared inner`), so a
+/// decorator over the in-process cache keeps the replica warning; `None`
+/// passes an undeclared inner cache through as undeclared.
+///
+/// **Undeclared reads as cross-replica** (GP 11): before this declaration
+/// the replica warning fired only for the shipped in-process cache itself,
+/// so a third-party cache that declares nothing keeps the posture it had.
+type IEmbeddingCacheLocality =
+    /// Where this cache's entries live: `Some` for a cache that knows,
+    /// `None` for a decorator over a cache that declares nothing.
+    abstract CacheLocality: EmbeddingCacheLocality option
+
+/// The probe for the embedding-cache locality declaration.
+[<RequireQualifiedAccess>]
+module EmbeddingCacheLocality =
+    /// The locality `cache` declares, or `None` when it implements no
+    /// `IEmbeddingCacheLocality`. Takes the cache as `obj` because the
+    /// cache interface is declared after this file.
+    let declared (cache: obj) : EmbeddingCacheLocality option =
+        match cache with
+        | :? IEmbeddingCacheLocality as declaring -> declaring.CacheLocality
+        | _ -> None
+
+    /// `true` unless `cache` declares its entries `InProcess`.
+    let isCrossReplica (cache: obj) : bool =
+        declared cache <> Some EmbeddingCacheLocality.InProcess
+
 // ─── Phase 14u — API-backed embedding-provider resilience ─────────
 //
 // Shared config surface for API-backed `IEmbeddingProvider`
