@@ -1,6 +1,8 @@
 module ToolUp.Platform.NotificationHandler
 
 open System
+open System.Runtime.ExceptionServices
+open System.Threading
 open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
 open Giraffe
@@ -41,15 +43,22 @@ let private serializeEnvelope (env: NotificationEnvelope) =
 /// `X-User-Id` fallback is honoured only under `QueryParamFallback`;
 /// under `CookieRequired` an unauthenticated connect is refused 401.
 ///
-/// **Subscription lifecycle.** One subscription per connection. The
-/// callback writes directly to this request's `Response.Body`; no
-/// `SSEConnectionManager.Broadcast` fan-out is needed because each
-/// connection has its own subscription. On disconnect the handler
-/// unsubscribes and removes the connection from the manager. This
-/// deliberately trades N in-memory callbacks per publish (for N open
-/// tabs under the same scope) for simpler lifecycle management —
-/// acceptable for the in-memory default; distributed implementations
-/// are free to multiplex differently behind the same interface.
+/// **Subscription lifecycle.** One subscription per connection, and ONE
+/// writer per response (Phase 1064). The connection is registered with the
+/// manager, which hands back its `ConnectionWriter`; each envelope is
+/// framed and enqueued on that writer, which writes and flushes one frame
+/// at a time, and the manager's keepalive goes through the same queue. The
+/// handler writes nothing to `Response.Body` after the ready comment and
+/// runs no keepalive loop of its own. (Until 1064 the channel callback
+/// wrote straight to the body, unawaited, beside a 15 s keepalive loop and
+/// the manager's 30 s one: three writers on one response — the race Phase
+/// 870 closed for live sessions.) A full queue or a failed write ends the
+/// connection; on disconnect the handler unsubscribes, removes the
+/// connection, and waits for the writer to stop. Each connection keeps its
+/// own subscription — N callbacks per publish for N open tabs under one
+/// scope — which is acceptable for the in-memory default; distributed
+/// implementations are free to multiplex differently behind the same
+/// interface.
 // Phase 6l.D — pre-handshake scope-at-capacity refusal lives below
 // inside the handler body so the response stays a plain 429 with
 // Retry-After when the scope is at cap. The legacy unconditional
@@ -69,9 +78,26 @@ let notificationHandler
             return Some ctx
         | SseScopeResolution.SseScope scopeId ->
 
-            let sink = SseConnectionSink.fromHttpResponse ctx.Response ctx.RequestAborted
+            // Opens once the SSE headers and the ready comment are on the
+            // wire, so a frame (an envelope, or the manager's keepalive)
+            // enqueued before then waits in the writer's queue instead of
+            // writing a body ahead of the headers.
+            let opened =
+                TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)
 
-            match manager.Add(scopeId, sink) with
+            let response = SseConnectionSink.fromHttpResponse ctx.Response ctx.RequestAborted
+
+            let sink =
+                { new IConnectionSink with
+                    member _.DisconnectToken = ctx.RequestAborted
+
+                    member _.WriteFrame(bytes, ct) = async {
+                        do! opened.Task.WaitAsync(ct) |> Async.AwaitTask
+                        do! response.WriteFrame(bytes, ct)
+                    }
+                }
+
+            match manager.AddWriter(scopeId, sink) with
             | Result.Error refusal ->
                 // Phase 6l.D — scope at capacity. Refuse with 429 +
                 // Retry-After before any text/event-stream headers
@@ -90,12 +116,10 @@ let notificationHandler
                     )
 
                 return Some ctx
-            | Result.Ok() ->
-                do! SSE.writeReadyResponse ctx.Response
-
-                // Write directly to this connection on each envelope. Exceptions
-                // are swallowed — a dead response cannot be recovered here, and
-                // the next keepalive iteration will fail and exit the loop.
+            | Result.Ok writer ->
+                // Frame and enqueue one envelope. A full queue is a
+                // connection that has stopped reading: end it, exactly
+                // as the manager's own fan-out does.
                 //
                 // Phase 6f filter: transactional kinds (`TransactionalEmail`,
                 // `TransactionalSms`, `MobilePush`) ride the same channel for
@@ -105,20 +129,13 @@ let notificationHandler
                 // a leak-tolerant fan-out (a sink running in another process
                 // will still see the publish via Redis; an in-process tab will
                 // not).
-                let writeEnvelope (env: NotificationEnvelope) =
-                    if NotificationKind.isTransactional env.Notification then
-                        ()
-                    elif not ctx.RequestAborted.IsCancellationRequested then
-                        try
-                            let json = serializeEnvelope env
-                            let eventName = NotificationKind.ofNotification env.Notification
-                            let bytes = SSE.namedFrame eventName json
-                            ctx.Response.Body.WriteAsync(bytes, 0, bytes.Length) |> ignore
-                            ctx.Response.Body.FlushAsync() |> ignore
-                        with _ ->
-                            ()
+                let sendEnvelope (env: NotificationEnvelope) =
+                    if not (NotificationKind.isTransactional env.Notification) then
+                        let eventName = NotificationKind.ofNotification env.Notification
+                        let frame = SSE.namedFrame eventName (serializeEnvelope env)
 
-                let! subscriptionId = channel.Subscribe(scopeId, writeEnvelope)
+                        if not (writer.TryEnqueue frame) then
+                            manager.Remove(scopeId, sink)
 
                 // Bridge: also subscribe to the reserved `_platform` topic for
                 // events that affect this user specifically. `MembershipChanged`
@@ -135,26 +152,48 @@ let notificationHandler
                 // not by the affected user, so the same envelope reaches every
                 // subscriber. Future cross-scope DataRefreshed kinds add
                 // additional `DataRefreshed(<kind>, _)` clauses here.
-                let writePlatformEnvelope (env: NotificationEnvelope) =
+                let sendPlatformEnvelope (env: NotificationEnvelope) =
                     match env.Notification with
-                    | MembershipChanged payload when payload.AffectedUserId = scopeId -> writeEnvelope env
-                    | DataRefreshed("PlatformKnowledgeBase", _) -> writeEnvelope env
+                    | MembershipChanged payload when payload.AffectedUserId = scopeId -> sendEnvelope env
+                    | DataRefreshed("PlatformKnowledgeBase", _) -> sendEnvelope env
                     | _ -> ()
 
+                // Both subscriptions are registered BEFORE the ready comment,
+                // so a client that has seen it has missed nothing: an
+                // envelope published in between waits in the writer's queue
+                // behind the `opened` gate.
+                let! subscriptionId = channel.Subscribe(scopeId, sendEnvelope)
+
                 let! platformSubscriptionId =
-                    channel.Subscribe(NotificationKind.PlatformReservedScope, writePlatformEnvelope)
+                    channel.Subscribe(NotificationKind.PlatformReservedScope, sendPlatformEnvelope)
+
+                let failure = ref (null: exn)
 
                 try
-                    while not ctx.RequestAborted.IsCancellationRequested do
-                        do! Task.Delay(15000, ctx.RequestAborted)
-                        do! ctx.Response.Body.WriteAsync(SSE.keepaliveBytes, 0, SSE.keepaliveBytes.Length)
-                        do! ctx.Response.Body.FlushAsync()
-                with
-                | :? TaskCanceledException -> ()
-                | :? OperationCanceledException -> ()
+                    do! SSE.writeReadyResponse ctx.Response
+                    opened.TrySetResult() |> ignore
 
+                    // Park until the client disconnects or the writer ends
+                    // the connection (a failed write, a full queue). Neither
+                    // task faults: the writer's loop catches its own
+                    // shutdown, and `WhenAny` does not observe a cancelled
+                    // delay as an exception.
+                    let disconnected = Task.Delay(Timeout.Infinite, ctx.RequestAborted)
+                    let! _ = Task.WhenAny(writer.Completion, disconnected)
+                    ()
+                with ex ->
+                    failure.Value <- ex
+
+                // Every exit path tears down the same way. `Remove` stops the
+                // writer, and its loop exits without another write, so no
+                // frame reaches this response after the handler returns.
+                manager.Remove(scopeId, sink)
                 do! channel.Unsubscribe subscriptionId
                 do! channel.Unsubscribe platformSubscriptionId
-                manager.Remove(scopeId, sink)
+                do! writer.Completion
+
+                if not (isNull failure.Value) then
+                    ExceptionDispatchInfo.Capture(failure.Value).Throw()
+
                 return Some ctx
     }

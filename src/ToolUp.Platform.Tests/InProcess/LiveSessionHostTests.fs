@@ -182,58 +182,9 @@ let private endpointTests =
 
 // ─── 4. Phase 870 — frames are written one at a time, in order ──────
 
-/// A response body that behaves like Kestrel's on the one point this pin
-/// needs: a write or flush issued while another is still in flight
-/// faults, as a faulted `Task` (the way an async method faults), rather
-/// than being serialised for the caller. `MemoryStream` completes every
-/// write synchronously, so it can never show the race.
-type private SerialOnlyBody() =
-    inherit Stream()
-
-    let buffer = new MemoryStream()
-    let busy = ref 0
-
-    static member val ConcurrentWriteMessage = "Phase 870 fake: concurrent writes are not supported."
-
-    member _.Text = lock buffer (fun () -> Text.Encoding.UTF8.GetString(buffer.ToArray()))
-
-    member private _.Guarded(append: unit -> unit) : Task = task {
-        if Interlocked.CompareExchange(&busy.contents, 1, 0) <> 0 then
-            raise (InvalidOperationException SerialOnlyBody.ConcurrentWriteMessage)
-
-        try
-            do! Task.Yield()
-            lock buffer append
-        finally
-            Volatile.Write(&busy.contents, 0)
-    }
-
-    override _.CanRead = false
-    override _.CanSeek = false
-    override _.CanWrite = true
-    override _.Length = raise (NotSupportedException())
-
-    override _.Position
-        with get () = raise (NotSupportedException())
-        and set _ = raise (NotSupportedException())
-
-    override _.Flush() = ()
-    override _.Read(_: byte[], _: int, _: int) : int = raise (NotSupportedException())
-    override _.Seek(_: int64, _: SeekOrigin) : int64 = raise (NotSupportedException())
-    override _.SetLength(_: int64) = raise (NotSupportedException())
-
-    override _.Write(bytes: byte[], offset: int, count: int) =
-        lock buffer (fun () -> buffer.Write(bytes, offset, count))
-
-    override this.WriteAsync(bytes: byte[], offset: int, count: int, _: CancellationToken) : Task =
-        let copy = Array.sub bytes offset count
-        this.Guarded(fun () -> buffer.Write(copy, 0, copy.Length))
-
-    override this.WriteAsync(bytes: ReadOnlyMemory<byte>, _: CancellationToken) : ValueTask =
-        let copy = bytes.ToArray()
-        ValueTask(this.Guarded(fun () -> buffer.Write(copy, 0, copy.Length)))
-
-    override this.FlushAsync(_: CancellationToken) : Task = this.Guarded ignore
+// The faulting-body harness, `SerialOnlyBody`, lives in
+// `SsePerConnectionWriterTests` (it compiles first) since Phase 1064 pins
+// the notification stream with it too.
 
 let private waitUntil (timeoutMs: int) (condition: unit -> bool) =
     let deadline = DateTime.UtcNow.AddMilliseconds(float timeoutMs)
@@ -264,7 +215,8 @@ let private burstTests =
                 EventHandler<UnobservedTaskExceptionEventArgs>(fun _ args ->
                     let ours =
                         args.Exception.Flatten().InnerExceptions
-                        |> Seq.exists (fun e -> e.Message = SerialOnlyBody.ConcurrentWriteMessage)
+                        |> Seq.exists (fun e ->
+                            e.Message = SsePerConnectionWriterTests.SerialOnlyBody.ConcurrentWriteMessage)
 
                     if ours then
                         Interlocked.Increment(&unobserved.contents) |> ignore)
@@ -288,7 +240,7 @@ let private burstTests =
                             let ctx, _ =
                                 mkContext (ServiceCollection()) $"/api/live-sessions/%s{d.SessionId}" cts.Token
 
-                            let body = new SerialOnlyBody()
+                            let body = new SsePerConnectionWriterTests.SerialOnlyBody()
                             ctx.Response.Body <- body
                             let serving = handler finalFunc ctx
 
