@@ -117,7 +117,7 @@ let private recordAudit (auditLog: IAuditLog option) (event: AuditEvent) =
 ///
 /// Published on `NotificationKind.PlatformReservedScope` — the magic
 /// scopeId every SSE connection subscribes to on top of its own per-user
-/// scope (see `NotificationHandler.writePlatformEnvelope`). The handler
+/// scope (see `NotificationHandler.sendPlatformEnvelope`). The handler
 /// filters that subscription so only platform-broadcast envelopes the
 /// client should see fan out to the wire; `DataRefreshed` carrying the
 /// `"PlatformKnowledgeBase"` data-type id is the allow-listed shape.

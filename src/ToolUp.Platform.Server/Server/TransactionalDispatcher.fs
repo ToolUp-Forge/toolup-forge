@@ -550,7 +550,7 @@ type TransactionalDispatcher
 ///     and the dispatcher carry the same `Id` (no double-stamping
 ///     drift).
 /// (3) SSE safety — even with the SSE filter in
-///     `NotificationHandler.writeEnvelope`, defence-in-depth says the
+///     `NotificationHandler.sendEnvelope`, defence-in-depth says the
 ///     envelope shouldn't be available to subscribe to in the first
 ///     place.
 type DispatchingNotificationChannel(inner: INotificationChannel, dispatcher: TransactionalDispatcher) =

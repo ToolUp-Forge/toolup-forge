@@ -710,7 +710,7 @@ let private PlatformLibraryPanel (model: Model) (dispatch: Msg -> unit) =
         // upload / delete / promote in another session refreshes this view
         // without requiring a manual Reload. Server publishes
         // `DataRefreshed("PlatformKnowledgeBase", _)` on the reserved
-        // `_platform` scope and `NotificationHandler.writePlatformEnvelope`
+        // `_platform` scope and `NotificationHandler.sendPlatformEnvelope`
         // forwards the envelope to every connected SSE client.
         let dispose =
             NotificationClient.subscribe (fun envelope ->
