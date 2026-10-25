@@ -300,7 +300,7 @@ let emitIngestionDrop
         | _ -> ()
     }
 
-let private makeVectorisationHook
+let internal makeVectorisationHook
     (handlers: VectorisationHandler list)
     (queue: IngestionQueue)
     (telemetry: IRagTelemetry)
@@ -397,11 +397,19 @@ let private makeVectorisationHook
             let chunks = handler.Vectorise processedData
 
             if not chunks.IsEmpty then
+                // The vector scope is the one the storage container names
+                // (GP 4): a team container is the team's, the deployment
+                // container is deployment-wide, and every other container
+                // (`user-{id}`, a session) is one caller's own, so its
+                // chunks stay in that caller's `User` scope. Routing them
+                // to `Deployment` served one caller's file to every other.
                 let vectorScope =
                     if scope.Container.StartsWith "team-" then
                         Team(scope.ScopeId)
-                    else
+                    elif scope.Container = ScopeEnumeration.DeploymentContainer then
                         Deployment
+                    else
+                        VectorScope.User scope.ScopeId
 
                 let basePairs =
                     chunks |> List.mapi (fun i chunk -> $"{entry.FileName}:chunk:{i}", chunk)
@@ -1016,9 +1024,14 @@ type RAGServerApp = {
 /// because the concern is the per-replica divergence, not whether a hook
 /// was called — an operator who wires the process-local cache by hand has
 /// changed nothing about what the validator is warning at.
+///
+/// Read from the cache's own `IEmbeddingCacheLocality` declaration, never
+/// its type, so a decorator that forwards the declaration keeps the
+/// warning. An undeclared cache reads as cross-replica, as an unrecognised
+/// cache did before (GP 11).
 let hasCrossReplicaEmbeddingCache (app: RAGServerApp) : bool =
     match app.EmbeddingCache with
-    | Some composed -> not (composed :? InMemoryEmbeddingCache)
+    | Some composed -> EmbeddingCacheLocality.isCrossReplica (box composed)
     | None -> false
 
 /// Phase 14z — does this app's composed `IEmbeddingProvider` key its
@@ -2714,10 +2727,14 @@ module RAGServerApp =
     /// in parallel. Each slot does one batched embedding call covering a whole
     /// document, so the effective upstream concurrency equals this number of
     /// HTTP calls (not chunks). Default 8.
-    let withIngestionConcurrency (concurrency: int) (app: RAGServerApp) : RAGServerApp = {
-        app with
-            IngestionConcurrency = max 1 concurrency
-    }
+    let withIngestionConcurrency (concurrency: int) (app: RAGServerApp) : RAGServerApp =
+        let clamped = max 1 concurrency
+
+        {
+            app with
+                IngestionConcurrency = clamped
+        }
+        |> noteClamp "IngestionConcurrency" (string concurrency) (string clamped) (clamped <> concurrency)
 
     /// Cap the number of pending document jobs in the ingestion queue. When
     /// full, `IngestionQueue.Enqueue` returns `false` and KB upload handlers

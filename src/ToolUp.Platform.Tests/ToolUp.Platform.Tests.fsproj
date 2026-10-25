@@ -667,6 +667,10 @@
         <Compile Include="InProcess\MetaWhatsAppCloudNotificationSinkTests.fs" />
         <Compile Include="InProcess\HnswVectorStoreTests.fs" />
         <Compile Include="InProcess\KnowledgeUserScopeIsolationTests.fs" />
+        <Compile Include="InProcess\VectorisationHookTests.fs" />
+        <Compile Include="InProcess\RagTelemetryTests.fs" />
+        <Compile Include="InProcess\ExtractorTests.fs" />
+        <Compile Include="InProcess\IngestionStatusStreamTests.fs" />
         <Compile Include="InProcess\HealthyHealthCheckTests.fs" />
         <Compile Include="InProcess\DegradedHealthCheckTests.fs" />
         <Compile Include="InProcess\UnhealthyHealthCheckTests.fs" />

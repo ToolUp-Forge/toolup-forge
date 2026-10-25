@@ -75,15 +75,9 @@ let private scopeKey (scope: VectorScope) =
     | User userId -> $"user:{userId}"
 
 /// Audit routing scope id — where the `KnowledgeVacuumCompleted` event
-/// lands so it is queryable in the right stream. Team sweeps land in the
-/// team's own audit; platform/deployment sweeps land in the reserved
-/// `_platform` scope.
-let private auditScopeId (scope: VectorScope) =
-    match scope with
-    | Platform
-    | Deployment -> "_platform"
-    | Team teamId -> teamId
-    | User userId -> $"user:{userId}"
+/// lands so it is queryable in the same stream as the scope's other RAG
+/// rows (`RetrievalTracers.auditScopeId`).
+let private auditScopeId = ToolUp.RAG.RetrievalTracers.auditScopeId
 
 let private utf8Len (s: string) =
     if isNull s then 0 else Encoding.UTF8.GetByteCount s

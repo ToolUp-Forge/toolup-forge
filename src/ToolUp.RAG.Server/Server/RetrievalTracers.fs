@@ -32,6 +32,26 @@ let hashQuery (input: string) =
 
     sb.ToString()
 
+/// The event-store scope id every RAG audit row for `scope` is written
+/// under: the retrieval trace and miss, the over-length-query refusal, the
+/// re-embedding run and the vacuum sweep. One spelling, so one team's RAG
+/// rows read back from one stream. A team row is keyed by the bare team id
+/// (the persisted stream key every other team audit row uses); the two
+/// shared scopes by their well-known container names.
+let internal auditScopeId (scope: VectorKnowledgeTypes.VectorScope) : string =
+    match scope with
+    | VectorKnowledgeTypes.Platform -> ScopeEnumeration.PlatformContainer
+    | VectorKnowledgeTypes.Deployment -> ScopeEnumeration.DeploymentContainer
+    | VectorKnowledgeTypes.Team teamId -> teamId
+    | VectorKnowledgeTypes.User userId -> $"user:{userId}"
+
+/// The audit scope of a retrieval caller: its team, or the platform scope
+/// for a caller with none.
+let internal callerAuditScopeId (ctx: AccessContext) : string =
+    match ctx.TeamId with
+    | Some teamId -> auditScopeId (VectorKnowledgeTypes.Team teamId)
+    | None -> auditScopeId VectorKnowledgeTypes.Platform
+
 // ─── No-op tracer ─────────────────────────────────────────────────
 
 /// Default `IRetrievalTracer`. Discards every emission. Wired by
@@ -130,12 +150,9 @@ type EventStoreRetrievalTracer(eventStore: IEventStore, logger: ILogger) =
                     RewrittenQueryHash = trace.RewrittenQueryHash
                 }
 
-                // Persist to the caller's resolved scope when there is one;
+                // Persist to the caller's team stream when there is one;
                 // anonymous / unscoped requests fall back to `_platform`.
-                let scopeId =
-                    match ctx.TeamId with
-                    | Some teamId -> sprintf "team-%s" teamId
-                    | None -> "_platform"
+                let scopeId = callerAuditScopeId ctx
 
                 let evt =
                     Events.create scopeId RetrievalTraceSourceModule KnowledgeRetrievedEventType (toTraceJson payload)
@@ -156,10 +173,7 @@ type EventStoreRetrievalTracer(eventStore: IEventStore, logger: ILogger) =
                     TopScore = miss.TopScore
                 }
 
-                let scopeId =
-                    match ctx.TeamId with
-                    | Some teamId -> sprintf "team-%s" teamId
-                    | None -> "_platform"
+                let scopeId = callerAuditScopeId ctx
 
                 let evt =
                     Events.create

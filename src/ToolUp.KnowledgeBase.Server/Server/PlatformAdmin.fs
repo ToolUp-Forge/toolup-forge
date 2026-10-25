@@ -7,6 +7,7 @@ open ToolUp.Platform.VectorKnowledgeTypes
 open SharedTypes
 open KnowledgeBase.ServerJsonHelpers
 open KnowledgeBase.ServerIndexStorage
+open KnowledgeBase.ServerIngestionObserver
 open KnowledgeBase.ServerApiDeps
 open KnowledgeBase.ServerApiDocuments
 
@@ -81,25 +82,7 @@ let private platformDeps (baseDeps: KnowledgeApiDeps) : KnowledgeApiDeps =
         // Phase 959 — the guarded index writer (see `Api/Deps.fs`).
         do! updateIndexStatus storage platformContainer docId status
 
-        if not (isNull (box notifications)) then
-            try
-                let payload: IngestionStatusUpdate = {
-                    DocumentId = docId
-                    FileName = fileName
-                    Outcome = "Failed"
-                    ChunkCount = 0
-                    ErrorReason = reason
-                    UploadedBy = userId
-                }
-
-                let payloadJson = toJson payload
-                let notification = CustomNotification(IngestionStatusNotificationKey, payloadJson)
-                do! notifications.Publish(userId, notification)
-            with ex ->
-                logger.Error(
-                    sprintf "[KnowledgeBase] Failed to publish IngestionStatus notification for %s" docId,
-                    Some ex
-                )
+        do! publishTerminalStatus notifications logger docId fileName userId status
     }
 
     {
@@ -139,19 +122,18 @@ let private recordAudit (auditLog: IAuditLog option) (event: AuditEvent) =
 /// client should see fan out to the wire; `DataRefreshed` carrying the
 /// `"PlatformKnowledgeBase"` data-type id is the allow-listed shape.
 ///
-/// Failure-tolerant — a missing channel or a transport error is logged
-/// and swallowed so a write that succeeded primarily never reports
-/// failure on a best-effort downstream notification.
+/// Failure-tolerant — a transport error is logged and swallowed so a
+/// write that succeeded primarily never reports failure on a best-effort
+/// downstream notification.
 let private publishPlatformKbRefresh (deps: KnowledgeApiDeps) = async {
-    if not (isNull (box deps.Notifications)) then
-        try
-            do!
-                deps.Notifications.Publish(
-                    NotificationKind.PlatformReservedScope,
-                    DataRefreshed("PlatformKnowledgeBase", platformContainer)
-                )
-        with ex ->
-            deps.Logger.Error("[PlatformKB] Failed to publish DataRefreshed notification", Some ex)
+    try
+        do!
+            deps.Notifications.Publish(
+                NotificationKind.PlatformReservedScope,
+                DataRefreshed("PlatformKnowledgeBase", platformContainer)
+            )
+    with ex ->
+        deps.Logger.Error("[PlatformKB] Failed to publish DataRefreshed notification", Some ex)
 }
 
 /// Construct the ToolUp.Remoting `IPlatformKnowledgeApi` for the current

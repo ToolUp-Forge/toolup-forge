@@ -135,9 +135,74 @@ let private observerTests =
         }
     ]
 
+/// Counts the reads the observer makes, over the in-memory store.
+type private CountingStatusStore(inner: IIngestionStatusStore) =
+    let mutable reads = 0
+    member _.Reads = reads
+
+    interface IIngestionStatusStore with
+        member _.SetPending(scopeId, documentId, total) =
+            inner.SetPending(scopeId, documentId, total)
+
+        member _.Set(scopeId, documentId, status) = inner.Set(scopeId, documentId, status)
+
+        member _.Get(scopeId, documentId) =
+            reads <- reads + 1
+            inner.Get(scopeId, documentId)
+
+        member _.GetTotal(scopeId, documentId) =
+            reads <- reads + 1
+            inner.GetTotal(scopeId, documentId)
+
+        member _.List scopeId = inner.List scopeId
+
+let private progressTests =
+    testList "DataManagerIngestionObserver progress" [
+        test "a chunk failure followed by a later success does not restart the count" {
+            let store = IngestionStatusStore.createInMemory ()
+            let observer = ToolUp.RAG.DataManagerIngestionObserver.create store None logger
+            run (store.SetPending("team-a", "three.csv", 3))
+
+            run (observer.OnChunkIndexed(chunkJob "team-a" "three.csv" 0))
+            run (observer.OnChunkIndexed(chunkJob "team-a" "three.csv" 1))
+            run (observer.OnChunkFailed(chunkJob "team-a" "three.csv" 2, "transient"))
+
+            // The failed chunk is retried and succeeds: two chunks were
+            // already indexed, so this is the third of three.
+            run (observer.OnChunkIndexed(chunkJob "team-a" "three.csv" 2))
+
+            Expect.equal
+                (run (store.Get("team-a", "three.csv")))
+                (Some Indexed)
+                "the count survived the failure, so the retried last chunk completes the file"
+        }
+
+        test "a 50-chunk knowledge-base document costs the status store at most one read" {
+            let store = CountingStatusStore(IngestionStatusStore.createInMemory ())
+            let observer = ToolUp.RAG.DataManagerIngestionObserver.create store None logger
+
+            let attempt: IngestionAttempt = {
+                AttemptId = "attempt-1"
+                EnqueuedChunks = 50
+            }
+
+            for i in 0..49 do
+                let job = {
+                    chunkJob "team-a" "kb-doc.pdf" i with
+                        Attempt = Some attempt
+                }
+
+                run (observer.OnChunkIndexed job)
+
+            Expect.isLessThanOrEqual store.Reads 1 "one read per document, not one per chunk"
+            Expect.equal (run ((store :> IIngestionStatusStore).Get("team-a", "kb-doc.pdf"))) None "still untouched"
+        }
+    ]
+
 let tests =
     testList "Phase 173 — ingestion-status surfacing" [
         storeContract "IIngestionStatusStore (in-memory)" IngestionStatusStore.createInMemory
         storeContract "IIngestionStatusStore (IDataObjectStore-backed)" dataObjectBackedFactory
         observerTests
+        progressTests
     ]

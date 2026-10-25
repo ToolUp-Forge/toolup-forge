@@ -575,9 +575,14 @@ type RagConfigBounds = {
 /// replacing silence with a named contract.
 ///
 /// The `with*` setters clamp on the way in (`withTopK 0` → `1`,
-/// `withMinScore (Some 1.5)` → `Some 0.99`), and
-/// `RetrievalDefaultsValidator` reports every clamp that fired — but the
-/// clamps are all one-sided lower bounds. Nothing rejects `withTopK 200`
+/// `withMinScore (Some 1.5)` → `Some 0.99`, `withMmrLambda` onto
+/// `[0, 1]`, `withIngestionConcurrency 0` → `1`), and
+/// `RetrievalDefaultsValidator` reports the retrieval clamps that fired, so
+/// a value set through a setter is clamped and warned, never errored here.
+/// The lower-bound and `[0, 1]` arms below are for a value that bypassed
+/// its setter: `RAGServerApp` is a public record, and `{ app with
+/// IngestionConcurrency = 0 }` reaches this validator unclamped. The
+/// setters bound nothing above, so nothing else rejects `withTopK 200`
 /// (a 200-match context block crowds out the conversation and dilutes
 /// per-source attention), `withSnippetCharLimit 20` (clamped only to
 /// 16 — below the ~32 chars a preview needs to be readable),

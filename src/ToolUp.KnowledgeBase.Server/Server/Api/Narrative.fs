@@ -312,7 +312,13 @@ let ingestNarrative
                                     Status = IngestionStatus.Failed reason
                             }
                     elif chunks.IsEmpty then
-                        setStatus docId (Complete 0)
+                        // Nothing to index, so no chunk callback will settle
+                        // the document: settle the cache, the persisted
+                        // index and the announcement here.
+                        let terminal = Complete 0
+                        setStatus docId terminal
+                        do! updateIndexStatus deps.Storage deps.Scope.Container docId terminal
+                        do! publishTerminalStatus deps.Notifications deps.Logger docId fileName deps.UserId terminal
 
                     // Nudge the KB client to reload its document list.
                     // The notification scope is the user id (matches the

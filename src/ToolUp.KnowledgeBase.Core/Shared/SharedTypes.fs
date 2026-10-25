@@ -342,9 +342,8 @@ let IngestionStatusNotificationKey = "KnowledgeBase.IngestionStatus"
 
 /// Payload of `CustomNotification(IngestionStatusNotificationKey, _)`.
 /// Serialised on the server with `FableConverters`; parsed on the
-/// client with `Fable.SimpleJson`. v1 fires only on terminal
-/// transitions (`Complete` / `Failed`) — incremental progress is
-/// noise in chat.
+/// client with `Fable.SimpleJson`. Fires once per terminal status —
+/// incremental progress is noise in chat.
 ///
 /// Wire shape is intentionally flat (no embedded DU): subscribers in
 /// other companion packages (e.g. the AI Assistant chat surface) parse
@@ -353,11 +352,14 @@ let IngestionStatusNotificationKey = "KnowledgeBase.IngestionStatus"
 type IngestionStatusUpdate = {
     DocumentId: string
     FileName: string
-    /// "Complete" or "Failed" — the only terminal kinds published.
+    /// The terminal status: "Complete", "Failed", "UnsupportedFormat",
+    /// "OcrUnavailable" or "UploadRejected". A subscriber ignores a value
+    /// it does not render.
     Outcome: string
     /// Chunk count when `Outcome = "Complete"`, 0 otherwise.
     ChunkCount: int
-    /// Failure reason when `Outcome = "Failed"`, empty otherwise.
+    /// The failure reason or the status detail for every outcome but
+    /// "Complete", empty for "Complete".
     ErrorReason: string
     UploadedBy: string
 }

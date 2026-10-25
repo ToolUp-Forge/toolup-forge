@@ -15,6 +15,10 @@
         <FrameworkReference Include="Microsoft.AspNetCore.App" />
     </ItemGroup>
     <ItemGroup>
+        <!-- The post-save vectorisation hook is driven directly by its scope pins. -->
+        <InternalsVisibleTo Include="ToolUp.Platform.Tests" />
+    </ItemGroup>
+    <ItemGroup>
         <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
         <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
         <ProjectReference Include="..\ToolUp.AI.Core\ToolUp.AI.Core.fsproj" />

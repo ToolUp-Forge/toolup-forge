@@ -120,6 +120,41 @@ let private seamTests =
         }
     ]
 
+// ─── Depth gauge over a store-side drop ──────────────────────────────
+
+let private depthTests =
+    testList "IngestionQueue depth gauge over a store" [
+        test "a job the store drops at its attempt cap leaves Depth equal to the jobs still queued" {
+            let store = InMemoryIngestionQueueStore(2)
+            let concrete = IngestionQueue(10, store = (store :> IIngestionQueueStore))
+            let q = concrete :> IIngestionQueue
+
+            Expect.isTrue (run (q.EnqueueAsync(mkJob "a"))) "a enqueued"
+            Expect.isTrue (run (q.EnqueueAsync(mkJob "b"))) "b enqueued"
+            Expect.equal concrete.Count 2 "two jobs queued"
+
+            // Abandon `a` until the store's two-attempt budget drops it.
+            let rec abandonUntilDropped () =
+                match run (q.TryDequeue()) with
+                | Some lease when lease.Job.DocumentId = "a" ->
+                    run (q.Abandon(lease.LeaseId, "drainer failed"))
+
+                    if store.Dropped = 0 then
+                        abandonUntilDropped ()
+                | Some lease ->
+                    // `b` is returned untouched so it stays queued.
+                    run (q.Abandon(lease.LeaseId, "not this one"))
+                    abandonUntilDropped ()
+                | None -> failtest "the queue ran dry before the store dropped `a`"
+
+            abandonUntilDropped ()
+
+            Expect.equal store.Dropped 1 "the store dropped `a` at its attempt cap"
+            let stillQueued = run ((store :> IIngestionQueueStore).Depth())
+            Expect.equal concrete.Count stillQueued "the depth gauge counts exactly the jobs still queued"
+        }
+    ]
+
 // ─── Store-contract arm ──────────────────────────────────────────────
 
 /// The contract cases, parameterised over a store factory so the same
@@ -459,6 +494,7 @@ let private liveRedisTests (connectionString: string) =
 let tests =
     testList "Phase 509 — durable ingestion queue" [
         seamTests
+        depthTests
         compositionTests
         storeContract
             "in-memory reference store"
