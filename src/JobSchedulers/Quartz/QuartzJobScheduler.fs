@@ -291,6 +291,9 @@ type QuartzJobScheduler
             match! jobStore.Get(scopeId, jobId) with
             | None -> return Error $"Job %A{jobId} not found in scope %s{scopeId}"
             | Some job when job.Status = Cancelled -> return Error "Cannot trigger a cancelled job"
+            // Phase 1064 — ruling 12: a disabled job refuses a manual fire,
+            // as the in-process scheduler does.
+            | Some job when job.Status = Disabled -> return Error "Cannot trigger a disabled job; enable it first"
             | Some job ->
                 try
                     let data = JobDataMap()

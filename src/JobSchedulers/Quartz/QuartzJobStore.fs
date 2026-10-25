@@ -359,19 +359,14 @@ type internal QuartzDispatchJob(context: QuartzDispatchContext) =
             | Some job ->
                 let source = triggerSourceOf map
 
-                let isManual =
-                    (match source with
-                     | ScheduledManually _ -> true
-                     | _ -> false)
-
-                // A cancelled job never runs. A disabled job runs only
-                // when an operator asked for this specific fire —
-                // `Disable` stops the SCHEDULE, and `TriggerOnce` is
-                // allowed against a disabled job by the IJobScheduler
-                // contract.
-                if job.Status = Cancelled || (job.Status = Disabled && not isManual) then
+                // A cancelled or disabled job never runs — a manual fire
+                // included (Phase 1064, ruling 12: `Disable` stops dispatch,
+                // and `TriggerOnce` refuses a disabled job before it gets
+                // here; this is the backstop for a fire already queued when
+                // the job was disabled).
+                if job.Status = Cancelled || job.Status = Disabled then
                     context.Logger.Debug
-                        $"[QuartzJobScheduler] event=fire_skipped jobId={jobId} status=%A{job.Status} manual={isManual}"
+                        $"[QuartzJobScheduler] event=fire_skipped jobId={jobId} status=%A{job.Status} source=%A{source}"
                 else
                     let attempt = ctx.RetryAttempt + 1
                     let runId = Guid.NewGuid()

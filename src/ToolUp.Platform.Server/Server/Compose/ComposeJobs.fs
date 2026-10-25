@@ -372,13 +372,22 @@ let private tryResolveExternalHandleStore
 /// above: a FACTORY registration is invisible here, because a factory
 /// cannot be invoked without building the provider. A companion
 /// registers an instance.
-let private tryResolveRegisteredInstance<'T when 'T: not struct> (services: IServiceCollection) : 'T option =
+///
+/// Phase 1064 — the ONE probe for an instance-registered `'T`: this file
+/// carried three (the 9c.E one, and a `tryRegisteredInstance` /
+/// `registeredInstances` pair Phase 43 added for the provider-profile
+/// wiring, where multi-registration is how `IOAuthCredentialFlow` is
+/// wired), and only the first skipped keyed descriptors. A keyed
+/// descriptor is not the unkeyed registration being looked for, so it is
+/// skipped here for every caller. (On .NET 10 reading
+/// `ImplementationInstance` on a keyed descriptor returns `null` rather
+/// than throwing, so the missing guard was a latent mis-read, not a crash.)
+let private registeredInstances<'T when 'T: not struct> (services: IServiceCollection) : 'T list =
     services
-    |> Seq.tryPick (fun descriptor ->
+    |> Seq.choose (fun descriptor ->
         if
             not (isNull descriptor.ServiceType)
             && descriptor.ServiceType = typeof<'T>
-            // Reading ImplementationInstance on a keyed descriptor throws.
             && not descriptor.IsKeyedService
         then
             match descriptor.ImplementationInstance with
@@ -386,13 +395,18 @@ let private tryResolveRegisteredInstance<'T when 'T: not struct> (services: ISer
             | _ -> None
         else
             None)
+    |> List.ofSeq
+
+/// The first instance-registered `'T`, per `registeredInstances`.
+let private tryRegisteredInstance<'T when 'T: not struct> (services: IServiceCollection) : 'T option =
+    registeredInstances<'T> services |> List.tryHead
 
 /// Phase 935 — bind the deployment's `ScopeCarrier` (registered as an
 /// instance beside its DataProtection key ring) into a scheduler that
 /// carries scopes. A scheduler that is not an `IScopeCarrierBinding`, or a
 /// composition with no carrier, is left as it was.
 let private bindScopeCarrier (services: IServiceCollection) (scheduler: obj) : unit =
-    match scheduler, tryResolveRegisteredInstance<ScopeCarrier> services with
+    match scheduler, tryRegisteredInstance<ScopeCarrier> services with
     | (:? IScopeCarrierBinding as binding), Some carrier -> binding.BindScopeCarrier carrier
     | _ -> ()
 
@@ -559,7 +573,7 @@ let registerJobScheduler
     // deployment that asked for Quartz, got `None`, and discovers at the
     // first missed cron boundary that nothing was scheduled.
     | QuartzJobScheduler quartzConfig ->
-        match tryResolveRegisteredInstance<IJobScheduler> services with
+        match tryRegisteredInstance<IJobScheduler> services with
         | None ->
             resolvedLogger.Warn(
                 sprintf
@@ -580,7 +594,7 @@ let registerJobScheduler
             // read it. Its absence is recoverable (the scheduler still
             // dispatches) but silently narrows the admin surface, so it
             // is named rather than inferred.
-            if (tryResolveRegisteredInstance<IJobStore> services).IsNone then
+            if (tryRegisteredInstance<IJobStore> services).IsNone then
                 resolvedLogger.Warn
                     "[ComposeJobs] event=quartz_job_store_not_registered ServerConfig.JobScheduler = QuartzJobScheduler and an IJobScheduler instance was found, but no IJobStore instance was. The scheduler dispatches, but the Job API, the service status board and the maintenance surface have no store to read. Register it: services.AddSingleton<IJobStore>(scheduler.JobStore)."
 
@@ -817,35 +831,6 @@ let registerOAuthRefresher
                 |> ignore
 
 // ─── Phase 43.B / 43.C — provider-profile OAuth + status probe ────
-
-/// The single registered instance of `'T` in the collection, when one
-/// was registered by INSTANCE (the shape every substrate below uses).
-/// Reading the `IServiceCollection` rather than a built provider is the
-/// `DeployPlaneDepsValidator` pattern — at compose time there is no
-/// container to resolve from yet.
-let private tryRegisteredInstance<'T when 'T: not struct> (services: IServiceCollection) : 'T option =
-    services
-    |> Seq.tryPick (fun d ->
-        if d.ServiceType = typeof<'T> then
-            match d.ImplementationInstance with
-            | :? 'T as instance -> Some instance
-            | _ -> None
-        else
-            None)
-
-/// Every instance-registered `'T`. Multi-registration is how
-/// `IOAuthCredentialFlow` is wired (`ServerApp.run` folds one
-/// `AddSingleton` per flow).
-let private registeredInstances<'T when 'T: not struct> (services: IServiceCollection) : 'T list =
-    services
-    |> Seq.choose (fun d ->
-        if d.ServiceType = typeof<'T> then
-            match d.ImplementationInstance with
-            | :? 'T as instance -> Some instance
-            | _ -> None
-        else
-            None)
-    |> List.ofSeq
 
 /// Phase 43.B / 43.C — bind the provider-profile OAuth refresh job and
 /// the live-status probe job to the scheduler.

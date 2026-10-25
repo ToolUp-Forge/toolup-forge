@@ -13,8 +13,8 @@ open ToolUp.Platform.HealthChecks
 // Covers behaviour the contract pack can't: BCL adapter timeout
 // enforcement, exception → Unhealthy translation, the HTTP status
 // mapping (Healthy/Degraded → 200, Unhealthy → 503), the per-Kind tag
-// partitioning, and the rejection of constructor-injected
-// registrations.
+// partitioning, and the deferred resolution of factory and
+// type-registered probes (Phase 1064).
 
 /// Build an `IHealthCheck` from a concrete `Check` thunk so tests can
 /// inject Healthy / Degraded / Unhealthy / throwing / hanging
@@ -26,6 +26,17 @@ let private mkProbe (name: string) (kind: HealthKind) (timeout: TimeSpan) (body:
         member _.Timeout = timeout
         member _.Check() = body ()
     }
+
+/// A probe with a parameterless constructor, for the type-registered
+/// (`AddSingleton<IHealthCheck, T>()`) form.
+type TypedProbe() =
+    static member ProbeName = "typed_probe"
+
+    interface IHealthCheck with
+        member _.Name = TypedProbe.ProbeName
+        member _.Kind = Liveness
+        member _.Timeout = TimeSpan.FromSeconds 1.0
+        member _.Check() = async { return Healthy }
 
 /// Build a `BclHealthCheckAdapter` for a probe and run its
 /// `CheckHealthAsync` to inspect the BCL-side result. The adapter is
@@ -182,24 +193,27 @@ let tests =
             Expect.contains liveness.Value.Tags "Liveness" "liveness probe tagged Liveness"
             Expect.contains readiness.Value.Tags "Readiness" "readiness probe tagged Readiness"
 
-        testCase "Aggregator rejects constructor-injected IHealthCheck registrations"
+        testCase "Aggregator resolves a type-registered IHealthCheck from the built provider (Phase 1064)"
         <| fun _ ->
-            // Companions must register via AddSingleton<IHealthCheck>(instance);
-            // the type-based form (AddSingleton<IHealthCheck, T>()) means the
-            // aggregator can't inspect Name/Kind/Timeout at compose time,
-            // and falling back to BuildServiceProvider would create
-            // divergent singleton instances.
+            // Until Phase 1064 the type-based form (AddSingleton<IHealthCheck, T>())
+            // was refused at compose: Name/Kind/Timeout cannot be read without a
+            // provider, and building a separate one would create divergent
+            // singletons. Resolving from the BUILT provider has neither problem,
+            // so it takes the same deferred path as a factory registration.
             let services = ServiceCollection()
+            services.AddSingleton<IHealthCheck, TypedProbe>() |> ignore
+            ToolUp.Platform.HealthCheckAggregator.register services
 
-            services.AddSingleton<IHealthCheck, ToolUp.Platform.HealthCheck.AuthProviderHealthCheck>()
-            |> ignore
-            // AuthProviderHealthCheck needs an IAuthProvider, but that
-            // doesn't matter here — register call should fail BEFORE
-            // any resolution attempt is made.
+            let sp = services.BuildServiceProvider()
 
-            Expect.throws
-                (fun () -> ToolUp.Platform.HealthCheckAggregator.register services)
-                "constructor-injected IHealthCheck registrations are rejected at compose time"
+            let registration =
+                sp
+                    .GetRequiredService<Microsoft.Extensions.Options.IOptions<HealthCheckServiceOptions>>()
+                    .Value.Registrations
+                |> Seq.tryFind (fun r -> r.Name = TypedProbe.ProbeName)
+
+            Expect.isSome registration "the type-registered probe reaches the BCL pipeline"
+            Expect.contains registration.Value.Tags "Liveness" "tagged by its Kind"
 
         testCase "Aggregator returns success when no probes are registered (GP 13 — lightweight default)"
         <| fun _ ->
@@ -231,4 +245,103 @@ let tests =
             Expect.equal snapshot.Length 2 "both probes captured in snapshot"
             Expect.contains snapshot ("a", Readiness, TimeSpan.FromSeconds 5.0) "probe a captured"
             Expect.contains snapshot ("b", Liveness, TimeSpan.FromMilliseconds 500.0) "probe b captured"
+
+        // Phase 1064 — defect 4. `registerBackupCoordinator` registers the
+        // `backup_restore_drill` probe by FACTORY, and the aggregator used to
+        // `failwithf` on it at compose, so a `BackupEnabled` deployment could
+        // not boot. A factory probe is now resolved from the BUILT provider —
+        // the runtime container's own singleton, so there is no divergent
+        // instance — beside the instance probes, which register exactly as
+        // before.
+        testCase "Aggregator resolves a factory-registered IHealthCheck from the built provider (Phase 1064)"
+        <| fun _ ->
+            let constructed = ref 0
+
+            let services = ServiceCollection()
+
+            services.AddSingleton<IHealthCheck>(
+                Func<IServiceProvider, IHealthCheck>(fun _ ->
+                    Interlocked.Increment(&constructed.contents) |> ignore
+
+                    mkProbe "factory_probe" Readiness (TimeSpan.FromSeconds 1.0) (fun () -> async { return Healthy }))
+            )
+            |> ignore
+
+            services.AddSingleton<IHealthCheck>(
+                mkProbe "instance_probe" Liveness (TimeSpan.FromSeconds 1.0) (fun () -> async { return Healthy })
+            )
+            |> ignore
+
+            ToolUp.Platform.HealthCheckAggregator.register services
+
+            let sp = services.BuildServiceProvider()
+
+            let registrations =
+                sp
+                    .GetRequiredService<Microsoft.Extensions.Options.IOptions<HealthCheckServiceOptions>>()
+                    .Value.Registrations
+                |> List.ofSeq
+
+            let factory = registrations |> List.tryFind (fun r -> r.Name = "factory_probe")
+            let instance = registrations |> List.tryFind (fun r -> r.Name = "instance_probe")
+
+            Expect.isSome factory "the factory probe reaches the BCL pipeline"
+            Expect.isSome instance "the instance probe still reaches it"
+            Expect.contains factory.Value.Tags "Readiness" "the factory probe is tagged by its Kind"
+
+            let bcl = factory.Value.Factory.Invoke sp
+
+            let result =
+                bcl.CheckHealthAsync(HealthCheckContext(Registration = factory.Value), CancellationToken.None)
+                |> Async.AwaitTask
+                |> Async.RunSynchronously
+
+            Expect.equal result.Status HealthStatus.Healthy "the factory probe runs through the adapter"
+
+            let containerCopy =
+                sp.GetServices<IHealthCheck>() |> Seq.find (fun c -> c.Name = "factory_probe")
+
+            Expect.equal containerCopy.Name "factory_probe" "the container resolves the same probe"
+            Expect.equal constructed.Value 1 "constructed once: the runtime container's singleton, not a second copy"
+
+        testCase "A factory probe that throws fails host start, not the first /ready poll (Phase 1064)"
+        <| fun _ ->
+            // The deferred probes resolve when the BCL health-check service
+            // is constructed, and `AddHealthChecks` registers the publisher
+            // hosted service that constructs it — so resolving the hosted
+            // services, which host start does, is where a bad factory fails.
+            let hostedServicesOf (factory: IServiceProvider -> IHealthCheck) =
+                let services = ServiceCollection()
+                services.AddLogging() |> ignore
+
+                services.AddSingleton<IHealthCheck>(Func<IServiceProvider, IHealthCheck>(factory))
+                |> ignore
+
+                ToolUp.Platform.HealthCheckAggregator.register services
+                let sp = services.BuildServiceProvider()
+
+                sp.GetServices<Microsoft.Extensions.Hosting.IHostedService>()
+                |> List.ofSeq
+                |> ignore
+
+            hostedServicesOf (fun _ ->
+                mkProbe "fine_probe" Readiness (TimeSpan.FromSeconds 1.0) (fun () -> async { return Healthy }))
+
+            Expect.throws
+                (fun () -> hostedServicesOf (fun _ -> failwith "Phase 1064 fake: the probe's dependency is missing"))
+                "a throwing factory surfaces when the host starts its services"
+
+        testCase "Snapshot refuses a factory-registered probe rather than silently skipping it (Phase 1064)"
+        <| fun _ ->
+            let services = ServiceCollection()
+
+            services.AddSingleton<IHealthCheck>(
+                Func<IServiceProvider, IHealthCheck>(fun _ ->
+                    mkProbe "factory_probe" Readiness (TimeSpan.FromSeconds 1.0) (fun () -> async { return Healthy }))
+            )
+            |> ignore
+
+            Expect.throws
+                (fun () -> ToolUp.Platform.HealthCheckAggregator.snapshot services |> ignore)
+                "a compose-time snapshot cannot name a factory probe, and says so instead of omitting it"
     ]

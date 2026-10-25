@@ -281,6 +281,62 @@ let private serviceTests =
         }
     ]
 
+// ─── Phase 1064 — a delivery-log write failure is visible ────────────
+
+let private delivery: WebhookDelivery = {
+    DeliveryId = Guid.NewGuid()
+    SubscriptionId = Guid.NewGuid()
+    EventId = None
+    Attempt = 1
+    AttemptedAt = DateTime(2026, 10, 25, 12, 0, 0, DateTimeKind.Utc)
+    Outcome = WebhookDeliveryOutcome.Success(200, 12L)
+}
+
+let private logAnswering (answer: Result<unit, string>) =
+    { new IWebhookDeliveryLog with
+        member _.Record(_, _) = async.Return answer
+        member _.ListRecent(_, _, _) = async.Return []
+        member _.Prune(_, _) = async.Return()
+    }
+
+let private deliveryLogTests =
+    testList "the delivery-log write (Phase 1064)" [
+        testCaseAsync "an Error from the delivery log is logged at Warning with the best-effort marker and counted"
+        <| async {
+            let log = CountingLogger()
+            let failures = ref 0L
+
+            do!
+                WebhookDispatcher.recordDeliveryBestEffort
+                    log
+                    (logAnswering (Error "the log store is down"))
+                    failures
+                    "scope-1064"
+                    delivery
+
+            Expect.equal failures.Value 1L "the failure is counted"
+            Expect.equal (log.Count("warn", "event=delivery_log_write_failed")) 1 "and logged at Warning, once"
+            Expect.equal (log.Count("warn", "best-effort-write")) 1 "carrying the best-effort-write marker"
+            Expect.equal (log.Count("warn", "the log store is down")) 1 "with the store's reason"
+        }
+
+        testCaseAsync "a successful delivery-log write logs nothing and counts nothing (GP 11)"
+        <| async {
+            let log = CountingLogger()
+            let failures = ref 0L
+
+            do! WebhookDispatcher.recordDeliveryBestEffort log (logAnswering (Ok())) failures "scope-1064" delivery
+
+            Expect.equal failures.Value 0L "nothing counted"
+            Expect.equal log.Total 0 "nothing logged"
+        }
+
+        test "a fresh dispatcher has counted no delivery-log failures" {
+            use svc = buildService (CountingLogger())
+            Expect.equal svc.DeliveryLogWriteFailures 0L "the counter starts at zero"
+        }
+    ]
+
 [<Tests>]
 let tests =
-    testList "Phase 968 — (a) the webhook dispatcher's dequeue loop" [ loopTests; serviceTests ]
+    testList "Phase 968 — (a) the webhook dispatcher's dequeue loop" [ loopTests; serviceTests; deliveryLogTests ]

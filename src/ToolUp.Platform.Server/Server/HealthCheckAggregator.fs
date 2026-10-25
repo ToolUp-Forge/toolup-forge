@@ -5,6 +5,7 @@ open System.Threading
 open System.Threading.Tasks
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Diagnostics.HealthChecks
+open Microsoft.Extensions.Options
 open ToolUp.Platform.HealthChecks
 
 // ─── Phase 9k aggregator + adapter ───────────────────────────────────
@@ -22,14 +23,14 @@ open ToolUp.Platform.HealthChecks
 // later registrations are silently ignored — they exist as DI services
 // but never feed into BCL's `MapHealthChecks` aggregation.
 //
-// **Companion contract**: registrations must use
-// `AddSingleton<IHealthCheck>(instance)`. The aggregator reads
-// `desc.ImplementationInstance` to inspect `Name` / `Kind` / `Timeout`
-// at registration time. Constructor-injected impls
-// (`AddSingleton<IHealthCheck, T>()`) cannot be inspected without
-// building a separate `IServiceProvider`, which would create different
-// singleton instances than the runtime container — failing loudly is
-// safer than silently registering a divergent probe.
+// **Companion contract**: register a probe by instance
+// (`AddSingleton<IHealthCheck>(instance)`), by factory, or by type. An
+// instance is inspected (`Name` / `Kind` / `Timeout`) and registered at
+// compose; a factory or type registration has no name until a provider
+// builds it, so it is resolved from the BUILT provider — the runtime
+// container's own singleton, never a second copy — when the health-check
+// options are materialised (Phase 1064; until then the aggregator refused
+// both, which made `Backup = BackupEnabled` unbootable).
 
 /// Truncate a free-text message to a safe length so the unauthenticated
 /// `/ready` JSON cannot leak large stack traces or internal detail.
@@ -74,56 +75,94 @@ type internal BclHealthCheckAdapter(check: IHealthCheck) =
                 return HealthCheckResult.Unhealthy msg
         }
 
-/// Walk `services` for every `AddSingleton<IHealthCheck>(instance)`
-/// registration and feed each into BCL's `AddHealthChecks` builder.
-/// Idempotent only by accident — call once, near end of compose, after
+/// The BCL registration for one ToolUp probe: the adapter, `Unhealthy`
+/// as the failure status, and the probe's `Kind` as its one tag.
+let private registrationFor (check: IHealthCheck) =
+    HealthCheckRegistration(
+        check.Name,
+        (BclHealthCheckAdapter(check) :> Microsoft.Extensions.Diagnostics.HealthChecks.IHealthCheck),
+        Nullable HealthStatus.Unhealthy,
+        [ HealthKind.toString check.Kind ]
+    )
+
+/// The `IHealthCheck` descriptors `register` feeds into the BCL pipeline,
+/// in registration order. Keyed descriptors are skipped: they are not part
+/// of `GetServices<IHealthCheck>()`, so counting one would misalign the
+/// positions `register` defers.
+let private healthCheckDescriptors (services: IServiceCollection) =
+    services
+    |> Seq.filter (fun d -> d.ServiceType = typeof<IHealthCheck> && not d.IsKeyedService)
+    |> List.ofSeq
+
+/// Walk `services` for every `IHealthCheck` registration and feed each into
+/// BCL's `AddHealthChecks` builder. Call once, near end of compose, after
 /// all companions have contributed.
+///
+/// An INSTANCE registration (`AddSingleton<IHealthCheck>(instance)`) is
+/// registered here, at compose, exactly as it always was. A FACTORY or
+/// TYPE registration (Phase 1064 — `registerBackupCoordinator`'s restore
+/// drill is the platform's own) cannot be inspected without a provider, so
+/// an options configurator registered here resolves it from the BUILT
+/// provider: the runtime container's own singleton, never a second copy.
+/// That runs at host start, not at the first `/ready` poll — the BCL
+/// health-check service validates its registrations on construction, and
+/// `AddHealthChecks` registers the publisher hosted service that constructs
+/// it — so a factory that throws fails the boot. A collection with no such
+/// registration adds nothing (GP 11).
 let register (services: IServiceCollection) : unit =
     let builder = services.AddHealthChecks()
-
-    let descriptors =
-        services
-        |> Seq.filter (fun d -> d.ServiceType = typeof<IHealthCheck>)
-        |> List.ofSeq
+    let descriptors = healthCheckDescriptors services
 
     for desc in descriptors do
-        let instance =
-            match desc.ImplementationInstance with
-            | :? IHealthCheck as c -> c
-            | _ ->
-                let implTypeName =
-                    if isNull desc.ImplementationType then
-                        "<unknown>"
-                    else
-                        desc.ImplementationType.FullName
+        match desc.ImplementationInstance with
+        | :? IHealthCheck as instance -> builder.Add(registrationFor instance) |> ignore
+        | _ -> ()
 
-                failwithf
-                    "IHealthCheck must be registered as an instance via services.AddSingleton<IHealthCheck>(instance). Descriptor for implementation type %s uses a factory or constructor-injected pattern that the aggregator cannot introspect at compose time. See TECHNICAL_GUIDE.md 'Companion authoring an IHealthCheck'."
-                    implTypeName
-
-        let registration =
-            HealthCheckRegistration(
-                instance.Name,
-                (BclHealthCheckAdapter(instance) :> Microsoft.Extensions.Diagnostics.HealthChecks.IHealthCheck),
-                Nullable HealthStatus.Unhealthy,
-                [ HealthKind.toString instance.Kind ]
-            )
-
-        builder.Add(registration) |> ignore
-
-/// Snapshot every registered `IHealthCheck` for the dev diagnostics
-/// endpoint. Captured at compose time alongside the BCL registration so
-/// `/dev/inspect` can run the same probes without going through BCL's
-/// aggregator. Returns `(name, kind, timeout)` triples — the dev
-/// handler invokes `IServiceProvider.GetServices<IHealthCheck>()` at
-/// request time to actually run them.
-let snapshot (services: IServiceCollection) : (string * HealthKind * TimeSpan) list =
-    services
-    |> Seq.choose (fun d ->
-        if d.ServiceType = typeof<IHealthCheck> then
+    // The positions, among the probes the built provider returns from
+    // `GetServices<IHealthCheck>()`, of every factory / type registration.
+    let deferred =
+        descriptors
+        |> List.indexed
+        |> List.choose (fun (i, d) ->
             match d.ImplementationInstance with
-            | :? IHealthCheck as c -> Some(c.Name, c.Kind, c.Timeout)
-            | _ -> None
-        else
-            None)
-    |> List.ofSeq
+            | :? IHealthCheck -> None
+            | _ -> Some i)
+
+    if not deferred.IsEmpty then
+        // `IOptions<>` itself: with no instance probe, nothing above has
+        // configured the options, so nothing has registered it.
+        services.AddOptions() |> ignore
+
+        services.AddSingleton<IConfigureOptions<HealthCheckServiceOptions>>(fun (sp: IServiceProvider) ->
+            let resolved = sp.GetServices<IHealthCheck>() |> Array.ofSeq
+
+            ConfigureOptions<HealthCheckServiceOptions>(fun options ->
+                for i in deferred do
+                    options.Registrations.Add(registrationFor resolved[i]))
+            :> IConfigureOptions<HealthCheckServiceOptions>)
+        |> ignore
+
+/// Snapshot every registered `IHealthCheck` as `(name, kind, timeout)`
+/// triples, read from the instance registrations at compose time.
+///
+/// A factory or type-registered probe has no name until a provider builds
+/// it, so a compose-time snapshot cannot describe one; it raises naming the
+/// implementation rather than silently returning a partial list (Phase 1064).
+/// Resolve `IServiceProvider.GetServices<IHealthCheck>()` instead when the
+/// collection may hold one.
+let snapshot (services: IServiceCollection) : (string * HealthKind * TimeSpan) list =
+    healthCheckDescriptors services
+    |> List.map (fun d ->
+        match d.ImplementationInstance with
+        | :? IHealthCheck as c -> c.Name, c.Kind, c.Timeout
+        | _ ->
+            let implementation =
+                if not (isNull d.ImplementationType) then
+                    d.ImplementationType.FullName
+                elif not (isNull d.ImplementationFactory) then
+                    "<factory>"
+                else
+                    "<unknown>"
+
+            invalidOp
+                $"HealthCheckAggregator.snapshot: the IHealthCheck registered as %s{implementation} has no name until a provider builds it, so a compose-time snapshot cannot describe it. Resolve IServiceProvider.GetServices<IHealthCheck>() instead.")

@@ -2,9 +2,13 @@ module ToolUp.Platform.Tests.InProcess.SsePerConnectionWriterTests
 
 open System
 open System.Diagnostics
+open System.IO
 open System.Text
 open System.Threading
+open System.Threading.Tasks
 open Expecto
+open Microsoft.AspNetCore.Http
+open Microsoft.AspNetCore.Http.Features
 open ToolUp.Platform
 
 // ─── SSEConnectionManager - per-connection writers (Phase 6k) ────────
@@ -74,7 +78,84 @@ type private WedgedSink(disconnect: CancellationToken) =
             return ()
         }
 
+/// Phase 870 — a response body that behaves like Kestrel's on the one point this pin
+/// needs: a write or flush issued while another is still in flight
+/// faults, as a faulted `Task` (the way an async method faults), rather
+/// than being serialised for the caller. `MemoryStream` completes every
+/// write synchronously, so it can never show the race.
+type internal SerialOnlyBody() =
+    inherit Stream()
+
+    let buffer = new MemoryStream()
+    let busy = ref 0
+
+    static member val ConcurrentWriteMessage = "Phase 870 fake: concurrent writes are not supported."
+
+    member _.Text = lock buffer (fun () -> Text.Encoding.UTF8.GetString(buffer.ToArray()))
+
+    member private _.Guarded(append: unit -> unit) : Task = task {
+        if Interlocked.CompareExchange(&busy.contents, 1, 0) <> 0 then
+            raise (InvalidOperationException SerialOnlyBody.ConcurrentWriteMessage)
+
+        try
+            do! Task.Yield()
+            lock buffer append
+        finally
+            Volatile.Write(&busy.contents, 0)
+    }
+
+    override _.CanRead = false
+    override _.CanSeek = false
+    override _.CanWrite = true
+    override _.Length = raise (NotSupportedException())
+
+    override _.Position
+        with get () = raise (NotSupportedException())
+        and set _ = raise (NotSupportedException())
+
+    override _.Flush() = ()
+    override _.Read(_: byte[], _: int, _: int) : int = raise (NotSupportedException())
+    override _.Seek(_: int64, _: SeekOrigin) : int64 = raise (NotSupportedException())
+    override _.SetLength(_: int64) = raise (NotSupportedException())
+
+    override _.Write(bytes: byte[], offset: int, count: int) =
+        lock buffer (fun () -> buffer.Write(bytes, offset, count))
+
+    override this.WriteAsync(bytes: byte[], offset: int, count: int, _: CancellationToken) : Task =
+        let copy = Array.sub bytes offset count
+        this.Guarded(fun () -> buffer.Write(copy, 0, copy.Length))
+
+    override this.WriteAsync(bytes: ReadOnlyMemory<byte>, _: CancellationToken) : ValueTask =
+        let copy = bytes.ToArray()
+        ValueTask(this.Guarded(fun () -> buffer.Write(copy, 0, copy.Length)))
+
+    override this.FlushAsync(_: CancellationToken) : Task = this.Guarded ignore
+
 let private payload (s: string) = Encoding.UTF8.GetBytes s
+
+// ─── Phase 1064 — the notification stream has one writer ─────────────
+//
+// `/api/notifications` used to write each envelope straight to the
+// response body from the channel callback (`WriteAsync |> ignore`, then
+// `FlushAsync |> ignore`, inside `try … with _ -> ()`), beside a 15 s
+// keepalive loop of its own and the manager's 30 s keepalive through the
+// `ConnectionWriter` `manager.Add` had wrapped the sink in: three writers
+// on one response, two of them unobserved. Phase 870 made the live-session
+// stream single-writer; this pins the notification stream to the same bar
+// over the same faulting body.
+
+let private waitUntilTrue (timeoutMs: int) (condition: unit -> bool) =
+    let deadline = DateTime.UtcNow.AddMilliseconds(float timeoutMs)
+
+    while not (condition ()) && DateTime.UtcNow < deadline do
+        Thread.Sleep 5
+
+    condition ()
+
+let private envelopeSeqs (text: string) =
+    Text.RegularExpressions.Regex.Matches(text, "n=(\d+);")
+    |> Seq.map (fun m -> int m.Groups[1].Value)
+    |> Seq.toList
 
 let tests =
     testList "SsePerConnectionWriter" [
@@ -218,4 +299,81 @@ let tests =
             Thread.Sleep 100
 
             Expect.equal sink.Received [ "data: before\n\n" ] "nothing is written to a removed connection"
+
+        testCase
+            "a burst of envelopes to one /api/notifications connection arrives complete and in order, with no unobserved write fault (Phase 1064)"
+        <| fun () ->
+            let frames = 200
+            let bursts = 10
+            let unobserved = ref 0
+
+            let onUnobserved =
+                EventHandler<UnobservedTaskExceptionEventArgs>(fun _ args ->
+                    let ours =
+                        args.Exception.Flatten().InnerExceptions
+                        |> Seq.exists (fun e -> e.Message = SerialOnlyBody.ConcurrentWriteMessage)
+
+                    if ours then
+                        Interlocked.Increment(&unobserved.contents) |> ignore)
+
+            TaskScheduler.UnobservedTaskException.AddHandler onUnobserved
+
+            let failures =
+                try
+                    [
+                        for burst in 1..bursts do
+                            use manager = new SSEConnectionManager()
+
+                            let channel =
+                                NotificationChannel.InMemoryNotificationChannel(None) :> INotificationChannel
+
+                            let handler =
+                                NotificationHandler.notificationHandler channel manager QueryParamFallback
+
+                            use cts = new CancellationTokenSource()
+                            let ctx = DefaultHttpContext()
+                            ctx.Request.Method <- "GET"
+                            ctx.Request.Path <- PathString "/api/notifications"
+
+                            ctx.Features.Set<IHttpRequestLifetimeFeature>(
+                                HttpRequestLifetimeFeature(RequestAborted = cts.Token)
+                            )
+
+                            ctx.Items["ToolUp.UserId"] <- "u-1064"
+                            let body = new SerialOnlyBody()
+                            ctx.Response.Body <- body
+                            let serving = handler (fun c -> Task.FromResult(Some c)) ctx
+
+                            if not (waitUntilTrue 5000 (fun () -> body.Text.Contains ": ready")) then
+                                failtestf "burst %d: the stream never opened" burst
+
+                            for i in 0 .. frames - 1 do
+                                channel.Publish(
+                                    "u-1064",
+                                    Notification.SystemMessage(SystemMessageLevel.Info, $"n=%d{i};")
+                                )
+                                |> Async.RunSynchronously
+
+                            waitUntilTrue 2000 (fun () -> (envelopeSeqs body.Text).Length >= frames)
+                            |> ignore
+
+                            cts.Cancel()
+                            serving.GetAwaiter().GetResult() |> ignore
+
+                            let seen = envelopeSeqs body.Text
+
+                            if seen <> [ 0 .. frames - 1 ] then
+                                yield burst, seen.Length
+                    ]
+                finally
+                    GC.Collect()
+                    GC.WaitForPendingFinalizers()
+                    GC.Collect()
+                    TaskScheduler.UnobservedTaskException.RemoveHandler onUnobserved
+
+            Expect.isEmpty
+                failures
+                $"every burst delivers all %d{frames} envelopes in order (burst, envelopes seen) — %d{failures.Length} of %d{bursts} bursts failed, %d{unobserved.Value} unobserved write faults"
+
+            Expect.equal unobserved.Value 0 "no envelope write faults inside an unobserved task"
     ]
