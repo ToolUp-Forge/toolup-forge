@@ -1648,10 +1648,21 @@ ToolUp.Platform.ComposeAudit.buildAuditReplicatorSubsystem(Microsoft.FSharp.Coll
 ToolUp.Platform.ComposeAudit.effectiveInnerEventStore(ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.AuditReplicator+AuditReplicator, ToolUp.Platform.IEventStore]]) : ToolUp.Platform.IEventStore
 ToolUp.Platform.ComposeAudit.registerAuditReplicatorHosting(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[System.Tuple`2[ToolUp.Platform.AuditReplicator+AuditReplicator, ToolUp.Platform.IEventStore]], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.IAuditSink]) : System.Void
 ToolUp.Platform.ComposeAuth (class)
+ToolUp.Platform.ComposeAuth.refuseAtPreflight(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ILogger, System.String, System.String, System.Exception) : System.Void
 ToolUp.Platform.ComposeAuth.registerPlatformAdminDevDiagnostics(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.IPlatformAdminStore, ToolUp.Platform.IPlatformRuntimeConfigStore) : System.Void
 ToolUp.Platform.ComposeAuth.registerPlatformAdminStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger) : ToolUp.Platform.IPlatformAdminStore
 ToolUp.Platform.ComposeAuth.registerPlatformRuntimeConfig(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.ILogger) : ToolUp.Platform.IPlatformRuntimeConfigStore
 ToolUp.Platform.ComposeAuth.resolveAuthProvider(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Auth+IAuthProvider]) : ToolUp.Platform.Auth+IAuthProvider
+ToolUp.Platform.ComposeAuth+BootstrapFaultValidator (class)
+ToolUp.Platform.ComposeAuth+BootstrapFaultValidator..ctor(System.Exception)
+ToolUp.Platform.ComposeAuth+BootstrapFaultValidator.Fault : System.Exception { get }
+ToolUp.Platform.ComposeAuth+BootstrapRefused (class)
+ToolUp.Platform.ComposeAuth+BootstrapRefused..ctor()
+ToolUp.Platform.ComposeAuth+BootstrapRefused..ctor(System.String, System.String, System.Exception)
+ToolUp.Platform.ComposeAuth+BootstrapRefused.Message : System.String { get }
+ToolUp.Platform.ComposeAuth+BootstrapRefused.cause : System.Exception { get }
+ToolUp.Platform.ComposeAuth+BootstrapRefused.remedy : System.String { get }
+ToolUp.Platform.ComposeAuth+BootstrapRefused.store : System.String { get }
 ToolUp.Platform.ComposeBootstrap (class)
 ToolUp.Platform.ComposeBootstrap.applyListenPlan(Microsoft.AspNetCore.Builder.WebApplicationBuilder, ToolUp.Platform.ServerBinding+ListenPlan) : System.Void
 ToolUp.Platform.ComposeBootstrap.buildAndRunHost(ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Builder.WebApplicationBuilder], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.Extensions.Hosting.HostApplicationBuilder], ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IAuditLog, ToolUp.Platform.ILogger, ToolUp.Platform.Metrics.IMetricsSink, ToolUp.Platform.ComposeExtensions, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]], Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]]) : ToolUp.Platform.IServerHost
@@ -1787,9 +1798,11 @@ ToolUp.Platform.ComposeStores.registerTelemetrySink(Microsoft.Extensions.Depende
 ToolUp.Platform.ComposeStores.registerTimeSeriesStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeStores.registerUserSchemaStore(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.ComposeTeamRuntime (class)
+ToolUp.Platform.ComposeTeamRuntime.bootstrapTeam(Microsoft.Extensions.DependencyInjection.IServiceCollection, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamManagement+TeamStore], ToolUp.Platform.ILogger, ToolUp.Platform.IAuditLog) : System.Void
 ToolUp.Platform.ComposeTeamRuntime.registerPostBootstrapValidators(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Auth+IAuthProvider], ToolUp.Platform.IPlatformAdminStore, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, ToolUp.Platform.SurfaceRequirement]], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.Tuple`2[System.String, System.String], ToolUp.Platform.SurfaceRequirement]], System.Int32) : System.Void
 ToolUp.Platform.ComposeTeamRuntime.registerTeamPermissionStores(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig, ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger, ToolUp.Platform.IAuditLog, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IPendingInviteStore]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamManagement+TeamStore]
 ToolUp.Platform.ComposeTeamRuntime.runBootstrapTeam(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamManagement+TeamStore], ToolUp.Platform.ILogger, ToolUp.Platform.IAuditLog) : System.Void
+ToolUp.Platform.ComposeTeamRuntime.runBootstrapTeam(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.TeamManagement+TeamStore], ToolUp.Platform.ILogger, ToolUp.Platform.IAuditLog) : System.Void  (obsolete)
 ToolUp.Platform.ComposeTenantLifecycle (class)
 ToolUp.Platform.ComposeTenantLifecycle.registerTenantLifecycle(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ServerConfig) : System.Void
 ToolUp.Platform.CompositionBinding (class)
@@ -2051,6 +2064,9 @@ ToolUp.Platform.CompositionManifestModule.allComponents(ToolUp.Platform.Composit
 ToolUp.Platform.CompositionManifestModule.build(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ComponentEntry], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConfigKnob]) : ToolUp.Platform.CompositionManifest
 ToolUp.Platform.CompositionManifestModule.canonicalMethods(ToolUp.Platform.CompositionManifest) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MetricCanonicalMethod]
 ToolUp.Platform.CompositionManifestModule.canonicalMethodsOf(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.Grounding.MetricRegistration]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.MetricCanonicalMethod]
+ToolUp.Platform.CompositionManifestModule.caseKnob`1(System.String, T) : ToolUp.Platform.ConfigKnob
+ToolUp.Platform.CompositionManifestModule.caseNameKnobs : Microsoft.FSharp.Collections.FSharpSet`1[System.String] { get }
+ToolUp.Platform.CompositionManifestModule.caseName`1(T) : System.String
 ToolUp.Platform.CompositionManifestModule.companionImplEntry(System.String, System.String) : ToolUp.Platform.ComponentEntry
 ToolUp.Platform.CompositionManifestModule.companionSlotEntry(System.String) : ToolUp.Platform.ComponentEntry
 ToolUp.Platform.CompositionManifestModule.dataTypeEntry(System.String) : ToolUp.Platform.ComponentEntry
@@ -4266,6 +4282,11 @@ ToolUp.Platform.ErratumImpact (class)
 ToolUp.Platform.ErratumImpact..ctor(ToolUp.Platform.RuleErratum, ToolUp.Platform.StampedRuleVersion)
 ToolUp.Platform.ErratumImpact.ImpactErratum : ToolUp.Platform.RuleErratum { get }
 ToolUp.Platform.ErratumImpact.ImpactStamped : ToolUp.Platform.StampedRuleVersion { get }
+ToolUp.Platform.EscapeHatchTokenValidator (class)
+ToolUp.Platform.EscapeHatchTokenValidator.Name : System.String (literal)
+ToolUp.Platform.EscapeHatchTokenValidator.escapeHatchKeys : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.EscapeHatchTokenValidator.evaluate(Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String]]) : ToolUp.Platform.ConfigValidation+ValidationResult
+ToolUp.Platform.EscapeHatchTokenValidator.validator() : ToolUp.Platform.ConfigValidation+IConfigValidator
 ToolUp.Platform.EvaluationError (class)
 ToolUp.Platform.EvaluationError.ArtifactNotFound : ToolUp.Platform.EvaluationError { get }
 ToolUp.Platform.EvaluationError.IsArtifactNotFound : System.Boolean { get }
@@ -5610,6 +5631,10 @@ ToolUp.Platform.HostSlotState.Tag : System.Int32 { get }
 ToolUp.Platform.HostSlotState+Tags (class)
 ToolUp.Platform.HostSlotState+Tags.FilledSlot : System.Int32 (literal)
 ToolUp.Platform.HostSlotState+Tags.OpenSlot : System.Int32 (literal)
+ToolUp.Platform.HostedServiceExemption (class)
+ToolUp.Platform.HostedServiceExemption..ctor(System.String, System.String)
+ToolUp.Platform.HostedServiceExemption.Reason : System.String { get }
+ToolUp.Platform.HostedServiceExemption.Service : System.String { get }
 ToolUp.Platform.HostedTreeUsageCounts (class)
 ToolUp.Platform.HostedTreeUsageCounts..ctor(System.Int32, System.Int32, System.Int32)
 ToolUp.Platform.HostedTreeUsageCounts.ActionDispatches : System.Int32 { get }
@@ -8926,6 +8951,11 @@ ToolUp.Platform.ProbeResponse.ProbeHeaders : Microsoft.FSharp.Collections.FSharp
 ToolUp.Platform.ProbeResponse.ProbeScheme : System.String { get }
 ToolUp.Platform.ProbeResponse.ProbeStatus : System.Int32 { get }
 ToolUp.Platform.ProcessProfileGate (class)
+ToolUp.Platform.ProcessProfileGate.SchedulerRegistrationReason : System.String (literal)
+ToolUp.Platform.ProcessProfileGate.addDeferredJobs(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.DeferredScheduledJobDeclaration], Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.Extensions.DependencyInjection.IServiceCollection
+ToolUp.Platform.ProcessProfileGate.addExempt(System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.IServiceProvider, Microsoft.Extensions.Hosting.IHostedService], Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.Extensions.DependencyInjection.IServiceCollection
+ToolUp.Platform.ProcessProfileGate.atStart(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Microsoft.Extensions.Hosting.IHostedService
+ToolUp.Platform.ProcessProfileGate.exempt(System.String, System.String, Microsoft.Extensions.DependencyInjection.IServiceCollection) : Microsoft.Extensions.DependencyInjection.IServiceCollection
 ToolUp.Platform.ProcessProfileGate.shouldRegisterBackgroundService(ToolUp.Platform.ServerConfig, ToolUp.Platform.BackgroundSubsystem) : System.Boolean
 ToolUp.Platform.ProcessProfileGate.shouldRegisterHttpPipeline(ToolUp.Platform.ServerConfig) : System.Boolean
 ToolUp.Platform.ProcessedDataCodec (class)

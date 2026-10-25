@@ -17,9 +17,10 @@ applies. Where a release ships a migration note under `docs/migrations/`, it is 
 
 Migration notes:
 
+- [1051-redesign-a-defects-composition-and-config](docs/migrations/1051-redesign-a-defects-composition-and-config.md)
 - [1082-redesign-g-defects-rag-and-knowledge-base](docs/migrations/1082-redesign-g-defects-rag-and-knowledge-base.md)
 
-_Surface since `v0.33.0`: **additive** — 3 packages moved; 54 members added, 0 members changed, 0 members removed._
+_Surface since `v0.33.0`: **additive** — 3 packages moved; 84 members added, 0 members changed, 0 members removed._
 
 ### Added
 
@@ -47,7 +48,7 @@ _Surface since `v0.33.0`: **additive** — 3 packages moved; 54 members added, 0
   - … and 10 more — `git diff v0.33.0 -- api-baselines/ToolUp.Facts.Server.approved.txt`
 - `ToolUp.KnowledgeBase.Server` — 1 member:
   - `KnowledgeBase.ServerIngestionObserver.publishTerminalStatus(ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger, System.String, System.String, System.String, SharedTypes+IngestionStatus) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]`
-- `ToolUp.Platform.Server` — 23 members:
+- `ToolUp.Platform.Server` — 53 members:
   - `ToolUp.Platform.BoundedMemoIndex`2 (class)`
   - `ToolUp.Platform.BoundedMemoIndex`2..ctor(System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit])`
   - `ToolUp.Platform.BoundedMemoIndex`2.Count : System.Int32 { get }`
@@ -57,18 +58,18 @@ _Surface since `v0.33.0`: **additive** — 3 packages moved; 54 members added, 0
   - `ToolUp.Platform.BoundedMemoIndex`2.Set(K, V) : System.Void`
   - `ToolUp.Platform.BoundedMemoIndex`2.TryGet(K) : Microsoft.FSharp.Core.FSharpOption`1[V]`
   - `ToolUp.Platform.BoundedMemoIndex`2.TryRemove(K) : Microsoft.FSharp.Core.FSharpOption`1[V]`
-  - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality (class)`
-  - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality+Tags (class)`
-  - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality+Tags.InProcess : System.Int32 (literal)`
-  - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality+Tags.Shared : System.Int32 (literal)`
-  - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality.InProcess : ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality { get }`
-  - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality.IsInProcess : System.Boolean { get }`
-  - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality.IsShared : System.Boolean { get }`
-  - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality.Shared : ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality { get }`
-  - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality.Tag : System.Int32 { get }`
-  - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocalityModule (class)`
-  - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocalityModule.declared(System.Object) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality]`
-  - … and 3 more — `git diff v0.33.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
+  - `ToolUp.Platform.ComposeAuth+BootstrapFaultValidator (class)`
+  - `ToolUp.Platform.ComposeAuth+BootstrapFaultValidator..ctor(System.Exception)`
+  - `ToolUp.Platform.ComposeAuth+BootstrapFaultValidator.Fault : System.Exception { get }`
+  - `ToolUp.Platform.ComposeAuth+BootstrapRefused (class)`
+  - `ToolUp.Platform.ComposeAuth+BootstrapRefused..ctor()`
+  - `ToolUp.Platform.ComposeAuth+BootstrapRefused..ctor(System.String, System.String, System.Exception)`
+  - `ToolUp.Platform.ComposeAuth+BootstrapRefused.Message : System.String { get }`
+  - `ToolUp.Platform.ComposeAuth+BootstrapRefused.cause : System.Exception { get }`
+  - `ToolUp.Platform.ComposeAuth+BootstrapRefused.remedy : System.String { get }`
+  - `ToolUp.Platform.ComposeAuth+BootstrapRefused.store : System.String { get }`
+  - `ToolUp.Platform.ComposeAuth.refuseAtPreflight(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ILogger, System.String, System.String, System.Exception) : System.Void`
+  - … and 33 more — `git diff v0.33.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
 
 ## [0.33.0] — 2026-10-24
 
