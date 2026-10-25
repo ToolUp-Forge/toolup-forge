@@ -304,6 +304,33 @@ let tests =
             Expect.equal containerCopy.Name "factory_probe" "the container resolves the same probe"
             Expect.equal constructed.Value 1 "constructed once: the runtime container's singleton, not a second copy"
 
+        testCase "A factory probe that throws fails host start, not the first /ready poll (Phase 1064)"
+        <| fun _ ->
+            // The deferred probes resolve when the BCL health-check service
+            // is constructed, and `AddHealthChecks` registers the publisher
+            // hosted service that constructs it — so resolving the hosted
+            // services, which host start does, is where a bad factory fails.
+            let hostedServicesOf (factory: IServiceProvider -> IHealthCheck) =
+                let services = ServiceCollection()
+                services.AddLogging() |> ignore
+
+                services.AddSingleton<IHealthCheck>(Func<IServiceProvider, IHealthCheck>(factory))
+                |> ignore
+
+                ToolUp.Platform.HealthCheckAggregator.register services
+                let sp = services.BuildServiceProvider()
+
+                sp.GetServices<Microsoft.Extensions.Hosting.IHostedService>()
+                |> List.ofSeq
+                |> ignore
+
+            hostedServicesOf (fun _ ->
+                mkProbe "fine_probe" Readiness (TimeSpan.FromSeconds 1.0) (fun () -> async { return Healthy }))
+
+            Expect.throws
+                (fun () -> hostedServicesOf (fun _ -> failwith "Phase 1064 fake: the probe's dependency is missing"))
+                "a throwing factory surfaces when the host starts its services"
+
         testCase "Snapshot refuses a factory-registered probe rather than silently skipping it (Phase 1064)"
         <| fun _ ->
             let services = ServiceCollection()

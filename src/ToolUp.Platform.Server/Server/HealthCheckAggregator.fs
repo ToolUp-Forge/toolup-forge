@@ -5,6 +5,7 @@ open System.Threading
 open System.Threading.Tasks
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Diagnostics.HealthChecks
+open Microsoft.Extensions.Options
 open ToolUp.Platform.HealthChecks
 
 // ─── Phase 9k aggregator + adapter ───────────────────────────────────
@@ -93,11 +94,6 @@ let private healthCheckDescriptors (services: IServiceCollection) =
     |> Seq.filter (fun d -> d.ServiceType = typeof<IHealthCheck> && not d.IsKeyedService)
     |> List.ofSeq
 
-/// Phase 1064 — the positions, among the probes the built provider will
-/// return from `GetServices<IHealthCheck>()`, of every probe registered by
-/// factory or by type. Present only when there is at least one.
-type private DeferredHealthChecks = { Positions: int list }
-
 /// Walk `services` for every `IHealthCheck` registration and feed each into
 /// BCL's `AddHealthChecks` builder. Call once, near end of compose, after
 /// all companions have contributed.
@@ -106,11 +102,13 @@ type private DeferredHealthChecks = { Positions: int list }
 /// registered here, at compose, exactly as it always was. A FACTORY or
 /// TYPE registration (Phase 1064 — `registerBackupCoordinator`'s restore
 /// drill is the platform's own) cannot be inspected without a provider, so
-/// it is resolved from the BUILT provider when the health-check options are
-/// first materialised: the runtime container's own singleton, never a
-/// second copy. `resolveDeferred` materialises them at boot so a factory
-/// that throws fails startup rather than the first `/ready` poll. A
-/// collection with no such registration adds nothing (GP 11).
+/// an options configurator registered here resolves it from the BUILT
+/// provider: the runtime container's own singleton, never a second copy.
+/// That runs at host start, not at the first `/ready` poll — the BCL
+/// health-check service validates its registrations on construction, and
+/// `AddHealthChecks` registers the publisher hosted service that constructs
+/// it — so a factory that throws fails the boot. A collection with no such
+/// registration adds nothing (GP 11).
 let register (services: IServiceCollection) : unit =
     let builder = services.AddHealthChecks()
     let descriptors = healthCheckDescriptors services
@@ -120,6 +118,8 @@ let register (services: IServiceCollection) : unit =
         | :? IHealthCheck as instance -> builder.Add(registrationFor instance) |> ignore
         | _ -> ()
 
+    // The positions, among the probes the built provider returns from
+    // `GetServices<IHealthCheck>()`, of every factory / type registration.
     let deferred =
         descriptors
         |> List.indexed
@@ -129,27 +129,18 @@ let register (services: IServiceCollection) : unit =
             | _ -> Some i)
 
     if not deferred.IsEmpty then
-        services.AddSingleton<DeferredHealthChecks>({ Positions = deferred }) |> ignore
+        // `IOptions<>` itself: with no instance probe, nothing above has
+        // configured the options, so nothing has registered it.
+        services.AddOptions() |> ignore
 
-        services
-            .AddOptions<HealthCheckServiceOptions>()
-            .Configure<IServiceProvider>(fun options sp ->
-                let resolved = sp.GetServices<IHealthCheck>() |> Array.ofSeq
+        services.AddSingleton<IConfigureOptions<HealthCheckServiceOptions>>(fun (sp: IServiceProvider) ->
+            let resolved = sp.GetServices<IHealthCheck>() |> Array.ofSeq
 
+            ConfigureOptions<HealthCheckServiceOptions>(fun options ->
                 for i in deferred do
                     options.Registrations.Add(registrationFor resolved[i]))
+            :> IConfigureOptions<HealthCheckServiceOptions>)
         |> ignore
-
-/// Phase 1064 — materialise the factory / type-registered probes `register`
-/// deferred, against the built provider. Called by `buildAndRunHost` right
-/// after `Build()`, so a probe whose factory throws fails the boot with its
-/// own exception. A no-op when nothing was deferred.
-let internal resolveDeferred (sp: IServiceProvider) : unit =
-    match sp.GetService(typeof<DeferredHealthChecks>) with
-    | :? DeferredHealthChecks ->
-        sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<HealthCheckServiceOptions>>().Value
-        |> ignore
-    | _ -> ()
 
 /// Snapshot every registered `IHealthCheck` as `(name, kind, timeout)`
 /// triples, read from the instance registrations at compose time.
