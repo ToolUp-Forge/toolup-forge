@@ -168,4 +168,93 @@ let tests =
                 (after.Modules |> List.map _.Id)
                 (ComponentId.ofModule "Shipping")
                 "the new module is enumerated"
+
+        // ── Phase 1051 — a sealed knob renders the case, not the payload ──
+        testCase "the two payload-capable knobs render their case name, pinned byte-for-byte"
+        <| fun _ ->
+            let knobsOf (config: ServerConfig) =
+                (ServerApp.empty |> ServerApp.withConfig config |> ServerApp.compositionManifest).ConfigKnobs
+                |> List.map (fun k -> k.Name, k.Value)
+                |> Map.ofList
+
+            let payloadCases =
+                knobsOf {
+                    ServerConfig.defaults with
+                        JobScheduler = QuartzJobScheduler QuartzConfig.defaults
+                        DataSubjectRequests =
+                            DataSubjectRequestMode.Enabled(DataSubjectRequestConfig.sync ErasurePolicy.Tombstone)
+                }
+
+            Expect.equal payloadCases["JobScheduler"] "QuartzJobScheduler" "the Quartz case, no QuartzConfig"
+            Expect.equal payloadCases["DataSubjectRequests"] "Enabled" "the DSR case, no config record"
+
+            let moved =
+                knobsOf {
+                    ServerConfig.defaults with
+                        JobScheduler =
+                            QuartzJobScheduler {
+                                QuartzConfig.defaults with
+                                    MaxConcurrency = 3
+                            }
+                }
+
+            Expect.equal moved["JobScheduler"] "QuartzJobScheduler" "a payload change no longer moves the knob"
+
+        testCase "the nilary cases' knob bytes are what `string` rendered before"
+        <| fun _ ->
+            for jobScheduler in [ NoJobScheduler; InProcessJobScheduler ] do
+                Expect.equal
+                    (CompositionManifest.caseName jobScheduler)
+                    (string jobScheduler)
+                    (sprintf "%A renders as before" jobScheduler)
+
+            Expect.equal
+                (CompositionManifest.caseName DataSubjectRequestMode.Disabled)
+                (string DataSubjectRequestMode.Disabled)
+                "Disabled renders as before"
+
+        testCase "a binding sealed on the old payload rendering still compares for the case it sealed"
+        <| fun _ ->
+            let live =
+                ServerApp.empty
+                |> ServerApp.withConfig {
+                    ServerConfig.defaults with
+                        JobScheduler = QuartzJobScheduler QuartzConfig.defaults
+                }
+                |> ServerApp.compositionManifest
+
+            let legacyValue = string (QuartzJobScheduler QuartzConfig.defaults)
+
+            Expect.isTrue
+                (legacyValue.StartsWith "QuartzJobScheduler"
+                 && legacyValue.Length > "QuartzJobScheduler".Length)
+                "the pre-1051 rendering carried the payload after the case name"
+
+            let sealedOnOld = {
+                live with
+                    ConfigKnobs =
+                        live.ConfigKnobs
+                        |> List.map (fun k ->
+                            if k.Name = "JobScheduler" then
+                                CompositionManifest.knob k.Name legacyValue
+                            else
+                                k)
+            }
+
+            Expect.isEmpty (BootVerificationPreflight.compare sealedOnOld live) "the legacy value reads as its case"
+
+            let sealedOnOtherCase = {
+                live with
+                    ConfigKnobs =
+                        live.ConfigKnobs
+                        |> List.map (fun k ->
+                            if k.Name = "JobScheduler" then
+                                CompositionManifest.knob k.Name (string InProcessJobScheduler)
+                            else
+                                k)
+            }
+
+            Expect.isNonEmpty
+                (BootVerificationPreflight.compare sealedOnOtherCase live)
+                "a different case is still drift"
     ]

@@ -154,10 +154,16 @@ let registerTenantLifecycle (services: IServiceCollection) (config: ServerConfig
         // present). `RegisterHandler` is idempotent; a no-op when no
         // `IJobScheduler` is composed — `DeprovisionTenantAsync` then
         // returns its clear "requires an IJobScheduler" error and the inline
-        // paths are unaffected (GP 13).
-        services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun (sp: IServiceProvider) ->
-            { new Microsoft.Extensions.Hosting.IHostedService with
-                member _.StartAsync(_ct) =
+        // paths are unaffected (GP 13). Exempt from the profile matrix
+        // (Phase 1051): a handler registration, placed by the scheduler's
+        // own gate.
+        services
+        |> ProcessProfileGate.exempt
+            "Phase 54a tenant-lifecycle handler registration"
+            ProcessProfileGate.SchedulerRegistrationReason
+        |> fun s ->
+            s.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun (sp: IServiceProvider) ->
+                ProcessProfileGate.atStart (fun () ->
                     match sp.GetService(typeof<IJobScheduler>) with
                     | :? IJobScheduler as scheduler ->
                         scheduler.RegisterHandler(
@@ -173,11 +179,5 @@ let registerTenantLifecycle (services: IServiceCollection) (config: ServerConfig
                             TenantLifecycleAggregator.ScheduledDeprovisionHandlerName,
                             ScheduledDeprovisionJobHandler.create sp
                         )
-                    | _ -> ()
-
-                    System.Threading.Tasks.Task.CompletedTask
-
-                member _.StopAsync(_ct) =
-                    System.Threading.Tasks.Task.CompletedTask
-            })
+                    | _ -> ()))
         |> ignore

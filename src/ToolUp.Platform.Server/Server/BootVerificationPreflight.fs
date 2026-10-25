@@ -773,6 +773,24 @@ module BootVerificationPreflight =
 
     // ─── Comparing compositions ──────────────────────────────────────
 
+    /// Phase 1051 — whether `recorded` is the pre-1051 `%A` rendering of
+    /// the case `observed` names, for a knob `CompositionManifest.caseKnob`
+    /// now renders by case name.
+    ///
+    /// No schema version is needed to tell the two renderings apart, and
+    /// none is spent (spending one would move the canonical bytes of every
+    /// default deployment, whose knobs did not change): a payload case's
+    /// `%A` is the case name followed by whitespace and the payload, and a
+    /// case-name rendering is a bare identifier, so the legacy value is
+    /// self-identifying. A binding sealed on it therefore still compares
+    /// for the case it sealed; the payload, which the seal no longer
+    /// covers, does not.
+    let private legacyCaseRendering (name: string) (recorded: string) (observed: string) : bool =
+        CompositionManifest.caseNameKnobs.Contains name
+        && recorded.Length > observed.Length
+        && recorded.StartsWith(observed, StringComparison.Ordinal)
+        && Char.IsWhiteSpace recorded.[observed.Length]
+
     /// Every way `observed` differs from `recorded`, each naming its
     /// subject.
     ///
@@ -815,7 +833,10 @@ module BootVerificationPreflight =
                 match Map.tryFind name recordedKnobs with
                 | None -> ConfigKnobAdded(name, observedValue)
                 | Some recordedValue ->
-                    if recordedValue <> observedValue then
+                    if
+                        recordedValue <> observedValue
+                        && not (legacyCaseRendering name recordedValue observedValue)
+                    then
                         ConfigKnobChanged(name, recordedValue, observedValue)
 
             for KeyValue(name, recordedValue) in recordedKnobs do

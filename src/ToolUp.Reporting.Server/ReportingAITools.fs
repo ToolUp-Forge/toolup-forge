@@ -1194,15 +1194,12 @@ let withReportingAITools (deps: ReportingAIToolDeps) (app: ServerApp) : ServerAp
         ServerModule.create SourceModule |> ServerModule.withAITools (tools deps)
 
     let register (s: IServiceCollection) =
-        s.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-            Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
-                DeferredScheduledJobDeclaration.hostedService
-                    "Report rendering (AI tools)"
-                    [
-                        DeferredScheduledJobDeclaration.ofHandler RenderJobHandlerName Manual (renderJobHandler deps)
-                    ]
-                    sp)
-        )
+        // Phase 1051 — exempt from the profile matrix: a handler
+        // registration, placed by the scheduler's own gate.
+        s
+        |> ProcessProfileGate.addDeferredJobs "Report rendering (AI tools)" [
+            DeferredScheduledJobDeclaration.ofHandler RenderJobHandlerName Manual (renderJobHandler deps)
+        ]
 
     let withJobs = {
         app with

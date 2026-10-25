@@ -742,27 +742,33 @@ module FactsCompose =
         //     the container that owns `IFactStore` / `IFactRecomputer`
         //     exists. `Trigger.Manual`: recompute jobs are fired on demand
         //     by `reactToDataChange`, never on a cadence.
-        services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-            Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
-                DeferredScheduledJobDeclaration.hostedService
-                    "Reactive fact recomputation"
-                    [
-                        DeferredScheduledJobDeclaration.create (fun provider ->
-                            RecomputeJobHandler.declaration
-                                (provider.GetRequiredService<IFactStore>())
-                                (provider.GetRequiredService<IFactRecomputer>())
-                                (provider.GetRequiredService<ILogger>()))
-                    ]
-                    sp)
-        )
+        //     Exempt from the profile matrix (Phase 1051), like (3) below: a
+        //     scheduler registration, placed by the scheduler's own gate.
+        (services
+         |> ProcessProfileGate.exempt "Reactive fact recomputation" ProcessProfileGate.SchedulerRegistrationReason)
+            .AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
+                Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
+                    DeferredScheduledJobDeclaration.hostedService
+                        "Reactive fact recomputation"
+                        [
+                            DeferredScheduledJobDeclaration.create (fun provider ->
+                                RecomputeJobHandler.declaration
+                                    (provider.GetRequiredService<IFactStore>())
+                                    (provider.GetRequiredService<IFactRecomputer>())
+                                    (provider.GetRequiredService<ILogger>()))
+                        ]
+                        sp)
+            )
         |> ignore
 
         // Phase 985 — the grounded-narrative job handler, registered with
         // the scheduler at startup only when a run registry and a run are
         // composed; otherwise the start is a DI lookup and nothing else.
-        services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-            Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(GroundedNarrativeTrigger.hostedService)
-        )
+        services
+        |> ProcessProfileGate.addExempt
+            "Grounded-narrative handler registration"
+            ProcessProfileGate.SchedulerRegistrationReason
+            GroundedNarrativeTrigger.hostedService
         |> ignore
 
         services
@@ -1385,7 +1391,15 @@ module FactsCompose =
             )
             // Schedule the standing check on the opt-in cadence. The
             // scheduler + metric registry are only resolvable from the built
-            // container, so registration happens in a startup hosted service.
+            // container, so registration happens in a startup hosted service
+            // — exempt from the profile matrix (Phase 1051): a scheduler
+            // registration, placed by the scheduler's own gate.
+            .AddSingleton<HostedServiceExemption>(
+                {
+                    Service = "Fact coherence check scheduling"
+                    Reason = ProcessProfileGate.SchedulerRegistrationReason
+                }
+            )
             .AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
                 Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
                     { new Microsoft.Extensions.Hosting.IHostedService with
@@ -2067,10 +2081,15 @@ module FactsCompose =
                 // is scheduled by the source team's owner under the source's
                 // minted scope, and a refresh by the target's under its own
                 // (`FactPublicationJobs.schedulePublication` / `scheduleRefresh`).
-                s.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                    Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
-                        { new Microsoft.Extensions.Hosting.IHostedService with
-                            member _.StartAsync(_ct) =
+                // Exempt from the profile matrix (Phase 1051): a handler
+                // registration, placed by the scheduler's own gate.
+                (s
+                 |> ProcessProfileGate.exempt
+                     "Fact publication handler registration"
+                     ProcessProfileGate.SchedulerRegistrationReason)
+                    .AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
+                        Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
+                            ProcessProfileGate.atStart (fun () ->
                                 // Resolving the service here surfaces a
                                 // declaration defect at startup, not at the
                                 // first publication.
@@ -2087,14 +2106,8 @@ module FactsCompose =
                                         FactPublicationJobs.RefreshHandler,
                                         FactPublicationJobs.refreshHandler publication
                                     )
-                                | None -> ()
-
-                                System.Threading.Tasks.Task.CompletedTask
-
-                            member _.StopAsync(_ct) =
-                                System.Threading.Tasks.Task.CompletedTask
-                        })
-                )
+                                | None -> ()))
+                    )
                 |> ignore
 
                 s

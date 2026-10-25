@@ -371,21 +371,17 @@ let withKnowledgeRetention (policy: KnowledgeRetentionPolicy) (scopes: string li
         if KnowledgeRetentionPolicy.isInert policy || List.isEmpty scopes then
             withPolicy
         else
-            withPolicy.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
-                    DeferredScheduledJobDeclaration.hostedService
-                        "Knowledge Base retention sweep"
-                        [
-                            DeferredScheduledJobDeclaration.create (fun provider ->
-                                ScheduledJobDeclaration.create
-                                    KnowledgeBase.ServerRetentionSweep.SweepHandlerName
-                                    (KnowledgeBase.ServerRetentionSweep.RetentionSweepJobHandler(provider, policy)
-                                    :> IJobHandler)
-                                    (Trigger.CronTrigger policy.SweepSchedule)
-                                |> ScheduledJobDeclaration.withScopes scopes)
-                        ]
-                        sp)
-            )
+            // Phase 1051 — exempt from the profile matrix: the sweep runs as
+            // a scheduler job, placed by the scheduler's own gate.
+            withPolicy
+            |> ProcessProfileGate.addDeferredJobs "Knowledge Base retention sweep" [
+                DeferredScheduledJobDeclaration.create (fun provider ->
+                    ScheduledJobDeclaration.create
+                        KnowledgeBase.ServerRetentionSweep.SweepHandlerName
+                        (KnowledgeBase.ServerRetentionSweep.RetentionSweepJobHandler(provider, policy) :> IJobHandler)
+                        (Trigger.CronTrigger policy.SweepSchedule)
+                    |> ScheduledJobDeclaration.withScopes scopes)
+            ]
 
     app |> withServiceConfig register
 

@@ -1215,8 +1215,8 @@ let compose
         (List.length shareTokenStoreDecorators)
 
     // Phase 5f — one-shot BootstrapTeam runtime (extracted to
-    // `ComposeTeamRuntime.runBootstrapTeam`).
-    runBootstrapTeam teamStoreOpt resolvedLogger auditLog
+    // `ComposeTeamRuntime.bootstrapTeam`; a storage fault refuses at preflight, Phase 1051).
+    bootstrapTeam services teamStoreOpt resolvedLogger auditLog
 
     // Phase 4b deferred follow-up — runtime PlatformKnowledgeBase
     // toggle (extracted to `ComposeAuth.registerPlatformRuntimeConfig`).

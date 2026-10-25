@@ -934,10 +934,15 @@ let registerModelFitting
             // Register the handler with the scheduler at startup, once the
             // container (and every IModelFitProvider) is built. Resolving the
             // registry here triggers the duplicate-`Kind` validation, so a
-            // misconfigured deployment fails on startup.
-            services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun (sp: System.IServiceProvider) ->
-                { new Microsoft.Extensions.Hosting.IHostedService with
-                    member _.StartAsync(_ct) =
+            // misconfigured deployment fails on startup. Exempt from the
+            // profile matrix (Phase 1051): a handler registration, placed by
+            // the scheduler's own gate.
+            (services
+             |> ProcessProfileGate.exempt
+                 "Phase 449 model-fit handler registration"
+                 ProcessProfileGate.SchedulerRegistrationReason)
+                .AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun (sp: System.IServiceProvider) ->
+                    ProcessProfileGate.atStart (fun () ->
                         let registry = sp.GetRequiredService<ModelFitProviderRegistry>()
                         let handler = ModelFitJobHandler.create registry auditLog resolvedLogger
                         scheduler.RegisterHandler(ModelFitJobHandler.HandlerName, handler)
@@ -947,13 +952,7 @@ let registerModelFitting
                                 "[Phase 449] ModelFit envelope registered — %d provider(s): %s"
                                 registry.Providers.Length
                                 (String.concat ", " registry.Kinds)
-                        )
-
-                        System.Threading.Tasks.Task.CompletedTask
-
-                    member _.StopAsync(_ct) =
-                        System.Threading.Tasks.Task.CompletedTask
-                })
+                        )))
             |> ignore
 
 /// Phase 9b.B — register and schedule module-/app-declared
@@ -1047,9 +1046,14 @@ let registerDataSubjectRequestJobs
 
             let audit = DataSubjectRequestApiHandler.auditToLog auditLog
 
-            services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
-                { new Microsoft.Extensions.Hosting.IHostedService with
-                    member _.StartAsync(_ct) =
+            // Exempt from the profile matrix (Phase 1051): a handler
+            // registration, placed by the scheduler's own gate.
+            (services
+             |> ProcessProfileGate.exempt
+                 "Phase 9h.A DSR export / erasure handler registration"
+                 ProcessProfileGate.SchedulerRegistrationReason)
+                .AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(fun (sp: System.IServiceProvider) ->
+                    ProcessProfileGate.atStart (fun () ->
                         let exporters =
                             sp.GetServices(typeof<IDataExporter>) |> Seq.cast<IDataExporter> |> List.ofSeq
 
@@ -1078,12 +1082,6 @@ let registerDataSubjectRequestJobs
                                 "[Phase 9h.A] Registered DSR background export/erasure job handlers (%d exporter(s), %d erasure handler(s))."
                                 exporters.Length
                                 handlers.Length
-                        )
-
-                        System.Threading.Tasks.Task.CompletedTask
-
-                    member _.StopAsync(_ct) =
-                        System.Threading.Tasks.Task.CompletedTask
-                })
+                        )))
             |> ignore
     | _ -> ()

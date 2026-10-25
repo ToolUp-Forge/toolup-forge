@@ -1070,9 +1070,9 @@ let registerBackupCoordinator
             | None -> ()
         ]
 
+        // Phase 1051 — exempt from the profile matrix: the snapshot and
+        // drill run as scheduler jobs, placed by the scheduler's own gate.
         if not declarations.IsEmpty then
-            services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                System.Func<System.IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
-                    DeferredScheduledJobDeclaration.hostedService "Phase 445 backup / restore drill" declarations sp)
-            )
+            services
+            |> ProcessProfileGate.addDeferredJobs "Phase 445 backup / restore drill" declarations
             |> ignore

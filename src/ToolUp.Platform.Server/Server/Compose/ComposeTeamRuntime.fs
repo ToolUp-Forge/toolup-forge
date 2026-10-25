@@ -427,6 +427,29 @@ let registerPostBootstrapValidators
     )
     |> ignore
 
+/// Phase 1051 — the remedy a team-bootstrap refusal names.
+[<Literal>]
+let private bootstrapTeamRemedy =
+    "The team store could not be read or written while bootstrapping TOOLUP_INITIAL_TEAM_NAME; restore access to the storage, then restart (the bootstrap is idempotent, so a restart retries it)."
+
+/// Phase 1051 — the team bootstrap's one blocking run: the exception a
+/// storage fault threw, or `None`.
+let private tryBootstrapTeam
+    (teamStoreOpt: TeamStore option)
+    (resolvedLogger: ILogger)
+    (auditLog: IAuditLog)
+    : exn option =
+    match teamStoreOpt with
+    | Some ts ->
+        try
+            BootstrapTeam.bootstrap resolvedLogger auditLog (ts :> ITeamStore)
+            |> Async.RunSynchronously
+
+            None
+        with ex ->
+            Some ex
+    | None -> None
+
 /// Phase 5f — one-shot bootstrap of the initial team from
 /// `TOOLUP_INITIAL_TEAM_NAME` (+ optional `TOOLUP_INITIAL_TEAM_ID`).
 /// Runs only when an `ITeamStore` is registered (Team / MultiTeam
@@ -436,13 +459,25 @@ let registerPostBootstrapValidators
 /// admin user-id (re-read from `TOOLUP_INITIAL_PLATFORM_ADMIN` inside
 /// `BootstrapTeam.bootstrap`) exists by the time we add it as Owner.
 /// Synchronous wait keeps the first request from racing the
-/// bootstrap; failures log at `Error` and do not abort startup.
+/// bootstrap. A failure the helper reports (no Owner configured, a
+/// refused `CreateTeam`) logs at `Error` and does not abort startup; a
+/// storage fault that THROWS refuses the boot at preflight with
+/// `ComposeAuth.BootstrapRefused` (Phase 1051) — it used to be logged and
+/// the boot continued with no team.
+let bootstrapTeam
+    (services: IServiceCollection)
+    (teamStoreOpt: TeamStore option)
+    (resolvedLogger: ILogger)
+    (auditLog: IAuditLog)
+    : unit =
+    tryBootstrapTeam teamStoreOpt resolvedLogger auditLog
+    |> Option.iter (ComposeAuth.refuseAtPreflight services resolvedLogger "BootstrapTeam" bootstrapTeamRemedy)
+
+/// Phase 5f — the team bootstrap for a caller holding no service
+/// collection. A storage fault that throws refuses where it happens, by
+/// raising `ComposeAuth.BootstrapRefused`, because there is no preflight
+/// to carry it to (Phase 1051; it used to be logged and the boot continued).
+[<System.Obsolete("Use ComposeTeamRuntime.bootstrapTeam, which carries a storage fault to the preflight so the storage validator's diagnosis is read first. Removed in 1.0.")>]
 let runBootstrapTeam (teamStoreOpt: TeamStore option) (resolvedLogger: ILogger) (auditLog: IAuditLog) : unit =
-    match teamStoreOpt with
-    | Some ts ->
-        try
-            BootstrapTeam.bootstrap resolvedLogger auditLog (ts :> ITeamStore)
-            |> Async.RunSynchronously
-        with ex ->
-            resolvedLogger.Error(sprintf "[BootstrapTeam] Bootstrap aborted: %s" ex.Message, Some ex)
-    | None -> ()
+    tryBootstrapTeam teamStoreOpt resolvedLogger auditLog
+    |> Option.iter (fun ex -> raise (ComposeAuth.BootstrapRefused("BootstrapTeam", bootstrapTeamRemedy, ex)))

@@ -505,6 +505,9 @@ let private registeredTests =
         ComponentIdentityTests.tests
         // Phase 280 — introspectable composition manifest.
         CompositionManifestTests.tests
+        // Phase 1051 — hosted services meet the gate or state their reason; a bootstrap fault refuses the boot.
+        HostedServiceGateTests.tests
+        BootstrapRefusalTests.tests
         // Phase 286 — composition structural diff (id-keyed, order-independent).
         CompositionDiffTests.tests
         // Phase 287 — composition golden-file CI gate (mirrors Phase 175 api-baseline).

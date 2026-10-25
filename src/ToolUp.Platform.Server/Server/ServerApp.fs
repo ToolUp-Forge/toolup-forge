@@ -2697,21 +2697,17 @@ module ServerApp =
             if DataObjectOrphanSweep.DataObjectOrphanSweepPolicy.isInert policy then
                 withPolicy
             else
-                withPolicy.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                    Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
-                        DeferredScheduledJobDeclaration.hostedService
-                            "Data-object orphan sweep"
-                            [
-                                DeferredScheduledJobDeclaration.create (fun provider ->
-                                    ScheduledJobDeclaration.create
-                                        DataObjectOrphanSweep.SweepHandlerName
-                                        (DataObjectOrphanSweep.DataObjectOrphanSweepJobHandler(provider, policy)
-                                        :> IJobHandler)
-                                        (Trigger.CronTrigger policy.Schedule)
-                                    |> ScheduledJobDeclaration.withScopes policy.Scopes)
-                            ]
-                            sp)
-                )
+                // Phase 1051 — exempt from the profile matrix: the sweep runs
+                // as a scheduler job, placed by the scheduler's own gate.
+                withPolicy
+                |> ProcessProfileGate.addDeferredJobs "Data-object orphan sweep" [
+                    DeferredScheduledJobDeclaration.create (fun provider ->
+                        ScheduledJobDeclaration.create
+                            DataObjectOrphanSweep.SweepHandlerName
+                            (DataObjectOrphanSweep.DataObjectOrphanSweepJobHandler(provider, policy) :> IJobHandler)
+                            (Trigger.CronTrigger policy.Schedule)
+                        |> ScheduledJobDeclaration.withScopes policy.Scopes)
+                ]
 
         {
             app with
@@ -3145,13 +3141,15 @@ module ServerApp =
         let configKnobs = [
             CompositionManifest.knob "ProcessProfile" (string app.Config.ProcessProfile)
             CompositionManifest.knob "ConfigDriftDetection" (string app.Config.ConfigDriftDetection)
-            CompositionManifest.knob "JobScheduler" (string app.Config.JobScheduler)
+            // Phase 1051 — the two payload-capable unions render their case
+            // name only (`CompositionManifest.caseKnob`), never their `%A`.
+            CompositionManifest.caseKnob "JobScheduler" app.Config.JobScheduler
             CompositionManifest.knob "EntityStore" (string app.Config.EntityStore)
             CompositionManifest.knob "UsageMetering" (string app.Config.UsageMetering)
             CompositionManifest.knob "MetricsEndpoint" (string app.Config.MetricsEndpoint)
             CompositionManifest.knob "RateLimiter" (string app.Config.RateLimiter)
             CompositionManifest.knob "SmokeTest" (string app.Config.SmokeTest)
-            CompositionManifest.knob "DataSubjectRequests" (string app.Config.DataSubjectRequests)
+            CompositionManifest.caseKnob "DataSubjectRequests" app.Config.DataSubjectRequests
             CompositionManifest.knob "PeerSubstrate" (string app.Config.PeerSubstrate)
             // Phase 526 — the resolved grounding fact-store kind.
             CompositionManifest.knob "FactStore" (string app.Config.FactStore)

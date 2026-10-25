@@ -357,10 +357,10 @@ module SchedulingServerApp =
                             CalendarSync.CalendarPollJobHandler(sync, entityStore) :> IJobHandler)
                 ]
 
-                services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                    System.Func<System.IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
-                        DeferredScheduledJobDeclaration.hostedService "Phase 20a calendar sync" declarations sp)
-                )
+                // Phase 1051 — exempt from the profile matrix: the sync runs
+                // as scheduler jobs, placed by the scheduler's own gate.
+                services
+                |> ProcessProfileGate.addDeferredJobs "Phase 20a calendar sync" declarations
 
         // 3. API handler. Resolves `IBookingScheduler` per request
         //    out of DI; the per-request `scopeId`/`userId` come from

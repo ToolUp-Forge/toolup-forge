@@ -554,7 +554,13 @@ let narrativePromptApi (ctx: HttpContext) : NarrativePromptApi =
 /// saved for their scope, of which there is none.
 let withPromptAdmin (app: ServerApp) : ServerApp =
     let register (s: IServiceCollection) =
-        s.AddSingleton<IHostedService>(Func<IServiceProvider, IHostedService>(NarrativeRegenerateJob.hostedService))
+        // Phase 1051 — exempt from the profile matrix: a handler
+        // registration, placed by the scheduler's own gate.
+        s
+        |> ProcessProfileGate.addExempt
+            "Narrative regenerate handler registration"
+            ProcessProfileGate.SchedulerRegistrationReason
+            NarrativeRegenerateJob.hostedService
         |> ignore
 
         s

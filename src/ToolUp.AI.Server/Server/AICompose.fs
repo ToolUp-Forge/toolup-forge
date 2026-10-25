@@ -556,6 +556,15 @@ let composeAI (app: AIServerApp) : ServerApp =
                         // container owns the singleton's disposal.
                         new AIChatWorker.AIChatWorker(logger))
                 )
+                // Phase 1051 — the reason above, as the exemption the
+                // registration guard reads.
+                .AddSingleton<HostedServiceExemption>(
+                    {
+                        Service = "AI chat worker"
+                        Reason =
+                            "an agent turn is bound to the process that accepted the request (its DI scope, SSE manager and cancellation registry), so no sibling silo could drain it and gating it would take chat out on WebOnly"
+                    }
+                )
                 .AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
                     Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
                         sp.GetRequiredService<AIChatWorker.AIChatWorker>()
@@ -1242,20 +1251,17 @@ let withConversationRetention (policy: ConversationRetentionPolicy) (scopes: str
         if ConversationRetentionPolicy.isInert policy || List.isEmpty scopes then
             withPolicy
         else
-            withPolicy.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                Func<IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>(fun sp ->
-                    DeferredScheduledJobDeclaration.hostedService
-                        "AI conversation retention sweep"
-                        [
-                            DeferredScheduledJobDeclaration.create (fun provider ->
-                                ScheduledJobDeclaration.create
-                                    ConversationRetention.SweepHandlerName
-                                    (ConversationRetentionSweepJobHandler(provider, policy) :> IJobHandler)
-                                    (Trigger.CronTrigger policy.SweepSchedule)
-                                |> ScheduledJobDeclaration.withScopes scopes)
-                        ]
-                        sp)
-            )
+            // Phase 1051 — exempt from the profile matrix: the sweep runs as
+            // a scheduler job, placed by the scheduler's own gate.
+            withPolicy
+            |> ProcessProfileGate.addDeferredJobs "AI conversation retention sweep" [
+                DeferredScheduledJobDeclaration.create (fun provider ->
+                    ScheduledJobDeclaration.create
+                        ConversationRetention.SweepHandlerName
+                        (ConversationRetentionSweepJobHandler(provider, policy) :> IJobHandler)
+                        (Trigger.CronTrigger policy.SweepSchedule)
+                    |> ScheduledJobDeclaration.withScopes scopes)
+            ]
 
     app |> withServiceConfig register
 

@@ -12,6 +12,67 @@ open ToolUp.Platform.BlobStorage
 // (Phase 15e follow-up). Takes the exact substrate values the inline
 // definition captured and returns the same shape. Zero behaviour change.
 
+/// Phase 1051 — a platform store's boot-time bootstrap threw, so the boot
+/// is refused rather than started without it.
+///
+/// A degraded entry is for a fault at RUNTIME, which a running deployment
+/// can recover from; a store that cannot be read at boot would start the
+/// deployment with no platform admin, a stub runtime-config store or no
+/// bootstrap team, and nothing would say so but one log line. `store`
+/// names what failed and `remedy` what the operator does about it; `cause`
+/// is the exception the store raised. Typed so a host can tell this
+/// refusal from any other startup fault.
+exception BootstrapRefused of store: string * remedy: string * cause: exn with
+    override this.Message =
+        sprintf
+            "[%s] bootstrap failed at boot, so the boot is refused rather than started without it: %s. %s"
+            this.store
+            this.cause.Message
+            this.remedy
+
+/// Phase 1051 — carries a `BootstrapRefused` to the startup preflight as an
+/// `Error` row, which refuses the boot.
+///
+/// The refusal rides the preflight rather than being raised where the
+/// bootstrap ran, because the bootstrap runs BEFORE the preflight: a
+/// storage that is down altogether fails the bootstrap read too, and
+/// raising there would replace the storage validator's diagnosis with
+/// this one. Through the preflight both rows are in the one refusal, the
+/// storage validator's first. Structural class, so `SkipPreflight` cannot
+/// skip it: a deployment that started anyway would be exactly the silent
+/// start this refuses.
+type BootstrapFaultValidator(fault: exn) =
+    /// The `BootstrapRefused` this row reports.
+    member _.Fault = fault
+
+    interface ConfigValidation.IStructuralClassValidator
+
+    interface ConfigValidation.IConfigValidator with
+        member _.Name =
+            match fault with
+            | BootstrapRefused(store, _, _) -> sprintf "bootstrap-fault (%s)" store
+            | _ -> "bootstrap-fault"
+
+        member _.Timeout = ConfigValidation.IConfigValidator.defaultTimeout
+        member _.Validate() = async { return ConfigValidation.ValidationResult.Error fault.Message }
+
+/// Phase 1051 — record a bootstrap fault: log it at `Error` and register the
+/// `BootstrapFaultValidator` that refuses the boot at preflight.
+let refuseAtPreflight
+    (services: IServiceCollection)
+    (resolvedLogger: ILogger)
+    (store: string)
+    (remedy: string)
+    (cause: exn)
+    : unit =
+    let fault = BootstrapRefused(store, remedy, cause)
+    resolvedLogger.Error(fault.Message, Some cause)
+
+    services.AddSingleton<ConfigValidation.IConfigValidator>(
+        BootstrapFaultValidator(fault) :> ConfigValidation.IConfigValidator
+    )
+    |> ignore
+
 /// Resolve the auth provider, defaulting to `HeaderAuthProvider` when
 /// the app didn't supply one. `HeaderAuthProvider` is spoofable; safe
 /// only because the security-class `HeaderAuthProviderModeValidator`
@@ -31,10 +92,11 @@ let resolveAuthProvider (authProvider: IAuthProvider option) : IAuthProvider =
 /// One-shot bootstrap from `TOOLUP_INITIAL_PLATFORM_ADMIN`. No-op when
 /// the env var is unset / empty OR when the admin list is already
 /// populated. Synchronous wait keeps the first request from racing the
-/// bootstrap; bootstrap failures are logged at Error by the helper and
-/// do not abort startup. The try/with guards against an `IBlobStorage`
-/// glitch — admin assignment can be retried via the API once the
-/// deployment is up.
+/// bootstrap; a failure the helper reports (a refused dev fallback) is
+/// logged at Error by the helper and does not abort startup. A storage
+/// fault that THROWS refuses the boot at preflight with `BootstrapRefused`
+/// (Phase 1051) — it used to be logged and the boot continued with no
+/// admin.
 ///
 /// Returns the constructed store so subsequent registrations
 /// (`PlatformRuntimeConfig`, dev-diagnostics contributor) can capture
@@ -60,7 +122,15 @@ let registerPlatformAdminStore
             platformAdminStore
         |> Async.RunSynchronously
     with ex ->
-        resolvedLogger.Error(sprintf "[PlatformAdmin] Bootstrap aborted: %s" ex.Message, Some ex)
+        // Phase 1051 — refuse the boot (at preflight): a deployment whose
+        // admin store cannot be read at boot would otherwise start with no
+        // platform admin and no refusal.
+        refuseAtPreflight
+            services
+            resolvedLogger
+            "PlatformAdmin"
+            "The platform-admin store (_platform/platform-admins.json in the configured blob storage) could not be read or written; restore access to the storage, then restart."
+            ex
 
     platformAdminStore
 
@@ -78,15 +148,22 @@ let registerPlatformRuntimeConfig
     (resolvedLogger: ILogger)
     : IPlatformRuntimeConfigStore =
 
+    // Phase 1051 — a load that throws refuses the boot at preflight. The
+    // stub below only carries the composition to that refusal: on its own
+    // it used to START the deployment, its reads returning the static
+    // config and its `Set` returning `Error`, so a persisted override was
+    // silently ignored.
     let platformRuntimeConfig: IPlatformRuntimeConfigStore =
         try
             PlatformRuntimeConfigStore.create resolvedBlobStorage config.PlatformKnowledgeBase
             |> Async.RunSynchronously
         with ex ->
-            resolvedLogger.Error(
-                sprintf "[PlatformRuntimeConfig] Init failed, falling back to ServerConfig default: %s" ex.Message,
-                Some ex
-            )
+            refuseAtPreflight
+                services
+                resolvedLogger
+                "PlatformRuntimeConfig"
+                "The platform runtime-config store (its persisted override in the configured blob storage) could not be read; restore access to the storage, then restart."
+                ex
 
             { new IPlatformRuntimeConfigStore with
                 member _.Snapshot() = config.PlatformKnowledgeBase

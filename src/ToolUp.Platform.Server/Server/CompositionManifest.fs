@@ -312,6 +312,28 @@ module CompositionManifest =
 
     let knob (name: string) (value: string) : ConfigKnob = { Name = name; Value = value }
 
+    /// Phase 1051 — the case name of a union value, and nothing of its
+    /// payload. `string` on a union is its `%A` rendering, so a knob sealed
+    /// that way pins the payload record's field order and formatting: a
+    /// field added to `QuartzConfig` would change the sealed bytes of every
+    /// deployment running Quartz. A nilary case renders as its name either
+    /// way, so for one this is byte-for-byte `string`.
+    let caseName (value: 'T) : string =
+        let case, _ =
+            Microsoft.FSharp.Reflection.FSharpValue.GetUnionFields(box value, typeof<'T>)
+
+        case.Name
+
+    /// Phase 1051 — a knob over a union that can carry a payload, rendered
+    /// by `caseName`.
+    let caseKnob (name: string) (value: 'T) : ConfigKnob = knob name (caseName value)
+
+    /// Phase 1051 — the knobs `caseKnob` renders. A binding sealed before
+    /// 1051 holds the `%A` rendering for a payload case of one of these,
+    /// and `BootVerificationPreflight.compare` reads that legacy value as
+    /// the case it names.
+    let caseNameKnobs: Set<string> = set [ "JobScheduler"; "DataSubjectRequests" ]
+
     /// Name prefix of the Phase 936 team output-visibility knobs.
     [<Literal>]
     let TeamOutputVisibilityKnobPrefix = "TeamOutputVisibility."

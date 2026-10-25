@@ -698,6 +698,9 @@
              ComponentId from the live registry; empty pipeline → empty
              manifest (GP 13). -->
         <Compile Include="InProcess\CompositionManifestTests.fs" />
+        <!-- Phase 1051 — every hosted service meets the gate or states its reason; a bootstrap fault refuses the boot. -->
+        <Compile Include="InProcess\HostedServiceGateTests.fs" />
+        <Compile Include="InProcess\BootstrapRefusalTests.fs" />
         <!-- Phase 286 — composition structural diff: add / remove / swap /
              config-change each surface as the right id-keyed delta; a renamed
              module (stable id) is a changed entry with a label delta, not

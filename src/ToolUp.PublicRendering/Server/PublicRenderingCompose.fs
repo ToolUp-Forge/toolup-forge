@@ -1551,16 +1551,23 @@ module PublicRenderingServerApp =
                                     :> IIndexNowService)
                             )
 
+                        // Phase 1051 — every startup submission below is
+                        // exempt from the profile matrix, with this reason.
+                        let indexNowStartupReason =
+                            "a one-shot outbound submission of the site this process serves: the web tier is the one tier certain to compose the site, so gating it off WebOnly would stop submissions in a WebOnly-plus-worker fleet"
+
                         let s =
                             if indexNowOptions.SubmitOnStartup then
-                                s.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                                    System.Func<System.IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>
-                                        (fun sp ->
-                                            let svc = sp.GetService(typeof<IIndexNowService>) :?> IIndexNowService
+                                (s
+                                 |> ProcessProfileGate.exempt "IndexNow startup submission" indexNowStartupReason)
+                                    .AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
+                                        System.Func<System.IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>
+                                            (fun sp ->
+                                                let svc = sp.GetService(typeof<IIndexNowService>) :?> IIndexNowService
 
-                                            IndexNowStartupService(svc, prLogger)
-                                            :> Microsoft.Extensions.Hosting.IHostedService)
-                                )
+                                                IndexNowStartupService(svc, prLogger)
+                                                :> Microsoft.Extensions.Hosting.IHostedService)
+                                    )
                             else
                                 s
 
@@ -1585,45 +1592,54 @@ module PublicRenderingServerApp =
                                         sprintf "toolup-indexnow-last-submission-%s.json" safeName
                                     )
 
-                                s.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
-                                    System.Func<System.IServiceProvider, Microsoft.Extensions.Hosting.IHostedService>
-                                        (fun sp ->
-                                            let metrics =
-                                                match sp.GetService(typeof<ToolUp.Platform.Metrics.IMetricsSink>) with
-                                                | :? ToolUp.Platform.Metrics.IMetricsSink as m -> m
-                                                | _ ->
-                                                    ToolUp.Platform.Metrics.NoOpMetricsSink()
-                                                    :> ToolUp.Platform.Metrics.IMetricsSink
+                                (s
+                                 |> ProcessProfileGate.exempt
+                                     (sprintf "IndexNow startup submission (%s)" site.Def.Name)
+                                     indexNowStartupReason)
+                                    .AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(
+                                        System.Func<
+                                            System.IServiceProvider,
+                                            Microsoft.Extensions.Hosting.IHostedService
+                                         >
+                                            (fun sp ->
+                                                let metrics =
+                                                    match
+                                                        sp.GetService(typeof<ToolUp.Platform.Metrics.IMetricsSink>)
+                                                    with
+                                                    | :? ToolUp.Platform.Metrics.IMetricsSink as m -> m
+                                                    | _ ->
+                                                        ToolUp.Platform.Metrics.NoOpMetricsSink()
+                                                        :> ToolUp.Platform.Metrics.IMetricsSink
 
-                                            let postFn body =
-                                                IndexNow.postWith httpClient indexNowOptions.Endpoint body
+                                                let postFn body =
+                                                    IndexNow.postWith httpClient indexNowOptions.Endpoint body
 
-                                            // Phase 632 — gated enumeration
-                                            // per satellite site, same as
-                                            // the default site above.
-                                            let universe () = async {
-                                                let now = System.DateTimeOffset.UtcNow
-                                                let! pages = site.Api.ListPagesPublic(now, "")
-                                                return SitemapGenerator.entriesAtWith sitemapUniverse now pages []
-                                            }
+                                                // Phase 632 — gated enumeration
+                                                // per satellite site, same as
+                                                // the default site above.
+                                                let universe () = async {
+                                                    let now = System.DateTimeOffset.UtcNow
+                                                    let! pages = site.Api.ListPagesPublic(now, "")
+                                                    return SitemapGenerator.entriesAtWith sitemapUniverse now pages []
+                                                }
 
-                                            let svc =
-                                                IndexNowService(
-                                                    indexNowOptions,
-                                                    siteHost,
-                                                    siteKey,
-                                                    site.Def.BaseUrl,
-                                                    FileIndexNowStateStore.createAt siteStatePath,
-                                                    postFn,
-                                                    metrics,
-                                                    prLogger,
-                                                    universe
-                                                )
-                                                :> IIndexNowService
+                                                let svc =
+                                                    IndexNowService(
+                                                        indexNowOptions,
+                                                        siteHost,
+                                                        siteKey,
+                                                        site.Def.BaseUrl,
+                                                        FileIndexNowStateStore.createAt siteStatePath,
+                                                        postFn,
+                                                        metrics,
+                                                        prLogger,
+                                                        universe
+                                                    )
+                                                    :> IIndexNowService
 
-                                            IndexNowStartupService(svc, prLogger)
-                                            :> Microsoft.Extensions.Hosting.IHostedService)
-                                ))
+                                                IndexNowStartupService(svc, prLogger)
+                                                :> Microsoft.Extensions.Hosting.IHostedService)
+                                    ))
                 |> fun s ->
                     // Phase 114 — expose the satellite-site registry to
                     // consumer-supplied custom handlers. Not registered when

@@ -535,10 +535,16 @@ let seedStandingSubscriptions
 /// what it lacks:
 ///
 /// ```fsharp skip=fragment
-/// services.AddSingleton<IHostedService>(
-///     Func<IServiceProvider, IHostedService>(
-///         ReportingCompose.withStandingSubscriptions standing standingDeps))
+/// services
+/// |> ProcessProfileGate.addExempt
+///     "Standing report subscriptions"
+///     ProcessProfileGate.SchedulerRegistrationReason
+///     (ReportingCompose.withStandingSubscriptions standing standingDeps)
 /// ```
+///
+/// It seeds scheduler jobs and runs no work of its own, so it is exempt
+/// from the profile matrix with the scheduler-registration reason (Phase
+/// 1051); registering it through `addExempt` writes that down.
 ///
 /// `deps.Api` must be the deps the subscription job handler's scheduler
 /// was built with, so a seeded job has a handler to dispatch to.

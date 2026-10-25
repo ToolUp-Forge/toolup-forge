@@ -1863,8 +1863,11 @@ let composeRAG (app: RAGServerApp) : ServerApp =
             match owned with
             | [] -> s
             | _ ->
-                s.AddSingleton<IHostedService>(fun (_: System.IServiceProvider) ->
-                    new RetrievalStoreFlushService(owned, ragLogger) :> IHostedService)
+                s
+                |> ProcessProfileGate.addExempt
+                    "RAG retrieval-store flush at stop"
+                    "flushes the stores THIS process opened, at its own graceful stop: a silo that skipped it would lose its own acknowledged writes, and it runs no loop"
+                    (fun _ -> new RetrievalStoreFlushService(owned, ragLogger) :> IHostedService)
 
         // Phase 945 — the off-path trace queue, registered so `/health/rag`
         // can report its lost-trace count. Absent when traces are written
@@ -1906,7 +1909,14 @@ let composeRAG (app: RAGServerApp) : ServerApp =
 
                 s
             else
-                s
+                // Phase 1051 — both consumers are exempt from the profile
+                // matrix, with the reason the queue imposes.
+                let queueReason =
+                    "drains the in-process ingestion queue, which only the process that accepted the upload can drain: gating it off a profile would strand every job that profile's HTTP tier enqueued"
+
+                (s
+                 |> ProcessProfileGate.exempt "RAG ingestion" queueReason
+                 |> ProcessProfileGate.exempt "RAG re-embedding" queueReason)
                     // Phase 14t — factory registration so the ingestion service
                     // captures the REAL host provider and can lazily resolve the
                     // (downstream-built) `IJobScheduler` for durable retries.
@@ -1973,8 +1983,13 @@ let composeRAG (app: RAGServerApp) : ServerApp =
                 let ragSurface: IIngestionRecoverySurface =
                     IngestionRecoverySweep.ofIngestionStatusStore ingestionStatusStore
 
-                s
-                    .AddSingleton<IIngestionRecoverySurface>(ragSurface)
+                // Phase 1051 — exempt from the profile matrix: it settles the
+                // jobs the in-process queue lost, so it belongs wherever the
+                // (exempt) ingestion consumer runs.
+                (s.AddSingleton<IIngestionRecoverySurface>(ragSurface)
+                 |> ProcessProfileGate.exempt
+                     "RAG ingestion recovery sweep"
+                     "a one-shot startup sweep settling the in-process ingestion jobs a restart lost, so it runs wherever the ingestion consumer runs, which is every profile")
                     .AddSingleton<IHostedService>(
                         System.Func<System.IServiceProvider, IHostedService>(fun sp ->
                             IngestionRecoverySweep.hostedService
@@ -2012,61 +2027,65 @@ let composeRAG (app: RAGServerApp) : ServerApp =
 
                 let vacuumHandler = ToolUp.RAG.RAGVacuumJobHandler.create vacuumDeps
 
-                s.AddSingleton<IHostedService>(fun (sp: System.IServiceProvider) ->
-                    { new IHostedService with
-                        member _.StartAsync(_ct) =
-                            match sp.GetService(typeof<IJobScheduler>) with
-                            | :? IJobScheduler as scheduler ->
-                                scheduler.RegisterHandler(
-                                    ToolUp.RAG.RAGVacuumJobHandler.VacuumHandlerName,
-                                    vacuumHandler
-                                )
+                s
+                |> ProcessProfileGate.addExempt
+                    "RAG tombstone auto-vacuum"
+                    ProcessProfileGate.SchedulerRegistrationReason
+                    (fun (sp: System.IServiceProvider) ->
+                        { new IHostedService with
+                            member _.StartAsync(_ct) =
+                                match sp.GetService(typeof<IJobScheduler>) with
+                                | :? IJobScheduler as scheduler ->
+                                    scheduler.RegisterHandler(
+                                        ToolUp.RAG.RAGVacuumJobHandler.VacuumHandlerName,
+                                        vacuumHandler
+                                    )
 
-                                let registration: JobRegistration = {
-                                    ScopeId = "_platform"
-                                    Handler = ToolUp.RAG.RAGVacuumJobHandler.VacuumHandlerName
-                                    Payload = ""
-                                    Trigger = CronTrigger cron
-                                    Idempotency =
-                                        Some {
-                                            Key = "rag-tombstone-vacuum-_platform"
-                                            TtlSeconds = 60 * 60 * 24 * 365
-                                        }
-                                    RetryPolicy = JobRetryPolicy.defaults
-                                    ShardKey = None
-                                    Precision = JobPrecision.Minute
-                                    CreatedBy = "_platform"
-                                    Tags = Map.ofList [ "source", "rag-compose"; "purpose", "tombstone-vacuum" ]
-                                }
+                                    let registration: JobRegistration = {
+                                        ScopeId = "_platform"
+                                        Handler = ToolUp.RAG.RAGVacuumJobHandler.VacuumHandlerName
+                                        Payload = ""
+                                        Trigger = CronTrigger cron
+                                        Idempotency =
+                                            Some {
+                                                Key = "rag-tombstone-vacuum-_platform"
+                                                TtlSeconds = 60 * 60 * 24 * 365
+                                            }
+                                        RetryPolicy = JobRetryPolicy.defaults
+                                        ShardKey = None
+                                        Precision = JobPrecision.Minute
+                                        CreatedBy = "_platform"
+                                        Tags = Map.ofList [ "source", "rag-compose"; "purpose", "tombstone-vacuum" ]
+                                    }
 
-                                async {
-                                    let! result = scheduler.Schedule registration
+                                    async {
+                                        let! result = scheduler.Schedule registration
 
-                                    match result with
-                                    | Ok _ ->
-                                        ragLogger.Info(
-                                            sprintf
-                                                "[RAGCompose] Tombstone auto-vacuum scheduled (cron '%s', retention %A)."
-                                                cron
-                                                app.TombstoneRetention
-                                        )
-                                    | Error err ->
-                                        ragLogger.Warn(
-                                            sprintf "[RAGCompose] Failed to schedule tombstone auto-vacuum: %A" err
-                                        )
-                                }
-                                |> Async.StartAsTask
-                                :> System.Threading.Tasks.Task
-                            | _ ->
-                                ragLogger.Warn(
-                                    "[RAGCompose] withVacuumSchedule is set but JobScheduler = NoJobScheduler — the tombstone auto-vacuum will not run and soft-deleted chunks will accumulate. Set ServerConfig.JobScheduler = InProcessJobScheduler for steady-state memory."
-                                )
+                                        match result with
+                                        | Ok _ ->
+                                            ragLogger.Info(
+                                                sprintf
+                                                    "[RAGCompose] Tombstone auto-vacuum scheduled (cron '%s', retention %A)."
+                                                    cron
+                                                    app.TombstoneRetention
+                                            )
+                                        | Error err ->
+                                            ragLogger.Warn(
+                                                sprintf "[RAGCompose] Failed to schedule tombstone auto-vacuum: %A" err
+                                            )
+                                    }
+                                    |> Async.StartAsTask
+                                    :> System.Threading.Tasks.Task
+                                | _ ->
+                                    ragLogger.Warn(
+                                        "[RAGCompose] withVacuumSchedule is set but JobScheduler = NoJobScheduler — the tombstone auto-vacuum will not run and soft-deleted chunks will accumulate. Set ServerConfig.JobScheduler = InProcessJobScheduler for steady-state memory."
+                                    )
 
+                                    System.Threading.Tasks.Task.CompletedTask
+
+                            member _.StopAsync(_ct) =
                                 System.Threading.Tasks.Task.CompletedTask
-
-                        member _.StopAsync(_ct) =
-                            System.Threading.Tasks.Task.CompletedTask
-                    })
+                        })
 
         // Phase 54d — RAG vector-store offboard purge hook, gated on the
         // same `TenantLifecycle = EnabledTenantLifecycle` switch the core
