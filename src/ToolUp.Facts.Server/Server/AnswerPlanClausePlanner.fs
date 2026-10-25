@@ -3,7 +3,6 @@
 
 namespace ToolUp.Facts
 
-open System.Collections.Concurrent
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
 
@@ -72,9 +71,9 @@ type IPlannedAnswerRecorder =
 /// answer path never records cannot grow this without limit.
 type AnswerPlanClausePlanner(planner: IAnswerPlanner, retention: int) =
 
-    let bound = max 1 retention
-    let retained = ConcurrentDictionary<string, AnswerPlan>()
-    let order = ConcurrentQueue<string>()
+    // Bounded, and never wiped: at the bound the oldest retained plan goes
+    // and every other stays recordable.
+    let retained = BoundedMemoIndex<string, AnswerPlan>(max 1 retention, ignore)
 
     /// Project a compiled candidate onto the generic clause the retrieval
     /// pipeline speaks. `AsOf = None` deliberately: the plan resolved the
@@ -118,28 +117,15 @@ type AnswerPlanClausePlanner(planner: IAnswerPlanner, retention: int) =
         |> List.distinct
 
     member private _.Retain(plan: AnswerPlan) =
-        if retained.TryAdd(plan.PlanId, plan) then
-            order.Enqueue plan.PlanId
+        if (retained.TryGet plan.PlanId).IsNone then
+            retained.Set(plan.PlanId, plan)
 
-            // Evict oldest-first until back inside the bound. The queue can
-            // hold ids already removed by a record, so a dequeue that finds
-            // nothing to remove simply continues.
-            while retained.Count > bound do
-                match order.TryDequeue() with
-                | true, oldest -> retained.TryRemove oldest |> ignore
-                | false, _ ->
-                    // Queue drained but the dictionary is still over bound
-                    // — only reachable under a concurrent add racing the
-                    // dequeue. Stop rather than spin; the next retain
-                    // trims it.
-                    retained.Clear()
+    /// How many plans are retained now.
+    member internal _.RetainedCount = retained.Count
 
     /// The plan behind `planId`, if it is still retained. Exposed for the
     /// recorder below and for tests that pin the no-recompile property.
-    member _.TryPlan(planId: string) : AnswerPlan option =
-        match retained.TryGetValue planId with
-        | true, plan -> Some plan
-        | false, _ -> None
+    member _.TryPlan(planId: string) : AnswerPlan option = retained.TryGet planId
 
     /// Project a compiled plan onto the clauses it pushes, retaining the
     /// plan when it produced any (shared by both `PlanClauses` forms).
@@ -177,10 +163,10 @@ type AnswerPlanClausePlanner(planner: IAnswerPlanner, retention: int) =
 
         member _.RecordPlanned(scopeId, messageId, planId) = async {
             match retained.TryRemove planId with
-            | true, plan ->
+            | Some plan ->
                 do! planner.Record(scopeId, messageId, plan)
                 return true
-            | false, _ -> return false
+            | None -> return false
         }
 
 /// Construction for `AnswerPlanClausePlanner`.

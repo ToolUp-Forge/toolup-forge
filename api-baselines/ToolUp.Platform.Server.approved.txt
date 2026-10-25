@@ -1169,6 +1169,15 @@ ToolUp.Platform.BootstrapTeam.initialTeamNameEnvVar : System.String (literal)
 ToolUp.Platform.BootstrapTeamValidator (class)
 ToolUp.Platform.BootstrapTeamValidator+BootstrapTeamValidator (class)
 ToolUp.Platform.BootstrapTeamValidator+BootstrapTeamValidator..ctor(Microsoft.FSharp.Core.FSharpOption`1[System.TimeSpan])
+ToolUp.Platform.BoundedMemoIndex`2 (class)
+ToolUp.Platform.BoundedMemoIndex`2..ctor(System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit])
+ToolUp.Platform.BoundedMemoIndex`2.Count : System.Int32 { get }
+ToolUp.Platform.BoundedMemoIndex`2.Evictions : System.Int64 { get }
+ToolUp.Platform.BoundedMemoIndex`2.MaxEntries : System.Int32 { get }
+ToolUp.Platform.BoundedMemoIndex`2.Remove(K) : System.Void
+ToolUp.Platform.BoundedMemoIndex`2.Set(K, V) : System.Void
+ToolUp.Platform.BoundedMemoIndex`2.TryGet(K) : Microsoft.FSharp.Core.FSharpOption`1[V]
+ToolUp.Platform.BoundedMemoIndex`2.TryRemove(K) : Microsoft.FSharp.Core.FSharpOption`1[V]
 ToolUp.Platform.BoundedWorkProvenanceSource (class)
 ToolUp.Platform.BoundedWorkProvenanceSource..ctor(ToolUp.Platform.IWorkProvenanceSource)
 ToolUp.Platform.BudgetAmendment (class)

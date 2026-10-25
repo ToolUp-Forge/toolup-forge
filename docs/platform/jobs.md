@@ -184,6 +184,20 @@ let idempotency: IdempotencyKey option =
 
 The lookup is per-scope.
 
+#### Schedule-then-trigger is not idempotent
+
+Idempotency covers `Schedule`, not what a caller does with the `JobId` it returns. A caller that
+schedules a `Manual` job under an idempotency key and then calls `TriggerOnce` on the returned id
+triggers the job again every time the key coalesces, so "submitting twice = the job runs once"
+stops holding. Two sites in the SDK do this today, and both are pinned by pending tests that turn on
+when `Schedule` reports whether it coalesced (Phase 1066's `ScheduleOutcome.Coalesced`; the fix is
+Phase 998's):
+
+| Site | Schedule | Trigger | Pending pin |
+|---|---|---|---|
+| `GroundedNarrativeTrigger.enqueueFor` | `src/ToolUp.Facts.Server/Server/ReactiveDataChange.fs:468` | `:472` | `GroundedNarrativeTests` — "double run, first site" |
+| `RecomputeJobHandler.applyPolicies` (an `Eager` recompute) | `src/ToolUp.Facts.Server/Server/RecomputeJobHandler.fs:317` | `:325` | `ReactiveRecomputeComposeTests` — "double run, second site" |
+
 ### Lifecycle events
 
 Five events emit to `IEventStore` under `SourceModule = "_platform.jobs"`:

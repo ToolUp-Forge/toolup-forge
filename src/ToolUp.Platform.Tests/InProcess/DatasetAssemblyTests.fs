@@ -384,4 +384,132 @@ let tests =
                 20
                 "every unit landed in exactly one subset"
         }
+        testCaseAsync "every aggregation folds a known bucket to a real value, never a silent zero"
+        <| async {
+            let store = freshStore ()
+            let executor = DatasetAssemblyExecutor.create store
+
+            let schema: DatasetSchema = {
+                Columns = [
+                    col "unit" DatasetDType.Categorical DatasetColumnRole.PanelUnit
+                    col "period" DatasetDType.Timestamp DatasetColumnRole.PanelPeriod
+                    col "v" DatasetDType.Float DatasetColumnRole.Plain
+                ]
+            }
+
+            let rows = [
+                for d, v in [ 1, 3.0; 2, 5.0; 3, 7.0 ] ->
+                    {
+                        Cells = [ cat "u1"; DatasetValue.Timestamp(t d); f v ]
+                    }
+            ]
+
+            let! _ = store.Create("s", "bucket", schema, rows, "u", Map.empty, Versioned)
+
+            let bucketRef: DatasetVersionRef = {
+                ScopeId = "s"
+                DatasetId = "bucket"
+                Version = 1
+            }
+
+            // Every case of the union, read off the type: a case added later
+            // is folded here without anyone listing it.
+            let aggregations =
+                Microsoft.FSharp.Reflection.FSharpType.GetUnionCases typeof<TimeSeriesAggregation>
+                |> Array.map (fun c ->
+                    Microsoft.FSharp.Reflection.FSharpValue.MakeUnion(c, [||]) :?> TimeSeriesAggregation)
+
+            Expect.isGreaterThanOrEqual aggregations.Length 7 "the union was enumerated"
+
+            for aggregation in aggregations do
+                let spec: DatasetAssemblySpec = {
+                    Scope = "s"
+                    Base = AssemblySource.DatasetVersion bucketRef
+                    Transforms = [
+                        AssemblyTransform.Window("v", 3, aggregation, [ "unit" ], "period", "folded")
+                    ]
+                    Split = None
+                    OutputDatasetId = sprintf "folded-%A" aggregation
+                    OutputRoles = []
+                    Policy = Versioned
+                }
+
+                let! produced = executor.Assemble(spec, "u")
+                let subsets = okv produced
+                let! page = readAll store subsets["all"]
+                let idx = DatasetSchema.indexOf "folded" page.Schema |> Option.get
+                let last = page.Rows |> List.last |> (fun r -> List.item idx r.Cells)
+
+                Expect.notEqual last (f 0.0) (sprintf "%A over [3; 5; 7] is not zero" aggregation)
+                Expect.notEqual last DatasetValue.Null (sprintf "%A over [3; 5; 7] is a value" aggregation)
+        }
+
+        testCaseAsync "a unit spelled like the missing-unit sentinel never shares a missing unit's bucket"
+        <| async {
+            let store = freshStore ()
+            let executor = DatasetAssemblyExecutor.create store
+
+            let schema: DatasetSchema = {
+                Columns = [
+                    {
+                        col "unit" DatasetDType.Text DatasetColumnRole.PanelUnit with
+                            Nullable = true
+                    }
+                    col "tag" DatasetDType.Text DatasetColumnRole.Plain
+                ]
+            }
+
+            // The text the old sentinel spelled: a NUL followed by "null",
+            // built from its char rather than written as a literal.
+            let sentinelText = string (char 0) + "null"
+
+            let rows = [
+                {
+                    Cells = [ txt sentinelText; txt "spelled" ]
+                }
+                {
+                    Cells = [ DatasetValue.Null; txt "missing" ]
+                }
+            ]
+
+            let! _ = store.Create("s", "units-null", schema, rows, "u", Map.empty, Versioned)
+
+            let spec: DatasetAssemblySpec = {
+                Scope = "s"
+                Base =
+                    AssemblySource.DatasetVersion {
+                        ScopeId = "s"
+                        DatasetId = "units-null"
+                        Version = 1
+                    }
+                Transforms = []
+                Split = Some(AssemblySplit.ByUnitHash("unit", [ for i in 1..16 -> sprintf "b%02d" i, 1 ]))
+                OutputDatasetId = "null-split"
+                OutputRoles = []
+                Policy = Versioned
+            }
+
+            let! produced = executor.Assemble(spec, "u")
+            let subsets = okv produced
+
+            let bucketOf (tag: string) = async {
+                let mutable found = []
+
+                for KeyValue(name, ref') in subsets do
+                    let! page = readAll store ref'
+                    let idx = DatasetSchema.indexOf "tag" page.Schema |> Option.get
+
+                    if page.Rows |> List.exists (fun r -> List.item idx r.Cells = txt tag) then
+                        found <- name :: found
+
+                return found
+            }
+
+            let! spelled = bucketOf "spelled"
+            let! missing = bucketOf "missing"
+
+            Expect.equal spelled.Length 1 "the spelled unit landed in exactly one bucket"
+            Expect.equal missing.Length 1 "the missing unit landed in exactly one bucket"
+            Expect.notEqual spelled missing "the sentinel's spelling and a missing unit hash apart"
+        }
     ]

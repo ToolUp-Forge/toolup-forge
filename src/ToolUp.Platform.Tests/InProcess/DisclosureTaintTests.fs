@@ -658,10 +658,109 @@ let latticeLawTests =
                 "and the other party's survives — one party's consent never launders another's data"
     ]
 
+// ── The gate's per-check fan-out is bounded ─────────────────────────
+//
+// A check over N facts started N reads together. The bound below holds at
+// the default and at a composed degree; the probe first proves the reads
+// do overlap, so a bound cannot hold vacuously.
+
+/// Delays every fact-blob download and records the most in flight at once.
+type private InFlightProbe(inner: ToolUp.Platform.BlobStorage.IBlobStorage) =
+    let gate = obj ()
+    let mutable inFlight = 0
+    let mutable maxInFlight = 0
+
+    member _.MaxInFlight = lock gate (fun () -> maxInFlight)
+    member _.Reset() = lock gate (fun () -> maxInFlight <- 0)
+
+    interface ToolUp.Platform.BlobStorage.IBlobStorage with
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            ToolUp.Platform.BlobStorage.composeNotSupported "test double"
+
+        member _.Upload(container, blobName, content) =
+            inner.Upload(container, blobName, content)
+
+        member _.Download(container, blobName) = async {
+            if blobName.StartsWith("_facts/", StringComparison.Ordinal) then
+                lock gate (fun () ->
+                    inFlight <- inFlight + 1
+                    maxInFlight <- max maxInFlight inFlight)
+
+                try
+                    do! Async.Sleep 25
+                    return! inner.Download(container, blobName)
+                finally
+                    lock gate (fun () -> inFlight <- inFlight - 1)
+            else
+                return! inner.Download(container, blobName)
+        }
+
+        member _.Delete(container, blobName) = inner.Delete(container, blobName)
+        member _.List(container, prefix) = inner.List(container, prefix)
+        member _.Exists(container, blobName) = inner.Exists(container, blobName)
+        member _.GetMetadata(container, blobName) = inner.GetMetadata(container, blobName)
+
+        member _.DownloadRange(container, blobName, offset, length) =
+            inner.DownloadRange(container, blobName, offset, length)
+
+        member _.Erase(container, prefix, policy, dryRun) =
+            inner.Erase(container, prefix, policy, dryRun)
+
+let private batchOf (store: IFactStore) (scope: string) (n: int) = [
+    for i in 1..n ->
+        (assertFact store scope (draftOf (sprintf "m%03d" i) (Computed("load", "1", "p")) (Scalar 1m) Surfaceable []))
+            .FactId
+]
+
+let fanOutTests =
+    testList "the gate's fan-out is bounded" [
+
+        testCaseAsync "a batch of N facts holds at most the default number of reads in flight"
+        <| async {
+            let probe = InFlightProbe(InMemoryBlobStorage())
+            let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let store = BlobFactStore.create probe events
+            let scope = "team-" + Guid.NewGuid().ToString("N")
+            let ids = batchOf store scope 64
+            probe.Reset()
+
+            let gate = FactDisclosureGate.create store events
+            let! verdicts = gate.Check(scope, "user-1", FactRetrieval, ids)
+            Expect.equal verdicts.Count 64 "every fact was decided"
+
+            Expect.isGreaterThan probe.MaxInFlight 1 "the reads did overlap"
+
+            Expect.isLessThanOrEqual
+                probe.MaxInFlight
+                DisclosureFanOut.DefaultMaxConcurrentReads
+                "never more than the default bound at once"
+        }
+
+        testCaseAsync "a composed degree bounds the fan-out to it"
+        <| async {
+            let probe = InFlightProbe(InMemoryBlobStorage())
+            let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let store = BlobFactStore.create probe events
+            let scope = "team-" + Guid.NewGuid().ToString("N")
+            let ids = batchOf store scope 32
+            probe.Reset()
+
+            let gate = (FactDisclosureGate(store, events)).WithFanOut { MaxConcurrentReads = 3 }
+
+            let! verdicts = gate.Check(scope, "user-1", FactRetrieval, ids)
+            Expect.equal verdicts.Count 32 "every fact was decided"
+            Expect.isGreaterThan probe.MaxInFlight 1 "the reads did overlap"
+            Expect.isLessThanOrEqual probe.MaxInFlight 3 "never more than the composed bound at once"
+        }
+    ]
+
 let tests =
     testList "Phase 562 taint-propagating disclosure" [
         pureWalkTests
         resolverVocabularyTests
         gateTests
         latticeLawTests
+        fanOutTests
     ]

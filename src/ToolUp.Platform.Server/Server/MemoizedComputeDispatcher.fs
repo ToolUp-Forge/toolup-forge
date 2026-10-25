@@ -298,15 +298,24 @@ module ComputeMemoMetrics =
     /// Gauge — live in-memory entries.
     let Entries = "toolup.compute.memo.entries"
 
-/// Phase 485 — a bounded, FIFO-draining in-memory index. Phase 328's
-/// discipline, extracted so both of the decorator's indexes get it:
-/// eviction is a bounded drain of the oldest keys, and the cap-race branch
-/// accepts a transient over-cap and reports it instead of wiping.
+/// A bounded, FIFO-draining in-memory index — the one bounded cache the
+/// platform's in-memory memo tables share.
 ///
-/// `internal` because it is the decorator's innards, not a surface a
-/// consumer composes against — the same posture `ComputeBackendCounters`
-/// takes.
-type internal BoundedMemoIndex<'K, 'V when 'K: equality>(cap: int, recordOverCap: unit -> unit) =
+/// **The discipline it holds (and every cache in the platform holds with
+/// it): a bounded cache never wipes.** At the cap, `Set` drains the oldest
+/// keys in a bounded batch, so steady state removes one victim per insert
+/// and a burst is caught up over the next few. When a count/queue race
+/// leaves the index at the cap with a momentarily empty queue, it accepts a
+/// transient slight over-cap and calls `recordOverCap` rather than clearing:
+/// a mass clear under cap pressure is silent, and every entry it discards
+/// becomes a re-computation (or a re-read) of work that was already paid
+/// for — and, for a cache whose readers ask "did I record this a moment
+/// ago?", a false "no".
+///
+/// `cap` is the entry bound; `recordOverCap` is called once per cap-race,
+/// for the owner to count or log. `Evictions` counts the entries the drain
+/// removed.
+type BoundedMemoIndex<'K, 'V when 'K: equality>(cap: int, recordOverCap: unit -> unit) =
 
     // Bound a single `Set`'s eviction work. One `Set` adds one entry, so
     // steady state removes one victim; the batch caps the catch-up drain
@@ -387,6 +396,13 @@ type internal BoundedMemoIndex<'K, 'V when 'K: equality>(cap: int, recordOverCap
             order.Enqueue key)
 
     member _.Remove(key: 'K) = entries.TryRemove key |> ignore
+
+    /// Remove `key` and return the value it held, atomically: of two
+    /// concurrent callers, exactly one receives the value.
+    member _.TryRemove(key: 'K) : 'V option =
+        match entries.TryRemove key with
+        | true, value -> Some value
+        | false, _ -> None
 
 /// Phase 485 — the memo's defaults, and the one composition rule that
 /// matters. Constants rather than magic numbers at the call site, so a

@@ -274,6 +274,30 @@ module ViewerAwareDisclosure =
                             }
         }
 
+/// How many of a check's facts the gate reads and decides at once. A
+/// check over N facts used to start N reads together, so one large batch
+/// fanned out without limit against the store; the gate now holds at most
+/// `MaxConcurrentReads` in flight. Composed with
+/// `FactsCompose.withDisclosureFanOut`; absent, the gate runs at
+/// `DisclosureFanOut.DefaultMaxConcurrentReads`.
+type DisclosureFanOut = {
+    /// The bound, at least 1.
+    MaxConcurrentReads: int
+}
+
+/// The fan-out default.
+module DisclosureFanOut =
+
+    /// Sixteen reads in flight per check: enough to keep a blob store busy,
+    /// small enough that one batch cannot monopolise it.
+    [<Literal>]
+    let DefaultMaxConcurrentReads = 16
+
+    /// The default bound.
+    let defaults = {
+        MaxConcurrentReads = DefaultMaxConcurrentReads
+    }
+
 /// The default `IFactDisclosureGate` over the composed fact store.
 /// Construct via `FactDisclosureGate.create`; registered in DI by
 /// `FactsCompose.withFactStore` alongside the store itself, so the fact
@@ -287,10 +311,13 @@ type FactDisclosureGate
         taint: DisclosureTaintConfig option,
         purpose: DisclosurePurposeConfig option,
         budgets: DeclassificationBudgetConfig option,
-        viewerAware: ViewerAwareDisclosure option
+        viewerAware: ViewerAwareDisclosure option,
+        fanOut: DisclosureFanOut
     ) =
 
     static let jsonOptions = FableConverters.create ()
+
+    let maxConcurrentReads = max 1 fanOut.MaxConcurrentReads
 
     let taintConfig = defaultArg taint DisclosureTaintConfig.empty
 
@@ -636,7 +663,7 @@ type FactDisclosureGate
 
                     return factId, finalVerdict
                 })
-                |> Async.Parallel
+                |> fun reads -> Async.Parallel(reads, maxConcurrentReads)
 
             return Map.ofArray verdicts
         }
@@ -672,14 +699,21 @@ type FactDisclosureGate
             ?purpose: DisclosurePurposeConfig,
             ?budgets: DeclassificationBudgetConfig
         ) =
-        FactDisclosureGate(store, events, resolvePolicy, taint, purpose, budgets, None)
+        FactDisclosureGate(store, events, resolvePolicy, taint, purpose, budgets, None, DisclosureFanOut.defaults)
 
     /// This gate with the Phase 896 viewer-aware facet armed: every other
-    /// facet (resolver, taint, purpose, budgets) is kept as it is, and a
-    /// `Restricted` fact is decided for the viewer. Composed by
+    /// facet (resolver, taint, purpose, budgets, fan-out) is kept as it is,
+    /// and a `Restricted` fact is decided for the viewer. Composed by
     /// `FactsCompose.withTeamOutputVisibility`.
     member _.WithViewerAwareness(facet: ViewerAwareDisclosure) : IFactDisclosureGate =
-        FactDisclosureGate(store, events, resolvePolicy, taint, purpose, budgets, Some facet) :> IFactDisclosureGate
+        FactDisclosureGate(store, events, resolvePolicy, taint, purpose, budgets, Some facet, fanOut)
+        :> IFactDisclosureGate
+
+    /// This gate with its per-check read fan-out bounded by `bound`; every
+    /// facet is kept as it is. Composed by `FactsCompose.withDisclosureFanOut`.
+    member _.WithFanOut(bound: DisclosureFanOut) : IFactDisclosureGate =
+        FactDisclosureGate(store, events, resolvePolicy, taint, purpose, budgets, viewerAware, bound)
+        :> IFactDisclosureGate
 
     interface IFactDisclosureGate with
 

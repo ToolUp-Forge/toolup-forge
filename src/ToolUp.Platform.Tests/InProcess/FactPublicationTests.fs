@@ -33,6 +33,7 @@ open System.Collections.Concurrent
 open System.IO
 open System.Text.Json
 open Expecto
+open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
 open ToolUp.Platform.Grounding
 open ToolUp.Platform.Secrets
@@ -1680,6 +1681,187 @@ let private delegateTargetTests =
         }
     ]
 
+
+// ─── Composition does no I/O ─────────────────────────────────────────
+//
+// The durable publication service restored its grants in its constructor
+// and the coherence check's start step scheduled its job synchronously, so
+// a slow blob store or scheduler stalled whoever was composing. Both are
+// pinned here over a substrate that does not answer until released.
+
+/// Holds every listing and download until `Release`.
+type private HeldStorage(inner: BlobStorage.IBlobStorage) =
+    let released =
+        System.Threading.Tasks.TaskCompletionSource<unit>(
+            System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously
+        )
+
+    member _.Release() = released.TrySetResult() |> ignore
+
+    interface BlobStorage.IBlobStorage with
+        member _.CanComposeFrom = false
+
+        member _.ComposeFrom(_, _, _) =
+            BlobStorage.composeNotSupported "test double"
+
+        member _.Upload(container, blobName, content) =
+            inner.Upload(container, blobName, content)
+
+        member _.Download(container, blobName) = async {
+            do! released.Task |> Async.AwaitTask
+            return! inner.Download(container, blobName)
+        }
+
+        member _.Delete(container, blobName) = inner.Delete(container, blobName)
+
+        member _.List(container, prefix) = async {
+            do! released.Task |> Async.AwaitTask
+            return! inner.List(container, prefix)
+        }
+
+        member _.Exists(container, blobName) = inner.Exists(container, blobName)
+        member _.GetMetadata(container, blobName) = inner.GetMetadata(container, blobName)
+
+        member _.DownloadRange(container, blobName, offset, length) =
+            inner.DownloadRange(container, blobName, offset, length)
+
+        member _.Erase(container, prefix, policy, dryRun) =
+            inner.Erase(container, prefix, policy, dryRun)
+
+/// A scheduler whose `Schedule` does not answer until `Release`.
+type private HeldScheduler() =
+    let released =
+        System.Threading.Tasks.TaskCompletionSource<unit>(
+            System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously
+        )
+
+    let scheduled = ConcurrentQueue<JobRegistration>()
+
+    member _.Release() = released.TrySetResult() |> ignore
+    member _.Scheduled = List.ofSeq scheduled
+
+    interface IJobScheduler with
+        member _.RegisterHandler(_, _) = ()
+        member _.RegisterHandlerAsync(_, _) = async { return Ok() }
+
+        member _.Schedule(registration: JobRegistration) = async {
+            do! released.Task |> Async.AwaitTask
+            scheduled.Enqueue registration
+            return Ok(Guid.NewGuid())
+        }
+
+        member _.Schedule(_: ResolvedScope, registration: JobRegistration) = async {
+            do! released.Task |> Async.AwaitTask
+            scheduled.Enqueue registration
+            return Ok(Guid.NewGuid())
+        }
+
+        member _.Cancel(_, _) = async { return () }
+        member _.Disable(_, _) = async { return () }
+        member _.Enable(_, _) = async { return () }
+        member _.Get(_, _) = async { return None }
+        member _.ListJobs _ = async { return [] }
+        member _.GetRecentRuns(_, _, _) = async { return [] }
+        member _.TriggerOnce(_, _, _) = async { return Ok() }
+        member _.NotifyEventWritten(_, _, _) = async { return () }
+
+let private quietLogger =
+    { new ILogger with
+        member _.Debug _ = ()
+        member _.Info _ = ()
+        member _.Warn _ = ()
+        member _.Error(_, _) = ()
+    }
+
+let startupTests =
+    testList "composition does no I/O" [
+
+        test "building the durable publication service returns before its grants can be read" {
+            let held = ref None
+
+            let building =
+                System.Threading.Tasks.Task.Run(fun () ->
+                    worldWith {
+                        defaults with
+                            Durable = true
+                            PublicationStorage =
+                                fun storage ->
+                                    let h = HeldStorage(storage)
+                                    held.Value <- Some h
+                                    h :> BlobStorage.IBlobStorage
+                    })
+
+            let returned = building.Wait(TimeSpan.FromSeconds 10.0)
+
+            // Release whatever happened, so a red run does not leak a
+            // blocked thread into the rest of the pack.
+            held.Value |> Option.iter _.Release()
+
+            Expect.isTrue returned "the constructor did not wait on the blob store"
+
+            let w = building.Result
+            let grants = w.Publication.Grants(teamScope north) |> Async.RunSynchronously
+            Expect.isEmpty grants "the first call restored (nothing) and answered"
+        }
+
+        test "the coherence check's start step returns without waiting on the scheduler" {
+            let app =
+                {
+                    ServerApp.empty with
+                        Config = {
+                            ServerApp.empty.Config with
+                                FactStore = EnabledFactStore
+                        }
+                }
+                |> FactsCompose.withCoherenceChecksConfig CoherenceConfig.defaults (Trigger.CronTrigger "0 3 * * *") [
+                    north
+                ]
+
+            let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let scheduler = HeldScheduler()
+            let services = Microsoft.Extensions.DependencyInjection.ServiceCollection()
+
+            services
+                .AddSingleton<ILogger>(quietLogger)
+                .AddSingleton<IEventStore>(events)
+                .AddSingleton<IFactStore>(BlobFactStore.create (InMemoryBlobStorage()) events)
+                .AddSingleton<INotificationChannel>(
+                    NotificationChannel.InMemoryNotificationChannel(None) :> INotificationChannel
+                )
+                .AddSingleton<IJobScheduler>(scheduler)
+            |> ignore
+
+            let configured =
+                match app.Extensions.ServiceConfig with
+                | Some configure -> configure services
+                | None -> failtest "the coherence check registered nothing"
+
+            use provider =
+                Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider
+                    configured
+
+            let hosted =
+                Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<
+                    Microsoft.Extensions.Hosting.IHostedService
+                 >
+                    provider
+                |> List.ofSeq
+
+            Expect.equal hosted.Length 1 "one start step"
+
+            let starting =
+                System.Threading.Tasks.Task.Factory.StartNew(fun () ->
+                    hosted.Head.StartAsync(Threading.CancellationToken.None))
+
+            let returned = starting.Wait(TimeSpan.FromSeconds 10.0)
+            scheduler.Release()
+
+            Expect.isTrue returned "StartAsync handed back a task rather than blocking on Schedule"
+            starting.Result.Wait(TimeSpan.FromSeconds 10.0) |> ignore
+            Expect.equal scheduler.Scheduled.Length 1 "and the job was scheduled once the scheduler answered"
+        }
+    ]
+
 let tests =
     testList "Phase 897 — team-to-team fact publication" [
         consolidationTests
@@ -1690,6 +1872,7 @@ let tests =
         composedWriterTests
         restartTests
         delegateTargetTests
+        startupTests
     ]
 
 // ─── Phase 971 - a refused ledger delete is the consolidation's failure ──

@@ -13,19 +13,50 @@ same name in one release is reported once, as a signature change. Under this rep
 policy a `breaking` release is a MINOR bump and an `additive` one a PATCH; from 1.0.0 the ordinary table
 applies. Where a release ships a migration note under `docs/migrations/`, it is linked from the section.
 
-## [Unreleased] — unreleased
+## [0.33.1] — unreleased
 
 Migration notes:
 
 - [1082-redesign-g-defects-rag-and-knowledge-base](docs/migrations/1082-redesign-g-defects-rag-and-knowledge-base.md)
 
-_Surface since `v0.33.0`: **additive** — 2 packages moved; 15 members added, 0 members changed, 0 members removed._
+_Surface since `v0.33.0`: **additive** — 3 packages moved; 54 members added, 0 members changed, 0 members removed._
 
 ### Added
 
+- `ToolUp.Facts.Server` — 30 members:
+  - `ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolUp.Platform.IEventStore, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime], ToolUp.Facts.FactSurfaceOptions, ToolUp.Facts.FactIndexOptions, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ILogger])`
+  - `ToolUp.Facts.BlobFactStore.ReadFaults : System.Int64 { get }`
+  - `ToolUp.Facts.DisclosureFanOut (class)`
+  - `ToolUp.Facts.DisclosureFanOut..ctor(System.Int32)`
+  - `ToolUp.Facts.DisclosureFanOut.MaxConcurrentReads : System.Int32 { get }`
+  - `ToolUp.Facts.DisclosureFanOutModule (class)`
+  - `ToolUp.Facts.DisclosureFanOutModule.DefaultMaxConcurrentReads : System.Int32 (literal)`
+  - `ToolUp.Facts.DisclosureFanOutModule.defaults : ToolUp.Facts.DisclosureFanOut { get }`
+  - `ToolUp.Facts.FactDisclosureGate.WithFanOut(ToolUp.Facts.DisclosureFanOut) : ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate`
+  - `ToolUp.Facts.FactReadFailed (class)`
+  - `ToolUp.Facts.FactReadFailed..ctor()`
+  - `ToolUp.Facts.FactReadFailed..ctor(ToolUp.Facts.FactReadFault)`
+  - `ToolUp.Facts.FactReadFailed.Message : System.String { get }`
+  - `ToolUp.Facts.FactReadFailed.fault : ToolUp.Facts.FactReadFault { get }`
+  - `ToolUp.Facts.FactReadFault (class)`
+  - `ToolUp.Facts.FactReadFault+FactDownloadFailed (class)`
+  - `ToolUp.Facts.FactReadFault+FactDownloadFailed.blobName : System.String { get }`
+  - `ToolUp.Facts.FactReadFault+FactDownloadFailed.reason : System.String { get }`
+  - `ToolUp.Facts.FactReadFault+FactUnparseable (class)`
+  - `ToolUp.Facts.FactReadFault+FactUnparseable.blobName : System.String { get }`
+  - … and 10 more — `git diff v0.33.0 -- api-baselines/ToolUp.Facts.Server.approved.txt`
 - `ToolUp.KnowledgeBase.Server` — 1 member:
   - `KnowledgeBase.ServerIngestionObserver.publishTerminalStatus(ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger, System.String, System.String, System.String, SharedTypes+IngestionStatus) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]`
-- `ToolUp.Platform.Server` — 14 members:
+- `ToolUp.Platform.Server` — 23 members:
+  - `ToolUp.Platform.BoundedMemoIndex`2 (class)`
+  - `ToolUp.Platform.BoundedMemoIndex`2..ctor(System.Int32, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit])`
+  - `ToolUp.Platform.BoundedMemoIndex`2.Count : System.Int32 { get }`
+  - `ToolUp.Platform.BoundedMemoIndex`2.Evictions : System.Int64 { get }`
+  - `ToolUp.Platform.BoundedMemoIndex`2.MaxEntries : System.Int32 { get }`
+  - `ToolUp.Platform.BoundedMemoIndex`2.Remove(K) : System.Void`
+  - `ToolUp.Platform.BoundedMemoIndex`2.Set(K, V) : System.Void`
+  - `ToolUp.Platform.BoundedMemoIndex`2.TryGet(K) : Microsoft.FSharp.Core.FSharpOption`1[V]`
+  - `ToolUp.Platform.BoundedMemoIndex`2.TryRemove(K) : Microsoft.FSharp.Core.FSharpOption`1[V]`
   - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality (class)`
   - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality+Tags (class)`
   - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality+Tags.InProcess : System.Int32 (literal)`
@@ -37,9 +68,7 @@ _Surface since `v0.33.0`: **additive** — 2 packages moved; 15 members added, 0
   - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality.Tag : System.Int32 { get }`
   - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocalityModule (class)`
   - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocalityModule.declared(System.Object) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality]`
-  - `ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocalityModule.isCrossReplica(System.Object) : System.Boolean`
-  - `ToolUp.Platform.IEmbeddingProvider+IEmbeddingCacheLocality (interface)`
-  - `ToolUp.Platform.IEmbeddingProvider+IEmbeddingCacheLocality.CacheLocality : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.IEmbeddingProvider+EmbeddingCacheLocality] { get }`
+  - … and 3 more — `git diff v0.33.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
 
 ## [0.33.0] — 2026-10-24
 
