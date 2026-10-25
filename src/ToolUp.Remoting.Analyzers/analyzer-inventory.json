@@ -361,13 +361,6 @@
     },
     {
       "rule": "TUA003",
-      "reason": "Constructor restores persisted grants once when the publication service is built at compose.",
-      "sites": {
-        "src/ToolUp.Facts.Server/Server/FactPublication.fs": 1
-      }
-    },
-    {
-      "rule": "TUA003",
       "reason": "Implements ASP.NET Core Data Protection's synchronous IXmlRepository; the framework calls it on key-ring load and rotation, not per request.",
       "sites": {
         "src/ToolUp.Platform.Server/Server/BlobXmlRepository.fs": 3

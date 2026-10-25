@@ -315,6 +315,8 @@ let private migrationOfflineTests =
                 [ "_facts/garbage.json"; "_facts/misnamed.json" ]
                 "both unusable blobs are named"
 
+            // The query path no longer skips the garbage blob either: a fact
+            // read that fails fails the read, naming the blob.
             let! listed =
                 (source :> IFactStore)
                     .Query(
@@ -324,13 +326,13 @@ let private migrationOfflineTests =
                                 IncludeSuperseded = true
                         }
                     )
+                |> Async.Catch
 
-            // Verify the probe: the query path really does skip the garbage
-            // blob silently, which is why the export must not.
-            Expect.equal
-                listed.Length
-                (MigrationSeedFacts + 2)
-                "the query path lists the misnamed copy and drops the garbage"
+            match listed with
+            | Choice2Of2(FactReadFailed(FactUnparseable(name, _))) ->
+                Expect.equal name "_facts/garbage.json" "the query names the blob it could not parse"
+            | Choice2Of2 other -> failtestf "the query failed untyped: %O" other
+            | Choice1Of2 facts -> failtestf "the query answered over a garbage blob with %d facts" facts.Length
         }
 
         testCaseAsync "the source check passes a valid fact base and names each fact of a broken one"
