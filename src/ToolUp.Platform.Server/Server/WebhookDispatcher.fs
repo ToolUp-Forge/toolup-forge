@@ -43,6 +43,32 @@ type IWebhookDispatcher =
 /// dispatch take effect on the same event.
 type private DispatchTask = { Event: ModuleEvent }
 
+/// Phase 1064 — record one delivery attempt in the delivery log, best
+/// effort. `IWebhookDeliveryLog.Record` answers a `Result`, and the
+/// dispatcher used to discard it (`let! _ =`), so a delivery-log write
+/// failure was invisible on every attempt. A failure is still not allowed
+/// to fail the delivery — the receiver already has the event, and the log
+/// is the operator's record of it, not the delivery — but it is now logged
+/// at Warning, carrying the `best-effort-write` marker, and counted on
+/// `failures`. Full propagation as a typed `WebhookDispatchError` is Phase
+/// 873's.
+let internal recordDeliveryBestEffort
+    (logger: ILogger)
+    (deliveryLog: IWebhookDeliveryLog)
+    (failures: int64 ref)
+    (scopeId: string)
+    (delivery: WebhookDelivery)
+    : Async<unit> =
+    async {
+        match! deliveryLog.Record(scopeId, delivery) with
+        | Ok() -> ()
+        | Error reason ->
+            Interlocked.Increment(&failures.contents) |> ignore
+
+            logger.Warn
+                $"[WebhookDispatcher] event=delivery_log_write_failed best-effort-write scope=%s{scopeId} subscription=%O{delivery.SubscriptionId} delivery=%O{delivery.DeliveryId} reason=%s{reason} — the delivery stands; its delivery-log row was not written"
+    }
+
 [<Literal>]
 let private QueueCapacity = 1024
 
@@ -466,10 +492,11 @@ type WebhookDispatcherService
             BoundedChannelOptions(QueueCapacity, FullMode = BoundedChannelFullMode.DropWrite, SingleReader = true)
         )
 
-    let recordDelivery (scopeId: string) (delivery: WebhookDelivery) = async {
-        let! _ = deliveryLog.Record(scopeId, delivery)
-        return ()
-    }
+    /// Phase 1064 — delivery-log writes that answered `Error`.
+    let deliveryLogWriteFailures = ref 0L
+
+    let recordDelivery (scopeId: string) (delivery: WebhookDelivery) =
+        recordDeliveryBestEffort logger deliveryLog deliveryLogWriteFailures scopeId delivery
 
     let emitAudit (scopeId: string) (eventType: string) (payload: 'T) = async {
         try
@@ -876,6 +903,12 @@ type WebhookDispatcherService
             urlPolicy,
             ?distributedLock = None
         )
+
+    /// Phase 1064 — how many delivery-log writes have answered `Error` since
+    /// the dispatcher started. Each one is also logged at Warning with the
+    /// `best-effort-write` marker.
+    member internal _.DeliveryLogWriteFailures =
+        Interlocked.Read(&deliveryLogWriteFailures.contents)
 
     interface IWebhookDispatcher with
         member _.Dispatch(event) =

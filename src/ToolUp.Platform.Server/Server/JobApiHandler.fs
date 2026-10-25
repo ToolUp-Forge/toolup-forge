@@ -98,6 +98,18 @@ let jobApi (ctx: HttpContext) : JobApi =
         | _ -> return Ok()
     }
 
+    /// Phase 1064 — run a status transition, rendering the scheduler's typed
+    /// busy refusal (an in-flight dispatch holds the job's lease, typically
+    /// asleep in its retry backoff) as a retryable `Error` rather than
+    /// letting the request wait the backoff out or fail as a 500.
+    let transition (work: Async<unit>) : Async<Result<unit, string>> = async {
+        try
+            do! work
+            return Ok()
+        with :? JobScheduler.JobStatusBusyException as busy ->
+            return Error busy.Message
+    }
+
     let withSchedulerResult (f: IJobScheduler -> string -> Async<Result<'T, string>>) = async {
         match scheduler, scopeOpt with
         | None, _ -> return Error "Background-job scheduler is not enabled in this deployment."
@@ -170,9 +182,7 @@ let jobApi (ctx: HttpContext) : JobApi =
 
                     match rbac with
                     | Error msg -> return Error msg
-                    | Ok() ->
-                        do! s.Cancel(scopeId, jobId)
-                        return Ok()
+                    | Ok() -> return! transition (s.Cancel(scopeId, jobId))
                 })
 
         Disable =
@@ -182,9 +192,7 @@ let jobApi (ctx: HttpContext) : JobApi =
 
                     match rbac with
                     | Error msg -> return Error msg
-                    | Ok() ->
-                        do! s.Disable(scopeId, jobId)
-                        return Ok()
+                    | Ok() -> return! transition (s.Disable(scopeId, jobId))
                 })
 
         Enable =
@@ -194,9 +202,7 @@ let jobApi (ctx: HttpContext) : JobApi =
 
                     match rbac with
                     | Error msg -> return Error msg
-                    | Ok() ->
-                        do! s.Enable(scopeId, jobId)
-                        return Ok()
+                    | Ok() -> return! transition (s.Enable(scopeId, jobId))
                 })
 
         TriggerOnce =

@@ -115,10 +115,18 @@ type IJobScheduler =
     /// not delete the record (history remains for audit).
     /// Returns `unit` on success; idempotent — cancelling an already-
     /// cancelled or unknown job is a no-op.
+    ///
+    /// Phase 1064 — the transition takes the job's lease, which an
+    /// in-flight dispatch holds across its retry backoff. The in-process
+    /// scheduler waits for it a bounded time (five seconds) and then
+    /// REFUSES, raising an `InvalidOperationException` that changes
+    /// nothing and is safe to retry, rather than parking the caller behind
+    /// the backoff sleep. `Disable` and `Enable` behave the same way.
     abstract Cancel: scopeId: string * jobId: JobId -> Async<unit>
 
     /// Disable a job — sets `Status = Disabled`. Stops dispatch
-    /// without losing the schedule. Admins re-enable via a separate
+    /// without losing the schedule — a manual `TriggerOnce` included
+    /// (Phase 1064, ruling 12). Admins re-enable via a separate
     /// `Enable` call.
     abstract Disable: scopeId: string * jobId: JobId -> Async<unit>
 
@@ -146,8 +154,9 @@ type IJobScheduler =
     /// `TriggerSource.ScheduledManually byUserId`. Cron-triggered
     /// jobs continue on their schedule; event-triggered jobs
     /// continue to react to events; manual fires are additive.
-    /// Returns `Error` when the job is unknown or its `Status` is
-    /// `Cancelled`.
+    /// Returns `Error`, and dispatches nothing, when the job is unknown,
+    /// `Cancelled`, or `Disabled` (Phase 1064, ruling 12 — every scheduler
+    /// the contract pack runs against refuses all three).
     abstract TriggerOnce: scopeId: string * jobId: JobId * byUserId: string -> Async<Result<unit, string>>
 
     /// Notify the scheduler that an event was written to

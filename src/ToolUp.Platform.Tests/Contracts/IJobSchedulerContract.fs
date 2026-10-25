@@ -291,6 +291,41 @@ let tests (name: string) (factory: unit -> IJobScheduler * string * string) =
             | Ok _ -> failtest "expected Error when triggering a cancelled job"
         }
 
+        // Phase 1064 — ruling 12: `Disable` stops dispatch, and a manual
+        // fire is a dispatch. The in-process scheduler used to answer
+        // `Ok()` and then skip the run silently; Quartz used to RUN it.
+        testCaseAsync "TriggerOnce on disabled job returns Error and writes no run row"
+        <| async {
+            let scheduler, scopeA, _ = factory ()
+            let executed = ref 0
+
+            scheduler.RegisterHandler(
+                "h",
+                { new IJobHandler with
+                    member _.Execute(_) = async {
+                        Threading.Interlocked.Increment(&executed.contents) |> ignore
+                        return JobResult.Success
+                    }
+                }
+            )
+
+            let r = mkRegistration scopeA "h" Manual
+            let jobId = okOrFail "Schedule" (scheduler.Schedule r |> Async.RunSynchronously)
+            do! scheduler.Disable(scopeA, jobId)
+
+            match! scheduler.TriggerOnce(scopeA, jobId, "alice") with
+            | Error _ -> ()
+            | Ok _ -> failtest "expected Error when triggering a disabled job"
+
+            // A would-be dispatch is asynchronous on both schedulers; give
+            // it time to land before asserting it did not.
+            do! Async.Sleep 500
+
+            let! runs = scheduler.GetRecentRuns(scopeA, jobId, 10)
+            Expect.isEmpty runs "a refused manual fire writes no run row"
+            Expect.equal executed.Value 0 "and runs no handler"
+        }
+
         // ─── Read paths ──────────────────────────────────────
 
         testCaseAsync "Get of unknown job returns None"

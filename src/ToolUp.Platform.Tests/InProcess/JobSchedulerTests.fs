@@ -3,6 +3,7 @@ module ToolUp.Platform.Tests.InProcess.JobSchedulerTests
 open System
 open System.IO
 open System.Text
+open Microsoft.Extensions.DependencyInjection
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
@@ -1283,6 +1284,213 @@ let private handoffTests =
         }
     ]
 
+// ─── Phase 1064 — three scheduler defects, each pinned red first ─────
+
+/// A job store that fails `RecordRun` exactly once after `Arm`, and
+/// delegates everything else. Models the process death (or the storage
+/// blip) between an external outcome's handle claim and its row write.
+type private FailOnceRunStore(inner: IJobStore) =
+    let mutable armed = 0
+
+    member _.Arm() = Threading.Volatile.Write(&armed, 1)
+
+    interface IJobStore with
+        member _.Save d = inner.Save d
+        member _.Get(scope, jobId) = inner.Get(scope, jobId)
+        member _.ListJobs scope = inner.ListJobs scope
+        member _.Update d = inner.Update d
+
+        member _.FindByIdempotencyKey(scope, key, ttl, now) =
+            inner.FindByIdempotencyKey(scope, key, ttl, now)
+
+        member _.RecordRun run = async {
+            if Threading.Interlocked.Exchange(&armed, 0) = 1 then
+                return raise (IOException "Phase 1064 fake: the run store blipped")
+            else
+                return! inner.RecordRun run
+        }
+
+        member _.GetRecentRuns(scope, jobId, count) =
+            inner.GetRecentRuns(scope, jobId, count)
+
+        member _.DueJobs(scope, now) = inner.DueJobs(scope, now)
+
+        member _.AwaitingExternalRuns(scope, limit) =
+            inner.AwaitingExternalRuns(scope, limit)
+
+        member _.ListScopesWithJobs() = inner.ListScopesWithJobs()
+
+/// A handler that always fails transiently, so its dispatch sleeps the
+/// retry backoff between attempts — holding the per-job lease throughout.
+type private AlwaysTransient() =
+    let mutable attempts = 0
+    member _.Attempts = Threading.Volatile.Read(&attempts)
+
+    interface IJobHandler with
+        member _.Execute _ = async {
+            Threading.Interlocked.Increment(&attempts) |> ignore
+            return TransientFailure "Phase 1064 fake: try again later"
+        }
+
+let private defect1064Tests =
+    testList "InProcessJobScheduler — Phase 1064 defects" [
+
+        test "defect 5 — an outcome whose claim succeeded and whose row write did not is completed by the next poll" {
+            let root =
+                Path.Combine(Path.GetTempPath(), "toolup-jobsched-1064-" + Guid.NewGuid().ToString("N"))
+
+            Directory.CreateDirectory root |> ignore
+            let storage = LocalFileStorage.LocalFileStorage(root) :> IBlobStorage
+            let eventStore = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let store = FailOnceRunStore(JobStore.create storage eventStore)
+            let channel = RecordingChannel()
+            let lck = InProcessDistributedLock.create ()
+            let dispatcher = FakeExternalDispatcher("gpu-pool")
+            let handleStore = InMemoryExternalHandleStore() :> IExternalHandleStore
+
+            let scheduler =
+                new JobScheduler.InProcessJobScheduler(
+                    store,
+                    eventStore,
+                    channel,
+                    ServerConfig.defaults,
+                    silentLogger,
+                    NoOpActivitySink() :> IActivitySink,
+                    distributedLock = lck,
+                    externalDispatcher = dispatcher,
+                    externalHandleStore = handleStore
+                )
+
+            let fixture = {
+                Root = root
+                Store = store
+                EventStore = eventStore
+                Channel = channel
+                Lock = lck
+                Scheduler = scheduler
+            }
+
+            let scope, jobId = scheduleManualJob fixture (HandOffHandler(dispatcher, None)) 3
+            let awaiting = handOffAndSettle fixture scope jobId
+
+            dispatcher.SetOutcome(ExternalOutcome.Succeeded "s3://results/run-1064.parquet")
+            store.Arm()
+
+            // The first poll's row write fails. Whatever it claimed, the run
+            // must still be resolvable.
+            reconcile fixture
+
+            // The next poll completes it.
+            reconcile fixture
+
+            let run = (latestRun fixture scope jobId).Value
+            Expect.equal run.RunId awaiting.RunId "the SAME run went terminal"
+
+            Expect.equal
+                run.Status
+                Succeeded
+                "the next poll completed the run instead of reporting AlreadyResolved forever"
+
+            let completions =
+                eventTypes fixture scope
+                |> List.filter (fun t -> t = "JobCompleted")
+                |> List.length
+
+            Expect.equal completions 1 "the completion was emitted exactly once"
+        }
+
+        test "defect 6 — Cancel on a job sleeping in its retry backoff returns inside the ceiling, refused as busy" {
+            let fixture = buildHandoff (FakeExternalDispatcher("unused"))
+            let ijs = fixture.Scheduler :> IJobScheduler
+            let handler = AlwaysTransient()
+            ijs.RegisterHandler("backoff-handler", handler)
+            let scope = "backoff-" + Guid.NewGuid().ToString("N").Substring(0, 8)
+
+            let registration: JobRegistration = {
+                ScopeId = scope
+                Handler = "backoff-handler"
+                Payload = "{}"
+                Trigger = Manual
+                Idempotency = None
+                RetryPolicy = {
+                    JobRetryPolicy.defaults with
+                        MaxAttempts = 2
+                        InitialBackoff = TimeSpan.FromMinutes 2.0
+                        MaxBackoff = TimeSpan.FromMinutes 2.0
+                }
+                ShardKey = None
+                Precision = Minute
+                CreatedBy = "test"
+                Tags = Map.empty
+            }
+
+            let jobId =
+                match ijs.Schedule registration |> Async.RunSynchronously with
+                | Ok id -> id
+                | Error e -> failtestf "schedule failed: %A" e
+
+            triggerOnce fixture scope jobId
+
+            // The first attempt failed and recorded its row; the dispatch is
+            // now asleep in a two-minute backoff, holding the job's lease.
+            Expect.isTrue (waitFor 5000 (runStatusIs fixture scope jobId Failed)) "the first attempt failed"
+
+            let sw = Diagnostics.Stopwatch.StartNew()
+            let outcome = Async.Catch(ijs.Cancel(scope, jobId)) |> Async.StartAsTask
+            let returned = outcome.Wait(TimeSpan.FromSeconds 20.0)
+            sw.Stop()
+
+            Expect.isTrue returned $"Cancel returned inside the ceiling (waited %d{sw.ElapsedMilliseconds} ms)"
+
+            match outcome.Result with
+            | Choice2Of2(:? JobScheduler.JobStatusBusyException as busy) ->
+                Expect.equal busy.JobId jobId "the refusal names the job"
+            | other -> failtestf "expected a typed busy refusal, got %A" other
+
+            Expect.equal handler.Attempts 1 "the backoff was not cut short"
+        }
+
+        test "defect 7 — registerProviderOAuth composes beside keyed registrations of the types it probes" {
+            let services = ServiceCollection() :> IServiceCollection
+
+            // Keyed FIRST, so a probe that does not skip keyed descriptors
+            // reaches one before any instance — reading
+            // `ImplementationInstance` on a keyed descriptor throws.
+            services.AddKeyedSingleton<Providers.IProviderProfile>(
+                "tenant-a",
+                Func<IServiceProvider, obj, Providers.IProviderProfile>(fun _ _ -> failwith "never resolved at compose")
+            )
+            |> ignore
+
+            services.AddKeyedSingleton<IOAuthCredentialFlow>(
+                "tenant-a",
+                Func<IServiceProvider, obj, IOAuthCredentialFlow>(fun _ _ -> failwith "never resolved at compose")
+            )
+            |> ignore
+
+            services.AddSingleton<Providers.IProviderProfile>(
+                BlobProviderProfile.create (InMemoryBlobStorage.InMemoryBlobStorage())
+            )
+            |> ignore
+
+            let secretStore =
+                { new Secrets.ISecretStore with
+                    member _.GetSecret(_, _) = async.Return None
+                    member _.SetSecret(_, _, _) = async.Return(Ok())
+                    member _.DeleteSecret(_, _) = async.Return(Ok())
+                    member _.ListKeys _ = async.Return []
+                }
+
+            let auditLog =
+                { new IAuditLog with
+                    member _.Record(_, _) = async.Return()
+                    member _.GetAuditTrail(_, _, _) = async.Return []
+                }
+
+            ComposeJobs.registerProviderOAuth services None secretStore auditLog silentLogger
+        }
+    ]
+
 /// Phase 9c.F — the rule-4 restart arm. One temp directory is the
 /// durable substrate; every `Open` builds a brand-new scheduler over a
 /// brand-new `BlobJobStore` over a brand-new `LocalFileStorage` rooted
@@ -1361,4 +1569,5 @@ let tests =
         telemetryTests
         catchUpTests
         handoffTests
+        defect1064Tests
     ]

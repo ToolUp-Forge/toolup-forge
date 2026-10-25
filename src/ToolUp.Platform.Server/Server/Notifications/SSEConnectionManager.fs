@@ -487,7 +487,14 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
     /// `Result.Error ScopeAtCapacity` if the current scope count is
     /// already at or above the cap. SSE handlers translate the error
     /// to HTTP 429. Returns `Result.Ok ()` on successful registration.
-    member _.Add(scopeId: string, conn: IConnectionSink) : Result<unit, ScopeAtCapacity> =
+    member this.Add(scopeId: string, conn: IConnectionSink) : Result<unit, ScopeAtCapacity> =
+        this.AddWriter(scopeId, conn) |> Result.map ignore
+
+    /// Phase 1064 — `Add`, handing back the connection's `ConnectionWriter`
+    /// so an endpoint that owns the subscription (`NotificationHandler`)
+    /// enqueues its frames through the same writer the manager's keepalive
+    /// uses: one writer per response, as for live sessions since 870.
+    member internal _.AddWriter(scopeId: string, conn: IConnectionSink) : Result<ConnectionWriter, ScopeAtCapacity> =
         let currentCount =
             match connections.TryGetValue scopeId with
             | true, conns -> conns.Length
@@ -516,7 +523,7 @@ type SSEConnectionManager(?maxConnectionsPerScope: int) =
             connections.AddOrUpdate(scopeId, [ writer ], fun _ existing -> writer :: existing)
             |> ignore
 
-            Result.Ok()
+            Result.Ok writer
 
     /// Remove a specific connection from a scope (matched by
     /// reference identity, not value equality — two different
