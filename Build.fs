@@ -4867,6 +4867,7 @@ let main args =
                 "ToolUp.KnowledgeBase.Server"
                 "src/ToolUp.KnowledgeBase.Server/ToolUp.KnowledgeBase.Server.fsproj"
             TemplateGate.package "ToolUp.OpenXml" "src/ToolUp.OpenXml/ToolUp.OpenXml.fsproj"
+            TemplateGate.package "ToolUp.Tabular" "src/ToolUp.Tabular/ToolUp.Tabular.fsproj"
             TemplateGate.package "ToolUp.AIProviders.Claude" "src/AIProviders/Claude/ClaudeAIProvider.fsproj"
             TemplateGate.package
                 "ToolUp.EmbeddingProviders.Local"
