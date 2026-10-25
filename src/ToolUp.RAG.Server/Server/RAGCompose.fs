@@ -728,10 +728,14 @@ type SparseIndexComposition =
     /// over one list is that list, so the pipeline takes its dense-only path.
     | NoSparseIndex
 
-/// Record form of `composeWithRAG` arguments. Flat superset of
-/// `AIServerApp` (which is itself a flat superset of `ServerApp`):
-/// every `with*` helper from the inner layers is mirrored here as a
-/// delegating helper, so the user writes a single fluent pipeline. The
+/// Record form of `composeWithRAG` arguments, wrapping an `AIServerApp`
+/// (which wraps a `ServerApp`). It is NOT a flat superset of either, and
+/// says so because a reader would assume it (Phase 1051, measured then):
+/// 43 of the 68 `ServerApp.with*` / `add*` builders and 10 of the 12
+/// AI-only builders have no delegating counterpart here. Reach the inner
+/// layers through `RAGServerApp.mapAI` (and, inside it, the AI layer's
+/// `Base` field) — the wrappers are retired by the composition-as-
+/// contributions model rather than completed. The
 /// required RAG dependency (`EmbeddingProvider`) plus the required AI
 /// dependencies (`AIProviderFactory`, `ProviderProfile`) are
 /// constructor parameters on `RAGServerApp.create`. Vectorisation

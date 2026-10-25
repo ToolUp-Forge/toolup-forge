@@ -25,10 +25,13 @@ open ToolUp.AI.SystemPromptBuilder
 
 // ─── AIServerApp — record-based superset of `ServerApp` with AI ─────
 //
-// `AIServerApp` is a flat superset of `ServerApp`: every `ServerApp.with*`
-// helper has a delegating counterpart on `AIServerApp` that lifts the
-// operation onto the inner `Base` field, so the user writes a single
-// fluent pipeline regardless of which companion is in play. AI-specific
+// `AIServerApp` wraps a `ServerApp` in its `Base` field, and some
+// `ServerApp.with*` helpers have a delegating counterpart here that lifts
+// the operation onto `Base`. It is NOT a flat superset, and says so
+// because a reader would assume it (Phase 1051, measured then): 41 of the
+// 68 `ServerApp.with*` / `add*` builders have no counterpart. Apply those
+// to the `Base` field directly — the wrappers are retired by the
+// composition-as-contributions model rather than completed. AI-specific
 // fields (provider factory, config store, tool registry, branding,
 // module contexts) sit alongside.
 //
