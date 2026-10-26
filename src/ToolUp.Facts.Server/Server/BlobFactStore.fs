@@ -32,12 +32,22 @@ open ToolUp.Platform.BlobStorage
 // resolved storage scope, so one scope's facts are unreachable from
 // another.
 //
+// **Reads that walk one metric across subjects ride the metric surface
+// (Phase 702).** The population read does, and since Phase 1122 so does a
+// current-heads query naming a metric and no subject — the fact browse's
+// series read. The surface's rows carry each head's subject, period,
+// method and `AsOf`, so such a query downloads the heads the rows admit
+// and no others; why the surface rather than a by-metric leaf set beside
+// this index's is recorded at "The series read through the surface".
+//
 // **What still enumerates, by definition.** A query that names neither a
 // subject nor a metric — `FactQuery.all`, and the full-history listing
 // built on it — is the whole-store walk: its answer is every fact, so no
-// index can make it read fewer. A query naming only one of the two
-// enumerates as well; the population read (a metric across subjects) is
-// the metric surface's job (Phase 702), not this index's.
+// index can make it read fewer. A query naming a subject and no metric
+// enumerates, as does a metric-only query the surface cannot answer from
+// current heads: a historical `AsOf`, `IncludeSuperseded`, a scope below
+// `FactSurfaceOptions.MinimumHeads`, or the first read of a metric whose
+// surface does not exist yet, which builds it.
 //
 // **Fan-out.** Every parallel blob fan-out in this file runs under
 // `BlobFanOut.Bound` concurrent requests — a download of a whole scope
@@ -679,11 +689,11 @@ type BlobFactStore
     //
     // Phase 890 — `all` is every fact, or, for a subject-and-metric query
     // over a complete index, the census-ordered facts of that (subject,
-    // metric)'s lineages. Every step below filters to that set anyway, so
-    // the two inputs produce the same answer.
-    let runQuery (scopeId: string) (query: FactQuery) : Async<Fact list * Fact list> = async {
-        let! all = queryCandidates scopeId query
-        let t = query.AsOf |> Option.defaultValue (clock().ToUniversalTime())
+    // metric)'s lineages. Phase 1122 — or, for a current-heads query naming
+    // a metric and no subject, the census-ordered heads the metric surface
+    // admits. Every step below filters to that set anyway, so the inputs
+    // produce the same answer.
+    let runQuery (query: FactQuery) (t: DateTime) (all: Fact list) : Fact list * Fact list =
 
         // Clause filters minus `Method` first (subject / metric / period)
         // — the *competition scope*. A fact's competitors are the other
@@ -721,11 +731,9 @@ type BlobFactStore
             else
                 selectCanonical heads
 
-        return
-            heads,
-            listing
-            |> List.sortBy (fun f -> f.Subject.Hierarchy, f.Metric.Value, f.Period.From)
-    }
+        heads,
+        listing
+        |> List.sortBy (fun f -> f.Subject.Hierarchy, f.Metric.Value, f.Period.From)
 
     // The derived competition indicator for one returned fact: the method
     // identities of the *other* current heads sharing its (subject,
@@ -1023,6 +1031,58 @@ type BlobFactStore
                         }
         }
 
+    /// The metric's snapshot, converged against the census `names` — from
+    /// the parse cache when the census matches, otherwise read, folded or
+    /// rebuilt. `None` means "could not produce a trustworthy snapshot":
+    /// the caller enumerates, which is always available and always right.
+    /// Shared by the population read and, since Phase 1122, the series read.
+    let convergedSurface
+        (scopeId: string)
+        (metric: MetricRef)
+        (names: string list)
+        : Async<FactSurfaceSnapshot option> =
+        async {
+            // The census value: one key per listed id, which is what both the
+            // reconcile and the parse cache compare against.
+            let logIds = names |> List.map factIdOfBlob
+            let logCensus = FactCensus.valueOfIds logIds
+
+            let! cached = async {
+                match surfaceCache with
+                | None -> return None
+                | Some cache ->
+                    match cache.TryGet(scopeId, metric.Value, logCensus) with
+                    | None -> return None
+                    | Some snapshot ->
+                        // A hit still asks whether the snapshot blob exists —
+                        // one probe, never a download — so `FactSurface.drop`
+                        // flushes every replica's cache as well as the blob,
+                        // and remains the operator's lever it was before the
+                        // cache.
+                        let! present = storage.Exists(scopeId, FactSurface.blobName metric.Value)
+
+                        if present then
+                            return Some snapshot
+                        else
+                            cache.Evict(scopeId, metric.Value)
+                            return None
+            }
+
+            match cached with
+            | Some snapshot -> return Some snapshot
+            | None ->
+                let! existing = surface.Get(scopeId, metric.Value)
+
+                // A snapshot already converged is remembered here; the reconcile
+                // remembers the ones it folds or rebuilds.
+                match existing with
+                | Some snapshot when not snapshot.Stale && FactCensus.valueOf snapshot.Census = logCensus ->
+                    cacheSurface scopeId metric.Value snapshot
+                | _ -> ()
+
+                return! reconcileSurface scopeId metric logIds logCensus existing
+        }
+
     let surfacePopulation
         (scopeId: string)
         (query: PopulationQuery)
@@ -1042,50 +1102,140 @@ type BlobFactStore
                 // unchanged.
                 return None
             else
-                // The census value: one key per listed id, which is what
-                // both the reconcile and the parse cache compare against.
-                let logIds = names |> List.map factIdOfBlob
-                let logCensus = FactCensus.valueOfIds logIds
-
-                let! cached = async {
-                    match surfaceCache with
-                    | None -> return None
-                    | Some cache ->
-                        match cache.TryGet(scopeId, query.Metric.Value, logCensus) with
-                        | None -> return None
-                        | Some snapshot ->
-                            // A hit still asks whether the snapshot blob
-                            // exists — one probe, never a download — so
-                            // `FactSurface.drop` flushes every replica's
-                            // cache as well as the blob, and remains the
-                            // operator's lever it was before the cache.
-                            let! present = storage.Exists(scopeId, FactSurface.blobName query.Metric.Value)
-
-                            if present then
-                                return Some snapshot
-                            else
-                                cache.Evict(scopeId, query.Metric.Value)
-                                return None
-                }
-
-                match cached with
+                match! convergedSurface scopeId query.Metric names with
+                | None -> return None
                 | Some snapshot -> return! answerFromSnapshot scopeId query direction metricDef snapshot
-                | None ->
-                    let! existing = surface.Get(scopeId, query.Metric.Value)
-
-                    // A snapshot already converged is remembered here; the
-                    // reconcile remembers the ones it folds or rebuilds.
-                    match existing with
-                    | Some snapshot when not snapshot.Stale && FactCensus.valueOf snapshot.Census = logCensus ->
-                        cacheSurface scopeId query.Metric.Value snapshot
-                    | _ -> ()
-
-                    let! reconciled = reconcileSurface scopeId query.Metric logIds logCensus existing
-
-                    match reconciled with
-                    | None -> return None
-                    | Some snapshot -> return! answerFromSnapshot scopeId query direction metricDef snapshot
         }
+
+    // ─── The series read through the surface (Phase 1122) ─────────────
+    //
+    // A current-heads query that names a metric and no subject — the fact
+    // browse's chart read, one metric across a subject branch over a period
+    // range — used to enumerate: the point-read index is keyed by (subject,
+    // metric) and has no prefix that walks one metric across subjects. The
+    // metric surface already holds exactly that walk: one row per current
+    // head of the metric, carrying the head's subject, period, `AsOf`,
+    // method identity and fact id. So the read takes the rows the query's
+    // period and method admit, and downloads those heads and no others.
+    //
+    // **Why the surface and not a by-metric leaf set beside Phase 890's.**
+    // The deciding case is a slice-scoped run that supersedes one period.
+    // A leaf set gains one leaf per new fact and keeps the superseded
+    // fact's, so a read through it downloads every fact of the metric in
+    // the range — heads AND the history behind them — and grows with each
+    // revision. The surface folds the run's facts into its snapshot at
+    // assert (one read and one write per touched metric per batch, which
+    // the population read already pays) and drops the superseded rows, so
+    // a read downloads the heads it returns. A replica that missed the
+    // batch folds the difference it decodes from the census, one fact read
+    // per unseen fact, and rebuilds only past `MaxIncrementalFold`.
+    //
+    // **Rows narrow; the pipeline decides — as the index's leaves do.** The
+    // rows admit a superset (a `Local` period endpoint is widened by the
+    // index's own tolerance), and the facts they admit run through the query
+    // pipeline in census order, exactly as the enumeration's would. The read
+    // declines, and the caller enumerates, wherever a heads-only snapshot
+    // could answer differently from the log: a historical `AsOf`, a full
+    // history (`IncludeSuperseded`), an admitted head stamped after the
+    // read's instant (law L4 would show its predecessor, which a snapshot
+    // does not hold), and an admitted head the census or a download cannot
+    // produce.
+
+    /// Could this surface row's head overlap `period`? The enumeration's
+    /// test on the row's endpoints, widened for a `Local` endpoint, whose
+    /// read-back ticks depend on the reading machine's zone.
+    let rowMayOverlap (period: TemporalExtent) (m: PopulationMember) : bool =
+        let slack (d: DateTime) =
+            if d.Kind = DateTimeKind.Local then
+                FactIndexLayout.LocalTolerance
+            else
+                0L
+
+        period.From.Ticks < m.PeriodTo.Ticks + slack m.PeriodTo
+        && m.PeriodFrom.Ticks - slack m.PeriodFrom < period.To.Ticks
+
+    /// The heads a metric-only, current-heads query can concern, read
+    /// through the metric's surface; `None` when the surface declines.
+    /// `competition` keeps every method's heads (the competition indicator
+    /// needs them); otherwise a named method narrows the rows as well.
+    let surfaceCandidates
+        (scopeId: string)
+        (query: FactQuery)
+        (metric: MetricRef)
+        (competition: bool)
+        (t: DateTime)
+        (names: string list)
+        : Async<Fact list option> =
+        async {
+            if List.length names < surfaceOptions.MinimumHeads then
+                return None
+            else
+                match! convergedSurface scopeId metric names with
+                | None -> return None
+                | Some snapshot ->
+                    let methodIdentity =
+                        if competition then
+                            None
+                        else
+                            query.Method |> Option.map Fact.methodIdentity
+
+                    let admitted =
+                        snapshot.Rows
+                        |> List.map _.Member
+                        |> List.filter (fun m ->
+                            (query.PeriodOverlaps |> Option.forall (fun p -> rowMayOverlap p m))
+                            && (methodIdentity |> Option.forall (fun identity -> identity = m.MethodIdentity)))
+
+                    if admitted |> List.exists (fun m -> m.AsOf > t) then
+                        return None
+                    else
+                        let census = Dictionary<string, int * string>(StringComparer.Ordinal)
+                        names |> List.iteri (fun i name -> census[factIdOfBlob name] <- (i, name))
+
+                        let chosen =
+                            admitted
+                            |> List.choose (fun m ->
+                                match census.TryGetValue m.FactId with
+                                | true, entry -> Some entry
+                                | _ -> None)
+                            |> List.sortBy fst
+                            |> List.map snd
+
+                        if List.length chosen <> List.length admitted then
+                            return None
+                        else
+                            let! facts = loadNames scopeId chosen
+
+                            return
+                                if List.length facts = List.length chosen then
+                                    Some facts
+                                else
+                                    None
+        }
+
+    /// Answer a fact query: the candidates — through the metric surface for
+    /// a current-heads query naming a metric and no subject (Phase 1122),
+    /// through the point-read index or the enumeration otherwise — then the
+    /// shared pipeline over them.
+    let answerQuery (scopeId: string) (query: FactQuery) (competition: bool) : Async<Fact list * Fact list> = async {
+        let t = query.AsOf |> Option.defaultValue (clock().ToUniversalTime())
+
+        let! all =
+            match query.Subject, query.Metric with
+            | None, Some metric when surfaceOptions.Enabled && query.AsOf.IsNone && not query.IncludeSuperseded -> async {
+                // One census for both outcomes: the surface's, or the
+                // enumeration it falls back to.
+                let! names = storage.List(scopeId, factsPrefix)
+                let! viaSurface = surfaceCandidates scopeId query metric competition t names
+
+                match viaSurface with
+                | Some heads -> return heads
+                | None -> return! loadNames scopeId names
+              }
+            | _ -> queryCandidates scopeId query
+
+        return runQuery query t all
+    }
 
     let runPopulation (scopeId: string) (query: PopulationQuery) : Async<Result<PopulationResult, string>> = async {
         let metricDef = registry |> Option.bind (fun r -> r.TryGetMetric query.Metric.Value)
@@ -1278,6 +1428,28 @@ type BlobFactStore
             let! index = readIndex scopeId names
             let heads = Dictionary<string, Fact>(StringComparer.Ordinal)
 
+            // Phase 1122 — a batch that takes the scope from below the index
+            // threshold to at or above it indexes the scope as it goes. It
+            // used to decide "not consulted" from the census it STARTED with
+            // and write no leaf, so a first upload of thousands of facts left
+            // the index empty and the first point read after it enumerated
+            // the scope (a consumer deployment measured 1,755 downloads for a
+            // handful of point reads at 1,742 facts). The census plus the
+            // distinct addresses not yet stored is exactly the scope's size
+            // once the writes land.
+            let crossesThreshold =
+                match index with
+                | NotConsulted when indexOptions.Enabled ->
+                    let unstored =
+                        addressed
+                        |> List.map snd
+                        |> List.distinct
+                        |> List.filter (fun factId -> not (stored.Contains factId))
+                        |> List.length
+
+                    List.length names + unstored >= indexOptions.MinimumFacts
+                | _ -> false
+
             match index with
             | Complete(leaves, census) ->
                 // Phase 890 — the heads of the lineages this batch touches,
@@ -1364,6 +1536,11 @@ type BlobFactStore
 
                 match index with
                 | Incomplete indexed -> do! repairIndex scopeId all indexed
+                // Crossing: the facts already stored are in hand, so their
+                // leaves cost writes and no reads; this batch's own follow
+                // its fact writes below.
+                | NotConsulted when crossesThreshold ->
+                    do! repairIndex scopeId all (HashSet<string>(StringComparer.Ordinal))
                 | _ -> ()
 
             // Derivation first, in submission order and entirely in
@@ -1446,9 +1623,11 @@ type BlobFactStore
             // them: a leaf is written only for a fact that is durable, so no
             // leaf ever names a fact this call failed to store. A leaf that
             // fails is noticed by the next consulting read's census check,
-            // which enumerates and rewrites it. Below the threshold, none.
+            // which enumerates and rewrites it. Below the threshold — counted
+            // after this batch's writes — none.
             match index with
-            | NotConsulted -> ()
+            | NotConsulted when not crossesThreshold -> ()
+            | NotConsulted
             | Incomplete _
             | Complete _ ->
                 do!
@@ -1861,12 +2040,12 @@ type BlobFactStore
         member _.Get(scopeId: string, factId: string) : Async<Fact option> = load scopeId factId
 
         member _.Query(scopeId: string, query: FactQuery) : Async<Fact list> = async {
-            let! _, listing = runQuery scopeId query
+            let! _, listing = answerQuery scopeId query false
             return listing
         }
 
         member _.QueryWithCompetition(scopeId: string, query: FactQuery) : Async<FactWithCompetition list> = async {
-            let! heads, listing = runQuery scopeId query
+            let! heads, listing = answerQuery scopeId query true
 
             return
                 listing

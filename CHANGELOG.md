@@ -13,6 +13,18 @@ same name in one release is reported once, as a signature change. Under this rep
 policy a `breaking` release is a MINOR bump and an `additive` one a PATCH; from 1.0.0 the ordinary table
 applies. Where a release ships a migration note under `docs/migrations/`, it is linked from the section.
 
+## [0.34.1] — unreleased
+
+Migration notes:
+
+- [1122-fact-series-read-rides-the-metric-surface](docs/migrations/1122-fact-series-read-rides-the-metric-surface.md)
+
+_No public-surface change since `v0.34.0`._
+
+## [0.34.0] — 2026-10-26
+
+_No public-surface change since `v0.33.1`._
+
 ## [0.33.1] — 2026-10-25
 
 Migration notes:

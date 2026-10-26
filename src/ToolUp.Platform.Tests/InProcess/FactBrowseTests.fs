@@ -191,8 +191,8 @@ type private World = {
     Scope: ResolvedScope
 }
 
-let private worldWith (denied: Set<string>) (clock: unit -> DateTime) : World * RecordingGate =
-    let storage = InMemoryBlobStorage()
+/// A world over the given storage — Phase 1122 passes a counting probe.
+let private worldOn (storage: IBlobStorage) (denied: Set<string>) (clock: unit -> DateTime) : World * RecordingGate =
     let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
 
     let store =
@@ -218,6 +218,9 @@ let private worldWith (denied: Set<string>) (clock: unit -> DateTime) : World * 
         Scope = resolved (newScope ())
     },
     gate
+
+let private worldWith (denied: Set<string>) (clock: unit -> DateTime) : World * RecordingGate =
+    worldOn (InMemoryBlobStorage()) denied clock
 
 /// A clock that moves one second per reading, so successive runs and the
 /// facts they assert are ordered in time as they are in the real world.
@@ -1603,6 +1606,90 @@ let private seriesTests =
         }
     ]
 
+// ─── Phase 1122 — a chart and a point read cost their answer ─────────
+//
+// The handler-level twin of the store pins in `FactStoreTests`: one table
+// run of 2,400 facts into an empty scope (the shape a consumer
+// deployment's first upload takes), then the three reads a browse makes,
+// counted at the storage. Before 1122 the first point read enumerated the
+// scope (the batch had crossed the index threshold without indexing) and
+// every chart did too (the series read named no subject).
+
+let private costTests =
+    testList "Phase 1122 — a chart and a point read download their answer, not the scope" [
+        test "after one large run, a point read and a chart read only the facts they serve" {
+            let counting = FactStoreTests.CountingBlobStorage(InMemoryBlobStorage())
+            let w, _ = worldOn counting Set.empty (tickingClock ())
+
+            // 600 SKUs x two months x two columns = 2,400 facts, in one run.
+            run w [
+                for i in 0..599 do
+                    let brand = sprintf "b%02d" (i % 12)
+                    let sku = sprintf "s%04d" i
+                    rowIn september brand sku (decimal i)
+                    rowIn october brand sku (decimal (i + 1))
+            ]
+            |> ignore
+
+            // The table's first read builds the revenue surface: the one
+            // enumeration the surface exists so that no later read repeats.
+            counting.Reset()
+
+            let firstPage =
+                ok "rows" (FactBrowseHandler.queryRows w.Deps w.Scope "u" (query "revenue" TopOfRanking 0 10))
+
+            let coldRowsReads = counting.Downloads
+
+            counting.Reset()
+
+            ok "rows again" (FactBrowseHandler.queryRows w.Deps w.Scope "u" (query "revenue" TopOfRanking 0 10))
+            |> ignore
+
+            let rowsReads = counting.Downloads
+            let targetId = firstPage.Rows.Head.FactId
+
+            counting.Reset()
+            let detail = ok "fact" (FactBrowseHandler.getFact w.Deps w.Scope "u" targetId)
+            let factReads = counting.Downloads
+
+            counting.Reset()
+
+            let chart =
+                ok
+                    "chart"
+                    (FactBrowseHandler.querySeries w.Deps w.Scope "u" {
+                        series "revenue" september.From october.To with
+                            SubjectPrefix = [ "b03" ]
+                    })
+
+            let chartReads = counting.Downloads
+            let points = List.length chart.Points
+
+            printfn
+                "Phase 1122 browse over 2,400 facts: QueryRows cold %d downloads, warm %d (page of 10), GetFact %d, QuerySeries %d for %d points of a 1,200-head metric"
+                coldRowsReads
+                rowsReads
+                factReads
+                chartReads
+                points
+
+            Expect.equal detail.Row.FactId targetId "the point read opens the fact"
+            Expect.equal points 100 "the chart is one brand's 50 SKUs over two months"
+            Expect.equal rowsReads 20 "a warm page of ten reads its ten rows and the gate's look at each, nothing more"
+
+            Expect.isLessThanOrEqual
+                factReads
+                5
+                "a point read reads its fact, its one-fact chain and the gate's look at it — never the scope"
+
+            // The store reads the metric's heads over the range (1,200 of
+            // the scope's 2,400 facts) and the gate re-reads each point; the
+            // prefix narrows after the store, so the bound is the metric's
+            // heads in range, not the chart's points (see facts.md).
+            Expect.equal chartReads (1_200 + points) "a chart reads its metric's heads in range, not the scope"
+        }
+    ]
+
 /// Every Phase 895 server case, and Phase 1113's series cases.
 let tests =
     testList "Phase 895 — fact browse surface" [
@@ -1614,4 +1701,5 @@ let tests =
         compositionTests
         composedDemoTests
         seriesTests
+        costTests
     ]

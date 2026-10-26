@@ -690,6 +690,11 @@ module FactBrowseHandler =
     ///   revision; a period a later slice-scoped run left alone keeps the
     ///   head the earlier run wrote. A superseded fact is never served as
     ///   a point — it is on the head's chain through `GetFact`.
+    /// - **What the read costs is the store's** (Phase 1122). On the blob
+    ///   store a metric-only head query rides the metric surface and
+    ///   downloads the metric's heads in the range, not the scope; the
+    ///   prefix and level below narrow after it, because `FactQuery` names
+    ///   no subject branch.
     /// - **Period membership is overlap**, `FactQuery.PeriodOverlaps` over
     ///   `[PeriodFrom, PeriodTo)`: a period straddling the range's edge is
     ///   a point, since a chart of the window wants it, and an aligned

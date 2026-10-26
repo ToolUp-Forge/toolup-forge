@@ -668,8 +668,10 @@ let auditAndFreshnessTests =
 /// An `IBlobStorage` decorator that counts the reads reaching the backing
 /// store. The point of an indexed read model is that a question stops
 /// costing one fact read per subject — a *structural* property, so it is
-/// asserted structurally here rather than inferred from a clock.
-type private CountingBlobStorage(inner: IBlobStorage) =
+/// asserted structurally here rather than inferred from a clock. Internal
+/// rather than private so the browse pack (Phase 1122) counts its handler's
+/// reads with the same probe.
+type internal CountingBlobStorage(inner: IBlobStorage) =
     let gate = obj ()
     let mutable downloads = 0
     let mutable lists = 0
@@ -2556,6 +2558,294 @@ let private readFaultTests =
         }
     ]
 
+// ─── Phase 1122 — a series read costs its answer, not the scope ──────
+//
+// The fact browse's chart read (Phase 1113) is a head query naming a
+// metric, a method and a period range, and no subject. Until 1122 that
+// query enumerated on this store — the point-read index has no prefix that
+// walks one metric across subjects — so every chart downloaded every fact
+// in the scope (measured on a consumer deployment: about 1,700 downloads a
+// chart at 1,742 facts). It now rides the Phase 702 metric surface, whose
+// rows carry each head's subject, period, method and `AsOf`, and reads only
+// the heads the surface admits.
+//
+// The second pin is the point read the same deployment measured at 1,755
+// downloads for a handful of calls: a scope filled by ONE batch from empty
+// crossed the index threshold inside that batch, the batch decided "below
+// the threshold" from the census it started with and wrote no leaf, and
+// the first point read then found the index incomplete and enumerated.
+
+[<Literal>]
+let private SeriesMonths = 12
+
+let private seriesMethod = Computed("sales-rollup", "v1", "sku-sales")
+
+let private seriesMonth (k: int) : TemporalExtent = {
+    From = DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths k
+    To = DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(k + 1)
+    Label = Some(sprintf "m%02d" k)
+}
+
+/// Original fact `index` of a seeded series scope: one subject per twelve
+/// facts, one month each. Subjects alternate between two metrics, so the
+/// series metric shares its scope (and its surface's census) with a
+/// neighbour it must never read.
+let private seriesFact (index: int) : Fact = {
+    syntheticFact index (Scalar(decimal index)) with
+        FactId = sprintf "s%08d" index
+        Subject = {
+            Hierarchy = "products"
+            Path = [
+                sprintf "brand-%02d" (index / SeriesMonths % 10)
+                sprintf "sku-%05d" (index / SeriesMonths)
+            ]
+        }
+        Metric = MetricRef(if index / SeriesMonths % 2 = 0 then "revenue" else "units")
+        Method = seriesMethod
+        Period = seriesMonth (index % SeriesMonths)
+}
+
+/// Seed `count` facts behind the store's back: nine in ten are originals,
+/// and every ninth original's lineage carries a revision that supersedes it
+/// — so the scope holds history the read must step over, not only heads.
+let private seedSeries (storage: IBlobStorage) (scope: string) (count: int) = async {
+    let json = FableConverters.create ()
+
+    let upload (fact: Fact) = async {
+        let payload = JsonSerializer.Serialize(fact, json) |> Encoding.UTF8.GetBytes
+        let! _ = storage.Upload(scope, sprintf "_facts/%s.json" fact.FactId, payload)
+        ()
+    }
+
+    let originals = count - count / 10
+
+    for i in 0 .. originals - 1 do
+        let original = seriesFact i
+        do! upload original
+
+        if i % 9 = 0 then
+            do!
+                upload {
+                    original with
+                        FactId = sprintf "r%08d" i
+                        Value = Scalar(decimal (i + 1))
+                        AsOf = baseAsOf.AddDays 1.0
+                        Supersedes = Some original.FactId
+                }
+}
+
+/// The chart read: revenue under the table's method over three months.
+let private seriesQuery: FactQuery = {
+    FactQuery.all with
+        Metric = Some(MetricRef "revenue")
+        Method = Some seriesMethod
+        PeriodOverlaps =
+            Some {
+                From = (seriesMonth 0).From
+                To = (seriesMonth 2).To
+                Label = None
+            }
+}
+
+let private storeWithPolicies
+    (storage: IBlobStorage)
+    (clock: unit -> DateTime)
+    (surface: FactSurfaceOptions)
+    (index: FactIndexOptions)
+    : IFactStore =
+    BlobFactStore(storage, InMemoryEventStore.InMemoryEventStore(), Some surfaceRegistry, clock, surface, index)
+    :> IFactStore
+
+/// What one measured series run produces.
+type private SeriesReadCost = {
+    Facts: int
+    Points: int
+    Before: int
+    BeforeMs: float
+    Cold: int
+    Warm: int
+    WarmLists: int
+    WarmMs: float
+    Replica: int
+    AfterRevision: int
+    RevisionPoints: int
+}
+
+let private timed (work: Async<'T>) : Async<'T * float> = async {
+    let sw = Diagnostics.Stopwatch.StartNew()
+    let! value = work
+    return value, sw.Elapsed.TotalMilliseconds
+}
+
+/// Seed `size` facts, then count what the chart read downloads before
+/// (the enumeration) and after (the surface), cold and warm, from a second
+/// replica, and after a slice-scoped run supersedes one period.
+let private measureSeriesRead (size: int) = async {
+    let counting = CountingBlobStorage(InMemoryBlobStorage.InMemoryBlobStorage())
+    let storage = counting :> IBlobStorage
+    let scope = newScope ()
+    do! seedSeries storage scope size
+
+    let enumerating =
+        storeWithPolicies storage fixedClock FactSurfaceOptions.disabled FactIndexOptions.defaults
+
+    let surfaced =
+        storeWithPolicies storage fixedClock FactSurfaceOptions.defaults FactIndexOptions.defaults
+
+    // Verify the probe before trusting any count it produces.
+    let probe = seriesFact 24
+    let! readBack = enumerating.Get(scope, probe.FactId)
+    Expect.equal readBack (Some probe) "the seeded blobs are in the store's own format"
+
+    counting.Reset()
+    let! viaLog, beforeMs = timed (enumerating.Query(scope, seriesQuery))
+    let before = counting.Downloads
+
+    Expect.isNonEmpty viaLog "the chart has points"
+    Expect.allEqual (viaLog |> List.map _.Metric) (MetricRef "revenue") "every point is the series metric"
+    Expect.exists viaLog (fun f -> f.Supersedes.IsSome) "and the revisions are among them, as heads"
+
+    counting.Reset()
+    let! cold = surfaced.Query(scope, seriesQuery)
+    let coldReads = counting.Downloads
+
+    counting.Reset()
+    let! warm, warmMs = timed (surfaced.Query(scope, seriesQuery))
+    let warmReads = counting.Downloads
+    let warmLists = counting.Lists
+
+    // A second replica: no parse cache, so it downloads the snapshot once.
+    let replica =
+        storeWithPolicies storage fixedClock FactSurfaceOptions.defaults FactIndexOptions.defaults
+
+    counting.Reset()
+    let! fromReplica = replica.Query(scope, seriesQuery)
+    let replicaReads = counting.Downloads
+
+    Expect.equal cold viaLog "the cold surfaced read answers what the log does"
+    Expect.equal warm viaLog "and so does the warm one"
+    Expect.equal fromReplica viaLog "and so does a second replica's"
+
+    // The deciding question: a slice-scoped run that supersedes one period.
+    // The batch folds into the snapshot it finds, so the read after it is
+    // as cheap as the read before it — no rebuild, no enumeration.
+    let revisedSubjects = [ for i in 0..3 -> (seriesFact (i * 2 * SeriesMonths)).Subject.Path ]
+
+    let! revision =
+        surfaced.AssertBatch(
+            scope,
+            [
+                for path in revisedSubjects ->
+                    {
+                        draftAt path "revenue" seriesMethod (Scalar 1m) (sprintf "rerun-%s" (String.concat "/" path)) with
+                            Subject = { Hierarchy = "products"; Path = path }
+                            Period = seriesMonth 1
+                    }
+            ]
+        )
+
+    match revision with
+    | Ok receipt ->
+        Expect.equal receipt.SupersedingCount (List.length revisedSubjects) "each draft revised its period's head"
+    | Error e -> failtestf "the slice-scoped run failed: %s" e
+
+    counting.Reset()
+    let! afterRevision = surfaced.Query(scope, seriesQuery)
+    let afterRevisionReads = counting.Downloads
+    let! afterRevisionLog = enumerating.Query(scope, seriesQuery)
+    Expect.equal afterRevision afterRevisionLog "after the revision the surfaced read still answers what the log does"
+
+    return {
+        Facts = size
+        Points = List.length viaLog
+        Before = before
+        BeforeMs = beforeMs
+        Cold = coldReads
+        Warm = warmReads
+        WarmLists = warmLists
+        WarmMs = warmMs
+        Replica = replicaReads
+        AfterRevision = afterRevisionReads
+        RevisionPoints = List.length afterRevision
+    }
+}
+
+let private seriesReadTests =
+    testList "Phase 1122 — a series read scales with its answer" [
+
+        testCaseAsync "a series read downloads the heads it returns, not the scope, at 2,000 and 20,000 facts"
+        <| async {
+            let! small = measureSeriesRead 2_000
+            let! large = measureSeriesRead 20_000
+
+            for m in [ small; large ] do
+                printfn
+                    "Phase 1122 series read at %d facts (%d points): before (enumeration) %d downloads, %.1f ms in memory | after: cold first read %d (builds the surface once), warm %d downloads + %d list, %.1f ms in memory, second replica %d, after a slice-scoped revision %d (%d points)"
+                    m.Facts
+                    m.Points
+                    m.Before
+                    m.BeforeMs
+                    m.Cold
+                    m.Warm
+                    m.WarmLists
+                    m.WarmMs
+                    m.Replica
+                    m.AfterRevision
+                    m.RevisionPoints
+
+            for m in [ small; large ] do
+                Expect.equal m.Before m.Facts "before: the chart read downloads every fact in the scope"
+                Expect.equal m.Warm m.Points "after: a warm chart read downloads exactly the points it returns"
+                Expect.equal m.WarmLists 1 "and lists the census once"
+                Expect.equal m.Replica (m.Points + 1) "a second replica adds one snapshot download, never the scope"
+                Expect.equal m.AfterRevision m.RevisionPoints "a slice-scoped revision leaves the read at its points"
+        }
+
+        testCaseAsync "a point read after one batch crosses the index threshold reads its fact, not the scope"
+        <| async {
+            let counting = CountingBlobStorage(InMemoryBlobStorage.InMemoryBlobStorage())
+            let storage = counting :> IBlobStorage
+            let scope = newScope ()
+
+            let store =
+                storeWithIndex storage (steppingClock baseAsOf) FactIndexOptions.defaults
+
+            // The shape a first table run takes: one batch into an empty
+            // scope, well past the 512-fact threshold.
+            let drafts = [
+                for i in 0..1_999 ->
+                    draftAt [ "eu"; sprintf "sku-%05d" i ] "revenue" rollup (Scalar(decimal i)) (sprintf "b%d" i)
+            ]
+
+            let! written = store.AssertBatch(scope, drafts)
+            Expect.isOk written "the batch is stored"
+
+            // The target's content address, computed rather than looked up:
+            // a lookup would itself repair a missing index before the count.
+            let d = List.item 423 drafts
+
+            let targetId =
+                Fact.compute
+                    d.Subject
+                    d.Metric
+                    d.Period
+                    d.Method
+                    (Fact.effectiveInputHashes d.Method d.Evidence d.Value)
+
+            counting.Reset()
+            let! got = store.Get(scope, targetId)
+            let! chain = store.QuerySupersessionChain(scope, targetId)
+            let reads = counting.Downloads
+
+            Expect.equal (got |> Option.map _.FactId) (Some targetId) "the point read finds the fact"
+            Expect.equal (chain |> List.map _.FactId) [ targetId ] "and its one-fact lineage"
+            Expect.equal reads 3 "the fact, the chain's target and its lineage — not the 2,000-fact scope"
+
+            let! leaves = leavesIn storage scope
+            Expect.equal leaves.Length 2_000 "the batch that crossed the threshold indexed every fact it wrote"
+        }
+    ]
+
 let pointReadIndexTests =
     testList "Phase 890 point-read index" [
 
@@ -2835,4 +3125,5 @@ let pointReadIndexTests =
         }
 
         readFaultTests
+        seriesReadTests
     ]

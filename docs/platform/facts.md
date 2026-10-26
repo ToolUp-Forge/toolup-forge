@@ -199,16 +199,26 @@ are the truth, and deleting every leaf loses nothing.
 **When it answers.** Every consulting read lists the census (`_facts/`) and
 the leaves, and the index answers only when every fact in the census has a
 leaf. Anything else — a failed leaf write, a fact written behind the store's
-back, a scope that has just crossed the threshold, an index someone deleted
-— makes that one read enumerate, which is always right, and write the
-missing leaves from the facts it just read. A failed index write therefore
-costs one slower read and never a different answer; the listings are two
-calls that fetch names, never blobs.
+back, an index someone deleted — makes that one read enumerate, which is
+always right, and write the missing leaves from the facts it just read. A
+failed index write therefore costs one slower read and never a different
+answer; the listings are two calls that fetch names, never blobs.
 
-**What still enumerates.** A query naming neither a subject nor a metric
-(`FactQuery.all`) is the whole-store walk by definition — its answer is every
-fact. A query naming only one of the two enumerates too; a metric across
-subjects is the population read's job, served by the metric surface.
+**A batch that crosses the threshold indexes the scope (Phase 1122).** The
+size test is taken on the scope as it will stand once the batch's writes
+land, so an `AssertBatch` that takes a scope from below the threshold to at
+or above it writes a leaf for every fact it stores, and for every fact
+already there (which that batch has read anyway, to find its lineage
+heads). Before 1122 the test was taken on the census the batch started
+with: a first upload of thousands of facts into an empty scope — the shape
+a table's first run takes — wrote no leaf, and the first point read after
+it enumerated the scope. A consumer deployment measured that as 1,755 blob
+downloads for a handful of fact-detail opens at 1,742 facts; the pinned
+case reads 2,002 downloads for one point read and its chain after a
+2,000-fact batch, and 3 after the fix.
+
+**What still enumerates** is set out per read in
+[What each read costs on the blob store](#what-each-read-costs-on-the-blob-store-phase-1122).
 
 **Operating it.** `RebuildIndex(scope)` on the `BlobFactStore` rewrites every
 leaf, and `IndexConsistencyCheck(scope, sampleSize)` reports the Phase 9f
@@ -285,6 +295,99 @@ decidable pipeline over the rows.
 
 A snapshot written before Phase 891 (format version 1) reads as no surface
 and is rebuilt on the first population read after the upgrade.
+
+### How the blob store serves a series read (Phase 1122)
+
+The fact browse's chart read (Phase 1113's `QuerySeries`) asks the store
+for the current heads of one metric under one method over a period range,
+naming no subject: `IFactStore.Query` with `Metric`, `Method` and
+`PeriodOverlaps` set. The point-read index cannot serve that — its leaves
+are keyed by (subject, metric) and there is no prefix that walks one metric
+across subjects — so until Phase 1122 the query enumerated, and every chart
+downloaded every fact in the scope. A consumer deployment on a one-core
+host measured 5,011 blob downloads (745 s of blob time) for about three
+chart loads at 1,742 facts, with requests of 15–31 s.
+
+**It now rides the metric surface.** A current-heads query naming a metric
+and no subject reads the metric's snapshot (from the parse cache when the
+census matches), keeps the rows whose period overlaps the range and, unless
+the caller asked for the competition indicator, whose method matches, and
+downloads those heads and no others. They then run through the same query
+pipeline the enumeration uses, in census order, so the two paths agree by
+construction. The browse's subject prefix and level still filter after the
+store; the disclosure gate is unchanged and still judges every point.
+
+**Why the surface, and not a by-metric leaf set beside the point-read
+index.** The deciding case is a slice-scoped run that supersedes one period.
+A leaf set gains a leaf per new fact and keeps the superseded fact's, so a
+read through it downloads every fact of the metric in the range — the heads
+and the history behind them — and grows with each revision. The surface
+folds the run's facts into its snapshot when the batch is asserted (one
+snapshot read and one write per metric the batch touches, which the
+population read already pays), drops the superseded rows, and so a read
+after the run downloads exactly the heads it returns. A replica that missed
+the batch folds the difference it decodes from the census, one fact read
+per unseen fact, and rebuilds only past `MaxIncrementalFold`. It also means
+one read model, already maintained, rather than a second index to keep.
+
+**When it declines, and the read enumerates.** A historical `AsOf`; full
+history (`IncludeSuperseded`); a scope below `MinimumHeads`; an admitted
+head stamped after the read's instant (law L4 would show its predecessor,
+which a heads-only snapshot does not hold); an admitted head the census or a
+download cannot produce. And the first read of a metric whose snapshot does
+not exist yet builds it — one enumeration per metric, once, exactly as the
+first population read of that metric does.
+
+Measured with the counting storage fake in `FactStoreTests` (in-memory
+backend; nine in ten facts originals, every ninth lineage revised once, two
+metrics alternating by subject; the chart is one metric over three months):
+
+| Scope | Points | Before: downloads | Before: time | After, warm: downloads | After: time | Second replica | After a slice-scoped revision |
+|---|---|---|---|---|---|---|---|
+| 2,000 facts | 225 | 2,000 | 80.9 ms | 225 (+1 listing) | 6.4 ms | 226 | 225 |
+| 20,000 facts | 2,250 | 20,000 | 276.0 ms | 2,250 (+1 listing) | 102.8 ms | 2,251 | 2,250 |
+
+The cold first read of each size is the surface build plus the read: 2,226
+and 22,251 downloads. The in-memory times understate the change against
+object storage, where each download is a round trip: at the 136–148 ms per
+GET the deployment above measured, and 16 downloads in flight
+(`BlobFanOut.Bound`), the 20,000-fact enumeration is about 1,250 sequential
+rounds — roughly three minutes — and the warm 2,250-point read about 141
+rounds, some twenty seconds. A chart's cost now follows its points: a
+24-point chart is two rounds for the store and two for the gate, whatever
+the scope holds.
+
+**What it does not narrow.** The store reads the metric's heads over the
+range across every subject; the browse's subject prefix and level filter
+afterwards, because `FactQuery` has no subject-branch clause. A chart of one
+brand in a scope of many therefore downloads the metric's heads for every
+brand in the range. In the browse pack's 2,400-fact table a 100-point chart
+of one brand reads 1,200 heads and the gate's 100, against 2,500 before.
+
+### What each read costs on the blob store (Phase 1122)
+
+Above the thresholds (`FactIndexOptions.defaults` and
+`FactSurfaceOptions.defaults`, 512 each), with the index complete and the
+metric's surface built:
+
+| Read | Shape | Downloads |
+|---|---|---|
+| Point | `Get`; `Query` naming a subject and a metric | the facts it returns |
+| Lineage | `QuerySupersessionChain`; the head lookup inside `Assert` / `AssertBatch` | the lineage's facts (one, to confirm, for a head lookup) |
+| Population | `QueryPopulation` | the top-k page it returns, plus the snapshot when the parse cache is cold |
+| Series | `Query` naming a metric and no subject, current heads | the metric's heads in the range, plus the snapshot when the parse cache is cold |
+| Full history | `Query` with `IncludeSuperseded`, or with a historical `AsOf` | every fact in the scope |
+
+**What enumerates by definition**: a query naming neither a subject nor a
+metric (`FactQuery.all`, and the full-history listing built on it) — its
+answer is every fact, so no index makes it read fewer; a query naming a
+subject and no metric; and the history reads above, because reconstructing
+what was current at an earlier instant needs the superseded facts a heads-only
+read model has dropped. **What enumerates once**: the first consulting read
+after the index went incomplete (it rewrites the missing leaves), and the
+first read of a metric whose surface does not exist (it builds it). The
+disclosure gate's own check under taint policies loads the scope separately
+and is not covered by this table.
 
 ## The indexed store: `ToolUp.FactStores.Postgres` (Phase 888)
 
