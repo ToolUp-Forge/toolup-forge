@@ -755,7 +755,7 @@
       removed applies nothing; a stored per-scope key of the wrong length is
       refused, never replaced.
     -->
-    <Version>0.33.1</Version>
+    <Version>0.34.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
       DLL. Non-publishable projects (App composition roots, modules,

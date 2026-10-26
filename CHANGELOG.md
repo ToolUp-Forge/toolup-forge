@@ -13,7 +13,7 @@ same name in one release is reported once, as a signature change. Under this rep
 policy a `breaking` release is a MINOR bump and an `additive` one a PATCH; from 1.0.0 the ordinary table
 applies. Where a release ships a migration note under `docs/migrations/`, it is linked from the section.
 
-## [0.33.1] — unreleased
+## [0.33.1] — 2026-10-25
 
 Migration notes:
 
@@ -45,7 +45,7 @@ _Surface since `v0.33.0`: **additive** — 3 packages moved; 84 members added, 0
   - `ToolUp.Facts.FactReadFault+FactDownloadFailed.reason : System.String { get }`
   - `ToolUp.Facts.FactReadFault+FactUnparseable (class)`
   - `ToolUp.Facts.FactReadFault+FactUnparseable.blobName : System.String { get }`
-  - … and 10 more — `git diff v0.33.0 -- api-baselines/ToolUp.Facts.Server.approved.txt`
+  - … and 10 more — `git diff v0.33.0 v0.33.1 -- api-baselines/ToolUp.Facts.Server.approved.txt`
 - `ToolUp.KnowledgeBase.Server` — 1 member:
   - `KnowledgeBase.ServerIngestionObserver.publishTerminalStatus(ToolUp.Platform.INotificationChannel, ToolUp.Platform.ILogger, System.String, System.String, System.String, SharedTypes+IngestionStatus) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]`
 - `ToolUp.Platform.Server` — 53 members:
@@ -69,7 +69,7 @@ _Surface since `v0.33.0`: **additive** — 3 packages moved; 84 members added, 0
   - `ToolUp.Platform.ComposeAuth+BootstrapRefused.remedy : System.String { get }`
   - `ToolUp.Platform.ComposeAuth+BootstrapRefused.store : System.String { get }`
   - `ToolUp.Platform.ComposeAuth.refuseAtPreflight(Microsoft.Extensions.DependencyInjection.IServiceCollection, ToolUp.Platform.ILogger, System.String, System.String, System.Exception) : System.Void`
-  - … and 33 more — `git diff v0.33.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
+  - … and 33 more — `git diff v0.33.0 v0.33.1 -- api-baselines/ToolUp.Platform.Server.approved.txt`
 
 ## [0.33.0] — 2026-10-24
 
