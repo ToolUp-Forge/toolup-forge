@@ -824,7 +824,9 @@ type DelegatedFactStore
 
     let pointDelegate (ops: InnerScope) (query: FactQuery) : Async<(DelegateFact * string option) option> = async {
         match query.Subject, query.Metric with
-        | Some subject, Some metric ->
+        // A subject outside the query's branch (Phase 1123) is no point
+        // read: the inner store, which honours the branch, answers nothing.
+        | Some subject, Some metric when FactQuery.admitsSubject query subject ->
             match delegateOf metric |> Option.filter (fun d -> DelegateFact.covers d subject) with
             | Some d -> return! selectByMethod ops d query.Method
             | None -> return None

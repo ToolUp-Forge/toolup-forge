@@ -1682,12 +1682,68 @@ let private costTests =
                 5
                 "a point read reads its fact, its one-fact chain and the gate's look at it — never the scope"
 
-            // The store reads the metric's heads over the range (1,200 of
-            // the scope's 2,400 facts) and the gate re-reads each point; the
-            // prefix narrows after the store, so the bound is the metric's
-            // heads in range, not the chart's points (see facts.md).
-            Expect.equal chartReads (1_200 + points) "a chart reads its metric's heads in range, not the scope"
+            // The store reads the brand's heads over the range — the chart's
+            // own points, since Phase 1123 hands it the prefix as a subject
+            // branch — and the gate re-reads each point (see facts.md).
+            Expect.equal chartReads (points + points) "a chart reads its branch's heads in range, not the metric's"
         }
+    ]
+
+// ─── Phase 1123 — a chart of one branch reads that branch ────────────
+//
+// The same browse at two sizes: `skus` SKUs over two months and two
+// columns (4 x `skus` facts), twenty brands, one brand charted. Before 1123
+// the store returned the metric's heads across every brand (2 x `skus`)
+// and the handler filtered the prefix after; now the prefix travels as the
+// query's `SubjectBranch` and the surface rows narrow before anything
+// downloads, so the chart costs its points plus the gate's look at each.
+
+/// Downloads of a one-brand chart over a warm surface, and its points.
+let private oneBrandChart (skus: int) : int * int =
+    let counting = FactStoreTests.CountingBlobStorage(InMemoryBlobStorage())
+    let w, _ = worldOn counting Set.empty (tickingClock ())
+
+    run w [
+        for i in 0 .. skus - 1 do
+            let brand = sprintf "b%02d" (i % 20)
+            let sku = sprintf "s%05d" i
+            rowIn september brand sku (decimal i)
+            rowIn october brand sku (decimal (i + 1))
+    ]
+    |> ignore
+
+    // The first read of the table builds the revenue surface — once.
+    ok "rows" (FactBrowseHandler.queryRows w.Deps w.Scope "u" (query "revenue" TopOfRanking 0 10))
+    |> ignore
+
+    counting.Reset()
+
+    let chart =
+        ok
+            "chart"
+            (FactBrowseHandler.querySeries w.Deps w.Scope "u" {
+                series "revenue" september.From october.To with
+                    SubjectPrefix = [ "b07" ]
+            })
+
+    counting.Downloads, List.length chart.Points
+
+let private branchCostTests =
+    testList "Phase 1123 — a chart of one branch downloads that branch's heads, not every branch's" [
+        for skus in [ 500; 5_000 ] do
+            test (sprintf "one brand of twenty, %d facts" (4 * skus)) {
+                let downloads, points = oneBrandChart skus
+
+                printfn
+                    "Phase 1123 one-brand chart over %d facts: QuerySeries %d downloads for %d points (the metric holds %d heads in range)"
+                    (4 * skus)
+                    downloads
+                    points
+                    (2 * skus)
+
+                Expect.equal points (2 * skus / 20) "the chart is one brand's SKUs over two months"
+                Expect.equal downloads (points + points) "the branch's heads in range and the gate's look at each"
+            }
     ]
 
 /// Every Phase 895 server case, and Phase 1113's series cases.
@@ -1702,4 +1758,5 @@ let tests =
         composedDemoTests
         seriesTests
         costTests
+        branchCostTests
     ]

@@ -719,13 +719,31 @@ type PostgresFactStore
                 (fun f -> reg.TryGetMetric f.Metric.Value |> Option.bind _.CanonicalMethod)
                 heads
 
-    let pointFilter (query: FactQuery) : RowFilter = {
-        RowFilter.none with
-            Hierarchy = query.Subject |> Option.map _.Hierarchy
-            Path = query.Subject |> Option.map _.Path
-            Metric = query.Metric |> Option.map _.Value
-            Period = query.PeriodOverlaps
-    }
+    // A named subject is the narrowest subject clause, so it fills the
+    // filter; a subject branch (Phase 1123) fills it only alone. A query
+    // naming both is answered here only when the subject lies in the branch
+    // (`runQuery` answers nothing otherwise), so the branch adds nothing.
+    let pointFilter (query: FactQuery) : RowFilter =
+        let subjectClauses =
+            match query.Subject, query.SubjectBranch with
+            | Some subject, _ -> {
+                RowFilter.none with
+                    Hierarchy = Some subject.Hierarchy
+                    Path = Some subject.Path
+              }
+            | None, Some branch -> {
+                RowFilter.none with
+                    Hierarchy = Some branch.Hierarchy
+                    Level = branch.Level
+                    PathPrefix = branch.PathPrefix
+              }
+            | None, None -> RowFilter.none
+
+        {
+            subjectClauses with
+                Metric = query.Metric |> Option.map _.Value
+                Period = query.PeriodOverlaps
+        }
 
     let byContentAddress (facts: Fact list) =
         facts |> List.sortWith (fun a b -> String.CompareOrdinal(a.FactId, b.FactId))
@@ -735,7 +753,7 @@ type PostgresFactStore
     // so the competition indicator sees every competitor), then the
     // listing — the history when asked, the named method's heads, or the
     // canonical selection.
-    let runQuery (scopeId: string) (query: FactQuery) : Async<Fact list * Fact list> = async {
+    let runFiltered (scopeId: string) (query: FactQuery) : Async<Fact list * Fact list> = async {
         let t = query.AsOf |> Option.defaultValue (clock().ToUniversalTime())
         let filter = pointFilter query
 
@@ -768,6 +786,13 @@ type PostgresFactStore
             listing
             |> List.sortBy (fun f -> f.Subject.Hierarchy, f.Metric.Value, f.Period.From)
     }
+
+    // A query naming a subject outside its own branch matches nothing
+    // (Phase 1123); every other query is one filtered read.
+    let runQuery (scopeId: string) (query: FactQuery) : Async<Fact list * Fact list> =
+        match query.Subject with
+        | Some subject when not (FactQuery.admitsSubject query subject) -> async.Return([], [])
+        | _ -> runFiltered scopeId query
 
     let competingMethods (heads: Fact list) (f: Fact) : string list =
         let key = competitionKey f

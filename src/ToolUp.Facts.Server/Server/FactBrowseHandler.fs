@@ -690,11 +690,11 @@ module FactBrowseHandler =
     ///   revision; a period a later slice-scoped run left alone keeps the
     ///   head the earlier run wrote. A superseded fact is never served as
     ///   a point — it is on the head's chain through `GetFact`.
-    /// - **What the read costs is the store's** (Phase 1122). On the blob
-    ///   store a metric-only head query rides the metric surface and
-    ///   downloads the metric's heads in the range, not the scope; the
-    ///   prefix and level below narrow after it, because `FactQuery` names
-    ///   no subject branch.
+    /// - **What the read costs is the store's** (Phase 1122, 1123). The
+    ///   hierarchy, prefix and level travel to the store as the query's
+    ///   `SubjectBranch`, so on the blob store a metric-only head query
+    ///   rides the metric surface and downloads the branch's heads in the
+    ///   range — not the scope, and not the metric's other branches.
     /// - **Period membership is overlap**, `FactQuery.PeriodOverlaps` over
     ///   `[PeriodFrom, PeriodTo)`: a period straddling the range's edge is
     ///   a point, since a chart of the window wants it, and an aligned
@@ -743,6 +743,16 @@ module FactBrowseHandler =
 
                     let query: FactQuery = {
                         FactQuery.all with
+                            SubjectBranch =
+                                Some {
+                                    Hierarchy = table.Hierarchy
+                                    PathPrefix =
+                                        if List.isEmpty request.SubjectPrefix then
+                                            None
+                                        else
+                                            Some request.SubjectPrefix
+                                    Level = depth
+                                }
                             Metric = Some(MetricRef request.Metric)
                             Method = Some(tableMethod table)
                             PeriodOverlaps =
@@ -755,21 +765,8 @@ module FactBrowseHandler =
 
                     let! heads = deps.Store.Query(scope, query)
 
-                    let underPrefix (path: string list) =
-                        List.length path >= List.length request.SubjectPrefix
-                        && List.truncate (List.length request.SubjectPrefix) path = request.SubjectPrefix
-
-                    let atLevel (path: string list) =
-                        match depth with
-                        | Some d -> List.length path = d
-                        | None -> true
-
                     let points =
                         heads
-                        |> List.filter (fun f ->
-                            f.Subject.Hierarchy = table.Hierarchy
-                            && underPrefix f.Subject.Path
-                            && atLevel f.Subject.Path)
                         |> List.groupBy (fun f -> f.Subject.Path, f.Period.From, f.Period.To)
                         |> List.map (fun (_, facts) -> facts |> List.maxBy _.AsOf)
                         |> List.sortBy (fun f -> f.Subject.Path, f.Period.From)

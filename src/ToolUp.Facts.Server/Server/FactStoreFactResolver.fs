@@ -97,6 +97,7 @@ type FactStoreFactResolver
     // clause field maps 1:1; the query never includes superseded facts —
     // the resolver reads heads and derives their supersession separately.
     let toQuery (clause: FactClause) : FactQuery = {
+        SubjectBranch = None
         Subject =
             Some {
                 Hierarchy = clause.SubjectHierarchy

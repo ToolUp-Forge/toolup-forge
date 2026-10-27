@@ -764,7 +764,16 @@
       Migration recipe:
       `docs/migrations/1122-fact-series-read-rides-the-metric-surface.md`.
     -->
-    <Version>0.34.1</Version>
+    <!--
+      Next draft 0.35.0 (v0.34.1 is tagged), breaking: Phase 1123 -
+      `FactQuery` gains a `SubjectBranch` clause (a record widening, so a
+      full `FactQuery` literal needs the field; a `with`-built query does
+      not), and the fact browse's series read hands its subject prefix and
+      level to the store, so a chart of one branch downloads that branch's
+      heads. Migration recipe:
+      `docs/migrations/1123-fact-query-subject-branch.md`.
+    -->
+    <Version>0.35.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
       DLL. Non-publishable projects (App composition roots, modules,

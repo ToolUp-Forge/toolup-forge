@@ -283,6 +283,7 @@ module FactQueryTool =
             | Error message -> return serialize {| error = message |}
             | Ok args ->
                 let query: FactQuery = {
+                    SubjectBranch = None
                     Subject = Some args.Subject
                     Metric = Some(MetricRef args.Metric)
                     PeriodOverlaps = args.PeriodOverlaps

@@ -13,6 +13,33 @@ same name in one release is reported once, as a signature change. Under this rep
 policy a `breaking` release is a MINOR bump and an `additive` one a PATCH; from 1.0.0 the ordinary table
 applies. Where a release ships a migration note under `docs/migrations/`, it is linked from the section.
 
+## [0.35.0] — unreleased
+
+Migration notes:
+
+- [1123-fact-query-subject-branch](docs/migrations/1123-fact-query-subject-branch.md)
+
+_Surface since `v0.34.1`: **breaking** — 1 package moved; 10 members added, 1 member changed, 0 members removed._
+
+### Added
+
+- `ToolUp.Facts.Server` — 10 members:
+  - `ToolUp.Facts.FactQuery.SubjectBranch : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.SubjectBranch] { get }`
+  - `ToolUp.Facts.FactQueryModule.admitsSubject(ToolUp.Facts.FactQuery) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.SubjectRef, System.Boolean]`
+  - `ToolUp.Facts.SubjectBranch (class)`
+  - `ToolUp.Facts.SubjectBranch..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])`
+  - `ToolUp.Facts.SubjectBranch.Hierarchy : System.String { get }`
+  - `ToolUp.Facts.SubjectBranch.Level : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }`
+  - `ToolUp.Facts.SubjectBranch.PathPrefix : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }`
+  - `ToolUp.Facts.SubjectBranchModule (class)`
+  - `ToolUp.Facts.SubjectBranchModule.matches(ToolUp.Facts.SubjectBranch) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.SubjectRef, System.Boolean]`
+  - `ToolUp.Facts.SubjectBranchModule.ofHierarchy(System.String) : ToolUp.Facts.SubjectBranch`
+
+### Changed
+
+- `ToolUp.Facts.Server` — 1 member:
+  - `ToolUp.Facts.FactQuery..ctor` — `ToolUp.Facts.FactQuery..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.SubjectRef], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.MetricRef], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.MethodRef], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], System.Boolean)` → `ToolUp.Facts.FactQuery..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.SubjectRef], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.SubjectBranch], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.MetricRef], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.MethodRef], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], System.Boolean)`
+
 ## [0.34.1] — 2026-10-26
 
 Migration notes:

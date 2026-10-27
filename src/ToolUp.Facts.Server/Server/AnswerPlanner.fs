@@ -223,6 +223,7 @@ type AnswerPlanner
                 return Refuse(InvalidSubjectPath(subject.Id, candidate.SubjectPath))
             else
                 let query: FactQuery = {
+                    SubjectBranch = None
                     Subject =
                         Some {
                             Hierarchy = subject.Id

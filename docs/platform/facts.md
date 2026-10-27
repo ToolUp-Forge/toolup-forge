@@ -83,7 +83,7 @@ idempotent re-assertion changes no state and emits nothing.
 | | Point read (`Query`) | Population read (`QueryPopulation`) |
 |---|---|---|
 | Asks | "what is metric M for subject S in period P?" | "which subjects rank highest/lowest on M, and what does that population look like?" |
-| Subject | one instance (or an open filter) | a **set** — hierarchy + optional depth + optional path prefix |
+| Subject | one instance, a branch (Phase 1123), both, or an open filter | a **set** — hierarchy + optional depth + optional path prefix |
 | Returns | every matching fact, unordered, unbounded | a **bounded ranking** plus a **summary** |
 | Ordering | none | declared — registry direction, or the caller's explicit choice |
 | History | `IncludeSuperseded` available | deliberately absent |
@@ -314,8 +314,9 @@ census matches), keeps the rows whose period overlaps the range and, unless
 the caller asked for the competition indicator, whose method matches, and
 downloads those heads and no others. They then run through the same query
 pipeline the enumeration uses, in census order, so the two paths agree by
-construction. The browse's subject prefix and level still filter after the
-store; the disclosure gate is unchanged and still judges every point.
+construction. Since Phase 1123 the browse's subject prefix and level travel
+to the store as the query's `SubjectBranch`, and the rows narrow by it too
+(see below); the disclosure gate is unchanged and still judges every point.
 
 **Why the surface, and not a by-metric leaf set beside the point-read
 index.** The deciding case is a slice-scoped run that supersedes one period.
@@ -357,12 +358,38 @@ rounds, some twenty seconds. A chart's cost now follows its points: a
 24-point chart is two rounds for the store and two for the gate, whatever
 the scope holds.
 
-**What it does not narrow.** The store reads the metric's heads over the
-range across every subject; the browse's subject prefix and level filter
-afterwards, because `FactQuery` has no subject-branch clause. A chart of one
-brand in a scope of many therefore downloads the metric's heads for every
-brand in the range. In the browse pack's 2,400-fact table a 100-point chart
-of one brand reads 1,200 heads and the gate's 100, against 2,500 before.
+**A chart of one branch reads that branch (Phase 1123).** Until 1123 the
+store read the metric's heads over the range across every subject and the
+browse filtered its prefix and level afterwards, because `FactQuery` could
+name one subject and nothing coarser: a 100-point chart of one brand in the
+browse pack's 2,400-fact table read 1,200 heads and the gate's 100.
+`FactQuery.SubjectBranch` now names a branch in the shape `PopulationQuery`
+names its subject set — a hierarchy, an optional path prefix, an optional
+depth — decided by the same predicate (`PopulationQuery.matchesSubject`,
+through `SubjectBranch.matches`), so the two reads cannot disagree on what
+"under this branch" means. The surface rows carry the subject, so the series
+read narrows by the branch before it downloads anything; the enumerating and
+indexed paths filter by it in the shared pipeline; the Postgres store binds it
+into SQL with the population read's own clauses; the delegated store forwards
+it to the inner store. A level the registry cannot resolve to a depth is the
+one thing the browse still cannot express, and, as before, it is not applied.
+
+Measured with the browse pack's counting storage (in-memory backend; one
+table run of SKUs under twenty brands, two months, two columns; one brand
+charted over a warm surface):
+
+| Scope | Metric heads in range | Points | Before: downloads | After: downloads |
+|---|---|---|---|---|
+| 2,000 facts | 1,000 | 50 | 1,050 | 100 |
+| 20,000 facts | 10,000 | 500 | 10,500 | 1,000 |
+
+The after figure is the chart's points plus the gate's look at each. A chart
+of the whole table is unchanged: its branch is the hierarchy, which every head
+lies in.
+
+**`Subject` and `SubjectBranch` AND-combine and are never exclusive.** Both may
+be named; a subject inside the branch reads as the subject alone, and a subject
+outside it matches nothing, as any two disjoint clauses do.
 
 ### What each read costs on the blob store (Phase 1122)
 
@@ -375,7 +402,7 @@ metric's surface built:
 | Point | `Get`; `Query` naming a subject and a metric | the facts it returns |
 | Lineage | `QuerySupersessionChain`; the head lookup inside `Assert` / `AssertBatch` | the lineage's facts (one, to confirm, for a head lookup) |
 | Population | `QueryPopulation` | the top-k page it returns, plus the snapshot when the parse cache is cold |
-| Series | `Query` naming a metric and no subject, current heads | the metric's heads in the range, plus the snapshot when the parse cache is cold |
+| Series | `Query` naming a metric and no subject, current heads | the metric's heads in the range under the query's `SubjectBranch` (all of them when it names none), plus the snapshot when the parse cache is cold |
 | Full history | `Query` with `IncludeSuperseded`, or with a historical `AsOf` | every fact in the scope |
 
 **What enumerates by definition**: a query naming neither a subject nor a

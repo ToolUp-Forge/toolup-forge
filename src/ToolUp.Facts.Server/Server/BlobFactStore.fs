@@ -695,15 +695,18 @@ type BlobFactStore
     // produce the same answer.
     let runQuery (query: FactQuery) (t: DateTime) (all: Fact list) : Fact list * Fact list =
 
-        // Clause filters minus `Method` first (subject / metric / period)
-        // — the *competition scope*. A fact's competitors are the other
+        // Clause filters minus `Method` first (subject and subject branch /
+        // metric / period) — the *competition scope*. A branch never splits
+        // a competition: competitors share their subject. A fact's competitors are the other
         // current heads sharing its (subject, metric, period) regardless
         // of which method the caller named, so the indicator base is
         // derived before the method clause narrows the listing.
+        let admitsSubject = FactQuery.admitsSubject query
+
         let scoped =
             all
             |> List.filter (fun f ->
-                (query.Subject |> Option.forall (fun s -> s = f.Subject))
+                admitsSubject f.Subject
                 && (query.Metric |> Option.forall (fun m -> m = f.Metric))
                 && (query.PeriodOverlaps |> Option.forall (fun p -> periodsOverlap p f.Period)))
 
@@ -1116,7 +1119,8 @@ type BlobFactStore
     // metric surface already holds exactly that walk: one row per current
     // head of the metric, carrying the head's subject, period, `AsOf`,
     // method identity and fact id. So the read takes the rows the query's
-    // period and method admit, and downloads those heads and no others.
+    // period, method and subject branch (Phase 1123) admit, and downloads
+    // those heads and no others.
     //
     // **Why the surface and not a by-metric leaf set beside Phase 890's.**
     // The deciding case is a slice-scoped run that supersedes one period.
@@ -1179,11 +1183,16 @@ type BlobFactStore
                         else
                             query.Method |> Option.map Fact.methodIdentity
 
+                    // The rows carry the subject, so a subject branch
+                    // (Phase 1123) narrows before anything downloads.
+                    let admitsSubject = FactQuery.admitsSubject query
+
                     let admitted =
                         snapshot.Rows
                         |> List.map _.Member
                         |> List.filter (fun m ->
-                            (query.PeriodOverlaps |> Option.forall (fun p -> rowMayOverlap p m))
+                            admitsSubject m.Subject
+                            && (query.PeriodOverlaps |> Option.forall (fun p -> rowMayOverlap p m))
                             && (methodIdentity |> Option.forall (fun identity -> identity = m.MethodIdentity)))
 
                     if admitted |> List.exists (fun m -> m.AsOf > t) then

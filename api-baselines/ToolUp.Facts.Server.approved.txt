@@ -765,14 +765,16 @@ ToolUp.Facts.FactPurposeContext.claim(System.String) : System.Void
 ToolUp.Facts.FactPurposeContext.clear() : System.Void
 ToolUp.Facts.FactPurposeContext.current() : Microsoft.FSharp.Core.FSharpOption`1[System.String]
 ToolUp.Facts.FactQuery (class)
-ToolUp.Facts.FactQuery..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.SubjectRef], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.MetricRef], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.MethodRef], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], System.Boolean)
+ToolUp.Facts.FactQuery..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.SubjectRef], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.SubjectBranch], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.MetricRef], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.MethodRef], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], System.Boolean)
 ToolUp.Facts.FactQuery.AsOf : Microsoft.FSharp.Core.FSharpOption`1[System.DateTime] { get }
 ToolUp.Facts.FactQuery.IncludeSuperseded : System.Boolean { get }
 ToolUp.Facts.FactQuery.Method : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.MethodRef] { get }
 ToolUp.Facts.FactQuery.Metric : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.MetricRef] { get }
 ToolUp.Facts.FactQuery.PeriodOverlaps : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent] { get }
 ToolUp.Facts.FactQuery.Subject : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.SubjectRef] { get }
+ToolUp.Facts.FactQuery.SubjectBranch : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.SubjectBranch] { get }
 ToolUp.Facts.FactQueryModule (class)
+ToolUp.Facts.FactQueryModule.admitsSubject(ToolUp.Facts.FactQuery) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.SubjectRef, System.Boolean]
 ToolUp.Facts.FactQueryModule.all : ToolUp.Facts.FactQuery { get }
 ToolUp.Facts.FactQueryModule.asOf(System.DateTime, ToolUp.Facts.FactQuery) : ToolUp.Facts.FactQuery
 ToolUp.Facts.FactQueryModule.forSubjectMetric(ToolUp.Facts.SubjectRef, ToolUp.Facts.MetricRef) : ToolUp.Facts.FactQuery
@@ -1276,6 +1278,14 @@ ToolUp.Facts.RecomputeJobHandlerModule.scheduleRecomputeUnder(ToolUp.Platform.IJ
 ToolUp.Facts.RecomputeJobPayload (class)
 ToolUp.Facts.RecomputeJobPayload..ctor(System.String)
 ToolUp.Facts.RecomputeJobPayload.factId : System.String { get }
+ToolUp.Facts.SubjectBranch (class)
+ToolUp.Facts.SubjectBranch..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
+ToolUp.Facts.SubjectBranch.Hierarchy : System.String { get }
+ToolUp.Facts.SubjectBranch.Level : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Facts.SubjectBranch.PathPrefix : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }
+ToolUp.Facts.SubjectBranchModule (class)
+ToolUp.Facts.SubjectBranchModule.matches(ToolUp.Facts.SubjectBranch) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.SubjectRef, System.Boolean]
+ToolUp.Facts.SubjectBranchModule.ofHierarchy(System.String) : ToolUp.Facts.SubjectBranch
 ToolUp.Facts.TaintCrossing (class)
 ToolUp.Facts.TaintCrossing..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String])
 ToolUp.Facts.TaintCrossing.AcceptedScopes : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }

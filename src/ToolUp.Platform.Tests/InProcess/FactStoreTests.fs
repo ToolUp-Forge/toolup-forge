@@ -2339,6 +2339,7 @@ let private queries890 (midway: DateTime) : FactQuery list = [
                         for asOf in [ None; Some midway ] ->
                             {
                                 Subject = Some { Hierarchy = "geography"; Path = path }
+                                SubjectBranch = None
                                 Metric = Some(MetricRef metric)
                                 PeriodOverlaps = period
                                 Method = method'

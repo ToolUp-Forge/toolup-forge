@@ -323,11 +323,56 @@ module FactDraft =
                 "method certificate ref is empty"
     ]
 
+/// A subject branch — every subject instance in one hierarchy, optionally
+/// under a path prefix and at one depth (Phase 1123). The shape
+/// `PopulationQuery` names its subject set in (`Hierarchy`, `PathPrefix`,
+/// `Level`), and decided by the same predicate, so a fact read and a
+/// population read never disagree on what "under this branch" means.
+type SubjectBranch = {
+    /// The subject hierarchy id (`SubjectRef.Hierarchy`).
+    Hierarchy: string
+    /// Admit only subjects whose `Path` starts with these segments. `None`
+    /// (or an empty prefix) admits the whole hierarchy.
+    PathPrefix: string list option
+    /// Admit only subjects with this many `Path` segments (`0` is the
+    /// hierarchy root). `None` admits every depth.
+    Level: int option
+}
+
+/// Construction and the membership predicate of a subject branch.
+module SubjectBranch =
+
+    /// The whole of one hierarchy, every depth.
+    let ofHierarchy (hierarchy: string) : SubjectBranch = {
+        Hierarchy = hierarchy
+        PathPrefix = None
+        Level = None
+    }
+
+    /// Whether `subject` lies in `branch` — `PopulationQuery.matchesSubject`
+    /// over the branch's three clauses, so the two reads share one decision.
+    /// Partially apply it once per read: the predicate is built once.
+    let matches (branch: SubjectBranch) : SubjectRef -> bool =
+        let population = {
+            PopulationQuery.create (MetricRef String.Empty) branch.Hierarchy with
+                Level = branch.Level
+                PathPrefix = branch.PathPrefix
+        }
+
+        PopulationQuery.matchesSubject population
+
 /// Read filter for `IFactStore.Query`. Every clause is optional and
 /// AND-combined; an all-`None` query returns every current fact in scope.
 type FactQuery = {
     /// Restrict to one subject instance.
     Subject: SubjectRef option
+    /// Restrict to the subject instances in one branch (Phase 1123) — the
+    /// read of one brand, region or store across its members. AND-combined
+    /// with `Subject` like every other clause and never exclusive with it:
+    /// the two can always both be named, and a query naming a subject
+    /// outside the branch matches nothing, as any two disjoint clauses do.
+    /// `None` admits every subject.
+    SubjectBranch: SubjectBranch option
     /// Restrict to one metric.
     Metric: MetricRef option
     /// Restrict to facts whose `Period` overlaps this extent.
@@ -355,6 +400,7 @@ module FactQuery =
     /// The empty query — every current fact in scope, visible now.
     let all: FactQuery = {
         Subject = None
+        SubjectBranch = None
         Metric = None
         PeriodOverlaps = None
         Method = None
@@ -371,6 +417,17 @@ module FactQuery =
 
     /// Reconstruct the fact base as of a transaction time (law L4).
     let asOf (t: DateTime) (q: FactQuery) : FactQuery = { q with AsOf = Some t }
+
+    /// Whether the query's subject clauses — `Subject` and `SubjectBranch`
+    /// — both admit `subject`. Every store filters by this, so the two
+    /// clauses mean one thing everywhere.
+    let admitsSubject (q: FactQuery) : SubjectRef -> bool =
+        let inBranch =
+            match q.SubjectBranch with
+            | Some branch -> SubjectBranch.matches branch
+            | None -> fun _ -> true
+
+        fun subject -> (q.Subject |> Option.forall (fun s -> s = subject)) && inBranch subject
 
 /// A queried fact annotated with its derived competition indicator
 /// (Phase 566 / GP 9 — selection is visible, never silent). Derived per

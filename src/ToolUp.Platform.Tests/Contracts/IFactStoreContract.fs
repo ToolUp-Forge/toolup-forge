@@ -1005,6 +1005,143 @@ let tests (name: string) (factory: unit -> IFactStore * string * string) =
             Expect.isEmpty fromB.Ranked "scopeB sees none of scopeA's population"
             Expect.equal fromB.Stats PopulationStats.empty "and no trace of it in the summary"
         }
+
+        // ── Phase 1123 — a fact query names a subject branch ──────────
+        //
+        // The seeded population: root, [eu], [na], [eu;fr] twice (two
+        // methods), [na;us], [na;ca], [na;mx], and [eu;uk] superseded once.
+
+        testCaseAsync "a subject branch admits the subjects under its prefix, at its depth when it names one"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let! seeded = seedPopulation store scopeA
+
+            let read branch =
+                store.Query(
+                    scopeA,
+                    {
+                        FactQuery.all with
+                            Metric = Some(MetricRef "elasticity")
+                            SubjectBranch = Some branch
+                    }
+                )
+
+            let paths (facts: Fact list) =
+                facts |> List.map _.Subject.Path |> List.sort
+
+            let geography = SubjectBranch.ofHierarchy "geography"
+
+            let! underEu =
+                read {
+                    geography with
+                        PathPrefix = Some [ "eu" ]
+                }
+
+            Expect.equal
+                (paths underEu)
+                [ [ "eu" ]; [ "eu"; "fr" ]; [ "eu"; "fr" ]; [ "eu"; "uk" ] ]
+                "the prefix's own subject and every subject under it: both competing fr heads, uk's head only"
+
+            Expect.contains underEu seeded.UkHead "the current head of a revised lineage"
+            Expect.isFalse (underEu |> List.contains seeded.UkFirst) "never the head it superseded"
+
+            let! euChildren =
+                read {
+                    geography with
+                        PathPrefix = Some [ "eu" ]
+                        Level = Some 2
+                }
+
+            Expect.equal
+                (paths euChildren)
+                [ [ "eu"; "fr" ]; [ "eu"; "fr" ]; [ "eu"; "uk" ] ]
+                "depth narrows the prefix"
+
+            let! topLevel = read { geography with Level = Some 1 }
+            Expect.equal (paths topLevel) [ [ "eu" ]; [ "na" ] ] "depth alone admits one level of the whole hierarchy"
+
+            let! everyone = read geography
+            Expect.hasLength everyone 9 "the whole hierarchy is every current head"
+
+            let! elsewhere = read (SubjectBranch.ofHierarchy "org-chart")
+            Expect.isEmpty elsewhere "another hierarchy holds none of them"
+
+            let! noMember =
+                read {
+                    geography with
+                        PathPrefix = Some [ "eu"; "de" ]
+                }
+
+            Expect.isEmpty noMember "a prefix no subject lies under matches nothing"
+        }
+
+        testCaseAsync
+            "a subject branch AND-combines with a subject: inside the branch the subject's read, outside it nothing"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let! seeded = seedPopulation store scopeA
+
+            let read prefix =
+                store.Query(
+                    scopeA,
+                    {
+                        FactQuery.forSubjectMetric seeded.UkHead.Subject (MetricRef "elasticity") with
+                            SubjectBranch =
+                                Some {
+                                    SubjectBranch.ofHierarchy "geography" with
+                                        PathPrefix = Some prefix
+                                }
+                    }
+                )
+
+            let! inside = read [ "eu" ]
+            Expect.equal inside [ seeded.UkHead ] "the subject lies in the branch"
+
+            let! outside = read [ "na" ]
+            Expect.isEmpty outside "the subject lies outside the branch"
+        }
+
+        testCaseAsync "a subject branch narrows a full history and keeps every competitor in the indicator"
+        <| async {
+            let store, scopeA, _ = factory ()
+            let! seeded = seedPopulation store scopeA
+
+            let branch prefix =
+                Some {
+                    SubjectBranch.ofHierarchy "geography" with
+                        PathPrefix = Some prefix
+                }
+
+            let! history =
+                store.Query(
+                    scopeA,
+                    {
+                        FactQuery.all with
+                            SubjectBranch = branch [ "eu"; "uk" ]
+                            IncludeSuperseded = true
+                    }
+                )
+
+            Expect.equal
+                (history |> List.map _.FactId |> List.sort)
+                ([ seeded.UkFirst.FactId; seeded.UkHead.FactId ] |> List.sort)
+                "the branch's whole lineage, superseded fact included"
+
+            let! annotated =
+                store.QueryWithCompetition(
+                    scopeA,
+                    {
+                        FactQuery.all with
+                            Metric = Some(MetricRef "elasticity")
+                            SubjectBranch = branch [ "eu"; "fr" ]
+                    }
+                )
+
+            Expect.hasLength annotated 2 "both competing fr heads"
+
+            for a in annotated do
+                Expect.hasLength a.CompetingMethods 1 "each names the other method: a branch never splits a competition"
+        }
     ]
 
 /// The registry-directed half of the population contract (Phase 701).
@@ -1466,12 +1603,58 @@ let private pointMatrix (instants: DateTime list) : FactQuery list = [
                         for asOf in asOfs do
                             yield {
                                 Subject = Some { Hierarchy = "geography"; Path = path }
+                                SubjectBranch = None
                                 Metric = Some(MetricRef metric)
                                 PeriodOverlaps = period
                                 Method = method'
                                 AsOf = asOf
                                 IncludeSuperseded = history
                             }
+
+    // Phase 1123 — the subject-branch clause, alone and beside a subject,
+    // through every read model (the metric-only current-heads shape is the
+    // one the blob store answers from its surface rows).
+    let branches = [
+        SubjectBranch.ofHierarchy "geography"
+        {
+            SubjectBranch.ofHierarchy "geography" with
+                PathPrefix = Some [ "eu" ]
+        }
+        {
+            SubjectBranch.ofHierarchy "geography" with
+                Level = Some 1
+        }
+        {
+            SubjectBranch.ofHierarchy "geography" with
+                PathPrefix = Some awkwardDifferentialPath
+                Level = Some(List.length awkwardDifferentialPath)
+        }
+        SubjectBranch.ofHierarchy "org-chart"
+    ]
+
+    for branch in branches do
+        for metric in [ None; Some(MetricRef "revenue"); Some(MetricRef "elasticity") ] do
+            for period in periods do
+                for history in [ false; true ] do
+                    for asOf in asOfs do
+                        yield {
+                            FactQuery.all with
+                                SubjectBranch = Some branch
+                                Metric = metric
+                                PeriodOverlaps = period
+                                IncludeSuperseded = history
+                                AsOf = asOf
+                        }
+
+        yield {
+            FactQuery.forSubjectMetric
+                {
+                    Hierarchy = "geography"
+                    Path = [ "uk" ]
+                }
+                (MetricRef "revenue") with
+                SubjectBranch = Some branch
+        }
 
     for history in [ false; true ] do
         for asOf in asOfs do
