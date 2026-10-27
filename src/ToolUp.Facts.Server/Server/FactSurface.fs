@@ -8,6 +8,8 @@ open System.Collections.Generic
 open System.Globalization
 open System.Security.Cryptography
 open System.Text
+open System.Text.Json
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 
@@ -121,16 +123,49 @@ open ToolUp.Platform.BlobStorage
 //     one metric; nothing is promised across either.
 //  6. Precision at the lower bound — `AsOf` is carried at the tick
 //     precision the fact was stamped with, and never re-derived.
+//
+// **A row is also a series point (Phase 1126).** The browse's chart read
+// answers from the rows, so a chart is one snapshot download rather than
+// one fact download per point. The row was widened by deciding each
+// `FactSeriesPoint` field against what the row already held:
+//
+//   - `Subject`, `SubjectPath`, `PeriodFrom`, `PeriodTo`, `FactId`, `AsOf`
+//     — already in `Member`.
+//   - `Freshness` — derived from `AsOf` under the metric's staleness
+//     policy, exactly as the fact path derives it; nothing to carry.
+//   - `Withheld` — the gate's verdict, judged over the row's `Disclosure`
+//     (already carried, for exactly this purpose) and its fact id.
+//   - `PeriodLabel` — NOT held: 702 dropped it because no ranking step
+//     reads it. Now carried as `Label`.
+//   - `Value` and `Rendering` — `Value` is `Some d` only for a `Scalar d`
+//     head, which `Member.Magnitude` already is. But `Rendering` renders
+//     the head's whole value under the metric's display format, and a
+//     non-scalar head (an `Absent` gap a table run wrote, an interval, a
+//     category) cannot be rendered from a magnitude. So the row carries
+//     the head's `Value`; the codec writes it only for a non-scalar head
+//     and rebuilds a scalar one from the magnitude column, so a scalar
+//     surface grows by its labels and nothing else.
+//
+// The snapshot format is versioned (`FactSurfaceCodec.Version`), and a
+// snapshot in the older shape decodes to nothing, so it is rebuilt through
+// the census path — never read as a row with no label.
 
 /// One current head, projected into the surface. `Member` is the decidable
 /// projection every population step reads; `Disclosure` is carried because
 /// a fact's classification travels with it from birth (plan D14) and a
 /// projection that dropped it could not be the basis of a disclosure-gated
-/// read later — nothing in the ranking consults it.
+/// read later — nothing in the ranking consults it, and the series read's
+/// row-form gate (Phase 1126) does. `Label` and `Value` are what a series
+/// point needs beyond the member (see the header).
 type internal FactSurfaceRow = {
     Member: PopulationMember
     /// `Disclosure.toString` of the head's classification.
     Disclosure: string
+    /// The head's `Period.Label`.
+    Label: string option
+    /// The head's value. `Member.Magnitude` is `PopulationValue.comparable`
+    /// of it.
+    Value: FactValue
 }
 
 /// The value a census reduces to for equality: how many fact ids, and the
@@ -507,10 +542,15 @@ module internal FactSurfaceCodec =
     let Magic = "toolup.factsurface"
 
     /// Version 2 (Phase 891) replaced the absorbed-id lines with the fixed
-    /// census. A version-1 snapshot is refused like any other unreadable
-    /// one — it reads as no surface and the next read rebuilds it.
+    /// census. Version 3 (Phase 1126) added each row's period label and,
+    /// for a non-scalar head, its value. An older snapshot is refused like
+    /// any other unreadable one — it reads as no surface and the next read
+    /// rebuilds it.
     [<Literal>]
-    let Version = 2
+    let Version = 3
+
+    // The value column's JSON shape: the converters the fact blobs use.
+    let private jsonOptions = FableConverters.create ()
 
     /// Bytes per census cell on the wire: a 32-bit count, a 64-bit key sum
     /// and a 32-bit check sum, little-endian.
@@ -691,8 +731,24 @@ module internal FactSurfaceCodec =
             sb.Append('\t') |> ignore
             appendInstant sb m.AsOf
 
-            sb.Append('\t').Append(escape m.MethodIdentity).Append('\t').Append(escape row.Disclosure).Append('\n')
+            sb.Append('\t').Append(escape m.MethodIdentity).Append('\t').Append(escape row.Disclosure).Append('\t')
             |> ignore
+
+            // An absent label is an empty field; a present one is `=` and
+            // the escaped text, so `Some ""` survives the round trip.
+            match row.Label with
+            | Some label -> sb.Append('=').Append(escape label) |> ignore
+            | None -> ()
+
+            sb.Append('\t') |> ignore
+
+            // A scalar head's value is its magnitude column; any other
+            // shape is written whole (and is never empty JSON).
+            match row.Value with
+            | Scalar _ -> ()
+            | value -> sb.Append(escape (JsonSerializer.Serialize(value, jsonOptions))) |> ignore
+
+            sb.Append('\n') |> ignore
 
         sb.Append(encodeCells census).Append('\n') |> ignore
 
@@ -703,7 +759,7 @@ module internal FactSurfaceCodec =
     /// Deliberately index-scanned rather than `Split`-ed: a 300,000-row
     /// surface is tens of megabytes, and splitting it into lines and then
     /// into fields allocates several strings per row before a single one is
-    /// needed. Only the five genuinely-textual fields are materialised; the
+    /// needed. Only the genuinely-textual fields are materialised; the
     /// numbers and instants are parsed straight off the source span.
     let decode (bytes: byte[]) : FactSurfaceSnapshot option =
         try
@@ -712,7 +768,7 @@ module internal FactSurfaceCodec =
             let mutable pos = 0
 
             // Field boundaries of the current line, as (start, length)
-            // pairs — nine fields on a row line, eight on the header.
+            // pairs — eleven fields on a row line, eight on the header.
             let bounds = Array.zeroCreate<struct (int * int)> 16
 
             /// Split the next line into `bounds`; returns the field count,
@@ -785,24 +841,44 @@ module internal FactSurfaceCodec =
 
                 for _ in 1..rowCount do
                     if ok then
-                        if nextLine () <> 9 then
+                        if nextLine () <> 11 then
                             ok <- false
                         else
-                            rows.Add {
-                                Member = {
-                                    FactId = text 0
-                                    Subject = {
-                                        Hierarchy = textUnescaped 1
-                                        Path = decodePath (text 2)
+                            let magnitude = magnitude 3
+
+                            let value =
+                                match textUnescaped 10, magnitude with
+                                | "", Some d -> Some(Scalar d)
+                                | "", None -> None
+                                | json, _ -> Some(JsonSerializer.Deserialize<FactValue>(json, jsonOptions))
+
+                            let label =
+                                match text 9 with
+                                | "" -> None
+                                | field -> Some(unescape (field.Substring 1))
+
+                            match value with
+                            // A row with neither a magnitude nor a value
+                            // is not a shape `encode` writes.
+                            | None -> ok <- false
+                            | Some value ->
+                                rows.Add {
+                                    Member = {
+                                        FactId = text 0
+                                        Subject = {
+                                            Hierarchy = textUnescaped 1
+                                            Path = decodePath (text 2)
+                                        }
+                                        Magnitude = magnitude
+                                        PeriodFrom = instant 4
+                                        PeriodTo = instant 5
+                                        AsOf = instant 6
+                                        MethodIdentity = textUnescaped 7
                                     }
-                                    Magnitude = magnitude 3
-                                    PeriodFrom = instant 4
-                                    PeriodTo = instant 5
-                                    AsOf = instant 6
-                                    MethodIdentity = textUnescaped 7
+                                    Disclosure = textUnescaped 8
+                                    Label = label
+                                    Value = value
                                 }
-                                Disclosure = textUnescaped 8
-                            }
 
                 let census =
                     if ok && nextLine () = 1 then
@@ -831,6 +907,8 @@ module internal FactSurfaceFold =
     let rowOf (f: Fact) : FactSurfaceRow = {
         Member = PopulationMember.ofFact f
         Disclosure = Disclosure.toString f.Disclosure
+        Label = f.Period.Label
+        Value = f.Value
     }
 
     /// Absorb `facts`, in order, into `snapshot`, which projects `metric`,

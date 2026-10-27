@@ -41,7 +41,9 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // **Judged over what was read (Phase 1125).** Each read hands the gate,
 // in its held form, the facts it has just taken from the store in this
 // scope and this request, so a served fact is downloaded once — never
-// again at the gate. The verdicts and audit are the id form's.
+// again at the gate. The verdicts and audit are the id form's. The series
+// read goes further (Phase 1126): it answers from the metric surface's rows
+// and hands the gate those rows, so a chart downloads no fact at all.
 //
 // **Per run, never per fact.** `withFactBrowse` also decorates the
 // composed `IFactTableWriter` so that a committed run publishes ONE
@@ -53,6 +55,60 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // stateless between calls (every answer is read from the stores), the
 // scope is the shard key, and no timing primitive beyond the injected
 // clock the freshness derivations read.
+
+/// Phase 1126 — one head of a series read, from whichever form the store
+/// returned it in: a fact (`Fact`), or a surface row with the head the gate
+/// judges it by (`Row`). The point mapping reads only these fields, so a
+/// point is the same whichever form it came from.
+type internal SeriesHead = {
+    FactId: string
+    Subject: SubjectRef
+    PeriodFrom: DateTime
+    PeriodTo: DateTime
+    Label: string option
+    Value: FactValue
+    AsOf: DateTime
+    /// The fact, when the head was read as one.
+    Fact: Fact option
+    /// The gate's row, when the head was read as a surface row. A row whose
+    /// classification does not parse has none, and is denied as an id the
+    /// read holds nothing for.
+    Row: HeldFactRow option
+}
+
+module internal SeriesHead =
+
+    let ofFact (f: Fact) : SeriesHead = {
+        FactId = f.FactId
+        Subject = f.Subject
+        PeriodFrom = f.Period.From
+        PeriodTo = f.Period.To
+        Label = f.Period.Label
+        Value = f.Value
+        AsOf = f.AsOf
+        Fact = Some f
+        Row = None
+    }
+
+    let ofRow (metric: string) (r: FactSurfaceRow) : SeriesHead = {
+        FactId = r.Member.FactId
+        Subject = r.Member.Subject
+        PeriodFrom = r.Member.PeriodFrom
+        PeriodTo = r.Member.PeriodTo
+        Label = r.Label
+        Value = r.Value
+        AsOf = r.Member.AsOf
+        Fact = None
+        Row =
+            Disclosure.tryParse r.Disclosure
+            |> Option.map (fun disclosure ->
+                ({
+                    FactId = r.Member.FactId
+                    Metric = metric
+                    Disclosure = disclosure
+                }
+                : HeldFactRow))
+    }
 
 /// The fact browse read surface over explicit dependencies, and its
 /// composition.
@@ -245,6 +301,29 @@ module FactBrowseHandler =
             else
                 let factIds = facts |> List.map _.FactId |> List.distinct
                 let! verdicts = deps.Gate.CheckHeld(scope, principal, FactBrowse, factIds, facts)
+
+                return
+                    fun factId ->
+                        verdicts
+                        |> Map.tryFind factId
+                        |> Option.defaultValue (FactNotDisclosable "unknown-fact")
+        }
+
+    /// Phase 1126 — the row form of `judge`: one gate call over the rows a
+    /// series read has just taken from the store's surface, in this scope
+    /// and this request. An id the gate returned nothing for is denied.
+    let private judgeRows
+        (gate: IHeldFactRowDisclosureGate)
+        (scope: ResolvedScope)
+        (principal: string)
+        (factIds: string list)
+        (held: HeldFactRow list)
+        : Async<string -> FactDisclosureVerdict> =
+        async {
+            if List.isEmpty factIds then
+                return fun _ -> FactNotDisclosable "unknown-fact"
+            else
+                let! verdicts = gate.CheckHeldRows(scope, principal, FactBrowse, List.distinct factIds, held)
 
                 return
                     fun factId ->
@@ -705,6 +784,13 @@ module FactBrowseHandler =
     ///   `SubjectBranch`, so on the blob store a metric-only head query
     ///   rides the metric surface and downloads the branch's heads in the
     ///   range — not the scope, and not the metric's other branches.
+    /// - **A chart is one download** (Phase 1126). When the store can return
+    ///   the heads as its surface rows (`IFactSeriesRowRead`) and the gate
+    ///   can judge rows (`IHeldFactRowDisclosureGate`), the points are built
+    ///   from the rows and judged as rows: one snapshot download, no fact.
+    ///   Otherwise the heads are read as facts and judged in the held form.
+    ///   Either way they are the same heads in the same order, and every
+    ///   rule below applies to both.
     /// - **Period membership is overlap**, `FactQuery.PeriodOverlaps` over
     ///   `[PeriodFrom, PeriodTo)`: a period straddling the range's edge is
     ///   a point, since a chart of the window wants it, and an aligned
@@ -773,13 +859,32 @@ module FactBrowseHandler =
                                 }
                     }
 
-                    let! heads = deps.Store.Query(scope, query)
+                    // Phase 1126 — the heads as rows when the store can
+                    // project them and the gate can judge them; otherwise as
+                    // facts. Either way the same heads, in the same order.
+                    let rowRead =
+                        match deps.Store, deps.Gate with
+                        | (:? IFactSeriesRowRead as store), (:? IHeldFactRowDisclosureGate as gate) -> Some(store, gate)
+                        | _ -> None
+
+                    let! rows =
+                        match rowRead with
+                        | Some(store, _) -> store.QuerySeriesRows(scope, query)
+                        | None -> async.Return None
+
+                    let! heads = async {
+                        match rows with
+                        | Some rows -> return rows |> List.map (SeriesHead.ofRow request.Metric)
+                        | None ->
+                            let! facts = deps.Store.Query(scope, query)
+                            return facts |> List.map SeriesHead.ofFact
+                    }
 
                     let points =
                         heads
-                        |> List.groupBy (fun f -> f.Subject.Path, f.Period.From, f.Period.To)
-                        |> List.map (fun (_, facts) -> facts |> List.maxBy _.AsOf)
-                        |> List.sortBy (fun f -> f.Subject.Path, f.Period.From)
+                        |> List.groupBy (fun h -> h.Subject.Path, h.PeriodFrom, h.PeriodTo)
+                        |> List.map (fun (_, group) -> group |> List.maxBy _.AsOf)
+                        |> List.sortBy (fun h -> h.Subject.Path, h.PeriodFrom)
 
                     if List.length points > cap then
                         return
@@ -791,36 +896,46 @@ module FactBrowseHandler =
                                     FactBrowseApi.MaxSeriesPoints
                             )
                     else
-                        let! verdictFor = judge deps scope principal points
+                        let! verdictFor =
+                            match rowRead, rows with
+                            | Some(_, gate), Some _ ->
+                                judgeRows
+                                    gate
+                                    scope
+                                    principal
+                                    (points |> List.map _.FactId)
+                                    (points |> List.choose _.Row)
+                            | _ -> judge deps scope principal (points |> List.choose _.Fact)
+
                         let now = deps.Clock().ToUniversalTime()
                         let format = displayFormatOf deps request.Metric
                         let staleness = stalenessOf deps request.Metric
 
-                        let pointOf (fact: Fact) : FactSeriesPoint =
-                            let withheld = verdictFor fact.FactId <> FactDisclosable
+                        let pointOf (head: SeriesHead) : FactSeriesPoint =
+                            let withheld = verdictFor head.FactId <> FactDisclosable
 
                             let freshness =
-                                match Freshness.deriveAt staleness fact.AsOf true now with
+                                match Freshness.deriveAt staleness head.AsOf true now with
                                 | FactFreshness.Fresh -> "fresh"
                                 | FactFreshness.Stale _ -> "stale"
 
                             {
-                                Subject = SubjectRef.toString fact.Subject
-                                SubjectPath = fact.Subject.Path
-                                PeriodFrom = fact.Period.From
-                                PeriodTo = fact.Period.To
-                                PeriodLabel = fact.Period.Label
+                                Subject = SubjectRef.toString head.Subject
+                                SubjectPath = head.Subject.Path
+                                PeriodFrom = head.PeriodFrom
+                                PeriodTo = head.PeriodTo
+                                PeriodLabel = head.Label
                                 Value =
-                                    match withheld, fact.Value with
+                                    match withheld, head.Value with
                                     | false, Scalar d -> Some d
                                     | _ -> None
                                 Rendering =
                                     if withheld then
                                         None
                                     else
-                                        Some(FactRendering.render format fact.Value)
-                                FactId = fact.FactId
-                                AsOf = fact.AsOf
+                                        Some(FactRendering.render format head.Value)
+                                FactId = head.FactId
+                                AsOf = head.AsOf
                                 Freshness = freshness
                                 Withheld = withheld
                             }

@@ -330,6 +330,66 @@ type IHeldFactDisclosureGate =
         scope: ResolvedScope * principal: string * surface: FactEgressSurface * factIds: string list * held: Fact list ->
             Async<Map<string, FactDisclosureVerdict>>
 
+/// Phase 1126 — what the disclosure gate reads of a fact it judges: its id,
+/// its metric (for the audit row) and its classification. Every facet beyond
+/// that is decided at check level, or from the derivation graph by id.
+type HeldFactRow = {
+    /// The fact's content-addressed id.
+    FactId: string
+    /// The fact's metric id, as the audit rows name it.
+    Metric: string
+    /// The fact's own classification.
+    Disclosure: Disclosure
+}
+
+/// Construction for `HeldFactRow`.
+module HeldFactRow =
+
+    /// The row a held fact is judged by.
+    let ofFact (fact: Fact) : HeldFactRow = {
+        FactId = fact.FactId
+        Metric = fact.Metric.Value
+        Disclosure = fact.Disclosure
+    }
+
+/// Phase 1126 — the disclosure gate's IN-PROCESS entry for heads the caller
+/// read as rows (a fact store's own projection of its current heads, such as
+/// the metric surface) rather than as whole facts, so a door that answers
+/// from rows is judged without reading a fact at all.
+///
+/// **What the caller vouches for** — the held form's rule, unchanged: every
+/// row in `held` was read from this scope's fact store, through `scope`,
+/// during this request, and carries the classification of the fact it
+/// projects. In-process callers only; never a remoting, peer or webhook path.
+///
+/// **Semantics.** Exactly the held form's, and so the id form's, over
+/// `factIds`: the same verdicts and the same audit rows under the base,
+/// viewer-aware, purpose, taint and budget configurations, because the gate's
+/// decision procedure reads of each fact only what a `HeldFactRow` holds. An
+/// id with no row in `held` is denied `unknown-fact`; a row whose id is not
+/// named is not judged.
+///
+/// **Under a taint configuration the row form still decides.** The taint
+/// stage walks the derivation graph, which the gate builds from the scope's
+/// whole listing in every form, and reaches the judged fact by id; it never
+/// needs the fact the caller holds. So a row-form check under taint costs the
+/// graph load, as the held form does, and no read per row. (Phase 1093's
+/// write-maintained taint index is what would retire the graph load.)
+///
+/// Composed as part of the platform gate (`FactDisclosureGate`); a door takes
+/// it from its held gate by capability, and a held gate that does not offer it
+/// is asked in its held form instead — a decorator is never bypassed.
+type IHeldFactRowDisclosureGate =
+    /// The verdict per id in `factIds`, each judged from its row in `held`,
+    /// audited as the id form audits it.
+    abstract CheckHeldRows:
+        scope: ResolvedScope *
+        principal: string *
+        surface: FactEgressSurface *
+        factIds: string list *
+        held: HeldFactRow list ->
+            Async<Map<string, FactDisclosureVerdict>>
+
 /// The default `IFactDisclosureGate` over the composed fact store.
 /// Construct via `FactDisclosureGate.create`; registered in DI by
 /// `FactsCompose.withFactStore` alongside the store itself, so the fact
@@ -421,22 +481,28 @@ type FactDisclosureGate
     // Phase 674 — the contributing party of a fact's OWN registered policy.
     // Resolved server-side from the composed vocabulary keyed by the ref the
     // stored fact carries; nothing a caller supplies reaches this lookup.
-    let ownContributorScopes (fact: Fact option) : string list =
-        match fact with
-        | Some f ->
-            match f.Disclosure with
+    let ownContributorScopes (head: HeldFactRow option) : string list =
+        match head with
+        | Some h ->
+            match h.Disclosure with
             | Restricted policyRef -> DisclosureTaintConfig.scopeOf taintConfig policyRef |> Option.toList
             | _ -> []
         | None -> []
 
     // The Phase 525 base verdict over a fact's own disclosure classification,
     // plus its metric for the audit payload.
-    let baseVerdict (surface: FactEgressSurface) (fact: Fact option) : FactDisclosureVerdict * string =
-        match fact with
-        | Some f -> DisclosureEgress.evaluateFact resolve surface f, f.Metric.Value
+    let baseVerdict (surface: FactEgressSurface) (head: HeldFactRow option) : FactDisclosureVerdict * string =
+        match head with
+        | Some h -> DisclosureEgress.evaluate resolve surface h.Disclosure, h.Metric
         // Unresolvable in this scope (unknown id, or a fact belonging to
         // another tenant) ⇒ deny, conservatively — never fail open.
         | None -> FactNotDisclosable "unknown-fact", ""
+
+    // A store read, as the head the decision procedure judges.
+    let headIn (read: Async<Fact option>) : Async<HeldFactRow option> = async {
+        let! fact = read
+        return fact |> Option.map HeldFactRow.ofFact
+    }
 
     // The request-path accessors, shared by the id and held forms: the
     // whole scope for the taint graph, and the team a team-scoped shard
@@ -459,11 +525,15 @@ type FactDisclosureGate
 
     // Phase 797 — one decision procedure, two ways of naming the shard.
     // The body is written once over an accessor pair so the string form
-    // and the `ResolvedScope` form cannot drift: `getFact` / `queryAll`
+    // and the `ResolvedScope` form cannot drift: `getHead` / `queryAll`
     // are the store's own members bound to the scope the caller holds,
-    // and `scopeId` is only ever the audit row's shard key.
+    // and `scopeId` is only ever the audit row's shard key. Phase 1126:
+    // the procedure reads of each judged fact only its id, metric and
+    // classification (`HeldFactRow`) — everything else it consults is the
+    // check-level facets and the derivation graph — so the id, held and row
+    // forms differ only in where that head comes from.
     let check
-        (getFact: string -> Async<Fact option>)
+        (getHead: string -> Async<HeldFactRow option>)
         (queryAll: unit -> Async<Fact list>)
         (scopeId: string)
         (scopeTeam: string option option)
@@ -498,23 +568,22 @@ type FactDisclosureGate
                          |> Async.StartAsTask
                      | None -> Task.FromResult(Ok(DisclosureViewer.leastPrivileged TeamVisible)))
 
-            let verdictFor (fact: Fact option) : Async<FactDisclosureVerdict * string> =
-                match resolveForViewer, fact with
-                | Some(_, resolveViewerAware), Some f ->
-                    match f.Disclosure with
+            let verdictFor (head: HeldFactRow option) : Async<FactDisclosureVerdict * string> =
+                match resolveForViewer, head with
+                | Some(_, resolveViewerAware), Some h ->
+                    match h.Disclosure with
                     | Restricted _ -> async {
                         let! resolved = viewer.Force() |> Async.AwaitTask
 
                         match resolved with
                         | Ok v ->
                             return
-                                DisclosureEgress.evaluateForViewer resolveViewerAware surface v f.Disclosure,
-                                f.Metric.Value
-                        | Error _ -> return FactNotDisclosable ViewerAwareDisclosure.UnreadableRef, f.Metric.Value
+                                DisclosureEgress.evaluateForViewer resolveViewerAware surface v h.Disclosure, h.Metric
+                        | Error _ -> return FactNotDisclosable ViewerAwareDisclosure.UnreadableRef, h.Metric
                       }
                     | Surfaceable
-                    | Disclosure.Internal -> async.Return(baseVerdict surface fact)
-                | _ -> async.Return(baseVerdict surface fact)
+                    | Disclosure.Internal -> async.Return(baseVerdict surface head)
+                | _ -> async.Return(baseVerdict surface head)
 
             // Phase 592 — the purpose facet, evaluated once per check
             // (the claim and the surface's allowed set are check-level,
@@ -564,8 +633,8 @@ type FactDisclosureGate
             let! verdicts =
                 ids
                 |> List.map (fun factId -> async {
-                    let! fact = getFact factId
-                    let! baseV, metric = verdictFor fact
+                    let! head = getHead factId
+                    let! baseV, metric = verdictFor head
 
                     // Phase 592 — a purpose refusal denies every fact in
                     // the check before per-fact evaluation (the claim is
@@ -639,7 +708,7 @@ type FactDisclosureGate
                     let contributorScopes =
                         match taintOutcome with
                         | Some outcome -> outcome.ContributorScopes
-                        | None -> ownContributorScopes fact
+                        | None -> ownContributorScopes head
 
                     let unsatisfiedScopes =
                         match taintOutcome with
@@ -770,7 +839,7 @@ type FactDisclosureGate
 
         member _.Check(scopeId: string, principal, surface, factIds) =
             check
-                (fun factId -> store.Get(scopeId, factId))
+                (fun factId -> headIn (store.Get(scopeId, factId)))
                 (fun () ->
                     store.Query(
                         scopeId,
@@ -790,7 +859,7 @@ type FactDisclosureGate
         // the one the platform minted, by construction.
         member _.Check(scope: ResolvedScope, principal, surface, factIds) =
             check
-                (fun factId -> store.Get(scope, factId))
+                (fun factId -> headIn (store.Get(scope, factId)))
                 (queryAllIn scope)
                 scope.ScopeId
                 (scopeTeamOf scope)
@@ -803,7 +872,24 @@ type FactDisclosureGate
     interface IHeldFactDisclosureGate with
 
         member _.CheckHeld(scope: ResolvedScope, principal, surface, factIds, held) =
-            let byId = held |> List.map (fun f -> f.FactId, f) |> Map.ofList
+            let byId = held |> List.map (fun f -> f.FactId, HeldFactRow.ofFact f) |> Map.ofList
+
+            check
+                (fun factId -> async.Return(Map.tryFind factId byId))
+                (queryAllIn scope)
+                scope.ScopeId
+                (scopeTeamOf scope)
+                principal
+                surface
+                factIds
+
+    // Phase 1126 — the row form: the request-path form with each id's head
+    // taken from the rows the caller read. The same procedure as the held
+    // form, so the same verdicts and audit in every configuration.
+    interface IHeldFactRowDisclosureGate with
+
+        member _.CheckHeldRows(scope: ResolvedScope, principal, surface, factIds, held) =
+            let byId = held |> List.map (fun r -> r.FactId, r) |> Map.ofList
 
             check
                 (fun factId -> async.Return(Map.tryFind factId byId))

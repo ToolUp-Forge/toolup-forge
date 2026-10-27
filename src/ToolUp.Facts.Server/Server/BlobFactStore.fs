@@ -381,6 +381,17 @@ type FactScopeExport = {
     Unreadable: (string * string) list
 }
 
+/// Phase 1126 — a store that can answer the browse's series read from its
+/// own projection of the current heads, as rows. Internal by construction,
+/// like the surface it reads: `IFactStore` is the contract, and a store
+/// without it (or a decorator over one) is read through `Query`, which
+/// returns the same heads as facts.
+type internal IFactSeriesRowRead =
+    /// The rows `Query` would return as facts for a metric-only, one-method,
+    /// current-heads query, in the same order; `None` when the projection
+    /// cannot answer it.
+    abstract QuerySeriesRows: scope: ResolvedScope * query: FactQuery -> Async<FactSurfaceRow list option>
+
 /// Blob-backed default `IFactStore`. Construct via `BlobFactStore.create`
 /// (or `createWithRegistry` to enable Phase 566 canonical-method
 /// selection — `registry = None` preserves the registry-less behaviour
@@ -1178,18 +1189,19 @@ type BlobFactStore
         period.From.Ticks < m.PeriodTo.Ticks + slack m.PeriodTo
         && m.PeriodFrom.Ticks - slack m.PeriodFrom < period.To.Ticks
 
-    /// The heads a metric-only, current-heads query can concern, read
-    /// through the metric's surface; `None` when the surface declines.
-    /// `competition` keeps every method's heads (the competition indicator
-    /// needs them); otherwise a named method narrows the rows as well.
-    let surfaceCandidates
+    /// The surface rows a metric-only, current-heads query can concern, in
+    /// census order, each beside its fact's blob name; `None` when the
+    /// surface declines. `competition` keeps every method's heads (the
+    /// competition indicator needs them); otherwise a named method narrows
+    /// the rows as well.
+    let surfaceAdmitted
         (scopeId: string)
         (query: FactQuery)
         (metric: MetricRef)
         (competition: bool)
         (t: DateTime)
         (names: string list)
-        : Async<Fact list option> =
+        : Async<(FactSurfaceRow * string) list option> =
         async {
             if List.length names < surfaceOptions.MinimumHeads then
                 return None
@@ -1209,13 +1221,14 @@ type BlobFactStore
 
                     let admitted =
                         snapshot.Rows
-                        |> List.map _.Member
-                        |> List.filter (fun m ->
+                        |> List.filter (fun row ->
+                            let m = row.Member
+
                             admitsSubject m.Subject
                             && (query.PeriodOverlaps |> Option.forall (fun p -> rowMayOverlap p m))
                             && (methodIdentity |> Option.forall (fun identity -> identity = m.MethodIdentity)))
 
-                    if admitted |> List.exists (fun m -> m.AsOf > t) then
+                    if admitted |> List.exists (fun row -> row.Member.AsOf > t) then
                         return None
                     else
                         let census = Dictionary<string, int * string>(StringComparer.Ordinal)
@@ -1223,24 +1236,97 @@ type BlobFactStore
 
                         let chosen =
                             admitted
-                            |> List.choose (fun m ->
-                                match census.TryGetValue m.FactId with
-                                | true, entry -> Some entry
+                            |> List.choose (fun row ->
+                                match census.TryGetValue row.Member.FactId with
+                                | true, (i, name) -> Some(i, (row, name))
                                 | _ -> None)
                             |> List.sortBy fst
                             |> List.map snd
 
-                        if List.length chosen <> List.length admitted then
-                            return None
-                        else
-                            let! facts = loadNames scopeId chosen
-
-                            return
-                                if List.length facts = List.length chosen then
-                                    Some facts
-                                else
-                                    None
+                        return
+                            if List.length chosen <> List.length admitted then
+                                None
+                            else
+                                Some chosen
         }
+
+    /// The heads a metric-only, current-heads query can concern, read
+    /// through the metric's surface; `None` when the surface declines.
+    let surfaceCandidates
+        (scopeId: string)
+        (query: FactQuery)
+        (metric: MetricRef)
+        (competition: bool)
+        (t: DateTime)
+        (names: string list)
+        : Async<Fact list option> =
+        async {
+            match! surfaceAdmitted scopeId query metric competition t names with
+            | None -> return None
+            | Some chosen ->
+                let! facts = loadNames scopeId (chosen |> List.map snd)
+
+                return
+                    if List.length facts = List.length chosen then
+                        Some facts
+                    else
+                        None
+        }
+
+    // ─── The series read answered from the rows (Phase 1126) ──────────
+    //
+    // The browse's chart read is a current-heads query naming a metric, a
+    // method and no subject. `surfaceCandidates` above downloads each head
+    // the rows admit and runs the query pipeline over the facts; but for
+    // this query every step of that pipeline is decided by what a row
+    // already holds — the subject branch, the exact period overlap, the
+    // method, L4 visibility (every row is a head, and a head stamped after
+    // the read's instant declines) and the listing's order (census order,
+    // then a stable sort on subject hierarchy and period start). So the
+    // rows ARE the answer, and nothing downloads but the snapshot.
+    //
+    // **Where it declines, and the caller reads facts.** Wherever the fact
+    // path declines (above), and also: a method-less query (canonical
+    // selection reads the registry over competing heads — a different
+    // pipeline, and not the chart's); and an admitted row with a `Local`
+    // instant, whose read-back from a fact blob depends on the reading
+    // machine's zone, so the row and the fact could disagree about the
+    // instant itself.
+
+    /// The rows a metric-only, one-method, current-heads query returns, in
+    /// the order `Query` returns its facts; `None` when the surface cannot
+    /// answer it — the caller then queries facts, which is always right.
+    let surfaceSeriesRows (scopeId: string) (query: FactQuery) : Async<FactSurfaceRow list option> = async {
+        match query.Subject, query.Metric, query.Method with
+        | None, Some metric, Some _ when surfaceOptions.Enabled && query.AsOf.IsNone && not query.IncludeSuperseded ->
+            let t = clock().ToUniversalTime()
+            let! names = storage.List(scopeId, factsPrefix)
+
+            match! surfaceAdmitted scopeId query metric false t names with
+            | None -> return None
+            | Some chosen ->
+                let rows = chosen |> List.map fst
+
+                let zoned (d: DateTime) = d.Kind = DateTimeKind.Local
+
+                if
+                    rows
+                    |> List.exists (fun r ->
+                        zoned r.Member.PeriodFrom || zoned r.Member.PeriodTo || zoned r.Member.AsOf)
+                then
+                    return None
+                else
+                    let overlaps (r: FactSurfaceRow) =
+                        query.PeriodOverlaps
+                        |> Option.forall (fun p -> p.From < r.Member.PeriodTo && r.Member.PeriodFrom < p.To)
+
+                    return
+                        rows
+                        |> List.filter overlaps
+                        |> List.sortBy (fun r -> r.Member.Subject.Hierarchy, r.Member.PeriodFrom)
+                        |> Some
+        | _ -> return None
+    }
 
     /// Answer a fact query: the candidates — through the metric surface for
     /// a current-heads query naming a metric and no subject (Phase 1122),
@@ -1349,7 +1435,7 @@ type BlobFactStore
     //     share one blob prefix, so a snapshot's census accounts for its
     //     neighbours' facts too — `applyFact` absorbs an out-of-metric
     //     fact without making it a row, which is exactly what keeps
-    //     `FactSurfaceRead.foldedCount` comparable to the scope's blob
+    //     the census count (`FactCensus.valueOf`) comparable to the scope's blob
     //     count. Absorbing them here is precisely what the read-time
     //     reconcile would otherwise do, through the same function; doing
     //     it now leaves the snapshot converged rather than one incremental
@@ -1961,6 +2047,9 @@ type BlobFactStore
     /// Registry-less construction — the pre-566 shape, byte-for-byte.
     new(storage: IBlobStorage, events: IEventStore, clock: unit -> DateTime) =
         BlobFactStore(storage, events, None, clock)
+
+    interface IFactSeriesRowRead with
+        member _.QuerySeriesRows(scope: ResolvedScope, query: FactQuery) = surfaceSeriesRows scope.ScopeId query
 
     interface IFactStore with
 

@@ -20,25 +20,34 @@ Migration notes:
 - [1123-fact-query-subject-branch](docs/migrations/1123-fact-query-subject-branch.md)
 - [1124-batch-builds-absent-metric-surfaces](docs/migrations/1124-batch-builds-absent-metric-surfaces.md)
 - [1125-gate-judges-held-facts](docs/migrations/1125-gate-judges-held-facts.md)
+- [1126-series-read-from-surface-rows](docs/migrations/1126-series-read-from-surface-rows.md)
 
-_Surface since `v0.34.1`: **breaking** — 1 package moved; 13 members added, 3 members changed, 0 members removed._
+_Surface since `v0.34.1`: **breaking** — 1 package moved; 22 members added, 3 members changed, 0 members removed._
 
 ### Added
 
-- `ToolUp.Facts.Server` — 13 members:
+- `ToolUp.Facts.Server` — 22 members:
   - `ToolUp.Facts.FactDisclosureGateModule.held(ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate) : ToolUp.Facts.IHeldFactDisclosureGate`
   - `ToolUp.Facts.FactQuery.SubjectBranch : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.SubjectBranch] { get }`
   - `ToolUp.Facts.FactQueryModule.admitsSubject(ToolUp.Facts.FactQuery) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.SubjectRef, System.Boolean]`
+  - `ToolUp.Facts.HeldFactRow (class)`
+  - `ToolUp.Facts.HeldFactRow..ctor(System.String, System.String, ToolUp.Facts.Disclosure)`
+  - `ToolUp.Facts.HeldFactRow.Disclosure : ToolUp.Facts.Disclosure { get }`
+  - `ToolUp.Facts.HeldFactRow.FactId : System.String { get }`
+  - `ToolUp.Facts.HeldFactRow.Metric : System.String { get }`
+  - `ToolUp.Facts.HeldFactRowModule (class)`
+  - `ToolUp.Facts.HeldFactRowModule.ofFact(ToolUp.Facts.Fact) : ToolUp.Facts.HeldFactRow`
   - `ToolUp.Facts.IHeldFactDisclosureGate (interface)`
   - `ToolUp.Facts.IHeldFactDisclosureGate.CheckHeld(ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict]]`
+  - `ToolUp.Facts.IHeldFactRowDisclosureGate (interface)`
+  - `ToolUp.Facts.IHeldFactRowDisclosureGate.CheckHeldRows(ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.HeldFactRow]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict]]`
   - `ToolUp.Facts.SubjectBranch (class)`
   - `ToolUp.Facts.SubjectBranch..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])`
   - `ToolUp.Facts.SubjectBranch.Hierarchy : System.String { get }`
   - `ToolUp.Facts.SubjectBranch.Level : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }`
   - `ToolUp.Facts.SubjectBranch.PathPrefix : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }`
   - `ToolUp.Facts.SubjectBranchModule (class)`
-  - `ToolUp.Facts.SubjectBranchModule.matches(ToolUp.Facts.SubjectBranch) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.SubjectRef, System.Boolean]`
-  - `ToolUp.Facts.SubjectBranchModule.ofHierarchy(System.String) : ToolUp.Facts.SubjectBranch`
+  - … and 2 more — `git diff v0.34.1 -- api-baselines/ToolUp.Facts.Server.approved.txt`
 
 ### Changed
 

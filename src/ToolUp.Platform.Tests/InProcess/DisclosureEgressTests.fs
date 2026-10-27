@@ -1182,12 +1182,30 @@ let private bothForms
         let! byHeld = (FactDisclosureGate.held gate).CheckHeld(scope, "user-1", surface, ids, heldFacts)
         let! afterHeld = events.ReadBySource(scope.ScopeId, FactEvents.SourceModule)
 
-        return byId, rowsOf (afterId |> List.skip before.Length), byHeld, rowsOf (afterHeld |> List.skip afterId.Length)
+        // Phase 1126 — the row form, over the rows of the same facts.
+        let rowForm =
+            match gate with
+            | :? IHeldFactRowDisclosureGate as rows -> rows
+            | _ -> failtest "the platform gate offers the row form"
+
+        let heldRows = heldFacts |> List.map HeldFactRow.ofFact
+        let! byRows = rowForm.CheckHeldRows(scope, "user-1", surface, ids, heldRows)
+        let! afterRows = events.ReadBySource(scope.ScopeId, FactEvents.SourceModule)
+
+        return
+            byId,
+            rowsOf (afterId |> List.skip before.Length),
+            byHeld,
+            rowsOf (afterHeld |> List.skip afterId.Length),
+            byRows,
+            rowsOf (afterRows |> List.skip afterHeld.Length)
     }
 
-let private expectSameAsIdForm label (byId, idRows, byHeld, heldRows) =
+let private expectSameAsIdForm label (byId, idRows, byHeld, heldRows, byRows, rowRows) =
     Expect.equal byHeld byId (sprintf "%s: the held form's verdicts are the id form's" label)
     Expect.equal heldRows idRows (sprintf "%s: the held form writes the id form's audit rows" label)
+    Expect.equal byRows byId (sprintf "%s: the row form's verdicts are the id form's" label)
+    Expect.equal rowRows idRows (sprintf "%s: the row form writes the id form's audit rows" label)
 
 let private heldTaintCfg =
     DisclosureTaintConfig.ofLists [
@@ -1240,10 +1258,31 @@ let private decorated (inner: IFactDisclosureGate) : IFactDisclosureGate =
             inner.Check(scope, principal, surface, factIds)
     }
 
+/// Phase 1126 — a harness over a fresh blob store and the platform gate made
+/// with `taint`, whose row form is the gate itself.
+let private rowHarness (taint: DisclosureTaintConfig option) () : IHeldFactRowDisclosureGateContract.RowGateHarness =
+    let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+    let store = BlobFactStore.create (InMemoryBlobStorage()) events
+    let gate = FactDisclosureGate(store, events, ?taint = taint)
+    let scopeId = "team-" + Guid.NewGuid().ToString("N")
+
+    {
+        Store = store
+        Events = events
+        IdForm = gate :> IFactDisclosureGate
+        Rows = gate :> IHeldFactRowDisclosureGate
+        ScopeId = scopeId
+        Scope = resolvedAt scopeId ("container-" + scopeId)
+    }
+
 let heldFormTests =
     testList "Phase 1125 the held form judges as the id form" [
         IHeldFactDisclosureGateContract.tests "FactDisclosureGate" (heldHarness id)
         IHeldFactDisclosureGateContract.tests "FactDisclosureGate.held over a decorating gate" (heldHarness decorated)
+        IHeldFactRowDisclosureGateContract.tests "FactDisclosureGate" (rowHarness None)
+        IHeldFactRowDisclosureGateContract.tests
+            "FactDisclosureGate under a taint config"
+            (rowHarness (Some heldTaintCfg))
 
 
         testCaseAsync "viewer-aware: a Restricted fact for a member and for an admin - same verdicts, same audit"
@@ -1291,7 +1330,7 @@ let heldFormTests =
                 let! outcome = bothForms events store gate scope FactBrowse [ restricted.FactId; visible.FactId ]
                 expectSameAsIdForm userId outcome
 
-                let byId, _, _, _ = outcome
+                let byId, _, _, _, _, _ = outcome
 
                 Expect.equal
                     (byId.TryFind restricted.FactId = Some FactDisclosable)
@@ -1322,7 +1361,7 @@ let heldFormTests =
             let! outcome = bothForms events store gate scope FactExport ids
             expectSameAsIdForm "taint" outcome
 
-            let byId, _, _, _ = outcome
+            let byId, _, _, _, _, _ = outcome
 
             Expect.equal
                 (byId.TryFind derived.FactId)
@@ -1350,6 +1389,16 @@ let heldFormTests =
             let! _ = (FactDisclosureGate.held gate).CheckHeld(scope, "user-1", FactExport, ids, heldFacts)
             Expect.isGreaterThan graphLoad 0 "the probe sees the graph load"
             Expect.equal counting.Downloads graphLoad "the held form loads the graph and reads no id"
+
+            // Phase 1126 — the row form decides under taint too, at the same
+            // graph load: the taint walk reaches each fact by id.
+            counting.Reset()
+
+            let! _ =
+                (gate :?> IHeldFactRowDisclosureGate)
+                    .CheckHeldRows(scope, "user-1", FactExport, ids, heldFacts |> List.map HeldFactRow.ofFact)
+
+            Expect.equal counting.Downloads graphLoad "the row form loads the graph and reads no id"
         }
 
         testCaseAsync "a decorating gate is never bypassed: its held form is its id form"

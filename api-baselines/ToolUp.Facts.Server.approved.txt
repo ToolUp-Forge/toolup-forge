@@ -1110,6 +1110,13 @@ ToolUp.Facts.GroundingResolution+Tags.GroundingSuperseded : System.Int32 (litera
 ToolUp.Facts.GroundingResolution+Tags.GroundingUnregisteredKind : System.Int32 (literal)
 ToolUp.Facts.GroundingResolution+Tags.GroundingUnresolved : System.Int32 (literal)
 ToolUp.Facts.GroundingResolution+Tags.GroundingWithheld : System.Int32 (literal)
+ToolUp.Facts.HeldFactRow (class)
+ToolUp.Facts.HeldFactRow..ctor(System.String, System.String, ToolUp.Facts.Disclosure)
+ToolUp.Facts.HeldFactRow.Disclosure : ToolUp.Facts.Disclosure { get }
+ToolUp.Facts.HeldFactRow.FactId : System.String { get }
+ToolUp.Facts.HeldFactRow.Metric : System.String { get }
+ToolUp.Facts.HeldFactRowModule (class)
+ToolUp.Facts.HeldFactRowModule.ofFact(ToolUp.Facts.Fact) : ToolUp.Facts.HeldFactRow
 ToolUp.Facts.IAnswerPlanner (interface)
 ToolUp.Facts.IAnswerPlanner.Plan(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.AnswerPlan]
 ToolUp.Facts.IAnswerPlanner.Plan(ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.AnswerPlan]
@@ -1164,6 +1171,8 @@ ToolUp.Facts.IGroundingCertificateIssuer (interface)
 ToolUp.Facts.IGroundingCertificateIssuer.Issue(System.String, System.String, ToolUp.Facts.CertificateSubject, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.GroundingCertificate, ToolUp.Facts.CertificateError]]
 ToolUp.Facts.IHeldFactDisclosureGate (interface)
 ToolUp.Facts.IHeldFactDisclosureGate.CheckHeld(ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict]]
+ToolUp.Facts.IHeldFactRowDisclosureGate (interface)
+ToolUp.Facts.IHeldFactRowDisclosureGate.CheckHeldRows(ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.HeldFactRow]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict]]
 ToolUp.Facts.IPlannedAnswerRecorder (interface)
 ToolUp.Facts.IPlannedAnswerRecorder.RecordPlanned(System.String, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Boolean]
 ToolUp.Facts.ImportedFactOffer (class)

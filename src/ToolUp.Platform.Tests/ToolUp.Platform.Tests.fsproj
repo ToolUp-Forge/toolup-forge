@@ -263,6 +263,7 @@
         <!-- Phase 520 — grounding fact store contract pack. -->
         <Compile Include="Contracts\IFactStoreContract.fs" />
         <Compile Include="Contracts\IHeldFactDisclosureGateContract.fs" />
+        <Compile Include="Contracts\IHeldFactRowDisclosureGateContract.fs" />
         <Compile Include="Contracts\IFactTableWriterContract.fs" />
         <!-- Phase 977 - the orphan sweep contract pack. -->
         <Compile Include="Contracts\IFactTableOrphanSweepContract.fs" />

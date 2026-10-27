@@ -3082,6 +3082,182 @@ let private firstUploadSurfaceTests =
         }
     ]
 
+// ─── Phase 1126 — a surface row carries what a series point needs ────
+//
+// The browse's chart read answers from the surface rows, so a row now
+// carries the head's period label and value. A non-scalar head (a table
+// run's `Absent` gap, an interval, a category) cannot be rendered from a
+// magnitude, so its value travels whole; a scalar head's is its magnitude
+// column. A snapshot in the version-2 shape has no labels, so it is rebuilt,
+// never read.
+
+/// Draft `i` of a mixed upload: one metric, twelve months per subject, with
+/// every shape the row has to carry, and labels absent, empty and present.
+let private mixedDraft (i: int) (hash: string) : FactDraft =
+    let path = [
+        sprintf "brand-%02d" (i / SeriesMonths % 4)
+        sprintf "sku-%05d" (i / SeriesMonths)
+    ]
+
+    let month = seriesMonth (i % SeriesMonths)
+
+    let value =
+        match i % 5 with
+        | 0 -> Absent "no data loaded for this period"
+        | 1 -> Interval(decimal i, decimal i + 0.50m)
+        | 2 -> Categorical(sprintf "tier\t%d>core" (i % 3))
+        | _ -> Scalar(decimal i + 0.10m)
+
+    {
+        draftAt path "revenue" seriesMethod value hash with
+            Subject = { Hierarchy = "products"; Path = path }
+            Period = {
+                month with
+                    Label =
+                        match i % 7 with
+                        | 0 -> None
+                        | 1 -> Some ""
+                        | _ -> month.Label
+            }
+    }
+
+let private decodedRows (storage: IBlobStorage) (scope: string) = async {
+    let! bytes = snapshotBytes storage scope "revenue"
+
+    return
+        match bytes |> Option.bind FactSurfaceCodec.decode with
+        | Some snapshot -> snapshot.Rows
+        | None -> failtest "the revenue snapshot did not read back"
+}
+
+let private seriesRowTests =
+    testList "Phase 1126 — a surface row carries what a series point needs" [
+
+        testCaseAsync "every value shape and label round-trips, and the assert-built snapshot equals the read-built one"
+        <| async {
+            let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
+            let scope = newScope ()
+
+            let writer =
+                storeWithPolicies storage (steppingClock baseAsOf) FactSurfaceOptions.always FactIndexOptions.defaults
+
+            let! first = writer.AssertBatch(scope, [ for i in 0..239 -> mixedDraft i (sprintf "m%d" i) ])
+            Expect.isOk first "the upload is stored"
+
+            // The first upload BUILDS the snapshot (Phase 1124); a read over a
+            // flushed surface rebuilds it. One heads selection, one shape.
+            let! atAssert = snapshotBytes storage scope "revenue"
+            do! FactSurface.drop storage scope
+
+            let reader =
+                storeWithPolicies storage fixedClock FactSurfaceOptions.always FactIndexOptions.defaults
+
+            let! _ = reader.QueryPopulation(scope, populationOf "revenue")
+            let! atRead = snapshotBytes storage scope "revenue"
+
+            Expect.isSome atAssert "the batch built the surface"
+            Expect.equal atAssert atRead "the assert-built snapshot is byte-for-byte the read-built one"
+
+            // Revisions over a slice of the heads, folded into the snapshot at
+            // assert: the maintained rows carry the revisions' labels and values.
+            let! second = writer.AssertBatch(scope, [ for i in 0..23 -> mixedDraft (i * 10) (sprintf "rev%d" i) ])
+
+            match second with
+            | Ok receipt -> Expect.equal receipt.SupersedingCount 24 "each revision superseded its lineage's head"
+            | Error e -> failtestf "the revision batch failed: %s" e
+
+            let! rowsAtAssert = decodedRows storage scope
+
+            let! heads =
+                reader.Query(
+                    scope,
+                    {
+                        FactQuery.all with
+                            Metric = Some(MetricRef "revenue")
+                    }
+                )
+
+            let fromFacts =
+                heads
+                |> List.map (fun f -> f.FactId, (f.Period.Label, f.Value, Disclosure.toString f.Disclosure))
+                |> Map.ofList
+
+            let fromRows =
+                rowsAtAssert
+                |> List.map (fun r -> r.Member.FactId, (r.Label, r.Value, r.Disclosure))
+                |> Map.ofList
+
+            Expect.equal fromRows fromFacts "each row carries its head's label, value and classification"
+
+            let shapes =
+                rowsAtAssert
+                |> List.map (fun r ->
+                    match r.Value with
+                    | Scalar _ -> "scalar"
+                    | Absent _ -> "absent"
+                    | Interval _ -> "interval"
+                    | Categorical _ -> "categorical"
+                    | _ -> "other")
+                |> Set.ofList
+
+            Expect.equal
+                shapes
+                (Set.ofList [ "scalar"; "absent"; "interval"; "categorical" ])
+                "the corpus holds every shape"
+
+            Expect.equal
+                (rowsAtAssert
+                 |> List.map _.Label
+                 |> List.filter (fun l -> l.IsNone || l = Some "")
+                 |> List.distinct
+                 |> List.sort)
+                [ None; Some "" ]
+                "an absent label and an empty one are both carried, and stay distinct"
+        }
+
+        testCaseAsync "a version-2 snapshot is rebuilt in the current shape, never read without labels"
+        <| async {
+            let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
+            let scope = newScope ()
+
+            let store =
+                storeWithPolicies storage (steppingClock baseAsOf) FactSurfaceOptions.always FactIndexOptions.defaults
+
+            let! written = store.AssertBatch(scope, [ for i in 0..59 -> mixedDraft i (sprintf "v%d" i) ])
+            Expect.isOk written "the upload is stored"
+            let! current = snapshotBytes storage scope "revenue"
+
+            // The same snapshot as a version-2 writer left it: the header's
+            // version, and nine fields per row — no label, no value.
+            let legacy =
+                match current with
+                | None -> failtest "no snapshot to downgrade"
+                | Some bytes ->
+                    let lines = Encoding.UTF8.GetString(bytes).Split('\n')
+                    let header = lines[0].Split('\t')
+                    header[1] <- "2"
+
+                    let rows =
+                        lines[1 .. lines.Length - 3]
+                        |> Array.map (fun line -> line.Split('\t') |> Array.truncate 9 |> String.concat "\t")
+
+                    Array.concat [ [| String.concat "\t" header |]; rows; lines[lines.Length - 2 ..] ]
+                    |> String.concat "\n"
+                    |> Encoding.UTF8.GetBytes
+
+            Expect.isNone (FactSurfaceCodec.decode legacy) "this build does not read a version-2 snapshot"
+            let! _ = storage.Upload(scope, FactSurface.blobName "revenue", legacy)
+
+            let reader =
+                storeWithPolicies storage fixedClock FactSurfaceOptions.always FactIndexOptions.defaults
+
+            let! _ = reader.QueryPopulation(scope, populationOf "revenue")
+            let! rebuilt = snapshotBytes storage scope "revenue"
+
+            Expect.equal rebuilt current "the read rebuilt it, through the census path, into the current shape"
+        }
+    ]
+
 let pointReadIndexTests =
     testList "Phase 890 point-read index" [
 
@@ -3363,4 +3539,5 @@ let pointReadIndexTests =
         readFaultTests
         seriesReadTests
         firstUploadSurfaceTests
+        seriesRowTests
     ]

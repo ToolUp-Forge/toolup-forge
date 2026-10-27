@@ -397,6 +397,83 @@ lies in.
 be named; a subject inside the branch reads as the subject alone, and a subject
 outside it matches nothing, as any two disjoint clauses do.
 
+### A chart is one download: the browse's series read answers from the rows (Phase 1126)
+
+After Phase 1123 a chart still downloaded **one fact blob per point**: the
+store found the candidate heads on the surface and then fetched each full
+`Fact`, although the snapshot it had just read already held almost everything
+a point needs. Since Phase 1126 the browse's `QuerySeries` takes the points
+from the rows themselves, and judges them as rows, so a chart costs the
+metric's one surface snapshot (nothing at all when the parse cache holds it)
+and no fact blob.
+
+**What a row now carries.** Each `FactSeriesPoint` field was decided against
+the row (the record is in the `FactSurface.fs` header): the subject, period
+bounds, fact id and `AsOf` were already there, freshness derives from `AsOf`,
+and the withheld verdict comes from the classification the row has carried
+since 702. The row gained the period `Label` and the head's value — the value
+because a point's rendering renders the whole value under the metric's display
+format, and a non-scalar head (a table run's `Absent` gap, an interval, a
+category) cannot be rendered from a magnitude. The codec writes the value only
+for a non-scalar head, so a scalar surface grows by its labels alone. The
+snapshot format moved to version 3; a version-2 snapshot decodes to nothing
+and is rebuilt through the census path, never read without its labels. The
+assert-time build (1124) and the read-time rebuild still go through one heads
+selection, and a test holds them byte-for-byte equal in the new shape.
+
+**The rows are the answer, not a hint.** For the chart's query — one metric,
+one method, no subject, current heads — every step of the store's pipeline is
+decided by what a row holds: the branch, the exact period overlap, the method,
+L4 visibility (every row is a head; a head stamped after the read's instant
+declines) and the listing order (census order, then the stable sort on
+hierarchy and period start). So the browse's own rules run unchanged over the
+rows — head-for-period, overlap membership, the later-`AsOf` tiebreak, the cap
+checked before the gate — and a parity test over originals, revisions, a
+slice-scoped run, `Absent` heads and an `Internal` column holds the row path's
+`FactSeries` equal to the fact path's, field for field, with the same audit
+rows. It declines, and the browse reads facts exactly as before, wherever the
+fact path would enumerate, for a method-less query, and for an admitted row
+with a `Local` instant (whose read-back from a blob depends on the reading
+machine's zone). `IFactStore.Query` itself is unchanged and still returns, and
+downloads, facts; the rows are an internal read of the blob store, and a store
+without them — or a decorator over one — is read the fact way.
+
+**The gate judges rows (`IHeldFactRowDisclosureGate`).** Beside 1125's held
+form, a Facts-tier, in-process entry takes the rows the door read — each a
+`HeldFactRow` of fact id, metric and classification — under the same vouching
+rule. Its verdicts and audit rows are the id form's in every configuration,
+because the gate's decision procedure reads of each fact exactly those three
+things; the contract pack holds that for the base and taint configurations and
+the disclosure suite for the viewer-aware one. **Under a taint configuration
+the row form still decides**: the taint stage walks the derivation graph,
+which the gate builds from the scope's whole listing in every form and reaches
+each fact by id, so it never needed the points' facts. A chart under taint
+therefore pays the graph load and no per-point read — less than after 1125, not
+the same. Phase 1093's write-maintained taint index is what would retire the
+graph load itself. The browse takes the row form from its held gate by
+capability; a held gate that does not offer it is asked in its held form, over
+facts, so a decorator is never bypassed.
+
+Measured with the browse pack's counting storage (in-memory backend; one table
+run of SKUs under twenty brands, two months, two columns; one brand charted):
+
+| Scope | Points | Before: fact downloads | Before: time | After: fact downloads | After: snapshot downloads | After: time |
+|---|---|---|---|---|---|---|
+| 2,000 facts, warm | 50 | 50 | 6.3 ms | 0 | 0 | 3.0 ms |
+| 20,000 facts, warm | 500 | 500 | 52.7 ms | 0 | 0 | 44.0 ms |
+| 2,000 facts, first read after the upload | 50 | 50 | 5.3 ms | 0 | 0 | 4.7 ms |
+| 20,000 facts, first read after the upload | 500 | 500 | 73.6 ms | 0 | 0 | 35.3 ms |
+
+The snapshot count is 0 because the writing replica's parse cache holds the
+snapshot the batch built (1124); a cold replica downloads it once. The
+in-memory times are the handler's own work and understate the change against
+object storage: at the 136–148 ms per GET and 16 downloads in flight measured
+above, the 500-point chart was about 32 rounds (some 4.5 s) and the 2,250-point
+chart of the 1122 measurement about 141 (some 20 s); each is now at most one.
+Under a taint configuration, over the parity corpus (7 points, 16 facts in
+scope): the fact path after 1125 read 23 facts (the graph's 16 plus the 7
+points), the row path reads 16 — the graph load alone.
+
 ### A first upload leaves its metrics' surfaces warm (Phase 1124)
 
 `AssertBatch` loads the whole scope to find lineage heads whenever the
@@ -443,6 +520,7 @@ metric's surface built:
 | Lineage | `QuerySupersessionChain`; the head lookup inside `Assert` / `AssertBatch` | the lineage's facts (one, to confirm, for a head lookup) |
 | Population | `QueryPopulation` | the top-k page it returns, plus the snapshot when the parse cache is cold |
 | Series | `Query` naming a metric and no subject, current heads | the metric's heads in the range under the query's `SubjectBranch` (all of them when it names none), plus the snapshot when the parse cache is cold |
+| Browse chart | `FactBrowseHandler.querySeries` (Phase 1126) | **one surface download** — the snapshot, only when the parse cache is cold — and no fact; under a taint configuration, plus the gate's graph load (below) |
 | Full history | `Query` with `IncludeSuperseded`, or with a historical `AsOf` | every fact in the scope |
 
 **What enumerates by definition**: a query naming neither a subject nor a
@@ -660,7 +738,7 @@ table runs over 200 SKUs, two months; each read warm):
 | Read | Store reads | Before: downloads | After: downloads |
 |---|---|---|---|
 | `QueryRows`, a page of 10 | 10 | 20 | 10 |
-| `QuerySeries`, 100 points | 100 | 200 | 100 |
+| `QuerySeries`, 100 points | 100 | 200 | 100 (0 since Phase 1126: the chart reads and judges rows) |
 | `GetRunMovers` | 32 | 52 | 32 |
 | `GetFact`, with its chain | 4 | 6 | 4 |
 

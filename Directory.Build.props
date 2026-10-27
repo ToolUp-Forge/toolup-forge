@@ -790,6 +790,15 @@
       read and a fact is downloaded once. Migration recipe:
       `docs/migrations/1125-gate-judges-held-facts.md`.
     -->
+    <!--
+      Phase 1126 rides the 0.35.0 draft (untagged, publicly unpinned; its
+      surface movement is additive — `HeldFactRow` and
+      `IHeldFactRowDisclosureGate` — below the draft's breaking class): the
+      fact browse's series read answers from the metric surface's rows and
+      the gate judges rows, so a chart is one snapshot download. The
+      snapshot format moves to version 3 (rebuilt, never misread). Migration
+      recipe: `docs/migrations/1126-series-read-from-surface-rows.md`.
+    -->
     <Version>0.35.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
