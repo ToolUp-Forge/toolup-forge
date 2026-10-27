@@ -1142,6 +1142,229 @@ let derivedRetrievalTests =
         }
     ]
 
+// ── Phase 1125 — the held form judges as the id form judges ─────────
+//
+// The `IHeldFactDisclosureGate` contract pack, bound over the platform
+// gate and over a decorating gate (whose held form is its id form), plus
+// the platform gate's own configurations: viewer-aware and taint verdicts
+// and audit rows equal the id form's, and under a taint configuration the
+// graph load is the id form's — the held form saves the per-id reads and
+// nothing else.
+
+let private resolvedAt (scopeId: string) (container: string) : ResolvedScope =
+    StorageScopeResolver.ScopeResolution.ofStorageScope {
+        ScopeId = scopeId
+        Container = container
+        Persist = true
+    }
+
+/// What the id form decided and audited, and what the held form decided and
+/// audited over the facts a door's own reads return.
+let private bothForms
+    (events: IEventStore)
+    (store: IFactStore)
+    (gate: IFactDisclosureGate)
+    (scope: ResolvedScope)
+    (surface: FactEgressSurface)
+    (ids: string list)
+    =
+    async {
+        let rowsOf (rows: ModuleEvent list) =
+            rows |> List.map (fun e -> e.EventType, e.Payload) |> List.sort
+
+        let! before = events.ReadBySource(scope.ScopeId, FactEvents.SourceModule)
+        let! byId = gate.Check(scope, "user-1", surface, ids)
+        let! afterId = events.ReadBySource(scope.ScopeId, FactEvents.SourceModule)
+
+        let! read = ids |> List.map (fun factId -> store.Get(scope, factId)) |> Async.Sequential
+        let heldFacts = read |> Array.choose id |> List.ofArray
+
+        let! byHeld = (FactDisclosureGate.held gate).CheckHeld(scope, "user-1", surface, ids, heldFacts)
+        let! afterHeld = events.ReadBySource(scope.ScopeId, FactEvents.SourceModule)
+
+        return byId, rowsOf (afterId |> List.skip before.Length), byHeld, rowsOf (afterHeld |> List.skip afterId.Length)
+    }
+
+let private expectSameAsIdForm label (byId, idRows, byHeld, heldRows) =
+    Expect.equal byHeld byId (sprintf "%s: the held form's verdicts are the id form's" label)
+    Expect.equal heldRows idRows (sprintf "%s: the held form writes the id form's audit rows" label)
+
+let private heldTaintCfg =
+    DisclosureTaintConfig.ofLists [
+        {
+            PolicyRef = "licensed"
+            Mode = TaintPropagating
+            PermitSurfaces = [ FactRetrieval ]
+            ContributorScope = None
+        }
+    ] []
+
+let private derivedDraft (metric: string) (value: FactValue) (disclosure: Disclosure) (inputs: string list) = {
+    draftWith metric disclosure with
+        Value = value
+        Evidence = {
+            ResultRef = None
+            InputHashes = inputs
+            TriggerRef = None
+        }
+}
+
+/// A harness over a fresh blob store, the gate `wrap` makes of the platform
+/// gate over it, and that gate's held form.
+let private heldHarness
+    (wrap: IFactDisclosureGate -> IFactDisclosureGate)
+    ()
+    : IHeldFactDisclosureGateContract.HeldGateHarness =
+    let store, events, platform = newGateHarness ()
+    let gate = wrap platform
+    let scopeId = "team-" + Guid.NewGuid().ToString("N")
+    let otherId = "team-" + Guid.NewGuid().ToString("N")
+
+    {
+        Store = store
+        Events = events
+        IdForm = gate
+        Held = FactDisclosureGate.held gate
+        ScopeId = scopeId
+        Scope = resolvedAt scopeId ("container-" + scopeId)
+        OtherScope = resolvedAt otherId ("container-" + otherId)
+    }
+
+/// A decorator the platform cannot see through: its held form is its id form.
+let private decorated (inner: IFactDisclosureGate) : IFactDisclosureGate =
+    { new IFactDisclosureGate with
+        member _.Check(scopeId: string, principal, surface, factIds) =
+            inner.Check(scopeId, principal, surface, factIds)
+
+        member _.Check(scope: ResolvedScope, principal, surface, factIds) =
+            inner.Check(scope, principal, surface, factIds)
+    }
+
+let heldFormTests =
+    testList "Phase 1125 the held form judges as the id form" [
+        IHeldFactDisclosureGateContract.tests "FactDisclosureGate" (heldHarness id)
+        IHeldFactDisclosureGateContract.tests "FactDisclosureGate.held over a decorating gate" (heldHarness decorated)
+
+
+        testCaseAsync "viewer-aware: a Restricted fact for a member and for an admin - same verdicts, same audit"
+        <| async {
+            let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let store = BlobFactStore.create (InMemoryBlobStorage()) events
+
+            let sales: DisclosurePolicy = {
+                PolicyRef = "sales"
+                Mode = Plain
+                PermitSurfaces = [ FactRetrieval; FactBrowse ]
+                ContributorScope = None
+            }
+
+            let teamId = "t" + Guid.NewGuid().ToString("N")
+
+            let gate =
+                FactDisclosureGate(store, events, taint = DisclosureTaintConfig.ofLists [ sales ] [])
+                    .WithViewerAwareness(
+                        {
+                            Resolver = None
+                            Sources = {
+                                OutputVisibility = fun _ -> async.Return(Ok TeamAdmins)
+                                TeamRole =
+                                    fun _ userId ->
+                                        async.Return(Some(if userId = "ada" then TeamRole.Admin else TeamRole.Member))
+                                IsTeam = fun scopeId -> async.Return(String.Equals(scopeId, teamId))
+                            }
+                        }
+                    )
+
+            let scope = resolvedAt teamId ("team-" + teamId)
+            let restricted = assertFact store teamId (draftWith "margin" (Restricted "sales"))
+            let visible = assertFact store teamId (draftWith "revenue" Surfaceable)
+
+            for userId in [ "mia"; "ada" ] do
+                use _ =
+                    RequestViewerContext.establish (fun () ->
+                        Some {
+                            UserId = userId
+                            ActiveTeamId = Some teamId
+                            IsPlatformAdmin = false
+                        })
+
+                let! outcome = bothForms events store gate scope FactBrowse [ restricted.FactId; visible.FactId ]
+                expectSameAsIdForm userId outcome
+
+                let byId, _, _, _ = outcome
+
+                Expect.equal
+                    (byId.TryFind restricted.FactId = Some FactDisclosable)
+                    (userId = "ada")
+                    "the oracle decides for the viewer: the admin sees it, the member does not"
+        }
+
+        testCaseAsync "taint: an inherited deny and a clean fact - same verdicts, same audit, the same graph load"
+        <| async {
+            let counting = FactStoreTests.CountingBlobStorage(InMemoryBlobStorage())
+            let events = InMemoryEventStore.InMemoryEventStore() :> IEventStore
+            let store = BlobFactStore.create counting events
+            let gate = FactDisclosureGate.createWithTaint heldTaintCfg store events
+            let scopeId = "team-" + Guid.NewGuid().ToString("N")
+            let scope = resolvedAt scopeId ("container-" + scopeId)
+
+            assertFact store scopeId (derivedDraft "raw" (Series "dov-raw") (Restricted "licensed") [])
+            |> ignore
+
+            let derived =
+                assertFact store scopeId (derivedDraft "derived" (Scalar 42m) Surfaceable [ "dov-raw" ])
+
+            let clean =
+                assertFact store scopeId (derivedDraft "clean" (Scalar 7m) Surfaceable [ "hashZ" ])
+
+            let ids = [ derived.FactId; clean.FactId ]
+
+            let! outcome = bothForms events store gate scope FactExport ids
+            expectSameAsIdForm "taint" outcome
+
+            let byId, _, _, _ = outcome
+
+            Expect.equal
+                (byId.TryFind derived.FactId)
+                (Some(FactNotDisclosable "licensed"))
+                "the oracle denies the derived fact on the inherited policy"
+
+            // The graph load is the id form's: a held check downloads exactly
+            // what the scope listing costs, and nothing per id.
+            let! read = ids |> List.map (fun factId -> store.Get(scope, factId)) |> Async.Sequential
+            let heldFacts = read |> Array.choose id |> List.ofArray
+
+            counting.Reset()
+
+            let! _ =
+                store.Query(
+                    scope,
+                    {
+                        FactQuery.all with
+                            IncludeSuperseded = true
+                    }
+                )
+
+            let graphLoad = counting.Downloads
+            counting.Reset()
+            let! _ = (FactDisclosureGate.held gate).CheckHeld(scope, "user-1", FactExport, ids, heldFacts)
+            Expect.isGreaterThan graphLoad 0 "the probe sees the graph load"
+            Expect.equal counting.Downloads graphLoad "the held form loads the graph and reads no id"
+        }
+
+        testCaseAsync "a decorating gate is never bypassed: its held form is its id form"
+        <| async {
+            let preset = PresetGate(Map.ofList [ "a", FactDisclosable ])
+            let scope = resolvedAt "s" "container-s"
+
+            let! verdicts = (FactDisclosureGate.held preset).CheckHeld(scope, "user-1", FactBrowse, [ "a"; "b" ], [])
+
+            Expect.equal preset.Calls 1 "the decorator was asked"
+            Expect.equal (verdicts.TryFind "a") (Some FactDisclosable) "its verdict stands"
+            Expect.equal (verdicts.TryFind "b") (Some(FactNotDisclosable "unknown-fact")) "and its deny"
+        }
+    ]
+
 let tests =
     testList "Phase 525 disclosure egress" [
         predicateTests
@@ -1151,4 +1374,5 @@ let tests =
         narrativeCommitTests
         purposeTests
         derivedRetrievalTests
+        heldFormTests
     ]

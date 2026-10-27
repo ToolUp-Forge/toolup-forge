@@ -316,7 +316,8 @@ downloads those heads and no others. They then run through the same query
 pipeline the enumeration uses, in census order, so the two paths agree by
 construction. Since Phase 1123 the browse's subject prefix and level travel
 to the store as the query's `SubjectBranch`, and the rows narrow by it too
-(see below); the disclosure gate is unchanged and still judges every point.
+(see below); the disclosure gate still judges every point, and since Phase 1125 it
+judges the points the read holds rather than reading them again.
 
 **Why the surface, and not a by-metric leaf set beside the point-read
 index.** The deciding case is a slice-scoped run that supersedes one period.
@@ -358,8 +359,8 @@ GET the deployment above measured, and 16 downloads in flight
 (`BlobFanOut.Bound`), the 20,000-fact enumeration is about 1,250 sequential
 rounds — roughly three minutes — and the warm 2,250-point read about 141
 rounds, some twenty seconds. A chart's cost now follows its points: a
-24-point chart is two rounds for the store and two for the gate, whatever
-the scope holds.
+24-point chart is two rounds for the store, whatever the scope holds (and,
+until Phase 1125, two more for the gate).
 
 **A chart of one branch reads that branch (Phase 1123).** Until 1123 the
 store read the metric's heads over the range across every subject and the
@@ -386,7 +387,9 @@ charted over a warm surface):
 | 2,000 facts | 1,000 | 50 | 1,050 | 100 |
 | 20,000 facts | 10,000 | 500 | 10,500 | 1,000 |
 
-The after figure is the chart's points plus the gate's look at each. A chart
+The after figure is the chart's points plus the gate's look at each; since
+Phase 1125 the gate no longer looks again, and the chart costs its points
+(50 and 500). A chart
 of the whole table is unchanged: its branch is the hierarchy, which every head
 lies in.
 
@@ -614,6 +617,52 @@ The gate is registered by `FactsCompose` so the tier cannot be composed
 without its egress doors armed. Remaining doors (external write-back,
 certificates) extend the DU additively, the same way exports and webhooks
 did.
+
+### The gate judges facts the caller already holds (Phase 1125)
+
+`IFactDisclosureGate.Check` takes ids and resolves each through the store, so
+a door that has just read its facts pays for them twice: once to read them,
+once more at the gate. The re-read has one virtue — the verdict is over what
+the store holds, and a fact's `Disclosure` is not covered by its content
+address, so a fact handed in cannot be verified from its id.
+
+`IHeldFactDisclosureGate.CheckHeld` (Facts tier, beside the id form) trades
+that virtue away for in-process callers only. It takes the resolved scope,
+the principal, the surface, the ids to judge and **the facts the caller
+read**. What the caller vouches for: **every held fact was read from this
+scope's fact store, through that scope, during this request.** The verdicts
+and audit rows are the id form's — the same taint, viewer, purpose and budget
+facets, the same `FactDisclosureDenied` / `Declassified` / `Accessed` rows —
+with each id resolved from the held facts instead of the store. An id with no
+held fact is denied `unknown-fact`, exactly as the id form denies an id the
+scope does not hold, so a door whose read found nothing hands the id with
+nothing beside it. Under a taint configuration the derivation graph is
+loaded as the id form loads it; the held form saves the per-id reads and
+nothing else.
+
+**In-process only.** A remoting, peer or webhook path never takes it: there
+the facts would come from outside the store, and the id form is the only
+sound one. That is also why it is not a member of `IFactDisclosureGate`,
+which sits below the `Fact` type and has a dozen implementers.
+
+**How a door reaches it.** `FactsCompose.withFactStore` registers
+`IHeldFactDisclosureGate` as `FactDisclosureGate.held` over the composed
+`IFactDisclosureGate` — resolved, not registered beside it, so the two cannot
+disagree and `withTeamOutputVisibility`'s replacement gate is the one judged.
+The platform gate is its own held form. Any other gate — a deployment's
+decorator, a test double — gets its id form behind the held entry: it is
+never bypassed, only left without the saving.
+
+The fact browse's four reads ride it (`FactBrowseDeps.Gate` is the held form).
+Measured with the browse pack's counting storage (in-memory backend; two
+table runs over 200 SKUs, two months; each read warm):
+
+| Read | Store reads | Before: downloads | After: downloads |
+|---|---|---|---|
+| `QueryRows`, a page of 10 | 10 | 20 | 10 |
+| `QuerySeries`, 100 points | 100 | 200 | 100 |
+| `GetRunMovers` | 32 | 52 | 32 |
+| `GetFact`, with its chain | 4 | 6 | 4 |
 
 ## Composition
 

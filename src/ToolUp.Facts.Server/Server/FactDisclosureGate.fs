@@ -298,6 +298,38 @@ module DisclosureFanOut =
         MaxConcurrentReads = DefaultMaxConcurrentReads
     }
 
+/// Phase 1125 — the disclosure gate's IN-PROCESS entry for facts the caller
+/// has already read, so a door that reads before it judges does not pay for
+/// every fact twice (the id form re-reads each id from the store).
+///
+/// **What the caller vouches for.** Every fact in `held` was read from this
+/// scope's fact store, through `scope`, during this request. The gate cannot
+/// verify that: a fact's `Disclosure` is not covered by its content address,
+/// so a fact handed in is judged on the classification it carries. That is
+/// why this is a Facts-tier entry for in-process callers only — never on a
+/// remoting, peer or webhook path, where the facts would come from outside
+/// the store and the id form is the only sound one.
+///
+/// **Semantics.** Exactly the id form's over `factIds` — the same verdicts,
+/// the same audit rows, the same taint, viewer, purpose and budget facets —
+/// with each id resolved from `held` instead of the store. An id with no
+/// fact in `held` is denied `unknown-fact`, exactly as the id form denies an
+/// id the scope does not hold: a door whose read found nothing hands the id
+/// with nothing beside it. A held fact whose id is not in `factIds` is not
+/// judged. Under a taint configuration the derivation graph is loaded as the
+/// id form loads it.
+///
+/// Composed by `FactsCompose.withFactStore` as the held form of the composed
+/// `IFactDisclosureGate` (`FactDisclosureGate.held`); deliberately not a
+/// member of `IFactDisclosureGate`, which sits below the `Fact` type.
+type IHeldFactDisclosureGate =
+    /// The verdict per id in `factIds`, each resolved from `held` (the facts
+    /// the caller read from `scope`'s store in this request), audited as the
+    /// id form audits it.
+    abstract CheckHeld:
+        scope: ResolvedScope * principal: string * surface: FactEgressSurface * factIds: string list * held: Fact list ->
+            Async<Map<string, FactDisclosureVerdict>>
+
 /// The default `IFactDisclosureGate` over the composed fact store.
 /// Construct via `FactDisclosureGate.create`; registered in DI by
 /// `FactsCompose.withFactStore` alongside the store itself, so the fact
@@ -405,6 +437,25 @@ type FactDisclosureGate
         // Unresolvable in this scope (unknown id, or a fact belonging to
         // another tenant) ⇒ deny, conservatively — never fail open.
         | None -> FactNotDisclosable "unknown-fact", ""
+
+    // The request-path accessors, shared by the id and held forms: the
+    // whole scope for the taint graph, and the team a team-scoped shard
+    // belongs to (Phase 896's viewer lookup).
+    let queryAllIn (scope: ResolvedScope) () : Async<Fact list> =
+        store.Query(
+            scope,
+            {
+                FactQuery.all with
+                    IncludeSuperseded = true
+            }
+        )
+
+    let scopeTeamOf (scope: ResolvedScope) : string option option =
+        Some(
+            scope.Storage
+            |> Option.filter (fun storage -> storage.Container.StartsWith("team-", StringComparison.Ordinal))
+            |> Option.map _.ScopeId
+        )
 
     // Phase 797 — one decision procedure, two ways of naming the shard.
     // The body is written once over an accessor pair so the string form
@@ -740,25 +791,44 @@ type FactDisclosureGate
         member _.Check(scope: ResolvedScope, principal, surface, factIds) =
             check
                 (fun factId -> store.Get(scope, factId))
-                (fun () ->
-                    store.Query(
-                        scope,
-                        {
-                            FactQuery.all with
-                                IncludeSuperseded = true
-                        }
-                    ))
+                (queryAllIn scope)
                 scope.ScopeId
-                (Some(
-                    scope.Storage
-                    |> Option.filter (fun storage -> storage.Container.StartsWith("team-", StringComparison.Ordinal))
-                    |> Option.map _.ScopeId
-                ))
+                (scopeTeamOf scope)
+                principal
+                surface
+                factIds
+
+    // Phase 1125 — the held form: the request-path form with each id
+    // resolved from the facts the caller read, not from the store.
+    interface IHeldFactDisclosureGate with
+
+        member _.CheckHeld(scope: ResolvedScope, principal, surface, factIds, held) =
+            let byId = held |> List.map (fun f -> f.FactId, f) |> Map.ofList
+
+            check
+                (fun factId -> async.Return(Map.tryFind factId byId))
+                (queryAllIn scope)
+                scope.ScopeId
+                (scopeTeamOf scope)
                 principal
                 surface
                 factIds
 
 module FactDisclosureGate =
+
+    /// Phase 1125 — the held form of a composed gate. The platform gate is
+    /// its own held form; any other `IFactDisclosureGate` (a deployment's
+    /// decorator, a test double) gets the id form behind the held entry,
+    /// which judges `factIds` through that gate and ignores the held facts —
+    /// so a decorator is never bypassed, only left without the saving.
+    let held (gate: IFactDisclosureGate) : IHeldFactDisclosureGate =
+        match gate with
+        | :? IHeldFactDisclosureGate as own -> own
+        | other ->
+            { new IHeldFactDisclosureGate with
+                member _.CheckHeld(scope, principal, surface, factIds, _) =
+                    other.Check(scope, principal, surface, factIds)
+            }
 
     /// The default gate over the composed store + event store, with the
     /// conservative policy resolver (every `Restricted` ref denies until a

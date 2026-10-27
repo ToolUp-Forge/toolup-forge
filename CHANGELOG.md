@@ -19,14 +19,18 @@ Migration notes:
 
 - [1123-fact-query-subject-branch](docs/migrations/1123-fact-query-subject-branch.md)
 - [1124-batch-builds-absent-metric-surfaces](docs/migrations/1124-batch-builds-absent-metric-surfaces.md)
+- [1125-gate-judges-held-facts](docs/migrations/1125-gate-judges-held-facts.md)
 
-_Surface since `v0.34.1`: **breaking** — 1 package moved; 10 members added, 1 member changed, 0 members removed._
+_Surface since `v0.34.1`: **breaking** — 1 package moved; 13 members added, 3 members changed, 0 members removed._
 
 ### Added
 
-- `ToolUp.Facts.Server` — 10 members:
+- `ToolUp.Facts.Server` — 13 members:
+  - `ToolUp.Facts.FactDisclosureGateModule.held(ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate) : ToolUp.Facts.IHeldFactDisclosureGate`
   - `ToolUp.Facts.FactQuery.SubjectBranch : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.SubjectBranch] { get }`
   - `ToolUp.Facts.FactQueryModule.admitsSubject(ToolUp.Facts.FactQuery) : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.SubjectRef, System.Boolean]`
+  - `ToolUp.Facts.IHeldFactDisclosureGate (interface)`
+  - `ToolUp.Facts.IHeldFactDisclosureGate.CheckHeld(ToolUp.Platform.ResolvedScope, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpMap`2[System.String, ToolUp.Platform.VectorKnowledgeTypes+FactDisclosureVerdict]]`
   - `ToolUp.Facts.SubjectBranch (class)`
   - `ToolUp.Facts.SubjectBranch..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])`
   - `ToolUp.Facts.SubjectBranch.Hierarchy : System.String { get }`
@@ -38,7 +42,9 @@ _Surface since `v0.34.1`: **breaking** — 1 package moved; 10 members added, 1 
 
 ### Changed
 
-- `ToolUp.Facts.Server` — 1 member:
+- `ToolUp.Facts.Server` — 3 members:
+  - `ToolUp.Facts.FactBrowseHandler+FactBrowseDeps..ctor` — `ToolUp.Facts.FactBrowseHandler+FactBrowseDeps..ctor(ToolUp.Platform.Grounding.IFactTableRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IFactTableWriter], ToolUp.Facts.IFactStore, ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])` → `ToolUp.Facts.FactBrowseHandler+FactBrowseDeps..ctor(ToolUp.Platform.Grounding.IFactTableRegistry, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.IFactTableWriter], ToolUp.Facts.IFactStore, ToolUp.Facts.IHeldFactDisclosureGate, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Grounding.IMetricRegistry], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, System.DateTime])`
+  - `ToolUp.Facts.FactBrowseHandler+FactBrowseDeps.Gate` — `ToolUp.Facts.FactBrowseHandler+FactBrowseDeps.Gate : ToolUp.Platform.VectorKnowledgeTypes+IFactDisclosureGate { get }` → `ToolUp.Facts.FactBrowseHandler+FactBrowseDeps.Gate : ToolUp.Facts.IHeldFactDisclosureGate { get }`
   - `ToolUp.Facts.FactQuery..ctor` — `ToolUp.Facts.FactQuery..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.SubjectRef], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.MetricRef], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.MethodRef], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], System.Boolean)` → `ToolUp.Facts.FactQuery..ctor(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.SubjectRef], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.SubjectBranch], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.MetricRef], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.TemporalExtent], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.MethodRef], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], System.Boolean)`
 
 ## [0.34.1] — 2026-10-26

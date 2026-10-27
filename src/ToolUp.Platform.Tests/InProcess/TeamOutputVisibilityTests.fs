@@ -672,7 +672,7 @@ let private doorTests =
                 Tables = Grounding.FactTableRegistry.build [] []
                 Writer = None
                 Store = h.Store
-                Gate = h.Armed
+                Gate = FactDisclosureGate.held h.Armed
                 Registry = None
                 Clock = fun () -> DateTime.UtcNow
             }

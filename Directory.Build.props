@@ -781,6 +781,15 @@
       does not enumerate. Migration recipe:
       `docs/migrations/1124-batch-builds-absent-metric-surfaces.md`.
     -->
+    <!--
+      Phase 1125 rides the 0.35.0 draft (untagged, publicly unpinned; the
+      draft is already breaking-class from Phase 1123, and 1125 is no
+      higher): `IHeldFactDisclosureGate` and `FactDisclosureGate.held` are
+      added, and `FactBrowseHandler.FactBrowseDeps.Gate` is retyped to the
+      held form, so the fact browse's reads hand the gate the facts they
+      read and a fact is downloaded once. Migration recipe:
+      `docs/migrations/1125-gate-judges-held-facts.md`.
+    -->
     <Version>0.35.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a

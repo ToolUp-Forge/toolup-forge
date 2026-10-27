@@ -149,30 +149,19 @@ let private rowIn (period: TemporalExtent) (brand: string) (sku: string) (revenu
 
 let private row (brand: string) (sku: string) (revenue: decimal) : FactTableRow = rowIn september brand sku revenue
 
-/// A gate that consults the real one and additionally denies the ids a
-/// test names, recording every surface it was asked at.
+/// A gate that consults the real one, in its held form (Phase 1125), and
+/// additionally denies the ids a test names, recording every surface it was
+/// asked at.
 type private RecordingGate(inner: IFactDisclosureGate, denied: Set<string>) =
     let surfaces = ResizeArray<FactEgressSurface>()
+    let real = FactDisclosureGate.held inner
 
     member _.Surfaces = List.ofSeq surfaces
 
-    interface IFactDisclosureGate with
-        member _.Check(scopeId: string, principal: string, surface: FactEgressSurface, factIds: string list) = async {
+    interface IHeldFactDisclosureGate with
+        member _.CheckHeld(scope, principal, surface, factIds, held) = async {
             surfaces.Add surface
-            let! verdicts = inner.Check(scopeId, principal, surface, factIds)
-
-            return
-                verdicts
-                |> Map.map (fun id v ->
-                    if denied.Contains id then
-                        FactNotDisclosable "licence-x"
-                    else
-                        v)
-        }
-
-        member _.Check(scope: ResolvedScope, principal: string, surface: FactEgressSurface, factIds: string list) = async {
-            surfaces.Add surface
-            let! verdicts = inner.Check(scope, principal, surface, factIds)
+            let! verdicts = real.CheckHeld(scope, principal, surface, factIds, held)
 
             return
                 verdicts
@@ -440,7 +429,7 @@ let private largeDeps (gate: IFactDisclosureGate) : FactBrowseHandler.FactBrowse
     Tables = tables
     Writer = None
     Store = largeStore ()
-    Gate = gate
+    Gate = FactDisclosureGate.held gate
     Registry = Some registry
     Clock = fun () -> t0
 }
@@ -643,7 +632,7 @@ let private sameSurfaceTests =
                 let raw =
                     PopulationQueryTool.executeWith
                         w.Store
-                        w.Deps.Gate
+                        (FactDisclosureGate.create w.Store w.Events)
                         (Some registry)
                         (fun () -> t0)
                         w.Scope
@@ -1677,22 +1666,24 @@ let private costTests =
 
             Expect.equal detail.Row.FactId targetId "the point read opens the fact"
             Expect.equal points 100 "the chart is one brand's 50 SKUs over two months"
-            Expect.equal rowsReads 20 "a warm page of ten reads its ten rows and the gate's look at each, nothing more"
+
+            Expect.equal
+                rowsReads
+                10
+                "a warm page of ten reads its ten rows, nothing more (the gate judges the rows it holds, Phase 1125)"
 
             Expect.equal
                 coldRowsReads
                 rowsReads
                 "the first page after the upload costs what a warm page does: the batch left the surface built"
 
-            Expect.isLessThanOrEqual
-                factReads
-                5
-                "a point read reads its fact, its one-fact chain and the gate's look at it — never the scope"
+            Expect.isLessThanOrEqual factReads 5 "a point read reads its fact and its one-fact chain — never the scope"
 
             // The store reads the brand's heads over the range — the chart's
             // own points, since Phase 1123 hands it the prefix as a subject
-            // branch — and the gate re-reads each point (see facts.md).
-            Expect.equal chartReads (points + points) "a chart reads its branch's heads in range, not the metric's"
+            // branch. The gate judges the points the read holds and reads
+            // none again (Phase 1125; see facts.md).
+            Expect.equal chartReads points "a chart reads its branch's heads in range, not the metric's"
         }
     ]
 
@@ -1703,7 +1694,8 @@ let private costTests =
 // the store returned the metric's heads across every brand (2 x `skus`)
 // and the handler filtered the prefix after; now the prefix travels as the
 // query's `SubjectBranch` and the surface rows narrow before anything
-// downloads, so the chart costs its points plus the gate's look at each.
+// downloads, so the chart costs its points (and, since Phase 1125, only
+// its points: the gate judges them without reading them again).
 
 /// Downloads of a one-brand chart over a warm surface, and its points.
 let private oneBrandChart (skus: int) : int * int =
@@ -1749,8 +1741,119 @@ let private branchCostTests =
                     (2 * skus)
 
                 Expect.equal points (2 * skus / 20) "the chart is one brand's SKUs over two months"
-                Expect.equal downloads (points + points) "the branch's heads in range and the gate's look at each"
+                Expect.equal downloads points "the branch's heads in range, read once"
             }
+    ]
+
+// ─── Phase 1125 — the gate judges the facts the read already holds ──
+//
+// The oracle for "downloaded once" is the same read through a gate that
+// reads nothing (it admits every id it is handed): what that read
+// downloads is what the browse's own store reads cost. The platform gate
+// must add nothing to it. Before 1125 it re-read every fact it judged, so
+// each warm read cost its store reads plus one download per fact.
+
+let private heldTests =
+    testList "Phase 1125 — a browse read downloads its facts once, not again at the gate" [
+        test "the composed held form is the composed gate itself" {
+            let d = composeDemo ()
+            let gate = d.Services.GetRequiredService<IFactDisclosureGate>()
+            let held = d.Services.GetRequiredService<IHeldFactDisclosureGate>()
+
+            Expect.isTrue
+                (obj.ReferenceEquals(gate, held))
+                "the fact tier composes the held form over its own gate, so the two cannot disagree"
+        }
+
+        test "a warm row page, chart, movers page and fact detail cost only their store reads" {
+            let counting = FactStoreTests.CountingBlobStorage(InMemoryBlobStorage())
+            let w, _ = worldOn counting Set.empty (tickingClock ())
+
+            let cells (shift: decimal) = [
+                for i in 0..199 do
+                    let brand = sprintf "b%02d" (i % 4)
+                    let sku = sprintf "s%04d" i
+                    rowIn september brand sku (decimal i)
+                    rowIn october brand sku (decimal i + shift)
+            ]
+
+            run w (cells 0m) |> ignore
+            let runId, _ = run w (cells 3m)
+
+            let oracle = {
+                w.Deps with
+                    Gate = FactDisclosureGate.held (DenySetGate Set.empty)
+            }
+
+            // The pre-1125 shape, kept as the "before" of the measurement: the
+            // platform gate behind a decorator, so its held form is its id
+            // form and it re-reads every fact it judges.
+            let idForm = {
+                w.Deps with
+                    Gate =
+                        FactDisclosureGate.held (
+                            let platform = FactDisclosureGate.create w.Store w.Events
+
+                            { new IFactDisclosureGate with
+                                member _.Check(scopeId: string, principal, surface, factIds) =
+                                    platform.Check(scopeId, principal, surface, factIds)
+
+                                member _.Check(scope: ResolvedScope, principal, surface, factIds) =
+                                    platform.Check(scope, principal, surface, factIds)
+                            }
+                        )
+            }
+
+            let firstPage =
+                ok "rows" (FactBrowseHandler.queryRows w.Deps w.Scope "u" (query "revenue" TopOfRanking 0 10))
+
+            let reads: (string * (FactBrowseHandler.FactBrowseDeps -> unit)) list = [
+                "QueryRows",
+                fun deps ->
+                    ok "rows" (FactBrowseHandler.queryRows deps w.Scope "u" (query "revenue" TopOfRanking 0 10))
+                    |> ignore
+                "QuerySeries",
+                fun deps ->
+                    ok
+                        "chart"
+                        (FactBrowseHandler.querySeries deps w.Scope "u" {
+                            series "revenue" september.From october.To with
+                                SubjectPrefix = [ "b01" ]
+                        })
+                    |> ignore
+                "GetRunMovers",
+                fun deps ->
+                    ok "movers" (FactBrowseHandler.getRunMovers deps w.Scope "u" (skuTable.Id, runId))
+                    |> ignore
+                "GetFact",
+                fun deps ->
+                    ok "fact" (FactBrowseHandler.getFact deps w.Scope "u" firstPage.Rows.Head.FactId)
+                    |> ignore
+            ]
+
+            let downloads (read: FactBrowseHandler.FactBrowseDeps -> unit) (deps: FactBrowseHandler.FactBrowseDeps) =
+                counting.Reset()
+                read deps
+                counting.Downloads
+
+            for name, read in reads do
+                // Warm: the first read of a metric may build its surface.
+                read w.Deps
+                let storeOnly = downloads read oracle
+                let gated = downloads read w.Deps
+                let before = downloads read idForm
+
+                printfn
+                    "Phase 1125 %s: %d downloads through the gate (%d through the id form), %d for the read alone"
+                    name
+                    gated
+                    before
+                    storeOnly
+
+                Expect.isGreaterThan storeOnly 0 (sprintf "%s reads its facts from the store" name)
+                Expect.isGreaterThan before storeOnly (sprintf "%s: the probe sees the id form's re-reads" name)
+                Expect.equal gated storeOnly (sprintf "%s: the gate judges the facts the read holds, reading none" name)
+        }
     ]
 
 /// Every Phase 895 server case, and Phase 1113's series cases.
@@ -1766,4 +1869,5 @@ let tests =
         seriesTests
         costTests
         branchCostTests
+        heldTests
     ]

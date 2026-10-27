@@ -445,6 +445,17 @@ module FactsCompose =
                     | :? DisclosureFanOut as bound, (:? FactDisclosureGate as concrete) -> concrete.WithFanOut bound
                     | _ -> gate)
             )
+            // Phase 1125 — the held form of whichever gate is composed last
+            // (`withTeamOutputVisibility` replaces the gate above), resolved
+            // through DI rather than registered beside it, so the two can
+            // never disagree: the platform gate is its own held form, and a
+            // decorating gate is judged through its id form, never bypassed.
+            // In-process doors that have just read their facts (the fact
+            // browse) take this; every other door keeps the id form.
+            .AddSingleton<IHeldFactDisclosureGate>(
+                Func<IServiceProvider, IHeldFactDisclosureGate>(fun sp ->
+                    FactDisclosureGate.held (sp.GetRequiredService<IFactDisclosureGate>()))
+            )
             // Phase 558 — the concrete fact resolver closes the Phase 522
             // seam, registered with the store + gate so the fact tier is
             // one compose knob, never three. The metric registry (Phase

@@ -38,6 +38,11 @@ open ToolUp.Platform.VectorKnowledgeTypes
 // page; the page reports a count grouped by policy, never a value, a
 // subject or an id.
 //
+// **Judged over what was read (Phase 1125).** Each read hands the gate,
+// in its held form, the facts it has just taken from the store in this
+// scope and this request, so a served fact is downloaded once — never
+// again at the gate. The verdicts and audit are the id form's.
+//
 // **Per run, never per fact.** `withFactBrowse` also decorates the
 // composed `IFactTableWriter` so that a committed run publishes ONE
 // notification to its scope, carrying the run's counts. Nothing in this
@@ -64,8 +69,12 @@ module FactBrowseHandler =
         Writer: IFactTableWriter option
         /// The fact store — the population read and point reads.
         Store: IFactStore
-        /// The disclosure gate every served fact passes, at `FactBrowse`.
-        Gate: IFactDisclosureGate
+        /// The disclosure gate every served fact passes, at `FactBrowse`, in
+        /// its held form (Phase 1125): each read hands the gate the facts it
+        /// has just read from `Store`, so a fact is downloaded once, not
+        /// again at the gate. `FactDisclosureGate.held` gives the held form
+        /// of any `IFactDisclosureGate`.
+        Gate: IHeldFactDisclosureGate
         /// The metric registry: display formats, staleness policies and
         /// the hierarchy levels a table sits at.
         Registry: IMetricRegistry option
@@ -221,19 +230,21 @@ module FactBrowseHandler =
         |> Option.map _.Staleness
         |> Option.defaultValue UntilSuperseded
 
-    /// One gate call over a set of ids; an id the gate returned nothing for
-    /// is denied, so the door never fails open.
+    /// One gate call over the facts a read has just taken from the store,
+    /// in this scope and this request — the held form's contract. An id the
+    /// gate returned nothing for is denied, so the door never fails open.
     let private judge
         (deps: FactBrowseDeps)
         (scope: ResolvedScope)
         (principal: string)
-        (factIds: string list)
+        (facts: Fact list)
         : Async<string -> FactDisclosureVerdict> =
         async {
-            if List.isEmpty factIds then
+            if List.isEmpty facts then
                 return fun _ -> FactNotDisclosable "unknown-fact"
             else
-                let! verdicts = deps.Gate.Check(scope, principal, FactBrowse, List.distinct factIds)
+                let factIds = facts |> List.map _.FactId |> List.distinct
+                let! verdicts = deps.Gate.CheckHeld(scope, principal, FactBrowse, factIds, facts)
 
                 return
                     fun factId ->
@@ -444,15 +455,15 @@ module FactBrowseHandler =
                                 })
                                 |> Async.Sequential
 
-                            let ids =
+                            let held =
                                 resolved
                                 |> Array.toList
                                 |> List.collect (fun (_, pair) ->
                                     match pair with
-                                    | Some(c, p) -> [ c.FactId; p.FactId ]
+                                    | Some(c, p) -> [ c; p ]
                                     | None -> [])
 
-                            let! verdictFor = judge deps scope principal ids
+                            let! verdictFor = judge deps scope principal held
 
                             let judged =
                                 resolved
@@ -555,7 +566,7 @@ module FactBrowseHandler =
                     // One gate call over the whole ranking up to the
                     // window's end — the tool's own call for this top-k —
                     // so the magnitude suppression below is the tool's.
-                    let! verdictFor = judge deps scope principal (result.Ranked |> List.map _.FactId)
+                    let! verdictFor = judge deps scope principal result.Ranked
                     let disclosure = PopulationDisclosure.fold verdictFor result.Ranked
                     let now = deps.Clock().ToUniversalTime()
 
@@ -627,8 +638,7 @@ module FactBrowseHandler =
             | None -> return Error "No fact with that id is visible in this scope."
             | Some fact ->
                 let! chain = deps.Store.QuerySupersessionChain(scope, factId)
-                let ids = fact.FactId :: (chain |> List.map _.FactId)
-                let! verdictFor = judge deps scope principal ids
+                let! verdictFor = judge deps scope principal (fact :: chain)
 
                 match verdictFor fact.FactId with
                 | FactNotDisclosable policy -> return Error(FactDisclosureVerdict.refusalText policy)
@@ -781,7 +791,7 @@ module FactBrowseHandler =
                                     FactBrowseApi.MaxSeriesPoints
                             )
                     else
-                        let! verdictFor = judge deps scope principal (points |> List.map _.FactId)
+                        let! verdictFor = judge deps scope principal points
                         let now = deps.Clock().ToUniversalTime()
                         let format = displayFormatOf deps request.Metric
                         let staleness = stalenessOf deps request.Metric
@@ -886,7 +896,12 @@ module FactBrowseHandler =
                 Tables = serviceOf<IFactTableRegistry> ctx |> Option.defaultValue FactTableRegistry.empty
                 Writer = serviceOf<IFactTableWriter> ctx
                 Store = store
-                Gate = gate
+                // Phase 1125 — the composed held form (`FactsCompose`
+                // registers it over the composed gate); a deployment that
+                // registered only a gate gets that gate's held form.
+                Gate =
+                    serviceOf<IHeldFactDisclosureGate> ctx
+                    |> Option.defaultWith (fun () -> FactDisclosureGate.held gate)
                 Registry = serviceOf<IMetricRegistry> ctx
                 Clock = fun () -> DateTime.UtcNow
             }
