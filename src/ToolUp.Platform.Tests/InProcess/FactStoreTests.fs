@@ -2847,6 +2847,241 @@ let private seriesReadTests =
         }
     ]
 
+// ─── Phase 1124 — a first upload leaves its metrics' surfaces warm ───
+//
+// Until 1124 a metric's surface was built on its first read: the first
+// series or population read after a first upload enumerated the scope once
+// per metric (1122 measured the cold series read at 22,251 downloads over
+// 20,000 facts). The batch that wrote those facts had the whole scope in
+// hand — it loads it to find lineage heads whenever the point-read index
+// is not consulted or is incomplete — so it now builds each touched
+// metric's absent snapshot from the facts it read plus the facts it wrote,
+// through the read-time rebuild's own heads selection and census.
+
+/// Draft `i` of a first-upload series batch: one subject per twelve
+/// drafts, one month each, subjects alternating between two metrics — the
+/// same shape `seriesFact` seeds behind the store's back.
+let private firstUploadDraft (i: int) (value: decimal) (hash: string) : FactDraft =
+    let path = [
+        sprintf "brand-%02d" (i / SeriesMonths % 10)
+        sprintf "sku-%05d" (i / SeriesMonths)
+    ]
+
+    let metric = if i / SeriesMonths % 2 = 0 then "revenue" else "units"
+
+    {
+        draftAt path metric seriesMethod (Scalar value) hash with
+            Subject = { Hierarchy = "products"; Path = path }
+            Period = seriesMonth (i % SeriesMonths)
+    }
+
+let private populationOf (metric: string) : PopulationQuery = {
+    PopulationQuery.create (MetricRef metric) "products" with
+        Level = Some 2
+        Ordering = Descending
+}
+
+let private snapshotBytes (storage: IBlobStorage) (scope: string) (metric: string) = async {
+    let! r = storage.Download(scope, FactSurface.blobName metric)
+
+    return
+        match r with
+        | Ok bytes -> Some bytes
+        | Error _ -> None
+}
+
+/// What one measured first upload produces.
+type private FirstUploadCost = {
+    Facts: int
+    Points: int
+    /// The pre-1124 cold first read — the enumeration a read-time build pays.
+    BeforeSeries: int
+    BeforePopulation: int
+    /// After: the first reads on the writing replica, then on a second one.
+    Series: int
+    Population: int
+    ReplicaSeries: int
+    ReplicaPopulation: int
+    Ranked: int
+}
+
+/// One `AssertBatch` of `size` drafts into an empty scope, then the first
+/// series and population reads, counted at the storage. The "before"
+/// figures are the same first reads after the surfaces are flushed — the
+/// read-time build every first read paid before 1124 — and the snapshots
+/// those reads rebuild are compared byte for byte with the assert-built
+/// ones.
+let private measureFirstUpload (size: int) = async {
+    let counting = CountingBlobStorage(InMemoryBlobStorage.InMemoryBlobStorage())
+    let storage = counting :> IBlobStorage
+    let scope = newScope ()
+
+    let writer =
+        storeWithPolicies storage (steppingClock baseAsOf) FactSurfaceOptions.defaults FactIndexOptions.defaults
+
+    let replica () =
+        storeWithPolicies storage fixedClock FactSurfaceOptions.defaults FactIndexOptions.defaults
+
+    let drafts = [ for i in 0 .. size - 1 -> firstUploadDraft i (decimal i) (sprintf "u%d" i) ]
+    let! written = writer.AssertBatch(scope, drafts)
+    Expect.isOk written "the first upload is stored"
+
+    let population (store: IFactStore) (metric: string) = async {
+        match! store.QueryPopulation(scope, populationOf metric) with
+        | Ok r -> return r
+        | Error e -> return failtestf "population read over %s failed: %s" metric e
+    }
+
+    counting.Reset()
+    let! chart = writer.Query(scope, seriesQuery)
+    let seriesReads = counting.Downloads
+
+    counting.Reset()
+    let! ranked = population writer "units"
+    let populationReads = counting.Downloads
+
+    counting.Reset()
+    let! replicaChart = replica().Query(scope, seriesQuery)
+    let replicaSeriesReads = counting.Downloads
+
+    counting.Reset()
+    let! replicaRanked = population (replica ()) "units"
+    let replicaPopulationReads = counting.Downloads
+
+    // Verify the probe: the warm figures mean nothing unless the snapshots
+    // the reads stood on were written by the batch.
+    let! revenueAtAssert = snapshotBytes storage scope "revenue"
+    let! unitsAtAssert = snapshotBytes storage scope "units"
+    Expect.isSome revenueAtAssert "the batch built the revenue surface"
+    Expect.isSome unitsAtAssert "and the units surface"
+
+    // Before: flush the surfaces and read again from a fresh replica — the
+    // cold first read every metric paid until 1124.
+    do! FactSurface.drop storage scope
+
+    counting.Reset()
+    let! rebuiltChart = replica().Query(scope, seriesQuery)
+    let beforeSeries = counting.Downloads
+
+    counting.Reset()
+    let! rebuiltRanked = population (replica ()) "units"
+    let beforePopulation = counting.Downloads
+
+    let! revenueAtRead = snapshotBytes storage scope "revenue"
+    let! unitsAtRead = snapshotBytes storage scope "units"
+
+    Expect.equal revenueAtAssert revenueAtRead "the assert-built revenue snapshot is the one a read builds"
+    Expect.equal unitsAtAssert unitsAtRead "and so is the units snapshot"
+    Expect.equal chart rebuiltChart "the warm chart answers what the rebuilt one does"
+    Expect.equal replicaChart rebuiltChart "and so does the second replica's"
+    Expect.equal ranked rebuiltRanked "the warm population answers what the rebuilt one does"
+    Expect.equal replicaRanked rebuiltRanked "and so does the second replica's"
+
+    return {
+        Facts = size
+        Points = List.length chart
+        BeforeSeries = beforeSeries
+        BeforePopulation = beforePopulation
+        Series = seriesReads
+        Population = populationReads
+        ReplicaSeries = replicaSeriesReads
+        ReplicaPopulation = replicaPopulationReads
+        Ranked = List.length ranked.Ranked
+    }
+}
+
+let private firstUploadSurfaceTests =
+    testList "Phase 1124 — a first upload leaves its metrics' surfaces warm" [
+
+        testCaseAsync
+            "the first series and population reads after one upload download their answer, at 2,000 and 20,000 facts"
+        <| async {
+            let! small = measureFirstUpload 2_000
+            let! large = measureFirstUpload 20_000
+
+            for m in [ small; large ] do
+                printfn
+                    "Phase 1124 first reads after one %d-fact upload: before (read-time build) series %d downloads, population %d | after: series %d for %d points, population %d for %d ranked; a second replica series %d, population %d"
+                    m.Facts
+                    m.BeforeSeries
+                    m.BeforePopulation
+                    m.Series
+                    m.Points
+                    m.Population
+                    m.Ranked
+                    m.ReplicaSeries
+                    m.ReplicaPopulation
+
+            for m in [ small; large ] do
+                Expect.isGreaterThanOrEqual m.BeforeSeries m.Facts "before: the first chart enumerated the scope"
+                Expect.isGreaterThanOrEqual m.BeforePopulation m.Facts "before: the first population read did too"
+                Expect.equal m.Series m.Points "after: the first chart downloads exactly its points"
+                Expect.equal m.Population m.Ranked "after: the first population read downloads exactly its ranked page"
+
+                Expect.equal
+                    m.ReplicaSeries
+                    (m.Points + 1)
+                    "a second replica adds one snapshot download, never the scope"
+
+                Expect.equal m.ReplicaPopulation (m.Ranked + 1) "for the population read too"
+        }
+
+        testCaseAsync "a batch that crosses the threshold over earlier facts builds the snapshot a read would build"
+        <| async {
+            let storage = InMemoryBlobStorage.InMemoryBlobStorage() :> IBlobStorage
+            let scope = newScope ()
+
+            let writer =
+                storeWithPolicies storage (steppingClock baseAsOf) FactSurfaceOptions.defaults FactIndexOptions.defaults
+
+            let enumerating =
+                storeWithPolicies storage fixedClock FactSurfaceOptions.disabled FactIndexOptions.disabled
+
+            // Below both thresholds: no snapshot, no index.
+            let! first =
+                writer.AssertBatch(scope, [ for i in 0..299 -> firstUploadDraft i (decimal i) (sprintf "a%d" i) ])
+
+            Expect.isOk first "the first batch is stored"
+            let! early = snapshotBytes storage scope "revenue"
+            Expect.isNone early "below the threshold the batch builds no surface"
+
+            // Crossing: new lineages, and revisions superseding forty of the
+            // first batch's heads — the build must retire what they replace.
+            let! second =
+                writer.AssertBatch(
+                    scope,
+                    [
+                        for i in 300..799 -> firstUploadDraft i (decimal i) (sprintf "a%d" i)
+                        for i in 0..39 -> firstUploadDraft i (decimal (i + 1000)) (sprintf "rev%d" i)
+                    ]
+                )
+
+            match second with
+            | Ok receipt -> Expect.equal receipt.SupersedingCount 40 "each revision superseded its lineage's head"
+            | Error e -> failtestf "the crossing batch failed: %s" e
+
+            let! revenueAtAssert = snapshotBytes storage scope "revenue"
+            let! unitsAtAssert = snapshotBytes storage scope "units"
+            Expect.isSome revenueAtAssert "the crossing batch built the revenue surface"
+
+            do! FactSurface.drop storage scope
+
+            let reader =
+                storeWithPolicies storage fixedClock FactSurfaceOptions.defaults FactIndexOptions.defaults
+
+            let! viaSurface = reader.Query(scope, seriesQuery)
+            let! _ = reader.QueryPopulation(scope, populationOf "units")
+            let! revenueAtRead = snapshotBytes storage scope "revenue"
+            let! unitsAtRead = snapshotBytes storage scope "units"
+
+            Expect.equal revenueAtAssert revenueAtRead "the assert-built snapshot equals the read-built one"
+            Expect.equal unitsAtAssert unitsAtRead "for every metric the batch touched"
+
+            let! viaLog = enumerating.Query(scope, seriesQuery)
+            Expect.equal viaSurface viaLog "and the surfaced read answers what the log does"
+        }
+    ]
+
 let pointReadIndexTests =
     testList "Phase 890 point-read index" [
 
@@ -3127,4 +3362,5 @@ let pointReadIndexTests =
 
         readFaultTests
         seriesReadTests
+        firstUploadSurfaceTests
     ]

@@ -773,6 +773,14 @@
       heads. Migration recipe:
       `docs/migrations/1123-fact-query-subject-branch.md`.
     -->
+    <!--
+      Phase 1124 rides the 0.35.0 draft (untagged, publicly unpinned; no
+      public surface moves, so the class is below the draft's): an
+      `AssertBatch` that read the whole scope builds each touched metric's
+      absent surface as it writes, so the first browse after a first upload
+      does not enumerate. Migration recipe:
+      `docs/migrations/1124-batch-builds-absent-metric-surfaces.md`.
+    -->
     <Version>0.35.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a

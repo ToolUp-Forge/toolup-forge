@@ -18,6 +18,7 @@ applies. Where a release ships a migration note under `docs/migrations/`, it is 
 Migration notes:
 
 - [1123-fact-query-subject-branch](docs/migrations/1123-fact-query-subject-branch.md)
+- [1124-batch-builds-absent-metric-surfaces](docs/migrations/1124-batch-builds-absent-metric-surfaces.md)
 
 _Surface since `v0.34.1`: **breaking** — 1 package moved; 10 members added, 1 member changed, 0 members removed._
 

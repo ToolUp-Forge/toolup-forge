@@ -67,6 +67,17 @@ type internal DraftDisposition = {
     Written: Fact option
 }
 
+/// What the write core hands back (Phase 704): one disposition per draft,
+/// and — when it read the whole scope to find lineage heads — the scope's
+/// facts as it read them, so the batch path can build an absent metric
+/// surface with no further read (Phase 1124). `ScopeInHand` is `None` when
+/// the core read only the touched lineages through a complete index, or
+/// read nothing (every draft already stored).
+type internal DraftsWritten = {
+    Dispositions: DraftDisposition list
+    ScopeInHand: Fact list option
+}
+
 /// The concurrency bound every parallel blob fan-out in `BlobFactStore`
 /// runs under (Phase 890). Sixteen is well inside the per-client
 /// connection budget of every shipped storage backend, and far above the
@@ -869,8 +880,12 @@ type BlobFactStore
         all
         |> List.filter (fun f -> f.Metric = metric && not (superseded.Contains f.FactId))
 
-    let rebuildSurface (scopeId: string) (metric: MetricRef) : Async<FactSurfaceSnapshot option> = async {
-        let! all = loadAll scopeId
+    /// Replace the metric's snapshot from `all`, the scope's facts in
+    /// census (listing) order. The read-time rebuild below and the
+    /// assert-time build (Phase 1124) both come through here, so a snapshot
+    /// built at assert is the one a read would build over the same log —
+    /// the same heads selection, the same row order, the same census.
+    let rebuildSurfaceFrom (scopeId: string) (metric: MetricRef) (all: Fact list) : Async<FactSurfaceSnapshot option> = async {
         let heads = currentHeadsFor metric all
 
         // The census is every fact the rebuild actually READ — never the
@@ -885,6 +900,11 @@ type BlobFactStore
                 cacheSurface scopeId metric.Value snapshot
                 Some snapshot
             | Error _ -> None
+    }
+
+    let rebuildSurface (scopeId: string) (metric: MetricRef) : Async<FactSurfaceSnapshot option> = async {
+        let! all = loadAll scopeId
+        return! rebuildSurfaceFrom scopeId metric all
     }
 
     /// Bring a snapshot up to date against the scope's fact census, or
@@ -1339,22 +1359,67 @@ type BlobFactStore
     // durable, the surface is derived, and the read path reconciles
     // against the log regardless — so every failure costs a slower read
     // and never a different answer.
-    let maintainSurfaceBatch (scopeId: string) (facts: Fact list) : Async<unit> = async {
+    //
+    // **An absent snapshot (Phase 1124).** With no snapshot there is
+    // nothing to fold into, and in general nothing to build from: the
+    // batch knows its own facts, not the metric's earlier ones. Except
+    // when the write core loaded the whole scope to find lineage heads —
+    // the point-read index not consulted (below its threshold, or crossing
+    // it in this batch) or incomplete — and hands those facts back as
+    // `scopeInHand`. Then the earlier facts plus the facts just written ARE
+    // the scope, and each absent snapshot is built with writes and no
+    // fact reads, so the first browse after a first upload does not
+    // enumerate. The indexed (`Complete`) path reads only the touched
+    // lineages' heads, holds no scope, and passes `None`: its metrics keep
+    // build-on-first-read.
+    let buildAbsentSurfaces (scopeId: string) (scopeInHand: Fact list) (written: Fact list) (metrics: MetricRef list) = async {
+        // One listing after the writes: the census a read would take,
+        // in the order it would take it. A listed fact not in hand
+        // (another writer's, landing concurrently) is left out of the
+        // census exactly as an unreadable blob is left out of a
+        // read-time rebuild's, so the next read folds it as unseen.
+        let! names = storage.List(scopeId, factsPrefix)
+
+        // The read path's gate (GP 13): below it no read consults a
+        // surface, so none is built.
+        if List.length names >= surfaceOptions.MinimumHeads then
+            let inHand = Dictionary<string, Fact>(StringComparer.Ordinal)
+
+            for f in Seq.append scopeInHand written do
+                inHand[f.FactId] <- f
+
+            let all =
+                names
+                |> List.choose (fun name ->
+                    match inHand.TryGetValue(factIdOfBlob name) with
+                    | true, f -> Some f
+                    | _ -> None)
+
+            for metric in metrics do
+                try
+                    let! _ = rebuildSurfaceFrom scopeId metric all
+                    ()
+                with _ ->
+                    // Best effort: the metric's first read builds it.
+                    ()
+    }
+
+    let maintainSurfaceBatch (scopeId: string) (scopeInHand: Fact list option) (facts: Fact list) : Async<unit> = async {
         if not surfaceOptions.Enabled || List.isEmpty facts then
             return ()
         else
             let ordered = facts |> List.sortBy _.AsOf
             let metrics = facts |> List.map _.Metric |> List.distinct
+            let absent = ResizeArray<MetricRef>()
 
             for metric in metrics do
                 try
                     let! existing = surface.Get(scopeId, metric.Value)
 
                     match existing with
-                    // No snapshot yet is a no-op, not a failure — a
-                    // surface that has not been built has nothing to
-                    // maintain, and the read path builds it on demand.
-                    | None -> ()
+                    // No snapshot yet is not a failure: built below when the
+                    // scope is in hand, otherwise left to the first read.
+                    | None -> absent.Add metric
                     | Some snapshot ->
                         // Linear in the batch (Phase 891): one walk of the
                         // snapshot's rows, however many heads the batch
@@ -1376,6 +1441,14 @@ type BlobFactStore
                         do! surface.MarkStale(scopeId, metric.Value)
                     with _ ->
                         ()
+
+            match scopeInHand with
+            | Some before when absent.Count > 0 ->
+                try
+                    do! buildAbsentSurfaces scopeId before facts (List.ofSeq absent)
+                with _ ->
+                    ()
+            | _ -> ()
     }
 
     // GP 6 audit — one ModuleEvent under the reserved `_facts` source
@@ -1405,7 +1478,7 @@ type BlobFactStore
     // callers — per-fact rows versus one summarised row; one fold versus
     // one fold per metric — so each caller does its own, over the
     // dispositions the core hands back.
-    let writeDrafts (scopeId: string) (drafts: FactDraft list) : Async<Result<DraftDisposition list, string>> = async {
+    let writeDrafts (scopeId: string) (drafts: FactDraft list) : Async<Result<DraftsWritten, string>> = async {
         // The census. The blob name IS the fact id (the same property
         // Phase 702's surface rests on), so presence is decided by a
         // single `List` call — no download per draft, at any batch size.
@@ -1425,17 +1498,23 @@ type BlobFactStore
             // and the log is never read. An empty batch takes this branch
             // too, vacuously.
             return
-                Ok(
-                    addressed
-                    |> List.map (fun (_, factId) -> {
-                        Outcome = BatchIdempotent
-                        FactId = factId
-                        Written = None
-                    })
-                )
+                Ok {
+                    Dispositions =
+                        addressed
+                        |> List.map (fun (_, factId) -> {
+                            Outcome = BatchIdempotent
+                            FactId = factId
+                            Written = None
+                        })
+                    ScopeInHand = None
+                }
         else
             let! index = readIndex scopeId names
             let heads = Dictionary<string, Fact>(StringComparer.Ordinal)
+
+            // Phase 1124 — the scope as read, when this call reads all of
+            // it (the enumerating branch below).
+            let scopeInHand: Fact list option ref = ref None
 
             // Phase 1122 — a batch that takes the scope from below the index
             // threshold to at or above it indexes the scope as it goes. It
@@ -1530,6 +1609,7 @@ type BlobFactStore
             | NotConsulted
             | Incomplete _ ->
                 let! all = loadAll scopeId
+                scopeInHand.Value <- Some all
 
                 // The current head of every lineage in scope, indexed once.
                 // The scalar path re-derives this per assert by scanning the
@@ -1657,7 +1737,12 @@ type BlobFactStore
                     | Ok _ -> None)
 
             match failures with
-            | [||] -> return Ok(List.ofSeq dispositions)
+            | [||] ->
+                return
+                    Ok {
+                        Dispositions = List.ofSeq dispositions
+                        ScopeInHand = scopeInHand.Value
+                    }
             | [| (_, e) |] ->
                 // The scalar path's message, verbatim — a batch of one
                 // must fail the way `Assert` has always failed.
@@ -1918,7 +2003,7 @@ type BlobFactStore
                 // emit.
                 let! written = writeDrafts scopeId [ draft ]
 
-                match written with
+                match written |> Result.map _.Dispositions with
                 | Error e -> return Error e
                 | Ok [ { Written = Some fact } ] ->
                     // Audit (GP 6): a FactAsserted event, and — when it
@@ -2004,7 +2089,10 @@ type BlobFactStore
 
                     match written with
                     | Error e -> return Error e
-                    | Ok dispositions ->
+                    | Ok {
+                             Dispositions = dispositions
+                             ScopeInHand = scopeInHand
+                         } ->
                         let receipt =
                             dispositions
                             |> List.map (fun d -> d.Outcome, d.FactId)
@@ -2038,8 +2126,10 @@ type BlobFactStore
                                 (JsonSerializer.Serialize(payload, jsonOptions))
 
                         // Phase 702 — one fold per touched metric, through
-                        // the same seam the scalar path uses.
-                        do! maintainSurfaceBatch scopeId facts
+                        // the same seam the scalar path uses; since Phase
+                        // 1124 an absent snapshot is built here as well
+                        // when the write core read the whole scope.
+                        do! maintainSurfaceBatch scopeId scopeInHand facts
 
                         return Ok receipt
             with ex ->

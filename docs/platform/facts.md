@@ -337,7 +337,8 @@ head stamped after the read's instant (law L4 would show its predecessor,
 which a heads-only snapshot does not hold); an admitted head the census or a
 download cannot produce. And the first read of a metric whose snapshot does
 not exist yet builds it — one enumeration per metric, once, exactly as the
-first population read of that metric does.
+first population read of that metric does — unless the batch that wrote the
+metric's facts already built it (Phase 1124, below).
 
 Measured with the counting storage fake in `FactStoreTests` (in-memory
 backend; nine in ten facts originals, every ninth lineage revised once, two
@@ -348,8 +349,10 @@ metrics alternating by subject; the chart is one metric over three months):
 | 2,000 facts | 225 | 2,000 | 80.9 ms | 225 (+1 listing) | 6.4 ms | 226 | 225 |
 | 20,000 facts | 2,250 | 20,000 | 276.0 ms | 2,250 (+1 listing) | 102.8 ms | 2,251 | 2,250 |
 
-The cold first read of each size is the surface build plus the read: 2,226
-and 22,251 downloads. The in-memory times understate the change against
+The cold first read of each size was the surface build plus the read: 2,226
+and 22,251 downloads. Since Phase 1124 a first upload builds the surface as
+it writes, so that cold read is now paid only by a metric whose snapshot is
+absent and whose batch could not build it (see below). The in-memory times understate the change against
 object storage, where each download is a round trip: at the 136–148 ms per
 GET the deployment above measured, and 16 downloads in flight
 (`BlobFanOut.Bound`), the 20,000-fact enumeration is about 1,250 sequential
@@ -391,6 +394,40 @@ lies in.
 be named; a subject inside the branch reads as the subject alone, and a subject
 outside it matches nothing, as any two disjoint clauses do.
 
+### A first upload leaves its metrics' surfaces warm (Phase 1124)
+
+`AssertBatch` loads the whole scope to find lineage heads whenever the
+point-read index is not consulted (below `FactIndexOptions.MinimumFacts`, or
+crossing it in this batch) or is incomplete. On those paths the batch then
+holds every fact of the scope — the ones it read and the ones it wrote — so
+for each metric it touched whose snapshot does not exist, and when the scope
+as it now stands reaches `FactSurfaceOptions.MinimumHeads`, it builds that
+snapshot with writes and no fact reads. It lists the scope once after the
+writes and builds through the read-time rebuild's own path (the same heads
+selection, row order and census), so a snapshot built at assert is
+byte-for-byte the one a read would build over the same log; a test asserts
+exactly that, over a crossing batch that also supersedes earlier heads. A
+fact another writer lands concurrently is left out of the census, so the next
+read folds it as unseen. The build is best effort, like all surface
+maintenance: a failure costs the later read its enumeration, never a
+different answer, and never fails the batch.
+
+**What still builds on first read:** a batch over a scope whose index is
+complete (it reads only the touched lineages' heads and does not hold the
+scope), a scalar `Assert`, and any snapshot flushed or lost afterwards.
+
+Measured with the counting storage fake in `FactStoreTests` (one batch into
+an empty scope, two metrics alternating by subject; the series read is one
+metric over three months, the population read a top-10 ranking of the other):
+
+| Scope | First series read: before | after | First population read: before | after | Second replica: series / population |
+|---|---|---|---|---|---|
+| 2,000 facts | 2,253 | 252 (its points) | 2,011 | 10 (its page) | 253 / 11 |
+| 20,000 facts | 22,503 | 2,502 (its points) | 20,011 | 10 (its page) | 2,503 / 11 |
+
+The browse pack's cold `QueryRows` after a 2,400-fact table run reads 20
+downloads, the same as a warm page (2,421 before).
+
 ### What each read costs on the blob store (Phase 1122)
 
 Above the thresholds (`FactIndexOptions.defaults` and
@@ -412,7 +449,8 @@ subject and no metric; and the history reads above, because reconstructing
 what was current at an earlier instant needs the superseded facts a heads-only
 read model has dropped. **What enumerates once**: the first consulting read
 after the index went incomplete (it rewrites the missing leaves), and the
-first read of a metric whose surface does not exist (it builds it). The
+first read of a metric whose surface does not exist (it builds it — no
+longer after a first upload, which builds it at assert; Phase 1124). The
 disclosure gate's own check under taint policies loads the scope separately
 and is not covered by this table.
 

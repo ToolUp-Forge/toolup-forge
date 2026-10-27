@@ -1631,8 +1631,10 @@ let private costTests =
             ]
             |> ignore
 
-            // The table's first read builds the revenue surface: the one
-            // enumeration the surface exists so that no later read repeats.
+            // Phase 1124 — the run's one batch held the whole (empty) scope,
+            // so it built the revenue surface as it wrote: the table's first
+            // read is as cheap as every later one. Until 1124 it enumerated
+            // the scope once to build that surface (2,421 downloads here).
             counting.Reset()
 
             let firstPage =
@@ -1676,6 +1678,11 @@ let private costTests =
             Expect.equal detail.Row.FactId targetId "the point read opens the fact"
             Expect.equal points 100 "the chart is one brand's 50 SKUs over two months"
             Expect.equal rowsReads 20 "a warm page of ten reads its ten rows and the gate's look at each, nothing more"
+
+            Expect.equal
+                coldRowsReads
+                rowsReads
+                "the first page after the upload costs what a warm page does: the batch left the surface built"
 
             Expect.isLessThanOrEqual
                 factReads
