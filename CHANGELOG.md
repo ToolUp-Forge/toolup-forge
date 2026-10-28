@@ -18,8 +18,9 @@ applies. Where a release ships a migration note under `docs/migrations/`, it is 
 Migration notes:
 
 - [1128-conversation-block-part](docs/migrations/1128-conversation-block-part.md)
+- [1129-fact-presentation-builders](docs/migrations/1129-fact-presentation-builders.md)
 
-_Surface since `v0.35.0`: **additive** — 1 package moved; 22 members added, 0 members changed, 0 members removed._
+_Surface since `v0.35.0`: **additive** — 2 packages moved; 22 members added, 0 members changed, 0 members removed; 1 package new._
 
 ### Added
 
@@ -45,6 +46,7 @@ _Surface since `v0.35.0`: **additive** — 1 package moved; 22 members added, 0 
   - `ToolUp.Platform.AI.BlockWithheld (class)`
   - `ToolUp.Platform.AI.BlockWithheld..ctor(System.String, System.Int32)`
   - … and 2 more — `git diff v0.35.0 -- api-baselines/ToolUp.AI.Wire.approved.txt`
+- `ToolUp.Facts.Presentation` — new package (123 public members)
 
 ## [0.35.0] — 2026-10-28
 
