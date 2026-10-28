@@ -545,6 +545,36 @@ so the saving is the trip, not the compute. At the cap (25,000 cells, one metric
 slice encodes to 5.9 MB. It decodes and prepares in 279 ms on .NET and 946 ms under
 Fable on Node, and a page over it takes 32 ms on .NET and 238 ms under Fable.
 
+### From a series to a chart: the presentation builders (Phase 1129)
+
+A series read answers with numbers; something still has to draw them without inventing
+one. `ToolUp.Facts.Presentation` is that step, as a library both compilers build, so a
+server and a browser draw the same node from the same read.
+
+A **presentation request** names what to draw: the kind (`trend`, `breakdown`,
+`comparison` or `table`), the table, its metric(s), the subject prefix and level, the
+period and the labels. It carries no number, which is the point: an author, a model
+included, can ask for a chart and cannot put a figure on it. Its JSON codec refuses a
+malformed request by name. `PresentationRequest.toQueries` turns it into the series reads
+it needs, and `Presentation.build` draws the answers as a Fuaran-UI node with the
+`BlockProvenance` (Phase 1128) that produced it.
+
+- **A gap is never a number.** Fuaran-UI's chart lowering reads a missing cell as 0, so a
+  withheld or absent point left in a chart's rows would draw as a zero. A trend drops a day
+  on which any subject has no published number and marks the day on the axis. A breakdown
+  and a comparison drop the subject. A table drops the cell. Each is named, with its
+  reason, beside the block.
+- **A refusal is shown, not hidden.** A series the read refused (over the point cap, say)
+  is a callout carrying the read's own text. A chart the lowering would refuse, with more
+  series or points than it draws, is a callout naming that, never a truncated picture.
+- **Validated before it leaves the builder.** Each chart is drawn from a canonical
+  columnar table, so Fuaran-UI's pre-emit validator grounds every field it names and every
+  column's type. A node the validator refuses is a builder defect and is returned as one.
+- **A table is Fact nodes.** One group per subject, one Fact node per published cell,
+  each carrying its fact id as a `data-fact` attribute, the same convention a narrative's
+  quoted numbers use. The attribute is host-side: a block that travels as wire JSON is
+  rebuilt from its request where the reader is, under the reader's gate.
+
 ### A first upload leaves its metrics' surfaces warm (Phase 1124)
 
 `AssertBatch` loads the whole scope to find lineage heads whenever the

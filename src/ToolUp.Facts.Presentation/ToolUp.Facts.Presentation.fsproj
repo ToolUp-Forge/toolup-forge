@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Facts.Presentation — from a gated fact series to a Fuaran-UI node. A presentation request (trend, breakdown, comparison or table; the whole of what a model may author for a block) and its JSON codec, and pure builders that draw a FactSeries as a validated Fuaran-UI node with the BlockProvenance that produced it. A withheld or absent point is never drawn as a number: it is left out of the rows and named with its reason. Compiled by both compilers, so a browser rebuilds exactly what a server built. Phase 1129.</Description>
+        <PackageTags>fsharp;fable;sdk;facts;grounding;charts;fuaran-ui</PackageTags>
+        <!-- Fable-touching project: nullable reference types stay disabled
+             (forge CLAUDE.md "Nullable reference types — keep disabled on
+             Fable-touching projects"). -->
+        <Nullable>disable</Nullable>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- ToolUp.Facts.Shared — the FactSeries a builder draws.
+             ToolUp.AI.Wire — the BlockProvenance record (Phase 1128) a builder
+             fills, and the portable JSON value model the request codec writes.
+             Both are Fable-clean, so this project is too. -->
+        <ProjectReference Include="..\ToolUp.Facts.Shared\ToolUp.Facts.Shared.fsproj" />
+        <ProjectReference Include="..\ToolUp.AI.Wire\ToolUp.AI.Wire.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The published Apache-2.0 Fuaran libraries: the columnar table a
+             chart is drawn from (Fuaran.Core.Column, at the Fuaran.Core pin);
+             the node vocabulary
+             and its pre-emit validator (Fuaran.UI), and the chart lowering a
+             built chart is checked against (Fuaran.UI.Charts). Pinned in
+             Directory.Packages.props, one property for the producing
+             repository; restored from nuget.org. -->
+        <PackageReference Include="Fuaran.Core.Column" />
+        <PackageReference Include="Fuaran.UI" />
+        <PackageReference Include="Fuaran.UI.Charts" />
+        <PackageReference Include="FSharp.Core" />
+    </ItemGroup>
+    <!-- Client-tier closure: pack source for Fable consumers under fable/. -->
+    <ItemGroup>
+        <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Shared\PresentationRequest.fs" />
+        <Compile Include="Shared\Provenance.fs" />
+        <Compile Include="Shared\Builders.fs" />
+    </ItemGroup>
+</Project>

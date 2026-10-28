@@ -2909,6 +2909,8 @@
         <Compile Include="InProcess\StreamAuthBothSignInsTests.fs" />
         <!-- Phase 1042 - a module registers a delivery-completed callback. -->
         <Compile Include="InProcess\DeliveryCompletedTests.fs" />
+        <!-- Phase 1129 - fact presentation builders: the request codec, the four builders' gap discipline, the pre-emit validator, the provenance. -->
+        <Compile Include="InProcess\FactPresentationTests.fs" />
         <Compile Include="Support\TestLane.fs" />
         <Compile Include="Support\TestLaneFilter.fs" />
         <Compile Include="Program.fs" />
@@ -2928,6 +2930,8 @@
         <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
         <!-- Phase 520 — grounding fact store companion (IFactStore contract binding). -->
         <ProjectReference Include="..\ToolUp.Facts.Server\ToolUp.Facts.Server.fsproj" />
+        <!-- Phase 1129 - the fact presentation builders (Fuaran-UI nodes from a fact series). -->
+        <ProjectReference Include="..\ToolUp.Facts.Presentation\ToolUp.Facts.Presentation.fsproj" />
         <!-- Phase 68 — graph store substrate: contract pack binds to the
              in-memory default; Core carries the IGraphStore contract. -->
         <ProjectReference Include="..\ToolUp.Graph.Core\ToolUp.Graph.Core.fsproj" />

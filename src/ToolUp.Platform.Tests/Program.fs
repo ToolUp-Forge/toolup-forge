@@ -2661,6 +2661,8 @@ let private registeredTests =
         StreamAuthBothSignInsTests.tests
         // Phase 1042 - a module registers a delivery-completed callback.
         DeliveryCompletedTests.tests
+        // Phase 1129 - fact presentation builders: from a fact series to a validated Fuaran-UI node.
+        FactPresentationTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

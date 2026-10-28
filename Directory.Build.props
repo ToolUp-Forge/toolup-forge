@@ -820,6 +820,16 @@
       never its node. Migration recipe:
       `docs/migrations/1128-conversation-block-part.md`.
     -->
+    <!--
+      Phase 1129 rides the 0.36.0 draft (untagged, publicly unpinned; its
+      surface movement is additive - a new package - below the draft's
+      breaking class): `ToolUp.Facts.Presentation` joins, the presentation
+      request and its JSON codec, and pure builders from a gated fact series
+      to a validated Fuaran-UI node with its `BlockProvenance`. Two published
+      Apache-2.0 packages join the graph from nuget.org, `Fuaran.UI` and
+      `Fuaran.UI.Charts`, on one Fuaran-UI repository pin. Migration recipe:
+      `docs/migrations/1129-fact-presentation-builders.md`.
+    -->
     <Version>0.36.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a

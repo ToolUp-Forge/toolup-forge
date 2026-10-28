@@ -129,3 +129,22 @@ this substrate. Three mechanics keep it that way:
   release independently. One property spanning both could never be right for long.
 - **Through the package graph, never by source.** No project here references Fuaran
   sources, so the published contract is the only thing consumed.
+
+### The second instance: the fact presentation builders (Phase 1129)
+
+`ToolUp.Facts.Presentation` draws a fact series as a Fuaran-UI node, so it depends on
+`Fuaran.UI` (the node vocabulary and its pre-emit validator) and `Fuaran.UI.Charts` (the
+chart lowering a built chart is checked against). It is the ruling's second adopter, under
+the same licence line: both packages are Apache-2.0, published on nuget.org, with a public
+repository, and a released ToolUp package that carries them restores anonymously.
+
+- **One pin for the producing repository.** `Fuaran.UI` and `Fuaran.UI.Charts` release
+  together from the Fuaran-UI repository, so both ride one property, `FuaranUIVersion`,
+  beside the Core and Compute pins. A later Fuaran-UI package joins that property, never a
+  new one.
+- **The pin agrees with the Core pin.** The Fuaran-UI release depends on Fuaran.Core and
+  Fuaran.Compute packages; the pinned release is one built against the Fuaran.Core version
+  pinned above, so the graph resolves to one Core version and nothing runs against a
+  Core release it was not compiled against.
+- **Fable-clean.** Both packages ship their sources under `fable/`, so the builders compile
+  in a browser as well as on a server.

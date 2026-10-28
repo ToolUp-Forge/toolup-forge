@@ -10,6 +10,13 @@
     <FuaranCoreVersion>0.40.2</FuaranCoreVersion>
     <FuaranComputeVersion>0.42.0</FuaranComputeVersion>
   </PropertyGroup>
+  <PropertyGroup>
+    <!-- Phase 1129 — the Fuaran-UI repository's pin, for Fuaran.UI and
+         Fuaran.UI.Charts (ToolUp.Facts.Presentation). Public: a release on
+         nuget.org. 0.98.1 is the release built against the Fuaran.Core pin
+         above. -->
+    <FuaranUIVersion>0.98.1</FuaranUIVersion>
+  </PropertyGroup>
   <!--
     Phase 11.C.1 (2026-05-08) Paket -> CPM migration. Versions are
     ported verbatim from paket.lock. Add a new <PackageVersion>
@@ -153,6 +160,15 @@
          docs/platform/open-core-boundary.md. -->
     <PackageVersion Include="Fuaran.Core.Column" Version="$(FuaranCoreVersion)" />
     <PackageVersion Include="Fuaran.Compute.DataFrame" Version="$(FuaranComputeVersion)" />
+    <!-- Phase 1129 — the published Apache-2.0 Fuaran-UI libraries the fact
+         presentation builders draw with: `Fuaran.UI` (the node vocabulary
+         and its pre-emit validator) and `Fuaran.UI.Charts` (the chart
+         lowering). Both restore from nuget.org at the one Fuaran-UI
+         repository pin, and both are Fable-clean (they ship their sources
+         under fable/). Their Fuaran.Core and Fuaran.Compute dependencies
+         resolve at the pins above. See docs/platform/open-core-boundary.md. -->
+    <PackageVersion Include="Fuaran.UI" Version="$(FuaranUIVersion)" />
+    <PackageVersion Include="Fuaran.UI.Charts" Version="$(FuaranUIVersion)" />
     <!-- Phase 195 — compile-time auth/audit analyzer (src/ToolUp.Remoting.Analyzers).
          0.36.0 tracks the F# 10 FCS line (FSharp.Compiler.Service 43.10.101);
          the analyzer package consumes it host-provided (PrivateAssets="all").

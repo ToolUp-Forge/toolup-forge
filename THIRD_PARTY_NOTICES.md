@@ -5,7 +5,7 @@ NuGet dependency the ToolUp SDK consumes (direct and transitive) along with
 its declared licence as published on nuget.org. The curated headline list
 of major direct dependencies lives in [`NOTICE.md`](NOTICE.md).
 
-Last regenerated: 2026-10-28 01:20:32 UTC.
+Last regenerated: 2026-10-28 14:01:25 UTC.
 
 Entries showing `(licence not declared)` are upstream packages whose NuGet
 metadata omits a licence — check the package's repository or README directly.
@@ -94,9 +94,17 @@ metadata omits a licence — check the package's repository or README directly.
 | `FSharp.SystemTextJson` | `1.3.13` | `MIT` | [link](https://github.com/tarmil/FSharp.SystemTextJson) |
 | `Fuaran.Compute.DataFrame` | `0.42.0` | `Apache-2.0` | [link](https://github.com/Fuaran-Core/fuaran-core-compute) |
 | `Fuaran.Core.Column` | `0.40.2` | `Apache-2.0` | [link](https://github.com/Fuaran-Core/fuaran-core) |
+| `Fuaran.Core.Ops` | `0.40.2` | `Apache-2.0` | [link](https://github.com/Fuaran-Core/fuaran-core) |
+| `Fuaran.Core.Propagation` | `0.40.2` | `Apache-2.0` | [link](https://github.com/Fuaran-Core/fuaran-core) |
+| `Fuaran.Core.Relation` | `0.40.2` | `Apache-2.0` | [link](https://github.com/Fuaran-Core/fuaran-core) |
 | `Fuaran.Core.Text` | `0.40.2` | `Apache-2.0` | [link](https://github.com/Fuaran-Core/fuaran-core) |
+| `Fuaran.Core.Tree` | `0.40.2` | `Apache-2.0` | [link](https://github.com/Fuaran-Core/fuaran-core) |
 | `Fuaran.Core.Unit` | `0.40.2` | `Apache-2.0` | [link](https://github.com/Fuaran-Core/fuaran-core) |
+| `Fuaran.Core.Validator` | `0.40.2` | `Apache-2.0` | [link](https://github.com/Fuaran-Core/fuaran-core) |
 | `Fuaran.Core.Wire` | `0.40.2` | `Apache-2.0` | [link](https://github.com/Fuaran-Core/fuaran-core) |
+| `Fuaran.UI` | `0.98.1` | `Apache-2.0` | [link](https://github.com/fuaran-ui/fuaran-dotnet) |
+| `Fuaran.UI.Charts` | `0.98.1` | `Apache-2.0` | [link](https://github.com/fuaran-ui/fuaran-dotnet) |
+| `Fuaran.UI.Renderer.Core` | `0.98.1` | `Apache-2.0` | [link](https://github.com/fuaran-ui/fuaran-dotnet) |
 | `Giraffe` | `8.2.0` | Embedded file: `LICENSE` | [link](https://github.com/giraffe-fsharp/giraffe) |
 | `Giraffe.ViewEngine` | `1.4.0` | `Apache-2.0` | [link](https://github.com/giraffe-fsharp/Giraffe.ViewEngine) |
 | `Google.Analytics.Data.V1Beta` | `2.0.0-beta10` | `Apache-2.0` | [link](https://github.com/googleapis/google-cloud-dotnet) |
@@ -360,4 +368,4 @@ metadata omits a licence — check the package's repository or README directly.
 | `YamlDotNet` | `16.3.0` | `MIT` | [link](https://github.com/aaubry/YamlDotNet/wiki) |
 | `ZstdSharp.Port` | `0.8.8` | `MIT` | [link](https://github.com/oleg-st/ZstdSharp) |
 
-Total: 345 packages.
+Total: 353 packages.
