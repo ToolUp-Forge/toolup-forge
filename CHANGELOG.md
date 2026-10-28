@@ -20,8 +20,9 @@ Migration notes:
 - [1128-conversation-block-part](docs/migrations/1128-conversation-block-part.md)
 - [1129-fact-presentation-builders](docs/migrations/1129-fact-presentation-builders.md)
 - [1130-conversation-block-render](docs/migrations/1130-conversation-block-render.md)
+- [1134-inert-taint-walk](docs/migrations/1134-inert-taint-walk.md)
 
-_Surface since `v0.35.0`: **additive** — 4 packages moved; 57 members added, 0 members changed, 0 members removed; 1 package new._
+_Surface since `v0.35.0`: **additive** — 5 packages moved; 58 members added, 0 members changed, 0 members removed; 1 package new._
 
 ### Added
 
@@ -72,6 +73,8 @@ _Surface since `v0.35.0`: **additive** — 4 packages moved; 57 members added, 0
 - `ToolUp.Facts.Client` — 2 members:
   - `ToolUp.Facts.Client.BlockSeriesResolver (class)`
   - `ToolUp.Facts.Client.BlockSeriesResolver.resolve(ToolUp.Facts.FactSeriesQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSeries, System.String]]`
+- `ToolUp.Facts.Core` — 1 member:
+  - `ToolUp.Facts.DisclosureTaintConfigModule.isTaintInert(ToolUp.Facts.DisclosureTaintConfig) : System.Boolean`
 - `ToolUp.Facts.Presentation` — new package (123 public members)
 
 ## [0.35.0] — 2026-10-28
