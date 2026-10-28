@@ -1706,14 +1706,19 @@ let private costTests =
 // metric's surface snapshot (nothing at all when the parse cache holds it)
 // and no fact blob, whatever the branch's size.
 
-/// One one-brand chart over `skus` SKUs: its fact-blob downloads, its
-/// surface-snapshot downloads, its points and its wall time. `warm` charts
-/// once first; otherwise this is the first read after the upload, over the
-/// surface the run's batch built as it wrote (Phase 1124).
-let private oneBrandChart (skus: int) (warm: bool) : int * int * int * float =
-    let counting = FactStoreTests.CountingBlobStorage(InMemoryBlobStorage())
-    let w, _ = worldOn counting Set.empty (tickingClock ())
+/// The browse's gate rebuilt over the world's store with a taint
+/// configuration composed (Phase 1134); `None` keeps the world's own gate.
+let private gatedBy (taint: DisclosureTaintConfig option) (w: World) : FactBrowseHandler.FactBrowseDeps =
+    match taint with
+    | None -> w.Deps
+    | Some config -> {
+        w.Deps with
+            Gate = RecordingGate(FactDisclosureGate(w.Store, w.Events, taint = config), Set.empty)
+      }
 
+/// One table run of `skus` SKUs over two months and two columns (4 x `skus`
+/// facts), twenty brands.
+let private runTwentyBrands (w: World) (skus: int) =
     run w [
         for i in 0 .. skus - 1 do
             let brand = sprintf "b%02d" (i % 20)
@@ -1723,13 +1728,29 @@ let private oneBrandChart (skus: int) (warm: bool) : int * int * int * float =
     ]
     |> ignore
 
+/// One brand's revenue chart over both months.
+let private brandChart (brand: string) : FactSeriesQuery = {
+    series "revenue" september.From october.To with
+        SubjectPrefix = [ brand ]
+}
+
+/// One one-brand chart over `skus` SKUs, judged by a gate composed with
+/// `taint`: its fact-blob downloads, its surface-snapshot downloads, its
+/// points and its wall time. `warm` charts once first; otherwise this is the
+/// first read after the upload, over the surface the run's batch built as it
+/// wrote (Phase 1124).
+let private oneBrandChartUnder
+    (taint: DisclosureTaintConfig option)
+    (skus: int)
+    (warm: bool)
+    : int * int * int * float =
+    let counting = FactStoreTests.CountingBlobStorage(InMemoryBlobStorage())
+    let w, _ = worldOn counting Set.empty (tickingClock ())
+    runTwentyBrands w skus
+    let deps = gatedBy taint w
+
     let chart () =
-        ok
-            "chart"
-            (FactBrowseHandler.querySeries w.Deps w.Scope "u" {
-                series "revenue" september.From october.To with
-                    SubjectPrefix = [ "b07" ]
-            })
+        ok "chart" (FactBrowseHandler.querySeries deps w.Scope "u" (brandChart "b07"))
 
     if warm then
         chart () |> ignore
@@ -1740,6 +1761,8 @@ let private oneBrandChart (skus: int) (warm: bool) : int * int * int * float =
     clock.Stop()
 
     counting.Downloads - counting.SurfaceDownloads, counting.SurfaceDownloads, points, clock.Elapsed.TotalMilliseconds
+
+let private oneBrandChart (skus: int) (warm: bool) : int * int * int * float = oneBrandChartUnder None skus warm
 
 let private branchCostTests =
     testList "Phase 1126 — a chart of one branch is one surface download, not one download per point" [
@@ -1763,6 +1786,202 @@ let private branchCostTests =
                     Expect.equal factDownloads 0 "the points are the surface's rows: no fact blob is downloaded"
                     Expect.isLessThanOrEqual surfaceDownloads 1 "at most the metric's one surface snapshot"
                 }
+    ]
+
+// ─── Phase 1134 — a taint config that cannot taint costs a chart nothing ─
+//
+// Every chart read is also a disclosure check, and the gate built the
+// derivation graph — a whole-scope listing and download — whenever a taint
+// config was composed at all. A consumer deployment registers exactly one
+// policy, `Plain`, with no contributor scope and no declassifier, for its
+// per-surface stance: its walk can change no verdict, yet each warm chart
+// downloaded the scope (1,748 blobs at 1,742 facts). Pinned by counts at 2k
+// and 20k facts; the converse pins that a config whose walk CAN change a
+// verdict still loads the graph.
+
+/// The consumer deployment's registration, exactly: one `Plain` policy
+/// permitting four surfaces, no contributor scope, no declassifier.
+let private tradeFigures: DisclosurePolicy = {
+    PolicyRef = "trade-figures"
+    Mode = Plain
+    PermitSurfaces = [ FactRetrieval; FactToolResult; FactNarrativePublication; FactBrowse ]
+    ContributorScope = None
+}
+
+let private inertTaint = DisclosureTaintConfig.ofLists [ tradeFigures ] []
+
+/// The three ways a config makes the walk live (the shard's rule), each one
+/// change away from the inert registration.
+let private liveTaints = [
+    "a TaintPropagating policy",
+    DisclosureTaintConfig.ofLists [
+        {
+            tradeFigures with
+                Mode = TaintPropagating
+        }
+    ] []
+    "a declared contributor scope",
+    DisclosureTaintConfig.ofLists [
+        {
+            tradeFigures with
+                ContributorScope = Some "party-a"
+        }
+    ] []
+    "a declassification routine",
+    DisclosureTaintConfig.ofLists [ tradeFigures ] [
+        {
+            OperationId = "aggregate-over-k"
+            Rationale = "aggregation over at least five members loses individual attribution"
+            AcceptingScopes = []
+        }
+    ]
+]
+
+/// Storage that holds every fact-blob download, once armed, until
+/// `readers + 1` listings of the fact prefix have been taken (each reader's
+/// census, plus one rebuild's) or ten seconds have passed. So concurrent cold
+/// readers are all in flight before any rebuild can finish, whatever the
+/// machine's speed, and a reader that does not share the first rebuild runs
+/// its own.
+type private HoldingBlobStorage(inner: IBlobStorage, readers: int) =
+    let released =
+        System.Threading.Tasks.TaskCompletionSource<unit>(
+            System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously
+        )
+
+    let mutable listings = 0
+    let mutable armed = false
+
+    member _.Arm() = armed <- true
+
+    interface IBlobStorage with
+        member _.CanComposeFrom = inner.CanComposeFrom
+        member _.ComposeFrom(c, b, parts) = inner.ComposeFrom(c, b, parts)
+        member _.Upload(c, b, content) = inner.Upload(c, b, content)
+
+        member _.Download(c, b) = async {
+            if armed && b.StartsWith("_facts/", StringComparison.Ordinal) then
+                let! _ =
+                    System.Threading.Tasks.Task.WhenAny(
+                        released.Task,
+                        System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds 10.0)
+                    )
+                    |> Async.AwaitTask
+
+                ()
+
+            return! inner.Download(c, b)
+        }
+
+        member _.Delete(c, b) = inner.Delete(c, b)
+
+        member _.List(c, prefix) = async {
+            if armed && prefix = "_facts/" && Interlocked.Increment(&listings) >= readers + 1 then
+                released.TrySetResult() |> ignore
+
+            return! inner.List(c, prefix)
+        }
+
+        member _.Exists(c, b) = inner.Exists(c, b)
+        member _.GetMetadata(c, b) = inner.GetMetadata(c, b)
+
+        member _.DownloadRange(c, b, offset, length) =
+            inner.DownloadRange(c, b, offset, length)
+
+        member _.Erase(c, prefix, policy, dryRun) = inner.Erase(c, prefix, policy, dryRun)
+
+/// A cold page of one-brand charts read at once, after the metric's surface
+/// was flushed (`FactSurface.drop` — the state a deploy finds when the
+/// snapshot shape moved). Returns the fact-blob downloads, the surface
+/// writes, the scope's size, each chart as the page read it and as it reads
+/// alone afterwards, and the page's wall time.
+let private coldPage (taint: DisclosureTaintConfig option) (skus: int) (brands: string list) =
+    let counting = FactStoreTests.CountingBlobStorage(InMemoryBlobStorage())
+    let holding = HoldingBlobStorage(counting, List.length brands)
+    let w, _ = worldOn holding Set.empty (tickingClock ())
+    runTwentyBrands w skus
+    let deps = gatedBy taint w
+    FactSurface.drop counting w.Scope.ScopeId |> Async.RunSynchronously
+
+    holding.Arm()
+    counting.Reset()
+    let clock = Diagnostics.Stopwatch.StartNew()
+
+    let together =
+        brands
+        |> List.map (fun brand -> FactBrowseHandler.querySeries deps w.Scope "u" (brandChart brand))
+        |> Async.Parallel
+        |> Async.RunSynchronously
+        |> Array.map (function
+            | Ok s -> s
+            | Error e -> failtestf "cold chart: %s" e)
+        |> List.ofArray
+
+    clock.Stop()
+    let factDownloads = counting.Downloads - counting.SurfaceDownloads
+    let surfaceWrites = counting.SurfaceUploads
+
+    let alone =
+        brands
+        |> List.map (fun brand -> ok "alone" (FactBrowseHandler.querySeries deps w.Scope "u" (brandChart brand)))
+
+    factDownloads, surfaceWrites, 4 * skus, together, alone, clock.Elapsed.TotalMilliseconds
+
+let private inertTaintTests =
+    testList "Phase 1134 — a taint config that cannot taint costs a chart nothing" [
+        for skus in [ 500; 5_000 ] do
+            test (sprintf "a warm chart under the inert registration downloads no fact blob, %d facts" (4 * skus)) {
+                let factDownloads, surfaceDownloads, points, ms =
+                    oneBrandChartUnder (Some inertTaint) skus true
+
+                printfn
+                    "Phase 1134 warm one-brand chart, inert config, %d facts: %d fact downloads, %d surface downloads, %d points, %.1f ms"
+                    (4 * skus)
+                    factDownloads
+                    surfaceDownloads
+                    points
+                    ms
+
+                Expect.equal points (2 * skus / 20) "the chart is one brand's SKUs over two months"
+                Expect.equal factDownloads 0 "a Plain-only config walks nothing, so the gate reads no fact"
+            }
+
+            test (sprintf "a cold three-chart page under the inert registration rebuilds once, %d facts" (4 * skus)) {
+                let factDownloads, surfaceWrites, scopeSize, together, alone, ms =
+                    coldPage (Some inertTaint) skus [ "b03"; "b07"; "b11" ]
+
+                printfn
+                    "Phase 1134 cold three-chart page, inert config, %d facts: %d fact downloads, %d surface writes, %.1f ms"
+                    scopeSize
+                    factDownloads
+                    surfaceWrites
+                    ms
+
+                Expect.equal surfaceWrites 1 "three concurrent cold reads of one metric share one rebuild and one PUT"
+                Expect.equal factDownloads scopeSize "the one rebuild reads the scope once; the gate reads nothing"
+                Expect.equal together alone "each chart is the answer it gives alone"
+            }
+
+            test (sprintf "a warm chart under a TaintPropagating config still loads the graph, %d facts" (4 * skus)) {
+                let factDownloads, _, points, ms =
+                    oneBrandChartUnder (Some(snd liveTaints.Head)) skus true
+
+                printfn
+                    "Phase 1134 warm one-brand chart, TaintPropagating config, %d facts: %d fact downloads, %d points, %.1f ms"
+                    (4 * skus)
+                    factDownloads
+                    points
+                    ms
+
+                Expect.equal points (2 * skus / 20) "the same chart"
+                Expect.isGreaterThanOrEqual factDownloads (4 * skus) "the walk can change a verdict, so the graph loads"
+            }
+
+        for name, config in liveTaints do
+            test (sprintf "under %s the graph is loaded" name) {
+                let factDownloads, _, _, _ = oneBrandChartUnder (Some config) 100 true
+                Expect.isGreaterThanOrEqual factDownloads 400 "the walk is live, so the gate reads the scope"
+            }
     ]
 
 // ─── Phase 1126 — the row path answers what the fact path answers ────
@@ -2541,6 +2760,7 @@ let tests =
         seriesTests
         costTests
         branchCostTests
+        inertTaintTests
         parityTests
         heldTests
         sliceTests

@@ -215,6 +215,7 @@ ToolUp.Facts.DisclosureTaintConfigModule.contributorScopes(ToolUp.Facts.Disclosu
 ToolUp.Facts.DisclosureTaintConfigModule.declassifierFor(ToolUp.Facts.DisclosureTaintConfig, System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.DeclassificationRoutine]
 ToolUp.Facts.DisclosureTaintConfigModule.empty : ToolUp.Facts.DisclosureTaintConfig { get }
 ToolUp.Facts.DisclosureTaintConfigModule.isEmpty(ToolUp.Facts.DisclosureTaintConfig) : System.Boolean
+ToolUp.Facts.DisclosureTaintConfigModule.isTaintInert(ToolUp.Facts.DisclosureTaintConfig) : System.Boolean
 ToolUp.Facts.DisclosureTaintConfigModule.isTaintPropagating(ToolUp.Facts.DisclosureTaintConfig, System.String) : System.Boolean
 ToolUp.Facts.DisclosureTaintConfigModule.ofLists(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DisclosurePolicy], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.DeclassificationRoutine]) : ToolUp.Facts.DisclosureTaintConfig
 ToolUp.Facts.DisclosureTaintConfigModule.resolver(ToolUp.Facts.DisclosureTaintConfig, System.String, ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface) : Microsoft.FSharp.Core.FSharpOption`1[System.Boolean]

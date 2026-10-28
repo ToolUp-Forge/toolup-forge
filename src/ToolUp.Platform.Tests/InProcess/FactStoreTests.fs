@@ -676,6 +676,7 @@ type internal CountingBlobStorage(inner: IBlobStorage) =
     let mutable downloads = 0
     let mutable lists = 0
     let mutable surfaceDownloads = 0
+    let mutable surfaceUploads = 0
 
     member _.Downloads = lock gate (fun () -> downloads)
 
@@ -687,11 +688,17 @@ type internal CountingBlobStorage(inner: IBlobStorage) =
     /// names only, so it is counted apart from the reads that fetch a blob.
     member _.Lists = lock gate (fun () -> lists)
 
+    /// Writes of a metric-surface snapshot (Phase 1134) — one per rebuild or
+    /// incremental fold that lands, so concurrent readers of one cold metric
+    /// are seen to share one rebuild.
+    member _.SurfaceUploads = lock gate (fun () -> surfaceUploads)
+
     member _.Reset() =
         lock gate (fun () ->
             downloads <- 0
             lists <- 0
-            surfaceDownloads <- 0)
+            surfaceDownloads <- 0
+            surfaceUploads <- 0)
 
     interface IBlobStorage with
         // Phase 741 — no bounded multi-part commit primitive here; callers assemble through memory.
@@ -701,6 +708,9 @@ type internal CountingBlobStorage(inner: IBlobStorage) =
             ToolUp.Platform.BlobStorage.composeNotSupported "test double"
 
         member _.Upload(container, blobName, content) =
+            if blobName.StartsWith(FactSurface.Prefix, StringComparison.Ordinal) then
+                lock gate (fun () -> surfaceUploads <- surfaceUploads + 1)
+
             inner.Upload(container, blobName, content)
 
         member _.Download(container, blobName) = async {

@@ -335,6 +335,22 @@ module DisclosureTaintConfig =
     let isEmpty (config: DisclosureTaintConfig) : bool =
         config.Policies.IsEmpty && config.Declassifiers.IsEmpty
 
+    /// Phase 1134 — whether the taint walk can change nothing under this
+    /// config: no registered policy is `TaintPropagating`, none declares a
+    /// `ContributorScope`, and no declassification routine is registered.
+    /// The walk then arrives exactly where an empty walk starts (no inherited
+    /// taint, no crossing, no contributor beyond the judged fact's own), so a
+    /// door may decide without building the derivation graph. The policies
+    /// still matter for their per-surface stance (`resolver`), which reads no
+    /// graph. An empty config is taint-inert; the converse does not hold.
+    ///
+    /// The one definition every door reads (the disclosure gate today), so
+    /// "this deployment cannot taint" is never decided twice.
+    let isTaintInert (config: DisclosureTaintConfig) : bool =
+        config.Declassifiers.IsEmpty
+        && config.Policies
+           |> Map.forall (fun _ policy -> policy.Mode = Plain && Option.isNone policy.ContributorScope)
+
     /// The Phase 525 `DisclosurePolicyResolver` built from the registered
     /// policies (Phase 562.A) — the policy vocabulary the resolver seam has
     /// lacked. A registered ref permits a surface iff it is in the policy's

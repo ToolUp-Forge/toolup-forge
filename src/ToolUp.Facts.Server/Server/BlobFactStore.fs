@@ -455,6 +455,45 @@ type BlobFactStore
         | Some cache -> cache.Store(scopeId, metric, snapshot)
         | None -> ()
 
+    // Phase 1134 — concurrent convergences of one (scope, metric, census)
+    // share one run. A cold page fires several series reads of one metric at
+    // once, and each used to rebuild the same snapshot: a scope read and a PUT
+    // apiece. The first reader starts the convergence and later readers await
+    // its task; the entry leaves the map when the task completes, after the
+    // run has remembered its snapshot in the parse cache, so a reader arriving
+    // after that finds the cache instead of starting a second run.
+    //
+    // Keyed by the census the reader LISTED, so a reader only ever shares a
+    // run begun from the same census as its own. The run may then see a newer
+    // census (a rebuild lists again), which is the answer a reader that ran
+    // alone would also have got. No lock is held across any read or write:
+    // the map's `GetOrAdd` is the only synchronisation, and a run belongs to
+    // the reader that started it.
+    let convergences =
+        System.Collections.Concurrent.ConcurrentDictionary<
+            struct (string * string * FactCensusValue),
+            Lazy<Tasks.Task<FactSurfaceSnapshot option>>
+         >()
+
+    let sharedConvergence
+        (key: struct (string * string * FactCensusValue))
+        (run: Async<FactSurfaceSnapshot option>)
+        : Async<FactSurfaceSnapshot option> =
+        let mine =
+            Lazy<Tasks.Task<FactSurfaceSnapshot option>>(fun () -> Async.StartAsTask run)
+
+        let entry = convergences.GetOrAdd(key, mine)
+
+        if obj.ReferenceEquals(entry, mine) then
+            mine.Value.ContinueWith(
+                (fun (_: Tasks.Task<FactSurfaceSnapshot option>) ->
+                    convergences.TryRemove(KeyValuePair(key, mine)) |> ignore),
+                Tasks.TaskContinuationOptions.ExecuteSynchronously
+            )
+            |> ignore
+
+        Async.AwaitTask entry.Value
+
     let serialise (f: Fact) : byte[] =
         JsonSerializer.Serialize(f, jsonOptions) |> Encoding.UTF8.GetBytes
 
@@ -1075,12 +1114,14 @@ type BlobFactStore
         (metric: MetricRef)
         (names: string list)
         : Async<FactSurfaceSnapshot option> =
-        async {
-            // The census value: one key per listed id, which is what both the
-            // reconcile and the parse cache compare against.
-            let logIds = names |> List.map factIdOfBlob
-            let logCensus = FactCensus.valueOfIds logIds
+        // The census value: one key per listed id, which is what both the
+        // reconcile and the parse cache compare against.
+        let logIds = names |> List.map factIdOfBlob
+        let logCensus = FactCensus.valueOfIds logIds
 
+        // Phase 1134 — one convergence per (scope, metric, census) in flight.
+        sharedConvergence struct (scopeId, metric.Value, logCensus)
+        <| async {
             let! cached = async {
                 match surfaceCache with
                 | None -> return None

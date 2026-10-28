@@ -474,6 +474,67 @@ Under a taint configuration, over the parity corpus (7 points, 16 facts in
 scope): the fact path after 1125 read 23 facts (the graph's 16 plus the 7
 points), the row path reads 16 — the graph load alone.
 
+### A chart's disclosure check costs nothing when the policies cannot taint (Phase 1134)
+
+Every chart read is also a disclosure check, and until 1134 the gate built the
+derivation graph — `Query` of the whole scope with `IncludeSuperseded`, which on
+the blob store downloads every fact — whenever any `DisclosureTaintConfig` was
+composed. A deployment that registers policies only for their per-surface
+stance paid it on every chart: on the first consumer deployment, one `Plain`
+policy with no contributor scope and no declassifier, a warm chart cost 1,748
+GETs and 15 s at 1,742 facts, the scope again on every read.
+
+**The rule.** The gate builds the graph only when the walk can change a verdict
+or an audit row: some registered policy is `TaintPropagating`, OR some policy
+declares a `ContributorScope`, OR a declassification routine is registered.
+Otherwise the config is taint-inert (`DisclosureTaintConfig.isTaintInert`) and
+the check is decided exactly as by an empty walk, with no graph. The walk can
+only seed taint from a `Restricted(TaintPropagating)` input, records a crossing
+only where a routine clears taint, and names contributors only for scoped
+policies, so an inert config's walk ends where an empty walk starts. The id,
+held and row forms share the one decision procedure, so all three skip
+together, and the policies still drive the resolver, which reads no graph.
+
+**No verdict or audit row moves.** The disclosure suite judges a corpus with
+the shapes the taint, multi-party, budget and egress suites use. It runs every
+surface, in the id and row forms, under three inert configs, with and without
+a crossing budget. Each run happens twice: once with the skip and once under the
+pre-1134 rule. The verdict maps and the audit streams are equal, and the
+skipping gate's reads equal a taint-free gate's.
+
+**Concurrent cold reads of one metric share one convergence.** A cold page
+fires several series reads of one metric at once (after a deploy that moved the
+snapshot shape, each finds no usable snapshot). Each used to rebuild it, a scope
+read and a PUT apiece. The store now runs one convergence per (scope, metric,
+listed census) in process, and concurrent readers await it. A reader shares
+only a run begun from the census it listed itself. A rebuild that then sees a
+newer census is the answer that reader would have got alone. No lock is held
+across a read or a write.
+
+Measured with the browse pack's counting storage (in-memory backend; the
+1126 table shape, one brand of twenty charted, Debug build):
+
+| Read | Scope | Before: fact downloads | Before: time | After: fact downloads | After: time |
+|---|---|---|---|---|---|
+| Warm chart, inert config | 2,000 facts | 2,000 | 79.8 ms | 0 | 3.1 ms |
+| Warm chart, inert config | 20,000 facts | 20,000 | 411.7 ms | 0 | 39.5 ms |
+| Cold three-chart page, inert config | 2,000 facts | 12,000, 3 PUTs | 239.8 ms | 2,000, 1 PUT | 46.2 ms |
+| Cold three-chart page, inert config | 20,000 facts | 120,000, 3 PUTs | 1,920.6 ms | 20,000, 1 PUT | 501.4 ms |
+| Warm chart, `TaintPropagating` config | 2,000 facts | 2,000 | 40.5 ms | 2,000 | 37.8 ms |
+| Warm chart, `TaintPropagating` config | 20,000 facts | 20,000 | 466.7 ms | 20,000 | 385.3 ms |
+
+What a chart's gate check costs, per configuration:
+
+| Configuration | The gate's reads per chart |
+|---|---|
+| No taint config | none (the row form judges the rows it holds) |
+| Taint-inert config (`Plain` policies only, unscoped, no declassifier) | none, since Phase 1134 |
+| A `TaintPropagating` policy, a contributor scope, or a declassifier | the graph load: one download per fact in the scope, every check |
+
+The propagating cost is unchanged by 1134; Phase 1093's write-maintained taint
+index is what would retire it. A cold page's one rebuild still reads the scope
+once, which is the convergence's own cost and not the gate's.
+
 ### A view reads once and refines locally: the view slice (Phase 1127)
 
 The browse was built on the rule "every change of page, metric, direction or subject
