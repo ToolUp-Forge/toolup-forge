@@ -19,11 +19,34 @@ Migration notes:
 
 - [1128-conversation-block-part](docs/migrations/1128-conversation-block-part.md)
 - [1129-fact-presentation-builders](docs/migrations/1129-fact-presentation-builders.md)
+- [1130-conversation-block-render](docs/migrations/1130-conversation-block-render.md)
 
-_Surface since `v0.35.0`: **additive** — 2 packages moved; 22 members added, 0 members changed, 0 members removed; 1 package new._
+_Surface since `v0.35.0`: **additive** — 4 packages moved; 57 members added, 0 members changed, 0 members removed; 1 package new._
 
 ### Added
 
+- `ToolUp.AI.Client` — 33 members:
+  - `ToolUp.AI.Client.AIClientConfig.registerBlockSeriesResolver(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactSeriesQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSeries, System.String]]]) : System.Void`
+  - `ToolUp.AI.Client.BlockRender (class)`
+  - `ToolUp.AI.Client.BlockRender+BlockDrift (class)`
+  - `ToolUp.AI.Client.BlockRender+BlockDrift..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])`
+  - `ToolUp.AI.Client.BlockRender+BlockDrift.Introduced : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }`
+  - `ToolUp.AI.Client.BlockRender+BlockDrift.Superseded : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }`
+  - `ToolUp.AI.Client.BlockRender+BlockOutcome (class)`
+  - `ToolUp.AI.Client.BlockRender+BlockOutcome+Drawn (class)`
+  - `ToolUp.AI.Client.BlockRender+BlockOutcome+Drawn.block : ToolUp.Facts.Presentation.PresentationBlock`1[Microsoft.FSharp.Core.Unit] { get }`
+  - `ToolUp.AI.Client.BlockRender+BlockOutcome+Drawn.drift : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.Client.BlockRender+BlockDrift] { get }`
+  - `ToolUp.AI.Client.BlockRender+BlockOutcome+Refused (class)`
+  - `ToolUp.AI.Client.BlockRender+BlockOutcome+Refused.reason : System.String { get }`
+  - `ToolUp.AI.Client.BlockRender+BlockOutcome+Tags (class)`
+  - `ToolUp.AI.Client.BlockRender+BlockOutcome+Tags.Drawn : System.Int32 (literal)`
+  - `ToolUp.AI.Client.BlockRender+BlockOutcome+Tags.NoReader : System.Int32 (literal)`
+  - `ToolUp.AI.Client.BlockRender+BlockOutcome+Tags.Refused : System.Int32 (literal)`
+  - `ToolUp.AI.Client.BlockRender+BlockOutcome.IsDrawn : System.Boolean { get }`
+  - `ToolUp.AI.Client.BlockRender+BlockOutcome.IsNoReader : System.Boolean { get }`
+  - `ToolUp.AI.Client.BlockRender+BlockOutcome.IsRefused : System.Boolean { get }`
+  - `ToolUp.AI.Client.BlockRender+BlockOutcome.NoReader : ToolUp.AI.Client.BlockRender+BlockOutcome { get }`
+  - … and 13 more — `git diff v0.35.0 -- api-baselines/ToolUp.AI.Client.approved.txt`
 - `ToolUp.AI.Wire` — 22 members:
   - `ToolUp.Platform.AI.AIContentPart+BlockPart (class)`
   - `ToolUp.Platform.AI.AIContentPart+BlockPart.node : System.String { get }`
@@ -46,6 +69,9 @@ _Surface since `v0.35.0`: **additive** — 2 packages moved; 22 members added, 0
   - `ToolUp.Platform.AI.BlockWithheld (class)`
   - `ToolUp.Platform.AI.BlockWithheld..ctor(System.String, System.Int32)`
   - … and 2 more — `git diff v0.35.0 -- api-baselines/ToolUp.AI.Wire.approved.txt`
+- `ToolUp.Facts.Client` — 2 members:
+  - `ToolUp.Facts.Client.BlockSeriesResolver (class)`
+  - `ToolUp.Facts.Client.BlockSeriesResolver.resolve(ToolUp.Facts.FactSeriesQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSeries, System.String]]`
 - `ToolUp.Facts.Presentation` — new package (123 public members)
 
 ## [0.35.0] — 2026-10-28
