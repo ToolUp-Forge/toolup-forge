@@ -118,7 +118,9 @@ type ConversationMessage = {
     /// preserves multipart shape so a replayed turn matches what the
     /// model originally received. The export renderer routes through
     /// `AIContentPart.exportPlaceholder` so embedded image bytes never
-    /// reach paste-able markdown.
+    /// reach paste-able markdown. Phase 1128: a `BlockPart` (a Fuaran-UI
+    /// node with the request and read that produced it) persists and
+    /// replays here unchanged, and reaches a provider as its text summary.
     Parts: AIContentPart list
     /// Phase 6j.D — recorded on the first server-persisted message of a
     /// conversation; the conversation's owner. The beacon handler and

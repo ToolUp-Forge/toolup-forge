@@ -13,7 +13,40 @@ same name in one release is reported once, as a signature change. Under this rep
 policy a `breaking` release is a MINOR bump and an `additive` one a PATCH; from 1.0.0 the ordinary table
 applies. Where a release ships a migration note under `docs/migrations/`, it is linked from the section.
 
-## [0.35.0] — unreleased
+## [0.36.0] — unreleased
+
+Migration notes:
+
+- [1128-conversation-block-part](docs/migrations/1128-conversation-block-part.md)
+
+_Surface since `v0.35.0`: **additive** — 1 package moved; 22 members added, 0 members changed, 0 members removed._
+
+### Added
+
+- `ToolUp.AI.Wire` — 22 members:
+  - `ToolUp.Platform.AI.AIContentPart+BlockPart (class)`
+  - `ToolUp.Platform.AI.AIContentPart+BlockPart.node : System.String { get }`
+  - `ToolUp.Platform.AI.AIContentPart+BlockPart.provenance : ToolUp.Platform.AI.BlockProvenance { get }`
+  - `ToolUp.Platform.AI.AIContentPart+Tags.BlockPart : System.Int32 (literal)`
+  - `ToolUp.Platform.AI.AIContentPart.IsBlockPart : System.Boolean { get }`
+  - `ToolUp.Platform.AI.BlockProvenance (class)`
+  - `ToolUp.Platform.AI.BlockProvenance..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.BlockWithheld], System.String, System.String, System.String)`
+  - `ToolUp.Platform.AI.BlockProvenance.FactIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }`
+  - `ToolUp.Platform.AI.BlockProvenance.Kind : System.String { get }`
+  - `ToolUp.Platform.AI.BlockProvenance.Metric : System.String { get }`
+  - `ToolUp.Platform.AI.BlockProvenance.Period : System.String { get }`
+  - `ToolUp.Platform.AI.BlockProvenance.Request : System.String { get }`
+  - `ToolUp.Platform.AI.BlockProvenance.TableId : System.String { get }`
+  - `ToolUp.Platform.AI.BlockProvenance.Withheld : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.BlockWithheld] { get }`
+  - `ToolUp.Platform.AI.BlockProvenanceModule (class)`
+  - `ToolUp.Platform.AI.BlockProvenanceModule.TableKind : System.String (literal)`
+  - `ToolUp.Platform.AI.BlockProvenanceModule.isTable(ToolUp.Platform.AI.BlockProvenance) : System.Boolean`
+  - `ToolUp.Platform.AI.BlockProvenanceModule.withheldTotal(ToolUp.Platform.AI.BlockProvenance) : System.Int32`
+  - `ToolUp.Platform.AI.BlockWithheld (class)`
+  - `ToolUp.Platform.AI.BlockWithheld..ctor(System.String, System.Int32)`
+  - … and 2 more — `git diff v0.35.0 -- api-baselines/ToolUp.AI.Wire.approved.txt`
+
+## [0.35.0] — 2026-10-28
 
 Migration notes:
 
@@ -56,7 +89,7 @@ _Surface since `v0.34.1`: **breaking** — 3 packages moved; 109 members added, 
   - `ToolUp.Facts.SubjectBranch.Hierarchy : System.String { get }`
   - `ToolUp.Facts.SubjectBranch.Level : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }`
   - `ToolUp.Facts.SubjectBranch.PathPrefix : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Collections.FSharpList`1[System.String]] { get }`
-  - … and 3 more — `git diff v0.34.1 -- api-baselines/ToolUp.Facts.Server.approved.txt`
+  - … and 3 more — `git diff v0.34.1 v0.35.0 -- api-baselines/ToolUp.Facts.Server.approved.txt`
 - `ToolUp.Facts.Shared` — 79 members:
   - `ToolUp.Facts.FactBrowseApi.AllPeriodsFrom : System.DateTime { get }`
   - `ToolUp.Facts.FactBrowseApi.AllPeriodsTo : System.DateTime { get }`
@@ -78,7 +111,7 @@ _Surface since `v0.34.1`: **breaking** — 3 packages moved; 109 members added, 
   - `ToolUp.Facts.FactBrowseSlice.coversRows(ToolUp.Facts.FactSlice, ToolUp.Facts.FactRowQuery) : System.Boolean`
   - `ToolUp.Facts.FactBrowseSlice.coversSeries(ToolUp.Facts.FactSlice, ToolUp.Facts.FactSeriesQuery) : System.Boolean`
   - `ToolUp.Facts.FactBrowseSlice.decode(ToolUp.Facts.FactSlice) : Microsoft.FSharp.Core.FSharpResult`2[Fuaran.Core.Table, System.String]`
-  - … and 59 more — `git diff v0.34.1 -- api-baselines/ToolUp.Facts.Shared.approved.txt`
+  - … and 59 more — `git diff v0.34.1 v0.35.0 -- api-baselines/ToolUp.Facts.Shared.approved.txt`
 
 ### Changed
 

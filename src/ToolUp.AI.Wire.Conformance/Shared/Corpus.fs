@@ -57,9 +57,28 @@ let private claudeRequests =
     ClaudeWireFixtures.requestFixtures
     |> List.map (fun (name, build, golden) -> "claude/" + name, build (), golden)
 
+/// Phase 1128 — every provider's request body for a history whose
+/// assistant turn holds block parts (`BlockPartFixtures.providerHistory`).
+/// A block reaches the model as its `redactedSummary` text block; the node
+/// is in no golden, and `ConformanceSuite` also asserts its marker absent
+/// from every built body.
+let blockRequestFixtures: (string * string * string) list = [
+    "openai/block-part",
+    OpenAIProviderWire.buildRequestBody "gpt-4o" BlockPartFixtures.providerHistory [] None false None,
+    """{"model":"gpt-4o","messages":[{"role":"user","content":"Show me revenue by site."},{"role":"assistant","content":[{"type":"text","text":"Revenue by site for the last delivery."},{"type":"text","text":"[block: table, table=daily-trade, metric=revenue, period=2026-10-26, facts=3, withheld=2]"},{"type":"text","text":"[block: trend, table=daily-trade, metric=revenue, period=2026-09-29..2026-10-26, facts=2, withheld=0]"}]}]}"""
+
+    "gemini/block-part",
+    GeminiAIProviderWire.buildRequestBody BlockPartFixtures.providerHistory [] None None,
+    """{"contents":[{"role":"user","parts":[{"text":"Show me revenue by site."}]},{"role":"model","parts":[{"text":"Revenue by site for the last delivery."},{"text":"[block: table, table=daily-trade, metric=revenue, period=2026-10-26, facts=3, withheld=2]"},{"text":"[block: trend, table=daily-trade, metric=revenue, period=2026-09-29..2026-10-26, facts=2, withheld=0]"}]}]}"""
+
+    "claude/block-part",
+    ClaudeAIProviderWire.buildRequestBody "claude-sonnet-4-5" 1024 BlockPartFixtures.providerHistory [] None false None,
+    """{"model":"claude-sonnet-4-5","max_tokens":1024,"messages":[{"role":"user","content":[{"type":"text","text":"Show me revenue by site.","cache_control":{"type":"ephemeral"}}]},{"role":"assistant","content":[{"type":"text","text":"Revenue by site for the last delivery."},{"type":"text","text":"[block: table, table=daily-trade, metric=revenue, period=2026-10-26, facts=3, withheld=2]"},{"type":"text","text":"[block: trend, table=daily-trade, metric=revenue, period=2026-09-29..2026-10-26, facts=2, withheld=0]"}]}]}"""
+]
+
 /// The full cross-provider request corpus, `(name, builtBytes, golden)`.
 let requestFixtures: (string * string * string) list =
-    openAIRequests @ geminiRequests @ claudeRequests
+    openAIRequests @ geminiRequests @ claudeRequests @ blockRequestFixtures
 
 // ─── Response structural-parity corpus ───────────────────────────────
 

@@ -71,13 +71,75 @@ type ImagePayload = {
     Source: ImageSource
 }
 
+// ─── Block parts (Phase 1128) ────────────────────────────────────
+//
+// A block is a chart or table the conversation SHOWS rather than quotes:
+// a Fuaran-UI node, carried as its canonical wire JSON in a string so this
+// tier names no Fuaran type and keeps its Fable and conformance footprint.
+// What makes a block trustworthy is how it was produced — the presentation
+// request a model wrote (never a row) and the read that answered it under
+// the disclosure gate — so the part carries that record beside the node. A
+// renderer re-runs the request under the reader's own gate; the provenance
+// is what the export and the audit summary describe, and the node never
+// reaches a provider (see `AIContentPart.redactedSummary`).
+
+/// Points a block's read withheld, counted by the disclosure policy that
+/// withheld them.
+type BlockWithheld = {
+    /// The disclosure policy that withheld the points.
+    PolicyRef: string
+    /// How many points it withheld.
+    Count: int
+}
+
+/// The request and the read that produced a block part.
+type BlockProvenance = {
+    /// The presentation request's kind, as the request vocabulary names
+    /// it (`"table"`, `"trend"`, …). A table-kind block
+    /// (`BlockProvenance.TableKind`) exports as a markdown table of this
+    /// record; any other kind exports as a placeholder naming its request.
+    Kind: string
+    /// The presentation request, as JSON — the whole of what a model
+    /// authored for this block.
+    Request: string
+    /// The fact ids the read answered with, in the order it returned them.
+    FactIds: string list
+    /// Points the read withheld, by disclosure policy. A withheld point is
+    /// counted here and is never drawn in the node.
+    Withheld: BlockWithheld list
+    /// The fact table the read named.
+    TableId: string
+    /// The metric the read named.
+    Metric: string
+    /// The period the read covered, in its canonical rendering.
+    Period: string
+}
+
+/// Reading a `BlockProvenance`.
+module BlockProvenance =
+    /// The `Kind` of a table block.
+    [<Literal>]
+    let TableKind = "table"
+
+    /// True when the block is a table (the kind compared without case).
+    let isTable (provenance: BlockProvenance) : bool =
+        provenance.Kind.ToLowerInvariant() = TableKind
+
+    /// The number of points withheld, across every policy.
+    let withheldTotal (provenance: BlockProvenance) : int =
+        provenance.Withheld |> List.sumBy (fun w -> w.Count)
+
 /// A single chunk of a multipart message. Providers iterate the
 /// list and emit one wire block per part in the vendor's native
 /// content-block shape (Anthropic `content: [...]`, OpenAI
-/// `content: [{type: "image_url", ...}]`).
+/// `content: [{type: "image_url", ...}]`). A `BlockPart` reaches a
+/// provider as a text block carrying its `redactedSummary`, never its node.
 type AIContentPart =
     | TextPart of string
     | ImagePart of ImagePayload
+    /// Phase 1128 — a Fuaran-UI node as canonical wire JSON, with the
+    /// request and the read that produced it.
+    | BlockPart of node: string * provenance: BlockProvenance
 
 module AIContentPart =
     /// PII / payload-size-safe summary suitable for audit logs +
@@ -95,15 +157,55 @@ module AIContentPart =
             match payload.Source with
             | Base64Bytes bytes -> sprintf "[image: %d bytes, type=%s]" bytes.Length payload.MediaType
             | Url u -> sprintf "[image: url, type=%s, host=%s]" payload.MediaType (System.Uri(u).Host)
+        | BlockPart(_, p) ->
+            // The node never enters a summary: this is the block's text
+            // stand-in wherever the node must not go — audit, latency
+            // events, and every provider request body.
+            sprintf
+                "[block: %s, table=%s, metric=%s, period=%s, facts=%d, withheld=%d]"
+                p.Kind
+                p.TableId
+                p.Metric
+                p.Period
+                p.FactIds.Length
+                (BlockProvenance.withheldTotal p)
+
+    /// A markdown table cell: pipes escaped, line breaks flattened.
+    let private cell (s: string) =
+        s.Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ")
+
+    /// An inline code span that survives a backtick in its content.
+    let private codeSpan (s: string) =
+        if s.Contains "`" then "`` " + s + " ``" else "`" + s + "`"
 
     /// Markdown placeholder for the conversation export. Exports
     /// must be paste-able into Slack / email / issue trackers, so
     /// embedded multi-MB base64 strings are unsafe / unkind /
-    /// unhelpful.
+    /// unhelpful. A table-kind block renders as a markdown table of
+    /// its provenance — what the read named and the facts it cited,
+    /// never rows the part does not hold — and any other block as a
+    /// placeholder naming its request.
     let exportPlaceholder (index: int) (part: AIContentPart) : string =
         match part with
         | TextPart s -> s
         | ImagePart _ -> sprintf "![image #%d]" index
+        | BlockPart(_, p) when BlockProvenance.isTable p ->
+            [
+                sprintf "**Block #%d: %s**" index (cell p.Kind)
+                ""
+                "| Provenance | Value |"
+                "|---|---|"
+                sprintf "| Table | %s |" (cell p.TableId)
+                sprintf "| Metric | %s |" (cell p.Metric)
+                sprintf "| Period | %s |" (cell p.Period)
+                sprintf "| Facts | %d |" p.FactIds.Length
+                for factId in p.FactIds do
+                    sprintf "| Fact | %s |" (cell factId)
+                for w in p.Withheld do
+                    sprintf "| Withheld under %s | %d |" (cell w.PolicyRef) w.Count
+            ]
+            |> String.concat "\n"
+        | BlockPart(_, p) -> sprintf "[block #%d: %s, request %s]" index p.Kind (codeSpan p.Request)
 
 /// A single message in the AI provider's conversation format. The
 /// optional multimodal payload travels in `Parts`; the `Content`
@@ -135,13 +237,15 @@ module AIProviderMessage =
 
     /// Construct a multipart message. The `Content` field is set
     /// to the concatenated text parts so audit / latency events
-    /// have a fallback when image bytes are redacted.
+    /// have a fallback when image bytes are redacted; a block part
+    /// contributes its `redactedSummary`, never its node.
     let multipart (role: string) (parts: AIContentPart list) : AIProviderMessage =
         let textConcat =
             parts
             |> List.choose (function
                 | TextPart s -> Some s
-                | ImagePart _ -> None)
+                | ImagePart _ -> None
+                | BlockPart _ as block -> Some(AIContentPart.redactedSummary block))
             |> String.concat " "
 
         {
@@ -157,7 +261,8 @@ module AIProviderMessage =
         msg.Parts
         |> List.exists (function
             | ImagePart _ -> true
-            | TextPart _ -> false)
+            | TextPart _
+            | BlockPart _ -> false)
 
     /// Redacted summary suitable for `IAuditLog` / latency events.
     /// Image bytes never enter the returned string — only metadata.

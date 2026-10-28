@@ -228,7 +228,10 @@ let private buildMultipartParts (parts: AIContentPart list) : JsonValue list =
                         "data", jstr (System.Convert.ToBase64String bytes)
                     ]
                 ]
-            | Url u -> jobj [ "fileData", jobj [ "mimeType", jstr payload.MediaType; "fileUri", jstr u ] ])
+            | Url u -> jobj [ "fileData", jobj [ "mimeType", jstr payload.MediaType; "fileUri", jstr u ] ]
+        // Phase 1128 — a block reaches the model as its text summary; the
+        // node never enters a request body.
+        | BlockPart _ -> jobj [ "text", jstr (AIContentPart.redactedSummary part) ])
 
 /// Parse a JSON-string payload (a tool's input schema, a stored
 /// tool-call argument blob, or a tool-result body) into a

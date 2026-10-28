@@ -223,7 +223,10 @@ let private buildMultipartContent (parts: AIContentPart list) (markForCache: boo
         |> List.map (fun part ->
             match part with
             | TextPart s -> jobj [ "type", jstr "text"; "text", jstr s ]
-            | ImagePart payload -> imageBlock payload)
+            | ImagePart payload -> imageBlock payload
+            // Phase 1128 — a block reaches the model as its text summary;
+            // the node never enters a request body.
+            | BlockPart _ -> jobj [ "type", jstr "text"; "text", jstr (AIContentPart.redactedSummary part) ])
 
     let blocks =
         if markForCache && not blocks.IsEmpty then

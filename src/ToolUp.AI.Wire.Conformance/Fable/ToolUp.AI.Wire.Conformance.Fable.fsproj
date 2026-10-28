@@ -55,6 +55,8 @@
              keeps the transpiled .js under output/ — an immediate-parent
              ..\*.fs reference rebases the .js above output/ into the tracked
              tree (a stray-artifact trap). -->
+        <!-- Phase 1128 — the block-part fixture family, as the .NET host. -->
+        <Compile Include="..\Shared\BlockPartFixtures.fs" />
         <Compile Include="..\Shared\Corpus.fs" />
         <Compile Include="..\Shared\ConformanceSuite.fs" />
         <Compile Include="ProgramFable.fs" />

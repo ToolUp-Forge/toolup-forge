@@ -1136,6 +1136,10 @@
         <!-- Phase 69c.tail B - conversation replay over the typed streaming
              shape: the stream terminates on every exit path, and the streamed
              report agrees with what replay returns. -->
+        <!-- Phase 1128 - the block-part fixture family, source-linked from the
+             wire conformance pack: this pack holds the server's conversation-blob
+             writer to its pinned literal (the browser pack holds the reader). -->
+        <Compile Include="..\ToolUp.AI.Wire.Conformance\Shared\BlockPartFixtures.fs" Link="AI\BlockPartFixtures.fs" />
         <Compile Include="AI\ConversationReplayStreamTests.fs" />
         <!-- Phase 69c.tail D - KB ingestion status over the IndexStorage
              change feed: transitions reach the subscriber, the declined

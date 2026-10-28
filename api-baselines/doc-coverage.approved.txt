@@ -18,7 +18,7 @@ ToolUp.AI.Server 714/1143
 ToolUp.AI.UiAwareness.Client 6/8
 ToolUp.AI.UiAwareness.Core 6/7
 ToolUp.AI.UiAwareness.Server 6/9
-ToolUp.AI.Wire 95/230
+ToolUp.AI.Wire 111/252
 ToolUp.AICookbooks.AgChart 9/9
 ToolUp.AICookbooks.AgGridEnterprise 7/7
 ToolUp.AIProviders.Claude 19/25

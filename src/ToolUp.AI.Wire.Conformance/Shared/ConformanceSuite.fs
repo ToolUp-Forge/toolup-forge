@@ -33,6 +33,56 @@ let suite =
                 testCase name (fun () -> Expect.equal actual golden "request body bytes")
         ]
 
+        // ── 1b. Block parts (Phase 1128) — the node never leaves as a payload ──
+        //
+        // A block's text stand-ins render identically on both hosts, and no
+        // provider request body built from a history holding blocks carries
+        // the node (its marker is absent; its summary is present).
+        testList "block parts" [
+            testCase "the audit summary names the table, metric and fact count, never the node" (fun () ->
+                Expect.equal
+                    (AIContentPart.redactedSummary BlockPartFixtures.tableBlock)
+                    BlockPartFixtures.tableSummary
+                    "table block summary"
+
+                Expect.equal
+                    (AIContentPart.redactedSummary BlockPartFixtures.trendBlock)
+                    BlockPartFixtures.trendSummary
+                    "trend block summary")
+
+            testCase "a table block exports as a markdown table of its provenance" (fun () ->
+                Expect.equal
+                    (AIContentPart.exportPlaceholder 2 BlockPartFixtures.tableBlock)
+                    BlockPartFixtures.tableExport
+                    "table export")
+
+            testCase "any other block exports as a placeholder naming its request" (fun () ->
+                Expect.equal
+                    (AIContentPart.exportPlaceholder 3 BlockPartFixtures.trendBlock)
+                    BlockPartFixtures.trendExport
+                    "trend export")
+
+            testCase "a multipart message's text fallback carries the summaries, not the nodes" (fun () ->
+                let assistant = List.last BlockPartFixtures.providerHistory
+
+                Expect.equal
+                    assistant.Content
+                    (String.concat " " [
+                        BlockPartFixtures.Prose
+                        BlockPartFixtures.tableSummary
+                        BlockPartFixtures.trendSummary
+                    ])
+                    "Content"
+
+                Expect.isTrue (not (AIProviderMessage.isMultimodal assistant)) "a block is not an image")
+
+            for name, body, _ in Corpus.blockRequestFixtures do
+                testCase (name + " carries the summaries and no node payload") (fun () ->
+                    Expect.isTrue (not (body.Contains BlockPartFixtures.NodeMarker)) "the node marker is absent"
+                    Expect.isTrue (body.Contains "[block: table, table=daily-trade") "the table summary is present"
+                    Expect.isTrue (body.Contains "[block: trend, table=daily-trade") "the trend summary is present")
+        ]
+
         // ── 2. Response structural-parity — OpenAI ──
         testList "response parity — openai" [
             for name, parsed, expected in Corpus.openAIResponseFixtures do

@@ -211,6 +211,12 @@
              literal to the sample value. -->
         <Compile Include="..\ToolUp.Platform.Tests\Remoting\ProcessedDataEnvelopeFixture.fs" />
         <Compile Include="ProcessedDataEnvelopeTests.fs" />
+        <!-- Phase 1128 - the block part: the fixture is the wire conformance pack's
+             shared file, which the .NET Platform pack also compiles (holding the
+             server's writer to its pinned literal); this pack holds the transpiled
+             reflection decoder to the same values. -->
+        <Compile Include="..\ToolUp.AI.Wire.Conformance\Shared\BlockPartFixtures.fs" Link="Remoting\BlockPartFixtures.fs" />
+        <Compile Include="ConversationBlockPartDecodeTests.fs" />
         <!-- Phase 843 - the client's JSON response decode through the algebra: the
              fixture is the same file the .NET pack compiles (it holds the writer and
              System.Text.Json to the pinned text and model); this pack holds JsonText

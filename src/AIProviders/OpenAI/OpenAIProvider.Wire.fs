@@ -176,7 +176,10 @@ let private buildMultipartContent (parts: AIContentPart list) : JsonValue =
                     sprintf "data:%s;base64,%s" payload.MediaType encoded
                 | Url u -> u
 
-            jobj [ "type", jstr "image_url"; "image_url", jobj [ "url", jstr url ] ])
+            jobj [ "type", jstr "image_url"; "image_url", jobj [ "url", jstr url ] ]
+        // Phase 1128 — a block reaches the model as its text summary; the
+        // node never enters a request body.
+        | BlockPart _ -> jobj [ "type", jstr "text"; "text", jstr (AIContentPart.redactedSummary part) ])
     |> jarr
 
 /// Convert a neutral `AIProviderMessage` into OpenAI's chat-completions

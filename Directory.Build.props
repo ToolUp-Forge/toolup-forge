@@ -809,7 +809,18 @@
       `Fuaran.Core.Column` and `Fuaran.Compute.DataFrame`. Migration recipe:
       `docs/migrations/1127-fact-browse-view-slice.md`.
     -->
-    <Version>0.35.0</Version>
+    <!--
+      Next draft 0.36.0 (v0.35.0 is tagged), breaking: Phase 1128 -
+      `AIContentPart` gains a `BlockPart` case (a Fuaran-UI node as wire
+      JSON, with its `BlockProvenance`: the presentation request and the
+      read that produced it), so every exhaustive match over the closed
+      union adds one arm. The rest is additive (`BlockProvenance`,
+      `BlockWithheld`, the `BlockProvenance` module). A block persists and
+      replays with its message, and reaches a provider as its text summary,
+      never its node. Migration recipe:
+      `docs/migrations/1128-conversation-block-part.md`.
+    -->
+    <Version>0.36.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
       DLL. Non-publishable projects (App composition roots, modules,

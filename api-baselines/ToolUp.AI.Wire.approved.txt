@@ -65,12 +65,17 @@ ToolUp.AI.Wire.JsonValueModule.asString(ToolUp.AI.Wire.JsonValue) : Microsoft.FS
 ToolUp.AI.Wire.JsonValueModule.tryField(System.String, ToolUp.AI.Wire.JsonValue) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.Wire.JsonValue]
 ToolUp.AI.Wire.JsonValueModule.tryItem(System.Int32, ToolUp.AI.Wire.JsonValue) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.Wire.JsonValue]
 ToolUp.Platform.AI.AIContentPart (class)
+ToolUp.Platform.AI.AIContentPart.IsBlockPart : System.Boolean { get }
 ToolUp.Platform.AI.AIContentPart.IsImagePart : System.Boolean { get }
 ToolUp.Platform.AI.AIContentPart.IsTextPart : System.Boolean { get }
 ToolUp.Platform.AI.AIContentPart.Tag : System.Int32 { get }
+ToolUp.Platform.AI.AIContentPart+BlockPart (class)
+ToolUp.Platform.AI.AIContentPart+BlockPart.node : System.String { get }
+ToolUp.Platform.AI.AIContentPart+BlockPart.provenance : ToolUp.Platform.AI.BlockProvenance { get }
 ToolUp.Platform.AI.AIContentPart+ImagePart (class)
 ToolUp.Platform.AI.AIContentPart+ImagePart.Item : ToolUp.Platform.AI.ImagePayload { get }
 ToolUp.Platform.AI.AIContentPart+Tags (class)
+ToolUp.Platform.AI.AIContentPart+Tags.BlockPart : System.Int32 (literal)
 ToolUp.Platform.AI.AIContentPart+Tags.ImagePart : System.Int32 (literal)
 ToolUp.Platform.AI.AIContentPart+Tags.TextPart : System.Int32 (literal)
 ToolUp.Platform.AI.AIContentPart+TextPart (class)
@@ -180,6 +185,23 @@ ToolUp.Platform.AI.AIProviderToolResult (class)
 ToolUp.Platform.AI.AIProviderToolResult..ctor(System.String, System.String)
 ToolUp.Platform.AI.AIProviderToolResult.Content : System.String { get }
 ToolUp.Platform.AI.AIProviderToolResult.ToolCallId : System.String { get }
+ToolUp.Platform.AI.BlockProvenance (class)
+ToolUp.Platform.AI.BlockProvenance..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.BlockWithheld], System.String, System.String, System.String)
+ToolUp.Platform.AI.BlockProvenance.FactIds : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Platform.AI.BlockProvenance.Kind : System.String { get }
+ToolUp.Platform.AI.BlockProvenance.Metric : System.String { get }
+ToolUp.Platform.AI.BlockProvenance.Period : System.String { get }
+ToolUp.Platform.AI.BlockProvenance.Request : System.String { get }
+ToolUp.Platform.AI.BlockProvenance.TableId : System.String { get }
+ToolUp.Platform.AI.BlockProvenance.Withheld : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.BlockWithheld] { get }
+ToolUp.Platform.AI.BlockProvenanceModule (class)
+ToolUp.Platform.AI.BlockProvenanceModule.TableKind : System.String (literal)
+ToolUp.Platform.AI.BlockProvenanceModule.isTable(ToolUp.Platform.AI.BlockProvenance) : System.Boolean
+ToolUp.Platform.AI.BlockProvenanceModule.withheldTotal(ToolUp.Platform.AI.BlockProvenance) : System.Int32
+ToolUp.Platform.AI.BlockWithheld (class)
+ToolUp.Platform.AI.BlockWithheld..ctor(System.String, System.Int32)
+ToolUp.Platform.AI.BlockWithheld.Count : System.Int32 { get }
+ToolUp.Platform.AI.BlockWithheld.PolicyRef : System.String { get }
 ToolUp.Platform.AI.ErrorClassifier (class)
 ToolUp.Platform.AI.ErrorClassifier.classifyStatus(System.Int32, System.String) : ToolUp.Platform.AI.AIProviderError
 ToolUp.Platform.AI.ErrorClassifier.classifyTransportFailure(System.String) : ToolUp.Platform.AI.AIProviderError

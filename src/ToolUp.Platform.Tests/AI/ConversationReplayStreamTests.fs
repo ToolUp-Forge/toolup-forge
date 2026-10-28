@@ -3,10 +3,18 @@ module ToolUp.Platform.Tests.AI.ConversationReplayStreamTests
 open System
 open System.Collections.Generic
 open System.Threading
+open System.Text
+open System.Text.Json
+open Microsoft.AspNetCore.Http
+open Microsoft.Extensions.DependencyInjection
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.AI
+open ToolUp.Platform.BlobStorage
+open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.AI
+open ToolUp.AI.Wire.Conformance
+open ToolUp.Platform.Tests.Contracts.InMemoryBlobStorage
 
 // ─── Phase 69c.tail B — conversation replay as a typed stream ────
 //
@@ -95,20 +103,20 @@ let private emptyFactory =
 
 // ─── The original conversation ───────────────────────────────────
 
-let private content (role: string) (text: string) : AIMessageContent = {
+let private content (parts: AIContentPart list) (role: string) (text: string) : AIMessageContent = {
     Role = role
     Content = text
     ToolCalls = []
     ToolResults = []
-    Parts = []
+    Parts = parts
 }
 
-let private turn (conversationId: string) (role: string) (text: string) : ConversationTurn = {
+let private turn (parts: AIContentPart list) (conversationId: string) (role: string) (text: string) : ConversationTurn = {
     TurnId = ""
     ConversationId = conversationId
     SchemaVersion = 1
     Role = role
-    Content = content role text
+    Content = content parts role text
     Timestamp = DateTime.UtcNow
     TokensIn = Some 5
     TokensOut = Some 5
@@ -116,8 +124,8 @@ let private turn (conversationId: string) (role: string) (text: string) : Conver
 }
 
 /// An in-memory store holding one conversation with `userTurns` user
-/// turns, each already answered.
-let private seededStore (userTurns: int) =
+/// turns, each already answered, every user turn carrying `userParts`.
+let private seededStoreWith (userParts: AIContentPart list) (userTurns: int) =
     let store = ConversationStore.InMemoryConversationStore() :> IConversationStore
     let writer = store :> IConversationWriter
     let conversationId = Guid.NewGuid().ToString("N")
@@ -142,13 +150,106 @@ let private seededStore (userTurns: int) =
 
     for i in 0 .. userTurns - 1 do
         for role in [ "user"; "assistant" ] do
-            writer.AppendTurn(scopeId, conversationId, turn conversationId role (sprintf "%s-%d" role i))
+            let parts = if role = "user" then userParts else []
+
+            writer.AppendTurn(scopeId, conversationId, turn parts conversationId role (sprintf "%s-%d" role i))
             |> Async.RunSynchronously
             |> function
                 | Ok() -> ()
                 | Error e -> failwithf "seed turn failed: %A" e
 
     store, conversationId
+
+/// An in-memory store holding one conversation with `userTurns` plain-text
+/// user turns, each already answered.
+let private seededStore (userTurns: int) = seededStoreWith [] userTurns
+
+// ─── Phase 1128 — the conversation blob, through the real read path ──
+//
+// The blob is the one the assistant handler writes
+// (`ai-conversations/{id}.json`, System.Text.Json with the remoting
+// converters) and `GetConversation` is the read the panel makes, so a
+// message holding block parts is asserted to survive the persisted format
+// and the read path the browser actually calls.
+
+let private blobOptions = FableConverters.create ()
+
+let private blobContainer = "replay-blocks"
+
+let private blobMessage (conversationId: Guid) (participant: ParticipantType) (text: string) parts =
+    {
+        Id = Guid.Parse "6f9619ff-8b86-d011-b42d-00c04fc964ff"
+        ConversationId = conversationId
+        Participant = participant
+        Content = text
+        Timestamp = DateTime(2026, 10, 26, 9, 30, 0, DateTimeKind.Utc)
+        ToolCalls = []
+        RetrievedSources = []
+        Parts = parts
+        CreatedBy = operator
+        BeaconId = ""
+        Verification = None
+    }
+    : ConversationMessage
+
+/// `GetConversation` over `storage`, as `operator` in a personal scope.
+let private getConversation (storage: IBlobStorage) (conversationId: Guid) : ConversationMessage list =
+    let services = ServiceCollection()
+    services.AddSingleton<IBlobStorage>(storage) |> ignore
+    services.AddSingleton<IAIProviderFactory>(factoryOver (provider None)) |> ignore
+
+    services.AddSingleton<AIToolRegistry.AIToolRegistry>(AIToolRegistry.AIToolRegistry())
+    |> ignore
+
+    services.AddSingleton<ClientToolDispatch.ClientToolDispatchRegistry>(
+        ClientToolDispatch.ClientToolDispatchRegistry()
+    )
+    |> ignore
+
+    services.AddSingleton<AICancellationRegistry.AICancellationRegistry>(
+        AICancellationRegistry.AICancellationRegistry()
+    )
+    |> ignore
+
+    services.AddSingleton<AccessContext>(accessContext) |> ignore
+    let ctx = DefaultHttpContext()
+    ctx.RequestServices <- services.BuildServiceProvider()
+
+    ctx.Items["ToolUp.StorageScope"] <-
+        box {
+            ScopeId = operator
+            Container = blobContainer
+            Persist = true
+        }
+
+    ctx.Items["ToolUp.UserId"] <- box operator
+    let manager = new SSEConnectionManager()
+
+    let api, _ =
+        AIAssistantHandler.aiAssistantApi None Map.empty manager (ctx :> HttpContext)
+
+    api.GetConversation conversationId |> Async.RunSynchronously
+
+/// Store `bytes` as conversation `conversationId`'s blob.
+let private uploadConversation (storage: IBlobStorage) (conversationId: Guid) (bytes: byte[]) =
+    storage.Upload(blobContainer, $"ai-conversations/{conversationId}.json", bytes)
+    |> Async.RunSynchronously
+    |> ignore
+
+/// A provider that records every history it is sent.
+let private capturingProvider (sent: ResizeArray<AIProviderMessage list>) =
+    { new IAIProvider with
+        member _.Capabilities = AIProviderCapabilities.unknown
+
+        member _.SendMessage(messages, _tools, _systemPrompt, _onStream, _retryPolicy) = async {
+            sent.Add messages
+            return Ok(response "a reply")
+        }
+
+        member _.SendStructuredMessage(_messages, _tools, _systemPrompt, _schema, _retryPolicy) = async {
+            return Ok(response "structured")
+        }
+    }
 
 // ─── Draining the stream ─────────────────────────────────────────
 
@@ -337,4 +438,109 @@ let tests =
                 Expect.equal r.OriginalConversationId originalId "the result still names the original"
             | other -> failwithf "expected an Ok result beside a completed stream, got %A" other
         }
+
+        testList "Phase 1128 — a block part persists, reloads and replays unchanged" [
+
+            test "the conversation-blob writer writes the pinned literal the browser reads" {
+                let written = JsonSerializer.Serialize(BlockPartFixtures.parts, blobOptions)
+
+                Expect.equal
+                    written
+                    BlockPartFixtures.partsJson
+                    "the server's bytes are the literal the Fable pack decodes"
+
+                let read =
+                    JsonSerializer.Deserialize<AIContentPart list>(BlockPartFixtures.partsJson, blobOptions)
+
+                Expect.equal read BlockPartFixtures.parts "the literal reads back to the same parts"
+            }
+
+            test "a message holding block parts reloads through GetConversation byte-identically" {
+                let storage = InMemoryBlobStorage() :> IBlobStorage
+                let conversationId = Guid.NewGuid()
+
+                let messages = [
+                    blobMessage conversationId User "Show me revenue by site." []
+                    blobMessage conversationId AIAssistant BlockPartFixtures.Prose BlockPartFixtures.parts
+                ]
+
+                let bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(messages, blobOptions))
+                uploadConversation storage conversationId bytes
+
+                let loaded = getConversation storage conversationId
+
+                Expect.equal loaded messages "the reloaded conversation equals what was written, blocks included"
+
+                Expect.equal
+                    (JsonSerializer.Serialize(loaded, blobOptions))
+                    (Encoding.UTF8.GetString bytes)
+                    "and re-serialises to the same bytes"
+            }
+
+            test "a blob written before block parts existed reads as before, with no block" {
+                let storage = InMemoryBlobStorage() :> IBlobStorage
+                let conversationId = Guid.NewGuid()
+
+                // The shape a pre-6o writer left: no `Parts` member at all
+                // (nor the later additive members) — and a pre-1128 multipart
+                // turn whose parts are text only.
+                let legacy =
+                    sprintf
+                        """[{"Id":"6f9619ff-8b86-d011-b42d-00c04fc964ff","ConversationId":"%O","Participant":"User","Content":"hello","Timestamp":"2026-10-26T09:30:00.0000000Z","ToolCalls":[],"RetrievedSources":[]},{"Id":"6f9619ff-8b86-d011-b42d-00c04fc964ff","ConversationId":"%O","Participant":"AIAssistant","Content":"hi","Timestamp":"2026-10-26T09:31:00.0000000Z","ToolCalls":[],"RetrievedSources":[],"Parts":[{"TextPart":"hi"}]}]"""
+                        conversationId
+                        conversationId
+
+                uploadConversation storage conversationId (Encoding.UTF8.GetBytes legacy)
+
+                let loaded = getConversation storage conversationId
+
+                Expect.equal (loaded |> List.map _.Content) [ "hello"; "hi" ] "both turns read"
+
+                Expect.equal
+                    (loaded |> List.map _.Parts)
+                    [ []; [ TextPart "hi" ] ]
+                    "an absent Parts reads as empty and a text-only Parts as written — no block appears"
+            }
+
+            test "the replay carries a user turn's block parts unchanged" {
+                let userParts = [ TextPart "Explain this table."; BlockPartFixtures.tableBlock ]
+                let store, originalId = seededStoreWith userParts 1
+                let sent = ResizeArray<AIProviderMessage list>()
+
+                let events =
+                    ConversationReplay.replayStream
+                        store
+                        (factoryOver (capturingProvider sent))
+                        None
+                        accessContext
+                        scopeId
+                        originalId
+                        ConversationReplayOptions.empty
+                    |> drain
+
+                match List.last events with
+                | ReplayCompleted(replayId, 1, _) ->
+                    match
+                        (store :> IConversationReader).GetConversation(scopeId, replayId)
+                        |> Async.RunSynchronously
+                    with
+                    | Ok(_, turns, _) ->
+                        let userTurn = turns |> List.find (fun t -> t.Role = "user")
+
+                        Expect.equal
+                            userTurn.Content.Parts
+                            userParts
+                            "the replayed user turn holds the original parts, block included"
+                    | Error e -> failwithf "the replay conversation should be readable, got %A" e
+
+                    match List.ofSeq sent with
+                    | [ history ] ->
+                        Expect.equal
+                            (history |> List.map _.Parts)
+                            [ userParts ]
+                            "the provider is handed the turn as recorded; its wire builder sends the summary"
+                    | other -> failwithf "expected exactly one provider call, got %d" other.Length
+                | other -> failwithf "expected a completed one-turn replay, got %A" other
+            }
+        ]
     ]

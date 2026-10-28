@@ -45,6 +45,10 @@
              path that Fable keeps under its `output/` dir. An immediate-parent
              `..\*.fs` reference instead rebases the transpiled .js ABOVE
              output/ into the tracked project dir (a stray-artifact trap). -->
+        <!-- Phase 1128 — the block-part fixture family. ToolUp.Platform.Tests
+             compiles it too (holding the server writer to its pinned literal),
+             as does ToolUp.AI.Client.Tests (holding the browser reader to it). -->
+        <Compile Include="Shared\BlockPartFixtures.fs" />
         <Compile Include="Shared\Corpus.fs" />
         <Compile Include="Shared\ConformanceSuite.fs" />
         <Compile Include="ProgramNet.fs" />
