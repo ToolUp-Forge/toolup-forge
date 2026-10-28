@@ -842,6 +842,7 @@ let private registeredTests =
         IngestionStatusStreamTests.tests
         ToolOutcomeTests.tests
         ConversationRecordTests.tests
+        AgentLoopRailsTests.tests
         InProcessOAuthTokenRefresherTests.tests
         BlobProviderProfileTests.tests
         // Phase 44 — the IProviderProfileApi transport + the reusable

@@ -1148,6 +1148,7 @@
         <Compile Include="AI\IngestionStatusStreamTests.fs" />
         <Compile Include="AI\ToolOutcomeTests.fs" />
         <Compile Include="AI\ConversationRecordTests.fs" />
+        <Compile Include="AI\AgentLoopRailsTests.fs" />
         <Compile Include="InProcess\TeamInvitationTests.fs" />
         <Compile Include="InProcess\InProcessOAuthTokenRefresherTests.fs" />
         <Compile Include="InProcess\SseTraceContributorTests.fs" />
