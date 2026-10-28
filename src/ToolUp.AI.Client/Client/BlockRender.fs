@@ -6,6 +6,7 @@ module ToolUp.AI.Client.BlockRender
 open System
 open Feliz
 open ToolUp.Platform
+open ToolUp.Platform.DataProp
 open ToolUp.Platform.AI
 open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Facts
@@ -207,14 +208,18 @@ let withheldText (w: BlockWithheld) : string =
         (plural w.Count "is" "are")
 
 let private placeholder (text: string) =
-    Html.p [ prop.custom ("data-block-placeholder", ""); prop.role "note"; prop.text text ]
+    Html.p [
+        dataProp.custom "data-block-placeholder" ""
+        prop.role "note"
+        prop.text text
+    ]
 
 let private citations (factIds: string list) =
     let composed = isFactBrowseComposed ()
     let shown = factIds |> List.truncate MaxCitations
 
     Html.div [
-        prop.custom ("data-block-citations", "")
+        dataProp.custom "data-block-citations" ""
         prop.children [
             Html.span [ prop.text "Facts: " ]
             for i, factId in List.indexed shown do
@@ -225,7 +230,7 @@ let private citations (factIds: string list) =
                         prop.type' "button"
                         prop.className "underline mr-1"
                         prop.title factId
-                        prop.custom ("data-fact", factId)
+                        dataProp.custom "data-fact" factId
                         prop.onClick (fun _ -> openFact factId)
                         prop.text label
                     ]
@@ -233,7 +238,7 @@ let private citations (factIds: string list) =
                     Html.span [
                         prop.className "mr-1"
                         prop.title factId
-                        prop.custom ("data-fact", factId)
+                        dataProp.custom "data-fact" factId
                         prop.text label
                     ]
             if factIds.Length > shown.Length then
@@ -245,26 +250,29 @@ let private furniture (block: PresentationBlock<unit>) (blockDrift: BlockDrift o
     let provenance = block.Provenance
 
     Html.div [
-        prop.custom ("data-block-furniture", "")
+        dataProp.custom "data-block-furniture" ""
         prop.className "mt-1 space-y-1"
         prop.children [
             match blockDrift with
             | Some d ->
                 Html.p [
-                    prop.custom ("data-block-drift", "")
+                    dataProp.custom "data-block-drift" ""
                     prop.role "note"
                     prop.text (driftText d)
                 ]
             | None -> ()
             for w in provenance.Withheld do
-                Html.p [ prop.custom ("data-block-withheld", w.PolicyRef); prop.text (withheldText w) ]
+                Html.p [
+                    dataProp.custom "data-block-withheld" w.PolicyRef
+                    prop.text (withheldText w)
+                ]
             if not provenance.FactIds.IsEmpty then
                 citations provenance.FactIds
             if isFactBrowseComposed () then
                 Html.button [
                     prop.type' "button"
                     prop.className "underline"
-                    prop.custom ("data-block-table", provenance.TableId)
+                    dataProp.custom "data-block-table" provenance.TableId
                     prop.title provenance.TableId
                     prop.onClick (fun _ -> openTable provenance.TableId)
                     prop.text "Open the table"
@@ -277,7 +285,7 @@ let private furniture (block: PresentationBlock<unit>) (blockDrift: BlockDrift o
 /// container carries no class or style: the block takes the page's theme.
 let view (provenance: BlockProvenance) (outcome: BlockOutcome) : ReactElement =
     Html.div [
-        prop.custom ("data-block-part", provenance.Kind)
+        dataProp.custom "data-block-part" provenance.Kind
         prop.children [
             match outcome with
             | BlockOutcome.NoReader ->
@@ -285,7 +293,7 @@ let view (provenance: BlockProvenance) (outcome: BlockOutcome) : ReactElement =
             | BlockOutcome.Refused reason -> placeholder reason
             | BlockOutcome.Drawn(block, blockDrift) ->
                 Html.div [
-                    prop.custom ("data-block-node", "")
+                    dataProp.custom "data-block-node" ""
                     prop.children [
                         Fuaran.UI.Renderer.Render.renderWithSources
                             Fuaran.UI.Renderer.BindingResolver.empty
@@ -330,6 +338,6 @@ let Block (provenance: BlockProvenance) =
     | Some o -> view provenance o
     | None ->
         Html.div [
-            prop.custom ("data-block-part", provenance.Kind)
+            dataProp.custom "data-block-part" provenance.Kind
             prop.children [ placeholder "Reading the facts for this block…" ]
         ]
