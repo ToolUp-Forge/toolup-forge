@@ -231,18 +231,25 @@ let private distinguishabilityTests =
         }
 
         test "the marker does not read as a tool invocation error" {
-            // `AIAgentEngine.isErrorToolResult` classifies by the prose
-            // prefixes our own error rendering produces. If the marker
-            // matched one, an elided result would count toward the
-            // two-turn early-stop and could end a conversation the model
-            // can recover from in one turn by narrowing. The predicate is
-            // private, so its shape is mirrored here — the comment on it
-            // says to update both.
+            // The agent loop's rails read the call's `ToolOutcome`, and the
+            // budget applies only to produced content, so an elided result
+            // never counts toward the two-turn early stop. What is left to
+            // pin is what the MODEL reads: a marker that looked like a
+            // fault rendering would read as a failure, not as a request to
+            // narrow the query.
             let payload, _ = applyTo (ResultBudgetChars 100) (payloadOf 5_000)
+
+            Expect.isFalse
+                (ToolUp.AI.ToolOutcome.isError (ToolUp.AI.ToolOutcome.Produced payload))
+                "produced content is not an error"
 
             Expect.isFalse (payload.StartsWith "Unknown tool:") "not the unknown-tool rendering"
             Expect.isFalse (payload.StartsWith "Tool '") "not the failed/invalid-args/denied rendering"
-            Expect.stringStarts payload "{" "it is a JSON document, which no error rendering is"
+            use doc = JsonDocument.Parse payload
+
+            Expect.isFalse
+                (fst (doc.RootElement.TryGetProperty "error"))
+                "no `error` field, which every JSON fault rendering carries"
         }
     ]
 

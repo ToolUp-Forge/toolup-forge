@@ -338,8 +338,8 @@ type AdminMutationWriteOutcome =
 /// wanted to distinguish "parked" from "storage broke" therefore had to
 /// recognise a message minted in another file — and classifying by a prose
 /// prefix matched against a renderer somewhere else is exactly the defect
-/// Phase 36.A recorded against `AIAgentEngine.isErrorToolResult`, whose
-/// comment says "update both" where a shared constant would do. Reworded
+/// the agent loop once had in classifying tool results by their prose,
+/// whose comment said "update both" where a shared value would do. Reworded
 /// either end independently and the recognition silently stops matching,
 /// with no compile error and no failing test that names the cause.
 ///

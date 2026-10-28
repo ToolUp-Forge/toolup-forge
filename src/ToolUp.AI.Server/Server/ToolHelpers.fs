@@ -46,6 +46,18 @@ type ToolExecutor = HttpContext -> string -> Async<string>
 /// call.
 exception ToolArgumentError of message: string
 
+/// Raised by a tool body that has decided its call faulted, carrying the
+/// fault itself. The agent loop records it as `ToolOutcome.Faulted fault`
+/// and the model reads `ToolOutcome.toModel` of it, so an executor whose
+/// signature returns content can still report a fault as a value the
+/// loop's rails see.
+exception ToolFaulted of fault: ToolFault
+
+/// Refuse the call's arguments with the JSON object the model is shown —
+/// `fields` in order, the `error` field first. Never returns.
+let refuseArguments (fields: (string * string) list) : 'T =
+    raise (ToolFaulted(ToolFault.ArgumentsRefused fields))
+
 let private fableJsonOptions = FableConverters.create ()
 
 /// Serialise a value to JSON using the FableConverters set so F#
@@ -70,24 +82,24 @@ let fableDeserialize<'T> (json: string) : 'T =
 let requireString (args: JsonElement) (name: string) (hint: string) : string =
     match args.TryGetProperty(name) with
     | true, v when v.ValueKind = JsonValueKind.String -> v.GetString()
-    | true, v -> failwith $"Argument '{name}' must be a string, got {v.ValueKind}. {hint}"
-    | false, _ -> failwith $"Required argument '{name}' is missing. {hint}"
+    | true, v -> raise (ToolArgumentError $"Argument '{name}' must be a string, got {v.ValueKind}. {hint}")
+    | false, _ -> raise (ToolArgumentError $"Required argument '{name}' is missing. {hint}")
 
 /// Require a decimal-valued argument. Throws with a clear message if
 /// absent or wrong type.
 let requireDecimal (args: JsonElement) (name: string) (hint: string) : decimal =
     match args.TryGetProperty(name) with
     | true, v when v.ValueKind = JsonValueKind.Number -> v.GetDecimal()
-    | true, v -> failwith $"Argument '{name}' must be a number, got {v.ValueKind}. {hint}"
-    | false, _ -> failwith $"Required argument '{name}' is missing. {hint}"
+    | true, v -> raise (ToolArgumentError $"Argument '{name}' must be a number, got {v.ValueKind}. {hint}")
+    | false, _ -> raise (ToolArgumentError $"Required argument '{name}' is missing. {hint}")
 
 /// Require a numeric argument and return as `float`. Same contract as
 /// `requireDecimal` but for callers that work in floating point.
 let requireNumber (args: JsonElement) (name: string) (hint: string) : float =
     match args.TryGetProperty(name) with
     | true, v when v.ValueKind = JsonValueKind.Number -> v.GetDouble()
-    | true, v -> failwith $"Argument '{name}' must be a number, got {v.ValueKind}. {hint}"
-    | false, _ -> failwith $"Required argument '{name}' is missing. {hint}"
+    | true, v -> raise (ToolArgumentError $"Argument '{name}' must be a number, got {v.ValueKind}. {hint}")
+    | false, _ -> raise (ToolArgumentError $"Required argument '{name}' is missing. {hint}")
 
 /// Require an argument of complex shape (array / object) and return
 /// its raw JSON text for downstream type-specific deserialisation.
@@ -96,7 +108,7 @@ let requireNumber (args: JsonElement) (name: string) (hint: string) : float =
 let requireRawJson (args: JsonElement) (name: string) (expectedShape: string) (hint: string) : string =
     match args.TryGetProperty(name) with
     | true, v -> v.GetRawText()
-    | false, _ -> failwith $"Required argument '{name}' is missing (expected {expectedShape}). {hint}"
+    | false, _ -> raise (ToolArgumentError $"Required argument '{name}' is missing (expected {expectedShape}). {hint}")
 
 /// Optional string argument. Returns `None` when the property is absent
 /// or not a JSON string; returns `Some s` with the raw string value
@@ -200,10 +212,10 @@ let wireTools
         match executors |> Map.tryFind def.Name with
         | Some exec -> def, exec
         | None ->
-            failwith
+            invalidOp
                 $"No executor registered for tool '{def.Name}' — add it to the module's `executors` map in Server.fs.")
 
-// ─── Phase 508 — schema-validated argument decoding ──────────────
+// ─── Schema-validated argument decoding ──────────────────────────
 //
 // The helpers above each answer one question about one property, which
 // is why an executor taking a structured argument ends up walking the

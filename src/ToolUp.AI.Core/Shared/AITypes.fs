@@ -39,7 +39,7 @@ type ToolCallRecord = {
     Status: ToolCallStatus
 }
 
-// ─── Numeric-fidelity verification (Phase 523) ───────────────────
+// ─── Numeric-fidelity verification ───────────────────────────────
 //
 // The numeric-fidelity answer gate extracts every numeric token from an
 // assistant answer, canonicalises it under the metric registry's display
@@ -49,7 +49,7 @@ type ToolCallRecord = {
 // unmatched token. Fable-shared because the client renders the verdict as
 // inline badges on both the live reply and history reload.
 
-/// Per-token numeric-fidelity verdict (Phase 523.B).
+/// Per-token numeric-fidelity verdict.
 type NumericVerdict =
     /// The token's canonical value matches a fact in the turn's retrieved
     /// set (any registry-legal rendering of that fact).
@@ -62,7 +62,7 @@ type NumericVerdict =
     | NoFactsInScope
 
 /// One numeric token extracted from an assistant answer together with its
-/// verification verdict (Phase 523).
+/// verification verdict.
 type VerifiedNumber = {
     /// The numeric token exactly as it appeared in the answer text
     /// (e.g. `"£21,800"`, `"-134%"`, `"−1.3"`).
@@ -78,9 +78,9 @@ type VerifiedNumber = {
     MatchedFactId: string option
 }
 
-/// Per-message numeric-fidelity verdict summary (Phase 523.D). Rides the
-/// SSE stream and the persisted `ConversationMessage`. `Off`-mode turns
-/// never produce one (the field stays `None`).
+/// Per-message numeric-fidelity verdict summary. Rides the SSE stream and
+/// the persisted `ConversationMessage`. `Off`-mode turns never produce one
+/// (the field stays `None`).
 type AnswerVerification = {
     /// Count of tokens with a `NumberVerified` verdict.
     Verified: int
@@ -111,28 +111,28 @@ type ConversationMessage = {
     /// can render a Sources panel on history reload as well as on the
     /// initial reply.
     RetrievedSources: RetrievedSource list
-    /// Phase 6o multimodal content parts. Empty for plain-text turns
+    /// Multimodal content parts. Empty for plain-text turns
     /// (`Content` carries the full message body). Populated for
     /// multipart turns: providers iterate `Parts` to emit vendor-native
     /// content-block arrays; the conversation-history round-trip
     /// preserves multipart shape so a replayed turn matches what the
     /// model originally received. The export renderer routes through
     /// `AIContentPart.exportPlaceholder` so embedded image bytes never
-    /// reach paste-able markdown. Phase 1128: a `BlockPart` (a Fuaran-UI
+    /// reach paste-able markdown. A `BlockPart` (a Fuaran-UI
     /// node with the request and read that produced it) persists and
     /// replays here unchanged, and reaches a provider as its text summary.
     Parts: AIContentPart list
-    /// Phase 6j.D — recorded on the first server-persisted message of a
+    /// Recorded on the first server-persisted message of a
     /// conversation; the conversation's owner. The beacon handler and
     /// `SubmitMessage` reject appends from a caller whose `UserId` does
     /// not match the first message's `CreatedBy` (rejection is gated to
-    /// non-empty values for backwards compatibility — pre-6j.D blobs
+    /// non-empty values for backwards compatibility — older blobs
     /// without the field deserialise to empty and are not gated).
     /// Client-side construction (local debug notes, optimistic user
     /// echo) sets this to `""` — it is authoritative only when the
     /// server writes it.
     CreatedBy: string
-    /// Phase 6j.E — the idempotency key of the fast-path beacon that
+    /// The idempotency key of the fast-path beacon that
     /// appended this message, stamped on BOTH synthetic turns of the
     /// pair. The beacon handler scans the tail of the conversation for
     /// this value and no-ops (202) on a repeat, so a page reload
@@ -144,10 +144,10 @@ type ConversationMessage = {
     /// through `String.IsNullOrEmpty`, so legacy history is untouched;
     /// additive + backward-compatible, GP 11).
     BeaconId: string
-    /// Phase 523 — numeric-fidelity verdict for this assistant message.
+    /// Numeric-fidelity verdict for this assistant message.
     /// `None` for user / system turns, for assistant turns produced with
     /// the gate `Off` (the default), and for conversation history
-    /// persisted before this field existed — pre-523 wire payloads without
+    /// persisted before this field existed — older wire payloads without
     /// the field deserialise to `None` (additive + backward-compatible, GP
     /// 11). Populated only when the answer gate ran in `Annotate` / `Strict`
     /// mode; the client renders it as inline verification badges on both the
@@ -171,9 +171,9 @@ type Conversation = {
     OverrideProviderLabel: string option
 }
 
-// ─── Phase 516 — paged, searchable conversation listing ──────────
+// ─── Paged, searchable conversation listing ──────────────────────
 
-/// One request for a page of the caller's conversations (Phase 516.C).
+/// One request for a page of the caller's conversations.
 ///
 /// Rows are ordered newest-activity first (`UpdatedAt` descending, ties
 /// broken by id), and `Cursor` is a KEYSET cursor over that order rather
@@ -193,7 +193,7 @@ type ConversationListQuery = {
     PageSize: int
 }
 
-/// One page of the caller's conversations (Phase 516.C).
+/// One page of the caller's conversations.
 type ConversationPage = {
     /// The page's rows, in listing order.
     Items: Conversation list
@@ -249,14 +249,14 @@ type AIStreamEvent =
     | TaskStatusChanged of taskId: Guid * status: AITaskStatus
     | MessageComplete of conversationId: Guid * messageId: Guid
     | StreamError of message: string
-    /// Phase 6h: the user cancelled the in-flight agent loop via
+    /// The user cancelled the in-flight agent loop via
     /// the `/api/ai/cancel/{taskId}` endpoint. The agent loop
     /// exits cleanly at the next turn boundary. The client
     /// already buffers streaming chunks for display; on this
     /// event it commits whatever's in the buffer to chat history
     /// (rather than discarding it) and clears any watchdog.
     | StreamCancelled of conversationId: Guid
-    /// Phase 6g.A: ask the client to execute a `ClientResident` tool.
+    /// Ask the client to execute a `ClientResident` tool.
     /// The client looks up the tool by name in its local registry,
     /// runs the body (typically dispatching typed `Msg`s into a
     /// module's MVU), and POSTs the result to `/api/ai/tool-result`.
@@ -276,14 +276,14 @@ type AIStreamEvent =
         argsJson: string *
         activeModule: string option *
         activePage: string option
-    /// Phase 523: per-message numeric-fidelity verdict. Emitted once, after
+    /// Per-message numeric-fidelity verdict. Emitted once, after
     /// the final assistant text is settled, when the answer gate ran
     /// (`Annotate` / `Strict`). The client renders the verdict as inline
     /// verification badges under the reply. Absent entirely when the gate
-    /// is `Off` (the default) — a deployment that never opts in sees the
-    /// pre-523 event stream byte-for-byte (GP 11 / GP 13).
+    /// is `Off` (the default) — a deployment that never opts in sees an
+    /// unchanged event stream byte-for-byte (GP 11 / GP 13).
     | AnswerVerified of conversationId: Guid * verification: AnswerVerification
-    /// Phase 36.D: ask the user to consent to a cross-module read before
+    /// Ask the user to consent to a cross-module read before
     /// it happens. Emitted by a `_platform.ai.*` tool that is about to
     /// read from `targetModule` in a conversation where the user has not
     /// already allowed it; the tool is suspended on a
@@ -310,7 +310,7 @@ type AIStreamEvent =
         targetModule: string *
         intendedQueryKey: string *
         redactedPayloadPreview: string
-    /// Phase 503: ask the user to approve a consequential tool call
+    /// Ask the user to approve a consequential tool call
     /// before it runs. Emitted by the agent loop's dispatch site when the
     /// deployment's `IToolApprovalPolicy` holds this invocation; the tool
     /// is suspended on a `TaskCompletionSource` keyed by `approvalId`
@@ -339,9 +339,132 @@ type AIStreamEvent =
         detail: string *
         redactedArgumentsPreview: string
 
+// ─── Tool outcomes ───────────────────────────────────────────────
+//
+// Every way one tool call ends, as one value: the body produced content,
+// a gate refused the call before the body ran, or the call faulted. The
+// agent loop's safety rails read the value (`ToolOutcome.isError`), and
+// the model reads its one rendering (`ToolOutcome.toModel`) — on the
+// server and, for a client-resident tool, in the browser, so both sides
+// render a fault through the same function. Primitives only, so the
+// client tier shares it without importing the server.
+
+/// A gate refused a tool call before its body ran.
+[<RequireQualifiedAccess>]
+type ToolRefusal =
+    /// The call is not permitted; `reason` is what the model is told.
+    | Denied of toolName: string * reason: string
+
+/// How a tool call faulted. Each case renders exactly the text the model
+/// has always been shown for it, so the case also fixes where the fault
+/// was observed.
+[<RequireQualifiedAccess>]
+type ToolFault =
+    /// The model named a tool the registry does not hold.
+    | UnknownTool of toolName: string
+    /// The tool body raised, or did not answer in time.
+    | Threw of toolName: string * message: string
+    /// The arguments did not decode against the tool's parameters.
+    | InvalidArguments of toolName: string * detail: string
+    /// The tool body checked its own arguments and refused them, answering
+    /// with a JSON object of string fields (the `error` field first) — the
+    /// body the built-in tools have always returned for a bad argument.
+    | ArgumentsRefused of fields: (string * string) list
+    /// A client-resident tool's executor raised in the browser.
+    | ClientThrew of toolName: string * detail: string
+    /// A client-resident tool did not finish inside the browser's watchdog.
+    | ClientTimedOut of toolName: string * detail: string
+    /// The browser holds no executor for the tool it was asked to run.
+    | ClientToolUnregistered of toolName: string * detail: string
+
+/// One tool call's outcome.
+[<RequireQualifiedAccess>]
+type ToolOutcome =
+    /// The body ran and returned this content.
+    | Produced of content: string
+    /// A gate refused the call; the body did not run.
+    | Refused of ToolRefusal
+    /// The call faulted.
+    | Faulted of ToolFault
+
+module ToolFault =
+    /// The fault's discriminator: the `error` token its JSON rendering
+    /// carries, or the case's name for a prose rendering.
+    let kind (fault: ToolFault) : string =
+        match fault with
+        | ToolFault.UnknownTool _ -> "UnknownTool"
+        | ToolFault.Threw _ -> "ToolThrew"
+        | ToolFault.InvalidArguments _ -> "InvalidArguments"
+        | ToolFault.ArgumentsRefused fields ->
+            fields
+            |> List.tryPick (fun (name, value) -> if name = "error" then Some value else None)
+            |> Option.defaultValue "InvalidArguments"
+        | ToolFault.ClientThrew _ -> "ToolThrew"
+        | ToolFault.ClientTimedOut _ -> "ClientWatchdogTimeout"
+        | ToolFault.ClientToolUnregistered _ -> "UnknownClientTool"
+
+module ToolOutcome =
+    let private hex = "0123456789abcdef"
+
+    /// A JSON string literal, escaping exactly what RFC 8259 requires
+    /// (`"`, `\` and U+0000–U+001F) — the escaping the server's JSON
+    /// writer applies, so a rendered body is byte-identical to the one
+    /// the tools serialised before this rendering existed.
+    let private jsonString (s: string) : string =
+        let escaped =
+            s
+            |> String.collect (fun c ->
+                match c with
+                | '"' -> "\\\""
+                | '\\' -> "\\\\"
+                | '\b' -> "\\b"
+                | '\012' -> "\\f"
+                | '\n' -> "\\n"
+                | '\r' -> "\\r"
+                | '\t' -> "\\t"
+                | c when int c < 0x20 ->
+                    let code = int c
+                    "\\u00" + string hex[code / 16] + string hex[code % 16]
+                | c -> string c)
+
+        "\"" + escaped + "\""
+
+    let private jsonObject (fields: (string * string) list) : string =
+        let members =
+            fields
+            |> List.map (fun (name, value) -> jsonString name + ":" + jsonString value)
+
+        "{" + String.concat "," members + "}"
+
+    let private clientEnvelope (kind: string) (toolName: string) (detail: string) =
+        jsonObject [ "error", kind; "tool", toolName; "detail", detail ]
+
+    /// The one rendering the model reads for an outcome.
+    let toModel (outcome: ToolOutcome) : string =
+        match outcome with
+        | ToolOutcome.Produced content -> content
+        | ToolOutcome.Refused(ToolRefusal.Denied(name, reason)) -> $"Tool '{name}' was denied: {reason}"
+        | ToolOutcome.Faulted fault ->
+            match fault with
+            | ToolFault.UnknownTool name -> $"Unknown tool: {name}"
+            | ToolFault.Threw(name, message) -> $"Tool '{name}' failed: {message}"
+            | ToolFault.InvalidArguments(name, detail) -> $"Tool '{name}' received invalid arguments: {detail}"
+            | ToolFault.ArgumentsRefused fields -> jsonObject fields
+            | ToolFault.ClientThrew(name, detail)
+            | ToolFault.ClientTimedOut(name, detail)
+            | ToolFault.ClientToolUnregistered(name, detail) -> clientEnvelope (ToolFault.kind fault) name detail
+
+    /// Whether the outcome counts as a failed call for the agent loop's
+    /// rails. A body that returned no content at all has produced nothing.
+    let isError (outcome: ToolOutcome) : bool =
+        match outcome with
+        | ToolOutcome.Produced content -> isNull content
+        | ToolOutcome.Refused _
+        | ToolOutcome.Faulted _ -> true
+
 // ─── Client-resident tool result ─────────────────────────────────
 
-/// Phase 6g.A: payload of the `/api/ai/tool-result` POST. The browser
+/// Payload of the `/api/ai/tool-result` POST. The browser
 /// sends this after running a `ClientResident` tool; the server's
 /// `ClientToolDispatchRegistry` matches by `ToolCallId` and completes
 /// the suspended `TaskCompletionSource` so the agent loop can resume.
@@ -354,9 +477,9 @@ type ClientToolResultRequest = {
     /// value; matching POSTs complete it.
     ToolCallId: Guid
     /// The tool's JSON result, identical in shape to a server-resident
-    /// tool's return value. For errors, the client sends the same
-    /// `{ "error": "...", ... }` shape `ToolInvocationError` produces
-    /// server-side, so the agent loop's recovery path is unchanged.
+    /// tool's return value. A browser-side fault is sent as
+    /// `ToolOutcome.toModel` renders it, which the agent loop reads back
+    /// as the same fault.
     ResultJson: string
 }
 
@@ -391,7 +514,7 @@ type IClientToolAuthorizer =
 
 // ─── AI surface ───────────────────────────────────────────────────
 
-/// Phase 6g.A: which AI surface the user is chatting from. Determines
+/// Which AI surface the user is chatting from. Determines
 /// per-turn tool filtering (see `AIToolRegistry.toProviderDef` and the
 /// `AISurfaceFilter` declared by each tool in
 /// `src/ToolUp.Platform/Shared/ModuleAITypes.fs`).
@@ -441,7 +564,7 @@ type AIMessageRequest = {
     /// without disturbing the account-level active setting. `None`
     /// uses the normal active-provider resolution.
     OverrideProviderLabel: string option
-    /// Phase 6g.A: which AI surface the user submitted from. Drives
+    /// Which AI surface the user submitted from. Drives
     /// per-turn tool filtering — `SidePanel` strips tools declared as
     /// `FullPageOnly`, `FullPage` exposes them.
     /// Defaults to `SidePanel` to keep behaviour conservative for
@@ -450,7 +573,7 @@ type AIMessageRequest = {
     /// to default-record-construction; explicit construction sites
     /// must set this field).
     ///
-    /// TRUST MODEL (Phase 6g.F): this is a **client-supplied** field.
+    /// TRUST MODEL: this is a **client-supplied** field.
     /// Under the default `ServerConfig.AISurfaceDerivation = TrustClient`
     /// the server does not verify it, so a caller can send `FullPage`
     /// from a side-panel context and unlock `FullPageOnly` tools. The
@@ -466,14 +589,14 @@ type AIMessageRequest = {
     /// See `src/ToolUp.AI/TECHNICAL_GUIDE.md` §"Surface determination &
     /// trust model".
     Surface: AISurface
-    /// Phase 502.D — per-message metadata-equality filter scoping this
+    /// Per-message metadata-equality filter scoping this
     /// turn's retrieval ("answer from document X only", "only tag=policy").
     /// Threaded onto `PromptContext.RetrievalFilters` by the assistant
     /// handler and merged with the deployment-level `RetrievalDefaults.Filters`
     /// by `RAGPromptBuilder`, which puts the result on
     /// `RetrievalRequest.Filters`. `None` (the default, and what an older
     /// client sending no field deserialises to) leaves the retrieval request
-    /// byte-identical to its pre-502.D shape (GP 11), and the field has no
+    /// byte-identical to an unfiltered request (GP 11), and the field has no
     /// effect at all on a deployment that composes no RAG prompt builder
     /// (GP 13).
     ///
@@ -496,8 +619,8 @@ type AIMessageRequest = {
 type AIAssistantApi = {
     /// Submit a message to a conversation (creates conversation if new).
     /// Anonymous-mode deployments chat with the assistant; per-scope
-    /// isolation + the Phase 6j.D ownership gate run in the handler.
-    // Phase 69g.tail — LLM inference is the platform's most expensive
+    /// isolation + the conversation-ownership gate run in the handler.
+    // LLM inference is the platform's most expensive
     // per-call path (provider tokens + optional RAG retrieval + tool
     // loops). Conservative per-subject burst cap; dormant until an
     // `IRateLimitStore` is composed.
@@ -509,7 +632,7 @@ type AIAssistantApi = {
     GetConversation: Guid -> Async<ConversationMessage list>
     /// List all conversations for current user/scope, newest activity
     /// first, each row carrying its real title, message count and
-    /// timestamps (Phase 516.A). Prefer `ListConversationsPage` for a
+    /// timestamps. Prefer `ListConversationsPage` for a
     /// panel: this reads every conversation in the scope.
     [<AllowAnonymous>]
     ListConversations: unit -> Async<Conversation list>
@@ -518,7 +641,7 @@ type AIAssistantApi = {
     GetAvailableTools: unit -> Async<AIToolDefinition list>
     /// Get task status. `Some` for a task this process accepted within
     /// its retention window, reflecting the last status it emitted
-    /// (Phase 516.D) — the polling fallback for a client that missed the
+    /// — the polling fallback for a client that missed the
     /// terminal SSE event. `None` for an unknown or expired task id, or
     /// one submitted by a different caller.
     [<AllowAnonymous>]
@@ -535,14 +658,14 @@ type AIAssistantApi = {
     /// provider). Idempotent.
     [<AllowAnonymous>]
     SetConversationOverride: Guid * string option -> Async<Result<unit, string>>
-    /// Phase 516.C — one page of the caller's conversations, optionally
+    /// One page of the caller's conversations, optionally
     /// filtered by a title/content search. See `ConversationListQuery`
     /// for the ordering and cursor contract.
     [<AllowAnonymous>]
     ListConversationsPage: ConversationListQuery -> Async<ConversationPage>
 }
 
-// ─── Phase 859 — team conversation visibility ────────────────────
+// ─── Team conversation visibility ────────────────────────────────
 //
 // In a team's shared storage every conversation sits in one container, so
 // nothing about the storage layout says who may read one. This is the
@@ -551,17 +674,17 @@ type AIAssistantApi = {
 // (non-team) scope is owner-only by construction and is not governed here.
 
 /// Who, besides its author, can see a conversation held in a team's shared
-/// storage (Phase 859). A property of the TEAM: the deployment declares the
+/// storage. A property of the TEAM: the deployment declares the
 /// default a team starts with and the levels a team may choose from, and
 /// the team's `Owner` chooses within that set.
 ///
 /// The level type itself is `ToolUp.Platform.TeamVisibilityLevel`
 /// (`TeamVisible` | `TeamAdmins` | `PlatformAdmins`), shared with team output
-/// visibility (Phase 896) so a team has one vocabulary for both axes. This
+/// visibility so a team has one vocabulary for both axes. This
 /// name is kept for the conversation axis.
 type TeamConversationVisibility = TeamVisibilityLevel
 
-/// The Phase 859 visibility rule. `canSee` is the single place the read
+/// The visibility rule. `canSee` is the single place the read
 /// rule lives; every read path in the handler filters through it.
 module TeamConversationVisibility =
     /// Every level, widest first.
@@ -636,7 +759,7 @@ module TeamConversationVisibility =
         | PlatformAdmins -> "Only you and the platform administrators can see your conversations."
 
 /// The visibility level in force for the caller's active team, as the
-/// client shows it (Phase 859.H).
+/// client shows it.
 type TeamConversationVisibilityView = {
     /// False outside a team scope: a personal conversation is visible to
     /// its owner only, and there is no level to show or set.
@@ -650,7 +773,7 @@ type TeamConversationVisibilityView = {
     Selectable: TeamConversationVisibility list
 }
 
-/// Read and set the active team's conversation visibility (Phase 859).
+/// Read and set the active team's conversation visibility.
 /// Mounted beside `AIAssistantApi`; the team is always the caller's active
 /// team, never a request field.
 type TeamConversationVisibilityApi = {
@@ -665,8 +788,8 @@ type TeamConversationVisibilityApi = {
     SetConversationVisibility: TeamConversationVisibility -> Async<Result<TeamConversationVisibilityView, string>>
 }
 
-// Phase 896's `TeamOutputVisibilityApi` / `TeamOutputVisibilityView` moved
-// to the platform tier in Phase 936 (`ToolUp.Platform`, Platform.Core
+// `TeamOutputVisibilityApi` / `TeamOutputVisibilityView` live in the
+// platform tier (`ToolUp.Platform`, Platform.Core
 // `Shared/Types/TeamOutputVisibility.fs`), beside the per-team policy record
 // they read and set, so a deployment without the assistant has them. The
 // conversation API above stays here.
@@ -719,12 +842,11 @@ type ModuleAIContext = {
     /// System-prompt text injected when this module is active.
     SystemPrompt: string
 }
-// ─── Phase 498 — provider fallback / failover routing ────────────
+// ─── Provider fallback / failover routing ────────────────────────
 //
-// Phase 43.B shipped `FallbackChain` on every `ProviderProfile` — an
-// ordered list of entry labels, "tried left-to-right when the resolved
-// primary fails" — but nothing server-side consumed it. These are the
-// two things the runtime needs to honour it: the classification of
+// `FallbackChain` on every `ProviderProfile` is an ordered list of entry
+// labels, "tried left-to-right when the resolved primary fails". These are
+// the two things the runtime needs to honour it: the classification of
 // WHICH errors justify a re-route, and the shape of the record each
 // re-route emits.
 //
@@ -732,7 +854,7 @@ type ModuleAIContext = {
 // `AIProviderError` union), so the client tier can read a failover
 // record back off the audit stream without a server-only reference.
 
-/// Phase 498 — which `AIProviderError` values justify advancing to the
+/// Which `AIProviderError` values justify advancing to the
 /// next entry of a deployment's `FallbackChain`.
 module AIProviderFailover =
 
@@ -770,7 +892,7 @@ module AIProviderFailover =
         | RetriesExhausted(_, inner) -> isOutageClass inner
         | other -> AIProviderError.isRetryable other
 
-/// Phase 498 — one recorded failover. Written through `IEventStore`
+/// One recorded failover. Written through `IEventStore`
 /// under `AIProviderFailoverRecord.SourceModule` each time the runtime
 /// advances a turn from one chain entry to the next, so "the primary
 /// was down and the secondary served the turn" is answerable from the
@@ -798,7 +920,7 @@ type AIProviderFailoverRecord = {
     /// is false.
     Reason: string
     /// Wall-clock milliseconds the FAILED attempt consumed. The
-    /// per-attempt half of the phase's latency requirement; the
+    /// per-attempt half of failover latency; the
     /// serving attempt's latency is the `AILatencyRecord` the turn
     /// emits as usual.
     AttemptDurationMs: float
@@ -826,15 +948,14 @@ module AIProviderFailoverRecord =
     [<Literal>]
     let EventType = "AIProviderFailover"
 
-// ─── Phase 504 — conversation retention / TTL policy ─────────────
+// ─── Conversation retention / TTL policy ─────────────────────────
 
-/// Per-scope retention policy for AI conversations (Phase 504.A).
+/// Per-scope retention policy for AI conversations.
 ///
 /// A conversation is **expired** when EITHER limit selects it: its last
 /// activity is older than `MaxAge`, or it is not among the `MaxCount`
 /// most-recently-active conversations of its scope. Both `None` is the
-/// default and means retain forever — the pre-504 behaviour, byte for
-/// byte (GP 11): `withConversationRetention` registers no sweep for an
+/// default and means retain forever, byte for byte (GP 11): `withConversationRetention` registers no sweep for an
 /// inert policy, and `ConversationRetention.sweepContainer` has no code
 /// path from an inert policy to a delete.
 ///

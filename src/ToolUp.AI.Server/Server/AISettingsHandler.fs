@@ -29,7 +29,7 @@ let private testMessage: AIProviderMessage = {
 /// trip; `TestConnection` is not free.
 let private testSystemPrompt = Some "Reply with a single word."
 
-/// The test-connection model input (Phase 791). Byte-identical to
+/// The test-connection model input. Byte-identical to
 /// `AIProviderEntryProbe`'s by the same deliberate design as the payload
 /// it lifts.
 let private testInput =
@@ -51,7 +51,7 @@ let private toView (entry: ProviderEntry) (hasKey: bool) : AIProviderInstanceVie
     UpdatedAt = entry.UpdatedAt
 }
 
-// ─── Routing helpers (Phase 43.A) ────────────────────────────────
+// ─── Routing helpers ─────────────────────────────────────────────
 //
 // The AI assistant's "active provider" is the platform store's
 // routing rule `{ Surface = "ai.assistant"; Context = None }`. These
@@ -88,11 +88,8 @@ let private clearActiveRoute (p: ProviderProfile) : ProviderProfile = {
 /// `ISecretStore` from DI per request (same pattern as
 /// `AIAssistantHandler.aiAssistantApi`); `IAIProviderFactory` and the
 /// canonical platform `IProviderProfile` store are passed in at
-/// compose time since composeAI already has them in hand. Phase
-/// 43.A — reads/writes the platform store directly; the
-/// `IUserAIConfigStore` shim is removed. The client wire contract
-/// (`AISettingsApi` / `AIUserConfigView` / `AIProviderInstanceView`)
-/// is unchanged — only the server-side persistence target moved.
+/// compose time since composeAI already has them in hand. Reads/writes
+/// the platform store directly.
 let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfile) (ctx: HttpContext) : AISettingsApi =
 
     let secretStore =
@@ -123,21 +120,16 @@ let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfi
                 | true, (:? string as id) -> id
                 | _ -> "anonymous"
 
-            let teamId =
-                match ctx.Items.TryGetValue "ToolUp.StorageScope" with
-                | true, (:? StorageScope as s) when s.Container.StartsWith "team-" -> Some s.ScopeId
-                | _ -> None
-
             AccessContext.unrestricted (AnonymousSession userId)
 
     let scopeOpt = AccessContext.configScope accessContext
 
-    // ─── Phase 43.C — verification on pasted-key add / rotate ────
+    // ─── Verification on pasted-key add / rotate ─────────────────
     //
-    // The probe seam is OPTIONAL, and that is what keeps this change
+    // The probe seam is OPTIONAL, and that is what keeps this
     // backward-compatible (GP 11): a deployment that has not wired an
-    // `IProviderEntryProbe` sees byte-identical `SaveInstance`
-    // behaviour to Phase 43.A. Wire one — `AICompose` does it
+    // `IProviderEntryProbe` sees `SaveInstance` save without
+    // verification. Wire one — `AICompose` does it
     // automatically when the provider-profile store is present — and
     // a save that rotates a key is verified before it is allowed to
     // stand.
@@ -276,17 +268,17 @@ let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfi
 
                         let priorEntry = current.Entries |> List.tryFind (fun e -> e.Label = req.Label)
 
-                        // The 42.B-only fields (Tags / Origin / Health)
+                        // The profile-only fields (Tags / Origin / Health)
                         // are not part of the settings-API wire contract.
                         // A brand-new entry gets the same defaults the
                         // removed shim wrote (Tags=[], Origin=PastedKey,
                         // Health=unknown) — byte-identical persisted
                         // state for a settings-only action sequence. An
                         // *edit* preserves the existing entry's values so
-                        // a Phase 43.B OAuth origin or a Phase 43.C
-                        // probe-written health survives a later metadata
-                        // edit (the shim could not — it round-tripped
-                        // through a lossy `AIUserConfig`).
+                        // an OAuth origin or a probe-written health
+                        // survives a later metadata edit (the shim could
+                        // not — it round-tripped through a lossy
+                        // `AIUserConfig`).
                         let newEntry: ProviderEntry = {
                             Label = req.Label
                             ProviderId = req.ProviderId
@@ -298,8 +290,7 @@ let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfi
                                 |> Option.map _.Origin
                                 |> Option.defaultValue CredentialOrigin.PastedKey
                             Health = priorEntry |> Option.map _.Health |> Option.defaultValue ProviderHealth.unknown
-                            // Phase 43.B — preserved, never minted
-                            // here. The settings API is the PASTED-KEY
+                            // Preserved, never minted here. The settings API is the PASTED-KEY
                             // path; an OAuth binding is written only by
                             // the OAuth callback. Preserving it means a
                             // metadata edit (model, tags) on a
@@ -322,8 +313,8 @@ let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfi
                         let keyRotated = req.ApiKey.IsSome
 
                         // Read the key we are about to overwrite BEFORE
-                        // overwriting it. Phase 43.C's "refuse to
-                        // persist on failure" has to be able to put the
+                        // overwriting it. "Refuse to persist on
+                        // failure" has to be able to put the
                         // previous credential back — a rotation that
                         // fails verification and leaves the old key
                         // deleted would have broken a working provider
@@ -370,7 +361,7 @@ let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfi
 
                         match saveResult with
                         | Ok() when keyRotated && probeOpt.IsSome ->
-                            // Phase 43.C — verification call. The entry
+                            // Verification call. The entry
                             // is written first because the probe
                             // resolves through
                             // `IAIProviderFactory.TryResolveByLabel`,
@@ -576,7 +567,7 @@ let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfi
                 // choice, not a team-configuration change. Only the model
                 // choice is user-editable.
                 withScope (fun scope -> async {
-                    // Phase 70: validate the model against ANY wired
+                    // Validate the model against ANY wired
                     // platform descriptor's models (not just the singular
                     // one). The UI's provider+model picker pairs
                     // `SetPlatformProviderOverride` with this call when
@@ -628,7 +619,7 @@ let aiSettingsApi (factory: IAIProviderFactory) (providerProfile: IProviderProfi
 
         SetPlatformProviderOverride =
             fun providerIdOpt ->
-                // Phase 70 — same user-rendering scope semantics as
+                // Same user-rendering scope semantics as
                 // `SetPlatformModelOverride`. Validates the supplied id
                 // against the deployment's wired `PlatformDescriptors`;
                 // `None` clears the override (resolution falls back to

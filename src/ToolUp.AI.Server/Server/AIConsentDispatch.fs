@@ -2,30 +2,28 @@ module ToolUp.AI.AIConsentDispatch
 
 open System
 open System.Collections.Concurrent
-open System.Text
-open System.Text.Json
 open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
-open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.BlobStorage
 open ToolUp.AI
 
-/// Phase 36.D — the per-conversation cross-module read consent gate.
+/// The per-conversation cross-module read consent gate.
 ///
 /// **What this is the fourth of.** A `_platform.ai.*` read already passes
 /// three gates before it reaches any module's data: the caller's per-module
-/// `Read` permission (36.A), the liveness of the authority behind that
-/// permission (730), and the module's own declared AI-queryability (36.C).
+/// `Read` permission, the liveness of the authority behind that
+/// permission, and the module's own declared AI-queryability.
 /// All three are answered by the DEPLOYMENT, at compose time or by an
 /// administrator. None of them asks the person sitting in front of the
 /// conversation whether the agent may go and read their data out of a
 /// module they did not name in their prompt. This gate does, and it is
-/// INNERMOST for a reason the 36.C ordering rationale already establishes:
-/// a caller who fails an outer gate must be refused before any dialog is
-/// shown, or the dialog itself leaks which modules a deployment exposed.
+/// INNERMOST for a reason the opt-in gate's ordering rationale already
+/// establishes: a caller who fails an outer gate must be refused before any
+/// dialog is shown, or the dialog itself leaks which modules a deployment
+/// exposed.
 ///
-/// **The mechanism is the Phase 6g.A client-resident round trip, reused.**
+/// **The mechanism is the client-resident round trip, reused.**
 /// A server-resident tool suspends on a `TaskCompletionSource`, the browser
 /// is asked over the existing SSE stream, and a POST to `/api/ai/consent`
 /// completes it — structurally the same suspend/resume `ClientToolDispatch`
@@ -54,10 +52,9 @@ open ToolUp.AI
 /// path, so the client-side failure wins the race and the user sees the
 /// specific cause rather than a generic server abort.
 ///
-/// Phase 503 made this the THIRD caller's budget too, so the declaration
-/// itself moved to `SuspendedPrompt`, beside the mechanism it bounds.
-/// This binding is the name the consent path and `AIAgentEngine` already
-/// read it by; the value is unchanged.
+/// This is a THIRD caller's budget too, so the declaration itself lives
+/// in `SuspendedPrompt`, beside the mechanism it bounds. This binding is
+/// the name the consent path and `AIAgentEngine` read it by.
 [<Literal>]
 let SuspendedDispatchTimeoutMs = SuspendedPrompt.SuspendedDispatchTimeoutMs
 
@@ -67,8 +64,8 @@ let SuspendedDispatchTimeoutMs = SuspendedPrompt.SuspendedDispatchTimeoutMs
 /// executor can reach the two things its signature does not carry.
 ///
 /// A tool executor is `HttpContext -> argsJson -> Async<string>`: it has no
-/// conversation and no way to emit on the SSE stream, because until this
-/// phase no server-resident tool needed either. Widening that signature
+/// conversation and no way to emit on the SSE stream, because no other
+/// server-resident tool needs either. Widening that signature
 /// would retype every tool in the SDK and every tool a consumer has
 /// written, to serve one gate; stamping the items is the same stringly-keyed
 /// per-request carry the loop already uses for `ToolUp.StorageScope` /
@@ -76,7 +73,7 @@ let SuspendedDispatchTimeoutMs = SuspendedPrompt.SuspendedDispatchTimeoutMs
 /// documents as the RBAC-correct path on the background flow).
 ///
 /// Named through constants so the stamping end and the reading end move
-/// together — the discipline Phase 730 established for the grant stamps.
+/// together — the same discipline the grant stamps follow.
 module ItemsKeys =
     /// `Guid` — the conversation the current turn belongs to.
     [<Literal>]
@@ -107,7 +104,7 @@ type StreamEmitter = { Emit: AIStreamEvent -> unit }
 /// One suspended consent request. Recorded at the tool site BEFORE the SSE
 /// event is emitted, so the decision POST can be authorised and attributed
 /// from the server's own record rather than from the client's body — the
-/// same reason Phase 36.A records a pending tool call's `SourceModule`.
+/// same reason a pending tool call's `SourceModule` is recorded.
 type PendingConsent = {
     ConversationId: Guid
     TargetModule: string
@@ -122,11 +119,10 @@ type PendingConsent = {
 /// Per-process registry of suspended cross-module reads awaiting a user's
 /// consent decision.
 ///
-/// Phase 503: a domain-named FACADE over the one suspended-dispatch
-/// mechanism (`SuspendedPrompt.PendingPromptRegistry`) rather than a
-/// second copy of it. The members below are unchanged — same names, same
-/// signatures, same semantics — and the plumbing under them is now shared
-/// with the approval round trip, so a fix to one is a fix to both.
+/// A domain-named FACADE over the one suspended-dispatch mechanism
+/// (`SuspendedPrompt.PendingPromptRegistry`) rather than a second copy of
+/// it. The plumbing under the members below is shared with the approval
+/// round trip, so a fix to one is a fix to both.
 type AIConsentRegistry() =
     let inner = SuspendedPrompt.PendingPromptRegistry<AllowDecision, PendingConsent>()
 
@@ -155,62 +151,44 @@ type AIConsentRegistry() =
     /// refusal. The turn then fails cleanly on the one shared budget.
     member _.TryAbandon(consentId: Guid) : bool = inner.TryAbandon(consentId, Denied)
 
-// ─── Persistence — the fourth sibling conversation blob ──────────
-
-let private jsonOptions = FableConverters.create ()
+// ─── Persistence — the consent sibling of the conversation record ──
 
 /// `ai-conversations/{id}.consent.json`, beside the conversation's own
-/// `.json` / `.history.json` / `.meta.json` siblings.
-///
-/// **The shard named `AIConversationState.CrossModuleAllowlist`; no such
-/// type exists.** The per-conversation server state IS this family of
-/// sibling blobs, so "extend the conversation state" is a fourth sibling:
-/// same container, same naming, same `FableConverters` round trip. Keeping
-/// it separate from the UI blob is the same argument `ConversationMeta`
-/// makes — the chat panel's history read should not pull a record it never
-/// renders, and a consent write should not rewrite the message list.
+/// `.json` / `.history.json` / `.meta.json` siblings: same container, same
+/// naming, same `FableConverters` round trip. Kept apart from the UI blob
+/// for the reason `ConversationMeta` is — the chat panel's history read
+/// should not pull a record it never renders, and a consent write should
+/// not rewrite the message list. Read and written through the conversation
+/// record (`ConversationBlobs`).
 let consentBlobName (conversationId: Guid) =
-    $"ai-conversations/{conversationId}.consent.json"
+    ConversationBlobs.consentBlobName conversationId
 
-/// Read a conversation's consent record. Absent (a conversation nobody has
-/// been asked about yet) and unparseable both read as empty — the safe
-/// direction, since an empty record grants nothing and merely prompts.
+/// A conversation's consent record, as the GATE reads it. Absent (a
+/// conversation nobody has been asked about yet) is empty, and so — for the
+/// gate only — is a record that cannot be read: an empty record grants
+/// nothing and merely prompts, which is the safe direction. Writing over an
+/// unreadable record is a different matter; `recordDecision` refuses to.
 let loadState (storage: IBlobStorage) (container: string) (conversationId: Guid) : Async<AIConsentState> = async {
-    let! result = storage.Download(container, consentBlobName conversationId)
-
-    match result with
-    | Ok bytes ->
-        try
-            let state =
-                JsonSerializer.Deserialize<AIConsentState>(Encoding.UTF8.GetString bytes, jsonOptions)
-
-            return
-                if isNull (box state.CrossModuleAllowlist) then
-                    AIConsentState.empty
-                else
-                    state
-        with _ ->
-            return AIConsentState.empty
+    match! ConversationBlobs.loadConsent storage container conversationId with
+    | Ok state -> return state
     | Error _ -> return AIConsentState.empty
 }
 
+/// Write a conversation's consent record whole.
 let saveState (storage: IBlobStorage) (container: string) (conversationId: Guid) (state: AIConsentState) : Async<unit> = async {
-    let bytes = JsonSerializer.Serialize(state, jsonOptions) |> Encoding.UTF8.GetBytes
-
-    let! _ = storage.Upload(container, consentBlobName conversationId, bytes) // best-effort-write: a lost decision re-prompts and never allows — an absent record always prompts (see recordDecision)
+    let! _ = ConversationBlobs.ConversationRecord.saveConsent storage container conversationId state // best-effort-write: a lost decision re-prompts and never allows — an absent record always prompts (see recordDecision)
     return ()
 }
 
 /// Record one decision into a conversation's consent record.
 ///
-/// Read-modify-write on a per-conversation blob. Two tool calls in one
-/// parallel batch could in principle interleave here and lose one
-/// another's decision; the cost of that is a re-prompt, never a spurious
-/// allowance, because the value that can be lost is the WRITE and the
-/// absence of a record always prompts. A stronger primitive (conditional
-/// upload) exists on `IBlobStorage` but is not universally implemented
-/// across the shipped backends, and paying for it to avoid an occasional
-/// extra dialog would be the wrong trade.
+/// Read-modify-write on a per-conversation blob, under the record's read
+/// rule: a stored record that cannot be read is left as it is and the
+/// decision is not recorded, so the next reach prompts again. Two tool
+/// calls in one parallel batch could in principle interleave here and lose
+/// one another's decision; the cost of that is a re-prompt, never a
+/// spurious allowance, because the value that can be lost is the WRITE and
+/// the absence of a record always prompts.
 let recordDecision
     (storage: IBlobStorage)
     (container: string)
@@ -219,8 +197,14 @@ let recordDecision
     (decision: AllowDecision)
     : Async<unit> =
     async {
-        let! state = loadState storage container conversationId
-        do! saveState storage container conversationId (AIConsentState.record targetModule decision state)
+        let! _ = // best-effort-write: a lost decision re-prompts and never allows — an absent or unreadable record always prompts
+            ConversationBlobs.ConversationRecord.updateConsent
+                storage
+                container
+                conversationId
+                (AIConsentState.record targetModule decision)
+
+        return ()
     }
 
 // ─── The gate ────────────────────────────────────────────────────
@@ -257,9 +241,9 @@ let redactPayloadPreview (raw: string) : string =
 
 /// The deployment's declared consent mode, read from DI.
 ///
-/// Absent — a deployment that composed AI before this phase, or a test
+/// Absent — a deployment that never declared a mode, or a test
 /// context that never registered one — reads as the default
-/// `RememberPerConversation`, which is the phase's deliberate GP 11
+/// `RememberPerConversation`, which is a deliberate GP 11
 /// inversion. Not `TrustEverything`: an absent declaration must never be
 /// the thing that turns the gate off.
 let resolveMode (ctx: HttpContext) : AIConsentMode =
@@ -381,7 +365,7 @@ let requireConsent
                         )
                     )
 
-                    // Phase 503: the race and the abandon-on-timeout are
+                    // The race and the abandon-on-timeout are
                     // the shared mechanism's, not this file's — they are
                     // what must not drift between the suspended round
                     // trips, so there is one of each.

@@ -5,9 +5,9 @@ open System
 open System.IO
 open System.Net.Http
 open System.Threading
-open ToolUp.AI.Wire // ClaudeStreaming — the pure SSE state machine (Phase 254)
-open ToolUp.Platform // RetryPolicy (Phase 11.C.5 Tier 3 — unified)
-open ToolUp.Platform.AI // IHttpTransport / HttpClientTransport / HttpRequest / ErrorClassifier (Phase 251/254)
+open ToolUp.AI.Wire // ClaudeStreaming — the pure SSE state machine
+open ToolUp.Platform // RetryPolicy
+open ToolUp.Platform.AI // IHttpTransport / HttpClientTransport / HttpRequest / ErrorClassifier
 open ToolUp.Platform.Secrets
 open ClaudeAIProviderWire
 open ToolUp.Platform.ProviderExceptions
@@ -33,7 +33,7 @@ let DefaultModel = "claude-haiku-4-5-20251001"
 [<Literal>]
 let DefaultMaxTokens = 4096
 
-/// Known-good model identifiers surfaced by the Phase D settings UI.
+/// Known-good model identifiers surfaced by the settings UI.
 /// Users may enter custom strings for models released after the build.
 ///
 /// Refreshed 2026-06-12 — the prior list pinned `claude-sonnet-4-20250514`
@@ -47,7 +47,7 @@ let KnownModels = [
     "claude-fable-5"
 ]
 
-// Shared per-process HttpClient. Phase 70's factory builds a fresh
+// Shared per-process HttpClient. The factory builds a fresh
 // `ClaudeAIProvider` per `Resolve` call (the curried `Build` closure
 // is invoked at request time, not at composition time). Constructing
 // a new HttpClient per provider per request — the prior shape — is
@@ -61,10 +61,10 @@ let KnownModels = [
 // instance, and the per-request `x-api-key` header lives on the
 // `HttpRequestMessage`, not on the client. Sharing is therefore safe.
 //
-// Phase 772 — built through the platform client factory, so the egress
-// policy handler sits in front of the same `HttpClientHandler` a bare
+// Built through the platform client factory, so the egress policy
+// handler sits in front of the same `HttpClientHandler` a bare
 // `new HttpClient()` would have used. Byte-identical under the default
-// permit-all policy; a verified composition can now refuse this origin.
+// permit-all policy; a verified composition can refuse this origin.
 let private sharedClient =
     lazy
         (let c =
@@ -76,11 +76,11 @@ let private sharedClient =
 
 // API-key fetching is abstracted to a thunk so the same core
 // implementation serves both the legacy secret-store path (fetch on
-// every request — supports rotation) and the Phase-A factory path
+// every request — supports rotation) and the factory path
 // (fetch once at construction — per-user BYOK). Each fetch call inside
 // SendMessage re-executes the thunk; the thunk decides whether to hit
 // a store or return a captured value.
-// ─── Per-call model override (Phase 661) ─────────────────────────
+// ─── Per-call model override ─────────────────────────────────────
 
 /// Whether this connector can serve `modelId` at all: an Anthropic id (`claude-…`).
 /// A vocabulary test, not a probe — the vendor's catalogue is still
@@ -94,22 +94,88 @@ let canServeModel (modelId: string) : bool = ModelIdFamily.isAnthropic modelId
 let resolveCallModel (configured: string) (options: AIProviderCallOptions) : string * ModelOverrideOutcome =
     ModelOverrideOutcome.resolve canServeModel "not an Anthropic (claude-*) model id" configured options
 
-/// Phase 1109 — the reply cap one call is sent with: `options.MaxTokens`
+/// The reply cap one call is sent with: `options.MaxTokens`
 /// when it names a positive budget, else the provider's constructed cap.
 let resolveCallMaxTokens (configured: int) (options: AIProviderCallOptions) : int =
     match options.MaxTokens with
     | Some budget when budget > 0 -> budget
     | _ -> configured
 
-type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, model: string, maxTokens: int) =
-    let client = sharedClient.Value
+/// The pause before retry `retryIndex` (0 = the first retry) after `err`.
+///
+///   - HTTP 429 (rate_limit_error): Anthropic's per-minute buckets can't be
+///     cleared by sub-second exponential backoff. Wait at least 15s on the
+///     first retry and scale up linearly (15s, 30s, 45s, …) so the bucket
+///     actually refills. Anthropic does not currently send `retry-after` on
+///     429s reliably, so a conservative floor is applied rather than the
+///     header parsed.
+///   - Everything else retryable (5xx, timeouts, transient network):
+///     InitialBackoff * 2^retryIndex (exponential, capped at MaxBackoff via
+///     `RetryPolicy.delayFor`). Fast enough for genuinely transient failures.
+let internal backoffFor (retryPolicy: RetryPolicy) (err: AIProviderError) (retryIndex: int) : TimeSpan =
+    match err with
+    | TransientServer(429, _) -> TimeSpan.FromMilliseconds(float (max 15_000 (15_000 * (retryIndex + 1))))
+    | _ ->
+        // `retryIndex` is 0-indexed (0 = first retry); the unified helper
+        // takes a 1-indexed attempt number, so pass `retryIndex + 2` (the
+        // delay before attempt 2 when retryIndex = 0).
+        RetryPolicy.delayFor retryPolicy (retryIndex + 2)
+
+/// The pause between attempts in production.
+let private productionSleep (delay: TimeSpan) : Async<unit> = Async.Sleep delay
+
+/// The one retry loop both sends run. Non-retryable errors propagate
+/// immediately; retryable ones are attempted until `MaxAttempts` (which
+/// counts the first attempt itself), pausing `backoffFor` between them
+/// through `sleep`. When `MaxAttempts = 1` the provider never retried, so
+/// the raw error is returned rather than wrapped in `RetriesExhausted` — the
+/// name would be misleading for a fail-fast call.
+let internal retryLoop
+    (sleep: TimeSpan -> Async<unit>)
+    (retryPolicy: RetryPolicy)
+    (singleAttempt: unit -> Async<Result<'T, AIProviderError>>)
+    : Async<Result<'T, AIProviderError>> =
+    let rec attempt attemptsMade = async {
+        let! result = singleAttempt ()
+        let attemptsMade = attemptsMade + 1
+
+        match result with
+        | Ok r -> return Ok r
+        | Error err when not (AIProviderError.isRetryable err) -> return Error err
+        | Error err when attemptsMade >= retryPolicy.MaxAttempts ->
+            return
+                if retryPolicy.MaxAttempts = 1 then
+                    Error err
+                else
+                    Error(RetriesExhausted(attemptsMade, err))
+        | Error err ->
+            do! sleep (backoffFor retryPolicy err (attemptsMade - 1))
+            return! attempt attemptsMade
+    }
+
+    attempt 0
+
+type ClaudeAIProvider
+    private
+    (
+        apiKeyFetcher: unit -> Async<string option>,
+        model: string,
+        maxTokens: int,
+        client: HttpClient,
+        sleep: TimeSpan -> Async<unit>
+    ) =
 
     // Guard a misconfigured cap. <= 0 would make the Anthropic API
     // reject every request; fall back to the safe default rather than
     // hard-fail every call.
     let maxTokens = if maxTokens > 0 then maxTokens else DefaultMaxTokens
 
-    /// Construct with an API key provided directly. Phase A+ factory
+    /// Construct over an injected client and pause, so a test can answer
+    /// the request and read the backoff without waiting it out.
+    internal new(apiKey: string, client: HttpClient, sleep: TimeSpan -> Async<unit>) =
+        ClaudeAIProvider((fun () -> async { return Some apiKey }), DefaultModel, DefaultMaxTokens, client, sleep)
+
+    /// Construct with an API key provided directly. The factory
     /// path used by BYOK deployments — the factory resolves the user's
     /// or team's stored key and builds this provider once per Resolve.
     /// `maxTokens` defaults to `DefaultMaxTokens` (4096).
@@ -117,18 +183,22 @@ type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
         ClaudeAIProvider(
             (fun () -> async { return Some apiKey }),
             defaultArg model DefaultModel,
-            defaultArg maxTokens DefaultMaxTokens
+            defaultArg maxTokens DefaultMaxTokens,
+            sharedClient.Value,
+            productionSleep
         )
 
     /// Construct reading the API key from the secret store on every
-    /// request. Legacy pre-Phase-A path; reads `ANTHROPIC_API_KEY` from
+    /// request. Legacy path; reads `ANTHROPIC_API_KEY` from
     /// the `_platform` scope and supports key rotation without
     /// reconstruction. `maxTokens` defaults to `DefaultMaxTokens` (4096).
     new(secretStore: ISecretStore, ?model: string, ?maxTokens: int) =
         ClaudeAIProvider(
             (fun () -> secretStore.GetSecret("_platform", "ANTHROPIC_API_KEY")),
             defaultArg model DefaultModel,
-            defaultArg maxTokens DefaultMaxTokens
+            defaultArg maxTokens DefaultMaxTokens,
+            sharedClient.Value,
+            productionSleep
         )
 
     interface IAIProvider with
@@ -136,11 +206,11 @@ type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
             Streaming = true
             ToolUse = true
             Vision = true
-            // Phase 6i.B: cache_control markers on system + tools +
+            // cache_control markers on system + tools +
             // history; usage block parsed on both streaming and
             // non-streaming paths.
             SupportsPromptCaching = true
-            // Phase 6j.B — Anthropic's structured-output path is the
+            // Anthropic's structured-output path is the
             // tool-based workaround this provider already implements,
             // and it is cheap and reliable over a four-field schema.
             SupportsTriage = true
@@ -155,7 +225,7 @@ type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
         }
 
         member _.SendMessage(messages, tools, systemPrompt, onStream, retryPolicy) = async {
-            // Phase 6o — short-circuit on multimodal content against a
+            // Short-circuit on multimodal content against a
             // non-vision-capable model. Cheaper failure than letting
             // Anthropic return HTTP 400, and avoids shipping
             // potentially large / PII image bytes over the wire to a
@@ -184,9 +254,8 @@ type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
                     let useStreaming = onStream.IsSome
 
                     // The portable wire mapping builds the request body over
-                    // `JsonValue` (Phase 254); the .NET HttpClientTransport
-                    // (Phase 251) reproduces the egress the provider used to
-                    // inline — same shared client, same per-request headers on
+                    // `JsonValue`; the .NET HttpClientTransport carries the
+                    // egress — same shared client, same per-request headers on
                     // the message, same per-call timeout derived from
                     // RetryPolicy.Timeout. Status classification is the
                     // ErrorClassifier's; the streaming assembly is the pure
@@ -329,62 +398,10 @@ type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
                             | ex -> return Error(TransientNetwork ex.Message)
                     }
 
-                    // Retry loop. Non-retryable errors propagate immediately.
-                    // Retryable errors are attempted up to MaxRetries extra times.
-                    //
-                    // Backoff strategy per error class:
-                    //   - HTTP 429 (rate_limit_error): Anthropic's per-minute
-                    //     buckets can't be cleared by sub-second exponential
-                    //     backoff. Wait at least 15s on the first retry and
-                    //     scale up linearly (15s, 30s, 45s, …) so the bucket
-                    //     actually refills. Anthropic does not currently send
-                    //     `retry-after` on 429s reliably, so we apply a
-                    //     conservative floor rather than parsing the header.
-                    //   - Everything else retryable (5xx, timeouts, transient
-                    //     network): InitialBackoff * 2^retryIndex (exponential,
-                    //     capped at MaxBackoff via `RetryPolicy.delayFor`).
-                    //     Fast enough for genuinely transient failures.
-                    let backoffFor (err: AIProviderError) (retryIndex: int) : TimeSpan =
-                        match err with
-                        | TransientServer(429, _) ->
-                            // Linear 15s/30s/45s minimum floor for per-minute buckets.
-                            TimeSpan.FromMilliseconds(float (max 15_000 (15_000 * (retryIndex + 1))))
-                        | _ ->
-                            // `retryIndex` is 0-indexed here (0 = first retry); the
-                            // unified helper takes a 1-indexed attempt number, so
-                            // pass `retryIndex + 2` (delay before attempt 2 when
-                            // retryIndex = 0).
-                            RetryPolicy.delayFor retryPolicy (retryIndex + 2)
-
-                    let rec retryLoop attemptsMade = async {
-                        let! result = singleAttempt ()
-                        let attemptsMade = attemptsMade + 1
-
-                        match result with
-                        | Ok r -> return Ok r
-                        | Error err when not (AIProviderError.isRetryable err) -> return Error err
-                        | Error err when attemptsMade >= retryPolicy.MaxAttempts ->
-                            // Budget exhausted. When `MaxAttempts = 1` the provider
-                            // never retried, so return the raw error rather than
-                            // wrapping in `RetriesExhausted` — the name would be
-                            // misleading for a fail-fast call. Post-11.C.5 semantic:
-                            // `MaxAttempts` counts the first attempt itself.
-                            return
-                                if retryPolicy.MaxAttempts = 1 then
-                                    Error err
-                                else
-                                    Error(RetriesExhausted(attemptsMade, err))
-                        | Error err ->
-                            // Retryable + budget remains: back off then retry.
-                            let delay = backoffFor err (attemptsMade - 1)
-                            do! Async.Sleep delay
-                            return! retryLoop attemptsMade
-                    }
-
-                    return! retryLoop 0
+                    return! retryLoop sleep retryPolicy singleAttempt
         }
 
-        // Phase 67b — Anthropic has no native structured-output mode.
+        // Anthropic has no native structured-output mode.
         // The documented workaround is to synthesise a tool whose
         // `input_schema` is the supplied schema, then force
         // `tool_choice = { type: "tool", name: "structured_response" }`
@@ -402,8 +419,8 @@ type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
         //
         // Non-streaming only — Anthropic does emit `tool_use` blocks
         // during streaming, but parsing partial `input` JSON
-        // mid-stream is fragile. Streaming structured-output is
-        // deferred to a follow-on phase per the Out-of-scope list.
+        // mid-stream is fragile. Streaming structured-output is not
+        // supported.
         member _.SendStructuredMessage(messages, tools, systemPrompt, schema, retryPolicy) = async {
             let hasImagePart =
                 messages |> List.exists ToolUp.Platform.AI.AIProviderMessage.isMultimodal
@@ -516,37 +533,18 @@ type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
                         | ex -> return Error(TransientNetwork ex.Message)
                     }
 
-                    let rec retryLoop attemptsMade = async {
-                        let! result = singleAttempt ()
-                        let attemptsMade = attemptsMade + 1
-
-                        match result with
-                        | Ok r -> return Ok r
-                        | Error err when not (AIProviderError.isRetryable err) -> return Error err
-                        | Error err when attemptsMade >= retryPolicy.MaxAttempts ->
-                            return
-                                if retryPolicy.MaxAttempts = 1 then
-                                    Error err
-                                else
-                                    Error(RetriesExhausted(attemptsMade, err))
-                        | Error _ ->
-                            let delay = RetryPolicy.delayFor retryPolicy (attemptsMade + 1)
-                            do! Async.Sleep delay
-                            return! retryLoop attemptsMade
-                    }
-
-                    return! retryLoop 0
+                    return! retryLoop sleep retryPolicy singleAttempt
         }
 
 
-    // Phase 661 — per-call model override. The provider instance IS the
+    // Per-call model override. The provider instance IS the
     // model binding (every send closes over `model`), so a call on
     // another model is served by a sibling instance bound to that model
     // with the same key source and `maxTokens` cap: byte-for-byte the request
     // a second registered instance would have emitted, with no second
     // instance for a composition root to wire. `options.Model = None`
     // delegates to this instance's own `SendMessage`, so the request
-    // bytes are unchanged. Phase 1109 — the per-call reply cap
+    // bytes are unchanged. The per-call reply cap
     // (`options.MaxTokens`) is served the same way: a sibling bound to that
     // cap, and this instance when neither the model nor the cap moves.
     member private this.TargetFor(options: AIProviderCallOptions) : IAIProvider * ModelOverrideOutcome =
@@ -557,7 +555,7 @@ type ClaudeAIProvider private (apiKeyFetcher: unit -> Async<string option>, mode
             if served = model && cap = maxTokens then
                 this :> IAIProvider
             else
-                ClaudeAIProvider(apiKeyFetcher, served, cap) :> IAIProvider
+                ClaudeAIProvider(apiKeyFetcher, served, cap, client, sleep) :> IAIProvider
 
         target, outcome
 
@@ -583,7 +581,7 @@ let create (secretStore: ISecretStore) : IAIProvider = ClaudeAIProvider(secretSt
 let createWithModel (secretStore: ISecretStore) (model: string) : IAIProvider = ClaudeAIProvider(secretStore, model)
 
 /// Create a Claude AI provider using a directly-supplied API key.
-/// Phase A+ factory path — used by the user/team-configured BYOK flow
+/// The factory path — used by the user/team-configured BYOK flow
 /// where the factory resolves the key once per `Resolve` call and
 /// constructs a provider bound to it.
 let createWithApiKey (apiKey: string) : IAIProvider = ClaudeAIProvider(apiKey) :> IAIProvider

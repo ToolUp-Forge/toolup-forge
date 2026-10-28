@@ -227,7 +227,12 @@ let private trusting () =
         (Some "Dashboard")
 
 let private run (h: Harness) (name: string) (args: string) =
-    (toolNamed name).Execute h.Ctx args |> Async.RunSynchronously
+    // What the model is shown: a fault the executor raised as a value is
+    // rendered the way the agent loop renders it.
+    try
+        (toolNamed name).Execute h.Ctx args |> Async.RunSynchronously
+    with ToolUp.AI.ToolHelpers.ToolFaulted fault ->
+        ToolOutcome.toModel (ToolOutcome.Faulted fault)
 
 /// Every `CrossModuleRead` row recorded in the caller's scope, read back
 /// through the shipped `IAuditLog` query path — the same path
@@ -870,12 +875,16 @@ let tests =
                 // Recording that read as a refusal would be worse than not
                 // recording it at all.
                 Expect.equal
-                    (AICrossModuleAudit.outcomeOf """{"content":"the PermissionDenied error means ..."}""")
+                    (AICrossModuleAudit.outcomeOf (
+                        ToolOutcome.Produced """{"content":"the PermissionDenied error means ..."}"""
+                    ))
                     AICrossModuleAudit.OkOutcome
                     "prose mentioning a refusal is not a refusal"
 
                 Expect.equal
-                    (AICrossModuleAudit.outcomeOf """{"error":"PermissionDenied","targetModule":"Payroll"}""")
+                    (AICrossModuleAudit.outcomeOf (
+                        ToolOutcome.Produced """{"error":"PermissionDenied","targetModule":"Payroll"}"""
+                    ))
                     "PermissionDenied"
                     "the field is"
 
@@ -883,7 +892,7 @@ let tests =
             <| fun _ ->
                 for body in [ ""; "   "; "not json at all"; "[1,2,3]" ] do
                     Expect.equal
-                        (AICrossModuleAudit.outcomeOf body)
+                        (AICrossModuleAudit.outcomeOf (ToolOutcome.Produced body))
                         AICrossModuleAudit.OkOutcome
                         $"'{body}' is a defect in a tool, not evidence a read was blocked"
         ]

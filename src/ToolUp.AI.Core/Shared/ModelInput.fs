@@ -8,24 +8,16 @@ open ToolUp.Platform
 open ToolUp.Platform.AI
 open ToolUp.Platform.VectorKnowledgeTypes
 
-// ─── Phase 791 — one closed value for everything a provider sees ──────
-//
-// The cage's input side had no type. The system prompt was a `string`
-// produced by a parallel fold over IO-capable builders, the facts block
-// was `sprintf`, and the two met the message list only as arguments at
-// the provider call — so the only way to ask "what did the model see?"
-// was to search the strings after the fact, which is what Phase 703's
-// non-entry assertion does.
+// ─── One closed value for everything a provider sees ──────────────────
 //
 // `ModelInput` is that value, and `ModelInput.render` is the one pure
 // function that turns it into what `IAIProvider` accepts. The split is
 // the point: assembly stays with the builders (which keep their IO and
-// now yield typed blocks), rendering is total and effect-free, and the
-// value is available at the provider boundary for Phase 792 to quantify
-// over.
+// yield typed blocks), rendering is total and effect-free, and the
+// value is available at the provider boundary to quantify over.
 //
 // `render` JOINS; it does not reformat. Every byte it emits came from a
-// field of the value, so the pre-phase strings survive byte-for-byte
+// field of the value, so the string-shaped prompts survive byte-for-byte
 // (GP 11) and a rendering cannot introduce a fact the value does not
 // carry — the property `leakedFactIds` measures.
 
@@ -42,12 +34,11 @@ type DisclosedFact = {
     /// The scope (principal / tenant) the verdict was resolved for. A
     /// string because the admissibility model compares strings; outside
     /// tests it is written only by `ModelInput.disclose`, from the scope the
-    /// platform's scope resolution minted (Phase 821).
+    /// platform's scope resolution minted.
     Scope: string
 }
 
-/// Whether a retrieved chunk passed the Phase 775 disclosure gate.
-/// `NotGated` is the honest reading before that phase lands — it says
+/// Whether a retrieved chunk passed the disclosure gate. `NotGated` says
 /// the gate did not run, never that it passed.
 type ChunkGateResult =
     | GatePassed
@@ -60,7 +51,7 @@ type Chunk = {
     ChunkId: string
     /// The chunk text.
     Text: string
-    /// The Phase 775 gate result.
+    /// The disclosure-gate result.
     GateResult: ChunkGateResult
     /// Source attribution, where the retrieval carried one.
     Source: string option
@@ -75,10 +66,13 @@ type PromptBlock = {
     Text: string
 }
 
-/// A tool result after the Phase 709 budget has been applied — what
+/// A tool result after the result budget has been applied — what
 /// remains, not what the tool returned.
 type ToolResult = {
-    /// The tool that produced it.
+    /// The call this result answers.
+    ToolCallId: string
+    /// The tool that produced it. Empty when no tool call in the
+    /// conversation carries `ToolCallId`.
     ToolName: string
     /// The content after the budget elided whatever it elided.
     Content: string
@@ -104,8 +98,7 @@ type ModelInput = {
 }
 
 /// What `render` produces: exactly the two arguments `IAIProvider`
-/// takes. The phase specification calls this shape `ProviderMessages`;
-/// it is a record rather than a tuple so the two halves cannot be
+/// takes. It is a record rather than a tuple so the two halves cannot be
 /// transposed at a call site.
 type ProviderMessages = {
     /// The joined system prompt. `None` when the value carries no
@@ -128,7 +121,7 @@ module ModelInput =
     }
 
     /// Construct a `DisclosedFact` whose `Scope` is the minted scope's shard
-    /// key (Phase 821). The one sanctioned construction outside tests: the
+    /// key. The one sanctioned construction outside tests: the
     /// record is a plain record so the admissibility model can compare its
     /// scope as a string, and a source scan pins that no shipped code
     /// writes `Scope` from anything but a `ResolvedScope` — so the string a
@@ -148,10 +141,9 @@ module ModelInput =
             Scope = ResolvedScope.scopeId scope
         }
 
-    /// Refuse a fact that the disclosure gate did not admit. This is the
-    /// constructor Phase 792 relies on: the type cannot be populated by a
-    /// leak, so "every fact in the value was disclosable" holds by
-    /// construction rather than by review.
+    /// Refuse a fact that the disclosure gate did not admit, so the type
+    /// cannot be populated by a leak and "every fact in the value was
+    /// disclosable" holds by construction rather than by review.
     let tryAddFact (fact: DisclosedFact) : Result<DisclosedFact, string> =
         match fact.Verdict with
         | FactDisclosable -> Ok fact
@@ -186,21 +178,39 @@ module ModelInput =
 
     /// Set the conversation turns, mirroring any tool results they carry
     /// into `ToolResults` so the typed record cannot drift from what the
-    /// messages actually hold.
-    let withMessages (messages: AIProviderMessage list) (input: ModelInput) : ModelInput = {
-        input with
-            Messages = messages
-            ToolResults = [
-                for m in messages do
-                    for tr in m.ToolResults do
-                        {
-                            ToolName = tr.ToolCallId
-                            Content = tr.Content
-                        }
-            ]
-    }
+    /// messages actually hold. Each result's `ToolName` is the name on the
+    /// tool call that carries its id, among the turns up to and including
+    /// the result's own; a result no call answers to keeps an empty name.
+    let withMessages (messages: AIProviderMessage list) (input: ModelInput) : ModelInput =
+        let folded =
+            messages
+            |> List.fold
+                (fun (names: Map<string, string>, results: ToolResult list) m ->
+                    let names =
+                        m.ToolCalls
+                        |> List.fold (fun (acc: Map<string, string>) call -> acc.Add(call.Id, call.Name)) names
 
-    /// Lift a pre-phase `string option` system prompt into the value.
+                    let results =
+                        results
+                        @ [
+                            for tr in m.ToolResults ->
+                                {
+                                    ToolCallId = tr.ToolCallId
+                                    ToolName = names |> Map.tryFind tr.ToolCallId |> Option.defaultValue ""
+                                    Content = tr.Content
+                                }
+                        ]
+
+                    names, results)
+                (Map.empty, [])
+
+        {
+            input with
+                Messages = messages
+                ToolResults = snd folded
+        }
+
+    /// Lift a `string option` system prompt into the value.
     ///
     /// The migration seam, and the reason the string-shaped entry points
     /// can delegate rather than duplicate: a `Some text` becomes the one
@@ -235,7 +245,7 @@ module ModelInput =
     /// The rendering as one string — every byte the provider is handed,
     /// in the order it is handed them.
     ///
-    /// This is the surface the Phase 703 oracle searches, expressed over
+    /// This is the surface the non-entry oracle searches, expressed over
     /// the value rather than captured from a spy, so the two probes are
     /// looking at the same thing when they are asked to agree.
     let renderedText (input: ModelInput) : string =
@@ -258,10 +268,10 @@ module ModelInput =
     /// rendering but are absent from the value.
     ///
     /// A non-empty result is a rendering that showed the model a fact the
-    /// value does not account for — the failure Phase 791.D exists to
-    /// catch. `candidates` is required rather than inferred because a
-    /// leak can only be detected for an id the caller can name; that is
-    /// the same honest limit the Phase 703 probe works under.
+    /// value does not account for — the failure this exists to catch.
+    /// `candidates` is required rather than inferred because a leak can
+    /// only be detected for an id the caller can name; that is the same
+    /// honest limit the non-entry probe works under.
     let leakedFactIds (candidates: string list) (input: ModelInput) : string list =
         let text = renderedText input
         let declared = input.Facts |> List.map _.FactId |> Set.ofList
@@ -269,7 +279,7 @@ module ModelInput =
         candidates
         |> List.filter (fun id -> text.Contains id && not (declared.Contains id))
 
-    /// Whether any chunk failed the Phase 775 gate.
+    /// Whether any chunk failed the disclosure gate.
     let hasFailedGates (input: ModelInput) : bool =
         input.Chunks
         |> List.exists (fun c ->
@@ -277,7 +287,7 @@ module ModelInput =
             | GateFailed _ -> true
             | _ -> false)
 
-// ─── The typed provider entry (Phase 791.C) ──────────────────────────
+// ─── The typed provider entry ─────────────────────────────────────────
 //
 // An optional type extension rather than a member on `IAIProvider`.
 // Widening the interface would retype the abstract member every shipped
@@ -313,7 +323,7 @@ module ModelInputProviderExtensions =
             let rendered = ModelInput.render input
             this.SendStructuredMessage(rendered.Messages, tools, rendered.SystemPrompt, schema, retryPolicy)
 
-        /// Phase 661 — `SendMessageWith` over a `ModelInput`: renders
+        /// `SendMessageWith` over a `ModelInput`: renders
         /// once and delegates to the per-call-options extension on the
         /// string-shaped members, so the override reaches a provider
         /// that implements `IAIProviderModelOverride` and is reported
@@ -329,7 +339,7 @@ module ModelInputProviderExtensions =
             let rendered = ModelInput.render input
             this.SendMessageWith(options, rendered.Messages, tools, rendered.SystemPrompt, onStream, retryPolicy)
 
-        /// Phase 661 — `SendStructuredMessageWith` over a `ModelInput`.
+        /// `SendStructuredMessageWith` over a `ModelInput`.
         member this.SendStructuredMessageWith
             (
                 options: AIProviderCallOptions,

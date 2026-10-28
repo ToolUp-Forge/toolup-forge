@@ -7,9 +7,9 @@ open ToolUp.Platform
 open ToolUp.Platform.EntityTypes
 open ToolUp.Platform.Narrative
 open ToolUp.Platform.VectorKnowledgeTypes
-open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.AI
 open ToolUp.AI.AIToolRegistry
+open ToolUp.AI.ToolHelpers
 
 /// Built-in AI tools for surfacing narrative output produced on other
 /// pages or earlier in the session. The assistant can list the user's
@@ -21,18 +21,10 @@ open ToolUp.AI.AIToolRegistry
 /// Wired automatically by `composeWithAI`; apps do not need to register
 /// these explicitly.
 
-// ─── JSON helpers ────────────────────────────────────────────────
-
-let private fableJsonOptions = FableConverters.create ()
-
-let private fableSerialize (value: obj) : string =
-    JsonSerializer.Serialize(value, fableJsonOptions)
-
-// ─── Disclosure egress (Phase 525.C) ─────────────────────────────
+// ─── Disclosure egress ───────────────────────────────────────────
 //
 // These narrative tools are the SDK's fact-reading tool executors: a
-// narrative's `Metric` spans carry fact-referenced values (Phase 521),
-// so a `get_narrative` / `get_narrative_section` result is a fact
+// narrative's `Metric` spans carry fact-referenced values, so a `get_narrative` / `get_narrative_section` result is a fact
 // egress surface. When the fact companion's disclosure gate is
 // composed, every fact ref in a returned document is checked at the
 // `FactToolResult` surface; a denied fact's *value* is redacted to a
@@ -177,8 +169,9 @@ let private executeList (ctx: HttpContext) (argsJson: string) : Async<string> = 
                 | _ -> None
 
             l, t
-        with _ ->
-            20, None
+        with
+        | :? JsonException as ex -> refuseArguments [ "error", $"Arguments were not valid JSON: {ex.Message}" ]
+        | ex -> refuseArguments [ "error", $"Arguments could not be read: {ex.Message}" ]
 
     let! entries = NarrativePublisher.listByTag ctx limit tagFilter
     return fableSerialize entries
@@ -210,27 +203,25 @@ let private getDefinition: AIToolDefinition = {
 
 let private executeGet (ctx: HttpContext) (argsJson: string) : Async<string> = async {
     let idText =
-        let doc = JsonDocument.Parse(argsJson)
+        try
+            use doc = JsonDocument.Parse(argsJson)
 
-        match doc.RootElement.TryGetProperty("id") with
-        | true, v when v.ValueKind = JsonValueKind.String -> Some(v.GetString())
-        | _ -> None
+            match doc.RootElement.TryGetProperty("id") with
+            | true, v when v.ValueKind = JsonValueKind.String -> Some(v.GetString())
+            | _ -> None
+        with _ ->
+            None
 
     match idText with
     | None ->
         return
-            fableSerialize {|
-                error = "Required argument 'id' is missing. Call list_narratives first to get valid ids."
-            |}
+            refuseArguments [
+                "error", "Required argument 'id' is missing. Call list_narratives first to get valid ids."
+            ]
     | Some idText ->
 
         match Guid.TryParse idText with
-        | false, _ ->
-            return
-                fableSerialize {|
-                    error = "Argument 'id' is not a valid GUID."
-                    id = idText
-                |}
+        | false, _ -> return refuseArguments [ "error", "Argument 'id' is not a valid GUID."; "id", idText ]
         | true, id ->
             let! entry = NarrativePublisher.get ctx id
 
@@ -243,7 +234,7 @@ let private executeGet (ctx: HttpContext) (argsJson: string) : Async<string> = a
                         id = idText
                     |}
             | Some e ->
-                // Phase 525.C — tool-result egress door: denied fact values
+                // Tool-result egress door: denied fact values
                 // are redacted before rendering; the typed markers ride the
                 // payload so the model can name the restriction.
                 let! docForRender, withheld = applyToolResultDisclosure ctx e.Document
@@ -331,24 +322,19 @@ let private executeGetSection (ctx: HttpContext) (argsJson: string) : Async<stri
     | None
     | Some(None, _) ->
         return
-            fableSerialize {|
-                error = "Required argument 'id' is missing. Call list_narratives first to get valid ids."
-            |}
+            refuseArguments [
+                "error", "Required argument 'id' is missing. Call list_narratives first to get valid ids."
+            ]
     | Some(_, None) ->
         return
-            fableSerialize {|
-                error =
-                    "Required argument 'sectionId' is missing. Section ids are stable anchors visible in the `id` field of each section returned by `get_narrative`."
-            |}
+            refuseArguments [
+                "error",
+                "Required argument 'sectionId' is missing. Section ids are stable anchors visible in the `id` field of each section returned by `get_narrative`."
+            ]
     | Some(Some idText, Some sectionId) ->
 
         match Guid.TryParse idText with
-        | false, _ ->
-            return
-                fableSerialize {|
-                    error = "Argument 'id' is not a valid GUID."
-                    id = idText
-                |}
+        | false, _ -> return refuseArguments [ "error", "Argument 'id' is not a valid GUID."; "id", idText ]
         | true, id ->
             let! entry = NarrativePublisher.get ctx id
 
@@ -382,7 +368,7 @@ let private executeGetSection (ctx: HttpContext) (argsJson: string) : Async<stri
                         CanonicalUrl = e.Document.CanonicalUrl
                     }
 
-                    // Phase 525.C — tool-result egress door (see executeGet).
+                    // Tool-result egress door (see executeGet).
                     let! docForRender, withheld = applyToolResultDisclosure ctx sectionDoc
                     let markdown = NarrativeMarkdown.render docForRender
 
@@ -539,25 +525,20 @@ let private executePublish (ctx: HttpContext) (argsJson: string) : Async<string>
     | None
     | Some(None, _, _, _, _, _, _, _) ->
         return
-            fableSerialize {|
-                error = "Required argument 'id' is missing. Call list_narratives first to get valid ids."
-            |}
+            refuseArguments [
+                "error", "Required argument 'id' is missing. Call list_narratives first to get valid ids."
+            ]
     | Some(_, None, _, _, _, _, _, _) ->
         return
-            fableSerialize {|
-                error =
-                    "Required argument 'slug' is missing. Pass a URL slug like 'blog/q3-release' (no leading slash)."
-            |}
+            refuseArguments [
+                "error",
+                "Required argument 'slug' is missing. Pass a URL slug like 'blog/q3-release' (no leading slash)."
+            ]
     | Some(Some idText, Some slug, titleOpt, descOpt, layoutOpt, canonicalOpt, langOpt, collisionOpt) ->
         match Guid.TryParse idText with
-        | false, _ ->
-            return
-                fableSerialize {|
-                    error = "Argument 'id' is not a valid GUID."
-                    id = idText
-                |}
+        | false, _ -> return refuseArguments [ "error", "Argument 'id' is not a valid GUID."; "id", idText ]
         | true, id ->
-            // Phase 80b — per-request authoriser gate. If an
+            // Per-request authoriser gate. If an
             // AIPublishAuthoriser is registered, call it before
             // doing any further work; a `false` return short-
             // circuits to an unauthorised error response.
@@ -586,7 +567,7 @@ let private executePublish (ctx: HttpContext) (argsJson: string) : Async<string>
                             id = idText
                         |}
                 | Some entry ->
-                    // Phase 525.D — narrative-publication egress door. A
+                    // Narrative-publication egress door. A
                     // public page is the widest surface a narrative can
                     // reach; a document whose Metric spans reference facts
                     // the gate denies at `FactNarrativePublication` is
@@ -646,7 +627,7 @@ let private executePublish (ctx: HttpContext) (argsJson: string) : Async<string>
                                         "No INarrativePagePublisher is registered. This deployment does not have PublicRendering wired in, or has not enabled AI publishing via withAIPublishEnabled true."
                                 |}
                         | Some publisher ->
-                            // Phase 814 — the request's resolved user is the
+                            // The request's resolved user is the
                             // principal the page's lifecycle row records.
                             let! outcome =
                                 publisher.PublishAsync(

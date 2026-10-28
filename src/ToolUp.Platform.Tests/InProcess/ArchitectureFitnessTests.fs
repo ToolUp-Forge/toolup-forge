@@ -1136,10 +1136,10 @@ let private phase946Tests =
 //
 // Phase 946's case above scans reads through the opt-in substrate's reader
 // only. A server handler reads a conversation BY ID far more often through
-// its blobs: `ConversationBlobs.load*` and the assistant handler's
-// `loadConversationOrFail` / `loadProviderHistoryOrFail` /
-// `loadConversationMeta`. This case scans every server project's source
-// for those reads and requires the binding that holds each one to call a
+// its blobs: `ConversationBlobs.load*`, the conversation record's writers
+// that read first (`ConversationRecord.update*` / `appendExchange`) and the
+// assistant handler's raising wrappers over them. This case scans every
+// server project's source for those reads and requires the binding that holds each one to call a
 // gate — `canSee`, `checkOwnership` / `checkAppend` (the owner gate, Phase
 // 6j.D / 961) or `authoriseWrite` (Phase 859) — or to be pinned below WITH
 // ITS REASON. A pin naming a read that no longer exists is itself a
@@ -1159,7 +1159,7 @@ let private phase946Tests =
 
 let private conversationBlobReadCall =
     System.Text.RegularExpressions.Regex(
-        @"(?<![A-Za-z0-9_.])(ConversationBlobs\.load[A-Za-z]*|loadConversationOrFail|loadProviderHistoryOrFail|loadConversationMeta)\s+[A-Za-z_(]"
+        @"(?<![A-Za-z0-9_.])(ConversationBlobs\.load[A-Za-z]*|ConversationBlobs\.ConversationRecord\.(?:update[A-Za-z]*|appendExchange)|loadConversationOrFail|loadProviderHistoryOrFail|loadMetaOrFail|appendExchangeOrFail)(?:\s+[A-Za-z_(]|\s*$)"
     )
 
 let private fieldHead =
@@ -1197,7 +1197,7 @@ let private conversationBlobReadsIn (file: string) (source: string) : (Conversat
             let call = conversationBlobReadCall.Match line
 
             // A comment is not a read, and neither is the definition of one
-            // of the wrappers (`let private loadConversationMeta (...)`).
+            // of the wrappers (`let private loadMetaOrFail (...)`).
             let isDefinition =
                 call.Success
                 && (match headAt i with
@@ -1258,6 +1258,28 @@ let private conversationBlobReadPins: ConversationReadPin list = [
         PinBinding = "titleConversation"
         Reason =
             "called only from the tail of a SubmitMessage turn the gate has admitted; no route reaches it otherwise"
+    }
+    {
+        PinFile = "src/ToolUp.AI.Server/Server/AIAssistantHandler.fs"
+        PinBinding = "loadMetaOrFail"
+        Reason = "the raising wrapper over ConversationBlobs.loadMeta; every call of it is scanned here"
+    }
+    {
+        PinFile = "src/ToolUp.AI.Server/Server/AIAssistantHandler.fs"
+        PinBinding = "appendExchangeOrFail"
+        Reason = "the raising wrapper over ConversationRecord.appendExchange; every call of it is scanned here"
+    }
+    {
+        PinFile = "src/ToolUp.AI.Server/Server/AIConsentDispatch.fs"
+        PinBinding = "loadState"
+        Reason =
+            "the consent gate's read of the conversation the running turn belongs to; only the reach tools an admitted turn dispatches reach it"
+    }
+    {
+        PinFile = "src/ToolUp.AI.Server/Server/AIConsentDispatch.fs"
+        PinBinding = "recordDecision"
+        Reason =
+            "writes only the conversation a live pending consent prompt names (the consent id the admitted turn registered); the decision POST re-checks Read on the target module"
     }
 ]
 

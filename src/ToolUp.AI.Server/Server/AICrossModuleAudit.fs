@@ -11,11 +11,11 @@ open Microsoft.AspNetCore.Http
 open ToolUp.Platform
 open ToolUp.AI.AIToolRegistry
 
-/// Phase 36.E — the write side of the cross-module read trail.
+/// The write side of the cross-module read trail.
 ///
-/// **What it records and why it is not optional.** Phases 36.A / 730 /
-/// 36.C / 36.D built four gates in front of the `_platform.ai.*` family,
-/// and between them they record every REFUSAL: an RBAC denial, an
+/// **What it records and why it is not optional.** Four gates stand in
+/// front of the `_platform.ai.*` family, and between them they record
+/// every REFUSAL: an RBAC denial, an
 /// attempt on inert authority, a consent decision. None of them records
 /// a read that was ALLOWED. So the question a reviewer actually asks —
 /// "what did the agent read out of modules the user never named" — had
@@ -69,7 +69,7 @@ type ReadTarget = {
     /// tools, which read no module's data; one entry for the three that
     /// name a module; and however many the data catalogue attributes an
     /// entity type to for `query_entity` — including none, which is the
-    /// attribution hole Phases 36.C and 36.D both record.
+    /// attribution hole the opt-in and consent gates both record.
     Modules: string list
     /// The read's discriminator within the target, when it has one.
     QueryKey: string option
@@ -101,7 +101,9 @@ let OkOutcome = "ok"
 [<Literal>]
 let ExceptionOutcome = "Exception"
 
-/// Read the `error` discriminator out of a rendered tool result.
+/// The `error` discriminator of content a tool produced — how a gate
+/// inside the tool (permission, opt-in, consent, store, not-found) still
+/// reports its refusal.
 ///
 /// Reads the FIELD rather than substring-matching, so a success payload
 /// whose content happens to contain the word `PermissionDenied` — an
@@ -109,12 +111,12 @@ let ExceptionOutcome = "Exception"
 /// An unparseable result reads as success, because every refusal this
 /// family renders is well-formed JSON by construction and a malformed
 /// body is a bug in a tool, not evidence that a read was blocked.
-let outcomeOf (rendered: string) : string =
-    if String.IsNullOrWhiteSpace rendered then
+let private producedOutcome (content: string) : string =
+    if String.IsNullOrWhiteSpace content then
         OkOutcome
     else
         try
-            use doc = JsonDocument.Parse rendered
+            use doc = JsonDocument.Parse content
 
             if doc.RootElement.ValueKind <> JsonValueKind.Object then
                 OkOutcome
@@ -126,6 +128,15 @@ let outcomeOf (rendered: string) : string =
                 | _ -> OkOutcome
         with _ ->
             OkOutcome
+
+/// The outcome token one invocation records: the fault's or refusal's own
+/// discriminator, read from the value; for produced content, its `error`
+/// field.
+let outcomeOf (outcome: ToolOutcome) : string =
+    match outcome with
+    | ToolOutcome.Produced content -> producedOutcome content
+    | ToolOutcome.Faulted fault -> ToolFault.kind fault
+    | ToolOutcome.Refused(ToolRefusal.Denied _) -> "Denied"
 
 // ─── Context reads ───────────────────────────────────────────────────
 
@@ -182,7 +193,7 @@ let payloadOf
             | _ -> None
         TargetModules = target.Modules
         ToolName = toolName
-        // Phase 283 — the stable id of the component that performed the
+        // The stable id of the component that performed the
         // read. The TOOL is that component and `ComponentId.forTool` is
         // its declared slot, so this needs nothing resolved at run time.
         // The target MODULE's id is deliberately not carried; see the
@@ -239,10 +250,18 @@ let audited
         let! outcome = Async.Catch(execute ctx argsJson)
         stopwatch.Stop()
 
-        let rendered, outcomeToken =
+        // A fault the executor raised as a value (`ToolHelpers.ToolFaulted`)
+        // is recorded as that fault, with the bytes the model is shown.
+        let toolOutcome =
             match outcome with
-            | Choice1Of2 result -> result, outcomeOf result
-            | Choice2Of2 _ -> "", ExceptionOutcome
+            | Choice1Of2 result -> Some(ToolOutcome.Produced result)
+            | Choice2Of2(ToolHelpers.ToolFaulted fault) -> Some(ToolOutcome.Faulted fault)
+            | Choice2Of2 _ -> None
+
+        let rendered, outcomeToken =
+            match toolOutcome with
+            | Some value -> ToolOutcome.toModel value, outcomeOf value
+            | None -> "", ExceptionOutcome
 
         do!
             record

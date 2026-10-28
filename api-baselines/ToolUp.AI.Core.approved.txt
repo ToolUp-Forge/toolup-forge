@@ -750,9 +750,70 @@ ToolUp.AI.ToolExecutionLocation.Tag : System.Int32 { get }
 ToolUp.AI.ToolExecutionLocation+Tags (class)
 ToolUp.AI.ToolExecutionLocation+Tags.ClientSide : System.Int32 (literal)
 ToolUp.AI.ToolExecutionLocation+Tags.ServerSide : System.Int32 (literal)
+ToolUp.AI.ToolFault (class)
+ToolUp.AI.ToolFault.IsArgumentsRefused : System.Boolean { get }
+ToolUp.AI.ToolFault.IsClientThrew : System.Boolean { get }
+ToolUp.AI.ToolFault.IsClientTimedOut : System.Boolean { get }
+ToolUp.AI.ToolFault.IsClientToolUnregistered : System.Boolean { get }
+ToolUp.AI.ToolFault.IsInvalidArguments : System.Boolean { get }
+ToolUp.AI.ToolFault.IsThrew : System.Boolean { get }
+ToolUp.AI.ToolFault.IsUnknownTool : System.Boolean { get }
+ToolUp.AI.ToolFault.Tag : System.Int32 { get }
+ToolUp.AI.ToolFault+ArgumentsRefused (class)
+ToolUp.AI.ToolFault+ArgumentsRefused.fields : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]] { get }
+ToolUp.AI.ToolFault+ClientThrew (class)
+ToolUp.AI.ToolFault+ClientThrew.detail : System.String { get }
+ToolUp.AI.ToolFault+ClientThrew.toolName : System.String { get }
+ToolUp.AI.ToolFault+ClientTimedOut (class)
+ToolUp.AI.ToolFault+ClientTimedOut.detail : System.String { get }
+ToolUp.AI.ToolFault+ClientTimedOut.toolName : System.String { get }
+ToolUp.AI.ToolFault+ClientToolUnregistered (class)
+ToolUp.AI.ToolFault+ClientToolUnregistered.detail : System.String { get }
+ToolUp.AI.ToolFault+ClientToolUnregistered.toolName : System.String { get }
+ToolUp.AI.ToolFault+InvalidArguments (class)
+ToolUp.AI.ToolFault+InvalidArguments.detail : System.String { get }
+ToolUp.AI.ToolFault+InvalidArguments.toolName : System.String { get }
+ToolUp.AI.ToolFault+Tags (class)
+ToolUp.AI.ToolFault+Tags.ArgumentsRefused : System.Int32 (literal)
+ToolUp.AI.ToolFault+Tags.ClientThrew : System.Int32 (literal)
+ToolUp.AI.ToolFault+Tags.ClientTimedOut : System.Int32 (literal)
+ToolUp.AI.ToolFault+Tags.ClientToolUnregistered : System.Int32 (literal)
+ToolUp.AI.ToolFault+Tags.InvalidArguments : System.Int32 (literal)
+ToolUp.AI.ToolFault+Tags.Threw : System.Int32 (literal)
+ToolUp.AI.ToolFault+Tags.UnknownTool : System.Int32 (literal)
+ToolUp.AI.ToolFault+Threw (class)
+ToolUp.AI.ToolFault+Threw.message : System.String { get }
+ToolUp.AI.ToolFault+Threw.toolName : System.String { get }
+ToolUp.AI.ToolFault+UnknownTool (class)
+ToolUp.AI.ToolFault+UnknownTool.toolName : System.String { get }
+ToolUp.AI.ToolFaultModule (class)
+ToolUp.AI.ToolFaultModule.kind(ToolUp.AI.ToolFault) : System.String
+ToolUp.AI.ToolOutcome (class)
+ToolUp.AI.ToolOutcome.IsFaulted : System.Boolean { get }
+ToolUp.AI.ToolOutcome.IsProduced : System.Boolean { get }
+ToolUp.AI.ToolOutcome.IsRefused : System.Boolean { get }
+ToolUp.AI.ToolOutcome.Tag : System.Int32 { get }
+ToolUp.AI.ToolOutcome+Faulted (class)
+ToolUp.AI.ToolOutcome+Faulted.Item : ToolUp.AI.ToolFault { get }
+ToolUp.AI.ToolOutcome+Produced (class)
+ToolUp.AI.ToolOutcome+Produced.content : System.String { get }
+ToolUp.AI.ToolOutcome+Refused (class)
+ToolUp.AI.ToolOutcome+Refused.Item : ToolUp.AI.ToolRefusal { get }
+ToolUp.AI.ToolOutcome+Tags (class)
+ToolUp.AI.ToolOutcome+Tags.Faulted : System.Int32 (literal)
+ToolUp.AI.ToolOutcome+Tags.Produced : System.Int32 (literal)
+ToolUp.AI.ToolOutcome+Tags.Refused : System.Int32 (literal)
+ToolUp.AI.ToolOutcomeModule (class)
+ToolUp.AI.ToolOutcomeModule.isError(ToolUp.AI.ToolOutcome) : System.Boolean
+ToolUp.AI.ToolOutcomeModule.toModel(ToolUp.AI.ToolOutcome) : System.String
+ToolUp.AI.ToolRefusal (class)
+ToolUp.AI.ToolRefusal.Tag : System.Int32 { get }
+ToolUp.AI.ToolRefusal.reason : System.String { get }
+ToolUp.AI.ToolRefusal.toolName : System.String { get }
 ToolUp.AI.ToolResult (class)
-ToolUp.AI.ToolResult..ctor(System.String, System.String)
+ToolUp.AI.ToolResult..ctor(System.String, System.String, System.String)
 ToolUp.AI.ToolResult.Content : System.String { get }
+ToolUp.AI.ToolResult.ToolCallId : System.String { get }
 ToolUp.AI.ToolResult.ToolName : System.String { get }
 ToolUp.AI.VerifiedNumber (class)
 ToolUp.AI.VerifiedNumber..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], ToolUp.AI.NumericVerdict, Microsoft.FSharp.Core.FSharpOption`1[System.String])

@@ -22,6 +22,7 @@ let private registeredTests =
         CopilotProviderTests.tests
         // Phase 661 - the per-call model override, offline, per connector.
         ModelOverrideTests.tests
+        ClaudeRetryFloorTests.tests
     ]
 
 /// Phase 722 — the registered list plus the guard that makes an

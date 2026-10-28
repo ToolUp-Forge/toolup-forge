@@ -13,10 +13,9 @@ open ToolUp.Platform.Metrics
 open ToolUp.AI
 open ToolUp.AI.AIToolRegistry
 
-/// Classification of tool-invocation failures. Converts the previously
-/// free-form exception messages into a discriminated shape so the agent
-/// loop, the SSE event stream, and future audit/dead-letter handling can
-/// all reason about errors without string-matching.
+/// Classification of tool-invocation failures, as the loop observes them.
+/// Each case is a `ToolOutcome` (`ToolInvocationError.toOutcome`), which is
+/// what the loop's rails read and what the model is shown.
 type ToolInvocationError =
     /// Model requested a tool the registry doesn't know about.
     | UnknownTool of toolName: string
@@ -30,15 +29,18 @@ type ToolInvocationError =
     | Denied of toolName: string * reason: string
 
 module ToolInvocationError =
-    /// Human-readable rendering suitable to pass back to the AI model as a
-    /// tool result — the model uses this to decide whether to retry with
-    /// different args, apologise to the user, or continue.
-    let toToolResultContent (err: ToolInvocationError) =
+    /// The outcome the error is: a refusal for `Denied`, a fault otherwise.
+    let toOutcome (err: ToolInvocationError) : ToolOutcome =
         match err with
-        | UnknownTool name -> $"Unknown tool: {name}"
-        | ToolThrew(name, msg) -> $"Tool '{name}' failed: {msg}"
-        | InvalidArguments(name, detail) -> $"Tool '{name}' received invalid arguments: {detail}"
-        | Denied(name, reason) -> $"Tool '{name}' was denied: {reason}"
+        | UnknownTool name -> ToolOutcome.Faulted(ToolFault.UnknownTool name)
+        | ToolThrew(name, msg) -> ToolOutcome.Faulted(ToolFault.Threw(name, msg))
+        | InvalidArguments(name, detail) -> ToolOutcome.Faulted(ToolFault.InvalidArguments(name, detail))
+        | Denied(name, reason) -> ToolOutcome.Refused(ToolRefusal.Denied(name, reason))
+
+    /// The tool result the model is shown — `ToolOutcome.toModel` of the
+    /// error's outcome. The model uses it to decide whether to retry with
+    /// different args, apologise to the user, or continue.
+    let toToolResultContent (err: ToolInvocationError) = ToolOutcome.toModel (toOutcome err)
 
 /// Maximum number of outer retries applied at the agent-loop level, on top
 /// of the provider's own RetryPolicy budget. Kicks in only for
@@ -111,21 +113,36 @@ let private detectConfusion (content: string) : string option =
 
         confusionMarkers |> List.tryFind (fun marker -> lowered.Contains marker)
 
-/// Identify tool results that our own invocation-error rendering produced
-/// (see `ToolInvocationError.toToolResultContent`). Matching by prefix
-/// keeps this in lockstep with that function; if a new invocation-error
-/// case is added, update both.
-let private isErrorToolResult (content: string) =
-    if isNull content then
-        true
-    elif content.StartsWith "Unknown tool:" then
-        true
-    elif content.StartsWith "Tool '" then
-        content.Contains "' failed:"
-        || content.Contains "' received invalid arguments:"
-        || content.Contains "' was denied:"
-    else
-        false
+/// Read a client-resident tool's posted result. A fault the browser
+/// reported arrives as `ToolOutcome.toModel` rendered it, and is read back
+/// as that fault only when re-rendering it reproduces the posted bytes
+/// exactly; anything else is content the tool produced.
+let private ofClientResult (posted: string) : ToolOutcome =
+    let fault =
+        try
+            use doc = JsonDocument.Parse posted
+            let root = doc.RootElement
+
+            let field (name: string) =
+                match root.TryGetProperty name with
+                | true, v when v.ValueKind = JsonValueKind.String -> Some(v.GetString())
+                | _ -> None
+
+            if root.ValueKind <> JsonValueKind.Object then
+                None
+            else
+                match field "error", field "tool", field "detail" with
+                | Some "ToolThrew", Some tool, Some detail -> Some(ToolFault.ClientThrew(tool, detail))
+                | Some "ClientWatchdogTimeout", Some tool, Some detail -> Some(ToolFault.ClientTimedOut(tool, detail))
+                | Some "UnknownClientTool", Some tool, Some detail ->
+                    Some(ToolFault.ClientToolUnregistered(tool, detail))
+                | _ -> None
+        with _ ->
+            None
+
+    match fault with
+    | Some f when ToolOutcome.toModel (ToolOutcome.Faulted f) = posted -> ToolOutcome.Faulted f
+    | _ -> ToolOutcome.Produced posted
 
 /// Emit a synthetic final assistant message carrying a stop-reason
 /// explanation, then signal end-of-turn through the SSE stream so the
@@ -172,7 +189,7 @@ let private classifyForAgentLoop (err: AIProviderError) =
 /// outer retry for `RetriesExhausted` (the provider's own budget having
 /// lapsed) then propagates any remaining error to the caller, which
 /// surfaces it at the `SubmitMessage` boundary as a failed `AITask`.
-/// Phase 6g.A: server-side timeout for client-resident tool calls.
+/// Server-side timeout for client-resident tool calls.
 /// The browser is expected to run the tool body and POST the result
 /// to `/api/ai/tool-result` within this window; otherwise the agent
 /// loop aborts the call via `ClientToolDispatchRegistry.TryAbort`
@@ -181,24 +198,22 @@ let private classifyForAgentLoop (err: AIProviderError) =
 /// envelope so the user-facing failure mode is "client gave up"
 /// rather than "server timed out".
 ///
-/// Phase 36.D: the value is no longer declared here. A suspended
-/// consent prompt is the same wait — a server thread parked on a
-/// `TaskCompletionSource` only the browser can complete — and two
-/// constants would be two budgets to keep in step. This binding is the
-/// local name for the one declaration in
-/// `AIConsentDispatch.SuspendedDispatchTimeoutMs`; every read below is
-/// unchanged, and so is the value.
+/// The value is not declared here. A suspended consent prompt is the
+/// same wait — a server thread parked on a `TaskCompletionSource` only
+/// the browser can complete — and two constants would be two budgets to
+/// keep in step. This binding is the local name for the one declaration
+/// in `AIConsentDispatch.SuspendedDispatchTimeoutMs`.
 let private ClientResidentToolTimeoutMs =
     AIConsentDispatch.SuspendedDispatchTimeoutMs
 
-/// Phase 6h follow-up: cap on `IEventStore.Write` for latency
+/// Cap on `IEventStore.Write` for latency
 /// telemetry. The agent loop awaits this on the response path; a
 /// slow / wedged event store backend would otherwise stall the
 /// conversation after the LLM has already finished.
 [<Literal>]
 let private LatencyWriteTimeoutMs = 5_000
 
-/// Phase 6h follow-up: per-call cap on `provider.SendMessage`.
+/// Per-call cap on `provider.SendMessage`.
 /// `RetryPolicy.defaults.Timeout` is `None` (provider default —
 /// `HttpClient.Timeout` = 5 min instance-wide), which is far longer
 /// than the client-side 60 s watchdog. A hung Anthropic call would
@@ -211,7 +226,7 @@ let private LatencyWriteTimeoutMs = 5_000
 [<Literal>]
 let private ProviderSendTimeoutMs = 50_000
 
-// ─── Phase 1109 — the caller's call budget ───────────────────────
+// ─── The caller's call budget ───────────────────────
 //
 // The 50 s cap above is right for chat, where a client watchdog is waiting,
 // and wrong for a background run nobody is waiting on: a long report is cut
@@ -238,7 +253,7 @@ type AgentCallBudget = {
 
 module AgentCallBudget =
     /// The interactive assistant's budget: 50 s a call, the provider's own
-    /// reply cap — what every call made before Phase 1109 ran under.
+    /// reply cap.
     let interactive: AgentCallBudget = {
         CallTimeout = TimeSpan.FromMilliseconds(float ProviderSendTimeoutMs)
         MaxTokens = None
@@ -258,7 +273,7 @@ module AgentCallBudget =
 
         sprintf "a call budget of %.0f s%s" (effectiveTimeout budget).TotalSeconds reply
 
-/// Phase 1109 — a provider call reached the end of a background caller's
+/// A provider call reached the end of a background caller's
 /// call budget with the reply still streaming. Raised only under a budget
 /// that names `RaiseWith`; the message names the budget and how to raise it.
 /// Another attempt under the same budget meets the same cap, so a caller
@@ -272,19 +287,18 @@ exception AgentCallBudgetExceeded of budget: AgentCallBudget * elapsed: TimeSpan
             this.detail
             (this.budget.RaiseWith |> Option.defaultValue "raise the call budget")
 
-// ─── Phase 6i.A — per-turn latency telemetry ─────────────────────
+// ─── Per-turn latency telemetry ─────────────────────
 //
 // One `AILatencyRecord` per agent-loop iteration is written through
 // `IEventStore` under `AILatencyRecord.SourceModule`. Always-on (no
 // config flag): one event-store write per turn is comfortably below
 // the noise floor of a multi-second LLM call. The dev endpoint
-// `/dev/ai-latency` reads these back via `ReadBySource` (Phase 9f
+// `/dev/ai-latency` reads these back via `ReadBySource` (the
 // `_by-source` index resolves in O(matches)) and rolls up p50/p95/p99
 // over a 60-minute window.
 //
-// Phase 9e wire-up (shipped 2026-05-23, Tidy-Up #1): the same per-turn
-// observations are emitted through `IMetricsSink` as `toolup.ai.turn.duration.ms`,
-// `toolup.ai.ttft.ms`, and `toolup.ai.cached_prompt_ratio` — see the
+// The same per-turn observations are emitted through `IMetricsSink` as
+// `toolup.ai.turn.duration.ms`, `toolup.ai.ttft.ms`, and `toolup.ai.cached_prompt_ratio` — see the
 // `metricsSinkOpt` branch inside `emitLatency` below. Registrations live
 // in `AILatencyMetrics.fs` and are folded into `ServerApp.MetricRegistrations`
 // by `AIServerApp.create`.
@@ -313,7 +327,7 @@ let private resolveLatencyScope (ctx: HttpContext) : StorageScope =
             Persist = true
         }
 
-/// Phase 9s — the caller's user id, for `AILatencyRecord.UserId`.
+/// The caller's user id, for `AILatencyRecord.UserId`.
 ///
 /// Read from the same `HttpContext.Items` stamp `resolveLatencyScope`
 /// falls back to, so the two agree by construction. `""` when the
@@ -326,8 +340,8 @@ let private resolveLatencyUserId (ctx: HttpContext) : string =
     | _ -> ""
 
 /// The full agent loop. Reached from `runAgentLoop` below, which is
-/// the entry point every caller uses — it applies the Phase 6j.B
-/// Tier-3 triage intercept first and only then delegates here.
+/// the entry point every caller uses — it applies the Tier-3 triage
+/// intercept first and only then delegates here.
 ///
 /// Split out rather than guarded inline so the intercept is a visible
 /// seam at the top of the file's public surface instead of a branch
@@ -350,8 +364,8 @@ let private runFullAgentLoop
     (onEvent: AIStreamEvent -> unit)
     : Async<AIProviderMessage list> =
     async {
-        // Phase 36.D: stamp the turn's identity and its SSE emitter onto
-        // the context every tool executor already receives.
+        // Stamp the turn's identity and its SSE emitter onto the context
+        // every tool executor already receives.
         //
         // A server-resident tool's signature is `HttpContext -> argsJson ->
         // Async<string>`: it has no conversation and no way to put an event
@@ -361,7 +375,7 @@ let private runFullAgentLoop
         // one gate — so the two facts ride the same per-request items carry
         // the loop already depends on for scope and permissions, keyed
         // through the constants that define them so both ends move
-        // together (the discipline Phase 730 set for the grant stamps).
+        // together, as the grant stamps do.
         //
         // Unconditional and cheap: three dictionary writes per turn,
         // whatever the deployment's consent mode. The gate that reads them
@@ -372,7 +386,7 @@ let private runFullAgentLoop
         ctx.Items[AIConsentDispatch.ItemsKeys.StreamEmitter] <-
             box ({ Emit = onEvent }: AIConsentDispatch.StreamEmitter)
 
-        // Phase 36.A: the caller's access context, reconstructed from the
+        // The caller's access context, reconstructed from the
         // items the background context carries forward. Resolved ONCE at
         // the top of the loop — permissions do not change mid-turn, and
         // re-resolving per tool call would let a mid-conversation
@@ -382,7 +396,7 @@ let private runFullAgentLoop
         // unrestricted anonymous context and the gate passes everything).
         let access = reconstructAccessContext ctx
 
-        // Phase 730: the grant / consent gate, resolved ONCE alongside the
+        // The grant / consent gate, resolved ONCE alongside the
         // access context and for the same reason — the stamps it reads do
         // not change mid-turn, and re-resolving per tool call would let a
         // mid-conversation consent revocation apply inconsistently across
@@ -391,10 +405,10 @@ let private runFullAgentLoop
         // `GetService` (GP 13).
         let grantGate = moduleGrantGate ctx
 
-        // Phase 36.A: filter the per-turn tool list by the caller's
-        // per-module `Read` permission, then (Phase 730) by whether the
-        // caller's authority on that module is actually LIVE, then
-        // (Phase 6g.A) by the request's surface. Tools sourced from a
+        // Filter the per-turn tool list by the caller's per-module
+        // `Read` permission, then by whether the caller's authority on
+        // that module is actually LIVE, then by the request's surface.
+        // Tools sourced from a
         // module the caller cannot read — or holds only a pending or
         // consent-revoked grant on — never reach the provider, so the
         // model neither sees them nor plans around them; tools declared as
@@ -423,7 +437,7 @@ let private runFullAgentLoop
         let providerName = provider.Capabilities.ProviderName
         let providerModel = provider.Capabilities.Model
 
-        // Phase 498 — the provider that is CURRENTLY serving, read at
+        // The provider that is CURRENTLY serving, read at
         // the moment it is needed rather than pinned at the top of the
         // loop. `providerName` / `providerModel` above stay the turn's
         // STARTING provider, which is the right subject for the log
@@ -435,7 +449,7 @@ let private runFullAgentLoop
         // life of the loop. With a chain, the failover composite
         // reports the entry that took over, so the turn's
         // `AILatencyRecord` and its metric tags name the winner
-        // (Phase 498.C) instead of the provider that went down.
+        // instead of the provider that went down.
         let servingProviderName () = provider.Capabilities.ProviderName
         let servingProviderModel () = provider.Capabilities.Model
 
@@ -457,7 +471,7 @@ let private runFullAgentLoop
         let mutable currentMessages = messages
         let mutable keepGoing = true
 
-        // Phase 6i.A: per-turn latency telemetry. Resolved once at the
+        // Per-turn latency telemetry. Resolved once at the
         // top of the loop — neither the event store nor the scope
         // changes mid-conversation. `eventStoreOpt` is `None` in tests
         // that bypass `compose`; emission silently no-ops in that case.
@@ -466,7 +480,7 @@ let private runFullAgentLoop
             | :? IEventStore as s -> Some s
             | _ -> None
 
-        // Phase 9e wire-up: companion-contributed `IMetricsSink`.
+        // Companion-contributed `IMetricsSink`.
         // Resolved once at the top of the loop (peer to `eventStoreOpt`).
         // `IMetricsSink` is never `null` in DI when `compose` runs (the
         // `NoOpMetricsSink` is registered when `MetricsEndpoint = Disabled`)
@@ -492,7 +506,7 @@ let private runFullAgentLoop
 
         let latencyScope = resolveLatencyScope ctx
 
-        // Phase 9s - resolved once per loop beside the scope, for the
+        // Resolved once per loop beside the scope, for the
         // same reason: both are properties of the REQUEST, and reading
         // them per turn would re-derive a constant inside the loop.
         let latencyUserId = resolveLatencyUserId ctx
@@ -513,7 +527,7 @@ let private runFullAgentLoop
                         | Some r -> r.StopReason
                         | None -> ""
 
-                    // Phase 6i.B: pull provider-reported token counts off
+                    // Pull provider-reported token counts off
                     // `response.Usage`. None when the provider didn't
                     // surface a usage block (turn errored before reading
                     // the response, or the provider declares
@@ -546,7 +560,7 @@ let private runFullAgentLoop
                         Payload = JsonSerializer.Serialize(payload, latencyJsonOptions)
                     }
 
-                    // Phase 6h follow-up: bound the event-store write so a
+                    // Bound the event-store write so a
                     // slow / wedged backend can't stall the agent loop after
                     // the LLM finished. Latency telemetry must never crash
                     // OR block an in-progress conversation. Mirrors the
@@ -571,7 +585,7 @@ let private runFullAgentLoop
                         logger.Warn
                             $"AI latency event-store write failed (taskId={taskId}, turn={turnNumber}): {ex.Message}. Record dropped; conversation unaffected."
 
-                    // Phase 9e wire-up: emit the same per-turn observations
+                    // Emit the same per-turn observations
                     // through `IMetricsSink` so operator dashboards can
                     // chart p50 / p95 / p99 alongside the existing
                     // `/dev/ai-latency` event-store rollup. Hot-path
@@ -619,7 +633,7 @@ let private runFullAgentLoop
         // loop — a wedged backend logs at Warn and the denial still
         // returns to the model.
         //
-        // Phase 36.A parameterises the stream so the RBAC denial gets its
+        // The stream is parameterised so the RBAC denial gets its
         // own `_platform.ai.unauthorized_tool` source rather than being
         // conflated with the allowlist stream: they are different
         // refusals with different operator responses (an allowlist deny
@@ -663,7 +677,7 @@ let private runFullAgentLoop
                         $"AI tool denial audit write ({auditSource}) failed (taskId={taskId}): {ex.Message}. Record dropped; conversation unaffected."
         }
 
-        // Phase 47 — the sustained-denial rate monitor and the channel
+        // The sustained-denial rate monitor and the channel
         // it alerts through. Resolved once per turn rather than per
         // denial; a deployment that declared no alert policy has no
         // monitor registered, so its entire cost is one failed
@@ -680,7 +694,7 @@ let private runFullAgentLoop
 
         /// G12 allowlist denial stream — unchanged shape and source.
         ///
-        /// Phase 47 additionally feeds the rolling denial-rate monitor.
+        /// It additionally feeds the rolling denial-rate monitor.
         /// The audit write is what makes a denial *readable*; the
         /// monitor is what makes a sustained campaign *noticed* without
         /// anyone refreshing a page. It runs after the write and never
@@ -692,7 +706,7 @@ let private runFullAgentLoop
             do! AIDenialRateMonitor.observeAndAlert denialRateMonitor denialAlertChannel latencyScope.ScopeId toolName
         }
 
-        /// Phase 36.A — RBAC denial stream. A tool the model named whose
+        /// RBAC denial stream. A tool the model named whose
         /// `SourceModule` the caller holds no `Read` on. Distinct source
         /// from the allowlist stream (see `writeToolDenialAudit`).
         let writeUnauthorizedToolAudit (toolName: string) (reason: string) =
@@ -716,7 +730,7 @@ let private runFullAgentLoop
         // The inner error is what informs whether to raise the
         // `RetryPolicy` budget, back off longer, or change tier.
         let sendWithOuterRetry (msgs: AIProviderMessage list) = async {
-            // Phase 6i.A: TtftMs measurement. Stopwatch starts here so
+            // TtftMs measurement. Stopwatch starts here so
             // the recorded time reflects everything the user perceives
             // as "wait before first character" — including any provider
             // retry pauses. `firstDeltaMs` stays `None` on tool-only
@@ -730,13 +744,12 @@ let private runFullAgentLoop
 
                 onEvent (MessageDelta(conversationId, content))
 
-            // Phase 6h follow-up: override the provider default so a
-            // hung Anthropic call surfaces as `AITaskFailed` within
-            // ~50 s rather than blocking until `HttpClient.Timeout`
-            // (5 min instance-wide). The client watchdog is 60 s; we
-            // want the provider error to win the race so chat shows
-            // the real cause instead of the generic watchdog.
-            // Phase 1109 — the cap is the caller's budget; the
+            // Override the provider default so a hung Anthropic call
+            // surfaces as `AITaskFailed` within ~50 s rather than
+            // blocking until `HttpClient.Timeout` (5 min instance-wide).
+            // The client watchdog is 60 s; we want the provider error to
+            // win the race so chat shows the real cause instead of the
+            // generic watchdog. The cap is the caller's budget; the
             // interactive budget is that same 50 s.
             let providerCallPolicy = {
                 RetryPolicy.defaults with
@@ -744,12 +757,11 @@ let private runFullAgentLoop
             }
 
             let rec loop outerRetriesUsed = async {
-                // Phase 6h follow-up — Workstream B. Trace each provider
-                // call attempt under `ai.agent` so an operator running
-                // with `TOOLUP_TRACE_CATEGORIES=ai.agent` can see exactly
-                // when SendMessage is invoked, distinguishing "stuck in
-                // provider" from "stuck in our agent loop logic." The
-                // existing `Info` "AI agent turn N" log fires once per
+                // Trace each provider call attempt under `ai.agent` so an
+                // operator running with `TOOLUP_TRACE_CATEGORIES=ai.agent`
+                // can see exactly when SendMessage is invoked, distinguishing
+                // "stuck in provider" from "stuck in our agent loop logic."
+                // The existing `Info` "AI agent turn N" log fires once per
                 // turn at the top; this fires once per provider attempt
                 // (1 + outer retries) so they're nested correctly.
                 Logger.trace
@@ -757,15 +769,14 @@ let private runFullAgentLoop
                     "ai.agent"
                     $"provider.SendMessage attempt {outerRetriesUsed + 1} (conversation={conversationId}, msgCount={msgs.Length}, toolCount={tools.Length})"
 
-                // Phase 791 — the turn's value. The blocks are fixed for
+                // The turn's value. The blocks are fixed for
                 // the conversation; the messages grow with each tool
                 // round-trip, so the value is rebuilt per attempt and
                 // `withMessages` keeps its tool-result record in step.
                 let turnInput = ModelInput.withMessages msgs modelInput
 
-                // Phase 1109 — a budget naming a reply length sends it
-                // through the call; one that does not sends the call
-                // exactly as before.
+                // A budget naming a reply length sends it through the
+                // call; one that does not leaves the provider's own cap.
                 let! result =
                     match budget.MaxTokens with
                     | None -> provider.SendMessage(turnInput, tools, Some streamCb, providerCallPolicy)
@@ -791,7 +802,7 @@ let private runFullAgentLoop
                 | Ok response -> return response
                 | Error err ->
                     match classifyForAgentLoop err with
-                    // Phase 1109 — the reply was still streaming when the
+                    // The reply was still streaming when the
                     // call reached a background caller's budget: name the
                     // budget, typed, so the caller does not retry into the
                     // same cap.
@@ -836,7 +847,7 @@ let private runFullAgentLoop
         }
 
         while keepGoing do
-            // Phase 6h: cancellation check at turn boundary. The
+            // Cancellation check at turn boundary. The
             // user has clicked Cancel via /api/ai/cancel/{taskId};
             // emit StreamCancelled and raise OperationCanceledException
             // to break out of the loop cleanly. The outer try/with
@@ -875,7 +886,7 @@ let private runFullAgentLoop
             logger.Info
                 $"AI agent turn {turn} (conversation={conversationId}, provider={providerName}/{providerModel}, tools={tools.Length})"
 
-            // Phase 6i.A: per-turn stopwatch + tool-timing accumulator.
+            // Per-turn stopwatch + tool-timing accumulator.
             // Both are local to the iteration body so they reset every
             // turn. `turnToolTimings` is populated only by the tool-use
             // branch; confusion-marker / end-turn branches leave it `[]`.
@@ -999,7 +1010,7 @@ let private runFullAgentLoop
                     // failures propagate and are handled at the SubmitMessage
                     // boundary.
                     //
-                    // Phase 6i.A: each parallel branch also returns a
+                    // Each parallel branch also returns a
                     // `ToolCallTiming` so the per-turn latency record
                     // can attribute time per tool. The location
                     // (server/client) is captured from the registry
@@ -1019,21 +1030,18 @@ let private runFullAgentLoop
 
                             let mutable resolvedLocation = ServerSide
 
-                            // Phase 709: resolved once, up here, because the
+                            // Resolved once, up here, because the
                             // post-dispatch budget guard below needs the same
                             // entry the execution branch does. A pure list
-                            // lookup — no side effect, and `None` still takes
-                            // the `UnknownTool` path exactly as before.
+                            // lookup — no side effect, and `None` takes the
+                            // `UnknownTool` path.
                             let toolOpt = registry.FindByName tc.Name
 
-                            let! result = async {
+                            let! outcome = async {
                                 try
-                                    // ─── Phase 793 — ONE decision, four refusals ───
+                                    // ─── ONE decision, four refusals ───
                                     //
-                                    // The RBAC arm and the grant arm below used
-                                    // to be two guards over two functions; the
-                                    // list filter composed the same two by hand.
-                                    // `ToolGate.decide` is now the whole
+                                    // `ToolGate.decide` is the whole
                                     // decision — RBAC, grant liveness, effect
                                     // ceiling — and the list, this re-check and
                                     // the MCP host all call it, so the tools the
@@ -1051,7 +1059,7 @@ let private runFullAgentLoop
 
                                     match toolOpt, verdict with
                                     | Some tool, ToolRefusedSource _ ->
-                                        // ─── Phase 36.A — dispatch-site re-check ───
+                                        // ─── Dispatch-site re-check ───
                                         //
                                         // Defence in depth. The per-turn tool
                                         // list above already excluded this tool,
@@ -1067,15 +1075,11 @@ let private runFullAgentLoop
                                         // point before `tool.Execute` runs with
                                         // the caller's scope in hand (GP 4).
                                         //
-                                        // A typed `Denied`, not `ToolThrew`: the
-                                        // model must be told the action is not
-                                        // permitted rather than that it failed,
-                                        // or it retries. (`Denied` postdates this
-                                        // phase's specification, which named
-                                        // `ToolThrew` before the typed-refusal
-                                        // case existed.) `isErrorToolResult`
-                                        // already recognises the rendering, so
-                                        // the loop's early-stop budget counts it.
+                                        // A refusal, not a fault: the model must
+                                        // be told the action is not permitted
+                                        // rather than that it failed, or it
+                                        // retries. A refusal is an error to the
+                                        // rails, so the early-stop budget counts it.
                                         let reason =
                                             $"requires Read on module '{tool.Definition.SourceModule}', which you do not have access to"
 
@@ -1095,16 +1099,16 @@ let private runFullAgentLoop
 
                                         do! writeUnauthorizedToolAudit tool.Definition.Name reason
 
-                                        return Error(Denied(tc.Name, reason))
+                                        return ToolInvocationError.toOutcome (Denied(tc.Name, reason))
                                     | Some tool, ToolRefusedGrant _ ->
-                                        // Phase 793: the decision was taken above;
-                                        // this call is the AUDIT half of the Phase
-                                        // 730 guard — it re-derives the same
+                                        // The decision was taken above; this
+                                        // call is the AUDIT half of the grant
+                                        // guard — it re-derives the same
                                         // verdict from the same stamps and emits
                                         // the `UnconsentedGrantRefused` row.
                                         guardToolGrant ctx access tool.Definition.SourceModule |> ignore
 
-                                        // ─── Phase 730 — grant / consent re-check ───
+                                        // ─── Grant / consent re-check ───
                                         //
                                         // The same defence-in-depth argument as
                                         // the RBAC arm above, one layer in. The
@@ -1136,9 +1140,9 @@ let private runFullAgentLoop
                                                 tool.Definition.SourceModule
                                         )
 
-                                        return Error(Denied(tc.Name, reason))
+                                        return ToolInvocationError.toOutcome (Denied(tc.Name, reason))
                                     | Some tool, (ToolRefusedUndeclared | ToolRefusedEffects _ as refused) ->
-                                        // ─── Phase 793 — effect-ceiling re-check ───
+                                        // ─── Effect-ceiling re-check ───
                                         //
                                         // The list filter already dropped this tool
                                         // under the deployment's `ToolPolicy`, so a
@@ -1160,22 +1164,20 @@ let private runFullAgentLoop
                                         )
 
                                         do! writeDenialAudit tool.Definition.Name reason
-                                        return Error(Denied(tc.Name, reason))
+                                        return ToolInvocationError.toOutcome (Denied(tc.Name, reason))
                                     | Some tool, ToolAdmitted ->
-                                        // ─── Phase 503 — the last two gates, then the
+                                        // ─── The last two gates, then the
                                         // routing. The ORDER is the contract.
                                         //
-                                        // The Phase 46 allowlist consult used to live
-                                        // inside the ClientResident arm below, because
-                                        // it is a client-resident seam. Phase 503's
-                                        // approval gate is not: the actions it exists
-                                        // for — writes, deletions, spend, outbound
-                                        // calls — are SERVER-resident. So the allowlist
-                                        // consult is hoisted here (answering `Allow`
-                                        // for a server-resident tool, which is what its
-                                        // absence always meant), the approval gate runs
-                                        // after it for BOTH locations, and only then
-                                        // does the Location routing happen.
+                                        // The allowlist consult is a client-resident
+                                        // seam. The approval gate is not: the actions
+                                        // it exists for — writes, deletions, spend,
+                                        // outbound calls — are SERVER-resident. So the
+                                        // allowlist consult runs here (answering
+                                        // `Allow` for a server-resident tool), the
+                                        // approval gate runs after it for BOTH
+                                        // locations, and only then does the Location
+                                        // routing happen.
                                         //
                                         // After the allowlist, never before: a dialog
                                         // for an action an outer gate already forbids
@@ -1221,13 +1223,12 @@ let private runFullAgentLoop
                                                 do! writeDenialAudit tool.Definition.Name reason
                                                 return Error(Denied(tc.Name, reason))
                                             | Allow ->
-                                                // Phase 503 — human-in-the-loop
-                                                // approval. With no `IToolApprovalPolicy`
+                                                // Human-in-the-loop approval. With no `IToolApprovalPolicy`
                                                 // composed this is one failed
                                                 // `GetService` and `ApprovalGranted`, so
                                                 // the turn is what it was (GP 11 / GP 13).
                                                 //
-                                                // Phase 793: the hold is keyed on effect
+                                                // The hold is keyed on effect
                                                 // CLASS first — a tool declaring a class
                                                 // the `ToolPolicy` names is held whatever
                                                 // the deployment's `IToolApprovalPolicy`
@@ -1250,7 +1251,7 @@ let private runFullAgentLoop
                                                 | ToolApprovalDispatch.ApprovalGranted -> return Ok()
                                                 | ToolApprovalDispatch.ApprovalRefused reason ->
                                                     // The refusal rides the EXISTING
-                                                    // denial stream, so Phase 47's
+                                                    // denial stream, so the
                                                     // /dev/ai-allowlist rollup, the
                                                     // IAIDenialRollupProbe panel and the
                                                     // sustained-denial rate monitor all
@@ -1269,16 +1270,16 @@ let private runFullAgentLoop
                                                     return Error(Denied(tc.Name, reason))
                                         }
 
-                                        // Phase 6g.A: route by `Location`. ServerResident
+                                        // Route by `Location`. ServerResident
                                         // — existing path (HttpContext + argsJson →
                                         // Async<resultJson>). ClientResident — emit
                                         // ClientToolInvoke SSE event, suspend on the
                                         // dispatch registry's TCS, await the matching
                                         // POST or timeout (90 s).
                                         match gated, tool.Definition.Location with
-                                        | Error err, _ -> return Error err
+                                        | Error err, _ -> return ToolInvocationError.toOutcome err
                                         | Ok(), ServerResident ->
-                                            // Phase 793 — the body runs inside its
+                                            // The body runs inside its
                                             // declared effect envelope: a host
                                             // capability invocation or an outbound
                                             // request it makes through the SDK's
@@ -1298,9 +1299,9 @@ let private runFullAgentLoop
                                                     }
                                                     (tool.Execute ctx tc.Arguments)
 
-                                            return Ok executed
+                                            return ToolOutcome.Produced executed
                                         | Ok(), ClientResident ->
-                                            // Phase 36.A: record the tool's
+                                            // Record the tool's
                                             // source module with the pending
                                             // call so `/api/ai/tool-result`
                                             // can re-check the POSTing
@@ -1312,7 +1313,7 @@ let private runFullAgentLoop
                                                     Some tool.Definition.SourceModule
                                                 )
 
-                                            // Phase 6g.A: SSE event carries the tool's
+                                            // SSE event carries the tool's
                                             // canonical name (`Definition.Name`, e.g.
                                             // `_platform.ui.inspect_active_module`), not
                                             // `tc.Name` which is the provider-sanitised
@@ -1338,7 +1339,7 @@ let private runFullAgentLoop
 
                                             if winner = (pendingTask :> Task) then
                                                 let! executed = pendingTask |> Async.AwaitTask
-                                                return Ok executed
+                                                return ofClientResult executed
                                             else
                                                 dispatchRegistry.TryAbort(
                                                     tcId,
@@ -1361,35 +1362,34 @@ let private runFullAgentLoop
                                                     $"AI ClientResident tool dispatch timed out after {ClientResidentToolTimeoutMs / 1000}s (conversation={conversationId}, tool={tool.Definition.Name}, toolCallId={tcId}, activeModule={activeModule}, activePage={activePage}). Likely causes: backgrounded client tab, unregistered tool, executor returned without POSTing tool-result, or multi-instance deployment without SSE/POST affinity."
 
                                                 return
-                                                    Error(
+                                                    ToolInvocationError.toOutcome (
                                                         ToolThrew(
                                                             tc.Name,
                                                             $"Client did not respond within {ClientResidentToolTimeoutMs / 1000} seconds"
                                                         )
                                                     )
-                                    | None, _ -> return Error(UnknownTool tc.Name)
+                                    | None, _ -> return ToolInvocationError.toOutcome (UnknownTool tc.Name)
                                 with
                                 | :? Text.Json.JsonException as ex ->
-                                    return Error(InvalidArguments(tc.Name, ex.Message))
-                                | :? ToolUp.AI.ToolHelpers.ToolArgumentError as ex ->
-                                    return Error(InvalidArguments(tc.Name, ex.Message))
-                                | ex -> return Error(ToolThrew(tc.Name, ex.Message))
+                                    return ToolInvocationError.toOutcome (InvalidArguments(tc.Name, ex.Message))
+                                | ToolHelpers.ToolArgumentError message ->
+                                    // The exception's own text, not `Message`, which F# renders
+                                    // as the exception's structured form.
+                                    return ToolInvocationError.toOutcome (InvalidArguments(tc.Name, message))
+                                | ToolHelpers.ToolFaulted fault -> return ToolOutcome.Faulted fault
+                                | ex -> return ToolInvocationError.toOutcome (ToolThrew(tc.Name, ex.Message))
                             }
 
-                            let rawContent =
-                                match result with
-                                | Ok r -> r
-                                | Error err -> ToolInvocationError.toToolResultContent err
+                            let rawContent = ToolOutcome.toModel outcome
 
-                            // ─── Phase 709 — result context budget ───────
+                            // ─── Result context budget ───────
                             //
                             // The single choke point every tool result passes
                             // through on its way into model context, applied
-                            // to the SUCCESS payload only: an invocation
-                            // error is our own short prose rendering and has
-                            // nothing to bound, and passing it through the
-                            // budget would risk one failure mode being
-                            // reported as another.
+                            // to PRODUCED content only: a fault or refusal is
+                            // our own short rendering and has nothing to
+                            // bound, and passing it through the budget would
+                            // risk one failure mode being reported as another.
                             //
                             // Placed here rather than at the ServerResident
                             // branch so a ClientResident result — JSON POSTed
@@ -1404,8 +1404,8 @@ let private runFullAgentLoop
                             // it never selects a substitute, so freed budget
                             // cannot surface something a policy withheld.
                             let content =
-                                match result, toolOpt with
-                                | Ok _, Some tool ->
+                                match outcome, toolOpt with
+                                | ToolOutcome.Produced _, Some tool ->
                                     let payload, elided =
                                         ToolResultBudget.apply
                                             tool.Definition.Name
@@ -1455,7 +1455,7 @@ let private runFullAgentLoop
                                 Name = tc.Name
                                 Location = resolvedLocation
                                 DurationMs = toolSw.Elapsed.TotalMilliseconds
-                                Errored = isErrorToolResult content
+                                Errored = ToolOutcome.isError outcome
                             }
 
                             let toolResult: AIProviderToolResult = {
@@ -1463,13 +1463,17 @@ let private runFullAgentLoop
                                 Content = content
                             }
 
-                            return (toolResult, timing)
+                            return (toolResult, timing, outcome)
                         })
                         |> Async.Parallel
 
-                    let toolResults = toolResultsAndTimings |> Array.map fst |> Array.toList
+                    let toolResults =
+                        toolResultsAndTimings |> Array.map (fun (r, _, _) -> r) |> Array.toList
 
-                    turnToolTimings <- toolResultsAndTimings |> Array.map snd |> Array.toList
+                    turnToolTimings <-
+                        toolResultsAndTimings
+                        |> Array.map (fun (_, timing, _) -> timing)
+                        |> Array.toList
 
                     // Append tool results as a user message for the next turn
                     let toolResultMsg = {
@@ -1490,7 +1494,8 @@ let private runFullAgentLoop
                     // path repeatedly rather than changing strategy. Reset
                     // to 0 the moment any tool in a turn succeeds.
                     let anySucceeded =
-                        toolResults |> List.exists (fun tr -> not (isErrorToolResult tr.Content))
+                        toolResultsAndTimings
+                        |> Array.exists (fun (_, _, outcome) -> not (ToolOutcome.isError outcome))
 
                     if anySucceeded then
                         consecutiveErroredTurns <- 0
@@ -1511,7 +1516,7 @@ let private runFullAgentLoop
                         emitEarlyStopMessage onEvent conversationId reason
                         keepGoing <- false
 
-            // Phase 6i.A: end-of-turn latency emission. Runs after every
+            // End-of-turn latency emission. Runs after every
             // turn that completed `sendWithOuterRetry`, including the
             // confusion-marker / end-turn / tool-error early-stop
             // branches. Cancellation and max-turn exits leave via
@@ -1523,18 +1528,17 @@ let private runFullAgentLoop
         return currentMessages
     }
 
-// ─── Phase 6j.B — Tier-3 triage intercept ────────────────────────
+// ─── Tier-3 triage intercept ────────────────────────
 //
-// `runAgentLoop` keeps its signature and remains the single entry
-// point; what changed is that a cheap, opt-in classifier now gets one
-// look at the turn before any frontier-model call is made. Everything
-// that decides whether it runs, and everything it costs, lives in
-// `FastPathTriageResolver`; this seam is deliberately thin.
+// A cheap, opt-in classifier gets one look at the turn before any
+// frontier-model call is made. Everything that decides whether it
+// runs, and everything it costs, lives in `FastPathTriageResolver`;
+// this seam is deliberately thin.
 //
 // `None` from the resolver means triage was not composed, not enabled,
 // not applicable to this turn, or the provider does not support it —
-// in every one of those cases the loop below runs exactly as it did
-// before this phase (GP 11 / GP 13).
+// in every one of those cases the full loop runs unchanged
+// (GP 11 / GP 13).
 //
 // On a resolution the loop does NOT run at all. The action has already
 // been published to the caller's `ModuleAction` stream by the resolver;
@@ -1547,14 +1551,14 @@ let private runFullAgentLoop
 // path, so the next complex turn replays a history in which the change
 // is visible.
 
-/// Phase 791 — the loop over the closed model-input value.
+/// The loop over the closed model-input value.
 ///
 /// The entry point every in-tree caller uses. `modelInput` carries
 /// everything the provider will be shown; `messages` remains separate
 /// because the loop grows it turn by turn and folds each growth back
 /// into the value before rendering.
 ///
-/// Phase 1109 — `budget` is the per-call budget every provider call runs
+/// `budget` is the per-call budget every provider call runs
 /// under: `AgentCallBudget.interactive` for a conversation a client is
 /// waiting on, a caller's own (still finite) budget for a background run.
 let runAgentLoopWithBudget
@@ -1614,7 +1618,7 @@ let runAgentLoopWithBudget
     }
 
 /// The loop under the interactive budget (`AgentCallBudget.interactive`):
-/// the entry point the assistant uses, unchanged by Phase 1109.
+/// the entry point the assistant uses.
 let runAgentLoopWithInput
     (provider: IAIProvider)
     (registry: AIToolRegistry)
@@ -1646,7 +1650,7 @@ let runAgentLoopWithInput
         AgentCallBudget.interactive
         onEvent
 
-/// The pre-791 string-shaped entry point, kept for one release so an
+/// The string-shaped entry point, kept for one release so an
 /// out-of-tree composition root upgrades without a same-commit edit
 /// (GP 11). Lifts the `string option` into a single-block `ModelInput`,
 /// which renders back to the identical prompt, and delegates.

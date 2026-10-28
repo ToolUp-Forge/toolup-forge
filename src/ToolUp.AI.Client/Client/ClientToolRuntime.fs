@@ -15,7 +15,7 @@ let private log = Logger.forCategory "ai.tool"
 
 // ─── Registry ────────────────────────────────────────────────────
 //
-// Phase 6g.A: client-side registry of `ClientResident` tool
+// Client-side registry of `ClientResident` tool
 // executors. Companion packages call `register` at startup to
 // make their tools dispatchable. The SSE handler in `SSEClient`
 // looks up incoming `ClientToolInvoke` events and invokes the
@@ -77,7 +77,7 @@ let register (name: string) (executor: ClientToolExecutor) = registry[name] <- e
 [<Emit("window.fetch($0, $1)")>]
 let private fetch (url: string) (opts: obj) : JS.Promise<obj> = jsNative
 
-/// Phase 6g.A: POST the result of a client-resident tool execution
+/// POST the result of a client-resident tool execution
 /// back to the server's `/api/ai/tool-result` endpoint. The handler
 /// looks up the matching `TaskCompletionSource` in the dispatch
 /// registry and completes the suspended agent loop. Failure to POST
@@ -109,23 +109,15 @@ let private postResult (taskId: Guid) (toolCallId: Guid) (resultJson: string) : 
         log.Error("Failed to POST client tool result", Some ex)
 }
 
-// ─── Error envelope ──────────────────────────────────────────────
-//
-// Mirrors the server-side `ToolInvocationError.toToolResultContent`
-// shape so the model sees the same JSON regardless of which side
-// the failure originated on. Hand-built JSON rather than running
-// it through Json.serialize — the wire shape is fixed and the
-// values are simple strings.
-
-let private errorEnvelope (kind: string) (toolName: string) (detail: string) : string =
-    let escape (s: string) =
-        s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r")
-
-    $"""{{"error":"{escape kind}","tool":"{escape toolName}","detail":"{escape detail}"}}"""
-
 // ─── Invocation entry point ──────────────────────────────────────
 
-/// Phase 6g.A: client watchdog for tool execution. The server's own
+/// A browser-side fault, rendered by `ToolOutcome.toModel` — the function
+/// the server renders every tool outcome with — so the agent loop reads it
+/// back as the same fault.
+let private fault (f: ToolFault) : string =
+    ToolOutcome.toModel (ToolOutcome.Faulted f)
+
+/// Client watchdog for tool execution. The server's own
 /// 90 s timeout is the outer envelope; the client times out earlier
 /// (30 s) so the user-facing failure mode is "client gave up" with
 /// an explicit error envelope rather than "server timed out" with a
@@ -161,7 +153,7 @@ let private runWithWatchdog
             return Error $"Client watchdog fired after {ClientWatchdogMs / 1000} seconds"
     }
 
-/// Phase 6g.A: handle an incoming `ClientToolInvoke` SSE event. Runs
+/// Handle an incoming `ClientToolInvoke` SSE event. Runs
 /// the matching registered executor (or returns an unknown-tool
 /// error envelope) and POSTs the result back to the server.
 ///
@@ -192,15 +184,17 @@ let handleInvoke
 
                     match result with
                     | Ok r -> return r
-                    | Error e -> return errorEnvelope "ClientWatchdogTimeout" toolName e
+                    | Error e -> return fault (ToolFault.ClientTimedOut(toolName, e))
                 with ex ->
-                    return errorEnvelope "ToolThrew" toolName ex.Message
+                    return fault (ToolFault.ClientThrew(toolName, ex.Message))
             | false, _ ->
                 return
-                    errorEnvelope
-                        "UnknownClientTool"
-                        toolName
-                        "No client-resident executor is registered for this tool."
+                    fault (
+                        ToolFault.ClientToolUnregistered(
+                            toolName,
+                            "No client-resident executor is registered for this tool."
+                        )
+                    )
         }
 
         let! json = resultJson

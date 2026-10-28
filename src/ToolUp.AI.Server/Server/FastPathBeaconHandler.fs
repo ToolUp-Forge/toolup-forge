@@ -12,7 +12,7 @@ open ToolUp.Platform.BlobStorage
 open ToolUp.Platform.StorageScopeResolver
 open ToolUp.AI
 
-// ─── Phase 6j.A — fast-path audit beacon endpoint ───────────────
+// ─── Fast-path audit beacon endpoint ────────────────────────────
 //
 // `POST /api/ai/fastpath/beacon`. The client's chat-send hook
 // fires this after a Tier 1 resolution. Server-side handler:
@@ -51,16 +51,16 @@ open ToolUp.AI
 //     into the history the model subsequently reads.
 //   * Rejections emit a `FastPathRejected` audit event and log,
 //     instead of the previous blanket silent `400`.
-//   * Phase 6j.D — per-conversation ownership. The first persisted
+//   * Per-conversation ownership. The first persisted
 //     message of a conversation records `CreatedBy = callerUserId`;
 //     subsequent appends from a different caller in the same
 //     shared `team-{teamId}` container return 403 and emit a
 //     `BeaconRejected` audit event via `IAuditLog` so cross-user
 //     history-forgery attempts are observable in the audit trail.
-//     Legacy blobs without `CreatedBy` are accepted (pre-6j.D
+//     Legacy blobs without `CreatedBy` are accepted (older
 //     conversations have no recorded owner; locking them out would
 //     break existing histories on the upgrade).
-//   * Phase 6j.E — beacon idempotency. A page reload mid-flight, a
+//   * Beacon idempotency. A page reload mid-flight, a
 //     browser network blip, or any client retry re-POSTs the same
 //     beacon, and the append path is not naturally idempotent: the
 //     synthetic `User + AIAssistant` pair lands twice and every
@@ -80,7 +80,7 @@ let private FastPathEventType = "FastPathResolved"
 [<Literal>]
 let private FastPathRejectedEventType = "FastPathRejected"
 
-// ─── Phase 6j.G — sequenced fast-path event types ───────────────
+// ─── Sequenced fast-path event types ────────────────────────────
 //
 // The multi-clause sequencer (whose client-side substrate ships as a
 // separate fast-path-resolver companion outside this repo) emits three
@@ -132,7 +132,7 @@ let private SequenceResolvedEventType = "SequencedFastPathResolved"
 [<Literal>]
 let private MaxBeaconTextLen = 16384
 
-/// Phase 6j.E — how many trailing conversation messages the idempotency
+/// How many trailing conversation messages the idempotency
 /// scan reads. A beacon appends exactly TWO messages, so 20 covers the
 /// last ten fast-path turns.
 ///
@@ -186,16 +186,16 @@ type FastPathBeacon = {
     /// navigation. Carries enough info for cross-tier consistency
     /// analysis against Tier 4 `set_field` tool calls.
     JsonFragment: string
-    /// Phase 6j.E — per-emission idempotency key (a fresh Guid string
+    /// Per-emission idempotency key (a fresh Guid string
     /// minted by the client for each beacon it sends, so a retry of the
-    /// SAME emission carries the SAME key). Empty from a pre-6j.E client:
+    /// SAME emission carries the SAME key). Empty from an older client:
     /// a missing JSON property deserialises to `null` under
     /// `FableConverters`, which the dedup scan reads as "no key" and
     /// admits unchanged — no dedup, no rejection (GP 11).
     BeaconId: string
 }
 
-// ─── Phase 6j.G — sequenced fast-path wire shapes ────────────────
+// ─── Sequenced fast-path wire shapes ─────────────────────────────
 //
 // Wire shape POSTed to `/api/ai/fastpath/sequenced-clause-beacon` by
 // the fast-path-resolver companion's sequenced executor after each
@@ -297,14 +297,14 @@ let private validateBeacon (b: FastPathBeacon) : Result<unit, string> =
     elif safeLen b.JsonFragment > MaxBeaconTextLen then
         Error(sprintf "JsonFragment exceeds %d-char limit" MaxBeaconTextLen)
     elif safeLen b.BeaconId > MaxBeaconIdLen then
-        // Phase 6j.E — no pre-6j.E client can trip this: the field did
-        // not exist, so it arrives absent (0 chars). Only a client that
+        // No client that predates the key can trip this: it sends no
+        // such field, so it arrives absent (0 chars). Only a client that
         // opts into keying can exceed the cap.
         Error(sprintf "BeaconId exceeds %d-char limit" MaxBeaconIdLen)
     else
         Ok()
 
-// ─── Phase 6j.D — conversation-ownership gate ───────────────────
+// ─── Conversation-ownership gate ────────────────────────────────
 //
 // The beacon append-path writes attacker-controlled text into the
 // provider-history blob the LLM reads on the next turn. In shared-
@@ -316,10 +316,10 @@ let private validateBeacon (b: FastPathBeacon) : Result<unit, string> =
 // cross-user appends.
 //
 // The gate itself — its four cases and why — is defined once, in
-// `ConversationBlobs.checkOwnership` (Phase 862), and `SubmitMessage`
+// `ConversationBlobs.checkOwnership`, and `SubmitMessage`
 // applies the same definition. This binding keeps the published name.
-// Both handlers call it through `ConversationBlobs.checkAppend` (Phase
-// 961), which adds the team policy for an ownerless legacy conversation;
+// Both handlers call it through `ConversationBlobs.checkAppend`,
+// which adds the team policy for an ownerless legacy conversation;
 // this pure binding is the owner-only half.
 
 // `Ok` when `callerUserId` may append to a conversation whose persisted
@@ -327,12 +327,12 @@ let private validateBeacon (b: FastPathBeacon) : Result<unit, string> =
 let checkOwnership (existing: ConversationMessage list) (callerUserId: string) : Result<unit, string> =
     ConversationBlobs.checkOwnership existing callerUserId
 
-// ─── Phase 6j.E — beacon idempotency ────────────────────────────
+// ─── Beacon idempotency ─────────────────────────────────────────
 //
 // Two normalisations feed one predicate.
 //
 // `FableConverters` deserialises a MISSING JSON property to `null` for a
-// reference type, so a pre-6j.E client's beacon and a pre-6j.E
+// reference type, so an older client's beacon and an older
 // conversation blob both surface `null` where a key would be — never
 // `""`. Reading every key through `beaconKey` folds absent / null /
 // empty into one case, so the "no key ⇒ behave exactly as today" clause
@@ -371,7 +371,7 @@ let private buildUserMessage (callerUserId: string) (beacon: FastPathBeacon) : C
     ToolCalls = []
     RetrievedSources = []
     Parts = []
-    // Phase 6j.D — establishes conversation ownership when this is the
+    // Establishes conversation ownership when this is the
     // first persisted message; subsequent appends are gated against this
     // by `checkOwnership`. `callerUserId` flows from `ToolUp.UserId`
     // populated by `ScopeResolutionMiddleware`; an empty string only
@@ -380,12 +380,12 @@ let private buildUserMessage (callerUserId: string) (beacon: FastPathBeacon) : C
     // treats those degenerate first-writes as legacy/unowned rather
     // than locking the conversation to nobody.
     CreatedBy = callerUserId
-    // Phase 6j.E — stamp the emission's idempotency key so a repeat POST
+    // Stamp the emission's idempotency key so a repeat POST
     // finds it in the tail scan. Stamped on BOTH turns of the pair, not
     // just this one: the window is counted in messages, so a pair
     // straddling its edge would otherwise be half-invisible.
     BeaconId = beaconKey beacon.BeaconId
-    // Phase 523 — fast-path turns bypass the LLM answer path entirely, so
+    // Fast-path turns bypass the LLM answer path entirely, so
     // no numeric-fidelity verdict applies.
     Verification = None
 }
@@ -438,14 +438,14 @@ let private buildAssistantMessage (beacon: FastPathBeacon) : ConversationMessage
         // CreatedBy is authoritative for the ownership gate. Set to the
         // same caller id so the audit / replay shape is consistent.
         CreatedBy = ""
-        // Phase 6j.E — see `buildUserMessage`: both turns of the pair
+        // See `buildUserMessage`: both turns of the pair
         // carry the key.
         BeaconId = beaconKey beacon.BeaconId
-        // Phase 523 — fast-path synthetic replies quote no facts.
+        // Fast-path synthetic replies quote no facts.
         Verification = None
     }
 
-/// Phase 6j.E — the append decision, whole, as one pure function: the
+/// The append decision, whole, as one pure function: the
 /// turns to append, or `None` when this beacon has already been applied.
 ///
 /// `None` is what makes the acceptance criterion structural rather than
@@ -466,7 +466,7 @@ let planBeaconAppend
     else
         Some [ buildUserMessage callerUserId beacon; buildAssistantMessage beacon ]
 
-// Phase 862 — the canonical `AIProviderMessage`, so the entries the
+// The canonical `AIProviderMessage`, so the entries the
 // beacon appends carry `Parts = []` like every other text turn.
 let private buildProviderUser (beacon: FastPathBeacon) : ToolUp.Platform.AI.AIProviderMessage =
     ToolUp.Platform.AI.AIProviderMessage.text "user" beacon.Instruction
@@ -572,7 +572,7 @@ let private emitRejection
                     $"FastPath rejection audit write failed (conversation {conversationId}, reason '{reason}'): {ex.Message}"
     }
 
-/// Phase 6j.D — record a `BeaconRejected` audit event via the
+/// Record a `BeaconRejected` audit event via the
 /// `IAuditLog` substrate. Distinct from `emitRejection` above: that
 /// one writes the existing `_platform.ai.fastpath` / `FastPathRejected`
 /// event (for malformed / oversized / scope-resolution-missing) via
@@ -705,7 +705,7 @@ let beaconHandler: HttpHandler =
 
                         match existingLoad with
                         | Error err ->
-                            // Phase 862 — a conversation blob that is present
+                            // A conversation blob that is present
                             // but cannot be read is refused, never replaced:
                             // read as empty, the append below would write a
                             // two-message conversation over it.
@@ -723,7 +723,7 @@ let beaconHandler: HttpHandler =
                             ctx.Response.StatusCode <- 409
                             return! next ctx
                         | Ok existing ->
-                            // Phase 961 — the gate with the team policy:
+                            // The gate with the team policy:
                             // owner-only, and for an ownerless legacy
                             // conversation under a narrowed level, the
                             // caller must pass `canModify`.
@@ -744,7 +744,7 @@ let beaconHandler: HttpHandler =
 
                             match admission with
                             | Error ownerOfRecord ->
-                                // Phase 6j.D — cross-user write attempt.
+                                // Cross-user write attempt.
                                 // The conversation belongs to someone else
                                 // in this shared container. Refuse without
                                 // touching either persisted blob.
@@ -766,7 +766,7 @@ let beaconHandler: HttpHandler =
                             | Ok() ->
                                 match planBeaconAppend existing callerUserId beacon with
                                 | None ->
-                                    // Phase 6j.E — this beacon is already in the
+                                    // This beacon is already in the
                                     // conversation's tail. Explicit no-op: neither
                                     // blob is read further or written, and no
                                     // `FastPathResolved` event is emitted (one
@@ -782,7 +782,7 @@ let beaconHandler: HttpHandler =
                                     ctx.Response.StatusCode <- 202
                                     return! next ctx
                                 | Some turns ->
-                                    // Phase 862 — read the provider history BEFORE
+                                    // Read the provider history BEFORE
                                     // either write, so a history that cannot be
                                     // read refuses the append with both blobs
                                     // byte-identical.
@@ -810,23 +810,16 @@ let beaconHandler: HttpHandler =
                                     | Ok providerExisting ->
                                         let providerTurns = [ buildProviderUser beacon; buildProviderAssistant beacon ]
 
-                                        let! saved = async {
-                                            match!
-                                                ConversationBlobs.saveConversation
-                                                    storage
-                                                    scope.Container
-                                                    beacon.ConversationId
-                                                    (existing @ turns)
-                                            with
-                                            | Error err -> return Error err
-                                            | Ok() ->
-                                                return!
-                                                    ConversationBlobs.saveProviderHistory
-                                                        storage
-                                                        scope.Container
-                                                        beacon.ConversationId
-                                                        (providerExisting @ providerTurns)
-                                        }
+                                        // The exchange goes through the record's
+                                        // one writer: history, then UI — the
+                                        // order a full turn writes in.
+                                        let! saved =
+                                            ConversationBlobs.ConversationRecord.appendExchange
+                                                storage
+                                                scope.Container
+                                                beacon.ConversationId
+                                                (providerExisting @ providerTurns)
+                                                turns
 
                                         match saved with
                                         | Error err ->
@@ -844,7 +837,7 @@ let beaconHandler: HttpHandler =
 
                                             ctx.Response.StatusCode <- 500
                                             return! next ctx
-                                        | Ok() ->
+                                        | Ok _ ->
                                             do! emitEvent eventStoreOpt logger scope beacon
 
                                             ctx.Response.StatusCode <- 202
@@ -866,7 +859,7 @@ let beaconHandler: HttpHandler =
             return! next ctx
     }
 
-// ─── Phase 6j.G — sequenced fast-path beacon handlers ────────────
+// ─── Sequenced fast-path beacon handlers ─────────────────────────
 //
 // Three pure-telemetry endpoints that ride alongside the conversation
 // beacon. Shape:

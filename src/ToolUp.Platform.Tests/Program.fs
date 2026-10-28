@@ -840,6 +840,8 @@ let private registeredTests =
         AISpendBudgetTests.tests
         ConversationReplayStreamTests.tests
         IngestionStatusStreamTests.tests
+        ToolOutcomeTests.tests
+        ConversationRecordTests.tests
         InProcessOAuthTokenRefresherTests.tests
         BlobProviderProfileTests.tests
         // Phase 44 — the IProviderProfileApi transport + the reusable

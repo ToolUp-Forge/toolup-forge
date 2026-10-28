@@ -380,10 +380,9 @@ module ToolGate =
 /// RBAC-correct path (GP 4), and it works unchanged on a real request
 /// context because the same middleware populates the same items.
 ///
-/// Mirrors `PlatformAITools.reconstructAccess` deliberately — same
-/// items, same fallbacks. `ModulePermissions` is the only field this
-/// gate reads; the rest are populated for the audit trail's subject
-/// attribution.
+/// `ModulePermissions` is the field the gates read; the rest are
+/// populated for the audit trail's subject attribution. The one
+/// reconstruction: the built-in `_platform.ai.*` tools call it too.
 let reconstructAccessContext (ctx: HttpContext) : AccessContext =
     let userId =
         match ctx.Items.TryGetValue "ToolUp.UserId" with
@@ -742,9 +741,9 @@ let toProviderDef (def: AIToolDefinition) : AIProviderToolDef =
 //     disclosure gate inside the tool has already run — so freed budget
 //     can never surface a substitute for something a policy withheld.
 //
-//   * **Not an error.** `isErrorToolResult` in the agent loop matches the
-//     invocation-error prose prefixes, and the marker deliberately does
-//     not. The tool SUCCEEDED; the result was too large to carry. Having
+//   * **Not an error.** The budget applies only to `ToolOutcome.Produced`
+//     content, which the agent loop's rails never count as an error. The
+//     tool SUCCEEDED; the result was too large to carry. Having
 //     it read as an error would spend the loop's two-turn early-stop
 //     budget on a situation the model can recover from in one turn by
 //     narrowing the query.
