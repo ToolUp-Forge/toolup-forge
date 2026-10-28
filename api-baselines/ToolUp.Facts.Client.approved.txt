@@ -3,6 +3,8 @@
 # Do not edit by hand. Drift in EITHER direction fails the gate (Phase 618): a
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
+ToolUp.Facts.Client.BlockSeriesResolver (class)
+ToolUp.Facts.Client.BlockSeriesResolver.resolve(ToolUp.Facts.FactSeriesQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSeries, System.String]]
 ToolUp.Facts.Client.FactBrowseModel (class)
 ToolUp.Facts.Client.FactBrowseModel.defaultRowQuery(System.String, System.String) : ToolUp.Facts.FactRowQuery
 ToolUp.Facts.Client.FactBrowseModel.empty : ToolUp.Facts.Client.FactBrowseModel+Model { get }

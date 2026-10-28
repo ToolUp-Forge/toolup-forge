@@ -484,26 +484,70 @@ let private truncateDocName (maxLen: int) (s: string) =
 // ground this" structurally legible. Acceptable trade-off for the
 // substrate-wiring follow-up; a true inline-markdown variant would
 // require Markdown.fs to expose an inline-only renderer.
+//
+// Phase 1130 — the same badge is the conjecture mark: prose a model
+// explicitly marks with `[conjecture]` as going beyond the facts (a
+// cause, a likelihood, a recommendation) renders with the badge
+// labelled "conjecture", so a reader can tell it from a figure the
+// gate admitted.
 [<Literal>]
 let private UnverifiedTag = "[unverified]"
 
+/// Phase 1130 — the marker a model writes before prose that goes beyond
+/// the facts. The panel renders it as the conjecture badge.
+[<Literal>]
+let ConjectureTag = "[conjecture]"
+
+/// Each badge mark: its tag, the badge's label and its tooltip.
+let private badgeMarks = [
+    UnverifiedTag, "unverified", "The model couldn't ground this claim against the retrieved knowledge base."
+    ConjectureTag,
+    "conjecture",
+    "The model marked this as going beyond the facts: a cause, a likelihood or a recommendation, not a published figure."
+]
+
+/// `content` split at every badge tag: the first segment, then each later
+/// segment with the mark that precedes it.
+let private splitAtMarks (content: string) : (string * string) option list * string list =
+    let rec go (rest: string) (marks: (string * string) option list) (segments: string list) =
+        let next =
+            badgeMarks
+            |> List.choose (fun (tag, label, title) ->
+                match rest.IndexOf(tag, StringComparison.Ordinal) with
+                | -1 -> None
+                | at -> Some(at, tag, label, title))
+            |> List.sortBy (fun (at, _, _, _) -> at)
+            |> List.tryHead
+
+        match next with
+        | None -> List.rev marks, List.rev (rest :: segments)
+        | Some(at, tag, label, title) ->
+            go (rest.Substring(at + tag.Length)) (Some(label, title) :: marks) (rest.Substring(0, at) :: segments)
+
+    go content [ None ] []
+
 let private renderContentWithUnverifiedBadges (content: string) : ReactElement =
-    if isNull content || not (content.Contains UnverifiedTag) then
+    if
+        isNull content
+        || not (badgeMarks |> List.exists (fun (tag, _, _) -> content.Contains tag))
+    then
         Toolup.Markdown.render content
     else
-        let segments = content.Split([| UnverifiedTag |], StringSplitOptions.None)
+        let marks, segments = splitAtMarks content
 
         Html.div [
             prop.className "space-y-2"
             prop.children [
-                for i, segment in Array.indexed segments do
-                    if i > 0 then
+                for mark, segment in List.zip marks segments do
+                    match mark with
+                    | Some(label, title) ->
                         Html.span [
                             prop.className
                                 "inline-block px-1.5 py-0.5 rounded bg-red-50 text-red-700 text-[10px] font-medium border border-red-200 align-middle mx-1"
-                            prop.title "The model couldn't ground this claim against the retrieved knowledge base."
-                            prop.text "unverified"
+                            prop.title title
+                            prop.text label
                         ]
+                    | None -> ()
 
                     if segment <> "" then
                         Toolup.Markdown.render segment
@@ -609,7 +653,7 @@ let ViewOriginalButton (originalRef: OriginalDocumentRef) =
 // deployment without it renders the card exactly as before.
 
 let private factRowLink (factId: string) =
-    if FactBrowseLinks.isComposed (RegisteredModules.snapshot () |> List.map _.ModuleId) then
+    if BlockRender.isFactBrowseComposed () then
         Html.div [
             prop.className "mt-1"
             prop.children [
@@ -617,13 +661,7 @@ let private factRowLink (factId: string) =
                     prop.className
                         "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-teal-700 hover:bg-teal-50 border border-teal-100 transition-colors"
                     prop.title factId
-                    prop.onClick (fun _ ->
-                        // The publish is a Cmd; run it here, outside any
-                        // update loop, with a dispatch that is never called.
-                        for effect in ModuleEvents.publish FactBrowseLinks.OpenFactTopic factId do
-                            effect ignore
-
-                        NavigationRequest.request (FactBrowseLinks.sidebarId FactBrowseLinks.RowsRoute))
+                    prop.onClick (fun _ -> BlockRender.openFact factId)
                     prop.children [ Html.span [ prop.text "▦" ]; Html.span [ prop.text "Open fact row" ] ]
                 ]
             ]
@@ -1034,6 +1072,79 @@ let ConversationVisibilityNotice () =
         ]
     | _ -> Html.none
 
+// ─── A message's bubble, and a message carrying a block (Phase 1130) ─
+
+/// The chat bubble's classes for `msg`'s participant.
+let private bubbleClasses (msg: ConversationMessage) : string list = [
+    "max-w-[85%] rounded-lg px-3 py-2 text-sm"
+    if msg.Participant = User then
+        "ml-auto bg-violet-500 text-white"
+    else
+        "mr-auto bg-gray-100 text-gray-800"
+]
+
+/// What follows a message's text in its bubble: the tool-call pills and,
+/// on an assistant turn, the sources.
+let private messageFooter (msg: ConversationMessage) : ReactElement list = [
+    if not msg.ToolCalls.IsEmpty then
+        Html.div [
+            prop.className "mt-2 space-y-1"
+            prop.children [
+                for tc in msg.ToolCalls do
+                    ToolCallPill tc
+            ]
+        ]
+
+    if msg.Participant <> User && not msg.RetrievedSources.IsEmpty then
+        MessageSources msg.RetrievedSources msg.Content
+]
+
+/// Whether `msg` carries a block part. Every other message renders exactly
+/// as it did before Phase 1130.
+let private hasBlockPart (msg: ConversationMessage) : bool =
+    msg.Parts
+    |> List.exists (function
+        | BlockPart _ -> true
+        | TextPart _
+        | ImagePart _ -> false)
+
+/// A message carrying a block part renders its parts in order: each text
+/// part in the message's bubble, each block through `BlockRender.Block` in
+/// a container that carries layout only — outside the bubble, so the block
+/// sits on the page's themed surface, not the bubble's colours. An image
+/// part renders nothing, as a turn's images never have in the panel; the
+/// tool calls and sources follow in a bubble of their own.
+let private blockMessage (msg: ConversationMessage) : ReactElement =
+    let footer = messageFooter msg
+
+    Html.div [
+        prop.className "space-y-2"
+        prop.children [
+            for part in msg.Parts do
+                match part with
+                | TextPart text when not (String.IsNullOrWhiteSpace text) ->
+                    Html.div [
+                        prop.className (bubbleClasses msg)
+                        prop.children [ renderContentWithUnverifiedBadges text ]
+                    ]
+                | TextPart _
+                | ImagePart _ -> ()
+                | BlockPart(_, provenance) ->
+                    Html.div [
+                        prop.className (
+                            if msg.Participant = User then
+                                "ml-auto w-full"
+                            else
+                                "mr-auto w-full"
+                        )
+                        prop.children [ BlockRender.Block provenance ]
+                    ]
+
+            if not footer.IsEmpty then
+                Html.div [ prop.className (bubbleClasses msg); prop.children footer ]
+        ]
+    ]
+
 [<ReactComponent>]
 let View
     (isOpen: bool)
@@ -1316,32 +1427,16 @@ let View
                             ]
 
                         for msg in messages do
-                            let isUser = msg.Participant = User
-
-                            Html.div [
-                                prop.className [
-                                    "max-w-[85%] rounded-lg px-3 py-2 text-sm"
-                                    if isUser then
-                                        "ml-auto bg-violet-500 text-white"
-                                    else
-                                        "mr-auto bg-gray-100 text-gray-800"
+                            if hasBlockPart msg then
+                                blockMessage msg
+                            else
+                                Html.div [
+                                    prop.className (bubbleClasses msg)
+                                    prop.children [
+                                        renderContentWithUnverifiedBadges msg.Content
+                                        yield! messageFooter msg
+                                    ]
                                 ]
-                                prop.children [
-                                    renderContentWithUnverifiedBadges msg.Content
-
-                                    if not msg.ToolCalls.IsEmpty then
-                                        Html.div [
-                                            prop.className "mt-2 space-y-1"
-                                            prop.children [
-                                                for tc in msg.ToolCalls do
-                                                    ToolCallPill tc
-                                            ]
-                                        ]
-
-                                    if not isUser && not msg.RetrievedSources.IsEmpty then
-                                        MessageSources msg.RetrievedSources msg.Content
-                                ]
-                            ]
 
                         // Streaming content (in-progress AI response)
                         if streamingContent <> "" then

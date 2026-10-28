@@ -141,6 +141,7 @@ ToolUp.AI.Client.AIAssistantUI+PreparedSubmission.WatchdogId : System.Guid { get
 ToolUp.AI.Client.AIClientConfig (class)
 ToolUp.AI.Client.AIClientConfig.appendAssistantModule(ToolUp.AI.AIAssistantMode, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]
 ToolUp.AI.Client.AIClientConfig.program(ToolUp.AI.AIAssistantMode, ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : ToolUp.Elmish.Program`4[Microsoft.FSharp.Core.Unit, ToolUp.AI.Client.AIClientConfig+OuterModel, ToolUp.AI.Client.AIClientConfig+OuterMsg, Fable.React.ReactElement]
+ToolUp.AI.Client.AIClientConfig.registerBlockSeriesResolver(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactSeriesQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSeries, System.String]]]) : System.Void
 ToolUp.AI.Client.AIClientConfig.run(ToolUp.AI.AIAssistantMode, ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : System.Void
 ToolUp.AI.Client.AIClientConfig.withSidePanel(ToolUp.AI.AIAssistantMode, ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : ToolUp.Elmish.Program`4[Microsoft.FSharp.Core.Unit, ToolUp.AI.Client.AIClientConfig+OuterModel, ToolUp.AI.Client.AIClientConfig+OuterMsg, Fable.React.ReactElement]
 ToolUp.AI.Client.AIClientConfig+OuterModel (class)
@@ -312,6 +313,37 @@ ToolUp.AI.Client.AISettingsUI+Status+SuccessMsg.Item : System.String { get }
 ToolUp.AI.Client.AISettingsUI+Status+Tags (class)
 ToolUp.AI.Client.AISettingsUI+Status+Tags.ErrorMsg : System.Int32 (literal)
 ToolUp.AI.Client.AISettingsUI+Status+Tags.SuccessMsg : System.Int32 (literal)
+ToolUp.AI.Client.BlockRender (class)
+ToolUp.AI.Client.BlockRender.Block(ToolUp.Platform.AI.BlockProvenance) : Fable.React.ReactElement
+ToolUp.AI.Client.BlockRender.MaxCitations : System.Int32 (literal)
+ToolUp.AI.Client.BlockRender.current() : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactSeriesQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSeries, System.String]]]]
+ToolUp.AI.Client.BlockRender.drift(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.Client.BlockRender+BlockDrift]
+ToolUp.AI.Client.BlockRender.driftText(ToolUp.AI.Client.BlockRender+BlockDrift) : System.String
+ToolUp.AI.Client.BlockRender.isFactBrowseComposed() : System.Boolean
+ToolUp.AI.Client.BlockRender.openFact(System.String) : System.Void
+ToolUp.AI.Client.BlockRender.openTable(System.String) : System.Void
+ToolUp.AI.Client.BlockRender.resolve(Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactSeriesQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSeries, System.String]]], ToolUp.Platform.AI.BlockProvenance) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.Client.BlockRender+BlockOutcome]
+ToolUp.AI.Client.BlockRender.view(ToolUp.Platform.AI.BlockProvenance, ToolUp.AI.Client.BlockRender+BlockOutcome) : Fable.React.ReactElement
+ToolUp.AI.Client.BlockRender.withheldText(ToolUp.Platform.AI.BlockWithheld) : System.String
+ToolUp.AI.Client.BlockRender+BlockDrift (class)
+ToolUp.AI.Client.BlockRender+BlockDrift..ctor(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.AI.Client.BlockRender+BlockDrift.Introduced : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.AI.Client.BlockRender+BlockDrift.Superseded : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.AI.Client.BlockRender+BlockOutcome (class)
+ToolUp.AI.Client.BlockRender+BlockOutcome.IsDrawn : System.Boolean { get }
+ToolUp.AI.Client.BlockRender+BlockOutcome.IsNoReader : System.Boolean { get }
+ToolUp.AI.Client.BlockRender+BlockOutcome.IsRefused : System.Boolean { get }
+ToolUp.AI.Client.BlockRender+BlockOutcome.NoReader : ToolUp.AI.Client.BlockRender+BlockOutcome { get }
+ToolUp.AI.Client.BlockRender+BlockOutcome.Tag : System.Int32 { get }
+ToolUp.AI.Client.BlockRender+BlockOutcome+Drawn (class)
+ToolUp.AI.Client.BlockRender+BlockOutcome+Drawn.block : ToolUp.Facts.Presentation.PresentationBlock`1[Microsoft.FSharp.Core.Unit] { get }
+ToolUp.AI.Client.BlockRender+BlockOutcome+Drawn.drift : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.Client.BlockRender+BlockDrift] { get }
+ToolUp.AI.Client.BlockRender+BlockOutcome+Refused (class)
+ToolUp.AI.Client.BlockRender+BlockOutcome+Refused.reason : System.String { get }
+ToolUp.AI.Client.BlockRender+BlockOutcome+Tags (class)
+ToolUp.AI.Client.BlockRender+BlockOutcome+Tags.Drawn : System.Int32 (literal)
+ToolUp.AI.Client.BlockRender+BlockOutcome+Tags.NoReader : System.Int32 (literal)
+ToolUp.AI.Client.BlockRender+BlockOutcome+Tags.Refused : System.Int32 (literal)
 ToolUp.AI.Client.ClientToolRuntime (class)
 ToolUp.AI.Client.ClientToolRuntime.handleInvoke(System.Guid, System.Guid, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.Unit]
 ToolUp.AI.Client.ClientToolRuntime.register(System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[ToolUp.AI.Client.ClientToolRuntime+ClientToolContext, System.String], Microsoft.FSharp.Control.FSharpAsync`1[System.String]]) : System.Void
@@ -334,6 +366,7 @@ ToolUp.AI.Client.ConsentDialog+PendingConsentRequest.TargetModule : System.Strin
 ToolUp.AI.Client.ConsentDialog+PendingConsentRequest.TaskId : System.Guid { get }
 ToolUp.AI.Client.ConsentDialog+PendingConsentRequest.ToolName : System.String { get }
 ToolUp.AI.Client.ConversationPanel (class)
+ToolUp.AI.Client.ConversationPanel.ConjectureTag : System.String (literal)
 ToolUp.AI.Client.ConversationPanel.ConversationVisibilityNotice() : Fable.React.ReactElement
 ToolUp.AI.Client.ConversationPanel.ExportMenu(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ConversationMessage]) : Fable.React.ReactElement
 ToolUp.AI.Client.ConversationPanel.KbInventoryBadge(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement

@@ -1002,3 +1002,15 @@ let run (mode: AIAssistantMode) (config: ClientConfig) (modules: ErasedModule li
             Client.viewSlicedOver shell config allModules)
         |> Program.withReactStore store "elmish-app"
         |> Program.run
+
+/// Phase 1130 — register the series read a conversation block part is
+/// re-read through: the reader's own gated fact read. A client boot that
+/// composes the fact store calls it once, before `run`, with the fact
+/// client's resolver:
+///
+///     AIClientConfig.registerBlockSeriesResolver ToolUp.Facts.Client.BlockSeriesResolver.resolve
+///
+/// Without it a block part renders a placeholder saying no fact reader is
+/// composed, and nothing else in the panel changes.
+let registerBlockSeriesResolver (resolver: BlockRender.BlockSeriesResolver) : unit =
+    BlockRender.setResolver (Some resolver)

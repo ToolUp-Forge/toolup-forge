@@ -298,6 +298,11 @@
         <!-- Phase 908 - every identity change clears the read cache (after
              RenderScope.fs, whose jsdom each case installs). -->
         <Compile Include="Remoting\IdentityChangeReadCacheTests.fs" />
+        <!-- Phase 1130 - the conversation panel draws a block part: re-read
+             through a resolver, its furniture, the page's theme, and the
+             no-block panel pinned byte for byte (after RenderScope.fs, whose
+             jsdom each case installs). -->
+        <Compile Include="ConversationBlockTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

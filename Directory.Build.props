@@ -830,6 +830,18 @@
       `Fuaran.UI.Charts`, on one Fuaran-UI repository pin. Migration recipe:
       `docs/migrations/1129-fact-presentation-builders.md`.
     -->
+    <!--
+      Phase 1130 rides the 0.36.0 draft (untagged, publicly unpinned; its
+      surface movement is additive - new modules and one new function, no
+      record field, union case or interface member - below the draft's
+      breaking class): the conversation panel draws a block part through the
+      published Fuaran-UI renderer, re-reading its request through a series
+      resolver a client boot registers (`AIClientConfig.registerBlockSeriesResolver`,
+      `BlockRender`; the fact client's `BlockSeriesResolver`). One published
+      Apache-2.0 package joins the graph from nuget.org, `Fuaran.UI.Renderer`,
+      on the Fuaran-UI repository pin. Migration recipe:
+      `docs/migrations/1130-conversation-block-render.md`.
+    -->
     <Version>0.36.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a

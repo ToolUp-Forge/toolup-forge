@@ -169,6 +169,12 @@
          resolve at the pins above. See docs/platform/open-core-boundary.md. -->
     <PackageVersion Include="Fuaran.UI" Version="$(FuaranUIVersion)" />
     <PackageVersion Include="Fuaran.UI.Charts" Version="$(FuaranUIVersion)" />
+    <!-- Phase 1130 — the published Apache-2.0 Fuaran-UI browser renderer the
+         conversation panel draws a block part with (ToolUp.AI.Client only).
+         Same repository, same pin; Fable-clean (sources under fable/). Its
+         npm imports (react, react-dom, ag-grid, ag-charts) are the ones the
+         client tier's consumers already install. -->
+    <PackageVersion Include="Fuaran.UI.Renderer" Version="$(FuaranUIVersion)" />
     <!-- Phase 195 — compile-time auth/audit analyzer (src/ToolUp.Remoting.Analyzers).
          0.36.0 tracks the F# 10 FCS line (FSharp.Compiler.Service 43.10.101);
          the analyzer package consumes it host-provided (PrivateAssets="all").

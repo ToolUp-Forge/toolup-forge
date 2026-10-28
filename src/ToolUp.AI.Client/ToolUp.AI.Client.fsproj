@@ -9,6 +9,17 @@
         <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
         <ProjectReference Include="..\ToolUp.Platform.Client\ToolUp.Platform.Client.fsproj" />
         <ProjectReference Include="..\ToolUp.AI.Core\ToolUp.AI.Core.fsproj" />
+        <!-- Phase 1130 — the fact presentation builders a block part is
+             rebuilt with (Fable-clean, compiled by both compilers). The
+             series read itself is a registration (BlockRender), so this
+             tier takes no reference to the fact client. -->
+        <ProjectReference Include="..\ToolUp.Facts.Presentation\ToolUp.Facts.Presentation.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Phase 1130 — the published Apache-2.0 Fuaran-UI browser renderer a
+             block part is drawn through, at the Fuaran-UI repository pin in
+             Directory.Packages.props; restored from nuget.org. -->
+        <PackageReference Include="Fuaran.UI.Renderer" />
     </ItemGroup>
     <!-- Phase 11.C.2 client-tier closure: pack source for Fable consumers
          under fable/. -->
@@ -34,6 +45,10 @@
         <Compile Include="Client\ToolApprovalDialog.fs" />
         <Compile Include="Client\SSEClient.fs" />
         <Compile Include="Client\SidePanelExtensions.fs" />
+        <!-- Phase 1130 — a block part, re-read through the registered series
+             resolver and drawn through the Fuaran-UI renderer, with its
+             furniture. Mounted by ConversationPanel, so it precedes it. -->
+        <Compile Include="Client\BlockRender.fs" />
         <Compile Include="Client\ConversationPanel.fs" />
         <Compile Include="Client\Icons.fs" />
         <Compile Include="Client\AIAssistantUI.fs" />

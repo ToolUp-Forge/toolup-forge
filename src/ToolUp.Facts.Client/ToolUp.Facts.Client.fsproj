@@ -20,6 +20,9 @@
     <ItemGroup>
         <Compile Include="Client\FactBrowseModel.fs" />
         <Compile Include="Client\FactBrowseView.fs" />
+        <!-- Phase 1130 — the series read a conversation block part is re-read
+             through, for a client boot to register with the AI client. -->
+        <Compile Include="Client\BlockSeriesResolver.fs" />
     </ItemGroup>
     <!-- Fable.* / Feliz / FSharp.Core resolved transitively via
          ToolUp.Platform.Client + the .NET SDK. -->
