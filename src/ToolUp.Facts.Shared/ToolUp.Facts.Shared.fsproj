@@ -13,6 +13,15 @@
              rendered values, never a `Fact`. -->
         <ProjectReference Include="..\ToolUp.Platform.Core\ToolUp.Platform.Core.fsproj" />
     </ItemGroup>
+    <ItemGroup>
+        <!-- Phase 1127 — the view slice: the canonical columnar Table and its
+             codec (Fuaran.Core.Column), and the Transform algebra a client
+             refines it with (Fuaran.Compute.DataFrame). Published Apache-2.0,
+             FSharp.Core-only and Fable-clean; pinned in Directory.Packages.props,
+             one property per producing repository. -->
+        <PackageReference Include="Fuaran.Core.Column" />
+        <PackageReference Include="Fuaran.Compute.DataFrame" />
+    </ItemGroup>
     <!-- Client-tier closure: pack source for Fable consumers under fable/. -->
     <ItemGroup>
         <Content Include="**\*.fsproj;**\*.fs" Exclude="**\*.fs.js;**\bin\**;**\obj\**" PackagePath="fable\" />

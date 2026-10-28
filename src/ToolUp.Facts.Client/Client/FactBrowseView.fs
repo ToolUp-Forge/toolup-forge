@@ -13,7 +13,9 @@ module ToolUp.Facts.Client.FactBrowseView
 //             run history (paged), with each committed run's change
 //             summary and, on request, its largest movers.
 //   /rows   — the drill-down: rank by a metric column, top or bottom,
-//             under a subject prefix, one server page at a time; and the
+//             under a subject prefix, one page at a time — answered from the
+//             table's held view slice (Phase 1127), or page by page from the
+//             server when the slice was refused; and the
 //             opened fact with its provenance chain.
 //
 // Every page has a considered empty state — no tables declared, no table
@@ -601,7 +603,8 @@ let private factPanel (fact: Load<FactDetailView>) (dispatch: Msg -> unit) =
             ]
         ]
 
-/// The drill-down page: one server page of ranked rows and the opened fact.
+/// The drill-down page: one page of ranked rows (from the held slice, or the
+/// server's page read) and the opened fact.
 [<ReactComponent>]
 let RowsPage (model: Model) (dispatch: Msg -> unit) =
     let queryPrefix =

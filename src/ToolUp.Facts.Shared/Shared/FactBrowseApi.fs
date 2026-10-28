@@ -77,6 +77,11 @@ type FactTableListing = {
     LatestRunOutcome: string option
     /// Why the latest run failed or was discarded, when it was.
     LatestRunReason: string option
+    /// Phase 1127 — the current run's stamp (`<tableId>@<sequence>:<digest
+    /// prefix>`), the token a view slice records as the latest run folded
+    /// into it. A slice whose stamp differs from the listing's is stale.
+    /// `None` until the table has committed a run.
+    RunStamp: string option
 }
 
 /// One declared column of a table.
@@ -491,6 +496,97 @@ type FactSeries = {
     Withheld: FactWithheldCount list
 }
 
+// ─── The view slice (Phase 1127) ─────────────────────────────────────
+//
+// A view reads ONCE and refines locally. Facts change when a run lands,
+// not while a person explores, so a view asks for one bounded slice of a
+// table — a period range, an optional subject branch, a metric set — and
+// answers every sort, filter, page, regroup and chart inside it on the
+// client, as `Fuaran.Compute.DataFrame` pipelines over the slice
+// (`FactBrowseSlice`). It reads again only when it leaves the slice or the
+// slice's run stamp moves.
+//
+// **The slice is a `Fuaran.Core.Column` table in its canonical codec**,
+// carried as text, so the wire format is the columnar strand's and any
+// columnar consumer can bind it without an adapter. Its layout is
+// `FactBrowseSlice`'s, stated there column by column.
+//
+// **Under the same gate.** Every cell passes the disclosure gate at
+// `FactBrowse` before the slice is encoded. A withheld cell keeps its
+// subject, period, fact id, freshness and ranking position — the
+// existence-level facts the series and drill-down reads already serve —
+// and carries no value and no rendering. Nothing withheld is encoded.
+//
+// **Bounded.** `FactBrowseApi.MaxSliceCells` is the most cells (one head
+// per subject, period and metric) a slice carries. The count is checked
+// before the gate, and a slice over it is refused naming the cap.
+
+/// A slice request: one table, a half-open period range, an optional
+/// subject branch, and a metric set.
+type FactSliceQuery = {
+    /// The table to read.
+    TableId: string
+    /// Start of the period range (inclusive). A head is in the slice when
+    /// its period overlaps `[PeriodFrom, PeriodTo)`.
+    PeriodFrom: DateTime
+    /// End of the period range (exclusive).
+    PeriodTo: DateTime
+    /// Subject path prefix (member ids from the hierarchy root). Empty
+    /// admits every subject of the table.
+    SubjectPrefix: string list
+    /// The metric columns to carry. Empty carries every column of the
+    /// table; otherwise each must be one of the table's columns.
+    Metrics: string list
+}
+
+/// One metric a slice carries.
+type FactSliceMetric = {
+    /// The metric id — also the name of its value column.
+    Metric: string
+    /// The metric's display format, so a client renders a derived figure
+    /// the way the facts are rendered. `""` renders verbatim.
+    DisplayFormat: string
+}
+
+/// One slice: the table's heads in the requested range as one columnar
+/// table, with what a client needs to refine it locally.
+type FactSlice = {
+    /// The table read.
+    TableId: string
+    /// The hierarchy the table's subjects sit in.
+    Hierarchy: string
+    /// The hierarchy level every row sits at.
+    Level: string
+    /// The method identity every head carries — the table's own lineage.
+    Method: string
+    /// The period range applied (inclusive start).
+    PeriodFrom: DateTime
+    /// The period range applied (exclusive end).
+    PeriodTo: DateTime
+    /// The subject prefix applied.
+    SubjectPrefix: string list
+    /// The metrics carried, in the table's column order.
+    Metrics: FactSliceMetric list
+    /// The slice as a `Fuaran.Core.Column` table in its canonical codec
+    /// (`ColumnCodec.encode`); decode with `FactBrowseSlice.decode`.
+    Table: string
+    /// The stamp of the latest run folded into the slice
+    /// (`FactTableListing.RunStamp` when it was read). `None` when the table
+    /// had committed no run.
+    RunStamp: string option
+    /// The cells carried (heads across every metric, withheld included).
+    CellCount: int
+    /// The cell cap in force (`FactBrowseApi.MaxSliceCells`).
+    MaxCells: int
+    /// The drill-down's rank ceiling, so a local page answers exactly as
+    /// the server's `QueryRows` would.
+    RankCeiling: int
+    /// Cells withheld from the viewer.
+    WithheldCount: int
+    /// The withheld cells grouped by policy.
+    Withheld: FactWithheldCount list
+}
+
 /// The payload of the one notification a committed fact-table run
 /// publishes (`FactBrowseLinks.RunCommittedNotificationKey`) to the run's
 /// scope. Counts only — never a value, a subject or a fact id — and one
@@ -545,6 +641,12 @@ type IFactBrowseApi = {
     /// the cap, when the series would exceed `FactBrowseApi.MaxSeriesPoints`.
     [<RequiresClaim "scope">]
     QuerySeries: FactSeriesQuery -> Async<Result<FactSeries, string>>
+    /// One view slice (Phase 1127) — a table's heads over a period range
+    /// and subject branch as one columnar table, gated before it is
+    /// encoded, which a client refines locally (`FactBrowseSlice`). Refused,
+    /// naming the cap, when it would exceed `FactBrowseApi.MaxSliceCells`.
+    [<RequiresClaim "scope">]
+    QuerySlice: FactSliceQuery -> Async<Result<FactSlice, string>>
 }
 
 /// Constants and helpers of the fact browse contract.
@@ -582,6 +684,26 @@ module FactBrowseApi =
         elif requested > MaxSeriesPoints then MaxSeriesPoints
         else requested
 
+    /// Phase 1127 — the most cells (one head per subject, period and
+    /// metric, withheld included) one slice carries. Part of the contract: a
+    /// slice that would exceed it is refused by name before the gate, and
+    /// every slice reports it. Sized by measurement (the Phase 1127 probe):
+    /// at the cap a single-metric slice encodes to about six megabytes and
+    /// decodes and prepares in about 0.3 s on .NET and about 1 s under Fable
+    /// (Node), with a page over it about 0.25 s there; a year by day
+    /// across sixty-eight subjects at one metric fits (24,820 cells). A larger
+    /// table reads page by page instead.
+    [<Literal>]
+    let MaxSliceCells = 25000
+
+    /// The period range a drill-down slice asks for: every period. The
+    /// drill-down ranks a table's heads across all its periods, so only a
+    /// slice over this range can answer it.
+    let AllPeriodsFrom = DateTime.MinValue
+
+    /// The exclusive end of `AllPeriodsFrom`'s range.
+    let AllPeriodsTo = DateTime.MaxValue
+
     /// ToolUp.Remoting route builder: `/api/_facts/browse/<method>`.
     let routeBuilder (_typeName: string) (methodName: string) =
         sprintf "/api/_facts/browse/%s" methodName
@@ -591,3 +713,750 @@ module FactBrowseApi =
     [<Literal>]
     let BulkExtractionNote =
         "Browsing shows one page at a time. To take a whole table out of the deployment, export it through the reporting path, where the same disclosure gate applies."
+
+/// One head a slice carries, as the server hands it to the encoder after
+/// the gate: the cell's identity and position always, its value only when
+/// the gate admitted it.
+type FactSliceCell = {
+    /// The metric the head is a fact of.
+    Metric: string
+    /// The fact's id.
+    FactId: string
+    /// The readable subject (`hierarchy/member>member`).
+    Subject: string
+    /// The subject's member ids from the hierarchy root.
+    SubjectPath: string list
+    /// Start of the period (inclusive).
+    PeriodFrom: DateTime
+    /// End of the period (exclusive).
+    PeriodTo: DateTime
+    /// The period's label, when it has one.
+    PeriodLabel: string option
+    /// The scalar value. `None` when withheld, or when the value is not a
+    /// scalar.
+    Value: decimal option
+    /// The value rendered with the metric's display format. `None` when
+    /// withheld.
+    Rendering: string option
+    /// When the fact was asserted.
+    AsOf: DateTime
+    /// `fresh` or `stale`.
+    Freshness: string
+    /// The policy that withheld the cell, when the gate did.
+    WithheldPolicy: string option
+    /// The head's 1-based position in its metric's ranking, largest first
+    /// (ties by fact id) — the drill-down's `TopOfRanking` order over the
+    /// whole slice. `None` when the value is not comparable. Existence-
+    /// level, like a drill-down row's rank: a withheld head keeps it.
+    RankDescending: int option
+    /// The same, smallest first — the `BottomOfRanking` order.
+    RankAscending: int option
+}
+
+/// Phase 1127 — the view slice's layout, its codec, and the local reads
+/// over it: the drill-down page and the series as `Fuaran.Compute`
+/// `Transform` pipelines evaluated over the prepared slice. Fable-safe, so
+/// the client and a .NET test evaluate the same pipelines.
+///
+/// **Layout.** One row per (subject, period), in subject-path then period
+/// order; the fixed columns, then eight per metric `m`:
+///
+/// | Column | Type | Holds |
+/// |---|---|---|
+/// | `row` | int | the row's position in that order |
+/// | `subject` | string | the readable subject |
+/// | `subject_path` | string | the member ids joined by `>` |
+/// | `period_from` / `period_to` | timestamp (ns) | the period |
+/// | `period_label` | string | its label, or null |
+/// | `m` | decimal | the value, or null (withheld, non-scalar, absent) |
+/// | `m/fact_id` | string | the head's fact id, or null when the row has no `m` head |
+/// | `m/as_of` | timestamp (ns) | when it was asserted |
+/// | `m/freshness` | string | `fresh` or `stale` |
+/// | `m/rendering` | string | the rendered value, or null when withheld |
+/// | `m/withheld` | string | the withholding policy, or null |
+/// | `m/rank_desc` / `m/rank_asc` | int | the ranking positions, or null |
+module FactBrowseSlice =
+
+    open Fuaran.Core
+    open Fuaran.Compute
+
+    /// The row-position column.
+    [<Literal>]
+    let RowColumn = "row"
+
+    /// The readable-subject column.
+    [<Literal>]
+    let SubjectColumn = "subject"
+
+    /// The joined subject-path column.
+    [<Literal>]
+    let PathColumn = "subject_path"
+
+    /// The period-start column.
+    [<Literal>]
+    let FromColumn = "period_from"
+
+    /// The period-end column.
+    [<Literal>]
+    let ToColumn = "period_to"
+
+    /// The period-label column.
+    [<Literal>]
+    let LabelColumn = "period_label"
+
+    /// The name of one of metric `metric`'s columns (`""` is the value).
+    let metricColumn (metric: string) (part: string) : string =
+        if part = "" then metric else metric + "/" + part
+
+    let private instantType = TimestampType TimeUnit.Nanoseconds
+
+    // ── Instants ─────────────────────────────────────────────────
+
+    /// An instant as the columnar strand's canonical timestamp text. The
+    /// value's ticks are written as they stand, whatever its `Kind`, so the
+    /// instant read back has the same ticks the server's views carry.
+    let timestampText (t: DateTime) : string =
+        let ticksPerSecond = 10000000L
+        let fraction = t.Ticks % ticksPerSecond
+        let whole = DateTime(t.Ticks - fraction)
+
+        let head =
+            sprintf
+                "%04d-%02d-%02dT%02d:%02d:%02d"
+                whole.Year
+                whole.Month
+                whole.Day
+                whole.Hour
+                whole.Minute
+                whole.Second
+
+        if fraction = 0L then
+            head + "Z"
+        else
+            head + "." + (sprintf "%07d" fraction).TrimEnd '0' + "Z"
+
+    /// The instant a canonical timestamp text names.
+    let parseTimestamp (text: string) : DateTime =
+        let part (start: int) (length: int) = int (text.Substring(start, length))
+
+        let whole =
+            DateTime(part 0 4, part 5 2, part 8 2, part 11 2, part 14 2, part 17 2, DateTimeKind.Utc)
+
+        if text.Length > 20 && text.[19] = '.' then
+            let digits = text.Substring(20, text.Length - 21)
+            let ticks = (digits + "0000000").Substring(0, 7)
+            whole.AddTicks(int64 ticks)
+        else
+            whole
+
+    // ── Decimals ─────────────────────────────────────────────────
+
+    let private decimalCell (d: decimal) : Cell =
+#if FABLE_COMPILER
+        let text = string d
+#else
+        let text = d.ToString(System.Globalization.CultureInfo.InvariantCulture)
+#endif
+        Cell.decimal text |> Option.defaultValue Null
+
+    let private parseDecimal (text: string) : decimal =
+#if FABLE_COMPILER
+        System.Decimal.Parse text
+#else
+        System.Decimal.Parse(text, System.Globalization.CultureInfo.InvariantCulture)
+#endif
+
+    /// A figure the slice derives (the population mean) rendered with a
+    /// metric's display format. On .NET it is exactly
+    /// `d.ToString(format, InvariantCulture)`, the server's own rendering.
+    /// Under Fable, whose decimal has no format support, the standard
+    /// fixed-point specifiers `N<k>`, `F<k>` and `P<k>` (and the blank
+    /// format) are rendered to the same text, rounding half away from zero
+    /// as .NET does; any other format renders the decimal verbatim.
+    let renderDerived (format: string) (d: decimal) : string =
+#if FABLE_COMPILER
+        let precision (spec: string) =
+            if spec.Length = 1 then
+                Some 2
+            else
+                match System.Int32.TryParse(spec.Substring 1) with
+                | true, k when k >= 0 && k <= 20 -> Some k
+                | _ -> None
+
+        let groupThousands (digits: string) : string =
+            let n = digits.Length
+
+            digits
+            |> Seq.mapi (fun i c ->
+                if i > 0 && (n - i) % 3 = 0 then
+                    "," + string c
+                else
+                    string c)
+            |> String.concat ""
+
+        let fixedPoint (grouped: bool) (k: int) (value: decimal) =
+            // Half away from zero, by hand: Fable's decimal rounding ignores the
+            // MidpointRounding argument and always rounds half to even.
+            let scale = pown 10m k
+            let scaled = abs value * scale
+            let whole = System.Math.Floor scaled
+            let magnitude = (if scaled - whole >= 0.5m then whole + 1m else whole) / scale
+
+            let text = string magnitude
+
+            let integral, fraction =
+                match text.IndexOf '.' with
+                | -1 -> text, ""
+                | i -> text.Substring(0, i), text.Substring(i + 1)
+
+            let integral = if grouped then groupThousands integral else integral
+            let fraction = (fraction + String.replicate k "0").Substring(0, k)
+            let body = if k = 0 then integral else integral + "." + fraction
+            if value < 0m && magnitude <> 0m then "-" + body else body
+
+        let spec = if isNull format then "" else format.Trim()
+
+        if spec = "" then
+            string d
+        else
+            match spec.[0], precision spec with
+            | ('N' | 'n'), Some k -> fixedPoint true k d
+            | ('F' | 'f'), Some k -> fixedPoint false k d
+            | ('P' | 'p'), Some k -> fixedPoint true k (d * 100m) + " %"
+            | _ -> string d
+#else
+        if System.String.IsNullOrWhiteSpace format then
+            d.ToString System.Globalization.CultureInfo.InvariantCulture
+        else
+            d.ToString(format, System.Globalization.CultureInfo.InvariantCulture)
+#endif
+
+    // ── The codec ────────────────────────────────────────────────
+
+    let private columnError (e: ColumnError) : string =
+        "The slice could not be encoded: " + ColumnCodec.errorString e
+
+    let private optStr (v: string option) : Cell =
+        match v with
+        | Some s -> Str s
+        | None -> Null
+
+    let private optInt (v: int option) : Cell =
+        match v with
+        | Some i -> Int i
+        | None -> Null
+
+    /// Build the slice's table from the gated heads: one row per (subject,
+    /// period), in subject-path then period order, one column group per
+    /// metric in `metrics`' order. A head whose metric is not in `metrics`
+    /// is ignored; two heads of one metric on one row keep the later
+    /// `AsOf`.
+    let build (metrics: string list) (cells: FactSliceCell list) : Result<Table, string> =
+        let rows =
+            cells
+            |> List.filter (fun c -> List.contains c.Metric metrics)
+            |> List.groupBy (fun c -> c.SubjectPath, c.PeriodFrom, c.PeriodTo)
+            |> List.sortBy fst
+            |> List.map (fun (_, group) ->
+                let byMetric =
+                    group
+                    |> List.groupBy _.Metric
+                    |> List.map (fun (m, heads) -> m, heads |> List.maxBy _.AsOf)
+                    |> Map.ofList
+
+                List.head group, byMetric)
+
+        let column (name: string) (ty: ColumnType) (cells: Cell list) =
+            Column.ofCells name ty cells |> Result.map (fun c -> Field.create name ty, c)
+
+        let fixedColumn (name: string) (ty: ColumnType) (cellOf: FactSliceCell -> Cell) =
+            column name ty (rows |> List.map (fst >> cellOf))
+
+        let metricColumns (m: string) =
+            let head (name: string) (ty: ColumnType) (cellOf: FactSliceCell -> Cell) =
+                rows
+                |> List.map (fun (_, byMetric: Map<string, FactSliceCell>) ->
+                    match byMetric.TryFind m with
+                    | Some c -> cellOf c
+                    | None -> Null)
+                |> column (metricColumn m name) ty
+
+            [
+                head "" DecimalType (fun c -> c.Value |> Option.map decimalCell |> Option.defaultValue Null)
+                head "fact_id" StringType (fun c -> Str c.FactId)
+                head "as_of" instantType (fun c -> Timestamp(timestampText c.AsOf))
+                head "freshness" StringType (fun c -> Str c.Freshness)
+                head "rendering" StringType (fun c -> optStr c.Rendering)
+                head "withheld" StringType (fun c -> optStr c.WithheldPolicy)
+                head "rank_desc" IntType (fun c -> optInt c.RankDescending)
+                head "rank_asc" IntType (fun c -> optInt c.RankAscending)
+            ]
+
+        let all =
+            [
+                column RowColumn IntType (rows |> List.mapi (fun i _ -> Int i))
+                fixedColumn SubjectColumn StringType (fun c -> Str c.Subject)
+                fixedColumn PathColumn StringType (fun c -> Str(String.concat ">" c.SubjectPath))
+                fixedColumn FromColumn instantType (fun c -> Timestamp(timestampText c.PeriodFrom))
+                fixedColumn ToColumn instantType (fun c -> Timestamp(timestampText c.PeriodTo))
+                fixedColumn LabelColumn StringType (fun c -> optStr c.PeriodLabel)
+            ]
+            @ List.collect metricColumns metrics
+
+        match
+            all
+            |> List.tryPick (fun r ->
+                match r with
+                | Error e -> Some e
+                | Ok _ -> None)
+        with
+        | Some e -> Error(columnError e)
+        | None ->
+            let pairs =
+                all
+                |> List.choose (fun r ->
+                    match r with
+                    | Ok p -> Some p
+                    | Error _ -> None)
+
+            let table = {
+                Schema = pairs |> List.map fst
+                Columns = pairs |> List.map snd
+            }
+
+            match Table.validate table with
+            | Error e -> Error(columnError e)
+            | Ok() -> Ok table
+
+    /// A built table in the canonical codec.
+    let encode (table: Table) : Result<string, string> =
+        ColumnCodec.tryEncode (Embedded table) |> Result.mapError columnError
+
+    /// The table a slice carries.
+    let decode (slice: FactSlice) : Result<Table, string> =
+        match ColumnCodec.decode slice.Table with
+        | Ok(Embedded table) -> Ok table
+        | Ok(Ref name) -> Error(sprintf "The slice names a source '%s' rather than carrying its rows." name)
+        | Error e -> Error("The slice could not be decoded: " + ColumnCodec.errorString e)
+
+    /// A slice decoded and prepared once, for every local read over it.
+    type Held = {
+        /// The slice as served.
+        Slice: FactSlice
+        /// Its table, prepared (`DataFrame.prepare`).
+        Prepared: Prepared
+    }
+
+    /// Decode and prepare a slice.
+    let hold (slice: FactSlice) : Result<Held, string> =
+        decode slice
+        |> Result.map (fun table -> {
+            Slice = slice
+            Prepared = DataFrame.prepare table
+        })
+
+    // ── Coverage: when a request can be answered locally ─────────
+
+    let private isPrefixOf (prefix: string list) (path: string list) =
+        List.length path >= List.length prefix
+        && List.forall2 (=) prefix (List.truncate (List.length prefix) path)
+
+    let private carries (slice: FactSlice) (metric: string) =
+        slice.Metrics |> List.exists (fun m -> m.Metric = metric)
+
+    /// Whether a drill-down request is answerable from the slice: same
+    /// table, a metric it carries, a prefix inside its branch, and a slice
+    /// over every period (the drill-down has no period range).
+    let coversRows (slice: FactSlice) (query: FactRowQuery) : bool =
+        slice.TableId = query.TableId
+        && carries slice query.Metric
+        && isPrefixOf slice.SubjectPrefix query.SubjectPrefix
+        && slice.PeriodFrom = FactBrowseApi.AllPeriodsFrom
+        && slice.PeriodTo = FactBrowseApi.AllPeriodsTo
+
+    /// Whether a series request is answerable from the slice: same table, a
+    /// metric it carries, a prefix inside its branch, a period range inside
+    /// its own, and the table's own level.
+    let coversSeries (slice: FactSlice) (query: FactSeriesQuery) : bool =
+        slice.TableId = query.TableId
+        && carries slice query.Metric
+        && isPrefixOf slice.SubjectPrefix query.SubjectPrefix
+        && query.PeriodFrom >= slice.PeriodFrom
+        && query.PeriodTo <= slice.PeriodTo
+        && query.SubjectLevel |> Option.forall (fun level -> level = slice.Level)
+
+    // ── The pipelines ────────────────────────────────────────────
+
+    let private notNull (column: string) = Not(IsNull(Col column))
+
+    /// The rows under a subject prefix — the branch filter.
+    let branchFilter (prefix: string list) : Transform list =
+        match prefix with
+        | [] -> []
+        | _ ->
+            let joined = String.concat ">" prefix
+
+            [
+                Filter(
+                    Binary(
+                        Or,
+                        Binary(Eq, Col PathColumn, Lit(Str joined)),
+                        Binary(StartsWith, Col PathColumn, Lit(Str(joined + ">")))
+                    )
+                )
+            ]
+
+    /// The population a drill-down ranks: the rows holding a head of the
+    /// metric, under the prefix.
+    let population (metric: string) (prefix: string list) : Transform list =
+        Filter(notNull (metricColumn metric "fact_id")) :: branchFilter prefix
+
+    let private rankColumnOf (metric: string) (direction: FactRowDirection) =
+        match direction with
+        | TopOfRanking -> metricColumn metric "rank_desc"
+        | BottomOfRanking -> metricColumn metric "rank_asc"
+
+    /// The column the ranking window numbers its rows in.
+    [<Literal>]
+    let RankColumn = "rank"
+
+    /// The drill-down's ranking window: the population's comparable heads
+    /// ordered by the slice's ranking position, numbered 1… under the
+    /// prefix, and cut to ranks `(fromRank, toRank]`.
+    let rankingWindow (query: FactRowQuery) (fromRank: int) (toRank: int) : Transform list =
+        let rankBy = rankColumnOf query.Metric query.Direction
+
+        population query.Metric query.SubjectPrefix
+        @ [
+            Filter(notNull rankBy)
+            Window {
+                PartitionBy = []
+                OrderBy = [ rankBy, Asc ]
+                Fn = RowNumber
+                Of = rankBy
+                As = RankColumn
+            }
+            Filter(
+                Binary(And, Binary(Gt, Col RankColumn, Lit(Int fromRank)), Binary(Le, Col RankColumn, Lit(Int toRank)))
+            )
+            Sort [ Slot.Lit RankColumn, Asc ]
+        ]
+
+    /// The series' points: the rows holding a head of the metric, under
+    /// the prefix, whose period overlaps the range, in subject-path then
+    /// period order.
+    let seriesPoints (query: FactSeriesQuery) : Transform list =
+        population query.Metric query.SubjectPrefix
+        @ [
+            Filter(
+                Binary(
+                    And,
+                    Binary(Lt, Col FromColumn, Lit(Timestamp(timestampText query.PeriodTo))),
+                    Binary(Gt, Col ToColumn, Lit(Timestamp(timestampText query.PeriodFrom)))
+                )
+            )
+            Sort [ Slot.Lit RowColumn, Asc ]
+        ]
+
+    let private evaluate (held: Held) (pipeline: Transform list) : Result<Table, string> =
+        DataFrame.evalPrepared (fun name -> Error(UnresolvedSource name)) Map.empty pipeline held.Prepared
+        |> Result.mapError (fun e -> sprintf "A local read over the slice failed: %A" e)
+
+    /// One answered table's rows, as a cell reader per column name.
+    let private rowsOf (table: Table) : (string -> Cell) list =
+        let columns =
+            table.Columns
+            |> List.map (fun c -> c.Name, Array.ofList (Column.toCells c))
+            |> Map.ofList
+
+        List.init (Table.rowCount table) (fun i -> fun name -> columns.[name].[i])
+
+    let private str (cell: Cell) : string option =
+        match cell with
+        | Str s -> Some s
+        | _ -> None
+
+    let private intOf (cell: Cell) : int option =
+        match cell with
+        | Int i -> Some i
+        | _ -> None
+
+    let private instant (cell: Cell) : DateTime =
+        match cell with
+        | Timestamp t -> parseTimestamp t
+        | _ -> DateTime.MinValue
+
+    let private pathOf (cell: Cell) : string list =
+        match str cell with
+        | None
+        | Some "" -> []
+        | Some text -> text.Split '>' |> List.ofArray
+
+    let private withheldCounts (policies: string list) : FactWithheldCount list =
+        policies
+        |> List.countBy id
+        |> List.sortBy fst
+        |> List.map (fun (policyRef, count) -> { PolicyRef = policyRef; Count = count })
+
+    let private displayFormatOf (slice: FactSlice) (metric: string) : string =
+        slice.Metrics
+        |> List.tryFind (fun m -> m.Metric = metric)
+        |> Option.map _.DisplayFormat
+        |> Option.defaultValue ""
+
+    let private countOf (cell: Cell) : int =
+        match cell with
+        | Int i -> i
+        | Float f -> int f
+        | Decimal text -> int (parseDecimal text)
+        | _ -> 0
+
+    /// The population summary's aggregate: one row of counts, coverage and
+    /// the value total over a drill-down's population, so a page never
+    /// materialises the population it summarises.
+    let summaryAggregate (metric: string) (prefix: string list) : Transform list =
+        let col part = metricColumn metric part
+
+        population metric prefix
+        @ [
+            Derive("is_fresh", Case([ Binary(Eq, Col(col "freshness"), Lit(Str "fresh")), Lit(Int 1) ], Lit(Int 0)))
+            GroupBy(
+                [],
+                [
+                    {
+                        Name = "facts"
+                        Fn = Count
+                        Of = col "fact_id"
+                    }
+                    {
+                        Name = "subjects"
+                        Fn = CountDistinct
+                        Of = SubjectColumn
+                    }
+                    {
+                        Name = "comparable"
+                        Fn = Count
+                        Of = col "rank_asc"
+                    }
+                    {
+                        Name = "withheld"
+                        Fn = Count
+                        Of = col "withheld"
+                    }
+                    {
+                        Name = "fresh"
+                        Fn = Sum
+                        Of = "is_fresh"
+                    }
+                    {
+                        Name = "from"
+                        Fn = Min
+                        Of = FromColumn
+                    }
+                    { Name = "to"; Fn = Max; Of = ToColumn }
+                    {
+                        Name = "total"
+                        Fn = Sum
+                        Of = col ""
+                    }
+                ]
+            )
+        ]
+
+    /// The head at one end of a drill-down's ranking (its rendering is the
+    /// summary's minimum or maximum).
+    let rankingEnd (metric: string) (prefix: string list) (rankPart: string) : Transform list =
+        let rankBy = metricColumn metric rankPart
+
+        population metric prefix
+        @ [
+            Filter(notNull rankBy)
+            Sort [ Slot.Lit rankBy, Asc ]
+            Limit(Slot.Lit 1, Slot.Lit 0)
+        ]
+
+    /// The population summary over the slice's matched heads. Counts,
+    /// coverage and freshness are existence-level and always ride. The
+    /// magnitudes ride only when no matched head is withheld — stricter
+    /// than the server read, which withholds them only when a head in the
+    /// ranking up to the page's end is: the slice never holds a withheld
+    /// value to fold in.
+    let private summary (held: Held) (metric: string) (prefix: string list) : Result<int * FactPopulationView, string> =
+        let slice = held.Slice
+
+        evaluate held (summaryAggregate metric prefix)
+        |> Result.bind (fun aggregate ->
+            let row = rowsOf aggregate |> List.tryHead
+
+            let read name =
+                row |> Option.map (fun r -> r name) |> Option.defaultValue Null
+
+            let facts = countOf (read "facts")
+            let comparable = countOf (read "comparable")
+            let withheld = countOf (read "withheld") > 0
+            let fresh = countOf (read "fresh")
+
+            let extreme (rankPart: string) =
+                if withheld || comparable = 0 then
+                    Ok None
+                else
+                    evaluate held (rankingEnd metric prefix rankPart)
+                    |> Result.map (fun t ->
+                        rowsOf t
+                        |> List.tryHead
+                        |> Option.bind (fun r -> str (r (metricColumn metric "rendering"))))
+
+            extreme "rank_asc"
+            |> Result.bind (fun minimum ->
+                extreme "rank_desc"
+                |> Result.map (fun maximum ->
+                    let mean =
+                        match read "total" with
+                        | Decimal text when not withheld && comparable > 0 ->
+                            Some(
+                                renderDerived (displayFormatOf slice metric) (parseDecimal text / decimal comparable)
+                            )
+                        | _ -> None
+
+                    comparable,
+                    {
+                        SubjectCount = if facts = 0 then 0 else countOf (read "subjects")
+                        FactCount = facts
+                        ComparableCount = comparable
+                        NonComparableCount = facts - comparable
+                        PeriodFrom = if facts = 0 then None else Some(instant (read "from"))
+                        PeriodTo = if facts = 0 then None else Some(instant (read "to"))
+                        FreshCount = fresh
+                        StaleCount = facts - fresh
+                        Methods =
+                            if facts = 0 then
+                                []
+                            else
+                                [
+                                    {
+                                        Method = slice.Method
+                                        FactCount = facts
+                                    }
+                                ]
+                        Minimum = minimum
+                        Maximum = maximum
+                        Mean = mean
+                        ValueStatisticsWithheld = withheld
+                    })))
+
+    /// One drill-down page answered from the slice: the same rows, order,
+    /// ranks, withheld counts and paging flags `QueryRows` serves for the
+    /// request (with the page clamps applied the same way). Its population
+    /// summary is the slice's own (see `summary`).
+    let rowPage (held: Held) (request: FactRowQuery) : Result<FactRowPage, string> =
+        let slice = held.Slice
+        let size = FactBrowseApi.clampPageSize request.PageSize
+        let index = FactBrowseApi.clampPage request.Page
+        let windowStart = index * size
+        let windowEnd = windowStart + size
+        let ceiling = slice.RankCeiling
+        let topK = max 1 (min windowEnd ceiling)
+        let col part = metricColumn request.Metric part
+
+        summary held request.Metric request.SubjectPrefix
+        |> Result.bind (fun (rankedCount, population) ->
+            evaluate held (rankingWindow request windowStart topK)
+            |> Result.map (fun window ->
+                let windowRows = rowsOf window
+                let truncated = rankedCount > topK
+                let withheld = windowRows |> List.choose (fun r -> str (r (col "withheld")))
+
+                {
+                    TableId = slice.TableId
+                    Metric = request.Metric
+                    Direction = request.Direction
+                    SubjectPrefix = request.SubjectPrefix
+                    Page = index
+                    PageSize = size
+                    MaxPageSize = FactBrowseApi.MaxPageSize
+                    RankCeiling = ceiling
+                    Rows =
+                        windowRows
+                        |> List.filter (fun r -> (str (r (col "withheld"))).IsNone)
+                        |> List.map (fun r -> {
+                            Rank = intOf (r RankColumn) |> Option.defaultValue 0
+                            FactId = str (r (col "fact_id")) |> Option.defaultValue ""
+                            Subject = str (r SubjectColumn) |> Option.defaultValue ""
+                            SubjectPath = pathOf (r PathColumn)
+                            Rendering = str (r (col "rendering")) |> Option.defaultValue ""
+                            PeriodFrom = instant (r FromColumn)
+                            PeriodTo = instant (r ToColumn)
+                            PeriodLabel = str (r LabelColumn)
+                            AsOf = instant (r (col "as_of"))
+                            Freshness = str (r (col "freshness")) |> Option.defaultValue ""
+                        })
+                    WithheldCount = List.length withheld
+                    Withheld = withheldCounts withheld
+                    HasMore = truncated && windowEnd < ceiling
+                    ReachedRankCeiling = truncated && windowEnd >= ceiling
+                    Population = population
+                }))
+
+    /// One series answered from the slice: the same points, order, withheld
+    /// marks and cap refusal `QuerySeries` serves for the request.
+    let series (held: Held) (request: FactSeriesQuery) : Result<FactSeries, string> =
+        let slice = held.Slice
+        let cap = FactBrowseApi.clampSeriesPoints request.MaxPoints
+        let col part = metricColumn request.Metric part
+
+        if request.PeriodFrom >= request.PeriodTo then
+            Error(
+                sprintf
+                    "The period range %s..%s is not a half-open [from, to) extent: from must be before to."
+                    (request.PeriodFrom.ToString "o")
+                    (request.PeriodTo.ToString "o")
+            )
+        else
+            evaluate held (seriesPoints request)
+            |> Result.bind (fun table ->
+                let rows = rowsOf table
+
+                if List.length rows > cap then
+                    Error(
+                        sprintf
+                            "The series would hold %d points, over the cap of %d (FactBrowseApi.MaxSeriesPoints is %d). Narrow the period range or the subject prefix."
+                            (List.length rows)
+                            cap
+                            FactBrowseApi.MaxSeriesPoints
+                    )
+                else
+                    let withheld = rows |> List.choose (fun r -> str (r (col "withheld")))
+
+                    Ok {
+                        TableId = slice.TableId
+                        Metric = request.Metric
+                        SubjectPrefix = request.SubjectPrefix
+                        SubjectLevel = slice.Level
+                        PeriodFrom = request.PeriodFrom
+                        PeriodTo = request.PeriodTo
+                        DisplayFormat = displayFormatOf slice request.Metric
+                        Points =
+                            rows
+                            |> List.map (fun r ->
+                                let isWithheld = (str (r (col "withheld"))).IsSome
+
+                                {
+                                    Subject = str (r SubjectColumn) |> Option.defaultValue ""
+                                    SubjectPath = pathOf (r PathColumn)
+                                    PeriodFrom = instant (r FromColumn)
+                                    PeriodTo = instant (r ToColumn)
+                                    PeriodLabel = str (r LabelColumn)
+                                    Value =
+                                        match r (col "") with
+                                        | Decimal text when not isWithheld -> Some(parseDecimal text)
+                                        | _ -> None
+                                    Rendering = if isWithheld then None else str (r (col "rendering"))
+                                    FactId = str (r (col "fact_id")) |> Option.defaultValue ""
+                                    AsOf = instant (r (col "as_of"))
+                                    Freshness = str (r (col "freshness")) |> Option.defaultValue ""
+                                    Withheld = isWithheld
+                                })
+                        MaxPoints = cap
+                        WithheldCount = List.length withheld
+                        Withheld = withheldCounts withheld
+                    })

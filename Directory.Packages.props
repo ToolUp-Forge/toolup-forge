@@ -2,6 +2,14 @@
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
+  <PropertyGroup>
+    <!-- Phase 1127 — one pin per PRODUCING repository (see the
+         PackageVersion entries beside FSharp.Core). Both are public:
+         released versions on nuget.org, never a local-feed build. -->
+    <FuaranRestorePath>public</FuaranRestorePath>
+    <FuaranCoreVersion>0.40.2</FuaranCoreVersion>
+    <FuaranComputeVersion>0.42.0</FuaranComputeVersion>
+  </PropertyGroup>
   <!--
     Phase 11.C.1 (2026-05-08) Paket -> CPM migration. Versions are
     ported verbatim from paket.lock. Add a new <PackageVersion>
@@ -126,6 +134,25 @@
     <PackageVersion Include="FParsec" Version="1.1.1" />
     <PackageVersion Include="FSharp.Control.Reactive" Version="5.0.5" />
     <PackageVersion Include="FSharp.Core" Version="10.1.300" />
+    <!-- Phase 1127 — the published Apache-2.0 Fuaran libraries the fact
+         browse's view slice rides: `Fuaran.Core.Column` (the canonical
+         columnar `Table` and its wire codec) and `Fuaran.Compute.DataFrame`
+         (the `Transform` algebra and its reference evaluator). Both are
+         FSharp.Core-only and Fable-clean, and restore from nuget.org.
+         One version property per producing repository, because the Core
+         and Compute repositories are versioned independently;
+         `Fuaran.Core.Unit` / `.Wire` arrive transitively at the Core pin.
+         The Core pin is 0.40.2 — the DataFrame release's own floor — and
+         not the newer 0.40.3, deliberately: a workspace local feed may
+         hold a same-numbered build of a Core release with different bytes,
+         and NuGet takes an exact version from whichever source answers
+         first, so a pin is public-only when nuget.org is the one source
+         that serves it. A package-source mapping would say this more
+         directly, but it would also disown the scratch feed the template
+         gate adds through RestoreAdditionalProjectSources. See
+         docs/platform/open-core-boundary.md. -->
+    <PackageVersion Include="Fuaran.Core.Column" Version="$(FuaranCoreVersion)" />
+    <PackageVersion Include="Fuaran.Compute.DataFrame" Version="$(FuaranComputeVersion)" />
     <!-- Phase 195 — compile-time auth/audit analyzer (src/ToolUp.Remoting.Analyzers).
          0.36.0 tracks the F# 10 FCS line (FSharp.Compiler.Service 43.10.101);
          the analyzer package consumes it host-provided (PrivateAssets="all").

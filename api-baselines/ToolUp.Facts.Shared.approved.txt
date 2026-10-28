@@ -4,14 +4,47 @@
 # removal is breaking and must be reviewed; an addition is non-breaking but must
 # still be folded into this file in the same PR.
 ToolUp.Facts.FactBrowseApi (class)
+ToolUp.Facts.FactBrowseApi.AllPeriodsFrom : System.DateTime { get }
+ToolUp.Facts.FactBrowseApi.AllPeriodsTo : System.DateTime { get }
 ToolUp.Facts.FactBrowseApi.BulkExtractionNote : System.String (literal)
 ToolUp.Facts.FactBrowseApi.DefaultPageSize : System.Int32 (literal)
 ToolUp.Facts.FactBrowseApi.MaxPageSize : System.Int32 (literal)
 ToolUp.Facts.FactBrowseApi.MaxSeriesPoints : System.Int32 (literal)
+ToolUp.Facts.FactBrowseApi.MaxSliceCells : System.Int32 (literal)
 ToolUp.Facts.FactBrowseApi.clampPage(System.Int32) : System.Int32
 ToolUp.Facts.FactBrowseApi.clampPageSize(System.Int32) : System.Int32
 ToolUp.Facts.FactBrowseApi.clampSeriesPoints(System.Int32) : System.Int32
 ToolUp.Facts.FactBrowseApi.routeBuilder(System.String, System.String) : System.String
+ToolUp.Facts.FactBrowseSlice (class)
+ToolUp.Facts.FactBrowseSlice.FromColumn : System.String (literal)
+ToolUp.Facts.FactBrowseSlice.LabelColumn : System.String (literal)
+ToolUp.Facts.FactBrowseSlice.PathColumn : System.String (literal)
+ToolUp.Facts.FactBrowseSlice.RankColumn : System.String (literal)
+ToolUp.Facts.FactBrowseSlice.RowColumn : System.String (literal)
+ToolUp.Facts.FactBrowseSlice.SubjectColumn : System.String (literal)
+ToolUp.Facts.FactBrowseSlice.ToColumn : System.String (literal)
+ToolUp.Facts.FactBrowseSlice.branchFilter(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform]
+ToolUp.Facts.FactBrowseSlice.build(Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactSliceCell]) : Microsoft.FSharp.Core.FSharpResult`2[Fuaran.Core.Table, System.String]
+ToolUp.Facts.FactBrowseSlice.coversRows(ToolUp.Facts.FactSlice, ToolUp.Facts.FactRowQuery) : System.Boolean
+ToolUp.Facts.FactBrowseSlice.coversSeries(ToolUp.Facts.FactSlice, ToolUp.Facts.FactSeriesQuery) : System.Boolean
+ToolUp.Facts.FactBrowseSlice.decode(ToolUp.Facts.FactSlice) : Microsoft.FSharp.Core.FSharpResult`2[Fuaran.Core.Table, System.String]
+ToolUp.Facts.FactBrowseSlice.encode(Fuaran.Core.Table) : Microsoft.FSharp.Core.FSharpResult`2[System.String, System.String]
+ToolUp.Facts.FactBrowseSlice.hold(ToolUp.Facts.FactSlice) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactBrowseSlice+Held, System.String]
+ToolUp.Facts.FactBrowseSlice.metricColumn(System.String, System.String) : System.String
+ToolUp.Facts.FactBrowseSlice.parseTimestamp(System.String) : System.DateTime
+ToolUp.Facts.FactBrowseSlice.population(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform]
+ToolUp.Facts.FactBrowseSlice.rankingEnd(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String) : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform]
+ToolUp.Facts.FactBrowseSlice.rankingWindow(ToolUp.Facts.FactRowQuery, System.Int32, System.Int32) : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform]
+ToolUp.Facts.FactBrowseSlice.renderDerived(System.String, System.Decimal) : System.String
+ToolUp.Facts.FactBrowseSlice.rowPage(ToolUp.Facts.FactBrowseSlice+Held, ToolUp.Facts.FactRowQuery) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactRowPage, System.String]
+ToolUp.Facts.FactBrowseSlice.series(ToolUp.Facts.FactBrowseSlice+Held, ToolUp.Facts.FactSeriesQuery) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSeries, System.String]
+ToolUp.Facts.FactBrowseSlice.seriesPoints(ToolUp.Facts.FactSeriesQuery) : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform]
+ToolUp.Facts.FactBrowseSlice.summaryAggregate(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform]
+ToolUp.Facts.FactBrowseSlice.timestampText(System.DateTime) : System.String
+ToolUp.Facts.FactBrowseSlice+Held (class)
+ToolUp.Facts.FactBrowseSlice+Held..ctor(ToolUp.Facts.FactSlice, Fuaran.Compute.Prepared)
+ToolUp.Facts.FactBrowseSlice+Held.Prepared : Fuaran.Compute.Prepared { get }
+ToolUp.Facts.FactBrowseSlice+Held.Slice : ToolUp.Facts.FactSlice { get }
 ToolUp.Facts.FactChainEntry (class)
 ToolUp.Facts.FactChainEntry..ctor(System.String, System.String, System.DateTime, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Facts.FactChainEntry.AsOf : System.DateTime { get }
@@ -161,6 +194,50 @@ ToolUp.Facts.FactSeriesQuery.PeriodTo : System.DateTime { get }
 ToolUp.Facts.FactSeriesQuery.SubjectLevel : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Facts.FactSeriesQuery.SubjectPrefix : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
 ToolUp.Facts.FactSeriesQuery.TableId : System.String { get }
+ToolUp.Facts.FactSlice (class)
+ToolUp.Facts.FactSlice..ctor(System.String, System.String, System.String, System.String, System.DateTime, System.DateTime, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactSliceMetric], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Int32, System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactWithheldCount])
+ToolUp.Facts.FactSlice.CellCount : System.Int32 { get }
+ToolUp.Facts.FactSlice.Hierarchy : System.String { get }
+ToolUp.Facts.FactSlice.Level : System.String { get }
+ToolUp.Facts.FactSlice.MaxCells : System.Int32 { get }
+ToolUp.Facts.FactSlice.Method : System.String { get }
+ToolUp.Facts.FactSlice.Metrics : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactSliceMetric] { get }
+ToolUp.Facts.FactSlice.PeriodFrom : System.DateTime { get }
+ToolUp.Facts.FactSlice.PeriodTo : System.DateTime { get }
+ToolUp.Facts.FactSlice.RankCeiling : System.Int32 { get }
+ToolUp.Facts.FactSlice.RunStamp : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactSlice.SubjectPrefix : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.FactSlice.Table : System.String { get }
+ToolUp.Facts.FactSlice.TableId : System.String { get }
+ToolUp.Facts.FactSlice.Withheld : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactWithheldCount] { get }
+ToolUp.Facts.FactSlice.WithheldCount : System.Int32 { get }
+ToolUp.Facts.FactSliceCell (class)
+ToolUp.Facts.FactSliceCell..ctor(System.String, System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.DateTime, System.DateTime, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Decimal], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.DateTime, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.Int32])
+ToolUp.Facts.FactSliceCell.AsOf : System.DateTime { get }
+ToolUp.Facts.FactSliceCell.FactId : System.String { get }
+ToolUp.Facts.FactSliceCell.Freshness : System.String { get }
+ToolUp.Facts.FactSliceCell.Metric : System.String { get }
+ToolUp.Facts.FactSliceCell.PeriodFrom : System.DateTime { get }
+ToolUp.Facts.FactSliceCell.PeriodLabel : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactSliceCell.PeriodTo : System.DateTime { get }
+ToolUp.Facts.FactSliceCell.RankAscending : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Facts.FactSliceCell.RankDescending : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Facts.FactSliceCell.Rendering : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactSliceCell.Subject : System.String { get }
+ToolUp.Facts.FactSliceCell.SubjectPath : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.FactSliceCell.Value : Microsoft.FSharp.Core.FSharpOption`1[System.Decimal] { get }
+ToolUp.Facts.FactSliceCell.WithheldPolicy : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
+ToolUp.Facts.FactSliceMetric (class)
+ToolUp.Facts.FactSliceMetric..ctor(System.String, System.String)
+ToolUp.Facts.FactSliceMetric.DisplayFormat : System.String { get }
+ToolUp.Facts.FactSliceMetric.Metric : System.String { get }
+ToolUp.Facts.FactSliceQuery (class)
+ToolUp.Facts.FactSliceQuery..ctor(System.String, System.DateTime, System.DateTime, Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Collections.FSharpList`1[System.String])
+ToolUp.Facts.FactSliceQuery.Metrics : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.FactSliceQuery.PeriodFrom : System.DateTime { get }
+ToolUp.Facts.FactSliceQuery.PeriodTo : System.DateTime { get }
+ToolUp.Facts.FactSliceQuery.SubjectPrefix : Microsoft.FSharp.Collections.FSharpList`1[System.String] { get }
+ToolUp.Facts.FactSliceQuery.TableId : System.String { get }
 ToolUp.Facts.FactTableColumnView (class)
 ToolUp.Facts.FactTableColumnView..ctor(System.String, System.String, System.String)
 ToolUp.Facts.FactTableColumnView.Disclosure : System.String { get }
@@ -175,7 +252,7 @@ ToolUp.Facts.FactTableDetail.RefreshCadenceSeconds : System.Int64 { get }
 ToolUp.Facts.FactTableDetail.Requirement : System.String { get }
 ToolUp.Facts.FactTableDetail.SchemaVersion : System.Int32 { get }
 ToolUp.Facts.FactTableListing (class)
-ToolUp.Facts.FactTableListing..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
+ToolUp.Facts.FactTableListing..ctor(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int32], Microsoft.FSharp.Core.FSharpOption`1[System.DateTime], System.String, Microsoft.FSharp.Core.FSharpOption`1[System.Int64], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String])
 ToolUp.Facts.FactTableListing.Freshness : System.String { get }
 ToolUp.Facts.FactTableListing.Hierarchy : System.String { get }
 ToolUp.Facts.FactTableListing.HistoryMode : System.String { get }
@@ -188,6 +265,7 @@ ToolUp.Facts.FactTableListing.Module : System.String { get }
 ToolUp.Facts.FactTableListing.OverdueBySeconds : Microsoft.FSharp.Core.FSharpOption`1[System.Int64] { get }
 ToolUp.Facts.FactTableListing.PeriodGrain : System.String { get }
 ToolUp.Facts.FactTableListing.RowCount : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }
+ToolUp.Facts.FactTableListing.RunStamp : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }
 ToolUp.Facts.FactTableListing.TableId : System.String { get }
 ToolUp.Facts.FactTableRunNotice (class)
 ToolUp.Facts.FactTableRunNotice..ctor(System.String, System.String, System.Int32, System.Int32, System.Int32, System.Int32, System.Int32)
@@ -216,7 +294,7 @@ ToolUp.Facts.FactWithheldCount..ctor(System.String, System.Int32)
 ToolUp.Facts.FactWithheldCount.Count : System.Int32 { get }
 ToolUp.Facts.FactWithheldCount.PolicyRef : System.String { get }
 ToolUp.Facts.IFactBrowseApi (class)
-ToolUp.Facts.IFactBrowseApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableListing], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactTableDetail, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.Int32, System.Int32], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactRunPage, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactRunMovers, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactRowQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactRowPage, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactDetailView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactSeriesQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSeries, System.String]]])
+ToolUp.Facts.IFactBrowseApi..ctor(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableListing], System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactTableDetail, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`3[System.String, System.Int32, System.Int32], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactRunPage, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactRunMovers, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactRowQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactRowPage, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactDetailView, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactSeriesQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSeries, System.String]]], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactSliceQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSlice, System.String]]])
 ToolUp.Facts.IFactBrowseApi.GetFact : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactDetailView, System.String]]] { get }
 ToolUp.Facts.IFactBrowseApi.GetRunMovers : Microsoft.FSharp.Core.FSharpFunc`2[System.Tuple`2[System.String, System.String], Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactRunMovers, System.String]]] { get }
 ToolUp.Facts.IFactBrowseApi.GetTable : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactTableDetail, System.String]]] { get }
@@ -224,3 +302,4 @@ ToolUp.Facts.IFactBrowseApi.ListRuns : Microsoft.FSharp.Core.FSharpFunc`2[System
 ToolUp.Facts.IFactBrowseApi.ListTables : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.FactTableListing], System.String]]] { get }
 ToolUp.Facts.IFactBrowseApi.QueryRows : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactRowQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactRowPage, System.String]]] { get }
 ToolUp.Facts.IFactBrowseApi.QuerySeries : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactSeriesQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSeries, System.String]]] { get }
+ToolUp.Facts.IFactBrowseApi.QuerySlice : Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Facts.FactSliceQuery, Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSlice, System.String]]] { get }

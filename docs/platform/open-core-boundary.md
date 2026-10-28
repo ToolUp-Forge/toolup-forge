@@ -99,3 +99,33 @@ order of preference:
 2. **Move the citation.** Planning context belongs in a private-side planning document;
    refer to it by number from here, if at all.
 3. **Mark it exempt, with a reason** — only for the two sanctioned cases above.
+
+## The published Fuaran libraries (Phase 1127)
+
+**Ruling (2026-10-27).** This repository may depend on, and name in any shipped file, the
+published Apache-2.0 Fuaran libraries — the `Fuaran.Core.*`, `Fuaran.Compute.*` and
+`Fuaran.UI.*` packages, their public repositories and their public specifications. The bare
+`Fuaran` token is therefore not a banned word here. The first adopter is the fact browse's
+view slice, which carries a `Fuaran.Core.Column` table and refines it with
+`Fuaran.Compute.DataFrame` (see [Facts](facts.md)).
+
+**The licence line.** The permission reaches exactly as far as a reader can follow it: a
+library that is BOTH Apache-2.0 AND published on nuget.org with a public repository. A
+Fuaran repository that is private — even one destined to be public — is still not cited,
+because a public file pointing at it names something a reader cannot open. Nothing else in
+the rule above changes: commercial layers and private repositories stay out of every
+shipped file.
+
+**Why the direction is allowed.** The dependency runs one way, from this SDK to a public
+library, the way it runs to FSharp.Core or Feliz. Those libraries take no dependency on this
+repository and know nothing of it, so no reader learns from the reference what sits above
+this substrate. Three mechanics keep it that way:
+
+- **nuget.org only.** Each pin names a version nuget.org serves, so a released ToolUp
+  package restores anonymously with its Fuaran dependencies. A version built on one machine
+  is never pinned.
+- **One version property per producing repository** in `Directory.Packages.props`
+  (`FuaranCoreVersion`, `FuaranComputeVersion`), because the Core and Compute repositories
+  release independently. One property spanning both could never be right for long.
+- **Through the package graph, never by source.** No project here references Fuaran
+  sources, so the published contract is the only thing consumed.

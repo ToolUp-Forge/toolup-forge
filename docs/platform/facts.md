@@ -474,6 +474,77 @@ Under a taint configuration, over the parity corpus (7 points, 16 facts in
 scope): the fact path after 1125 read 23 facts (the graph's 16 plus the 7
 points), the row path reads 16 — the graph load alone.
 
+### A view reads once and refines locally: the view slice (Phase 1127)
+
+The browse was built on the rule "every change of page, metric, direction or subject
+prefix is a new server read". Each of those reads pays the store, the gate and a round
+trip. Fact tables change when a run lands, not while someone explores, so the browse
+now works the other way round.
+
+`IFactBrowseApi.QuerySlice` reads one table's current heads over a period range, an
+optional subject branch and a metric set. It returns them as one columnar table, a
+`Fuaran.Core.Column` `Table` in its canonical codec, which any columnar consumer can
+bind with no adapter. The client prepares the slice once (`DataFrame.prepare`). It then
+answers every drill-down page, sort, metric change, branch filter and chart as a
+`Fuaran.Compute.DataFrame` pipeline over it (`FactBrowseSlice.rowPage`, `.series`).
+It reads again only when it leaves the slice or the slice's **run stamp** moves.
+
+- **One read per metric, each one the series read.** Each metric's heads come from the
+  same head query `QuerySeries` uses. On the blob store with the row-form gate (Phase
+  1126) that is one surface download per metric and no fact. Elsewhere the slice falls
+  back to fact reads, as the series read does.
+- **Judged before it is encoded.** The gate decides every cell before encoding. A
+  withheld cell keeps its subject, period, fact id and ranking position, the
+  existence-level data the series and drill-down reads already serve. It carries no
+  value and no rendering.
+- **Ranks without values.** Each metric's comparable heads are ranked over the whole
+  slice in the population read's own order (value, then fact id), in both directions,
+  withheld heads included. A drill-down under any prefix inside the slice is that order
+  restricted to the prefix. So the client can number a withheld row's place without
+  holding its value, and its page matches `QueryRows` row for row.
+- **The summary is stricter.** A local page's minimum, maximum and mean are withheld
+  whenever any matched head is withheld. The server withholds them only when the
+  ranking up to the page's end holds one, because it can fold values the slice never
+  receives. The local summary can therefore be stricter than the server's, never looser.
+- **The run stamp.** `FactTableListing.RunStamp` is the current run's watermark token.
+  The slice records it, read before any head, so a run that commits mid-read leaves the
+  slice looking older than it is and never newer. A refreshed listing that names
+  another stamp drops the slice, and so does the per-run notification.
+- **Bounded.** `FactBrowseApi.MaxSliceCells` (25,000 heads across metrics) is checked
+  before the gate. A table over it is refused with the cap named, and the browse falls
+  back to the server's page reads for that table.
+- **What stays a server read.** `GetFact` returns a fact's supersession chain and
+  `GetRunMovers` returns a run's movers with the facts they replaced. Neither is in a
+  slice of current heads.
+
+The packages are the published Apache-2.0 `Fuaran.Core.Column` and
+`Fuaran.Compute.DataFrame`, restored from nuget.org. The ruling that admits them is
+recorded in [the open-core boundary](open-core-boundary.md).
+
+**Measured** (in-memory blob store, twenty brands, two months, two columns). The
+session is: open a table, change metric twice, sort, filter to a brand, page three
+times, open one chart.
+
+| | 2,000 facts | 20,000 facts |
+|---|---|---|
+| Before: server reads | 9 | 9 |
+| Before: blob downloads | 250 | 325 |
+| Before: per interaction | 2.0–3.0 ms | 19.8–38.5 ms |
+| After: server reads | 1 (the slice) | 1 (the slice) |
+| After: blob downloads | 2 (one surface per metric), then 0 | 2, then 0 |
+| After: slice read + decode + prepare | 65 ms | 743 ms |
+| After: encoded slice | 452 KB | 4.55 MB |
+| After: per interaction (local) | 0.5–6.6 ms | 7.6–43.9 ms |
+
+These figures are in-process, so they price neither the network nor object storage.
+On a deployment each "before" interaction is a round trip plus its share of the 325
+downloads, at the 136–148 ms per GET measured above. That cost is what made each
+interaction take seconds, and after the slice it is paid once per table. Locally, an
+interaction over the 20,000-fact table costs about what the in-memory server read does,
+so the saving is the trip, not the compute. At the cap (25,000 cells, one metric) the
+slice encodes to 5.9 MB. It decodes and prepares in 279 ms on .NET and 946 ms under
+Fable on Node, and a page over it takes 32 ms on .NET and 238 ms under Fable.
+
 ### A first upload leaves its metrics' surfaces warm (Phase 1124)
 
 `AssertBatch` loads the whole scope to find lineage heads whenever the

@@ -49,6 +49,7 @@ let private listing (tableId: string) (metrics: string list) : FactTableListing 
     OverdueBySeconds = None
     LatestRunOutcome = None
     LatestRunReason = None
+    RunStamp = None
 }
 
 let private detail (tableId: string) : FactTableDetail = {
@@ -87,6 +88,7 @@ let private fakeApi: IFactBrowseApi = {
     QueryRows = fun _ -> noCall ()
     GetFact = fun _ -> noCall ()
     QuerySeries = fun _ -> noCall ()
+    QuerySlice = fun _ -> noCall ()
 }
 
 let private step (msg: Msg) (model: Model) = updateWith fakeApi msg model |> fst
@@ -365,6 +367,322 @@ let private badgeTests =
             Expect.equal present absent "the companion changes nothing about a document it does not describe"
     ]
 
+// ─── Phase 1127 — the slice, refined locally under Fable ─────────────
+//
+// The .NET pack holds the slice's pipelines to the server reads over a real
+// store. Here the same pipelines run under Fable over a slice built and
+// encoded on this host, against answers worked out by hand: ranks keep a
+// withheld head's position, the branch filter is a prefix of members, the
+// series keeps a withheld point's place, and a page inside the slice costs
+// no server read.
+
+let private september = DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+let private october = DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc)
+
+let private sliceCell (brand: string) (sku: string) (value: decimal) (desc: int) (asc: int) (withheld: bool) =
+    {
+        Metric = "revenue"
+        FactId = "f-" + sku
+        Subject = sprintf "product/%s>%s" brand sku
+        SubjectPath = [ brand; sku ]
+        PeriodFrom = september
+        PeriodTo = october
+        PeriodLabel = Some "2026-09"
+        Value = if withheld then None else Some value
+        Rendering = if withheld then None else Some(string value)
+        AsOf = september.AddDays 3.0
+        Freshness = "fresh"
+        WithheldPolicy = if withheld then Some "licence-x" else None
+        RankDescending = Some desc
+        RankAscending = Some asc
+    }
+    : FactSliceCell
+
+/// Three heads: z1 = 50 (largest), a2 = 20 (withheld), a1 = 10 (smallest).
+let private fixtureSlice: FactSlice =
+    let encoded =
+        FactBrowseSlice.build [ "revenue" ] [
+            sliceCell "acme" "a1" 10m 3 1 false
+            sliceCell "acme" "a2" 20m 2 2 true
+            sliceCell "zeta" "z1" 50m 1 3 false
+        ]
+        |> Result.bind FactBrowseSlice.encode
+
+    {
+        TableId = "t"
+        Hierarchy = "product"
+        Level = "sku"
+        Method = "computed:price-model:v1:t"
+        PeriodFrom = FactBrowseApi.AllPeriodsFrom
+        PeriodTo = FactBrowseApi.AllPeriodsTo
+        SubjectPrefix = []
+        Metrics = [
+            {
+                Metric = "revenue"
+                DisplayFormat = ""
+            }
+        ]
+        Table =
+            match encoded with
+            | Ok text -> text
+            | Error e -> failwith e
+        RunStamp = Some "t@1:abc"
+        CellCount = 3
+        MaxCells = FactBrowseApi.MaxSliceCells
+        RankCeiling = 1000
+        WithheldCount = 1
+        Withheld = [ { PolicyRef = "licence-x"; Count = 1 } ]
+    }
+
+let private heldFixture () =
+    match FactBrowseSlice.hold fixtureSlice with
+    | Ok held -> held
+    | Error e -> failwith e
+
+let private page (direction: FactRowDirection) (prefix: string list) (index: int) (size: int) =
+    let request = {
+        defaultRowQuery "t" "revenue" with
+            Direction = direction
+            SubjectPrefix = prefix
+            Page = index
+            PageSize = size
+    }
+
+    match FactBrowseSlice.rowPage (heldFixture ()) request with
+    | Ok p -> p
+    | Error e -> failwith e
+
+let private ranks (p: FactRowPage) =
+    p.Rows |> List.map (fun r -> r.Rank, r.FactId)
+
+let private sliceTests =
+    testList "Phase 1127 — the view slice, refined locally" [
+        testCase "a page keeps a withheld head's rank, so no row is promoted"
+        <| fun _ ->
+            let top = page TopOfRanking [] 0 2
+            Expect.equal (ranks top) [ 1, "f-z1" ] "z1 is first; a2's rank 2 is withheld"
+            Expect.equal top.WithheldCount 1 "one withheld head on the page"
+            Expect.isTrue top.HasMore "a third ranked head lies past the page"
+            Expect.equal (ranks (page TopOfRanking [] 1 2)) [ 3, "f-a1" ] "a1 keeps rank 3"
+            Expect.equal (ranks (page BottomOfRanking [] 0 3)) [ 1, "f-a1"; 3, "f-z1" ] "the smallest first"
+
+        testCase "the branch filter ranks within the branch"
+        <| fun _ ->
+            Expect.equal (ranks (page TopOfRanking [ "acme" ] 0 1)) [] "a2 heads the acme branch and is withheld"
+            Expect.equal (ranks (page TopOfRanking [ "acme" ] 1 1)) [ 2, "f-a1" ] "a1 is second in its branch"
+            Expect.equal (ranks (page TopOfRanking [ "acme"; "a1" ] 0 5)) [ 1, "f-a1" ] "a member path is a branch"
+            Expect.equal (ranks (page TopOfRanking [ "acm" ] 0 5)) [] "a prefix is of members, not of text"
+
+        testCase "the summary withholds magnitudes whenever a matched head is withheld"
+        <| fun _ ->
+            let all = (page TopOfRanking [] 0 5).Population
+            Expect.isTrue all.ValueStatisticsWithheld "a2 is in the population"
+            Expect.isNone all.Minimum "no minimum"
+            Expect.equal (all.SubjectCount, all.FactCount, all.ComparableCount) (3, 3, 3) "counts always ride"
+            let zeta = (page TopOfRanking [ "zeta" ] 0 5).Population
+            Expect.isFalse zeta.ValueStatisticsWithheld "nothing withheld in zeta"
+
+            Expect.equal
+                (zeta.Minimum, zeta.Maximum, zeta.Mean)
+                (Some "50", Some "50", Some "50")
+                "the magnitudes over one head"
+
+        testCase "the series keeps a withheld point's place, and its cap"
+        <| fun _ ->
+            let request: FactSeriesQuery = {
+                TableId = "t"
+                Metric = "revenue"
+                SubjectPrefix = []
+                SubjectLevel = None
+                PeriodFrom = september
+                PeriodTo = october
+                MaxPoints = FactBrowseApi.MaxSeriesPoints
+            }
+
+            match FactBrowseSlice.series (heldFixture ()) request with
+            | Error e -> failwith e
+            | Ok s ->
+                Expect.equal (s.Points |> List.map _.FactId) [ "f-a1"; "f-a2"; "f-z1" ] "subject then period order"
+                Expect.equal (s.Points |> List.map _.Value) [ Some 10m; None; Some 50m ] "a gap where withheld"
+                Expect.equal (s.Points |> List.map _.Withheld) [ false; true; false ] "marked withheld"
+                Expect.equal s.Points.Head.PeriodFrom september "the instant round-trips"
+
+            match FactBrowseSlice.series (heldFixture ()) { request with MaxPoints = 2 } with
+            | Ok _ -> failwith "three points over a cap of two must be refused"
+            | Error e -> Expect.isTrue (e.Contains "over the cap of 2") "the refusal names the cap"
+
+        testCase "a derived figure renders as .NET renders it"
+        <| fun _ ->
+            Expect.equal (FactBrowseSlice.renderDerived "N2" 1234.5m) "1,234.50" "N2"
+            Expect.equal (FactBrowseSlice.renderDerived "N0" -1234.5m) "-1,235" "N0, half away from zero"
+            Expect.equal (FactBrowseSlice.renderDerived "F1" 2.25m) "2.3" "F1"
+            Expect.equal (FactBrowseSlice.renderDerived "P1" 0.1234m) "12.3 %" "P1"
+            Expect.equal (FactBrowseSlice.renderDerived "" 3.5m) "3.5" "verbatim"
+
+        testCase "inside the slice a page, a metric or a prefix costs no server read"
+        <| fun _ ->
+            let query = defaultRowQuery "t" "revenue"
+
+            let waiting = {
+                empty with
+                    SelectedTable = Some "t"
+                    RowQuery = Some query
+                    Rows = Loading
+                    Slice = Loading
+            }
+
+            let held, cmd = updateWith fakeApi (SliceLoaded("t", Ok fixtureSlice)) waiting
+            Expect.isTrue (List.isEmpty cmd) "the waiting page is answered from the slice"
+
+            match held.Rows with
+            | Loaded p -> Expect.equal (ranks p) [ 1, "f-z1"; 3, "f-a1" ] "the first page, a2's rank 2 withheld"
+            | other -> failwithf "expected a page, got %A" other
+
+            let paged, cmd =
+                updateWith
+                    fakeApi
+                    (RowsRequested {
+                        query with
+                            SubjectPrefix = [ "acme" ]
+                            Page = 1
+                            PageSize = 1
+                    })
+                    held
+
+            Expect.isTrue (List.isEmpty cmd) "a branch page is local"
+
+            match paged.Rows with
+            | Loaded p -> Expect.equal (ranks p) [ 2, "f-a1" ] "ranked within the branch"
+            | other -> failwithf "expected a page, got %A" other
+
+        testCase "a moved run stamp, or the run notification, drops the slice"
+        <| fun _ ->
+            let held, _ =
+                updateWith fakeApi (SliceLoaded("t", Ok fixtureSlice)) {
+                    empty with
+                        SelectedTable = Some "t"
+                        RowQuery = Some(defaultRowQuery "t" "revenue")
+                        Slice = Loading
+                }
+
+            let unchanged, _ =
+                updateWith
+                    fakeApi
+                    (DetailLoaded(
+                        Ok {
+                            detail "t" with
+                                Listing = {
+                                    listing "t" [ "revenue" ] with
+                                        RunStamp = Some "t@1:abc"
+                                }
+                        }
+                    ))
+                    held
+
+            match unchanged.Slice with
+            | Loaded _ -> ()
+            | other -> failwithf "the same stamp keeps the slice, got %A" other
+
+            let moved, cmd =
+                updateWith
+                    fakeApi
+                    (DetailLoaded(
+                        Ok {
+                            detail "t" with
+                                Listing = {
+                                    listing "t" [ "revenue" ] with
+                                        RunStamp = Some "t@2:def"
+                                }
+                        }
+                    ))
+                    held
+
+            Expect.equal moved.Slice Loading "a new stamp reads the slice again"
+            Expect.isFalse (List.isEmpty cmd) "and asks for it"
+
+            let notified, _ =
+                updateWith
+                    fakeApi
+                    (RunCommitted {
+                        TableId = "t"
+                        RunId = "r2"
+                        RowCount = 3
+                        New = 0
+                        Changed = 1
+                        Unchanged = 2
+                        Removed = 0
+                    })
+                    held
+
+            Expect.equal notified.Slice Loading "the run's notification drops the slice too"
+
+        testCase "a slice at the cap decodes, prepares and pages in the browser's runtime"
+        <| fun _ ->
+            let n = FactBrowseApi.MaxSliceCells
+
+            let encoded =
+                FactBrowseSlice.build [ "revenue" ] [
+                    for i in 0 .. n - 1 do
+                        sliceCell (sprintf "b%02d" (i % 20)) (sprintf "s%05d" i) (decimal i) (n - i) (i + 1) false
+                ]
+                |> Result.bind FactBrowseSlice.encode
+
+            let text =
+                match encoded with
+                | Ok t -> t
+                | Error e -> failwith e
+
+            let started = DateTime.UtcNow
+
+            let held =
+                match
+                    FactBrowseSlice.hold {
+                        fixtureSlice with
+                            Table = text
+                            CellCount = n
+                    }
+                with
+                | Ok h -> h
+                | Error e -> failwith e
+
+            let prepared = DateTime.UtcNow
+            let prepareMs = (prepared - started).TotalMilliseconds
+
+            let first =
+                match FactBrowseSlice.rowPage held (defaultRowQuery "t" "revenue") with
+                | Ok p -> p
+                | Error e -> failwith e
+
+            let pageMs = (DateTime.UtcNow - prepared).TotalMilliseconds
+
+            printfn
+                "Phase 1127 slice at the cap under Fable (%d cells, %d encoded chars): decode+prepare %.0f ms, one local page %.0f ms"
+                n
+                text.Length
+                prepareMs
+                pageMs
+
+            Expect.equal (List.length first.Rows) FactBrowseApi.DefaultPageSize "a full first page"
+            Expect.equal first.Rows.Head.FactId (sprintf "f-s%05d" (n - 1)) "the largest first"
+
+        testCase "a refused slice sends the drill-down to the server's pages"
+        <| fun _ ->
+            let model, cmd =
+                updateWith fakeApi (SliceLoaded("t", Error "The slice would hold 60000 cells, over the cap")) {
+                    empty with
+                        SelectedTable = Some "t"
+                        RowQuery = Some(defaultRowQuery "t" "revenue")
+                        Slice = Loading
+                }
+
+            Expect.equal model.Rows Loading "the page is read from the server"
+            Expect.isFalse (List.isEmpty cmd) "one QueryRows read"
+
+            match model.Slice with
+            | LoadFailed _ -> ()
+            | other -> failwithf "the refusal is held, got %A" other
+    ]
+
 /// Every Phase 895 client case.
 let tests =
-    testList "Phase 895 — fact browse client" [ modelTests; pageTests; badgeTests ]
+    testList "Phase 895 — fact browse client" [ modelTests; pageTests; badgeTests; sliceTests ]

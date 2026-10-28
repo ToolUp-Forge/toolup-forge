@@ -2048,6 +2048,487 @@ let private heldTests =
     ]
 
 /// Every Phase 895 server case, and Phase 1113's series cases.
+// ─── Phase 1127 — a view reads once and refines locally ──────────────
+//
+// The oracle is the server: for every drill-down page and every series the
+// existing reads serve over a corpus with revisions, a slice-scoped run,
+// gaps, an Internal column and facts denied by name, the local pipeline
+// over the slice (`FactBrowseSlice.rowPage` / `.series`) must answer the
+// same rows, order, ranks, withheld positions and paging flags. The probe
+// below then counts what a representative browsing session costs both ways.
+
+let private allPeriods (metrics: string list) : FactSliceQuery = {
+    TableId = skuTable.Id
+    PeriodFrom = FactBrowseApi.AllPeriodsFrom
+    PeriodTo = FactBrowseApi.AllPeriodsTo
+    SubjectPrefix = []
+    Metrics = metrics
+}
+
+let private holdSlice (deps: FactBrowseHandler.FactBrowseDeps) (scope: ResolvedScope) : FactBrowseSlice.Held =
+    match FactBrowseSlice.hold (ok "slice" (FactBrowseHandler.querySlice deps scope "u" (allPeriods []))) with
+    | Ok held -> held
+    | Error e -> failtestf "hold: %s" e
+
+let private localOk (label: string) (r: Result<'T, string>) : 'T =
+    match r with
+    | Ok v -> v
+    | Error e -> failtestf "%s: expected Ok, got %s" label e
+
+/// The mixed corpus with two revenue heads denied by name, read through the
+/// row form and through the held (fact) form, so both the slice's paths and
+/// the withheld positions are exercised.
+let private deniedWorld () : World * FactBrowseHandler.FactBrowseDeps list =
+    let w, _ = mixedWorld (InMemoryBlobStorage())
+
+    let denied =
+        revenueFacts w
+        |> List.filter (fun f -> f.Subject.Path = [ "acme"; "a2" ] || f.Subject.Path = [ "zeta"; "z1" ])
+        |> List.filter (fun f -> f.Period = october)
+        |> List.map _.FactId
+        |> Set.ofList
+
+    let gate = RecordingGate(FactDisclosureGate(w.Store, w.Events), denied)
+    let rowForm = { w.Deps with Gate = gate }
+    w, [ rowForm; { rowForm with Gate = heldOnly gate } ]
+
+let private sliceTests =
+    testList "Phase 1127 — the slice answers what the server reads answer" [
+        test "every drill-down page, both directions, every prefix, both forms" {
+            let w, forms = deniedWorld ()
+
+            for deps in forms do
+                let held = holdSlice deps w.Scope
+                Expect.isGreaterThan held.Slice.WithheldCount 0 "the corpus withholds cells"
+
+                for metric in [ "revenue"; "segment" ] do
+                    for direction in [ TopOfRanking; BottomOfRanking ] do
+                        for prefix in [ []; [ "acme" ]; [ "zeta" ]; [ "acme"; "a1" ]; [ "nobody" ] ] do
+                            for size in [ 1; 2; 3; 50 ] do
+                                for page in 0..4 do
+                                    let request = {
+                                        query metric direction page size with
+                                            SubjectPrefix = prefix
+                                    }
+
+                                    let label = sprintf "%s %A %A page %d of %d" metric direction prefix page size
+                                    let server = ok label (FactBrowseHandler.queryRows deps w.Scope "u" request)
+                                    let local = localOk label (FactBrowseSlice.rowPage held request)
+
+                                    Expect.isTrue (FactBrowseSlice.coversRows held.Slice request) label
+                                    Expect.equal local.Rows server.Rows (label + ": rows, order and ranks")
+                                    Expect.equal local.WithheldCount server.WithheldCount (label + ": withheld")
+                                    Expect.equal local.Withheld server.Withheld (label + ": withheld policies")
+                                    Expect.equal local.HasMore server.HasMore (label + ": has more")
+
+                                    Expect.equal
+                                        local.ReachedRankCeiling
+                                        server.ReachedRankCeiling
+                                        (label + ": rank ceiling")
+
+                                    Expect.equal
+                                        {
+                                            local with
+                                                Rows = []
+                                                Population = server.Population
+                                        }
+                                        { server with Rows = [] }
+                                        (label + ": every other page field")
+
+                                    let lp, sp = local.Population, server.Population
+                                    Expect.equal lp.SubjectCount sp.SubjectCount (label + ": subjects")
+                                    Expect.equal lp.FactCount sp.FactCount (label + ": facts")
+                                    Expect.equal lp.ComparableCount sp.ComparableCount (label + ": comparable")
+                                    Expect.equal lp.PeriodFrom sp.PeriodFrom (label + ": coverage from")
+                                    Expect.equal lp.PeriodTo sp.PeriodTo (label + ": coverage to")
+                                    Expect.equal lp.Methods sp.Methods (label + ": methods")
+
+                                    // The local magnitudes are never looser than the
+                                    // server's, and equal to them where both ride.
+                                    if sp.ValueStatisticsWithheld then
+                                        Expect.isTrue lp.ValueStatisticsWithheld (label + ": withheld is withheld")
+
+                                    if not lp.ValueStatisticsWithheld then
+                                        Expect.equal
+                                            (lp.Minimum, lp.Maximum, lp.Mean)
+                                            (sp.Minimum, sp.Maximum, sp.Mean)
+                                            (label + ": magnitudes")
+        }
+
+        test "every series, both forms" {
+            let w, forms = deniedWorld ()
+
+            for deps in forms do
+                let held = holdSlice deps w.Scope
+
+                for metric in [ "revenue"; "segment" ] do
+                    for from, until in
+                        [
+                            september.From, october.To
+                            september.From, september.To
+                            october.From, october.To
+                            september.From.AddDays 10.0, october.From.AddDays 3.0
+                        ] do
+                        for prefix in [ []; [ "acme" ]; [ "zeta"; "z1" ] ] do
+                            for cap in [ 1; FactBrowseApi.MaxSeriesPoints ] do
+                                let request = {
+                                    series metric from until with
+                                        SubjectPrefix = prefix
+                                        MaxPoints = cap
+                                }
+
+                                let label = sprintf "%s %O..%O %A cap %d" metric from until prefix cap
+                                Expect.isTrue (FactBrowseSlice.coversSeries held.Slice request) label
+
+                                Expect.equal
+                                    (FactBrowseSlice.series held request)
+                                    (Async.RunSynchronously(FactBrowseHandler.querySeries deps w.Scope "u" request))
+                                    (label + ": the same series, or the same refusal")
+        }
+
+        test "no withheld value or rendering is encoded" {
+            let w, forms = deniedWorld ()
+            let held = holdSlice (List.head forms) w.Scope
+            let table = localOk "decode" (FactBrowseSlice.decode held.Slice)
+
+            let cells (name: string) =
+                table.Columns
+                |> List.find (fun c -> c.Name = name)
+                |> Fuaran.Core.Column.toCells
+                |> Array.ofList
+
+            let mutable withheld = 0
+
+            for metric in [ "revenue"; "segment" ] do
+                let policies = cells (FactBrowseSlice.metricColumn metric "withheld")
+                let values = cells metric
+                let renderings = cells (FactBrowseSlice.metricColumn metric "rendering")
+
+                for i in 0 .. policies.Length - 1 do
+                    if policies.[i] <> Fuaran.Core.Cell.Null then
+                        withheld <- withheld + 1
+                        Expect.equal values.[i] Fuaran.Core.Cell.Null "a withheld cell carries no value"
+                        Expect.equal renderings.[i] Fuaran.Core.Cell.Null "a withheld cell carries no rendering"
+
+            Expect.equal withheld held.Slice.WithheldCount "every withheld cell is counted"
+
+            for denied in [ "12"; "55" ] do
+                Expect.isFalse
+                    (held.Slice.Table.Contains(sprintf "\"%s\"" denied))
+                    (sprintf "the denied value %s is nowhere in the encoded slice" denied)
+        }
+
+        test "the run stamp is the listing's, and moves with a run" {
+            let w = world ()
+            run w [ row "acme" "a1" 1m ] |> ignore
+
+            let first =
+                ok "slice" (FactBrowseHandler.querySlice w.Deps w.Scope "u" (allPeriods []))
+
+            let listing = ok "table" (FactBrowseHandler.getTable w.Deps w.Scope skuTable.Id)
+            Expect.isSome first.RunStamp "a committed table has a stamp"
+            Expect.equal first.RunStamp listing.Listing.RunStamp "the slice records the listing's stamp"
+            run w [ row "acme" "a1" 2m ] |> ignore
+            let after = ok "table" (FactBrowseHandler.getTable w.Deps w.Scope skuTable.Id)
+            Expect.notEqual after.Listing.RunStamp first.RunStamp "a run moves the stamp the slice is checked against"
+        }
+
+        test "a slice over the cap is refused before the gate, naming the cap" {
+            let facts = syntheticPopulation.Force()
+            let notHere () : Async<'T> = async { return failtest "not read in this test" }
+
+            let store =
+                { new IFactStore with
+                    member _.Assert(_: string, _: FactDraft) : Async<Result<Fact, string>> = notHere ()
+                    member _.Assert(_: ResolvedScope, _: FactDraft) : Async<Result<Fact, string>> = notHere ()
+
+                    member _.AssertBatch(_: string, _: FactDraft list) : Async<Result<BatchAssertReceipt, string>> =
+                        notHere ()
+
+                    member _.AssertBatch
+                        (_: ResolvedScope, _: FactDraft list)
+                        : Async<Result<BatchAssertReceipt, string>> =
+                        notHere ()
+
+                    member _.Get(_: string, _: string) : Async<Fact option> = notHere ()
+                    member _.Get(_: ResolvedScope, _: string) : Async<Fact option> = notHere ()
+                    member _.Query(_: string, _: FactQuery) : Async<Fact list> = notHere ()
+                    member _.Query(_: ResolvedScope, _: FactQuery) : Async<Fact list> = async.Return facts
+
+                    member _.QueryWithCompetition(_: string, _: FactQuery) : Async<FactWithCompetition list> =
+                        notHere ()
+
+                    member _.QueryWithCompetition(_: ResolvedScope, _: FactQuery) : Async<FactWithCompetition list> =
+                        notHere ()
+
+                    member _.QuerySupersessionChain(_: string, _: string) : Async<Fact list> = notHere ()
+                    member _.QuerySupersessionChain(_: ResolvedScope, _: string) : Async<Fact list> = notHere ()
+
+                    member _.QueryPopulation(_: string, _: PopulationQuery) : Async<Result<PopulationResult, string>> =
+                        notHere ()
+
+                    member _.QueryPopulation
+                        (_: ResolvedScope, _: PopulationQuery)
+                        : Async<Result<PopulationResult, string>> =
+                        notHere ()
+                }
+
+            let gate =
+                { new IHeldFactDisclosureGate with
+                    member _.CheckHeld(_, _, _, _, _) = async { return failtest "the gate is never asked" }
+                }
+
+            let deps = {
+                largeDeps (DenySetGate Set.empty) with
+                    Store = store
+                    Gate = gate
+            }
+
+            match
+                FactBrowseHandler.querySlice deps (resolved (newScope ())) "u" (allPeriods [ "revenue" ])
+                |> Async.RunSynchronously
+            with
+            | Ok _ -> failtest "a 100,000-cell slice must be refused"
+            | Error e ->
+                Expect.stringContains e "100000 cells" "the refusal names the count"
+                Expect.stringContains e "FactBrowseApi.MaxSliceCells" "and the cap"
+                Expect.stringContains e "Narrow the period range" "and how to narrow"
+        }
+
+        test "a derived figure renders as the server renders it (the Fable pack asserts the same strings)" {
+            Expect.equal (FactBrowseSlice.renderDerived "N2" 1234.5m) "1,234.50" "N2"
+            Expect.equal (FactBrowseSlice.renderDerived "N0" -1234.5m) "-1,235" "N0, half away from zero"
+            Expect.equal (FactBrowseSlice.renderDerived "F1" 2.25m) "2.3" "F1"
+            Expect.equal (FactBrowseSlice.renderDerived "P1" 0.1234m) "12.3 %" "P1"
+            Expect.equal (FactBrowseSlice.renderDerived "" 3.5m) "3.5" "verbatim"
+        }
+
+        test "a metric the table lacks, and an empty range, are refused" {
+            let w = world ()
+
+            for request, needle in
+                [
+                    allPeriods [ "nope" ], "no metric column 'nope'"
+                    {
+                        allPeriods [] with
+                            PeriodTo = FactBrowseApi.AllPeriodsFrom
+                    },
+                    "not a half-open"
+                ] do
+                match
+                    FactBrowseHandler.querySlice w.Deps w.Scope "u" request
+                    |> Async.RunSynchronously
+                with
+                | Ok _ -> failtestf "expected a refusal containing %s" needle
+                | Error e -> Expect.stringContains e needle "the refusal says why"
+        }
+    ]
+
+// ─── Phase 1127 — what a browsing session costs, before and after ────
+//
+// One representative session over a table of `skus` SKUs (two months, two
+// columns, twenty brands): open the table, change metric twice, sort, filter
+// to a branch, page three times, open one chart. BEFORE is the session as the
+// server reads answer it (every interaction a read); AFTER is one slice read,
+// then every interaction a local pipeline. Downloads count blob reads of any
+// kind.
+
+type private SessionCost = {
+    Reads: int
+    Downloads: int
+    Milliseconds: float list
+}
+
+let private sessionSteps: (string * Choice<FactRowQuery, FactSeriesQuery>) list = [
+    "open the table", Choice1Of2(query "revenue" TopOfRanking 0 25)
+    "change metric", Choice1Of2(query "segment" TopOfRanking 0 25)
+    "change metric back", Choice1Of2(query "revenue" TopOfRanking 0 25)
+    "sort", Choice1Of2(query "revenue" BottomOfRanking 0 25)
+    "filter to a branch",
+    Choice1Of2 {
+        query "revenue" TopOfRanking 0 25 with
+            SubjectPrefix = [ "b07" ]
+    }
+    for page in 1..3 do
+        sprintf "page %d" page,
+        Choice1Of2 {
+            query "revenue" TopOfRanking page 25 with
+                SubjectPrefix = [ "b07" ]
+        }
+    "open one chart",
+    Choice2Of2 {
+        series "revenue" september.From october.To with
+            SubjectPrefix = [ "b07" ]
+    }
+]
+
+let private session (skus: int) : SessionCost * SessionCost * int * float =
+    let counting = FactStoreTests.CountingBlobStorage(InMemoryBlobStorage())
+    let w, _ = worldOn counting Set.empty (tickingClock ())
+
+    run w [
+        for i in 0 .. skus - 1 do
+            let brand = sprintf "b%02d" (i % 20)
+            let sku = sprintf "s%05d" i
+            rowIn september brand sku (decimal i)
+            rowIn october brand sku (decimal (i + 1))
+    ]
+    |> ignore
+
+    let timed (f: unit -> unit) =
+        let clock = Diagnostics.Stopwatch.StartNew()
+        f ()
+        clock.Stop()
+        clock.Elapsed.TotalMilliseconds
+
+    counting.Reset()
+
+    let beforeMs =
+        sessionSteps
+        |> List.map (fun (_, step) ->
+            timed (fun () ->
+                match step with
+                | Choice1Of2 q -> ok "rows" (FactBrowseHandler.queryRows w.Deps w.Scope "u" q) |> ignore
+                | Choice2Of2 q -> ok "series" (FactBrowseHandler.querySeries w.Deps w.Scope "u" q) |> ignore))
+
+    let before = {
+        Reads = List.length sessionSteps
+        Downloads = counting.Downloads
+        Milliseconds = beforeMs
+    }
+
+    counting.Reset()
+    let mutable held = None
+
+    let sliceMs = timed (fun () -> held <- Some(holdSlice w.Deps w.Scope))
+
+    let held = held.Value
+    let sliceDownloads = counting.Downloads
+
+    let localMs =
+        sessionSteps
+        |> List.map (fun (label, step) ->
+            timed (fun () ->
+                match step with
+                | Choice1Of2 q ->
+                    Expect.isTrue (FactBrowseSlice.coversRows held.Slice q) label
+                    localOk label (FactBrowseSlice.rowPage held q) |> ignore
+                | Choice2Of2 q ->
+                    Expect.isTrue (FactBrowseSlice.coversSeries held.Slice q) label
+                    localOk label (FactBrowseSlice.series held q) |> ignore))
+
+    let after = {
+        Reads = 1
+        Downloads = counting.Downloads
+        Milliseconds = localMs
+    }
+
+    Expect.equal after.Downloads sliceDownloads "the local interactions download nothing"
+    before, after, held.Slice.Table.Length, sliceMs
+
+let private sessionCostTests =
+    testList "Phase 1127 — a browsing session pays one read per slice and nothing per interaction" [
+        for skus in [ 500; 5_000 ] do
+            test (sprintf "the session over %d facts" (4 * skus)) {
+                let before, after, encodedBytes, sliceMs = session skus
+
+                let show (ms: float list) =
+                    ms |> List.map (sprintf "%.1f") |> String.concat " / "
+
+                printfn
+                    "Phase 1127 session over %d facts — BEFORE: %d server reads, %d downloads, per interaction ms [%s]; AFTER: %d slice read (%.1f ms incl. decode+prepare, %d downloads, %d encoded bytes), %d downloads after it, per interaction ms [%s]"
+                    (4 * skus)
+                    before.Reads
+                    before.Downloads
+                    (show before.Milliseconds)
+                    after.Reads
+                    sliceMs
+                    after.Downloads
+                    encodedBytes
+                    0
+                    (show after.Milliseconds)
+
+                Expect.equal before.Reads 9 "the session is nine interactions, each a server read today"
+                Expect.equal after.Reads 1 "after: one slice read for the table"
+                Expect.isLessThanOrEqual after.Downloads 2 "one surface download per metric, no fact blob"
+            }
+
+        test "a slice at the cap encodes and prepares within the stated budget" {
+            let cells = [
+                for i in 0 .. FactBrowseApi.MaxSliceCells - 1 do
+                    {
+                        Metric = "revenue"
+                        FactId = sprintf "f%06d" i
+                        Subject = sprintf "products/b%02d>s%05d" (i % 20) (i / 2)
+                        SubjectPath = [ sprintf "b%02d" (i % 20); sprintf "s%05d" (i / 2) ]
+                        PeriodFrom = (if i % 2 = 0 then september else october).From
+                        PeriodTo = (if i % 2 = 0 then september else october).To
+                        PeriodLabel = (if i % 2 = 0 then september else october).Label
+                        Value = Some(decimal i)
+                        Rendering = Some(string i)
+                        AsOf = t0
+                        Freshness = "fresh"
+                        WithheldPolicy = None
+                        RankDescending = Some(FactBrowseApi.MaxSliceCells - i)
+                        RankAscending = Some(i + 1)
+                    }
+                    : FactSliceCell
+            ]
+
+            let encoded =
+                FactBrowseSlice.build [ "revenue" ] cells
+                |> Result.bind FactBrowseSlice.encode
+                |> localOk "encode"
+
+            let slice = {
+                TableId = skuTable.Id
+                Hierarchy = "products"
+                Level = "sku"
+                Method = "computed:sales-rollup:v1:sku-sales"
+                PeriodFrom = FactBrowseApi.AllPeriodsFrom
+                PeriodTo = FactBrowseApi.AllPeriodsTo
+                SubjectPrefix = []
+                Metrics = [
+                    {
+                        Metric = "revenue"
+                        DisplayFormat = ""
+                    }
+                ]
+                Table = encoded
+                RunStamp = None
+                CellCount = FactBrowseApi.MaxSliceCells
+                MaxCells = FactBrowseApi.MaxSliceCells
+                RankCeiling = PopulationQuery.MaxTopK
+                WithheldCount = 0
+                Withheld = []
+            }
+
+            let clock = Diagnostics.Stopwatch.StartNew()
+            let held = localOk "hold" (FactBrowseSlice.hold slice)
+            let prepareMs = clock.Elapsed.TotalMilliseconds
+            clock.Restart()
+
+            let page =
+                localOk "page" (FactBrowseSlice.rowPage held (query "revenue" TopOfRanking 0 25))
+
+            let pageMs = clock.Elapsed.TotalMilliseconds
+
+            printfn
+                "Phase 1127 slice at the cap (%d cells): %d encoded bytes, decode+prepare %.1f ms, one local page %.1f ms (.NET)"
+                FactBrowseApi.MaxSliceCells
+                encoded.Length
+                prepareMs
+                pageMs
+
+            Expect.equal (List.length page.Rows) 25 "a page of the largest"
+
+            Expect.equal
+                page.Rows.Head.FactId
+                (sprintf "f%06d" (FactBrowseApi.MaxSliceCells - 1))
+                "ranked by the slice's own positions"
+        }
+    ]
+
 let tests =
     testList "Phase 895 — fact browse surface" [
         boundedTests
@@ -2062,4 +2543,6 @@ let tests =
         branchCostTests
         parityTests
         heldTests
+        sliceTests
+        sessionCostTests
     ]
