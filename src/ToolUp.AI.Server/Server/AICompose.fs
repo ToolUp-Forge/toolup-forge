@@ -133,6 +133,14 @@ type AIServerApp = {
     /// `Some` composes the policy and, under `CompositionProfile.Verified`,
     /// refuses any registered tool that declares no effects.
     ToolEffects: ToolEffectEnvelope.ToolEffectComposition option
+    /// Phase 1132 — server-resident tools whose executor answers the record
+    /// form (`ToolHelpers.ToolAnswer`): the text the model reads and the
+    /// parts the assistant message carries. The sibling of
+    /// `ServerApp.AITools`, which holds string executors only; `composeAI`
+    /// registers each entry through `AIToolRegistry.createAnsweringTool`,
+    /// under the same tool-name collision check. Empty (the default)
+    /// registers nothing. Append with `AIServerApp.withAIAnsweringTools`.
+    AIAnsweringTools: (AIToolDefinition * (HttpContext -> string -> Async<ToolHelpers.ToolAnswer>)) list
 }
 
 // ─── composeAI — AI-specific contribution layer ───────────────────────
@@ -207,7 +215,9 @@ let composeAI (app: AIServerApp) : ServerApp =
         (NarrativeTools.builtInTools @ PlatformAITools.builtIn)
         |> List.map _.Definition.Name
 
-    let moduleToolNames = moduleTools |> List.map (fun (def, _) -> def.Name)
+    let moduleToolNames =
+        (moduleTools |> List.map (fun (def, _) -> def.Name))
+        @ (app.AIAnsweringTools |> List.map (fun (def, _) -> def.Name))
 
     let duplicateNames =
         (builtInToolNames @ moduleToolNames)
@@ -254,8 +264,14 @@ let composeAI (app: AIServerApp) : ServerApp =
     // `ServerModule.withAITools`; `composeAI` aggregates them via
     // `ServerApp.AITools` and registers them here. Built-ins reserve
     // platform-prefixed names so they cannot collide with module tools.
+    //
+    // Phase 1132 — the record-form tools ride beside them, registered
+    // through `createAnsweringTool`, which refuses a client-resident
+    // definition here, at compose time.
     let registeredModuleTools =
-        moduleTools |> List.map (fun (def, exec) -> createTool def exec)
+        (moduleTools |> List.map (fun (def, exec) -> createTool def exec))
+        @ (app.AIAnsweringTools
+           |> List.map (fun (def, answer) -> createAnsweringTool def answer))
 
     // The registry lists and dispatches under the deployment's
     // `ToolPolicy`; none declared is `ToolPolicy.unrestricted` (GP 11).
@@ -704,6 +720,7 @@ module AIServerApp =
         DenialRateAlert = None
         ConsentMode = RememberPerConversation
         ToolEffects = None
+        AIAnsweringTools = []
     }
 
     /// The composition seam — lift an existing `ServerApp` into an
@@ -734,6 +751,7 @@ module AIServerApp =
             DenialRateAlert = None
             ConsentMode = RememberPerConversation
             ToolEffects = None
+            AIAnsweringTools = []
         }
 
     // ─── Delegating helpers (mirror every `ServerApp.with*` / `add*`) ───
@@ -1144,6 +1162,23 @@ module AIServerApp =
                     AITools = app.Base.AITools @ ReflectionTools.tools
             }
     }
+
+    /// Phase 1132 — expose server-resident tools whose executor answers the
+    /// record form (`ToolHelpers.ToolAnswer`): the text the model reads and
+    /// the parts the assistant message carries after its own text. The
+    /// sibling of `ServerModule.withAITools` for string executors;
+    /// `composeAI` registers each through
+    /// `AIToolRegistry.createAnsweringTool`, so the tool-name collision
+    /// check, the tool policy and the effect envelope see them as they see
+    /// every other tool. **Adds** to the list.
+    let withAIAnsweringTools
+        (tools: (AIToolDefinition * (HttpContext -> string -> Async<ToolHelpers.ToolAnswer>)) list)
+        (app: AIServerApp)
+        : AIServerApp =
+        {
+            app with
+                AIAnsweringTools = app.AIAnsweringTools @ tools
+        }
 
     /// Additively declare a platform provider on the
     /// `AIServerApp` pipeline. Each call appends to
