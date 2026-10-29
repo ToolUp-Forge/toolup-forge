@@ -904,19 +904,20 @@
       Migration recipe: `docs/migrations/1131-tool-result-block.md`.
     -->
     <!--
-      Phase 1132 rides the 0.37.0 draft (untagged, publicly unpinned; its
-      surface movement is at most the draft's own breaking class, not above
-      it): `ToolUp.Facts.Presentation.Server` joins, a new package holding
-      the `render_chart` and `render_table` AI tools and
-      `PresentationCompose.withRenderTools`; `ToolUp.AI.Server`'s
+      Next draft 0.38.0 (v0.37.0 is tagged, at 5c85258d, the Phase 1136
+      landing), breaking by the surface guard (the `AIServerApp` constructor
+      gains a parameter) and additive for every other caller: Phase 1132 -
+      `ToolUp.Facts.Presentation.Server`
+      joins, a new package holding the `render_chart` and `render_table` AI
+      tools and `PresentationCompose.withRenderTools`; `ToolUp.AI.Server`'s
       `AIServerApp` gains `AIAnsweringTools` (the record-form sibling of
-      `ServerApp.AITools`), so a full record construction adds a field, with
-      `AIServerApp.withAIAnsweringTools` beside it; `ToolUp.Facts.Server`
-      gains `FactBrowseHandler.factBrowseDeps`. A deployment that composes
-      neither is unchanged. Migration recipe:
-      `docs/migrations/1132-render-tools.md`.
+      `ServerApp.AITools`) with `AIServerApp.withAIAnsweringTools` beside
+      it, so a full record literal adds a field (the record is built through
+      `AIServerApp.create` / `createFrom`); `ToolUp.Facts.Server` gains
+      `FactBrowseHandler.factBrowseDeps`. A deployment that composes neither
+      is unchanged. Migration recipe: `docs/migrations/1132-render-tools.md`.
     -->
-    <Version>0.37.0</Version>
+    <Version>0.38.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
       DLL. Non-publishable projects (App composition roots, modules,

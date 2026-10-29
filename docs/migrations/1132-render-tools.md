@@ -1,9 +1,8 @@
 # Render tools draw a chart or table from gated facts
 
-**Ships in:** ToolUp.Facts.Presentation.Server 0.37.0 (a new package), ToolUp.AI.Server and ToolUp.Facts.Server 0.37.0.
-It rides the untagged 0.37.0 draft, whose class is already breaking. For a deployment it is opt-in and additive. It is
-breaking only for code that builds an `AIServerApp` as a full record literal instead of calling `AIServerApp.create` or
-`AIServerApp.createFrom`.
+**Ships in:** ToolUp.Facts.Presentation.Server 0.38.0 (a new package), ToolUp.AI.Server and ToolUp.Facts.Server 0.38.0.
+For a deployment it is opt-in and additive. It is breaking only for code that builds an `AIServerApp` as a full record
+literal instead of calling `AIServerApp.create` or `AIServerApp.createFrom`.
 
 **Affected:** a deployment with the fact store and the AI companion that wants the assistant to show a chart or a table
 of its fact tables in the conversation. A deployment that does not compose the render tools registers no new tool and
