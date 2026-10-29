@@ -223,6 +223,78 @@ let private repoRoot () =
 
     up (DirectoryInfo AppContext.BaseDirectory)
 
+/// A scheduler that does everything `inner` does except re-issue a carried
+/// scope: it is not an `IJobScopeReissue`, as a third-party scheduler need
+/// not be.
+let private nonReissuing (inner: IJobScheduler) =
+    { new IJobScheduler with
+        member _.RegisterHandler(name, handler) = inner.RegisterHandler(name, handler)
+
+        member _.RegisterHandlerAsync(name, handler) =
+            inner.RegisterHandlerAsync(name, handler)
+
+        member _.Schedule(registration: JobRegistration) = inner.Schedule registration
+
+        member _.Schedule(scope: ResolvedScope, registration: JobRegistration) = inner.Schedule(scope, registration)
+
+        member _.Cancel(scopeId, jobId) = inner.Cancel(scopeId, jobId)
+        member _.Disable(scopeId, jobId) = inner.Disable(scopeId, jobId)
+        member _.Enable(scopeId, jobId) = inner.Enable(scopeId, jobId)
+        member _.Get(scopeId, jobId) = inner.Get(scopeId, jobId)
+        member _.ListJobs scopeId = inner.ListJobs scopeId
+
+        member _.GetRecentRuns(scopeId, jobId, count) =
+            inner.GetRecentRuns(scopeId, jobId, count)
+
+        member _.TriggerOnce(scopeId, jobId, byUserId) =
+            inner.TriggerOnce(scopeId, jobId, byUserId)
+
+        member _.NotifyEventWritten(scopeId, eventType, eventId) =
+            inner.NotifyEventWritten(scopeId, eventType, eventId)
+    }
+
+/// A connector forwarding every member — its capability record included —
+/// to `inner`, as a retry or metering wrapper does.
+let private decorated (inner: IDataSource) =
+    { new IDataSource with
+        member _.Kind = inner.Kind
+        member _.Capabilities = inner.Capabilities
+        member _.Connect ctx = inner.Connect ctx
+        member _.ListTables ctx = inner.ListTables ctx
+        member _.GetSchema(ctx, t) = inner.GetSchema(ctx, t)
+        member _.Query(ctx, sql) = inner.Query(ctx, sql)
+    }
+
+/// Schedule, through the string overload, the job a pre-Phase-935
+/// deployment left for `sourceId`'s pull of `table`: tagged as the
+/// declared delivery's, carrying no scope token.
+let private legacyPullJob (world: World) (principal: DeclaredPrincipal) (sourceId: string) (table: string) =
+    let scope = world.ScopeOf principal
+
+    let registration: JobRegistration = {
+        ScopeId = scope.ScopeId
+        Handler = DataIngestionJobHandler.JobHandlerName
+        Payload = DataIngestionJobHandler.payloadFor sourceId table
+        Trigger = CronTrigger "0 6 * * *"
+        Idempotency = None
+        RetryPolicy = JobRetryPolicy.defaults
+        ShardKey = Some sourceId
+        Precision = JobPrecision.Minute
+        CreatedBy = principal.UserId
+        Tags =
+            Map [
+                DeclaredDelivery.SourceTag, sourceId
+                DeclaredDelivery.JobKeyTag, $"pull:{table}"
+            ]
+    }
+
+    match
+        (world.Scheduler :> IJobScheduler).Schedule registration
+        |> Async.RunSynchronously
+    with
+    | Ok jobId -> jobId
+    | Error e -> failtestf "the legacy job could not be scheduled: %A" e
+
 let tests =
     testList "Phase 1015 — a declared source's data arrives under its declared principal" [
 
@@ -453,6 +525,7 @@ let tests =
             let sql =
                 { new IDataSource with
                     member _.Kind = "Sql"
+                    member _.Capabilities = ConnectorCapabilities.none
                     member _.Connect _ = async { return Ok() }
                     member _.ListTables _ = async { return Ok [] }
                     member _.GetSchema(_, t) = async { return Ok { TableName = t; Columns = [] } }
@@ -676,4 +749,226 @@ let tests =
             Expect.isTrue (File.Exists path) "the delivery source exists"
             Expect.isEmpty (found (File.ReadAllText path)) "the delivery tier builds no resolved scope"
         }
+
+        testList "Phase 1095 — the delivery is a plan, and a connector's abilities are its record" [
+
+            test "a refusal the plan can see for the third source registers nothing for the first two" {
+                let world = World()
+                let p = world.TeamPrincipal "p"
+                let scope = world.ScopeOf p
+                legacyPullJob world p "c" "t" |> ignore
+
+                let deps = {
+                    world.Deps with
+                        Scheduler = nonReissuing world.Scheduler
+                }
+
+                let pull id = {
+                    Source = csvSource id [ "container", "exports" ] (Some [ "t" ])
+                    Delivery = DataSourceDelivery.ScheduledPull("0 6 * * *", "p")
+                }
+
+                let refusals =
+                    match
+                        DeclaredDelivery.seed (Some world.Resolver) deps {
+                            Principals = [ p ]
+                            Sources = [ pull "a"; pull "b"; pull "c" ]
+                        }
+                        |> Async.RunSynchronously
+                    with
+                    | Ok report -> failtestf "seeding was not refused: %A" report
+                    | Error refusals -> refusals
+
+                Expect.equal
+                    refusals
+                    [ UnscopedJob("c", "pull:t") ]
+                    "the third source's unscoped job is refused by name"
+
+                Expect.isEmpty (liveJobs world scope.ScopeId "a") "the first source's job was not registered"
+                Expect.isEmpty (liveJobs world scope.ScopeId "b") "the second source's job was not registered"
+                Expect.isNone (world.Configs.Get(scope.ScopeId, "a") |> Async.RunSynchronously) "no config was written"
+
+                Expect.equal
+                    (world.Deps.Ledger.ReadSeeded() |> Async.RunSynchronously)
+                    (Ok Set.empty)
+                    "the ledger was not written"
+            }
+
+            test "a decorated watchable connector is read from its record, not its type" {
+                let world = World()
+                let loader = world.TeamPrincipal "loader"
+                let scope = world.ScopeOf loader
+
+                let deps = {
+                    world.Deps with
+                        Connectors = [ decorated world.Csv ]
+                }
+
+                match
+                    DeclaredDelivery.seed (Some world.Resolver) deps {
+                        Principals = [ loader ]
+                        Sources = [
+                            {
+                                Source = csvSource "drops" [] None
+                                Delivery = DataSourceDelivery.Watched("incoming", "loader")
+                            }
+                        ]
+                    }
+                    |> Async.RunSynchronously
+                with
+                | Ok report -> Expect.equal report.Seeded [ scope.ScopeId, "drops" ] "the decorated source is watched"
+                | Error refusals -> failtestf "the decorated connector was refused: %A" refusals
+
+                Expect.equal
+                    (onlyJob world scope.ScopeId "drops").Handler
+                    DeclaredDelivery.WatchJobHandlerName
+                    "its watch is scheduled"
+            }
+
+            test "plan law: a refused declaration plans nothing and seeding performs no effect" {
+                let world = World()
+                let p = world.TeamPrincipal "p"
+                let scope = world.ScopeOf p
+
+                let declared = {
+                    Principals = [ p ]
+                    Sources = [
+                        {
+                            Source = csvSource "good" [ "container", "exports" ] (Some [ "t" ])
+                            Delivery = DataSourceDelivery.ScheduledPull("0 6 * * *", "p")
+                        }
+                        {
+                            Source = csvSource "bad" [ "container", "exports" ] (Some [ "t" ])
+                            Delivery = DataSourceDelivery.ScheduledPull("whenever", "p")
+                        }
+                    ]
+                }
+
+                let observed =
+                    match
+                        DeclaredDelivery.observe (Some world.Resolver) world.Deps declared
+                        |> Async.RunSynchronously
+                    with
+                    | Ok observed -> observed
+                    | Error refusals -> failtestf "observing was refused: %A" refusals
+
+                match DeclaredDelivery.plan declared observed with
+                | Error [ InvalidCadence("bad", "whenever", _) ] -> ()
+                | other -> failtestf "expected the bad cadence refused, got %A" other
+
+                match seed world declared with
+                | Error [ InvalidCadence("bad", "whenever", _) ] -> ()
+                | other -> failtestf "expected seeding refused, got %A" other
+
+                Expect.isEmpty (liveJobs world scope.ScopeId "good") "no job was registered"
+
+                Expect.isNone
+                    (world.Configs.Get(scope.ScopeId, "good") |> Async.RunSynchronously)
+                    "no config was written"
+
+                Expect.equal
+                    (world.Deps.Ledger.ReadSeeded() |> Async.RunSynchronously)
+                    (Ok Set.empty)
+                    "the ledger was not written"
+            }
+
+            test "plan law: the plan over an unchanged declaration and ledger changes nothing" {
+                let world = World()
+                let p = world.TeamPrincipal "p"
+                let loader = world.TeamPrincipal "loader"
+                let scope = world.ScopeOf p
+
+                let declared = {
+                    Principals = [ p; loader ]
+                    Sources = [
+                        {
+                            Source = csvSource "sales" [ "container", "exports" ] (Some [ "sales"; "returns" ])
+                            Delivery = DataSourceDelivery.ScheduledPull("0 6 * * *", "p")
+                        }
+                        {
+                            Source = csvSource "drops" [] None
+                            Delivery = DataSourceDelivery.Watched("incoming", "loader")
+                        }
+                    ]
+                }
+
+                let planned () =
+                    match
+                        DeclaredDelivery.observe (Some world.Resolver) world.Deps declared
+                        |> Async.RunSynchronously
+                    with
+                    | Error refusals -> failtestf "observing was refused: %A" refusals
+                    | Ok observed ->
+                        match DeclaredDelivery.plan declared observed with
+                        | Ok plan -> plan
+                        | Error refusals -> failtestf "planning was refused: %A" refusals
+
+                let first = planned ()
+                Expect.hasLength first.Register 3 "a first plan registers two pulls and a watch"
+                Expect.hasLength first.Seed 2 "and writes both configs"
+
+                for r in first.Register do
+                    let key =
+                        r.Registration.Idempotency
+                        |> Option.map _.Key
+                        |> Option.defaultWith (fun () -> failtest "a declared job carries an idempotency key")
+
+                    let cadence =
+                        match r.Registration.Trigger with
+                        | CronTrigger cadence -> cadence
+                        | other -> failtestf "a declared job is on a cron, got %A" other
+
+                    Expect.equal
+                        (DeclaredDelivery.tryParseIdempotencyKey key)
+                        (Some(r.SourceId, r.JobKey, cadence))
+                        $"the registered key '{key}' reads back as its parts"
+
+                seeded world declared |> ignore
+                let again = planned ()
+
+                Expect.isEmpty again.Seed "no config is rewritten"
+                Expect.isEmpty again.Register "no job is registered"
+                Expect.isEmpty again.Cancel "no job is cancelled"
+                Expect.isEmpty again.Retire "nothing is retired"
+                Expect.equal again.LedgerAfter again.LedgerBefore "the ledger is unchanged"
+
+                Expect.equal
+                    (again.Restamp |> List.map _.JobId |> Set.ofList)
+                    (liveJobs world scope.ScopeId "sales"
+                     |> List.map _.JobId
+                     |> Set.ofList
+                     |> Set.union (
+                         liveJobs world (world.ScopeOf loader).ScopeId "drops"
+                         |> List.map _.JobId
+                         |> Set.ofList
+                     ))
+                    "only the kept jobs' carried scopes are re-issued"
+            }
+
+            test "plan law: the idempotency-key grammar round-trips" {
+                let parts = [
+                    "sales", "pull:sales", "0 6 * * *"
+                    "a-b.c_d", "pull:t-1@x:y", "*/5 * * * *"
+                    "x-pull", "pull:pull:z", "0 0 1 * *"
+                    "watch-me", "watch", DeclaredDelivery.DefaultWatchPoll
+                    "w", "pull:ends-watch", "0 6 * * 1"
+                ]
+
+                for sourceId, jobKey, cadence in parts do
+                    let key = DeclaredDelivery.idempotencyKey sourceId jobKey cadence
+
+                    Expect.equal
+                        (DeclaredDelivery.tryParseIdempotencyKey key)
+                        (Some(sourceId, jobKey, cadence))
+                        $"'{key}' round-trips"
+
+                for junk in
+                    [
+                        "declared-data-delivery-"
+                        "other-sales-pull:t@0 6 * * *"
+                        "declared-data-delivery-sales"
+                    ] do
+                    Expect.isNone (DeclaredDelivery.tryParseIdempotencyKey junk) $"'{junk}' is not a key"
+            }
+        ]
     ]

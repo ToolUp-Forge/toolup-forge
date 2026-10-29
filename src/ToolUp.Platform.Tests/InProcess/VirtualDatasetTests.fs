@@ -51,6 +51,7 @@ type private InMemorySource(frames: Map<string, DatasetSchema * DatasetRow list>
 
     interface IDataSource with
         member _.Kind = "InMemory"
+        member _.Capabilities = ConnectorCapabilities.none
 
         member _.Connect _ = async {
             return

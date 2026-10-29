@@ -46,6 +46,86 @@ type DataSourceCallContext = {
     Credential: string option
 }
 
+/// Phase 834 — the format of the bytes a connector's `IDataSource.Query`
+/// returns. Names what the shipped connector family actually emits.
+[<RequireQualifiedAccess>]
+type PayloadFormat =
+    /// RFC 4180 CSV with a header row, UTF-8. The family default and the
+    /// answer for a connector that declares nothing.
+    | Csv
+    /// A JSON document whose shape the connector documents (the Google
+    /// Analytics connector's report envelope).
+    | Json
+    /// A format this SDK version does not name. The shipped ingestor
+    /// refuses it at ingestion — naming the connector — before anything is
+    /// persisted, rather than storing bytes no reader can parse.
+    | Other of name: string
+
+// ─── ConnectorCapabilities — what a connector can do (Phase 1095) ───
+//
+// A connector's abilities beyond the five `IDataSource` members used to be
+// discovered by probing its runtime type for a companion interface. A probe
+// reads the TYPE, so a decorator wrapping a watchable connector (a retry or
+// metering wrapper) read as "not watchable", and nothing stated what a
+// connector could do until something asked. The abilities are now one
+// declared record, `IDataSource.Capabilities`, which every consumer reads
+// instead: a decorator forwards its inner connector's record, so its
+// capability is the inner's.
+//
+// Construct a record from `ConnectorCapabilities.none` with `with`
+// (`{ ConnectorCapabilities.none with Watchable = Some(this :> IWatchableFileSource) }`),
+// so a capability a later SDK version adds reads as "not declared" in your
+// connector without an edit.
+
+/// One object at a file source's location, as a watched delivery sees it
+/// (Phase 1015): the table it is, the blob it is stored as, and the
+/// identity that says whether it is new.
+type WatchedObject = {
+    /// The table name the connector reads the object as.
+    Table: string
+    /// The object's blob name within the source's container.
+    BlobName: string
+    /// The object's identity: its blob name, last-modified instant and
+    /// size. A new object, or an object rewritten in place, has an identity
+    /// no ingestion has recorded.
+    Identity: string
+}
+
+/// A file connector whose location a watched delivery can watch (Phase
+/// 1015). The connector owns its naming — container, prefix and extension
+/// come from ITS reading of the config — so a watch sees exactly the
+/// objects the connector would read. Declared as
+/// `ConnectorCapabilities.Watchable`; a connector that does not declare it
+/// cannot be declared `Watched`.
+type IWatchableFileSource =
+    /// The objects at the source's configured location, with their
+    /// identities. `Error` when the location cannot be read.
+    abstract ListObjects: ctx: DataSourceCallContext -> Async<Result<WatchedObject list, IngestionError>>
+
+/// Phase 837 — a connector that can also emit its source's native format,
+/// declared as `ConnectorCapabilities.Native`. The ingestor calls
+/// `QueryNative` only when a reader for `NativeFormat` is composed, and
+/// falls back to `IDataSource.Query` (the connector's declared format)
+/// otherwise.
+type IEmitsNativePayload =
+    /// The native format `QueryNative` emits. A constant of the connector.
+    abstract NativeFormat: PayloadFormat
+
+    /// Run a query and return the source's bytes in `NativeFormat`,
+    /// unconverted. Same dialect and error contract as `IDataSource.Query`.
+    abstract QueryNative: ctx: DataSourceCallContext * sql: string -> Async<Result<byte[], IngestionError>>
+
+/// Phase 1095 — what a connector can do beyond the five `IDataSource`
+/// members, declared once. `None` in a field means the connector does not
+/// offer that capability, and a consumer that needs it refuses by name
+/// (`ConnectorCapabilities.require`) rather than probing the connector's type.
+type ConnectorCapabilities = {
+    /// A watched delivery can watch the connector's location.
+    Watchable: IWatchableFileSource option
+    /// The connector can emit its source's native format.
+    Native: IEmitsNativePayload option
+}
+
 type IDataSource =
     /// Kind discriminator that the ingestor matches against
     /// `DataSourceConfig.Kind` to route. E.g. `"BigQuery"`,
@@ -93,6 +173,94 @@ type IDataSource =
     /// Connectors document their dialect.
     abstract Query: ctx: DataSourceCallContext * sql: string -> Async<Result<byte[], IngestionError>>
 
+    /// What this connector can do beyond the members above (Phase 1095):
+    /// a constant of the connector, read at boot. A connector that offers
+    /// nothing more answers `ConnectorCapabilities.none`; a decorator
+    /// answers its inner connector's record.
+    abstract Capabilities: ConnectorCapabilities
+
+/// Phase 1095 — one capability a connector may declare, as a refusal names it.
+[<RequireQualifiedAccess>]
+type ConnectorCapability =
+    /// `ConnectorCapabilities.Watchable`.
+    | Watchable
+    /// `ConnectorCapabilities.Native`.
+    | Native
+
+/// Phase 1095 — a capability was asked of a connector that does not declare
+/// it, named by the connector's `Kind` and the capability.
+type CapabilityNotDeclared = {
+    /// The connector's `IDataSource.Kind`.
+    Kind: string
+    /// The capability asked for.
+    Capability: ConnectorCapability
+}
+
+/// Phase 1095 — naming capabilities.
+[<RequireQualifiedAccess>]
+module ConnectorCapability =
+
+    /// Every capability, in declaration order.
+    let all: ConnectorCapability list = [ ConnectorCapability.Watchable; ConnectorCapability.Native ]
+
+    /// The capability's name, as the record field spells it.
+    let name (capability: ConnectorCapability) : string =
+        match capability with
+        | ConnectorCapability.Watchable -> "Watchable"
+        | ConnectorCapability.Native -> "Native"
+
+/// Phase 1095 — reading a connector's declared capabilities. The one place a
+/// capability is asked for: every consumer goes through these readers, never
+/// through a type probe.
+[<RequireQualifiedAccess>]
+module ConnectorCapabilities =
+
+    /// Nothing beyond the five `IDataSource` members.
+    let none: ConnectorCapabilities = { Watchable = None; Native = None }
+
+    /// Whether `capabilities` declares `capability`.
+    let declares (capability: ConnectorCapability) (capabilities: ConnectorCapabilities) : bool =
+        match capability with
+        | ConnectorCapability.Watchable -> capabilities.Watchable.IsSome
+        | ConnectorCapability.Native -> capabilities.Native.IsSome
+
+    /// The capabilities `capabilities` declares, in declaration order.
+    let declared (capabilities: ConnectorCapabilities) : ConnectorCapability list =
+        ConnectorCapability.all |> List.filter (fun c -> declares c capabilities)
+
+    let private refused (source: IDataSource) (capability: ConnectorCapability) : CapabilityNotDeclared = {
+        Kind = source.Kind
+        Capability = capability
+    }
+
+    /// `Ok` when `source` declares `capability`; otherwise the refusal naming
+    /// the connector and the capability.
+    let require (capability: ConnectorCapability) (source: IDataSource) : Result<unit, CapabilityNotDeclared> =
+        if declares capability source.Capabilities then
+            Ok()
+        else
+            Error(refused source capability)
+
+    /// The connector's declared watch, or the refusal naming it.
+    let watchable (source: IDataSource) : Result<IWatchableFileSource, CapabilityNotDeclared> =
+        match source.Capabilities.Watchable with
+        | Some watchable -> Ok watchable
+        | None -> Error(refused source ConnectorCapability.Watchable)
+
+    /// The connector's declared native emission, or the refusal naming it.
+    let native (source: IDataSource) : Result<IEmitsNativePayload, CapabilityNotDeclared> =
+        match source.Capabilities.Native with
+        | Some native -> Ok native
+        | None -> Error(refused source ConnectorCapability.Native)
+
+/// Phase 1095 — rendering `CapabilityNotDeclared`.
+[<RequireQualifiedAccess>]
+module CapabilityNotDeclared =
+
+    /// A sentence naming the connector and the capability it does not declare.
+    let describe (refusal: CapabilityNotDeclared) : string =
+        $"connector '{refusal.Kind}' does not declare the {ConnectorCapability.name refusal.Capability} capability"
+
 // ─── PayloadFormat — what `IDataSource.Query` bytes ARE (Phase 834) ───
 //
 // "The bytes are CSV" used to live in a doc comment: nothing recorded it
@@ -110,21 +278,6 @@ type IDataSource =
 // that declares nothing is `Csv` — what the family emitted before the
 // type existed — so an existing implementation, recompiled or not, keeps
 // working with no edit (GP 11).
-
-/// Phase 834 — the format of the bytes a connector's `IDataSource.Query`
-/// returns. Names what the shipped connector family actually emits.
-[<RequireQualifiedAccess>]
-type PayloadFormat =
-    /// RFC 4180 CSV with a header row, UTF-8. The family default and the
-    /// answer for a connector that declares nothing.
-    | Csv
-    /// A JSON document whose shape the connector documents (the Google
-    /// Analytics connector's report envelope).
-    | Json
-    /// A format this SDK version does not name. The shipped ingestor
-    /// refuses it at ingestion — naming the connector — before anything is
-    /// persisted, rather than storing bytes no reader can parse.
-    | Other of name: string
 
 /// Phase 834 — implemented alongside `IDataSource` by a connector that
 /// declares the format of its `Query` bytes. Optional by design: a
