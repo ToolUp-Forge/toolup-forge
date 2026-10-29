@@ -410,6 +410,11 @@ type private RedshiftDataSourceImpl(secretStore: ISecretStore option) =
     interface IDataSource with
         member _.Kind = Kind
 
+        // Phase 1095 — a query against Redshift has no location a delivery can
+        // watch, and it emits only the CSV it declares: nothing beyond the five
+        // members (what the capability probes answered before the record).
+        member _.Capabilities = ConnectorCapabilities.none
+
         member _.Connect(ctx) =
             withClient ctx "Redshift Connect" (fun settings client -> async {
                 let! ct = Async.CancellationToken
