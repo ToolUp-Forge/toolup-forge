@@ -6,7 +6,6 @@ namespace ToolUp.Facts
 open System
 open System.Text
 open System.Text.Json
-open System.Security.Cryptography
 open ToolUp.Remoting.Json.SystemTextJson
 open ToolUp.Platform
 open ToolUp.Platform.VectorKnowledgeTypes
@@ -338,13 +337,6 @@ module GroundingCertificate =
 
     let private jsonOptions = FableConverters.create ()
 
-    let private sha256Hex (s: string) : string =
-        use sha = SHA256.Create()
-
-        sha.ComputeHash(Encoding.UTF8.GetBytes s)
-        |> Array.map (sprintf "%02x")
-        |> String.concat ""
-
     /// Canonical node-kind string. Total over `ProvenanceNodeKind`.
     let private nodeKindString (k: ProvenanceNodeKind) : string =
         match k with
@@ -381,7 +373,8 @@ module GroundingCertificate =
         (certRef: string option)
         (withheld: bool)
         : string =
-        [
+        CanonicalFrame.digest [
+            "certificate-node"
             id
             kind
             defaultArg disclosure ""
@@ -389,8 +382,6 @@ module GroundingCertificate =
             defaultArg certRef ""
             (if withheld then "withheld" else "disclosed")
         ]
-        |> String.concat "|"
-        |> sha256Hex
 
     /// Deterministically order a body's lists so the signed bytes are
     /// reproducible (nodes by kind+id, edges by kind+from+to, policy refs
@@ -430,8 +421,7 @@ module GroundingCertificate =
     /// document they hold. That is what lets an inclusion check run with
     /// nothing supplied by the issuer, and it is the identity the import
     /// door's `cert:sha256:` ref already names.
-    let certificateDigest (body: GroundingCertificateBody) : string =
-        DsseEnvelope.sha256Hex (canonicalBytes body)
+    let certificateDigest (body: GroundingCertificateBody) : string = Sha256.hex (canonicalBytes body)
 
     /// Append the issuance row. Called on the success path of both
     /// issuers, and only there: a certificate that failed to seal was never
