@@ -18,11 +18,12 @@ applies. Where a release ships a migration note under `docs/migrations/`, it is 
 Migration notes:
 
 - [1076-tool-outcome-and-conversation-record](docs/migrations/1076-tool-outcome-and-conversation-record.md)
+- [1077-redesign-f-turnoutcome-loopstate-and-loop-step](docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md)
 - [1128-conversation-block-part](docs/migrations/1128-conversation-block-part.md)
 - [1129-fact-presentation-builders](docs/migrations/1129-fact-presentation-builders.md)
 - [1130-conversation-block-render](docs/migrations/1130-conversation-block-render.md)
 
-_Surface since `v0.35.0`: **breaking** — 6 packages moved; 124 members added, 2 members changed, 0 members removed; 1 package new._
+_Surface since `v0.35.0`: **breaking** — 7 packages moved; 317 members added, 3 members changed, 5 members removed; 1 package new._
 
 ### Added
 
@@ -70,13 +71,28 @@ _Surface since `v0.35.0`: **breaking** — 6 packages moved; 124 members added, 
   - `ToolUp.AI.ToolFault+Tags.ClientTimedOut : System.Int32 (literal)`
   - `ToolUp.AI.ToolFault+Tags.ClientToolUnregistered : System.Int32 (literal)`
   - … and 41 more — `git diff v0.35.0 -- api-baselines/ToolUp.AI.Core.approved.txt`
-- `ToolUp.AI.Server` — 6 members:
-  - `ToolUp.AI.AIAgentEngine+ToolInvocationErrorModule.toOutcome(ToolUp.AI.AIAgentEngine+ToolInvocationError) : ToolUp.AI.ToolOutcome`
-  - `ToolUp.AI.ToolHelpers+ToolFaulted (class)`
-  - `ToolUp.AI.ToolHelpers+ToolFaulted..ctor()`
-  - `ToolUp.AI.ToolHelpers+ToolFaulted..ctor(ToolUp.AI.ToolFault)`
-  - `ToolUp.AI.ToolHelpers+ToolFaulted.fault : ToolUp.AI.ToolFault { get }`
-  - `ToolUp.AI.ToolHelpers.refuseArguments`1(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[System.String, System.String]]) : T`
+- `ToolUp.AI.Server` — 196 members:
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudgetModule.exceeded(ToolUp.AI.AIAgentEngine+AgentCallBudget, System.TimeSpan, System.String) : System.String`
+  - `ToolUp.AI.AIAgentEngine+AgentCallBudgetModule.ofLimits(ToolUp.AI.SystemPromptBuilder+AgentLoopLimits) : ToolUp.AI.AIAgentEngine+AgentCallBudget`
+  - `ToolUp.AI.AIAgentEngine+AgentLoopStopped (class)`
+  - `ToolUp.AI.AIAgentEngine+AgentLoopStopped..ctor()`
+  - `ToolUp.AI.AIAgentEngine+AgentLoopStopped..ctor(ToolUp.AI.AIAgentEngine+LoopStop)`
+  - `ToolUp.AI.AIAgentEngine+AgentLoopStopped.Message : System.String { get }`
+  - `ToolUp.AI.AIAgentEngine+AgentLoopStopped.stop : ToolUp.AI.AIAgentEngine+LoopStop { get }`
+  - `ToolUp.AI.AIAgentEngine+Loop (class)`
+  - `ToolUp.AI.AIAgentEngine+Loop.reply(ToolUp.AI.AIAgentEngine+TurnContext, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], System.String) : ToolUp.AI.AIAgentEngine+LoopState`
+  - `ToolUp.AI.AIAgentEngine+Loop.run(ToolUp.AI.AIAgentEngine+TurnContext, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.AIAgentEngine+LoopState, ToolUp.AI.AIAgentEngine+LoopStop]]`
+  - `ToolUp.AI.AIAgentEngine+Loop.settle(ToolUp.AI.AIAgentEngine+TurnContext, ToolUp.AI.AIAgentEngine+LoopState, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolCall], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[ToolUp.Platform.AI.AIProviderToolResult, ToolUp.AI.ToolCallTiming, ToolUp.AI.ToolOutcome]]) : ToolUp.AI.AIAgentEngine+LoopState`
+  - `ToolUp.AI.AIAgentEngine+Loop.step(ToolUp.AI.AIAgentEngine+LoopState, ToolUp.Platform.AI.AIProviderResponse) : ToolUp.AI.AIAgentEngine+StepVerdict`
+  - `ToolUp.AI.AIAgentEngine+LoopState (class)`
+  - `ToolUp.AI.AIAgentEngine+LoopState..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallTiming], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIAgentEngine+LoopStop])`
+  - `ToolUp.AI.AIAgentEngine+LoopState.ConsecutiveErrored : System.Int32 { get }`
+  - `ToolUp.AI.AIAgentEngine+LoopState.Messages : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage] { get }`
+  - `ToolUp.AI.AIAgentEngine+LoopState.Stopped : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIAgentEngine+LoopStop] { get }`
+  - `ToolUp.AI.AIAgentEngine+LoopState.Timings : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallTiming] { get }`
+  - `ToolUp.AI.AIAgentEngine+LoopState.Turn : System.Int32 { get }`
+  - `ToolUp.AI.AIAgentEngine+LoopStateModule (class)`
+  - … and 176 more — `git diff v0.35.0 -- api-baselines/ToolUp.AI.Server.approved.txt`
 - `ToolUp.AI.Wire` — 22 members:
   - `ToolUp.Platform.AI.AIContentPart+BlockPart (class)`
   - `ToolUp.Platform.AI.AIContentPart+BlockPart.node : System.String { get }`
@@ -103,13 +119,27 @@ _Surface since `v0.35.0`: **breaking** — 6 packages moved; 124 members added, 
   - `ToolUp.Facts.Client.BlockSeriesResolver (class)`
   - `ToolUp.Facts.Client.BlockSeriesResolver.resolve(ToolUp.Facts.FactSeriesQuery) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactSeries, System.String]]`
 - `ToolUp.Facts.Presentation` — new package (123 public members)
+- `ToolUp.Platform.Build` — 3 members:
+  - `ToolUp.Platform.CodemodMigration+Tags.AgentLoop : System.Int32 (literal)`
+  - `ToolUp.Platform.CodemodMigration.AgentLoop : ToolUp.Platform.CodemodMigration { get }`
+  - `ToolUp.Platform.CodemodMigration.IsAgentLoop : System.Boolean { get }`
 
 ### Changed
 
 - `ToolUp.AI.Core` — 1 member:
   - `ToolUp.AI.ToolResult..ctor` — `ToolUp.AI.ToolResult..ctor(System.String, System.String)` → `ToolUp.AI.ToolResult..ctor(System.String, System.String, System.String)`
-- `ToolUp.AI.Server` — 1 member:
+- `ToolUp.AI.Server` — 2 members:
   - `ToolUp.AI.AICrossModuleAudit.outcomeOf` — `ToolUp.AI.AICrossModuleAudit.outcomeOf(System.String) : System.String` → `ToolUp.AI.AICrossModuleAudit.outcomeOf(ToolUp.AI.ToolOutcome) : System.String`
+  - `ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig..ctor` — `ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig..ctor(ToolUp.AI.AIAssistantBranding, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.AI.AISurfaceDerivationMode)` → `ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig..ctor(ToolUp.AI.AIAssistantBranding, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], ToolUp.AI.SystemPromptBuilder+AgentLoopLimits, ToolUp.AI.AISurfaceDerivationMode)`
+
+### Removed
+
+- `ToolUp.AI.Server` — 5 members:
+  - `ToolUp.AI.AIAgentEngine.runAgentLoop(ToolUp.Platform.AI.IAIProvider, ToolUp.AI.AIToolRegistry+AIToolRegistry, ToolUp.AI.ClientToolDispatch+ClientToolDispatchRegistry, Microsoft.AspNetCore.Http.HttpContext, System.Guid, System.Guid, ToolUp.AI.AISurface, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Threading.CancellationToken, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIStreamEvent, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage]]`
+  - `ToolUp.AI.AIAgentEngine.runAgentLoop(ToolUp.Platform.AI.IAIProvider, ToolUp.AI.AIToolRegistry+AIToolRegistry, ToolUp.AI.ClientToolDispatch+ClientToolDispatchRegistry, Microsoft.AspNetCore.Http.HttpContext, System.Guid, System.Guid, ToolUp.AI.AISurface, Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpOption`1[System.String], System.Threading.CancellationToken, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], Microsoft.FSharp.Core.FSharpOption`1[System.String], Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.AIStreamEvent, Microsoft.FSharp.Core.Unit]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage]]  (obsolete)`
+  - `ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig.MaxHistoryMessages : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }`
+  - `ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfigModule.DefaultMaxHistoryMessages : System.Int32 (literal)`
+  - `ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfigModule.effectiveMaxHistory(Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig]) : System.Int32`
 
 ## [0.35.0] — 2026-10-28
 
