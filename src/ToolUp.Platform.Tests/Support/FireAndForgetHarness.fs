@@ -1,5 +1,7 @@
 module ToolUp.Platform.Tests.Support.FireAndForgetHarness
 
+// Phase 1028 - the fire-and-forget harness the Phase 1024, 1025 and 1026 suites share.
+
 // The scaffolding the fire-and-forget guard tests share (Phases 1024, 1025
 // and 1026): a sink that fails in a chosen way, a hook that collects every
 // unobserved task exception, and the waits that let a background write

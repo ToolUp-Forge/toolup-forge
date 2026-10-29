@@ -1,5 +1,11 @@
 module ToolUp.Platform.Tests.InProcess.EvidenceBundleExportTests
 
+// Phase 714 — that walk exported as an artefact a counterparty
+// can hold: content-addressed in both directions, wrapped as a
+// standard signed statement, readable without a verifier, and
+// carrying its claim boundary on a clean bundle as well as a
+// broken one. The nested-attestation ruling is pinned here.
+
 open System
 open System.Collections.Concurrent
 open System.IO

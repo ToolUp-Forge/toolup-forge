@@ -1,5 +1,9 @@
 module ToolUp.Platform.Tests.Contracts.IFactTableWriterContract
 
+// Phase 994 - one open run per table over every implementer; run inputs
+// and period slices over every writer that takes them, and refused by
+// the delegate writer, which does not.
+
 open System
 open Expecto
 open Microsoft.Extensions.DependencyInjection

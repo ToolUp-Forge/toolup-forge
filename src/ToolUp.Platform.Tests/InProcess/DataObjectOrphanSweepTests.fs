@@ -1,5 +1,10 @@
 module ToolUp.Platform.Tests.InProcess.DataObjectOrphanSweepTests
 
+// Phase 634 — the IN-BAND GC's half of the same problem: a
+// `Delete` racing a `Save` must not reclaim the writer's
+// not-yet-referenced content, while still removing the bytes the
+// delete itself released (Phase 105's gone-at-rest contract).
+
 open System
 open System.Collections.Concurrent
 open Microsoft.Extensions.DependencyInjection

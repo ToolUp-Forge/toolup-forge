@@ -3,6 +3,11 @@
 
 module ToolUp.Platform.Tests.InProcess.ReportSubscriptionEarlierNames
 
+// Phase 990 — a report subscription's job runs under the scope that
+// created it (and fails closed when that scope cannot be re-minted),
+// a scheduled grounded report end to end under its team's scope, and
+// an assistant chat turn's fact tools reading the request's scope.
+
 // ─── Phase 1029 — the reporting tier's earlier principal name ─────────
 //
 // `StandingSubscriptionPrincipal` is an obsolete abbreviation of the shared

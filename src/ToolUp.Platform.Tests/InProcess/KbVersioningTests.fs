@@ -1,5 +1,8 @@
 module ToolUp.Platform.Tests.InProcess.KbVersioningTests
 
+// Phase 867 — KB ingestion status completes, never un-fails, and
+// drops a superseded attempt's late callbacks.
+
 open System
 open System.Text
 open Expecto

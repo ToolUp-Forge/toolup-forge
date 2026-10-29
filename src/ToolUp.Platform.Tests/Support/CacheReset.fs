@@ -1,5 +1,9 @@
 module ToolUp.Platform.Tests.Support.CacheReset
 
+// Phase 11a.A — module-level mutable cache reset registry.
+// Tests touching a (b)-class cache call CacheReset.invalidateAll
+// at setup. See docs/platform/testing-conventions.md.
+
 // ─── Module-level-cache reset registry ──────────────────────────────
 //
 // Some SDK substrate modules carry a process-lifetime `let mutable`

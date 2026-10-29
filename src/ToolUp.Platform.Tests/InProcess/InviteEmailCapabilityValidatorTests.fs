@@ -1,5 +1,10 @@
 module ToolUp.Platform.Tests.InProcess.InviteEmailCapabilityValidatorTests
 
+// Phase 248 OidcAuthValidatorTimeoutTests is wired above (Phase 653),
+// inside the "env-mutating-config-validators" sequenced group.
+// Phase 247 — invite-by-email capability validator (warns when the
+// invite surface mounts with no IUserDirectory). Same audit.
+
 open Expecto
 open Microsoft.Extensions.DependencyInjection
 open ToolUp.Platform
