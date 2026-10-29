@@ -221,17 +221,9 @@ let createDefault () : IOriginalSourceResolver = DefaultOriginalSourceResolver()
 /// `ServerApp.withCspContributor` — so `AIServerApp` / `RAGServerApp`
 /// inherit it via their `Base` without a per-wrapper forwarder. Apps
 /// that never call this get `DefaultOriginalSourceResolver` (GP 11).
+/// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withOriginalSourceResolver (resolver: IOriginalSourceResolver) (app: ServerApp) : ServerApp =
     let register (s: IServiceCollection) =
         s.AddSingleton<IOriginalSourceResolver>(resolver)
 
-    {
-        app with
-            Extensions = {
-                app.Extensions with
-                    ServiceConfig =
-                        match app.Extensions.ServiceConfig with
-                        | None -> Some register
-                        | Some baseFn -> Some(fun s -> register (baseFn s))
-            }
-    }
+    app |> ServerApp.addServiceConfig register

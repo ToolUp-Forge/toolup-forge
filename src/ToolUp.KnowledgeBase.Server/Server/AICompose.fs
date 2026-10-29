@@ -321,9 +321,9 @@ let register (app: AIServerApp) : AIServerApp =
         )
 
     // Phase 54d — register the KB offboard-purge hook when the deployment
-    // opted into the tenant-lifecycle substrate. Threaded through the
-    // shared `Extensions.ServiceConfig` seam (the same idiom
-    // `ServerApp.withCspContributor` uses), gated on the same
+    // opted into the tenant-lifecycle substrate. Contributed as a
+    // `Contribution.service` (the seam `ServerApp.withCspContributor`
+    // also feeds), gated on the same
     // `TenantLifecycle = EnabledTenantLifecycle` switch the core
     // `ComposeTenantLifecycle` gates on. The hook self-`Skipped`s when no
     // `IBlobStorage` is composed, so the gate is the only condition.
@@ -347,18 +347,15 @@ let register (app: AIServerApp) : AIServerApp =
         s.AddSingleton<INarrativeIngestor>(fun (sp: IServiceProvider) ->
             KnowledgeBase.ServerApiNarrativeIngestor.create sp)
 
-    let baseWithLifecycle = {
-        baseWithTools with
-            Extensions = {
-                baseWithTools.Extensions with
-                    ServiceConfig =
-                        let register (s: IServiceCollection) =
-                            registerIndexInstanceValidator (registerNarrativeIngestor (registerLifecycleHook s))
+    let register (s: IServiceCollection) =
+        registerIndexInstanceValidator (registerNarrativeIngestor (registerLifecycleHook s))
 
-                        match baseWithTools.Extensions.ServiceConfig with
-                        | None -> Some register
-                        | Some baseFn -> Some(fun s -> register (baseFn s))
-            }
-    }
+    // Phase 1052 — the knowledge base's registrations are a contribution
+    // under its own id.
+    let baseWithLifecycle =
+        baseWithTools
+        |> ServerApp.addContribution (
+            Contribution.service (ComponentId.forCompanionSlot "ToolUp.KnowledgeBase") register
+        )
 
     { app with Base = baseWithLifecycle }
