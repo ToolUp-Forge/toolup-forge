@@ -2769,7 +2769,6 @@ ToolUp.Platform.CountersignatureCanonical.instant(System.DateTimeOffset) : Syste
 ToolUp.Platform.CountersignatureCanonical.recordBytes(ToolUp.Platform.CountersignatureRecord) : System.Byte[]
 ToolUp.Platform.CountersignatureCanonical.recordDomain : System.String { get }
 ToolUp.Platform.CountersignatureCanonical.recordId(ToolUp.Platform.CountersignatureRecord) : System.String
-ToolUp.Platform.CountersignatureCanonical.sha256Hex(System.Byte[]) : System.String
 ToolUp.Platform.CountersignatureCanonical.sortedSet(System.Text.StringBuilder, System.Collections.Generic.IEnumerable`1[System.String]) : System.Void
 ToolUp.Platform.CountersignatureCanonical.subjectBytes(System.String, System.String, System.Byte[]) : System.Byte[]
 ToolUp.Platform.CountersignatureCanonical.subjectDomain : System.String { get }

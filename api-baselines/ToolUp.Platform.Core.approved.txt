@@ -2601,6 +2601,10 @@ ToolUp.Platform.BundleIntegrityModule.label(ToolUp.Platform.BundleIntegrity) : S
 ToolUp.Platform.CacheableAttribute (class)
 ToolUp.Platform.CacheableAttribute..ctor(System.Int32)
 ToolUp.Platform.CacheableAttribute.MaxAgeSeconds : System.Int32 { get }
+ToolUp.Platform.CanonicalFrame (class)
+ToolUp.Platform.CanonicalFrame.digest(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
+ToolUp.Platform.CanonicalFrame.frame(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.Byte[]
+ToolUp.Platform.CanonicalFrame.text(Microsoft.FSharp.Collections.FSharpList`1[System.String]) : System.String
 ToolUp.Platform.CapabilityId (class)
 ToolUp.Platform.CapabilityId.Item : System.String { get }
 ToolUp.Platform.CapabilityId.Tag : System.Int32 { get }
@@ -12189,6 +12193,9 @@ ToolUp.Platform.SeveredWorkEdge.Ref : ToolUp.Platform.WorkRecordRef { get }
 ToolUp.Platform.SeveredWorkEdgeModule (class)
 ToolUp.Platform.SeveredWorkEdgeModule.describe(ToolUp.Platform.SeveredWorkEdge) : System.String
 ToolUp.Platform.SeveredWorkEdgeModule.key(ToolUp.Platform.SeveredWorkEdge) : System.String
+ToolUp.Platform.Sha256 (class)
+ToolUp.Platform.Sha256.hex(System.Byte[]) : System.String
+ToolUp.Platform.Sha256.hexOfUtf8(System.String) : System.String
 ToolUp.Platform.ShareToken (class)
 ToolUp.Platform.ShareToken..ctor(System.String, ToolUp.Platform.ShareTokenClaim)
 ToolUp.Platform.ShareToken.Claim : ToolUp.Platform.ShareTokenClaim { get }

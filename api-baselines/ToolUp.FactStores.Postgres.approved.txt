@@ -20,6 +20,7 @@ ToolUp.FactStores.Postgres.FactStoreMigration (class)
 ToolUp.FactStores.Postgres.FactStoreMigration.MigratedType : System.String (literal)
 ToolUp.FactStores.Postgres.FactStoreMigration.exitCode(ToolUp.FactStores.Postgres.FactStoreMigrationReport) : System.Int32
 ToolUp.FactStores.Postgres.FactStoreMigration.migrate(ToolUp.Facts.BlobFactStore, ToolUp.FactStores.Postgres.PostgresFactStore, ToolUp.Platform.IEventStore, ToolUp.FactStores.Postgres.FactStoreMigrationOptions, Microsoft.FSharp.Collections.FSharpList`1[System.String]) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.FactStores.Postgres.FactStoreMigrationReport]
+ToolUp.FactStores.Postgres.FactStoreMigration.migrateIds(ToolUp.FactStores.Postgres.PostgresFactStore, System.String, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactIdMigrationReport, System.String]]
 ToolUp.FactStores.Postgres.FactStoreMigration.render(ToolUp.FactStores.Postgres.FactStoreMigrationReport) : System.String
 ToolUp.FactStores.Postgres.FactStoreMigration.scopeBound(ToolUp.FactStores.Postgres.FactStoreMigrationOptions, System.Int32) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.FactStores.Postgres.MigrationDifference]
 ToolUp.FactStores.Postgres.FactStoreMigration.validateSource(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.FactStores.Postgres.MigrationDifference]
@@ -93,10 +94,12 @@ ToolUp.FactStores.Postgres.MigrationDifferenceModule (class)
 ToolUp.FactStores.Postgres.MigrationDifferenceModule.describe(ToolUp.FactStores.Postgres.MigrationDifference) : System.String
 ToolUp.FactStores.Postgres.MigrationSql (class)
 ToolUp.FactStores.Postgres.MigrationSql.StageTable : System.String (literal)
+ToolUp.FactStores.Postgres.MigrationSql.deleteRow(System.String) : System.String
 ToolUp.FactStores.Postgres.MigrationSql.insertStaged(System.String) : System.String
 ToolUp.FactStores.Postgres.MigrationSql.progressDdl(System.String) : System.String
 ToolUp.FactStores.Postgres.MigrationSql.progressTable(System.String) : System.String
 ToolUp.FactStores.Postgres.MigrationSql.readProgress(System.String) : System.String
+ToolUp.FactStores.Postgres.MigrationSql.rekeyRow(System.String) : System.String
 ToolUp.FactStores.Postgres.MigrationSql.saveProgress(System.String) : System.String
 ToolUp.FactStores.Postgres.MigrationSql.scopeBoundStatements(System.String) : Microsoft.FSharp.Collections.FSharpList`1[System.String]
 ToolUp.FactStores.Postgres.MigrationSql.stage(System.String) : System.String

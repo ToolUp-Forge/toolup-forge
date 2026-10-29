@@ -223,17 +223,7 @@ module GroundingEnvelope =
         |> List.distinctBy declarationKey
         |> List.sortBy declarationKey
 
-    /// Length-framed canonical text for an envelope — the exact bytes its
-    /// digest is taken over.
-    ///
-    /// Framed with the same injective scheme Phase 656 / 657 use, for the
-    /// same reason: without it two distinct envelopes could canonicalise
-    /// to identical text by concatenation, and a digest over them would
-    /// be meaningless.
-    ///
-    /// Phase 1089: the field list is framed by `CanonicalFrame`, the one
-    /// frame every content id is taken over — byte-identical to the
-    /// hand-framed form it replaces, pinned in `CanonicalFrameTests`.
+    /// The envelope's canonical field list, in frame order.
     let private canonicalFields (envelope: GroundingEnvelope) : string list =
         let declarations = canonicalDeclarations envelope
 
@@ -247,6 +237,17 @@ module GroundingEnvelope =
                 declaration.Value
         ]
 
+    /// Length-framed canonical text for an envelope — the exact bytes its
+    /// digest is taken over.
+    ///
+    /// Framed with the same injective scheme Phase 656 / 657 use, for the
+    /// same reason: without it two distinct envelopes could canonicalise
+    /// to identical text by concatenation, and a digest over them would
+    /// be meaningless.
+    ///
+    /// Phase 1089: the field list is framed by `CanonicalFrame`, the one
+    /// frame every content id is taken over — byte-identical to the
+    /// hand-framed form it replaces, pinned in `CanonicalFrameTests`.
     let canonicalForm (envelope: GroundingEnvelope) : string =
         envelope |> canonicalFields |> CanonicalFrame.text
 

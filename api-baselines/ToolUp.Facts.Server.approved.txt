@@ -107,6 +107,7 @@ ToolUp.Facts.BlobFactStore..ctor(ToolUp.Platform.BlobStorage+IBlobStorage, ToolU
 ToolUp.Facts.BlobFactStore.CountScope(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
 ToolUp.Facts.BlobFactStore.ExportScope(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.Facts.FactScopeExport]
 ToolUp.Facts.BlobFactStore.IndexConsistencyCheck(System.String, System.Int32) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SecondaryIndex+IndexConsistencyEntry]]
+ToolUp.Facts.BlobFactStore.MigrateIds(System.String, System.Boolean) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.FactIdMigrationReport, System.String]]
 ToolUp.Facts.BlobFactStore.ReadFaults : System.Int64 { get }
 ToolUp.Facts.BlobFactStore.RebuildIndex(System.String) : Microsoft.FSharp.Control.FSharpAsync`1[System.Int32]
 ToolUp.Facts.BlobFactStoreModule (class)
@@ -645,6 +646,22 @@ ToolUp.Facts.FactEvents.AssertedType : System.String (literal)
 ToolUp.Facts.FactEvents.BatchAssertedType : System.String (literal)
 ToolUp.Facts.FactEvents.SourceModule : System.String (literal)
 ToolUp.Facts.FactEvents.SupersededType : System.String (literal)
+ToolUp.Facts.FactIdChange (class)
+ToolUp.Facts.FactIdChange..ctor(System.String, System.String)
+ToolUp.Facts.FactIdChange.From : System.String { get }
+ToolUp.Facts.FactIdChange.To : System.String { get }
+ToolUp.Facts.FactIdMigration (class)
+ToolUp.Facts.FactIdMigration.plan(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.Fact]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Facts.Fact, ToolUp.Facts.Fact]]
+ToolUp.Facts.FactIdMigration.render(ToolUp.Facts.FactIdMigrationReport) : System.String
+ToolUp.Facts.FactIdMigration.report(System.String, System.Boolean, System.Int32, Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Facts.Fact, ToolUp.Facts.Fact]]) : ToolUp.Facts.FactIdMigrationReport
+ToolUp.Facts.FactIdMigrationReport (class)
+ToolUp.Facts.FactIdMigrationReport..ctor(System.String, System.Boolean, System.Int32, System.Int32, System.Int32, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactIdChange])
+ToolUp.Facts.FactIdMigrationReport.DryRun : System.Boolean { get }
+ToolUp.Facts.FactIdMigrationReport.FactsRead : System.Int32 { get }
+ToolUp.Facts.FactIdMigrationReport.FirstDivergent : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactIdChange] { get }
+ToolUp.Facts.FactIdMigrationReport.Rekeyed : System.Int32 { get }
+ToolUp.Facts.FactIdMigrationReport.Relinked : System.Int32 { get }
+ToolUp.Facts.FactIdMigrationReport.ScopeId : System.String { get }
 ToolUp.Facts.FactImport (class)
 ToolUp.Facts.FactImport.CertificateRefPrefix : System.String (literal)
 ToolUp.Facts.FactImport.attestedCertificateRef(ToolUp.Facts.AttestedGroundingCertificate) : System.String
