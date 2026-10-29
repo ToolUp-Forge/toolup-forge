@@ -1812,6 +1812,9 @@ let private registeredTests =
         // live envelope, an unrecorded drift does not, and the door
         // refuses to extend a chain it can no longer prove.
         GroundingEnvelopeSealTests.tests
+        // Phase 860 - the live-interface posture reaches the composition
+        // manifest as an unsealed field, and readiness reads it without RAG.
+        CompositionManifestLiveInterfaceTests.tests
         // DefaultDeployPipeline.Rollback regression: a build-sourced
         // deploy's rollback relaunches the artefact ref recovered from
         // the DeployPushing event history (never a synthetic

@@ -678,6 +678,21 @@ module BootVerificationPreflight =
     [<Literal>]
     let CanonicalMethodFramingVersion = "toolup.compositionmanifest.canonicalmethods.v1"
 
+    /// Phase 860 — the schema version the canonical-method block frames:
+    /// the newest schema whose additions the seal COVERS, never the
+    /// manifest's own `SchemaVersion`.
+    ///
+    /// Phase 694 framed the effective schema, which was the same number
+    /// while the canonical-method schema was the newest. Schema 3 adds a
+    /// field the seal deliberately does not cover (`LiveInterfaceTools`),
+    /// and framing `3` would have made the same composition seal to new
+    /// bytes on this binary for no new evidence. Existing seals were never
+    /// at risk (a stored binding re-canonicalises under its own recorded
+    /// version), but a re-seal of an unchanged composition was. A later
+    /// schema that adds a SEALED field raises this in its own gated block.
+    let private sealedSchemaVersion (manifest: CompositionManifest) : int =
+        min (CompositionManifest.effectiveSchemaVersion manifest) CompositionManifest.CanonicalMethodSchemaVersion
+
     /// Length-framed canonical text for a composition manifest.
     ///
     /// Framed with the same injective scheme Phase 656 uses, for the same
@@ -695,6 +710,11 @@ module BootVerificationPreflight =
     /// genuine, untampered seal no longer verifies. Versioned evolution
     /// means the old bytes stay reachable, not merely that the new field
     /// is optional.
+    ///
+    /// **Phase 860: `LiveInterfaceTools` is not framed at all.** It is
+    /// derived from tool definitions whose names the entry block already
+    /// covers, so the same composition seals to the same bytes with or
+    /// without it, at schema 2 or 3 (see `sealedSchemaVersion`).
     let compositionCanonicalForm (manifest: CompositionManifest) : string =
         let builder = StringBuilder()
         let frame = ProvenanceFraming.frame builder
@@ -721,7 +741,7 @@ module BootVerificationPreflight =
             let methods = CompositionManifest.canonicalMethods manifest
 
             frame CanonicalMethodFramingVersion
-            frame (string (CompositionManifest.effectiveSchemaVersion manifest))
+            frame (string (sealedSchemaVersion manifest))
             frame (string methods.Length)
 
             for method in methods do

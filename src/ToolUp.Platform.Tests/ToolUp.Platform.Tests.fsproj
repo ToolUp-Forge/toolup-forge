@@ -2241,6 +2241,11 @@
              the next mutation is refused). After BootVerificationPreflightTests,
              whose CompositionProfile it enforces under. -->
         <Compile Include="InProcess\GroundingEnvelopeSealTests.fs" />
+        <!-- Phase 860 - the live-interface posture on the composition manifest:
+             populated from the flag, never the name; one predicate shared with
+             the tool-aware framing; not sealed (pre-860 canonical bytes pinned);
+             readiness without RAG. After BuildTranscriptTests (StubSealer). -->
+        <Compile Include="InProcess\CompositionManifestLiveInterfaceTests.fs" />
         <!-- Phase 18 — IPlatformPeer in-process binding + buyer→seller
              TestServer worked example (identity validation, audit
              emission, matching RootRequestId across the HTTP boundary). -->
