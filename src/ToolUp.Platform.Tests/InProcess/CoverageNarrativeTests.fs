@@ -789,7 +789,7 @@ let private composed
     ingestor
     |> Option.iter (fun i -> services.AddSingleton<INarrativeIngestor>(i) |> ignore)
 
-    match app.Extensions.ServiceConfig with
+    match ServerApp.serviceConfig app with
     | Some cfg -> cfg services |> ignore
     | None -> ()
 

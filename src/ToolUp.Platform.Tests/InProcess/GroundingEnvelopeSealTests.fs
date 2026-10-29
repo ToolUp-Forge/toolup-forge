@@ -721,7 +721,7 @@ let tests =
             let bare =
                 FactsCompose.withGroundingEnvelopeSeal CompositionProfile.Verified None ServerApp.empty
 
-            Expect.isNone bare.Extensions.ServiceConfig "a NoFactStore deployment composes nothing (GP 11/13)"
+            Expect.isNone (ServerApp.serviceConfig bare) "a NoFactStore deployment composes nothing (GP 11/13)"
 
             let composed =
                 FactsCompose.withGroundingEnvelopeSeal CompositionProfile.Verified None (groundedApp None)
@@ -729,7 +729,7 @@ let tests =
             let services = ServiceCollection()
             services.AddSingleton<IAuditLog>(RecordingAuditLog()) |> ignore
 
-            match composed.Extensions.ServiceConfig with
+            match ServerApp.serviceConfig composed with
             | None -> failtest "the composed deployment registered nothing"
             | Some configure ->
                 configure services |> ignore

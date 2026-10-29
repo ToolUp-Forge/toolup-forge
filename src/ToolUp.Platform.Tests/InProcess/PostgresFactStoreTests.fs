@@ -107,7 +107,7 @@ let private composed (replicaCount: int) (knobs: ServerApp -> ServerApp) : Servi
     services.AddSingleton<IScopeEnumerator>(ScopeEnumeration.ofScopes "test" [ "team-scale" ])
     |> ignore
 
-    match app.Extensions.ServiceConfig with
+    match ServerApp.serviceConfig app with
     | Some cfg -> cfg services |> ignore
     | None -> ()
 
@@ -613,9 +613,7 @@ let offlineTests =
             let after =
                 FactsCompose.withFactStoreImplementation "test" (fun _ -> failwith "never built") app
 
-            Expect.isTrue
-                (obj.ReferenceEquals(app.Extensions.ServiceConfig, after.Extensions.ServiceConfig))
-                "no registration"
+            Expect.isNone (ServerApp.serviceConfig after) "no registration"
 
         // The differential pack, self-bound: the enumerating blob path held
         // to the indexed-and-surfaced one. Proves the pack on every run.

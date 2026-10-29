@@ -781,7 +781,7 @@ let composeTests =
         let registered (app: ServerApp) =
             let services = ServiceCollection() :> IServiceCollection
 
-            match app.Extensions.ServiceConfig with
+            match ServerApp.serviceConfig app with
             | Some register -> register services |> ignore
             | None -> ()
 

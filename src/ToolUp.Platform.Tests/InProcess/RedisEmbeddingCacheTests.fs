@@ -681,7 +681,7 @@ let private composedCache (app: ToolUp.RAG.RAGCompose.RAGServerApp) : IEmbedding
         :> Microsoft.Extensions.DependencyInjection.IServiceCollection
 
     let services =
-        match composed.Extensions.ServiceConfig with
+        match ToolUp.Platform.ServerApp.serviceConfig composed with
         | Some f -> f services
         | None -> services
 
