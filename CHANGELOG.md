@@ -18,11 +18,15 @@ applies. Where a release ships a migration note under `docs/migrations/`, it is 
 Migration notes:
 
 - [1095-redesign-h-deliveryplan-and-connector-capabilities](docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md)
+- [1132-render-tools](docs/migrations/1132-render-tools.md)
 
-_Surface since `v0.37.0`: **breaking** — 3 packages moved; 100 members added, 1 member changed, 7 members removed._
+_Surface since `v0.37.0`: **breaking** — 6 packages moved; 103 members added, 2 members changed, 7 members removed; 1 package new._
 
 ### Added
 
+- `ToolUp.AI.Server` — 2 members:
+  - `ToolUp.AI.AICompose+AIServerApp.AIAnsweringTools : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]]] { get }`
+  - `ToolUp.AI.AICompose+AIServerAppModule.withAIAnsweringTools(Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]]], ToolUp.AI.AICompose+AIServerApp) : ToolUp.AI.AICompose+AIServerApp`
 - `ToolUp.DataSources.Common` — 60 members:
   - `ToolUp.DataSources.Common.DeclaredDelivery.execute(ToolUp.DataSources.Common.DeclaredDeliveryDeps, ToolUp.DataSources.Common.DeliveryPlan) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.DataSources.Common.DeclaredSeedReport, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.Common.DeclaredDeliveryRefusal]]]`
   - `ToolUp.DataSources.Common.DeclaredDelivery.idempotencyKey(System.String, System.String, System.String) : System.String`
@@ -45,6 +49,9 @@ _Surface since `v0.37.0`: **breaking** — 3 packages moved; 100 members added, 
   - `ToolUp.DataSources.Common.DeliveryCancel.SourceId : System.String { get }`
   - `ToolUp.DataSources.Common.DeliveryObservation (class)`
   - … and 40 more — `git diff v0.37.0 -- api-baselines/ToolUp.DataSources.Common.approved.txt`
+- `ToolUp.Facts.Presentation.Server` — new package (21 public members)
+- `ToolUp.Facts.Server` — 1 member:
+  - `ToolUp.Facts.FactBrowseHandler.factBrowseDeps(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactBrowseHandler+FactBrowseDeps]`
 - `ToolUp.Platform.Build` — 3 members:
   - `ToolUp.Platform.CodemodMigration+Tags.Capabilities : System.Int32 (literal)`
   - `ToolUp.Platform.CodemodMigration.Capabilities : ToolUp.Platform.CodemodMigration { get }`
@@ -74,6 +81,8 @@ _Surface since `v0.37.0`: **breaking** — 3 packages moved; 100 members added, 
 
 ### Changed
 
+- `ToolUp.AI.Server` — 1 member:
+  - `ToolUp.AI.AICompose+AIServerApp..ctor` — `ToolUp.AI.AICompose+AIServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy], ToolUp.AI.AIConsentMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.ToolEffectEnvelope+ToolEffectComposition])` → `ToolUp.AI.AICompose+AIServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy], ToolUp.AI.AIConsentMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.ToolEffectEnvelope+ToolEffectComposition], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]]])`
 - `ToolUp.DataSources.Common` — 1 member:
   - `ToolUp.DataSources.Common.Files.listObjects` — `ToolUp.DataSources.Common.Files.listObjects(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, ToolUp.DataSources.Common.Files+FileSourceSettings) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.DataSources.Common.WatchedObject], ToolUp.Platform.IngestionError]]` → `ToolUp.DataSources.Common.Files.listObjects(ToolUp.Platform.BlobStorage+IBlobStorage, System.String, ToolUp.DataSources.Common.Files+FileSourceSettings) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.WatchedObject], ToolUp.Platform.IngestionError]]`
 

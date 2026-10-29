@@ -17,6 +17,7 @@ open ToolUp.Platform.VectorKnowledgeTypes
 open ToolUp.Platform.TeamManagement
 open ToolUp.RAG.IngestionTypes
 open ToolUp.Facts
+open ToolUp.Facts.Presentation
 open SharedTypes
 open KnowledgeBase.ServerApiDeps
 open KnowledgeBase.ServerApiNarrative
@@ -1431,6 +1432,76 @@ let heldFormTests =
         }
     ]
 
+// ── Phase 1132 — the tool-result door for a block ─────────────────
+//
+// The render tools open one egress: a block a tool attaches to the assistant
+// turn, beside the text the model reads. It is judged at the `FactToolResult`
+// surface (the render tool pack pins the surface); here, what crosses it. A
+// withheld point is a count in the summary and is never drawn — its value is
+// in neither the node nor the summary — and a principal the policy denies
+// every point gets a refusal and no block, never an empty chart.
+
+let renderToolTests =
+    testList "Phase 1132 the tool-result door for a block" [
+        test "a withheld point is a count in the summary, and its value is in neither the node nor the summary" {
+            let w = FactRenderToolTests.RenderFixtures.world ()
+            w.Gate.Deny [ FactRenderToolTests.RenderFixtures.revenueFactId w "s2" 1 ]
+
+            let answered =
+                FactRenderToolTests.RenderFixtures.answer
+                    RenderTool.Chart
+                    w
+                    (PresentationRequest.toJson FactRenderToolTests.RenderFixtures.trendRequest)
+
+            Expect.equal
+                answered.Text
+                "Drew a trend of revenue from fact table 'daily-trade' over 2026-10-01/2026-10-04, titled \"Revenue per day by site\": 6 point(s) read, 1 withheld under trade-figures. The user sees the block; this result carries none of its values, so state none."
+                "the summary counts the withheld point under its policy"
+
+            let node, provenance = FactRenderToolTests.RenderFixtures.blockOf answered
+
+            Expect.equal
+                provenance.Withheld
+                [
+                    {
+                        PolicyRef = "trade-figures"
+                        Count = 1
+                    }
+                ]
+                "the provenance counts it"
+
+            for text in [ node; answered.Text; provenance.Request ] do
+                Expect.isFalse
+                    (text.Contains FactRenderToolTests.RenderFixtures.DistinctiveDigits)
+                    "the withheld value appears nowhere the tool answers"
+        }
+
+        test "a principal the policy denies every point gets a refusal naming the count, not an empty chart" {
+            let w = FactRenderToolTests.RenderFixtures.world ()
+
+            let answered =
+                FactRenderToolTests.RenderFixtures.answer
+                    RenderTool.Chart
+                    w
+                    (PresentationRequest.toJson {
+                        FactRenderToolTests.RenderFixtures.trendRequest with
+                            TableId = "daily-margin"
+                            Metrics = [ "margin" ]
+                    })
+
+            Expect.equal
+                answered.Text
+                "render_chart refused the request: no point it reads carries a number you may be shown: 6 point(s) read, 6 withheld under trade-figures."
+                "the refusal counts what was withheld"
+
+            Expect.isEmpty answered.Parts "no block is attached"
+
+            Expect.isFalse
+                (answered.Text.Contains FactRenderToolTests.RenderFixtures.DistinctiveDigits)
+                "and no value is named"
+        }
+    ]
+
 let tests =
     testList "Phase 525 disclosure egress" [
         predicateTests
@@ -1441,4 +1512,5 @@ let tests =
         purposeTests
         derivedRetrievalTests
         heldFormTests
+        renderToolTests
     ]
