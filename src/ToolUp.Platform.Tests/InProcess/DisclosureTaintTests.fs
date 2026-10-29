@@ -313,7 +313,11 @@ let gateTests =
             Expect.equal denies.Length 1 "one deny row for the inherited-taint refusal"
             Expect.stringContains denies.Head.Payload "licensed" "the deny names the inherited policy"
             Expect.stringContains denies.Head.Payload "Export" "the deny names the surface"
-            Expect.isFalse (denies.Head.Payload.Contains "42") "the denied value never rides the audit row"
+            // The fact id is hex and may contain "42" by chance (Phase 1089's
+            // frame gives this fact one that does), so it is cut out first.
+            Expect.isFalse
+                (denies.Head.Payload.Replace(d.FactId, "").Contains "42")
+                "the denied value never rides the audit row"
         }
 
         testCaseAsync "a declassification routine on the path discloses the fact and audits the crossing (GP 6)"
