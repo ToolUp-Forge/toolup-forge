@@ -1159,7 +1159,7 @@ let private phase946Tests =
 
 let private conversationBlobReadCall =
     System.Text.RegularExpressions.Regex(
-        @"(?<![A-Za-z0-9_.])(ConversationBlobs\.load[A-Za-z]*|ConversationBlobs\.ConversationRecord\.(?:update[A-Za-z]*|appendExchange)|loadConversationOrFail|loadProviderHistoryOrFail|loadMetaOrFail|appendExchangeOrFail)(?:\s+[A-Za-z_(]|\s*$)"
+        @"(?<![A-Za-z0-9_.])(ConversationBlobs\.load[A-Za-z]*|ConversationBlobs\.ConversationRecord\.(?:update[A-Za-z]*|appendExchange))(?:\s+[A-Za-z_(]|\s*$)"
     )
 
 let private fieldHead =
@@ -1197,7 +1197,7 @@ let private conversationBlobReadsIn (file: string) (source: string) : (Conversat
             let call = conversationBlobReadCall.Match line
 
             // A comment is not a read, and neither is the definition of one
-            // of the wrappers (`let private loadMetaOrFail (...)`).
+            // of a function the scan matches by name.
             let isDefinition =
                 call.Success
                 && (match headAt i with
@@ -1239,13 +1239,18 @@ let private conversationBlobReadsIn (file: string) (source: string) : (Conversat
 let private conversationBlobReadPins: ConversationReadPin list = [
     {
         PinFile = "src/ToolUp.AI.Server/Server/AIAssistantHandler.fs"
-        PinBinding = "loadConversationOrFail"
-        Reason = "the raising wrapper over ConversationBlobs.loadConversation; every call of it is scanned here"
+        PinBinding = "resolveProvider"
+        Reason = "a turn stage called only from attemptTurn, after admitTurn (the checkAppend gate) admitted the caller"
     }
     {
         PinFile = "src/ToolUp.AI.Server/Server/AIAssistantHandler.fs"
-        PinBinding = "loadProviderHistoryOrFail"
-        Reason = "the raising wrapper over ConversationBlobs.loadProviderHistory; every call of it is scanned here"
+        PinBinding = "loadHistory"
+        Reason = "a turn stage called only from runAdmitted, after admitTurn (the checkAppend gate) admitted the caller"
+    }
+    {
+        PinFile = "src/ToolUp.AI.Server/Server/AIAssistantHandler.fs"
+        PinBinding = "completeTurn"
+        Reason = "a turn stage called only from runAdmitted, after admitTurn (the checkAppend gate) admitted the caller"
     }
     {
         PinFile = "src/ToolUp.AI.Server/Server/AIAssistantHandler.fs"
@@ -1258,16 +1263,6 @@ let private conversationBlobReadPins: ConversationReadPin list = [
         PinBinding = "titleConversation"
         Reason =
             "called only from the tail of a SubmitMessage turn the gate has admitted; no route reaches it otherwise"
-    }
-    {
-        PinFile = "src/ToolUp.AI.Server/Server/AIAssistantHandler.fs"
-        PinBinding = "loadMetaOrFail"
-        Reason = "the raising wrapper over ConversationBlobs.loadMeta; every call of it is scanned here"
-    }
-    {
-        PinFile = "src/ToolUp.AI.Server/Server/AIAssistantHandler.fs"
-        PinBinding = "appendExchangeOrFail"
-        Reason = "the raising wrapper over ConversationRecord.appendExchange; every call of it is scanned here"
     }
     {
         PinFile = "src/ToolUp.AI.Server/Server/AIConsentDispatch.fs"
@@ -1329,7 +1324,7 @@ let private phase961Tests =
             // stopped matching cannot pass vacuously.
             Expect.isGreaterThanOrEqual reads.Length 12 "the scan found the handler's by-id reads"
 
-            for binding in [ "bgWork"; "GetConversation"; "authoriseWrite"; "SetConversationOverride" ] do
+            for binding in [ "admitTurn"; "GetConversation"; "authoriseWrite"; "SetConversationOverride" ] do
                 Expect.isTrue
                     (reads |> List.exists (fun (r, _) -> r.Binding = binding))
                     $"the scan attributes a read to `{binding}`"
@@ -1363,7 +1358,7 @@ let private phase961Tests =
                     "        }"
                     "    Open ="
                     "        fun conversationId -> async {"
-                    "            let! messages = loadConversationOrFail logger storage container conversationId"
+                    "            let! messages = ConversationBlobs.loadConversation storage container conversationId"
                     "            return messages |> List.filter (fun m -> ConversationVisibility.canSee s v m.CreatedBy t)"
                     "        }"
                     "}"
