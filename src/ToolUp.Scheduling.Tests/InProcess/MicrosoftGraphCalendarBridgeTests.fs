@@ -1458,7 +1458,7 @@ let private subscriptionTests =
                     (SchedulingServerApp.create ())
 
             Expect.equal (composed.CalendarBridges |> List.map _.Kind) [ KindName ] "the bridge is composed"
-            Expect.isSome composed.Base.Extensions.ServiceConfig "the renewal hosted service is registered"
+            Expect.isSome (ServerApp.serviceConfig composed.Base) "the renewal hosted service is registered"
 
             let polling =
                 ToolUp.Calendar.MicrosoftGraphSubscriptions.compose
@@ -1466,7 +1466,7 @@ let private subscriptionTests =
                     [ "team-a" ]
                     (SchedulingServerApp.create ())
 
-            Expect.isNone polling.Base.Extensions.ServiceConfig "a polling-only bridge adds nothing (GP 13)"
+            Expect.isNone (ServerApp.serviceConfig polling.Base) "a polling-only bridge adds nothing (GP 13)"
         }
     ]
 

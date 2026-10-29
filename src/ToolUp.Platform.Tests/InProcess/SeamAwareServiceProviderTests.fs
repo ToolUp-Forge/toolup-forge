@@ -301,9 +301,7 @@ let private floor =
             let app = ServerApp.empty
             let confined = SeamAuthorityEnforcement.confine SeamAuthorityGate.disabled app
 
-            Expect.isTrue
-                (obj.ReferenceEquals(confined.Extensions.ServiceConfig, app.Extensions.ServiceConfig))
-                "the disabled gate must register nothing"
+            Expect.isNone (ServerApp.serviceConfig confined) "the disabled gate must register nothing"
     ]
 
 // ── 4. the wiring through addModule ───────────────────────────────────
@@ -354,7 +352,7 @@ let private requestFor (app: ServerApp) : DefaultHttpContext =
         ServiceCollection().AddSingleton<Seams.IAIProvider>(Named "ai").AddSingleton<Seams.IBlobStorage>(Named "blob")
 
     let configured =
-        match app.Extensions.ServiceConfig with
+        match ServerApp.serviceConfig app with
         | Some configure -> configure collection
         | None -> collection
 

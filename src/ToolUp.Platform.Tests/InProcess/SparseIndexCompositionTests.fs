@@ -179,7 +179,7 @@ let private provider (app: RAGServerApp) : ServiceProvider =
     let services = ServiceCollection() :> IServiceCollection
 
     let services =
-        match composed.Extensions.ServiceConfig with
+        match ServerApp.serviceConfig composed with
         | Some f -> f services
         | None -> services
 

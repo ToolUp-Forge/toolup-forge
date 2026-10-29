@@ -1189,6 +1189,7 @@ let tools (deps: ReportingAIToolDeps) : (AIToolDefinition * (HttpContext -> stri
 /// calls this has no reporting tools (GP 13); one without a scheduler
 /// gets the tools, renders every report in the turn, and the startup
 /// diagnostic names the unregistered handler.
+/// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withReportingAITools (deps: ReportingAIToolDeps) (app: ServerApp) : ServerApp =
     let toolModule =
         ServerModule.create SourceModule |> ServerModule.withAITools (tools deps)
@@ -1201,15 +1202,6 @@ let withReportingAITools (deps: ReportingAIToolDeps) (app: ServerApp) : ServerAp
             DeferredScheduledJobDeclaration.ofHandler RenderJobHandlerName Manual (renderJobHandler deps)
         ]
 
-    let withJobs = {
-        app with
-            Extensions = {
-                app.Extensions with
-                    ServiceConfig =
-                        match app.Extensions.ServiceConfig with
-                        | None -> Some register
-                        | Some baseFn -> Some(fun s -> register (baseFn s))
-            }
-    }
+    let withJobs = app |> ServerApp.addServiceConfig register
 
     ServerApp.addModule toolModule withJobs

@@ -827,10 +827,6 @@ module FormsServerApp =
         let mergedExt: ComposeExtensions = {
             baseExt with
                 Handlers = baseExt.Handlers @ [ formsApiHandler; publicFormsApiHandler ]
-                ServiceConfig =
-                    match baseExt.ServiceConfig with
-                    | None -> Some formsServiceConfig
-                    | Some baseFn -> Some(fun s -> formsServiceConfig (baseFn s))
         }
 
         // Phase 1h — append the Forms marker so a second `withForms` on
@@ -839,6 +835,9 @@ module FormsServerApp =
             withEntities with
                 Extensions = mergedExt
         }
+        |> ServerApp.addContribution (
+            Contribution.service (ComponentId.forCompanionSlot "ToolUp.Forms") formsServiceConfig
+        )
         |> ServerApp.withCompanionMarker "ToolUp.Forms"
 
     /// Drive the final composition. Registers the two form entity
@@ -889,5 +888,6 @@ module FormsServerApp =
 ///     |> AICompose.withAI factory providerProfile (fun ai ->
 ///         ai |> AIServerApp.withAIConfig assistant)
 ///     |> ServerApp.run
+/// **Adds** the companion: its handlers, and its registrations as a contribution under its own id.
 let withForms (configure: FormsServerApp -> FormsServerApp) (app: ServerApp) : ServerApp =
     FormsServerApp.createFrom app |> configure |> FormsServerApp.composeForms

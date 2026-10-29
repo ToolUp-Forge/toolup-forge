@@ -1009,7 +1009,7 @@ let private composeTests =
             let services = ServiceCollection()
 
             let configure =
-                composed.Extensions.ServiceConfig
+                ServerApp.serviceConfig composed
                 |> Option.defaultWith (fun () -> failtest "no config")
 
             let provider = (configure services).BuildServiceProvider()
@@ -1097,7 +1097,7 @@ let private composeWith
         addConversation ()
 
     let configure =
-        composed.Extensions.ServiceConfig
+        ServerApp.serviceConfig composed
         |> Option.defaultWith (fun () -> failtest "no config")
 
     configure services |> ignore
@@ -1322,7 +1322,7 @@ let private platformTierTests =
 
             let services = ServiceCollection()
             services.AddSingleton<IBlobStorage>(world.Storage) |> ignore
-            (twice.Extensions.ServiceConfig |> Option.get) services |> ignore
+            ((ServerApp.serviceConfig twice) |> Option.get) services |> ignore
 
             Expect.equal
                 (ConfigValidatorAggregator.validate services None false

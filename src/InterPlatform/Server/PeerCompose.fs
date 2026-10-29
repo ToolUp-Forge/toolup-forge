@@ -39,6 +39,10 @@ open ToolUp.Platform.Server
 // handlers, no peer audit. Byte-for-byte equivalent to a base
 // `ServerApp.run` of the same `Base` (GP 13 — zero cost when unused).
 
+/// Phase 1052 — the peer companion's identity: its DI registrations are
+/// `Contribution.service` values under it.
+let private owner: ComponentId = ComponentId.forCompanionSlot "ToolUp.InterPlatform"
+
 /// Record form of the peer compose arguments. Wraps a base `ServerApp`
 /// and carries the local deployment identity (used by the outbound
 /// client / handshake) plus the contracts this deployment hosts. Like
@@ -513,7 +517,7 @@ module PeerServerApp =
     /// — no singleton, no allocation, byte-for-byte unchanged (GP 11 /
     /// GP 13).
     ///
-    /// Registered through the base `ServerApp`'s `ServiceConfig` seam, not
+    /// Registered as a contribution on the base `ServerApp`, not
     /// the peer branch, so PSI is available to a deployment that uses the
     /// primitive without hosting peer contracts. `TryAdd`, so a deployment
     /// that registered its own implementation earlier keeps it.
@@ -523,20 +527,9 @@ module PeerServerApp =
             services.TryAddSingleton<IPrivateSetIntersection>(PrivateSetIntersection.create cipher)
             services
 
-        let extensions = app.Base.Extensions
-
         {
             app with
-                Base = {
-                    app.Base with
-                        Extensions = {
-                            extensions with
-                                ServiceConfig =
-                                    match extensions.ServiceConfig with
-                                    | None -> Some register
-                                    | Some existing -> Some(existing >> register)
-                        }
-                }
+                Base = app.Base |> ServerApp.addContribution (Contribution.service owner register)
         }
 
     /// Phase 309 — refuse to start when this deployment hosts peer
@@ -2061,12 +2054,10 @@ module PeerServerApp =
             let mergedExt: ComposeExtensions = {
                 baseExt with
                     Handlers = baseExt.Handlers @ [ JsonRpcPeerHost.routes ]
-                    ServiceConfig =
-                        match baseExt.ServiceConfig with
-                        | None -> Some peerServiceConfig
-                        | Some baseFn -> Some(fun s -> peerServiceConfig (baseFn s))
             }
 
-            let final = { app.Base with Extensions = mergedExt }
+            let final =
+                { app.Base with Extensions = mergedExt }
+                |> ServerApp.addContribution (Contribution.service owner peerServiceConfig)
 
             ServerApp.run final

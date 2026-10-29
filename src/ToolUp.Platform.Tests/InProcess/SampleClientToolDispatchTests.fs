@@ -138,7 +138,7 @@ let private composeShapeTests =
             // on our authorizer.
             let services = ServiceCollection() :> IServiceCollection
 
-            match app.Base.Extensions.ServiceConfig with
+            match ServerApp.serviceConfig app.Base with
             | None -> failtest "Compose.registerWithPolicy must install a ServiceConfig delegate"
             | Some configure -> configure services |> ignore
 

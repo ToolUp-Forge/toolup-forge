@@ -278,12 +278,12 @@ module AzureTableRateLimitStore =
 
     /// Create an `IRateLimitStore` backed by Azure Table Storage.
     /// Validates the table exists (creates if missing) on first
-    /// invocation. Consumer wires this into compose via a
-    /// `ComposeExtensions.ServiceConfig` callback:
+    /// invocation. Consumer wires this into compose with
+    /// `ServerApp.addServiceConfig`:
     ///
     ///     ServerApp.empty
     ///     |> ServerApp.withConfig { ... with RateLimitStore = ExternalRateLimitStore }
-    ///     |> ServerApp.withServiceConfig (fun s ->
+    ///     |> ServerApp.addServiceConfig (fun s ->
     ///         let store = AzureTableRateLimitStore.create options logger
     ///         s.AddSingleton<IRateLimitStore>(store))
     let create (options: Options) (logger: ILogger) : IRateLimitStore = Store(options, logger) :> _

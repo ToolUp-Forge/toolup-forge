@@ -1947,16 +1947,18 @@ module PublicRenderingServerApp =
             let mergedExt: ComposeExtensions = {
                 baseExt with
                     Handlers = baseExt.Handlers @ publicRenderingHandlers
-                    ServiceConfig =
-                        match baseExt.ServiceConfig with
-                        | None -> Some publicRenderingServiceConfig
-                        | Some baseFn -> Some(fun s -> publicRenderingServiceConfig (baseFn s))
             }
 
-            let final = {
-                appWithEntity with
-                    Extensions = mergedExt
-            }
+            let final =
+                {
+                    appWithEntity with
+                        Extensions = mergedExt
+                }
+                |> ServerApp.addContribution (
+                    Contribution.service
+                        (ComponentId.forCompanionSlot "ToolUp.PublicRendering")
+                        publicRenderingServiceConfig
+                )
 
             // Phase 80c — append the PublicRendering marker so a
             // second `withPublicRendering` on the same pipeline trips
@@ -2142,6 +2144,7 @@ module PublicRenderingServerApp =
 ///         |> PublicRenderingServerApp.withLayout "article" articleLayout
 ///         |> PublicRenderingServerApp.withFeed myAtomFeed)
 ///     |> ServerApp.run
+/// **Adds** the companion: its handlers, and its registrations as a contribution under its own id.
 let withPublicRendering (configure: PublicRenderingServerApp -> PublicRenderingServerApp) (app: ServerApp) : ServerApp =
     PublicRenderingServerApp.createFrom app
     |> configure

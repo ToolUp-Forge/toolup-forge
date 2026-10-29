@@ -390,7 +390,7 @@ let private compositionTests =
 
             let services = Microsoft.Extensions.DependencyInjection.ServiceCollection()
 
-            match app.Extensions.ServiceConfig with
+            match ServerApp.serviceConfig app with
             | Some configure -> configure services |> ignore
             | None -> failtest "ServiceConfig was not extended"
 

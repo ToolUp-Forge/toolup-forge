@@ -852,9 +852,7 @@ let tests =
             let before = ServerApp.empty
             let after = FactsCompose.withFactImport [] before
 
-            Expect.isTrue
-                (obj.ReferenceEquals(before.Extensions.ServiceConfig, after.Extensions.ServiceConfig))
-                "a NoFactStore app is returned untouched — not merely equivalent"
+            Expect.isNone (ServerApp.serviceConfig after) "a NoFactStore app registers nothing"
 
         testCaseAsync "a door composed with no anchors trusts nobody, which is not the same as no door"
         <| async {

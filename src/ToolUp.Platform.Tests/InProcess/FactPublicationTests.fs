@@ -1832,7 +1832,7 @@ let startupTests =
             |> ignore
 
             let configured =
-                match app.Extensions.ServiceConfig with
+                match ServerApp.serviceConfig app with
                 | Some configure -> configure services
                 | None -> failtest "the coherence check registered nothing"
 

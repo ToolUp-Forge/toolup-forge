@@ -67,6 +67,11 @@ let private arr (items: Value list) : Value = Value.Arr(Array.ofList items)
 
 let private ix (n: int) : BigInteger = BigInteger n
 
+/// The model's `pair` — a record since Phase 957 (Custard prints a
+/// one-constructor inductive with named fields as one), built here with its
+/// type named, because `triple` and `quad` share its first two labels.
+let private modelPair (first: 'a) (second: 'b) : RemotingDecode.pair<'a, 'b> = { first = first; second = second }
+
 // ─── The bridge ──────────────────────────────────────────────────────
 
 let private modelWidth (width: IntegerWidth) : RemotingDecode.integer_width =
@@ -101,8 +106,7 @@ let rec private bridge (value: Value) : ModelValue =
     | Value.Str text -> RemotingDecode.VStr(text, ix text.Length)
     | Value.Bin bytes -> RemotingDecode.VBin(bytes, ix bytes.Length)
     | Value.Arr items -> RemotingDecode.VArr(items |> List.ofArray |> List.map bridge)
-    | Value.Map entries ->
-        RemotingDecode.VMap(entries |> List.map (fun (k, v) -> RemotingDecode.Pair(bridge k, bridge v)))
+    | Value.Map entries -> RemotingDecode.VMap(entries |> List.map (fun (k, v) -> modelPair (bridge k) (bridge v)))
 
 /// **The go-red bridge.** Identical but for one thing: every integer
 /// arrives declared 64-bit, so the model can no longer see the width
@@ -116,10 +120,7 @@ let rec private blindBridge (value: Value) : ModelValue =
     | Value.UInt(n, _) -> RemotingDecode.VUInt(BigInteger n, RemotingDecode.Bits64)
     | Value.Arr items -> RemotingDecode.VArr(items |> List.ofArray |> List.map blindBridge)
     | Value.Map entries ->
-        RemotingDecode.VMap(
-            entries
-            |> List.map (fun (k, v) -> RemotingDecode.Pair(blindBridge k, blindBridge v))
-        )
+        RemotingDecode.VMap(entries |> List.map (fun (k, v) -> modelPair (blindBridge k) (blindBridge v)))
     | other -> bridge other
 
 let private toDecodeError (error: RemotingDecode.refusal) : DecodeError = {
@@ -167,14 +168,15 @@ let private toOption (o: RemotingDecode.opt<'a>) : 'a option =
 // Phase 800 — the model's own tuple types, back to F#'s. The model
 // declares `pair` / `triple` / `quad` rather than taking F*'s native
 // tuples so that the extraction references `Prims` and nothing else.
-let private toPair (RemotingDecode.Pair(a, b)) : 'a * 'b = a, b
-let private toTriple (RemotingDecode.Triple(a, b, c)) : 'a * 'b * 'c = a, b, c
+let private toPair (p: RemotingDecode.pair<'a, 'b>) : 'a * 'b = p.first, p.second
+let private toTriple (t: RemotingDecode.triple<'a, 'b, 'c>) : 'a * 'b * 'c = t.first, t.second, t.third
 
 // ─── The model's decoders, mirroring the production ones ─────────────
 //
 // Each is the same pipeline written against the extracted combinators.
-// Ten of them take a `()` first: F*'s F# backend thunks a definition
-// the value restriction would otherwise reject.
+// (Until Phase 957 ten of them took a `()` first, the legacy printer's
+// answer to the value restriction; Custard eta-expands such a definition
+// over its value argument instead, so they are plain decoders here.)
 
 let private mBool: ModelDecoder<bool> = RemotingDecode.as_bool
 let private mString: ModelDecoder<string> = RemotingDecode.as_string
@@ -183,28 +185,28 @@ let private mChar: ModelDecoder<char> =
     RemotingDecode.as_char_with (fun (s: string) -> s.[0])
 
 let private mInt32: ModelDecoder<int> =
-    RemotingDecode.map toInt32 (RemotingDecode.as_int32 ())
+    RemotingDecode.map toInt32 (RemotingDecode.as_int32)
 
 let private mInt64: ModelDecoder<int64> =
-    RemotingDecode.map toInt64 (RemotingDecode.as_int64 ())
+    RemotingDecode.map toInt64 (RemotingDecode.as_int64)
 
 let private mInt16: ModelDecoder<int16> =
-    RemotingDecode.map toInt16 (RemotingDecode.as_int16 ())
+    RemotingDecode.map toInt16 (RemotingDecode.as_int16)
 
 let private mSByte: ModelDecoder<sbyte> =
-    RemotingDecode.map toSByte (RemotingDecode.as_sbyte ())
+    RemotingDecode.map toSByte (RemotingDecode.as_sbyte)
 
 let private mByte: ModelDecoder<byte> =
-    RemotingDecode.map toByte (RemotingDecode.as_byte ())
+    RemotingDecode.map toByte (RemotingDecode.as_byte)
 
 let private mUInt16: ModelDecoder<uint16> =
-    RemotingDecode.map toUInt16 (RemotingDecode.as_uint16 ())
+    RemotingDecode.map toUInt16 (RemotingDecode.as_uint16)
 
 let private mUInt32: ModelDecoder<uint32> =
-    RemotingDecode.map toUInt32 (RemotingDecode.as_uint32 ())
+    RemotingDecode.map toUInt32 (RemotingDecode.as_uint32)
 
 let private mUInt64: ModelDecoder<uint64> =
-    RemotingDecode.map toUInt64 (RemotingDecode.as_uint64 ())
+    RemotingDecode.map toUInt64 (RemotingDecode.as_uint64)
 
 let private mFloat: ModelDecoder<float> = RemotingDecode.as_float
 
@@ -246,9 +248,7 @@ let private mSet (element: ModelDecoder<'a>) : ModelDecoder<Set<'a>> =
     RemotingDecode.map Set.ofList (RemotingDecode.list_of element)
 
 let private mMap (key: ModelDecoder<'k>) (entry: ModelDecoder<'v>) : ModelDecoder<Map<'k, 'v>> =
-    RemotingDecode.map
-        (fun pairs -> pairs |> List.map (fun (RemotingDecode.Pair(k, v)) -> k, v) |> Map.ofList)
-        (RemotingDecode.entries_of key entry)
+    RemotingDecode.map (fun pairs -> pairs |> List.map toPair |> Map.ofList) (RemotingDecode.entries_of key entry)
 
 let private mOption (inner: ModelDecoder<'a>) : ModelDecoder<'a option> =
     RemotingDecode.map toOption (RemotingDecode.as_option inner)
@@ -699,11 +699,10 @@ let tests =
             let word = Value.UInt(4294967295UL, IntegerWidth.Bits32)
 
             let honest =
-                RemotingDecode.map toInt32 (RemotingDecode.as_int32 ()) (bridge word)
-                |> toResult
+                RemotingDecode.map toInt32 (RemotingDecode.as_int32) (bridge word) |> toResult
 
             let blind =
-                RemotingDecode.map toInt32 (RemotingDecode.as_int32 ()) (blindBridge word)
+                RemotingDecode.map toInt32 (RemotingDecode.as_int32) (blindBridge word)
                 |> toResult
 
             Expect.equal honest (Ok -1) "the honest bridge reinterprets a 32-bit unsigned word as Int32 -1"
@@ -760,7 +759,7 @@ let tests =
             let encoded: ModelValue = RemotingDecode.encode_consignment strLen consignment
 
             Expect.equal
-                (RemotingDecode.decode_consignment () encoded |> toResult)
+                (RemotingDecode.decode_consignment encoded |> toResult)
                 (Ok consignment)
                 "decode (encode c) = c, over the reference API-record vocabulary"
 
@@ -832,15 +831,15 @@ let tests =
 
             let legs: RemotingDecode.ref_leg list = [
                 {
-                    hop = RemotingDecode.Pair(BigInteger 3, "EDI")
+                    hop = modelPair (BigInteger 3) "EDI"
                     status = RemotingDecode.Planned
                 }
                 {
-                    hop = RemotingDecode.Pair(BigInteger -1, "GLA")
+                    hop = modelPair (BigInteger -1) "GLA"
                     status = RemotingDecode.Delayed("weather", BigInteger 45)
                 }
                 {
-                    hop = RemotingDecode.Pair(BigInteger 2147483647, "ABZ")
+                    hop = modelPair (BigInteger 2147483647) "ABZ"
                     status = RemotingDecode.Arrived(BigInteger -2147483648)
                 }
             ]
@@ -849,7 +848,7 @@ let tests =
                 let encoded: ModelValue = RemotingDecode.encode_leg strLen leg
 
                 Expect.equal
-                    (RemotingDecode.decode_leg () encoded |> toResult)
+                    (RemotingDecode.decode_leg encoded |> toResult)
                     (Ok leg)
                     "decode (encode leg) = leg, over the widened vocabulary"
     ]

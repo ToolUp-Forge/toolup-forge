@@ -1,32 +1,35 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright (c) Andrew J. Willshire / ToolUp Analytics Ltd (UK)
-
-/// Phase 955 — the Fable host's stand-in for Custard's support library.
-///
-/// Custard's F# backend writes a support library, `FStarCustard.fs`,
-/// beside every module it extracts, and every extracted module opens it
-/// (`../custard/FStarCustard.fs` is the one it wrote for the array ring;
-/// the .NET oracle compiles it as generated). Fable refuses that file:
-/// it holds `System.Int128` / `System.UInt128` arithmetic, console
-/// writers, `exit` and a strict UTF-8 decoder, none of which Fable
-/// carries, and it is one module, so the refusal is of the whole file
-/// whatever the extraction in hand uses.
-///
-/// The array ring (`../custard/ElmishRingArray.fs`) uses NOTHING from it.
-/// Its extraction is arithmetic on `uint64`, an array and `ref` cells,
-/// all the target's own. So on this host the module it opens is this
-/// one, and it is empty on purpose: an extraction that came to need a
-/// name from the support library would fail to compile here, naming the
-/// name, rather than run against a second implementation of it that
-/// nothing holds to the first.
-///
-/// That is the difference from `Prims.fs` beside this file, which
-/// re-implements five names over machine integers and says so on the
-/// claims ladder. Nothing is re-implemented here.
-///
-/// Compiled by `ToolUp.Remoting.Proofs.Oracle.Fable.fsproj`, ahead of the
-/// generated `../custard/ElmishRingArray.fs`.
+// Derived by proofs/check.ps1 from the FStarCustard.fs Custard wrote beside the
+// extractions (Phase 957). Do not edit: the leg re-derives and byte-holds it.
+//
+// The Fable host's stand-in for Custard's F# support library. The generated file
+// does not transpile (128-bit integer arithmetic, console writers, exit, a strict
+// UTF-8 decoder), and the Elmish extractions this host compiles reach only Prims,
+// so this is that block, verbatim, and nothing else: an extraction that came to
+// need another name from the support library fails to compile here, naming it.
 module FStarCustard
 
-/// F# does not accept a module with no declarations; this is the one.
-let supportLibraryNamesCarried = 0
+module Prims =
+  let op_Plus (x : bigint) (y : bigint) : bigint = x + y
+  let op_Minus (x : bigint) (y : bigint) : bigint = x - y
+  let op_Star (x : bigint) (y : bigint) : bigint = x * y
+  let op_Slash (x : bigint) (y : bigint) : bigint = x / y
+  let op_Percent (x : bigint) (y : bigint) : bigint = x % y
+  let op_Minus_Minus (x : bigint) : bigint = -x
+  let op_Less (x : bigint) (y : bigint) : bool = x < y
+  let op_Less_Equals (x : bigint) (y : bigint) : bool = x <= y
+  let op_Greater (x : bigint) (y : bigint) : bool = x > y
+  let op_Greater_Equals (x : bigint) (y : bigint) : bool = x >= y
+  let abs (x : bigint) : bigint = if x < 0I then -x else x
+  let pow2 (n : bigint) : bigint =
+    System.Numerics.BigInteger.Pow (2I, int n)
+  let strcat (x : string) (y : string) : string = x + y
+  let string_of_bool (b : bool) : string = if b then "true" else "false"
+  let string_of_int (x : bigint) : string = x.ToString ()
+  let string_of_int8 (x : uint8) : string = x.ToString ()
+  let string_of_int16 (x : uint16) : string = x.ToString ()
+  let string_of_int32 (x : uint32) : string = x.ToString ()
+  let string_of_int64 (x : uint64) : string = x.ToString ()
+  let string_of_sint8 (x : int8) : string = x.ToString ()
+  let string_of_sint16 (x : int16) : string = x.ToString ()
+  let string_of_sint32 (x : int32) : string = x.ToString ()
+  let string_of_sint64 (x : int64) : string = x.ToString ()
