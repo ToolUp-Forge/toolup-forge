@@ -455,19 +455,6 @@ let fetchUrl
 
 // ─── Compose-time registration ────────────────────────────────────
 
-/// Append a service registration onto the shared `ComposeExtensions`
-/// seam — the same threading every other KB compose hook uses.
-let private withServiceConfig (register: IServiceCollection -> IServiceCollection) (app: ServerApp) : ServerApp = {
-    app with
-        Extensions = {
-            app.Extensions with
-                ServiceConfig =
-                    match app.Extensions.ServiceConfig with
-                    | None -> Some register
-                    | Some baseFn -> Some(fun s -> register (baseFn s))
-        }
-}
-
 // ─── Phase 725.D — bulk-import preflight ──────────────────────────
 //
 // Every other KB policy ships an `IConfigValidator` that names a risky
@@ -554,9 +541,11 @@ type private UrlIngestionValidator(serverConfig: ServerConfig, policy: UrlIngest
 /// Phase 725.D — also registers a preflight validator that warns when
 /// this policy leaves any expansion guard unbounded (the posture
 /// `ArchiveImportPolicy.unbounded` states in full).
+/// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withArchiveImportPolicy (policy: ArchiveImportPolicy) (app: ServerApp) : ServerApp =
     let withSingleton =
-        app |> withServiceConfig (fun s -> s.AddSingleton<ArchiveImportPolicy>(policy))
+        app
+        |> ServerApp.addServiceConfig (fun s -> s.AddSingleton<ArchiveImportPolicy>(policy))
 
     ServerApp.withConfigValidator
         (ArchiveImportPolicyValidator(policy) :> ConfigValidation.IConfigValidator)
@@ -581,10 +570,11 @@ let withArchiveImportPolicy (policy: ArchiveImportPolicy) (app: ServerApp) : Ser
 /// egress posture: a broad allowlist, or any allowlist at all in a
 /// Team / MultiTeam deployment where the fetch surface is shared across
 /// tenants. An empty (inert) allowlist warns about nothing.
+/// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withUrlIngestion (policy: UrlIngestionPolicy) (app: ServerApp) : ServerApp =
     let withSingletons =
         app
-        |> withServiceConfig (fun s ->
+        |> ServerApp.addServiceConfig (fun s ->
             s
                 .AddSingleton<UrlIngestionPolicy>(policy)
                 .AddSingleton<IUrlContentFetcher>(HttpUrlContentFetcher() :> IUrlContentFetcher))
@@ -596,5 +586,7 @@ let withUrlIngestion (policy: UrlIngestionPolicy) (app: ServerApp) : ServerApp =
 /// Phase 511 — register a custom URL transport (an egress proxy, a
 /// signed-fetch service) without changing the allowlist semantics. The
 /// gate stays in `classifyUrl`; only the bytes arrive differently.
+/// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withUrlContentFetcher (fetcher: IUrlContentFetcher) (app: ServerApp) : ServerApp =
-    app |> withServiceConfig (fun s -> s.AddSingleton<IUrlContentFetcher>(fetcher))
+    app
+    |> ServerApp.addServiceConfig (fun s -> s.AddSingleton<IUrlContentFetcher>(fetcher))

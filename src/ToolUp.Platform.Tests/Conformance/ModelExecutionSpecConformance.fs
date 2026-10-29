@@ -3,6 +3,15 @@
 
 module ToolUp.Platform.Tests.Conformance.ModelExecutionSpecConformance
 
+// Phase 602 — certification against the external model-execution
+// conformance corpus. The corpus is canonical over this
+// implementation, not emitted from it, so this family can find a
+// defect no in-repo fixture ever would. Its non-vacuity arm
+// asserts the vector COUNT executed, and its go-red arm proves a
+// mutated document fails — both because a conformance suite is
+// exactly the kind of code that passes by doing nothing. An
+// absent corpus is one loud failure, never a skip.
+
 // ─── Model-execution wire-spec conformance ───────────────────────────
 //
 // Certifies the platform's out-of-process model-execution face

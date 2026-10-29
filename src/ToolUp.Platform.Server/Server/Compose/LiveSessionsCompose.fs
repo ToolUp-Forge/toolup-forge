@@ -297,6 +297,7 @@ module LiveSessionsCompose =
     /// resolves it from DI to open sessions and push frames) and mounts
     /// the SSE subscribe endpoint. Not calling this composes nothing —
     /// no endpoint, no service, no allocation (GP 11 / GP 13).
+    /// **Adds** one handler, and its registration through `ServerApp.addServiceConfig`.
     let withLiveSessions (configure: LiveSessionOptions -> LiveSessionOptions) (app: ServerApp) : ServerApp =
         let options = configure LiveSessionOptions.defaults
 
@@ -310,8 +311,5 @@ module LiveSessionsCompose =
         {
             app with
                 Extensions.Handlers = app.Extensions.Handlers @ [ LiveSessionHandler.handler options host ]
-                Extensions.ServiceConfig =
-                    match app.Extensions.ServiceConfig with
-                    | Some existing -> Some(existing >> registerHost)
-                    | None -> Some registerHost
         }
+        |> ServerApp.addServiceConfig registerHost

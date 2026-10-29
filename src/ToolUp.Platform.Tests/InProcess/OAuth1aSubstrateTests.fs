@@ -1,5 +1,8 @@
 module ToolUp.Platform.Tests.InProcess.OAuth1aSubstrateTests
 
+// Phase 10g — OAuth 1.0a substrate (RFC 5849 signer + state store +
+// IOAuth1aFlow conformance pack).
+
 open System
 open System.Net.Http
 open Expecto

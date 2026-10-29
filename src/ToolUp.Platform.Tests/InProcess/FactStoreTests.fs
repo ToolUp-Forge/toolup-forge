@@ -1,5 +1,28 @@
 module ToolUp.Platform.Tests.InProcess.FactStoreTests
 
+// Phase 704 — batch fact assertion: the semantics ride the contract
+// pack above (both read models); this is the summarised-audit half —
+// one FactBatchAsserted row per batch, the per-fact shape kept for
+// scalar Assert, and the deliberate audit of an all-idempotent batch.
+
+// Phase 701 — population fact query: the registry-directed half of the
+// IFactStore population contract (DirectionOfBetter ordering, the
+// Neutral / unregistered refusals, D19 canonical-vs-all selection) plus
+// the population pipeline measured at the requirement's cardinality.
+
+// Phase 702 — the metric surface: the same IFactStore contract run a
+// second time through the derived current-heads read model, the two
+// paths' population results compared directly across a query matrix,
+// the maintenance paths (supersession / competition / neighbouring
+// metric / out-of-band write / flush-and-rebuild / AsOf bypass /
+// fallback threshold), and the read measured at 100,000 heads.
+
+// Phase 890 — the blob fact store's point-read index: the IFactStore
+// contract with the index forced on, the indexed and enumerating reads
+// compared across a query matrix, the read counts at two scope sizes,
+// index deletion / failed writes / out-of-band facts / rebuild and
+// consistency, the threshold, and the fan-out bound.
+
 open System
 open System.Text
 open System.Text.Json

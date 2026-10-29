@@ -2277,6 +2277,7 @@ SidebarPreferences.hide(System.String, SidebarPreferences+UserSidebarPreferences
 SidebarPreferences.isHidden(System.String, SidebarPreferences+UserSidebarPreferences) : System.Boolean
 SidebarPreferences.load() : SidebarPreferences+UserSidebarPreferences
 SidebarPreferences.normalise(SidebarPreferences+UserSidebarPreferences) : SidebarPreferences+UserSidebarPreferences
+SidebarPreferences.persist`1(Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, msg], SidebarPreferences+UserSidebarPreferences) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]
 SidebarPreferences.restore(System.String, SidebarPreferences+UserSidebarPreferences) : SidebarPreferences+UserSidebarPreferences
 SidebarPreferences.save(SidebarPreferences+UserSidebarPreferences) : System.Void
 SidebarPreferences.setOrder(System.String, Microsoft.FSharp.Collections.FSharpList`1[System.String], SidebarPreferences+UserSidebarPreferences) : SidebarPreferences+UserSidebarPreferences
@@ -3262,13 +3263,16 @@ ToolUp.Platform.BootDegradationMessages.Heading : System.String { get }
 ToolUp.Platform.BootDegradationMessages.Retry : System.String { get }
 ToolUp.Platform.BootDegradationMessages.Sources : ToolUp.Platform.BootSourceMessages { get }
 ToolUp.Platform.BootSourceMessages (class)
-ToolUp.Platform.BootSourceMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.BootSourceMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.BootSourceMessages.ActiveTeam : System.String { get }
 ToolUp.Platform.BootSourceMessages.AuthBridge : System.String { get }
 ToolUp.Platform.BootSourceMessages.Configs : System.String { get }
+ToolUp.Platform.BootSourceMessages.DataSnapshot : System.String { get }
 ToolUp.Platform.BootSourceMessages.Flags : System.String { get }
 ToolUp.Platform.BootSourceMessages.Permissions : System.String { get }
+ToolUp.Platform.BootSourceMessages.PlatformInfo : System.String { get }
 ToolUp.Platform.BootSourceMessages.PlatformRole : System.String { get }
+ToolUp.Platform.BootSourceMessages.SidebarPrefs : System.String { get }
 ToolUp.Platform.BootSourceMessages.TeamAutoSelect : System.String { get }
 ToolUp.Platform.BootSourceMessages.TeamRole : System.String { get }
 ToolUp.Platform.BootSourceMessages.Teams : System.String { get }
@@ -3368,6 +3372,7 @@ ToolUp.Platform.Client.init(ToolUp.Platform.ClientConfig, ToolUp.Platform.IModul
 ToolUp.Platform.Client.installRequestSeam(ToolUp.Platform.ClientConfig) : System.Void
 ToolUp.Platform.Client.moduleIdentityReport(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : System.String
 ToolUp.Platform.Client.moduleIdentityTable(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ModuleIdentityRow]
+ToolUp.Platform.Client.observeModuleStates(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], ToolUp.Platform.Client+Msg, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Object], ToolUp.Platform.Client+Model) : System.Void
 ToolUp.Platform.Client.prepareModules(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]
 ToolUp.Platform.Client.program(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule]) : ToolUp.Elmish.Program`4[Microsoft.FSharp.Core.Unit, ToolUp.Platform.Client+Model, ToolUp.Platform.Client+Msg, Fable.React.ReactElement]
 ToolUp.Platform.Client.programLifetimeEffects(ToolUp.Platform.ClientConfig) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Elmish.EffectHandle`1[ToolUp.Platform.Client+Msg]]
@@ -3378,6 +3383,7 @@ ToolUp.Platform.Client.update(ToolUp.Platform.ClientConfig, ToolUp.Platform.IMod
 ToolUp.Platform.Client.view(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], ToolUp.Platform.Client+ExtraChrome, ToolUp.Platform.Client+Model, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Client+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 ToolUp.Platform.Client.viewSlicedOver(ToolUp.Platform.Client+ShellStore, ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], ToolUp.Platform.Client+ExtraChrome, ToolUp.Platform.Client+Model, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Client+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
 ToolUp.Platform.Client.viewWithSignIn(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], ToolUp.Platform.Client+ExtraChrome, ToolUp.Platform.Client+Model, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Client+Msg, Microsoft.FSharp.Core.Unit]) : Fable.React.ReactElement
+ToolUp.Platform.Client.withModuleStateObserver`4(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Client+Msg]], Microsoft.FSharp.Core.FSharpFunc`2[model, ToolUp.Platform.Client+Model], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
 ToolUp.Platform.Client.withShellLifetimeEffects`4(ToolUp.Platform.ClientConfig, Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.Platform.Client+Msg, msg], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]
 ToolUp.Platform.Client+ExtraChrome (class)
 ToolUp.Platform.Client+ExtraChrome..ctor(Microsoft.FSharp.Core.FSharpOption`1[Fable.React.ReactElement], Microsoft.FSharp.Core.FSharpOption`1[Fable.React.ReactElement])
@@ -6157,7 +6163,7 @@ ToolUp.Platform.TeamConfigMessages.Saving : System.String { get }
 ToolUp.Platform.TeamConfigMessages.SelectModulePrompt : System.String { get }
 ToolUp.Platform.TeamConfigMessages.SidebarLoading : System.String { get }
 ToolUp.Platform.TeamManagerMessages (class)
-ToolUp.Platform.TeamManagerMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)
+ToolUp.Platform.TeamManagerMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)
 ToolUp.Platform.TeamManagerMessages.ActiveBadge : System.String { get }
 ToolUp.Platform.TeamManagerMessages.Back : System.String { get }
 ToolUp.Platform.TeamManagerMessages.BreadcrumbMembers : System.String { get }
@@ -6207,6 +6213,7 @@ ToolUp.Platform.TeamManagerMessages.Reissuing : System.String { get }
 ToolUp.Platform.TeamManagerMessages.RemoveMember : System.String { get }
 ToolUp.Platform.TeamManagerMessages.RevokeInvite : System.String { get }
 ToolUp.Platform.TeamManagerMessages.RevokeInviteHeading : System.String { get }
+ToolUp.Platform.TeamManagerMessages.RevokeInvitePrompt : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]] { get }
 ToolUp.Platform.TeamManagerMessages.RoleLabel : System.String { get }
 ToolUp.Platform.TeamManagerMessages.Switch : System.String { get }
 ToolUp.Platform.TeamManagerMessages.TeamIdLabel : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
@@ -6218,6 +6225,7 @@ ToolUp.Platform.TeamManagerMessages.TransferNoOtherMembers : System.String { get
 ToolUp.Platform.TeamManagerMessages.TransferOwnership : System.String { get }
 ToolUp.Platform.TeamManagerMessages.TransferOwnershipHelp : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
 ToolUp.Platform.TeamManagerMessages.TransferRoleExplanation : Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String] { get }
+ToolUp.Platform.TeamManagerMessages.TransferSelectedMemberFallback : System.String { get }
 ToolUp.Platform.TeamManagerMessages.Transferring : System.String { get }
 ToolUp.Platform.TeamManagerMessages.YouSuffix : System.String { get }
 ToolUp.Platform.Telemetry (class)
@@ -7039,11 +7047,11 @@ Toolup.Sidebar+SidebarSection.Title : Microsoft.FSharp.Core.FSharpOption`1[Syste
 Toolup.UIToolkit.Layout (class)
 Toolup.UIToolkit.Layout.AppShell(System.String, System.String, Microsoft.FSharp.Collections.FSharpList`1[Toolup.Sidebar+SidebarSection], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Collections.FSharpList`1[System.String], Microsoft.FSharp.Core.Unit]], ToolUp.Platform.PageContent, Microsoft.FSharp.Core.FSharpOption`1[Fable.React.ReactElement], Microsoft.FSharp.Core.FSharpOption`1[Fable.React.ReactElement], ToolUp.Platform.InputsPaneWidth) : Fable.React.ReactElement
 Toolup.UIToolkit.Layout.AppShellWith(Toolup.UIToolkit.Layout+SidebarProps, ToolUp.Platform.PageContent, Microsoft.FSharp.Core.FSharpOption`1[Fable.React.ReactElement], Microsoft.FSharp.Core.FSharpOption`1[Fable.React.ReactElement], ToolUp.Platform.InputsPaneWidth) : Fable.React.ReactElement
-Toolup.UIToolkit.Layout.UserButton(Microsoft.FSharp.Collections.FSharpList`1[Feliz.IReactProperty]) : Fable.React.ReactElement
 Toolup.UIToolkit.Layout.loadingIndicator(ToolUp.Platform.LoadingIndicatorMode) : Fable.React.ReactElement
 Toolup.UIToolkit.Layout.loadingIndicatorInline(ToolUp.Platform.LoadingIndicatorMode) : Fable.React.ReactElement
 Toolup.UIToolkit.Layout.loadingSkeleton() : Fable.React.ReactElement
 Toolup.UIToolkit.Layout.pageHeader(System.String, Fable.React.ReactElement, Microsoft.FSharp.Core.FSharpOption`1[Fable.React.ReactElement]) : Fable.React.ReactElement
+Toolup.UIToolkit.Layout.registerHeaderIdentityAction(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]) : System.Void
 Toolup.UIToolkit.Layout.renderPageContent(ToolUp.Platform.InputsPaneWidth, ToolUp.Platform.PageContent) : Fable.React.ReactElement
 Toolup.UIToolkit.Layout.userButton() : Fable.React.ReactElement
 Toolup.UIToolkit.Layout+Panel (class)

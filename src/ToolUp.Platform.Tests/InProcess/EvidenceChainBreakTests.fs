@@ -3,6 +3,23 @@
 
 module ToolUp.Platform.Tests.InProcess.EvidenceChainBreakTests
 
+// Phase 715 — the break-injection corpus, which is what makes the
+// two packs above worth anything: one healthy synthetic chain
+// with both canonical forms pinned, then one variant per break
+// class asserting the specific verdict AND the specific position.
+// Every case is demonstrated to fail against code lacking its
+// check — a discriminating twin for the walked chain, a
+// deliberately-weakened copy of the verifier for the bundle and
+// the document — because a check that runs, passes and could not
+// have failed is indistinguishable from one that works.
+
+// Phase 729 — the corpus's one unproven class, promoted. A
+// severed ANCESTOR edge is recorded as a typed marker rather than
+// dropped, so the hop reads broken at the ref that failed, the
+// enumeration behind it stays incomplete, and both are derived
+// from the same recording rather than from two observations that
+// could drift.
+
 open System
 open System.Collections.Concurrent
 open System.IO

@@ -600,9 +600,11 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         // `TeamManagerUI`'s direct `OnTeamSwitched` invocation.
         model.OnAccessibleModulesChanged |> Option.iter (fun f -> f ())
 
+        // Phase 1069 — `Banner` is `Some(isError, text)`: a success is
+        // `false`, as `SaveDefaultsResult` writes it.
         {
             model with
-                Banner = Some(true, bannerText)
+                Banner = Some(false, bannerText)
         },
         Cmd.none
 
@@ -625,7 +627,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 
         {
             model' with
-                Banner = Some(false, MessageCatalog.english.PermissionsAdmin.ExposureChangeFailed moduleName msg)
+                Banner = Some(true, MessageCatalog.english.PermissionsAdmin.ExposureChangeFailed moduleName msg)
         },
         Cmd.none
 

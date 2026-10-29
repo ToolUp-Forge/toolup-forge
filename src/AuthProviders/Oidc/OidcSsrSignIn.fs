@@ -578,6 +578,7 @@ let routes (http: HttpClient) (config: OidcSsrSignInConfig) : HttpHandler =
 /// every companion contributes through. Apply it BEFORE
 /// `PublicRenderingCompose.withPublicRendering`, so the routes precede the
 /// public-page catch-all.
+/// **Adds** the sign-in routes, and their registrations through `ServerApp.addServiceConfig`.
 let withInteractiveSignInPage
     (page: SignInPage)
     (http: HttpClient)
@@ -591,13 +592,11 @@ let withInteractiveSignInPage
             Extensions = {
                 app.Extensions with
                     Handlers = app.Extensions.Handlers @ [ routesWithPage page http config ]
-                    ServiceConfig =
-                        match app.Extensions.ServiceConfig with
-                        | None -> Some registerSignIn
-                        | Some baseFn -> Some(fun s -> registerSignIn (baseFn s))
             }
     }
+    |> ServerApp.addServiceConfig registerSignIn
 
 /// `withInteractiveSignInPage` with the default failure page.
+/// **Adds** what `withInteractiveSignInPage` adds.
 let withInteractiveSignIn (http: HttpClient) (config: OidcSsrSignInConfig) (app: ServerApp) : ServerApp =
     withInteractiveSignInPage SignInPage.defaults http config app

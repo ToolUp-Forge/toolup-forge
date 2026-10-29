@@ -1,5 +1,9 @@
 module ToolUp.Platform.Tests.InProcess.HomeOverviewTests
 
+// Phase 217 — IHomeWidgetDataProvider merge + scope-correctness.
+
+// Phase 217 — recents/pinning per-user round-trip + scope isolation.
+
 open System
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.DependencyInjection

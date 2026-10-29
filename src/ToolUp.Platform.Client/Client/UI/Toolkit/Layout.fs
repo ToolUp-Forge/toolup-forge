@@ -6,35 +6,32 @@ namespace Toolup.UIToolkit
 open Toolup
 open Feliz
 open Fable.Core.JsInterop
-open Browser
 open ToolUp.Platform
 open ToolUp.Platform.DataProp
 
 module Layout =
-    //open Fable.Core.JsInterop
-    //let UserButton: obj = import "UserButton" "@clerk/react"
-    // Import everything once
-    let private clerk = importAll<obj> "@clerk/react"
+    /// Phase 1069 — the header's identity action (an account / user
+    /// button), REGISTERED by the auth companion that owns it rather than
+    /// imported here: the shell bundle references no vendor UI package
+    /// (GP 2 / GP 13). The Clerk companion registers Clerk's `UserButton`
+    /// when its provider wraps the app (`ClerkAuthUI.wrapApp`); a
+    /// deployment without one renders nothing in the slot.
+    ///
+    /// A documented client-side mutable, like the shell's other
+    /// companion registries: it is set once, when the auth UI wraps the
+    /// shell, before the header first renders.
+    let mutable private headerIdentityAction: (unit -> ReactElement) option = None
 
-    // Wrapped components - each accepts Feliz-style props (IReactProperty list)
-    let UserButton (props: IReactProperty list) : ReactElement =
-        ReactLegacy.createElement (unbox<ReactElement> clerk?UserButton, createObj !!props)
+    /// Register (or replace) the header's identity action. Called by an
+    /// auth companion when its provider mounts.
+    let registerHeaderIdentityAction (render: unit -> ReactElement) : unit = headerIdentityAction <- Some render
 
-    /// Render Clerk's UserButton inside the page header when an active
-    /// ClerkProvider has been mounted; render nothing otherwise. Apps in
-    /// Anonymous / dev modes don't mount a provider, so `clerk?UserButton`
-    /// would throw at render — `window.Clerk` (populated by the Clerk SDK
-    /// when its provider mounts) is the feature-detection signal.
-    /// Bypasses the F# `UserButton` wrapper above because passing
-    /// `{| showName = true |}` through `ReactLegacy.createElement` hits
-    /// the wrapper's `createObj !!props` with an anonymous record, which
-    /// is not an `IReactProperty list` and crashes with "fields is not
-    /// iterable".
+    /// The registered identity action, or nothing when no companion
+    /// registered one (Anonymous / dev modes, non-Clerk providers).
     let userButton () : ReactElement =
-        if isNull Browser.Dom.window?Clerk then
-            Html.none
-        else
-            ReactLegacy.createElement (unbox<ReactElement> clerk?UserButton, {| showName = true |}, [||])
+        match headerIdentityAction with
+        | Some render -> render ()
+        | None -> Html.none
 
     /// Page header with optional caller-supplied trailing action element
     /// (e.g. an AI chat toggle button — the shell knows which feature owns

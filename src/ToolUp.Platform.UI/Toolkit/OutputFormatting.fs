@@ -13,9 +13,17 @@ module OutputFormatting =
 
     let phiChar = string (char 0x03C6) // lowercase φ
 
+    /// Phase 1069 — the ONE locale the toolkit formats numbers and
+    /// currency in, named rather than scattered as a literal. It is the
+    /// fallback until Phase 1075 passes the caller's locale into the
+    /// toolkit; a caller that already holds a locale formats through
+    /// `MessageCatalogProvider.formatNumber locale` instead.
+    [<Literal>]
+    let fallbackLocale = "en-GB"
+
     let formatCurrency value =
         (float value)?toLocaleString (
-            "en-GB",
+            fallbackLocale,
             {|
                 style = "currency"
                 currency = "GBP"
@@ -24,7 +32,7 @@ module OutputFormatting =
 
     let formatDecimal (value: decimal) =
         (float value)?toLocaleString (
-            "en-GB",
+            fallbackLocale,
             {|
                 minimumFractionDigits = 0
                 maximumFractionDigits = 2
@@ -32,7 +40,7 @@ module OutputFormatting =
         )
 
 
-    let formatInt (value: int) = value?toLocaleString "en-GB"
+    let formatInt (value: int) = value?toLocaleString fallbackLocale
 
     let formatDate (date: System.DateTime) = date.ToString("dd MMM yyyy")
 

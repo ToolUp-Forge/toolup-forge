@@ -1,5 +1,18 @@
 module ToolUp.Platform.Tests.InProcess.BuildTranscriptTests
 
+// Phase 656 — build transcript + sealed deploy record. The
+// determinism packs are probed in BOTH directions: equal inputs
+// must digest equally, and every recorded field must reach the
+// digest — a canonical form that silently dropped one would pass
+// the first pack perfectly.
+
+// Phase 659 — the dependency-closure upstream-provenance join.
+// The closure's canonical form is probed in both directions like
+// the transcript's; capture reads the restore's own output; the
+// attest seam runs provider-absent (honestly unattested) and
+// against a stub ledger; and the closure's digest is bound into
+// the sealed record — perturb the closure, the seal refuses.
+
 open System
 open System.IO
 open System.Security.Cryptography

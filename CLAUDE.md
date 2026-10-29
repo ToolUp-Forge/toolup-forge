@@ -494,6 +494,10 @@ The other two were environmental but worth knowing: the `IAssetStore` pack needs
 
 The `Publish` FAKE target (`dotnet run -- Publish`) packs every public-surface SDK fsproj into a per-run `./artifacts/` directory and pushes each `.nupkg` to **nuget.org** (the default source since the 2026-08-19 cutover; the old `ToolUp-Forge` GitHub Packages feed is frozen and no longer pushed to). CI workflow is [`.github/workflows/publish-nuget.yml`](.github/workflows/publish-nuget.yml) — triggers on tag `v*.*.*` (or manual `workflow_dispatch` to heal a failed tag run — a dispatch packs main's current `<Version>`, tagged or not, so never dispatch ahead of a tag); authentication is nuget.org **Trusted Publishing** (the workflow's login step exchanges its OIDC token for a one-hour key — no stored credential; the only repo secret is the `NUGET_USER` profile name). The push is idempotent (`--skip-duplicate`) so re-runs after a transient failure skip versions already published. Local manual publishes set `NUGET_API_KEY` (a classic push-scoped api.nuget.org key — the exception path; CI never uses one) and optionally override `TOOLUP_PUBLISH_SOURCE`. Symbol packages (`.snupkg`) are pushed automatically to nuget.org's symbol server (`dotnet nuget push` detects the sibling file) and also remain in `./artifacts/` for local inspection.
 
+### Phase citations in source comments
+
+New code cites no phase in a source comment: the phase's recorded outcome is the record of why a thing exists, and a number in a comment goes stale the first time the thing is reshaped. An existing phase-history comment is removed from any file a change touches (the tidy rule). No sweep is scheduled. The two ledgers of the Platform test pack, `Program.fs` and `ToolUp.Platform.Tests.fsproj`, were stripped of their per-entry comments (Phase 1101) and now list the files and nothing else; a phase a stripped comment cited that its test file's own header did not carry was moved into that header.
+
 ### Fast iteration
 
 `dotnet build ToolUp.Forge.sln` evaluates ~50 fsprojs (~1.5–6 minutes); a one-shot Fable compile is similarly expensive. Use:
@@ -620,6 +624,10 @@ touches public surface:
 - **Runtime**: .NET 10 (`net10.0`).
 - **Language**: F# 10 (the SDK pin in `global.json` is `10.0.203`). All workspace siblings are on the same baseline; assume F# 10 features are available without further qualification.
 - **Formatter**: Fantomas — pre-commit step. Run `dotnet fantomas <file>` BEFORE `dotnet build`.
+
+### A builder's name says whether it sets or adds (Phases 1050, 1052)
+
+A `with*` builder **sets** (a later call, or a later whole-record setter such as `withConfig` / `withExtensions`, replaces what it wrote); an `add*` builder **appends** and nothing later replaces it. A new builder follows the names: `ServerApp.addServiceConfig` appends DI registrations and survives a later `withExtensions`; `ServerApp.addContribution` appends a `Contribution` (a companion's registrations under its own `ComponentId`, via `Contribution.service owner register`). Existing appending `with*` builders keep their names — renaming them would break every consumer for no behaviour change — and say **Adds** in their doc comment; every builder says **Sets** or **Adds** there. A DI registration is never appended by folding `ComposeExtensions.ServiceConfig` by hand: the one fold is `ServiceConfig.append`, and `dotnet run --project Build.fsproj -- VerifyServiceConfigFold` (a `VerifyAll` leg) refuses a second copy under `src/`. A test that builds a provider from a composed app reads `ServerApp.serviceConfig app` — the consumer's `ServiceConfig` followed by every contribution, which is what `run` applies — never `app.Extensions.ServiceConfig` alone.
 
 ### Fantomas pitfall: indexer ambiguity
 

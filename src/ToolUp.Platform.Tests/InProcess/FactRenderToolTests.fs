@@ -517,7 +517,7 @@ let private composedRegistry (app: AIServerApp) : AIToolRegistry.AIToolRegistry 
     let composed = composeAI app
     let services = ServiceCollection() :> IServiceCollection
 
-    match composed.Extensions.ServiceConfig with
+    match ServerApp.serviceConfig composed with
     | Some configure -> configure services |> ignore
     | None -> failtest "composeAI registers its services"
 
@@ -655,7 +655,7 @@ let private composedContext () : HttpContext =
     services.AddSingleton<IMetricRegistry>(registry) |> ignore
     services.AddSingleton<IFactTableRegistry>(tables) |> ignore
 
-    match app.Extensions.ServiceConfig with
+    match ServerApp.serviceConfig app with
     | Some configure -> configure services |> ignore
     | None -> failtest "the composed fact tier registers its services"
 
