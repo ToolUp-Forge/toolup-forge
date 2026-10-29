@@ -1213,13 +1213,15 @@ module FactBrowseHandler =
             QuerySlice = fun _ -> refusal ()
         }
 
-    /// The per-request API. The scope is the one the platform's scope
-    /// resolution minted for this request (`ScopeResolution.forRequest`),
-    /// the principal the request's user.
-    let factBrowseApi (ctx: HttpContext) : IFactBrowseApi =
+    /// The browse dependencies the request's composition holds, or `None`
+    /// when the fact store or its disclosure gate is not composed. Phase
+    /// 1132 — public, so another in-process reader of the fact tables (the
+    /// render tools) takes them as a value from this one resolution rather
+    /// than resolving the container itself.
+    let factBrowseDeps (ctx: HttpContext) : FactBrowseDeps option =
         match serviceOf<IFactStore> ctx, serviceOf<IFactDisclosureGate> ctx with
         | Some store, Some gate ->
-            let deps = {
+            Some {
                 Tables = serviceOf<IFactTableRegistry> ctx |> Option.defaultValue FactTableRegistry.empty
                 Writer = serviceOf<IFactTableWriter> ctx
                 Store = store
@@ -1232,9 +1234,15 @@ module FactBrowseHandler =
                 Registry = serviceOf<IMetricRegistry> ctx
                 Clock = fun () -> DateTime.UtcNow
             }
+        | _ -> None
 
-            api deps (StorageScopeResolver.ScopeResolution.forRequest ctx) (userIdOf ctx)
-        | _ -> unavailable
+    /// The per-request API. The scope is the one the platform's scope
+    /// resolution minted for this request (`ScopeResolution.forRequest`),
+    /// the principal the request's user.
+    let factBrowseApi (ctx: HttpContext) : IFactBrowseApi =
+        match factBrowseDeps ctx with
+        | Some deps -> api deps (StorageScopeResolver.ScopeResolution.forRequest ctx) (userIdOf ctx)
+        | None -> unavailable
 
     // ── Per-run notification ─────────────────────────────────────
 

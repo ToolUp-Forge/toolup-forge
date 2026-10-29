@@ -303,6 +303,7 @@
              no-block panel pinned byte for byte (after RenderScope.fs, whose
              jsdom each case installs). -->
         <Compile Include="ConversationBlockTests.fs" />
+        <Compile Include="ChatWatchdogTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>

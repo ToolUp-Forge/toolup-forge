@@ -941,6 +941,44 @@ Composing the store on its own therefore arms neither door fully: with no
 AI tier the tools are never registered, and with no compiler the planner
 refuses every question, so the push door is dormant.
 
+#### The render tools: the model asks for a chart, not a number (Phase 1132)
+
+Beside the three fact tools, two more let the model *show* facts rather than quote them:
+`render_chart` (a trend, a breakdown or a comparison) and `render_table`. The model writes a
+[presentation request](#from-a-series-to-a-chart-the-presentation-builders-phase-1129), never
+a row. The server reads the series it names through the browse's series read and draws the
+block with the presentation builders. It answers the record form a tool result can carry
+(Phase 1131): a text summary the model reads, and the block the assistant message carries.
+
+- **Judged at the tool-result door.** The read is gated at `FactToolResult`, where every
+  fact tool's result is judged, never at the browse door, so an operator who narrows what
+  the model may be shown narrows these too.
+- **Refused by name.** A malformed request, an unknown table, metric or subject level, and
+  a kind the other tool draws are each refused with a sentence naming what to repair. Each
+  tool's description says the ids come from the deployment's standing context, as
+  `query_facts` says of its own.
+- **The model reads counts, never values.** The summary names the kind, the metric, the
+  table, the canonical period, the title, how many points were read and how many were
+  withheld under which policy. The values are in the block, which the user sees. A withheld
+  point is a count in the summary and is never drawn.
+- **A denied principal gets a refusal, not an empty chart.** When no point of the read
+  carries a number the caller may be shown, the tool attaches nothing and says why.
+
+They live in their own package, `ToolUp.Facts.Presentation.Server`, because they bring the
+Fuaran-UI dependency; `ToolUp.Facts.Server` stays free of it. They are composed explicitly
+onto the AI composition, beside the three. They arm only with the fact store and the AI
+companion. A deployment that does not compose them has neither tool and no new dependency:
+
+```fsharp skip=fragment
+AIServerApp.createFrom factory providerProfile app
+|> PresentationCompose.withRenderTools
+|> composeAI
+```
+
+The tools take table, metric and level ids they cannot list, so a deployment names its fact
+tables in the assistant's standing context. Migration recipe:
+[`docs/migrations/1132-render-tools.md`](../migrations/1132-render-tools.md).
+
 #### The question compiler (Phase 986)
 
 The planner takes its compiler from the first of these that the
