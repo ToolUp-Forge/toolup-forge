@@ -42,7 +42,7 @@ ToolUp.AuditSinks.DatadogLogs 9/13
 ToolUp.AuditSinks.GcsArchive 7/11
 ToolUp.AuditSinks.S3Archive 7/11
 ToolUp.AuditSinks.SplunkHec 8/12
-ToolUp.AuthProviders.ClerkUI 4/10
+ToolUp.AuthProviders.ClerkUI 5/11
 ToolUp.AuthProviders.EntraDirectory 7/23
 ToolUp.AuthProviders.GitHub 38/74
 ToolUp.AuthProviders.GoogleDirectory 29/56
@@ -136,12 +136,12 @@ ToolUp.OpenXml 107/298
 ToolUp.OpenXml.Spreadsheet 45/141
 ToolUp.OpenXml.SvgRasterizer.Skia 3/3
 ToolUp.Platform.Build 314/570
-ToolUp.Platform.Client 2936/7254
+ToolUp.Platform.Client 2945/7262
 ToolUp.Platform.Core 7214/15282
 ToolUp.Platform.Server 7027/12749
 ToolUp.Platform.Testing 118/264
 ToolUp.Platform.Transport 44/90
-ToolUp.Platform.UI 71/183
+ToolUp.Platform.UI 72/184
 ToolUp.PublicRendering 656/1148
 ToolUp.RAG.Core 82/133
 ToolUp.RAG.Server 294/515

@@ -72,6 +72,7 @@ let allTests =
         // shell's background subscriptions; the admin-tile click-through
         // silent-no-op regression).
         ShellLifetimeEffectsTests.tests
+        ShellUpdateEffectsTests.tests
         // Phase 879 - shell slots: the prepared module list and the
         // built-ins' admin tiles over reference configurations, pinned by
         // baselines recorded before the slot refactor.

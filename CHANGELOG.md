@@ -13,7 +13,43 @@ same name in one release is reported once, as a signature change. Under this rep
 policy a `breaking` release is a MINOR bump and an `additive` one a PATCH; from 1.0.0 the ordinary table
 applies. Where a release ships a migration note under `docs/migrations/`, it is linked from the section.
 
-## [0.37.0] — unreleased
+## [Unreleased] — unreleased
+
+Migration notes:
+
+- [1069-redesign-e-defects-client-shell](docs/migrations/1069-redesign-e-defects-client-shell.md)
+
+_Surface since `v0.37.0`: **breaking** — 3 packages moved; 11 members added, 2 members changed, 1 member removed._
+
+### Added
+
+- `ToolUp.AuthProviders.ClerkUI` — 1 member:
+  - `ToolUp.AuthProviders.ClerkAuthUI.userButton() : Fable.React.ReactElement`
+- `ToolUp.Platform.Client` — 9 members:
+  - `SidebarPreferences.persist`1(Microsoft.FSharp.Core.FSharpFunc`2[System.Exception, msg], SidebarPreferences+UserSidebarPreferences) : Microsoft.FSharp.Collections.FSharpList`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.Unit], Microsoft.FSharp.Core.Unit]]`
+  - `ToolUp.Platform.BootSourceMessages.DataSnapshot : System.String { get }`
+  - `ToolUp.Platform.BootSourceMessages.PlatformInfo : System.String { get }`
+  - `ToolUp.Platform.BootSourceMessages.SidebarPrefs : System.String { get }`
+  - `ToolUp.Platform.Client.observeModuleStates(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], ToolUp.Platform.Client+Msg, Microsoft.FSharp.Collections.FSharpMap`2[System.String, System.Object], ToolUp.Platform.Client+Model) : System.Void`
+  - `ToolUp.Platform.Client.withModuleStateObserver`4(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ErasedModule], Microsoft.FSharp.Core.FSharpFunc`2[msg, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.Client+Msg]], Microsoft.FSharp.Core.FSharpFunc`2[model, ToolUp.Platform.Client+Model], ToolUp.Elmish.Program`4[arg, model, msg, view]) : ToolUp.Elmish.Program`4[arg, model, msg, view]`
+  - `ToolUp.Platform.TeamManagerMessages.RevokeInvitePrompt : Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]] { get }`
+  - `ToolUp.Platform.TeamManagerMessages.TransferSelectedMemberFallback : System.String { get }`
+  - `Toolup.UIToolkit.Layout.registerHeaderIdentityAction(Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.Unit, Fable.React.ReactElement]) : System.Void`
+- `ToolUp.Platform.UI` — 1 member:
+  - `Toolup.UIToolkit.OutputFormatting.fallbackLocale : System.String (literal)`
+
+### Changed
+
+- `ToolUp.Platform.Client` — 2 members:
+  - `ToolUp.Platform.BootSourceMessages..ctor` — `ToolUp.Platform.BootSourceMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)` → `ToolUp.Platform.BootSourceMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)`
+  - `ToolUp.Platform.TeamManagerMessages..ctor` — `ToolUp.Platform.TeamManagerMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)` → `ToolUp.Platform.TeamManagerMessages..ctor(System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], System.String, System.String, System.String, System.String, System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[System.String, System.String]], System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String, System.String)`
+
+### Removed
+
+- `ToolUp.Platform.Client` — 1 member:
+  - `Toolup.UIToolkit.Layout.UserButton(Microsoft.FSharp.Collections.FSharpList`1[Feliz.IReactProperty]) : Fable.React.ReactElement`
+
+## [0.37.0] — 2026-10-29
 
 Migration notes:
 
@@ -53,7 +89,7 @@ _Surface since `v0.36.0`: **breaking** — 6 packages moved; 269 members added, 
   - `ToolUp.AI.AIAgentEngine+LoopState.Stopped : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIAgentEngine+LoopStop] { get }`
   - `ToolUp.AI.AIAgentEngine+LoopState.Timings : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallTiming] { get }`
   - `ToolUp.AI.AIAgentEngine+LoopState.Turn : System.Int32 { get }`
-  - … and 203 more — `git diff v0.36.0 -- api-baselines/ToolUp.AI.Server.approved.txt`
+  - … and 203 more — `git diff v0.36.0 v0.37.0 -- api-baselines/ToolUp.AI.Server.approved.txt`
 - `ToolUp.AuthProviders.Oidc` — 7 members:
   - `ToolUp.AuthProviders.OidcSsrSignIn+SignInPage (class)`
   - `ToolUp.AuthProviders.OidcSsrSignIn+SignInPageModule (class)`
@@ -91,7 +127,7 @@ _Surface since `v0.36.0`: **breaking** — 6 packages moved; 269 members added, 
   - `ToolUp.Platform.GroundedProjectionContext.Scope : ToolUp.Platform.ResolvedScope { get }`
   - `ToolUp.Platform.GroundedProjectionContext.Surface : ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface { get }`
   - `ToolUp.Platform.GroundedProjectionRequest (class)`
-  - … and 8 more — `git diff v0.36.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
+  - … and 8 more — `git diff v0.36.0 v0.37.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
 
 ### Changed
 

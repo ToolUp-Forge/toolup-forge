@@ -141,7 +141,7 @@ module Forms =
 
             let formatNumber (n: decimal) : string =
                 (float n)?toLocaleString (
-                    "en-GB",
+                    OutputFormatting.fallbackLocale,
                     {|
                         minimumFractionDigits = 2
                         maximumFractionDigits = 2
@@ -228,7 +228,7 @@ module Forms =
                 if not includeCommas then
                     string n
                 else
-                    (int n)?toLocaleString ("en-GB")
+                    (int n)?toLocaleString OutputFormatting.fallbackLocale
 
             let displayValue, setDisplayValue =
                 React.useState (formatNumber value includeCommas)

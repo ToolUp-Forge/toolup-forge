@@ -13,7 +13,7 @@
 // message is a FUNCTION field; it is left pointing at the English message until you
 // replace it with a lambda of the shape its comment names.
 //
-// Leaves: 1524 (222 parameterised).
+// Leaves: 1529 (223 parameterised).
 
 module ToolUp.Platform.Localization.Skeleton
 
@@ -102,6 +102,12 @@ let catalog (c: MessageCatalog) : MessageCatalog = {
                         TeamRole = "Team role"
                         // en: "Session refresh"
                         AuthBridge = "Session refresh"
+                        // en: "Platform info"
+                        PlatformInfo = "Platform info"
+                        // en: "Uploaded data"
+                        DataSnapshot = "Uploaded data"
+                        // en: "Sidebar preferences"
+                        SidebarPrefs = "Sidebar preferences"
                 }
         }
         Toast = {
@@ -257,6 +263,8 @@ let catalog (c: MessageCatalog) : MessageCatalog = {
                 // en (string -> string -> string -> string): "Transfer ownership of {a} from {b} (you) to {c}?"
                 // translate as `fun (a: string) (b: string) (c: string) -> $"…"`; left as the English message until you do
                 TransferConfirmPrompt = c.TeamManager.TransferConfirmPrompt
+                // en: "the selected member"
+                TransferSelectedMemberFallback = "the selected member"
                 // en: "Transferring…"
                 Transferring = "Transferring…"
                 // en: "Confirm transfer"
@@ -295,6 +303,9 @@ let catalog (c: MessageCatalog) : MessageCatalog = {
                 RevokeInvite = "Revoke"
                 // en: "Revoke pending invitation?"
                 RevokeInviteHeading = "Revoke pending invitation?"
+                // en (string -> string -> string): "{a} will no longer auto-join {b} on sign-in."
+                // translate as `fun (a: string) (b: string) -> $"…"`; left as the English message until you do
+                RevokeInvitePrompt = c.TeamManager.RevokeInvitePrompt
                 // en: "Re-issue"
                 Reissue = "Re-issue"
                 // en: "Re-issuing…"

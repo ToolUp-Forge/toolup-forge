@@ -112,6 +112,7 @@
              background subscriptions, the admin-tile click-through
              regression class. -->
         <Compile Include="ShellLifetimeEffectsTests.fs" />
+        <Compile Include="ShellUpdateEffectsTests.fs" />
         <!-- Phase 879 - the prepared module list and the built-ins' admin
              tiles over reference configurations, pinned by baselines
              recorded BEFORE the shell-slot refactor (shell-slot-baselines/). -->

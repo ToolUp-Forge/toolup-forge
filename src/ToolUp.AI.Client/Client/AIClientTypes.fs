@@ -37,9 +37,13 @@ type AIAssistantClientBranding = {
     ShowSidePanel: bool
 }
 
-/// Controls whether/how the AI assistant appears in the platform.
-/// The same four-case shape as the shell's `SlotFill`. Client-only — server-side
-/// AI configuration goes through `AIAssistantServerConfig` directly.
+/// Controls whether/how the AI assistant appears in the platform. Three
+/// cases — off, the built-in assistant, the built-in assistant rebranded.
+/// Unlike the shell's `SlotFill` it has no `External` case: the assistant
+/// cannot yet be replaced by a deployment's own, nor its family emptied
+/// slot by slot, until Phase 1074 makes the AI family slots. Client-only —
+/// server-side AI configuration goes through `AIAssistantServerConfig`
+/// directly.
 type AIAssistantMode =
     /// No AI assistant — modules provide their own AI or none is needed.
     | NoAIAssistant
