@@ -1,4 +1,4 @@
-Codemod: 27 site(s) in 7 file(s) need human review (not rewritten):
+Codemod: 28 site(s) in 8 file(s) need human review (not rewritten):
   src/Client/App.fs
     L14 [66-dev-default-user-id] DevDefaultUserId = "dev-admin"
       -> Phase 66: `ClientConfig.DevDefaultUserId` is deleted — the public-utility-with-admin shape it approximated is `Surfaces = Surfaces.anonymousAndIndividual` (worked example 4)
@@ -27,6 +27,9 @@ Codemod: 27 site(s) in 7 file(s) need human review (not rewritten):
       -> Phase 1077: the history window is `AIAssistantServerConfig.Limits.HistoryWindow` now: set `Limits = { AgentLoopLimits.defaults with HistoryWindow = <n> }`, and read it as `AIAssistantServerConfig.limits cfg |> AgentLoopLimits.historyWindow`
     L25 [1077-run-agent-loop] AIAgentEngine.runAgentLoop provider registry dispatch ctx taskId conversationId AISurface.SidePanel None None CancellationToken.None messages prompt onEvent
       -> Phase 1077: `AIAgentEngine.runAgentLoop` is removed: call `runAgentLoopWithInput` with the same arguments, passing `ModelInput.ofSystemPrompt "SystemPromptBuilder" systemPrompt messages` where the system prompt was (or build an `AIAgentEngine.TurnContext` and call `AIAgentEngine.run`)
+  src/Server/Connectors.fs
+    L56 [1095-capability-probe] | :? IWatchableFileSource -> true
+      -> Phase 1095: a connector's capabilities are its declared `Capabilities` record now: read `ConnectorCapabilities.watchable` / `ConnectorCapabilities.native` (or `source.Capabilities`), never the type — a decorator forwards its inner connector's record
   src/Server/Guarded.fs
     L12 [815-remoting-permission-guarded-api] let handler = RemotingHelpers.makePermissionGuardedApi "SkuAnalysis" apiFactory
       -> Phase 815: `RemotingHelpers.makePermissionGuardedApi name factory` is removed: compose the module as `ServerModule.create name |> ServerModule.withGuardedApi factory` (the same module-access gate) and declare method-level authorisation with `[<RequiresRole>]` / `[<TenantScoped>]` / `[<AllowAnonymous>]` per docs/migrations/69d-authorization-metadata.md
@@ -62,6 +65,7 @@ Codemod: 27 site(s) in 7 file(s) need human review (not rewritten):
       -> Phase 73: the Newtonsoft-backed `FableJsonConverter` was retired in the STJ migration — use `ToolUp.Remoting.Json.SystemTextJson.FableConverters.create()` and `System.Text.Json.JsonSerializer` (see the Phase 73 doc's Remoting note)
   Read:
     Phase 1077 — docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md
+    Phase 1095 — docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md
     Phase 11.C.5 — docs/migrations/11-C-5-public-api-stability-cluster.md
     Phase 66 — docs/migrations/0.X.0-platform-mode-to-surfaces.md
     Phase 73 — docs/migrations/73-namespace-rename-to-toolup-remoting-and-toolup-elmish.md

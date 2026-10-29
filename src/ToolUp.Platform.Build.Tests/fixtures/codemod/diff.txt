@@ -131,6 +131,23 @@
 @@ L20 [1077-history-window-constant]
 -let window = AIAssistantServerConfig.DefaultMaxHistoryMessages
 +let window = AgentLoopLimits.DefaultHistoryWindow
+--- a/src/Server/Connectors.fs
++++ b/src/Server/Connectors.fs
+@@ L8 [1095-capabilities-member]
+-    interface IDataSource with
++    interface IDataSource with
++        member _.Capabilities = ConnectorCapabilities.none
+@@ L18 [1095-watch-seam-namespace]
+-        member _.ListObjects _ = async { return Ok([]: ToolUp.DataSources.Common.WatchedObject list) }
++        member _.ListObjects _ = async { return Ok([]: ToolUp.Platform.WatchedObject list) }
+@@ L20 [1095-capabilities-member]
+-    interface IDataSource with
++    interface IDataSource with
++        member this.Capabilities = { ConnectorCapabilities.none with Watchable = Some(this :> IWatchableFileSource) }
+@@ L29 [1095-capabilities-member]
+-    { new IDataSource with
++    { new IDataSource with
++        member this.Capabilities = { ConnectorCapabilities.none with Native = Some(this :> IEmitsNativePayload) }
 --- a/src/Server/Program.fs
 +++ b/src/Server/Program.fs
 @@ L5 [73-remoting-namespace]
@@ -182,4 +199,4 @@
 @@ L41 [73-remoting-namespace]
 -let legacyJson = Fable.Remoting.Json.FableJsonConverter()
 +let legacyJson = ToolUp.Remoting.Json.FableJsonConverter()
-Codemod: 56 rewrite(s) across 8 file(s) pending.
+Codemod: 60 rewrite(s) across 9 file(s) pending.

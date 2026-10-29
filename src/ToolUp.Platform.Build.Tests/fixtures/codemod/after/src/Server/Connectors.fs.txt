@@ -1,0 +1,57 @@
+module MyApp.Server.Connectors
+
+open ToolUp.Platform
+open ToolUp.DataSources.Common
+
+/// A warehouse connector: no capability beyond the five members.
+type WarehouseSource(endpoint: string) =
+    interface IDataSource with
+        member _.Capabilities = ConnectorCapabilities.none
+        member _.Kind = "Warehouse"
+        member _.Connect _ = async { return Ok() }
+        member _.ListTables _ = async { return Ok [] }
+        member _.GetSchema(_, t) = async { return Ok { TableName = t; Columns = [] } }
+        member _.Query(_, _) = async { return Ok [||] }
+
+/// A file connector a delivery can watch.
+type DropFolderSource() =
+    interface IWatchableFileSource with
+        member _.ListObjects _ = async { return Ok([]: ToolUp.Platform.WatchedObject list) }
+
+    interface IDataSource with
+        member this.Capabilities = { ConnectorCapabilities.none with Watchable = Some(this :> IWatchableFileSource) }
+        member _.Kind = "DropFolder"
+        member _.Connect _ = async { return Ok() }
+        member _.ListTables _ = async { return Ok [] }
+        member _.GetSchema(_, t) = async { return Ok { TableName = t; Columns = [] } }
+        member _.Query(_, _) = async { return Ok [||] }
+
+/// A columnar connector that also emits its native bytes.
+let columnar (inner: IDataSource) =
+    { new IDataSource with
+        member this.Capabilities = { ConnectorCapabilities.none with Native = Some(this :> IEmitsNativePayload) }
+        member _.Kind = inner.Kind
+        member _.Connect ctx = inner.Connect ctx
+        member _.ListTables ctx = inner.ListTables ctx
+        member _.GetSchema(ctx, t) = inner.GetSchema(ctx, t)
+        member _.Query(ctx, sql) = inner.Query(ctx, sql)
+      interface IEmitsNativePayload with
+          member _.NativeFormat = PayloadFormat.Other "columnar"
+          member _.QueryNative(ctx, sql) = inner.Query(ctx, sql)
+    }
+
+/// Already migrated by hand: left alone.
+type MigratedSource() =
+    interface IDataSource with
+        member _.Kind = "Migrated"
+        member _.Capabilities = ConnectorCapabilities.none
+        member _.Connect _ = async { return Ok() }
+        member _.ListTables _ = async { return Ok [] }
+        member _.GetSchema(_, t) = async { return Ok { TableName = t; Columns = [] } }
+        member _.Query(_, _) = async { return Ok [||] }
+
+/// A probe the record replaces: reported, never rewritten.
+let isWatchable (source: IDataSource) =
+    match box source with
+    | :? IWatchableFileSource -> true
+    | _ -> false
