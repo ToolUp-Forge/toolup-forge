@@ -176,8 +176,9 @@ let private truncateForDebug (limit: int) (s: string) =
     else s.Substring(0, limit) + "… (truncated)"
 
 // ─── Stream-idle watchdog ────────────────────────────────────────
-// Mirrors the side-panel watchdog in AIClientConfig.fs. See that file's
-// comment for the token-based-invalidation rationale.
+// Mirrors the side-panel watchdog in AIClientConfig.fs: it measures
+// idleness from the last event of the live turn, not time since submit.
+// See that file's comment for the token-based-invalidation rationale.
 
 let private watchdogTimeoutMs = 60_000
 
@@ -189,6 +190,22 @@ let private scheduleWatchdog (token: Guid) : Cmd<Msg> =
         })
         ()
         WatchdogFired
+
+/// A live turn's event restarts the idle clock: a fresh token replaces the
+/// live one and a firing is scheduled for it, so the firing the previous
+/// token had pending is ignored. With no live token there is nothing to
+/// restart.
+let private rearmWatchdog (model: Model) : Model * Cmd<Msg> =
+    match model.WatchdogToken with
+    | Some _ ->
+        let token = Guid.NewGuid()
+
+        {
+            model with
+                WatchdogToken = Some token
+        },
+        scheduleWatchdog token
+    | None -> model, Cmd.none
 
 let private watchdogNote (conversationId: Guid) : ConversationMessage = {
     Id = Guid.NewGuid()
@@ -539,11 +556,10 @@ let update msg model =
         | MessageDelta(convId, content) ->
             match model.ActiveConversation with
             | Some activeId when activeId = convId ->
-                {
+                rearmWatchdog {
                     model with
                         StreamingContent = model.StreamingContent + content
-                },
-                Cmd.none
+                }
             | _ -> model, Cmd.none
 
         | MessageComplete(convId, _msgId) ->
@@ -579,7 +595,7 @@ let update msg model =
                 Cmd.none
             | _ -> model, Cmd.none
 
-        | TaskStatusChanged(_taskId, status) ->
+        | TaskStatusChanged(taskId, status) ->
             let taskUpdate =
                 match model.CurrentTask with
                 | Some task ->
@@ -617,6 +633,10 @@ let update msg model =
                         StreamingContent = ""
                 },
                 refresh
+            | Queued, _, _
+            | InProgress, _, _ when model.CurrentTask |> Option.forall (fun task -> task.TaskId = taskId) ->
+                // A non-terminal status of the live task is a sign of life.
+                rearmWatchdog { model with CurrentTask = taskUpdate }
             | _ -> { model with CurrentTask = taskUpdate }, refresh
 
         | ToolCallStarted(convId, toolName, toolCallId) ->
@@ -625,32 +645,33 @@ let update msg model =
                 if model.DebugMode then
                     let note = debugNote convId $"🔧 Calling tool `{toolName}` (id {toolCallId})"
 
-                    {
+                    rearmWatchdog {
                         model with
                             Messages = model.Messages @ [ note ]
-                    },
-                    Cmd.none
+                    }
                 else
                     // Non-debug view — keep the inline ephemeral marker
                     // in the streaming buffer so the user sees the tool
                     // is running.
-                    {
+                    rearmWatchdog {
                         model with
                             StreamingContent = model.StreamingContent + $"\n[Calling {toolName}...]"
-                    },
-                    Cmd.none
+                    }
             | _ -> model, Cmd.none
 
         | ToolCallCompleted(convId, _toolCallId, content) ->
-            match model.ActiveConversation, model.DebugMode with
-            | Some activeId, true when activeId = convId ->
-                let note = debugNote convId $"↳ Tool result: {truncateForDebug 500 content}"
+            match model.ActiveConversation with
+            | Some activeId when activeId = convId ->
+                // The debug note is gated on `DebugMode`; the re-arm is not.
+                if model.DebugMode then
+                    let note = debugNote convId $"↳ Tool result: {truncateForDebug 500 content}"
 
-                {
-                    model with
-                        Messages = model.Messages @ [ note ]
-                },
-                Cmd.none
+                    rearmWatchdog {
+                        model with
+                            Messages = model.Messages @ [ note ]
+                    }
+                else
+                    rearmWatchdog model
             | _ -> model, Cmd.none
 
         | StreamError errorMsg ->
@@ -694,11 +715,13 @@ let update msg model =
         // not yet render verification badges; ignored for now (a later
         // client phase surfaces it). The verdict is already persisted on the
         // `ConversationMessage` and re-read on history load.
+        | AnswerVerified(convId, _) when model.ActiveConversation = Some convId -> rearmWatchdog model
         | AnswerVerified(_, _) -> model, Cmd.none
 
         // Phase 1131 — a part a server-resident tool attached. The reloaded
         // conversation carries it on the final message; appending it to the
         // in-flight message is the client reducer's (Phase 1080).
+        | BlockAttached(convId, _) when model.ActiveConversation = Some convId -> rearmWatchdog model
         | BlockAttached(_, _) -> model, Cmd.none
 
         // Phase 6h: user clicked Cancel and the server has confirmed
