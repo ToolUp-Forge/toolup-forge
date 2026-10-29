@@ -63,6 +63,7 @@ open ToolUp.AI
 open ToolUp.AI.GroundedNarrativeRun
 open ToolUp.ArtefactSigning
 open ToolUp.Facts
+open ToolUp.Facts.Presentation
 open ToolUp.RAG
 open ToolUp.RAG.RAGCompose
 open ToolUp.Reporting
@@ -559,6 +560,15 @@ let private metrics: IMetricRegistry =
             MetricRegistration.Module = "sales"
             Definition = revenueDefinition
         }
+        // Phase 1136 — the brand table's second, internal column.
+        {
+            MetricRegistration.Module = "sales"
+            Definition = {
+                revenueDefinition with
+                    Id = "cost"
+                    Name = "cost"
+            }
+        }
     ] [
         {
             SubjectRegistration.Module = "sales"
@@ -799,7 +809,9 @@ type private Deployment = {
 /// A deployment as one is written: a RAG app with the fact tier composed in
 /// one call, grounded narratives composed over it, booted — its AI provider
 /// factory built over the scripted model by `factoryFor`.
-let private deployComposed
+let private deployShaped
+    (definition: GroundedNarrativeDefinition)
+    (tables: FactTableDefinition list)
     (options: GroundedNarrativeRunOptions)
     (factoryFor: ScriptedModel -> IAIProviderFactory)
     (write: Writer)
@@ -812,7 +824,7 @@ let private deployComposed
         |> RAGServerApp.withStorage storage
         |> RAGServerApp.withFacts FactsCompose.withFactTier
         |> composeRAG
-        |> GroundedNarratives.compose options [ summaryRun ]
+        |> GroundedNarratives.compose options [ definition ]
         |> NarrativePromptHandler.withPromptAdmin
 
     let services = ServiceCollection() :> IServiceCollection
@@ -832,7 +844,13 @@ let private deployComposed
     services.AddHttpContextAccessor() |> ignore
 
     services.AddSingleton<IFactTableRegistry>(
-        FactTableRegistry.build [] [ BindAllFactTables DefaultFactTableWriter.Destination ]
+        FactTableRegistry.build
+            (tables
+             |> List.map (fun t -> {
+                 FactTableRegistration.Module = "sales"
+                 Definition = t
+             }))
+            [ BindAllFactTables DefaultFactTableWriter.Destination ]
     )
     |> ignore
 
@@ -869,6 +887,9 @@ let private deployComposed
         TeamId = teamId
         Scope = ScopeResolution.ofStorageScope (storageFor teamId)
     }
+
+let private deployComposed options factoryFor write =
+    deployShaped summaryRun [] options factoryFor write
 
 let private deployWith (factoryFor: ScriptedModel -> IAIProviderFactory) (write: Writer) : Deployment =
     deployComposed (GroundedNarrativeRunOptions.create NarrativeGrounding.factTools) factoryFor write
@@ -2515,6 +2536,379 @@ let doubleRunTests =
         }
     ]
 
+// ── H. Requested projections and conjecture (Phase 1136) ────────────
+
+/// A day-grain table of brand sales: revenue disclosable, cost internal —
+/// so a series read of cost withholds every point.
+let private brandSales: FactTableDefinition = {
+    Id = "brand-sales"
+    SchemaVersion = 1
+    Hierarchy = "brand"
+    Level = "brand"
+    Columns = [
+        FactTableDefinition.column "revenue" FactTableValueShape.Scalar
+        {
+            (FactTableDefinition.column "cost" FactTableValueShape.Scalar) with
+                Disclosure = Some FactTableDisclosure.Internal
+        }
+    ]
+    PeriodGrain = FactTablePeriodGrain.Day
+    ProducingOperation = "sales-rollup"
+    RefreshCadence = TimeSpan.FromDays 1.0
+    HistoryMode = FactTableHistoryMode.Replace
+    Disclosure = FactTableDisclosure.Surfaceable
+    Requirement = FactTableRequirement.Optional
+}
+
+let private tradingDay = DateTime(2026, 10, 28, 0, 0, 0, DateTimeKind.Utc)
+
+/// The day's rows for two brands, through the composed table writer, plus
+/// the September revenue fact the scripted model reads with `query_facts`.
+let private withBrandSales (deployment: Deployment) : Deployment =
+    assertOk deployment.Store deployment.TeamId (assertedDraft "revenue" 1250m Surfaceable)
+    |> ignore
+
+    let writer = deployment.Services.GetRequiredService<IFactTableWriter>()
+
+    let period: TemporalExtent = {
+        From = tradingDay
+        To = tradingDay.AddDays 1.0
+        Label = None
+    }
+
+    let row (brand: string) (revenue: decimal) (cost: decimal) : FactTableRow = {
+        Subject = [ brand ]
+        Period = period
+        Values = Map.ofList [ "revenue", Scalar revenue; "cost", Scalar cost ]
+    }
+
+    let opened =
+        match writer.OpenRun(deployment.TeamId, brandSales.Id) |> Async.RunSynchronously with
+        | Ok r -> r
+        | Error e -> failtestf "open: %s" (FactTableWriteError.describe e)
+
+    match
+        writer.WriteRows(deployment.TeamId, opened.RunId, [ row "zenith" 900m 400m; row "acme" 1250m 700m ])
+        |> Async.RunSynchronously
+    with
+    | Ok _ -> ()
+    | Error e -> failtestf "write: %s" (FactTableWriteError.describe e)
+
+    match writer.Commit(deployment.TeamId, opened.RunId) |> Async.RunSynchronously with
+    | Ok _ -> deployment
+    | Error e -> failtestf "commit: %s" (FactTableWriteError.describe e)
+
+/// The gated fact reader a projection context offers: the fact tier's
+/// per-request API over the run's own request context.
+let private readThrough (context: GroundedProjectionContext) =
+    (FactBrowseHandler.factBrowseApi context.Request).QuerySeries
+
+let private request (kind: string) (metrics: string list) : string =
+    sprintf
+        """{"kind":"%s","tableId":"%s","metrics":[%s],"period":{"day":"2026-10-28"}}"""
+        kind
+        brandSales.Id
+        (metrics |> List.map (sprintf "\"%s\"") |> String.concat ",")
+
+/// The model's answer: the section's paragraphs (each a JSON value, written
+/// as JSON text) and its projections.
+let private answerWith (paragraphs: string list) (projections: string list) : string =
+    sprintf
+        """{"sections":[{"id":"summary","paragraphs":[%s],"projections":[%s]}]}"""
+        (String.concat "," paragraphs)
+        (String.concat "," projections)
+
+let private citing (id: string) (rendering: string) =
+    JsonSerializer.Serialize $"Acme revenue was [[Revenue|{rendering}|{id}]] in September."
+
+let private deployFor (definition: GroundedNarrativeDefinition) (write: Writer) : Deployment =
+    deployShaped
+        definition
+        [ brandSales ]
+        (GroundedNarrativeRunOptions.create NarrativeGrounding.factTools)
+        (fun model -> ScriptedFactory(model) :> IAIProviderFactory)
+        write
+    |> withBrandSales
+
+let private publishedDocument (outcome: GroundedNarrativeOutcome) : NarrativeDocument * NarrativeCitation list =
+    match outcome with
+    | GroundedNarrativePublished(_, document, citations, _, _) -> document, citations
+    | other -> failtestf "expected a publication, got %s" (GroundedNarrativeOutcome.describe other)
+
+let private summaryElements (document: NarrativeDocument) : NarrativeElement list =
+    document.Sections |> List.find (fun s -> s.Id = "summary") |> _.Elements
+
+let private tablesIn (elements: NarrativeElement list) =
+    elements
+    |> List.choose (function
+        | NarrativeElement.Table(columns, rows) -> Some(columns, rows)
+        | _ -> None)
+
+let private paragraphText (element: NarrativeElement) : string option =
+    match element with
+    | NarrativeElement.Paragraph spans ->
+        spans
+        |> List.map (function
+            | InlineSpan.Text s -> s
+            | _ -> "")
+        |> String.concat ""
+        |> Some
+    | _ -> None
+
+/// The brand-sales facts of a metric, by subject member.
+let private brandFacts (deployment: Deployment) (metric: string) : Map<string, Fact> =
+    deployment.Store.Query(
+        deployment.Scope,
+        {
+            FactQuery.all with
+                Metric = Some(MetricRef metric)
+        }
+    )
+    |> Async.RunSynchronously
+    |> List.filter (fun f -> f.Period.From = tradingDay)
+    |> List.map (fun f -> List.last f.Subject.Path, f)
+    |> Map.ofList
+
+let projectionTests =
+    testList "Phase 1136 H — a run draws the tables its findings ask for, and labels a hypothesis" [
+
+        test "a deterministic projection reads a series under the run's principal; a withheld point is named, not drawn" {
+            let seen = ref None
+
+            let definition =
+                summaryRun
+                |> GroundedNarrativeDefinition.withProjectionContext (fun context -> async {
+                    seen.Value <- Some(context.Scope.ScopeId, context.Principal, context.Surface)
+
+                    let! built =
+                        PresentationNarrative.project (readThrough context) (request "table" [ "revenue"; "cost" ])
+
+                    return built |> Result.map (fun elements -> [ "summary", elements ])
+                })
+
+            let deployment =
+                deployFor definition (fun id rendering -> answerWith [ citing id rendering ] [])
+
+            let document, citations = publishedDocument (run deployment)
+
+            Expect.equal
+                seen.Value
+                (Some(deployment.TeamId, "narrator", FactNarrativePublication))
+                "the projection ran under the run's scope, principal and surface"
+
+            let revenue = brandFacts deployment "revenue"
+            let cost = brandFacts deployment "cost"
+
+            match tablesIn (summaryElements document) with
+            | [ columns, rows ] ->
+                Expect.equal (columns |> List.map fst) [ "brand"; "revenue"; "cost" ] "subjects by metrics"
+
+                for row in rows do
+                    match row with
+                    | [ InlineSpan.Text subject ] :: [ InlineSpan.Metric(label, value, Some factId) ] :: [ [] ] ->
+                        Expect.equal label "revenue" "the cell names its metric"
+                        Expect.equal factId revenue.[subject].FactId "the cell cites the Fact it states"
+                        Expect.contains (NarrativeCitation.factIds citations) factId "a fact the gate admitted"
+                        Expect.isFalse (value.Contains "700" || value.Contains "400") "no withheld value is drawn"
+                    | other -> failtestf "unexpected row %A" other
+
+                Expect.equal (rows |> List.length) 2 "both brands"
+            | other -> failtestf "expected one table, got %A" other
+
+            let notes = summaryElements document |> List.choose paragraphText
+
+            for brand in [ "acme"; "zenith" ] do
+                Expect.isTrue
+                    (notes
+                     |> List.exists (fun n -> n.Contains $"{brand}, cost" && n.Contains "withheld"))
+                    $"the withheld cost of {brand} is named"
+
+            Expect.isFalse
+                (citations
+                 |> List.exists (fun c -> cost |> Map.exists (fun _ f -> f.FactId = c.Reference)))
+                "no cost fact is cited"
+        }
+
+        test
+            "a requested breakdown renders with every number a gated fact; an unregistered kind is refused and the run publishes" {
+            let definition =
+                summaryRun
+                |> GroundedNarrativeDefinition.withRequestBuilder "breakdown" (fun context request ->
+                    PresentationNarrative.project (readThrough context) request.Json)
+
+            let deployment =
+                deployFor definition (fun id rendering ->
+                    answerWith [ citing id rendering ] [
+                        request "breakdown" [ "revenue" ]
+                        request "pie" [ "revenue" ]
+                    ])
+
+            let document, citations = publishedDocument (run deployment)
+            let revenue = brandFacts deployment "revenue"
+
+            match tablesIn (summaryElements document) with
+            | [ columns, rows ] ->
+                Expect.equal (columns |> List.map fst) [ "brand"; "revenue" ] "one metric column"
+
+                let cited =
+                    rows
+                    |> List.map (function
+                        | [ InlineSpan.Text subject ] :: [ InlineSpan.Metric(_, value, Some factId) ] :: [] ->
+                            Expect.equal factId revenue.[subject].FactId "the cell cites the Fact it states"
+                            Expect.contains (NarrativeCitation.factIds citations) factId "a fact the gate admitted"
+                            subject, value
+                        | other -> failtestf "unexpected row %A" other)
+
+                Expect.equal (cited |> List.map fst) [ "acme"; "zenith" ] "largest first"
+            | other -> failtestf "expected one table, got %A" other
+
+            let row = lastRow deployment
+            Expect.equal (row.GetProperty("Outcome").GetString()) "published" "the run published"
+            Expect.equal (row.GetProperty("Projections").GetInt32()) 1 "one projection drawn"
+
+            let refusals =
+                row.GetProperty("ProjectionRefusals").EnumerateArray()
+                |> Seq.map _.GetString()
+                |> List.ofSeq
+
+            match refusals with
+            | [ refusal ] ->
+                Expect.stringContains refusal "kind 'pie'" "the refusal names the request"
+                Expect.stringContains refusal "no builder is registered" "and why"
+                Expect.stringContains refusal "'breakdown'" "and what is registered"
+            | other -> failtestf "expected one refusal, got %A" other
+
+            Expect.stringContains
+                (systemPrompt definition [ "query_facts" ])
+                "\"projections\""
+                "the model is told the request form"
+        }
+
+        test "a digit in a conjecture is refused, citation token or not" {
+            for conjecture in
+                [
+                    JsonSerializer.Serialize {|
+                        conjecture = "Perhaps the 2 new stores helped."
+                    |}
+                    JsonSerializer.Serialize "Trading held up. {{perhaps acme rose [[Revenue|1250|anything]]}}"
+                ] do
+                let deployment =
+                    deployFor (summaryRun |> GroundedNarrativeDefinition.withConjecture) (fun id rendering ->
+                        answerWith [ citing id rendering; conjecture ] [])
+
+                match run deployment with
+                | GroundedNarrativeRefused offences ->
+                    Expect.contains
+                        (offences |> List.map _.Reason)
+                        UnreferencedNumber
+                        "the digit is an unreferenced number"
+
+                    Expect.isEmpty (published deployment) "and nothing was published"
+                | other -> failtestf "expected a refusal, got %s" (GroundedNarrativeOutcome.describe other)
+        }
+
+        test "a conjecture renders as a labelled callout, and the audit row counts it" {
+            let deployment =
+                deployFor (summaryRun |> GroundedNarrativeDefinition.withConjecture) (fun id rendering ->
+                    answerWith [
+                        JsonSerializer.Serialize
+                            $"Acme revenue was [[Revenue|{rendering}|{id}]] in September. {{{{perhaps the weather helped}}}}"
+                        JsonSerializer.Serialize {|
+                            conjecture = "The launch may have drawn new shoppers."
+                        |}
+                    ] [])
+
+            let document, _ = publishedDocument (run deployment)
+
+            let callouts =
+                summaryElements document
+                |> List.choose (function
+                    | NarrativeElement.Callout(_, spans) -> Some spans
+                    | _ -> None)
+
+            Expect.equal
+                callouts
+                [
+                    [
+                        InlineSpan.Strong ConjectureLabel
+                        InlineSpan.Text ": perhaps the weather helped"
+                    ]
+                    [
+                        InlineSpan.Strong ConjectureLabel
+                        InlineSpan.Text ": The launch may have drawn new shoppers."
+                    ]
+                ]
+                "each conjecture is a labelled callout, after the prose it sat in"
+
+            Expect.isFalse
+                (summaryElements document
+                 |> List.choose paragraphText
+                 |> List.exists (fun p -> p.Contains "weather"))
+                "and is not left in the paragraph"
+
+            Expect.equal ((lastRow deployment).GetProperty("Conjectures").GetInt32()) 2 "the audit row counts both"
+        }
+
+        test "a run with neither renders exactly as before" {
+            let spans = parseParagraph "Acme revenue was [[Revenue|1250|fact-id]] in September."
+
+            let provenance = {
+                ModuleId = "sales"
+                PageRoute = None
+                GeneratedAt = DateTimeOffset(2026, 10, 29, 0, 0, 0, TimeSpan.Zero)
+                SettingsKey = "grounded-narrative:monthly-brand-summary"
+                SettingsDisplay = [ "run", "monthly-brand-summary" ]
+            }
+
+            let before: NarrativeDocument = {
+                Title = summaryRun.Title
+                Subtitle = None
+                Sections = [
+                    {
+                        Id = "summary"
+                        Heading = "Summary"
+                        Subheading = None
+                        Elements = [ NarrativeElement.Paragraph spans; NarrativeElement.Divider ]
+                    }
+                ]
+                Provenance = Some provenance
+                Lang = None
+                CanonicalUrl = None
+            }
+
+            let answer =
+                """{"sections":[{"id":"summary","paragraphs":["Acme revenue was [[Revenue|1250|fact-id]] in September.",""]}]}"""
+
+            match parseOutput answer with
+            | Ok drafts ->
+                Expect.isTrue
+                    (drafts |> List.forall (fun d -> List.isEmpty d.Projections))
+                    "an answer without projections decodes with none"
+
+                match assemble summaryRun drafts [ "summary", [ NarrativeElement.Divider ] ] [] provenance with
+                | Ok document ->
+                    let json (d: NarrativeDocument) =
+                        JsonSerializer.Serialize(d, ToolUp.Remoting.Json.SystemTextJson.FableConverters.create ())
+
+                    Expect.equal (json document) (json before) "the document is byte-identical"
+                | Error reason -> failtestf "assemble refused: %s" reason
+            | Error reason -> failtestf "parse refused: %s" reason
+
+            Expect.equal
+                (rulesFor summaryRun)
+                [
+                    "The report is REFUSED, and never published, if any of these is broken:"
+                    "- Write every figure as a citation token [[label|value|reference]]: the label in words with no digits, the value exactly as the tool rendered it (or that figure rounded), the reference the fact's id (or kind:id for a declared reference)."
+                    "- Write no other digits anywhere, and no numbers in words."
+                    "- Cite only figures a tool returned. Do not compute differences, ratios or percentages yourself."
+                    "- Tables and charts are added for you. Write prose only."
+                    ""
+                    "Answer with ONLY a JSON object: {\"sections\":[{\"id\":\"<section id>\",\"paragraphs\":[\"...\"]}]}"
+                ]
+                "and the instruction's rules are the rules it always had"
+        }
+    ]
+
 let tests =
     testList "Phase 985 — grounded narrative generation" [
         pureGateTests
@@ -2525,4 +2919,5 @@ let tests =
         budgetTests
         wordingTests
         doubleRunTests
+        projectionTests
     ]

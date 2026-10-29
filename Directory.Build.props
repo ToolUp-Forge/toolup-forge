@@ -880,6 +880,19 @@
       `docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md`.
     -->
     <!--
+      Phase 1136 rides the 0.37.0 draft (untagged, publicly unpinned; its
+      surface movement is breaking-class, the draft's own class, not above
+      it): `GroundedNarrativeDefinition.Project` takes a
+      `GroundedProjectionContext` instead of the scope id, and the record
+      gains `RequestBuilders` and `AllowsConjecture`, so a full record
+      construction changes; `GroundedNarrativeRun.parseOutput` / `assemble`
+      take `GroundedSectionDraft`. The rest is additive
+      (`withProjectionContext`, `withRequestBuilder`, `withConjecture`,
+      `rulesFor`, `PresentationNarrative.draw` / `project`). A run that uses
+      neither form renders and is instructed exactly as before. Migration
+      recipe: `docs/migrations/1136-requested-projections.md`.
+    -->
+    <!--
       Phase 1131 rides the 0.37.0 draft (untagged, publicly unpinned; its
       surface movement is breaking-class, the draft's own class, not above
       it): `ToolUp.AI.Core`'s `AIStreamEvent` gains `BlockAttached`, so an

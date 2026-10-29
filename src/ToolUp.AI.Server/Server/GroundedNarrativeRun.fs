@@ -48,7 +48,8 @@ module ToolUp.AI.GroundedNarrativeRun
 // no reference (`[[label|value]]`) becomes a span with none, which the gate
 // refuses; a token that does not parse stays text, which — carrying its
 // digits — the gate refuses too. The model never writes the title, the
-// section headings, a table or a chart.
+// section headings, a table or a chart: it may REQUEST a table, and may mark
+// a hypothesis as conjecture (Phase 1136, below).
 
 open System
 open System.Text
@@ -145,9 +146,79 @@ let parseParagraph (text: string) : InlineSpan list =
 
     List.ofSeq spans
 
-/// Read the model's final answer: section id → paragraphs. `Error` names
-/// what is wrong with the format.
-let parseOutput (content: string) : Result<(string * InlineSpan list list) list, string> =
+// **Conjecture (Phase 1136).** A hypothesis may be written only if it is
+// marked as one: a paragraph `{"conjecture":"..."}` in place of a string, or
+// a span `{{...}}` inside one. Either renders as a labelled callout after the
+// prose it sits in. Its text is kept as plain text — a citation token inside
+// it is NOT read as a figure — so any digit in a conjecture reaches the gate
+// as an unreferenced number and the narrative is refused: a number is a fact
+// or it is not written.
+//
+// **Requested projections (Phase 1136).** A section may carry
+// `"projections":[{...}]`, each a request object naming its `kind`. The run
+// builds each through the builder the definition registered for that kind,
+// under the run's projection context, and checks it through the grounding
+// gate on its own; a request that cannot be built or is not grounded is
+// refused by name on the audit row, and the rest of the run goes on.
+
+let private conjectureToken =
+    Regex(@"\{\{([^{}]*)\}\}", RegexOptions.CultureInvariant)
+
+/// One block of a section's prose as the model wrote it.
+type GroundedProse =
+    /// A paragraph of spans, citation tokens read as `Metric` spans.
+    | ProseParagraph of InlineSpan list
+    /// A marked hypothesis, as plain text.
+    | ProseConjecture of string
+
+/// One section of the model's answer.
+type GroundedSectionDraft = {
+    /// The section id the model wrote; `""` when it wrote none.
+    Id: string
+    /// The section's prose, in the order written.
+    Prose: GroundedProse list
+    /// The projections the model requested for the section.
+    Projections: GroundedProjectionRequest list
+}
+
+/// The heading a conjecture callout carries.
+[<Literal>]
+let ConjectureLabel = "Conjecture — not a recorded fact"
+
+/// The callout a conjecture renders as.
+let conjectureCallout (text: string) : NarrativeElement =
+    Callout(Info, [ Strong ConjectureLabel; Text(": " + text) ])
+
+/// One paragraph string as prose blocks: the paragraph with every `{{...}}`
+/// span lifted out, then each lifted span as a conjecture.
+let private proseOf (text: string) : GroundedProse list =
+    let conjectures =
+        conjectureToken.Matches text
+        |> Seq.map (fun m -> m.Groups[1].Value.Trim())
+        |> Seq.filter (String.IsNullOrWhiteSpace >> not)
+        |> List.ofSeq
+
+    let rest = conjectureToken.Replace(text, "")
+
+    let paragraph =
+        if String.IsNullOrWhiteSpace rest then
+            []
+        else
+            [ ProseParagraph(parseParagraph rest) ]
+
+    paragraph @ (conjectures |> List.map ProseConjecture)
+
+let private stringProperty (name: string) (element: JsonElement) : string option =
+    match element.TryGetProperty name with
+    | true, v when v.ValueKind = JsonValueKind.String -> Some(v.GetString())
+    | _ -> None
+
+/// Read the model's final answer: one draft per section. `Error` names
+/// what is wrong with the format. A paragraph that is neither a string nor
+/// a conjecture object is skipped, as before; a projection that is not an
+/// object, or names no kind, is kept with an empty kind so the run refuses
+/// it by name rather than dropping it.
+let parseOutput (content: string) : Result<GroundedSectionDraft list, string> =
     if String.IsNullOrWhiteSpace content then
         Error "the model returned no narrative"
     else
@@ -164,21 +235,46 @@ let parseOutput (content: string) : Result<(string * InlineSpan list list) list,
                 | true, sections when sections.ValueKind = JsonValueKind.Array ->
                     sections.EnumerateArray()
                     |> Seq.map (fun section ->
-                        let id =
-                            match section.TryGetProperty "id" with
-                            | true, v when v.ValueKind = JsonValueKind.String -> v.GetString()
-                            | _ -> ""
-
-                        let paragraphs =
+                        let prose =
                             match section.TryGetProperty "paragraphs" with
                             | true, ps when ps.ValueKind = JsonValueKind.Array ->
                                 ps.EnumerateArray()
-                                |> Seq.filter (fun p -> p.ValueKind = JsonValueKind.String)
-                                |> Seq.map (fun p -> parseParagraph (p.GetString()))
+                                |> Seq.collect (fun p ->
+                                    match p.ValueKind with
+                                    | JsonValueKind.String -> proseOf (p.GetString())
+                                    | JsonValueKind.Object ->
+                                        match stringProperty "conjecture" p with
+                                        | Some c when not (String.IsNullOrWhiteSpace c) -> [
+                                            ProseConjecture(c.Trim())
+                                          ]
+                                        | _ -> []
+                                    | _ -> [])
                                 |> List.ofSeq
                             | _ -> []
 
-                        id, paragraphs)
+                        let projections =
+                            match section.TryGetProperty "projections" with
+                            | true, rs when rs.ValueKind = JsonValueKind.Array ->
+                                rs.EnumerateArray()
+                                |> Seq.map (fun r ->
+                                    let kind =
+                                        if r.ValueKind = JsonValueKind.Object then
+                                            stringProperty "kind" r |> Option.defaultValue ""
+                                        else
+                                            ""
+
+                                    {
+                                        Kind = kind.Trim().ToLowerInvariant()
+                                        Json = r.GetRawText()
+                                    })
+                                |> List.ofSeq
+                            | _ -> []
+
+                        {
+                            Id = stringProperty "id" section |> Option.defaultValue ""
+                            Prose = prose
+                            Projections = projections
+                        })
                     |> List.ofSeq
                     |> Ok
                 | _ -> Error "the model's answer has no \"sections\" array"
@@ -186,28 +282,33 @@ let parseOutput (content: string) : Result<(string * InlineSpan list list) list,
                 Error(sprintf "the model's answer is not valid JSON: %s" ex.Message)
 
 /// The narrative document a run publishes: the registered shape's title and
-/// headings, the model's prose per section, then that section's projections.
-/// `Error` when the model wrote a section the shape does not declare.
+/// headings, then per section the model's prose (a conjecture as its
+/// labelled callout), the deterministic projections, and the requested
+/// projections that were built and grounded. `Error` when the model wrote
+/// a section the shape does not declare.
 let assemble
     (definition: GroundedNarrativeDefinition)
-    (prose: (string * InlineSpan list list) list)
+    (drafts: GroundedSectionDraft list)
     (projections: (string * NarrativeElement list) list)
+    (requested: (string * NarrativeElement list) list)
     (provenance: NarrativeProvenance)
     : Result<NarrativeDocument, string> =
     let declared = definition.Sections |> List.map _.Id |> Set.ofList
 
-    match prose |> List.map fst |> List.filter (declared.Contains >> not) with
+    match drafts |> List.map _.Id |> List.filter (declared.Contains >> not) with
     | unknown :: _ -> Error(sprintf "the model wrote section '%s', which the run does not declare" unknown)
     | [] ->
         let proseFor id =
-            prose
-            |> List.filter (fun (sid, _) -> sid = id)
-            |> List.collect snd
-            |> List.filter (List.isEmpty >> not)
-            |> List.map Paragraph
+            drafts
+            |> List.filter (fun d -> d.Id = id)
+            |> List.collect _.Prose
+            |> List.choose (function
+                | ProseParagraph [] -> None
+                | ProseParagraph spans -> Some(Paragraph spans)
+                | ProseConjecture text -> Some(conjectureCallout text))
 
-        let projectedFor id =
-            projections |> List.filter (fun (sid, _) -> sid = id) |> List.collect snd
+        let elementsFor (source: (string * NarrativeElement list) list) id =
+            source |> List.filter (fun (sid, _) -> sid = id) |> List.collect snd
 
         Ok {
             Title = definition.Title
@@ -218,28 +319,70 @@ let assemble
                     Id = shape.Id
                     Heading = shape.Heading
                     Subheading = None
-                    Elements = proseFor shape.Id @ projectedFor shape.Id
+                    Elements =
+                        proseFor shape.Id
+                        @ elementsFor projections shape.Id
+                        @ elementsFor requested shape.Id
                 })
             Provenance = Some provenance
             Lang = None
             CanonicalUrl = None
         }
 
+/// The most projections one run may request. The rest are refused by name:
+/// each request is a fact read and a gate pass, and a report is not a dump.
+[<Literal>]
+let MaxRequestedProjections = 8
+
 /// The grounding rules every run's instruction ends with, after the wording
 /// . A
 /// report that breaks one is refused by the gate whatever the wording says.
-let rules: string list = [
+let private citationRules: string list = [
     "The report is REFUSED, and never published, if any of these is broken:"
     "- Write every figure as a citation token [[label|value|reference]]: the label in words with no digits, the value exactly as the tool rendered it (or that figure rounded), the reference the fact's id (or kind:id for a declared reference)."
     "- Write no other digits anywhere, and no numbers in words."
     "- Cite only figures a tool returned. Do not compute differences, ratios or percentages yourself."
-    "- Tables and charts are added for you. Write prose only."
-    ""
-    "Answer with ONLY a JSON object: {\"sections\":[{\"id\":\"<section id>\",\"paragraphs\":[\"...\"]}]}"
 ]
 
+let private proseOnlyRule =
+    "- Tables and charts are added for you. Write prose only."
+
+let private answerShape =
+    "Answer with ONLY a JSON object: {\"sections\":[{\"id\":\"<section id>\",\"paragraphs\":[\"...\"]}]}"
+
+let rules: string list = citationRules @ [ proseOnlyRule; ""; answerShape ]
+
+/// Phase 1136 — the rules a definition's run ends with. A definition that
+/// registers no request builder and allows no conjecture gets `rules`,
+/// byte for byte. Registered builders replace the prose-only line with the
+/// projection request form, naming the registered kinds; an allowed
+/// conjecture adds the conjecture form. The answer shape names what the
+/// run reads.
+let rulesFor (definition: GroundedNarrativeDefinition) : string list =
+    let kinds = definition.RequestBuilders |> Map.toList |> List.map fst
+
+    if List.isEmpty kinds && not definition.AllowsConjecture then
+        rules
+    else
+        [
+            yield! citationRules
+            if List.isEmpty kinds then
+                proseOnlyRule
+            else
+                "- Never write a table or its rows. To show one, add a request to the section's \"projections\": an object naming its \"kind\" ("
+                + String.concat ", " kinds
+                + "), \"tableId\", \"metrics\", optionally \"subjectPrefix\" and \"subjectLevel\", and \"period\" ({\"day\":\"yyyy-MM-dd\",\"rangeDays\":n}). The table is drawn from the facts for you. Request one only where a finding calls for it."
+            if definition.AllowsConjecture then
+                "- A hypothesis you cannot cite may be written only as a conjecture: a paragraph {\"conjecture\":\"...\"} in place of a string, or {{...}} inside a paragraph. It is shown labelled as conjecture, and must carry no figure, no number in words and no citation."
+            ""
+            if List.isEmpty kinds then
+                answerShape
+            else
+                "Answer with ONLY a JSON object: {\"sections\":[{\"id\":\"<section id>\",\"paragraphs\":[\"...\"],\"projections\":[]}]}"
+        ]
+
 /// The instruction the model works from: the definition's wording (the
-/// declared one, or an administrator's in its place), then `rules`.
+/// declared one, or an administrator's in its place), then `rulesFor` it.
 let systemPrompt (definition: GroundedNarrativeDefinition) (toolNames: string list) : string =
     let sb = StringBuilder()
     let line (s: string) = sb.AppendLine s |> ignore
@@ -268,7 +411,7 @@ let systemPrompt (definition: GroundedNarrativeDefinition) (toolNames: string li
 
     line ""
 
-    for rule in rules do
+    for rule in rulesFor definition do
         line rule
 
     sb.ToString()
@@ -302,6 +445,13 @@ type internal GroundedNarrativeAuditRow = {
     /// (unreadable, or it no longer fits the declaration), so the run fell
     /// back to the declared wording.
     PromptFallback: string option
+    /// Phase 1136 — how many conjectures the narrative carried.
+    Conjectures: int
+    /// Phase 1136 — how many requested projections were drawn.
+    Projections: int
+    /// Phase 1136 — each requested projection refused, naming the request
+    /// and why. A row written before 1136 reads as none.
+    ProjectionRefusals: string list
 }
 
 module internal GroundedNarrativeAuditRow =
@@ -313,6 +463,8 @@ module internal GroundedNarrativeAuditRow =
 
             if isNull (box row) || String.IsNullOrEmpty row.RunKey then
                 None
+            elif isNull (box row.ProjectionRefusals) then
+                Some { row with ProjectionRefusals = [] }
             else
                 Some row
         with _ ->
@@ -531,6 +683,14 @@ type private GenerationShortfall =
     | GenerationFailed of string
     | GenerationOverBudget of string
 
+/// Phase 1136 — what a run's audit row counts of its conjectures and
+/// requested projections.
+type private RunMarks = {
+    Conjectures: int
+    Projections: int
+    ProjectionRefusals: string list
+}
+
 type GroundedNarrativeRunner
     (services: IServiceProvider, registry: GroundedNarrativeRegistry, options: GroundedNarrativeRunOptions) =
 
@@ -582,6 +742,9 @@ type GroundedNarrativeRunner
                     Detail = Some reason
                     PromptVersion = version
                     PromptFallback = fallback
+                    Conjectures = 0
+                    Projections = 0
+                    ProjectionRefusals = []
                 }
 
             return result reason
@@ -645,12 +808,123 @@ type GroundedNarrativeRunner
         ctx.Items["ToolUp.UserId"] <- box principal
         ctx :> HttpContext, diScope
 
+    /// Phase 1136 — run `project` under the run's projection context: the
+    /// same request context the model's fact tools read through, over its
+    /// own DI scope, disposed when `project` is done.
+    let withProjectionContext
+        (definition: GroundedNarrativeDefinition)
+        (resolved: ResolvedScope)
+        (scope: StorageScope)
+        (project: GroundedProjectionContext -> Async<'T>)
+        : Async<'T> =
+        async {
+            let ctx, diScope = contextFor resolved scope definition.Principal
+
+            try
+                return!
+                    project {
+                        Scope = resolved
+                        Principal = definition.Principal
+                        Surface = definition.Surface
+                        Request = ctx
+                    }
+            finally
+                diScope.Dispose()
+        }
+
+    /// Phase 1136 — build each requested projection through the builder
+    /// registered for its kind, and check what it built through the gate on
+    /// its own. The drawn ones by section, and one refusal per request that
+    /// was not drawn, naming the request and why — an offence by its
+    /// location and reason, never by the value it states.
+    let resolveRequested
+        (gate: INarrativeGroundingGate)
+        (definition: GroundedNarrativeDefinition)
+        (context: GroundedProjectionContext)
+        (drafts: GroundedSectionDraft list)
+        : Async<(string * NarrativeElement list) list * string list> =
+        async {
+            let requests =
+                drafts
+                |> List.collect (fun d -> d.Projections |> List.map (fun r -> d.Id, r))
+                |> List.indexed
+
+            let registered =
+                match definition.RequestBuilders |> Map.toList |> List.map fst with
+                | [] -> "none"
+                | kinds -> kinds |> List.map (sprintf "'%s'") |> String.concat ", "
+
+            let drawn = ResizeArray<string * NarrativeElement list>()
+            let refusals = ResizeArray<string>()
+
+            for (i, (sectionId, request)) in requests do
+                let name =
+                    sprintf
+                        "projection %d (%s) in section '%s'"
+                        (i + 1)
+                        (if request.Kind = "" then
+                             "no kind"
+                         else
+                             sprintf "kind '%s'" request.Kind)
+                        sectionId
+
+                if i >= MaxRequestedProjections then
+                    refusals.Add(sprintf "%s: a run may request at most %d projections" name MaxRequestedProjections)
+                else
+                    match definition.RequestBuilders.TryFind request.Kind with
+                    | None ->
+                        refusals.Add(
+                            sprintf "%s: no builder is registered for that kind; the run registers %s" name registered
+                        )
+                    | Some build ->
+                        let! built = async {
+                            try
+                                return! build context request
+                            with ex ->
+                                return Error(sprintf "the builder failed: %s" ex.Message)
+                        }
+
+                        match built with
+                        | Error why -> refusals.Add(sprintf "%s: %s" name why)
+                        | Ok [] -> refusals.Add(sprintf "%s: the builder drew nothing" name)
+                        | Ok elements ->
+                            let probe: NarrativeDocument = {
+                                Title = definition.Title
+                                Subtitle = None
+                                Sections = [
+                                    {
+                                        Id = sectionId
+                                        Heading = sectionId
+                                        Subheading = None
+                                        Elements = elements
+                                    }
+                                ]
+                                Provenance = None
+                                Lang = None
+                                CanonicalUrl = None
+                            }
+
+                            match!
+                                gate.Check(context.Scope.ScopeId, definition.Principal, definition.Surface, probe)
+                            with
+                            | Grounded _ -> drawn.Add((sectionId, elements))
+                            | Ungrounded offences ->
+                                offences
+                                |> List.map (fun o ->
+                                    sprintf "%s: %s" o.Location (GroundingOffenceReason.describe o.Reason))
+                                |> String.concat "; "
+                                |> sprintf "%s: not grounded: %s" name
+                                |> refusals.Add
+
+            return List.ofSeq drawn, List.ofSeq refusals
+        }
+
     let generate
         (definition: GroundedNarrativeDefinition)
         (resolved: ResolvedScope)
         (scope: StorageScope)
         (provider: IAIProvider)
-        : Async<Result<(string * InlineSpan list list) list, GenerationShortfall>> =
+        : Async<Result<GroundedSectionDraft list, GenerationShortfall>> =
         async {
             let tools = AIToolRegistry()
             tools.RegisterAll(options.Tools |> List.map (fun (def, exec) -> createTool def exec))
@@ -713,6 +987,7 @@ type GroundedNarrativeRunner
         (gate: INarrativeGroundingGate)
         (scope: StorageScope)
         (document: NarrativeDocument)
+        (marks: RunMarks)
         (citations: NarrativeCitation list)
         : Async<GroundedNarrativeOutcome> =
         async {
@@ -769,6 +1044,9 @@ type GroundedNarrativeRunner
                             | Error reason -> Some(sprintf "no certificate: %s" reason)
                         PromptVersion = wording.Version
                         PromptFallback = wording.Fallback
+                        Conjectures = marks.Conjectures
+                        Projections = marks.Projections
+                        ProjectionRefusals = marks.ProjectionRefusals
                     }
 
                 return GroundedNarrativePublished(narrativeId, document, citations, indexed, certificate)
@@ -806,13 +1084,13 @@ type GroundedNarrativeRunner
                     | Error(ProviderUnfunded reason) -> return! unfunded (Some wording) request reason
                     | Error(ProviderUnavailable reason) -> return! failed request reason
                     | Ok provider ->
-                        match! definition.Project request.Scope.ScopeId with
+                        match! withProjectionContext definition request.Scope scope definition.Project with
                         | Error reason -> return! failed request (sprintf "the run's projections failed: %s" reason)
                         | Ok projections ->
                             match! generate definition request.Scope scope provider with
                             | Error(GenerationFailed reason) -> return! failed request reason
                             | Error(GenerationOverBudget reason) -> return! overBudget (Some wording) request reason
-                            | Ok prose ->
+                            | Ok drafts ->
                                 let provenance = {
                                     ModuleId = definition.ModuleId
                                     PageRoute = definition.PageRoute
@@ -821,7 +1099,27 @@ type GroundedNarrativeRunner
                                     SettingsDisplay = [ "run", definition.Key; "trigger", request.Trigger ]
                                 }
 
-                                match assemble definition prose projections provenance with
+                                let! requested, projectionRefusals =
+                                    if drafts |> List.forall (fun d -> List.isEmpty d.Projections) then
+                                        async.Return([], [])
+                                    else
+                                        withProjectionContext definition request.Scope scope (fun context ->
+                                            resolveRequested gate definition context drafts)
+
+                                let marks = {
+                                    Conjectures =
+                                        drafts
+                                        |> List.sumBy (fun d ->
+                                            d.Prose
+                                            |> List.filter (function
+                                                | ProseConjecture _ -> true
+                                                | ProseParagraph _ -> false)
+                                            |> List.length)
+                                    Projections = requested |> List.length
+                                    ProjectionRefusals = projectionRefusals
+                                }
+
+                                match assemble definition drafts projections requested provenance with
                                 | Error reason -> return! failed request reason
                                 | Ok document ->
                                     match!
@@ -833,7 +1131,7 @@ type GroundedNarrativeRunner
                                         )
                                     with
                                     | Grounded citations ->
-                                        return! publish request wording gate scope document citations
+                                        return! publish request wording gate scope document marks citations
                                     | Ungrounded offences ->
                                         do!
                                             record request.Scope.ScopeId GroundedNarrativeEvents.RefusedType {
@@ -847,6 +1145,9 @@ type GroundedNarrativeRunner
                                                 Detail = None
                                                 PromptVersion = wording.Version
                                                 PromptFallback = wording.Fallback
+                                                Conjectures = marks.Conjectures
+                                                Projections = marks.Projections
+                                                ProjectionRefusals = marks.ProjectionRefusals
                                             }
 
                                         return GroundedNarrativeRefused offences
