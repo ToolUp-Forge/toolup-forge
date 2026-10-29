@@ -903,7 +903,24 @@
       `LoopState.messageParts`; a string-returning executor is unchanged.
       Migration recipe: `docs/migrations/1131-tool-result-block.md`.
     -->
-    <Version>0.37.0</Version>
+    <!--
+      Next draft 0.38.0 (v0.37.0 is tagged and published), breaking:
+      Phase 1095 - `IDataSource` gains the abstract `Capabilities:
+      ConnectorCapabilities` member, so every implementer adds one line
+      (codemod rewrite `1095-capabilities-member`); `IWatchableFileSource` and
+      `WatchedObject` move from `ToolUp.DataSources.Common` into
+      `ToolUp.Platform` beside `IDataSource` (codemod rewrite
+      `1095-watch-seam-namespace` for a fully-qualified reference; a type
+      probe on a capability interface is codemod review rule
+      `1095-capability-probe`); `DeclaredDeliveryRefusal` gains `UnscopedJob`
+      and `ObservationFailed`, so an exhaustive match adds two arms. The rest
+      is additive: `DeliveryPlan`, `DeliveryObservation`,
+      `DeclaredDelivery.observe` / `plan` / `execute`, and the
+      `ConnectorCapabilities` readers. Every shipped connector declares what
+      its probes answered, so ingestion is byte-for-byte unchanged. Migration
+      recipe: `docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md`.
+    -->
+    <Version>0.38.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
       DLL. Non-publishable projects (App composition roots, modules,
