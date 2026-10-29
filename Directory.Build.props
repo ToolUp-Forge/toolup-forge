@@ -926,6 +926,19 @@
       `StorageScopeDerivation.tryKeyFromSubject`. Nothing is removed or
       retyped.
     -->
+    <!--
+      Phase 1052 rides the 0.38.0 draft (untagged, publicly unpinned; the
+      draft is already breaking, and so is this: `ServerApp` gains
+      `Contributions`, so a full record literal adds a field - build from
+      `ServerApp.empty`). `ToolUp.Platform.Server` gains `ServiceConfig.append`,
+      `Contribution` / `ContributionKind` / `Contribution.service`,
+      `ServerApp.addContribution`, `ServerApp.addServiceConfig` and
+      `ServerApp.serviceConfig`. Companions now contribute their DI
+      registrations to `Contributions` instead of folding them into
+      `Extensions.ServiceConfig`, so code that read that field to build a
+      provider reads `ServerApp.serviceConfig app`. Migration recipe:
+      `docs/migrations/1052-serviceconfig-append-and-contribution-service.md`.
+    -->
     <Version>0.38.0</Version>
     <!--
       IsPackable defaults to true for SDK-style projects that produce a
