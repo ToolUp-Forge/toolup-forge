@@ -27,11 +27,9 @@
 /// go-red variants, and the comparisons as ROWS — and is compiled into
 /// `ToolUp.Platform.Tests` (Expecto) and into `ToolUp.AI.Client.Tests`
 /// (`node:test`), the `ElmishProofDifferential.fs` precedent. The
-/// extraction itself compiles on both hosts (Phase 850's normaliser);
-/// the Fable host compiles it over the machine-integer `Prims` in
-/// `proofs/oracle/fable/`, which is why every integer crosses into the
-/// model through `Prims.parse_int` and back through `int` — the one
-/// spelling both shims accept.
+/// extraction itself compiles on both hosts: since Phase 957 it is
+/// Custard's, over `bigint` on both, so every integer crosses into the
+/// model through `bigint` and back through `int`.
 ///
 /// ─── The script ─────────────────────────────────────────────────────
 ///
@@ -70,9 +68,9 @@
 /// .NET differential runs" is a checked statement rather than a hope, and
 /// every coverage floor below — measured once — holds on both. The model's
 /// verdicts over the campaign are pinned the same way
-/// (`VerdictFingerprint`), which holds the Fable host's machine-integer
-/// shim to the .NET host's `BigInteger` one over the loop model, the claim
-/// Phase 850 made for the ring.
+/// (`VerdictFingerprint`), which holds the Fable transpilation of the loop
+/// model to the .NET run of it (until Phase 957 the two hosts ran
+/// different `Prims` shims, and this is what held them to each other).
 ///
 /// The comparisons are ROWS (`corpusChecks`): a name, what a violation
 /// means, and a function returning the violations (empty is a pass). Each
@@ -526,10 +524,9 @@ let productionRun (script: Script) : Outcome =
 
 // ─── The extracted machine ───────────────────────────────────────────
 
-/// Into the model's integers. `Prims.int` is `BigInteger` on the .NET
-/// host and `int` on the Fable one; decimal text is what both shims'
-/// `parse_int` read, which is how the extraction spells its own literals.
-let toModelInt (n: int) : Prims.int = Prims.parse_int (string n)
+/// Into the model's integers: `Prims.int` is `bigint` on both hosts since
+/// Phase 957 (Fable carries it as a BigInt).
+let toModelInt (n: int) : bigint = bigint n
 
 let private toModelEv (ev: Ev) : ElmishLoop.ev<int> =
     match ev with

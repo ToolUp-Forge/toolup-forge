@@ -35,8 +35,8 @@ open ToolUp.Platform.Tests.Client.ElmishProofDifferential
 // Fable pack replays it against the transpiled runtime. Until Phase 850
 // only this host could compile the extraction (see the header of
 // `Client/ElmishProofDifferential.fs`); since 850 the Fable pack compiles
-// the ring extraction too and runs it live, and the corpus doubles as the
-// check that the two hosts' `Prims` shims compute the same model.
+// the ring extraction too and runs it live, and the corpus holds the
+// transpiled model to the verdicts this host recorded.
 //
 // The go-red cases are committed and asserted CAUGHT, and the campaign
 // asserts it reached the grow step and the shortcut — a differential
@@ -70,16 +70,16 @@ let private ofModelOutput (out: ElmishRing.opt<ElmishRing.slot<int>>) : Result<i
 /// The extracted model over an op sequence: the outputs and the final
 /// ring, so the campaign can also say how far it grew.
 let private modelRing (capacity: int) (ops: RingOp list) : int option list * ElmishRing.ring<int> =
-    match ElmishRing.run (ElmishRing.create (big capacity)) (toModelOps ops) with
-    | ElmishRing.Pair(ring, outs) ->
-        let mapped =
-            outs
-            |> List.map (fun o ->
-                match ofModelOutput o with
-                | Ok v -> v
-                | Error e -> failtest e)
+    let result = ElmishRing.run (ElmishRing.create (big capacity)) (toModelOps ops)
 
-        mapped, ring
+    let mapped =
+        result.second
+        |> List.map (fun o ->
+            match ofModelOutput o with
+            | Ok v -> v
+            | Error e -> failtest e)
+
+    mapped, result.first
 
 let private modelSlots (ring: ElmishRing.ring<int>) : int =
     match ring with
@@ -90,14 +90,12 @@ let private modelSlots (ring: ElmishRing.ring<int>) : int =
 /// subscribes are the input's ids, so the model's pairs map back to ids
 /// directly.
 let private modelDiffShape (input: DiffInput) : DiffShape =
-    let active = input.Active |> List.map (fun (k, id) -> ElmishSub.Pair(k, id))
-    let requested = input.Requested |> List.map (fun (k, id) -> ElmishSub.Pair(k, id))
+    let toPair (k: SubId, id: int) : ElmishSub.pair<SubId, int> = { first = k; second = id }
+    let active = input.Active |> List.map toPair
+    let requested = input.Requested |> List.map toPair
 
     let ofPairs (xs: ElmishSub.pair<SubId, int> list) =
-        xs
-        |> List.map (fun p ->
-            match p with
-            | ElmishSub.Pair(k, id) -> k, id)
+        xs |> List.map (fun p -> p.first, p.second)
 
     let d = ElmishSub.diff active requested
 
@@ -106,14 +104,13 @@ let private modelDiffShape (input: DiffInput) : DiffShape =
     let start (_: SubId) (id: int) : ElmishSub.opt<int> = ElmishSub.OSome id
     let next = ElmishSub.change start d
 
-    match d with
-    | ElmishSub.Diff(dupes, toStop, toKeep, toStart) -> {
-        Dupes = dupes
-        ToStop = ofPairs toStop
-        ToKeep = ofPairs toKeep
-        ToStart = ofPairs toStart
+    {
+        Dupes = d.dupes
+        ToStop = ofPairs d.to_stop
+        ToKeep = ofPairs d.to_keep
+        ToStart = ofPairs d.to_start
         ChangeKeys = ofPairs next |> List.map fst
-      }
+    }
 
 // ─── The campaign, with the model's verdicts ─────────────────────────
 
@@ -213,14 +210,13 @@ let private MaxGrowable = 1073741823UL
 /// that would be trusted rather than proved: the `int` capacity widened
 /// to the extraction's `uint64`, the placeholder the constructor fills
 /// unwritten slots with, and a refused push surfaced as an exception.
-type private ArrayRing<'item>(ring: ElmishRingArray.elmishRingArray_ring<'item>) =
-    new(size: int) = ArrayRing(ElmishRingArray.elmishRingArray_create (uint64 (max size 0)) Unchecked.defaultof<'item>)
+type private ArrayRing<'item>(ring: ElmishRingArray.ring<'item>) =
+    new(size: int) = ArrayRing(ElmishRingArray.create (uint64 (max size 0)) Unchecked.defaultof<'item>)
 
-    member _.Pop() : 'item option =
-        ElmishRingArray.elmishRingArray_pop ring
+    member _.Pop() : 'item option = ElmishRingArray.pop ring
 
     member _.Push(item: 'item) : unit =
-        if not (ElmishRingArray.elmishRingArray_push ring item) then
+        if not (ElmishRingArray.push ring item) then
             invalidOp ArrayRingCeilingMessage
 
     /// The backing array's length — read by the campaign, never by a client.
@@ -389,7 +385,7 @@ let private arrayRingTests =
             // which is exactly what the model's refusal branch says it does.
             // A ring that really holds a billion slots is the theorem's to
             // cover, not a test's to allocate.
-            let atCeiling () : ElmishRingArray.elmishRingArray_ring<int> = {
+            let atCeiling () : ElmishRingArray.ring<int> = {
                 items = ref [| 10; 11; 12; 13; 14; 15; 16; 17 |]
                 cap = ref (MaxGrowable + 1UL)
                 wix = ref 2UL
@@ -402,7 +398,7 @@ let private arrayRingTests =
             let before = raw.items.Value
 
             Expect.isFalse
-                (ElmishRingArray.elmishRingArray_push raw 99)
+                (ElmishRingArray.push raw 99)
                 "the extraction refuses the push that would grow past max_growable"
 
             Expect.isTrue (obj.ReferenceEquals(raw.items.Value, before)) "the refused push kept the array"
@@ -413,7 +409,7 @@ let private arrayRingTests =
                 (MaxGrowable + 1UL, 2UL, 3UL, true)
                 "the refused push moved no index"
 
-            Expect.equal (ElmishRingArray.elmishRingArray_pop raw) (Some 13) "the oldest unread item is still first"
+            Expect.equal (ElmishRingArray.pop raw) (Some 13) "the oldest unread item is still first"
 
             let rb = ArrayRing<int>(atCeiling ())
 
@@ -709,13 +705,11 @@ let tests =
                 ElmishRing.Writable([ ElmishRing.Placeholder ], big 0)
 
             let outs =
-                match ElmishRing.run one [ ElmishRing.Push 1; ElmishRing.Push 2; ElmishRing.Pop ] with
-                | ElmishRing.Pair(_, outs) ->
-                    outs
-                    |> List.map (fun o ->
-                        match ofModelOutput o with
-                        | Ok v -> v
-                        | Error e -> failtest e)
+                (ElmishRing.run one [ ElmishRing.Push 1; ElmishRing.Push 2; ElmishRing.Pop ]).second
+                |> List.map (fun o ->
+                    match ofModelOutput o with
+                    | Ok v -> v
+                    | Error e -> failtest e)
 
             Expect.equal
                 outs

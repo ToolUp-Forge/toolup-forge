@@ -20,18 +20,20 @@
     to an error tree-wide (Phase 624); this file states the same promotion
     below, so the oracle is under the rule exactly as authored code is, and
     `ArchitectureFitness.fs0025ExemptPrefixes` no longer names this
-    subtree. Until Phase 1035 that was impossible: the F* extractor emits
-    one field projector per constructor argument, each a single-case
-    `match` over a multi-case union, and nobody can fix a file a byte-diff
-    holds identical to the extractor's output. Since 1035
-    `normalise-extraction.fsx` completes each such match with one explicit,
-    loudly failing arm per missing case — the root policy's own
-    prescription for an unreachable case — and since 1037 `check.ps1`
-    strips the FS0025 suppression Custard's backend writes into its
-    `#nowarn` line, so every committed extraction compiles with the rule
-    on. A future extraction shape the normaliser does not complete now
-    fails BOTH the proof leg's build and the solution build, by name,
-    rather than compiling into a silent warning.
+    subtree. Until Phase 1035 that was impossible: the legacy F* printer
+    emitted one field projector per constructor argument, each a
+    single-case `match` over a multi-case union, and nobody can fix a file
+    a byte-diff holds identical to the extractor's output. Phase 1035's
+    normaliser completed those matches; Phase 1037 made `check.ps1` strip
+    the FS0025 suppression Custard's backend writes into its `#nowarn`
+    line; and since Phase 957 every extraction is Custard's, which emits no
+    projectors, so the normaliser is gone and the one strip is the whole of
+    it. A match F* leaves incomplete because it erased the refinement that
+    made it total (the decoder's `item_at`) is the MODEL's to complete, by
+    a respelling that changes no theorem — so every committed extraction
+    compiles with the rule on, and a new such shape fails BOTH the proof
+    leg's build and the solution build, by name, rather than compiling into
+    a silent warning.
 
     WHAT IS LOST by not importing the root, so nobody has to re-derive it:
     the package metadata and version guarded on `IsPackable != false`, and

@@ -187,17 +187,32 @@
     "rewritten entries are the policy row, the three proved rows that moved (`-is-queue`, `-push-refines`,",
     "`-create-refines`), the two differential rows and the measurement, three `assumed` rows (the ceiling, the extractor,",
     "the wrapper) and `-not-shipped`; the second appended entry is the `tested` finding",
-    "`elmish-array-ring-slower-under-fable-steady-state`."
+    "`elmish-array-ring-slower-under-fable-steady-state`.",
+    "Phase 957 - the eight models move to Custard's F# backend - moved the pinned prover to v2026.10.11, the first",
+    "release carrying the two fixes Phase 955 reported (#4626, #4627), and found the route change it was to make on",
+    "green had become the only route: upstream #4653 made Custard the only extraction backend, so the release has no",
+    "legacy printer, no --extract and no --custard_backend, and --codegen FSharp names Custard's F# backend. All nine",
+    "models now go through ONE whole-program Custard run, split per module (proofs/oracle/custard/); the layout",
+    "normaliser and both hand-written Prims shims are deleted. REWROTE five entries and moved no theorem:",
+    "`extraction-route-stays-legacy` is now the dated decision to migrate, naming the release;",
+    "`elmish-fable-shim-machine-integers` moves from `assumed` to `tested` - there is no shim, both hosts run the",
+    "prover's bigint, and the corpus replay and the fingerprint pins hold Fable's transpilation of each model to the",
+    ".NET run of it; `elmish-array-ring-fable-support-stand-in` is restated for a stand-in the leg DERIVES from the",
+    "generated support library and byte-holds, no longer an empty hand-written module; `runtime-shim-hand-written`",
+    "is restated for a support library the extractor writes, byte-held and compiled as generated;",
+    "`toolchain-trusted` names Custard. One model respelling, no theorem moved: `RemotingDecode.item_at` over",
+    "List.Tot.hd / List.Tot.tl, because F* erases the refinement that made its match total and Custard emits the",
+    "match as F* wrote it (FS0025 under the oracle's incomplete-match rule); every lemma over it checks unchanged."
   ],
   "kind": "proofs",
   "version": 1,
   "subject": "toolup-forge",
-  "$scope": "the proved models under proofs/: ToolUp.Remoting.Decode - the combinator algebra over the closed MessagePack value model (Phase 787); the disclosure algebra - DisclosureEgress.evaluate plus the population fold PopulationDisclosure.fold / valuesWithheld / disclosedStats (Phase 790); and the AI tool gate - ToolGate.decideDeclared, AIToolRegistry.ListAccessible and the dispatch-site re-check over the declared ToolEffect class (Phase 793); and the model-input value - the closed value every provider call is given, its smart constructor, the assembly a caller folds over it and the pure render (Phase 792); and the taint flow - the TaintLabel lattice, the labelled transform algebra fold and DisclosureTaint.analyze's conjunction (Phase 795); and the Elmish runtime's ring buffer and subscription diff - RingBuffer<'item> proved a FIFO queue through every grow, and Sub.Internal.diff / NewSubs.calculate / Fx.change proved to start, stop and keep exactly what their comment says, on the shortcut path too (Phase 788); and the Elmish ring as a stateful array - the same ring over Pulse.Lib.Vec, refining the ring model, extracted through Custard's F# backend and run beside the shipped ring on both hosts without replacing it (Phase 955); and the array ring's whole-sequence theorem up to the first refused push, with its ceiling lifted under the stated premise SizeT.fits_u32, and the measurement that stopped its replacement of the shipped ring (Phase 956)",
+  "$scope": "the proved models under proofs/: ToolUp.Remoting.Decode - the combinator algebra over the closed MessagePack value model (Phase 787); the disclosure algebra - DisclosureEgress.evaluate plus the population fold PopulationDisclosure.fold / valuesWithheld / disclosedStats (Phase 790); and the AI tool gate - ToolGate.decideDeclared, AIToolRegistry.ListAccessible and the dispatch-site re-check over the declared ToolEffect class (Phase 793); and the model-input value - the closed value every provider call is given, its smart constructor, the assembly a caller folds over it and the pure render (Phase 792); and the taint flow - the TaintLabel lattice, the labelled transform algebra fold and DisclosureTaint.analyze's conjunction (Phase 795); and the Elmish runtime's ring buffer and subscription diff - RingBuffer<'item> proved a FIFO queue through every grow, and Sub.Internal.diff / NewSubs.calculate / Fx.change proved to start, stop and keep exactly what their comment says, on the shortcut path too (Phase 788); and the Elmish ring as a stateful array - the same ring over Pulse.Lib.Vec, refining the ring model, extracted through Custard's F# backend and run beside the shipped ring on both hosts without replacing it (Phase 955); and the array ring's whole-sequence theorem up to the first refused push, with its ceiling lifted under the stated premise SizeT.fits_u32, and the measurement that stopped its replacement of the shipped ring (Phase 956); all nine extracted to F# in one run of Custard's F# backend, split per module, the only extraction route the pinned release has (Phase 957)",
   "$provers": {
     "fstar-pinned": {
       "tool": "fstar",
       "pin": "proofs/fstar-pin.json",
-      "version": "v2026.09.27",
+      "version": "v2026.10.11",
       "solver": "z3 4.13.3",
       "leg": "proofs/check.ps1",
       "reproducibility": "proof hints no longer exist in this prover, so the pin, a margin on --z3rlimit, and --quake 3 over three cold runs are what stand in for them"
@@ -339,9 +354,9 @@
     {
       "id": "toolchain-trusted",
       "level": "assumed",
-      "claim": "The extractor and the F# compiler are trusted. The theorem is about the model; the code that runs is the extraction, and nothing verifies that the extraction preserves semantics.",
+      "claim": "The extractor and the F# compiler are trusted. The theorem is about the model; the code that runs is the extraction, and nothing verifies that the extraction preserves semantics. Since Phase 957 the extractor is Custard's F# backend (F* v2026.10.11, the release that made Custard the only extraction backend), run once over all nine models with --custard_split; until then the eight first-order models went through F*'s legacy F# printer, re-laid by a normaliser this repository wrote.",
       "evidence": {
-        "assumption": "the F* extractor and the F# compiler are correct"
+        "assumption": "Custard's F# backend - its compilation of the checked program, its printer and the support library it writes - and the F# compiler are correct"
       },
       "mitigation": "the differential host runs the EXTRACTION, not the model, so an extraction defect that changes behaviour on any corpus payload is caught there"
     },
@@ -357,10 +372,10 @@
     {
       "id": "runtime-shim-hand-written",
       "level": "assumed",
-      "claim": "The extractor's F# backend ships no runtime, so the nine names it references are supplied by a hand-written shim.",
+      "claim": "Since Phase 957 the runtime the extraction references is the support library the extractor itself writes beside it (FStarCustard.fs: Prims over bigint, FStar.List.Tot.Base, strings, characters), byte-held by the leg and compiled as generated; nothing between the prover's output and the host is hand-written. Until Phase 957 the legacy F# backend shipped no runtime, and the nine names the extraction referenced were supplied by a hand-written Prims shim (proofs/oracle/Prims.fs, deleted).",
       "evidence": {
-        "assumption": "the hand-written Prims shim implements the nine names the extraction references as the prover means them",
-        "artifact": "proofs/oracle/Prims.fs"
+        "assumption": "Custard's support library realises Prims, FStar.List.Tot.Base and the string and character primitives as the prover means them - the same trust as toolchain-trusted, stated here because it is the one place the extraction meets code that is not the model's",
+        "artifact": "proofs/oracle/custard/FStarCustard.fs"
       },
       "mitigation": "small enough to read in a minute; the byte-diff means a model change reaching for a tenth name fails the leg rather than compiling against a widened shim"
     },
@@ -1864,12 +1879,16 @@
     },
     {
       "id": "elmish-fable-shim-machine-integers",
-      "level": "assumed",
-      "claim": "The Fable host's Prims shim (proofs/oracle/fable/Prims.fs) carries Prims.int and Prims.nat as System.Int32, where the ring theorems are about mathematical integers. They hold of the compiled model exactly as long as no index or length in any ring exceeds Int32.MaxValue.",
+      "level": "tested",
+      "claim": "Since Phase 957 the Fable host compiles the SAME Custard extractions the .NET host compiles (proofs/oracle/custard/ElmishRing.fs, ElmishLoop.fs, ElmishRingArray.fs), over the same Prims.int = bigint (a JavaScript BigInt under Fable), against a stand-in for the support library that proofs/check.ps1 cuts from the generated one and byte-holds. There is no machine-integer shim and nothing is assumed about integer width: the theorems are about mathematical integers and the hosts run mathematical integers. What this row now records is the TEST that held the two hosts to each other while there were two shims, which is what it measures still - Fable's transpilation of each model against the .NET run of it. Until Phase 957 (Phases 850-956) this was an `assumed` row: the Fable host's Prims shim (proofs/oracle/fable/Prims.fs, deleted) carried Prims.int as System.Int32 and the theorems held of it exactly as long as no index or length exceeded Int32.MaxValue.",
       "evidence": {
-        "assumption": "no ring's backing array reaches 2^31 slots - the grow step doubles an array of a few dozen slots, and a ring that large would have exhausted the browser first"
-      },
-      "mitigation": "the Fable host's first Phase 850 case runs the machine-integer model over the corpus the .NET host wrote with the BigInteger shim and requires the verdicts identical on every sequence, so the two shims are held to each other on every VerifyFable run; since Phase 884 the dispatch-loop model is held the same way, by the pinned fingerprint of its verdicts over the loop campaign, which both hosts assert; the overflow itself is unreachable in practice and unmodelled on purpose"
+        "family": "Phase 788 - the proved Elmish runtime as oracle (Fable) / Phase 884 - the proved dispatch loop as oracle (Fable)",
+        "host": "src/ToolUp.AI.Client.Tests/ElmishProofOracleTests.fs",
+        "cases": [
+          "Phase 850 - the extracted ring runs directly under Fable and reproduces the verdicts the .NET host recorded",
+          "the model's verdicts over the loop campaign match the pinned fingerprint (the same literal the .NET host asserts)"
+        ]
+      }
     },
     {
       "id": "elmish-ring-extraction-measured",
@@ -2027,11 +2046,11 @@
     {
       "id": "elmish-array-ring-fable-support-stand-in",
       "level": "assumed",
-      "claim": "On the Fable host the module the extraction opens is not the support library Custard generated (FStarCustard.fs, which Fable refuses: 128-bit integers, console writers, exit, a strict UTF-8 decoder) but an EMPTY module of the same name, proofs/oracle/fable/FStarCustard.fs.",
+      "claim": "On the Fable host the module the three Elmish extractions open is not the support library Custard generated (FStarCustard.fs, which Fable refuses: 128-bit integers, console writers, exit, a strict UTF-8 decoder) but proofs/oracle/fable/FStarCustard.fs, which since Phase 957 proofs/check.ps1 DERIVES from the generated file on every run - the `module Prims =` block, verbatim, under a fixed header - and byte-holds. Phase 955's stand-in was hand-written and empty.",
       "evidence": {
-        "assumption": "the array ring's extraction references nothing in the support library, so compiling it against an empty module changes nothing it computes"
+        "assumption": "the three extractions the Fable host compiles reference nothing in the support library outside its Prims block, so compiling them against that block alone changes nothing they compute"
       },
-      "mitigation": "it cannot fail silently: a name the extraction came to need would not resolve and the Fable compile would stop on it; nothing is re-implemented, so there is no second implementation to drift; the .NET oracle compiles the generated library as generated"
+      "mitigation": "it cannot fail silently: a name the extractions came to need would not resolve and the Fable compile would stop on it; nothing is re-implemented, and nothing is hand-written either - the block is cut from the generated file, so a release that changed Prims changes the stand-in and the byte-diff says so; the .NET oracle compiles the generated library as generated"
     },
     {
       "id": "elmish-array-ring-wrapper-hand-written",
@@ -2054,11 +2073,11 @@
     {
       "id": "extraction-route-stays-legacy",
       "level": "policy",
-      "claim": "The eight first-order models stay on the legacy F# printer (`--codegen FSharp`) and the layout normaliser, which upstream now describes as unmaintained; only the array ring goes through Custard's F# backend.",
+      "claim": "DECIDED 2026-10-29 (Phase 957): the eight first-order models MOVE to Custard's F# backend on F* v2026.10.11, and the legacy F# printer and the layout normaliser retire. The decision was made for the phase by the release: upstream FStarLang/FStar#4653 (merged 2026-10-10) made Custard the only extraction backend, so v2026.10.11 - the first release carrying the two fixes Phase 955 reported - has no legacy printer, no --extract and no --custard_backend, and --codegen FSharp names Custard's F# backend. The measurement that was to decide on green is green: in one whole-program run split per module every model emits every definition under a module root (72 / 14 / 9 / 28 / 36 / 15 / 12 / 26 / 13 top-level bindings), every generated project builds on .NET 10 as generated (ModelInput's FS0058 is gone, #4626; RemotingDecode's seven refusals are gone, #4627), all nine modules transpile under Fable and the three the Fable pack runs do so in it, and every differential host is green on both hosts with its case counts unchanged. One model respelling, no theorem moved (RemotingDecode.item_at over List.Tot.hd / tl, because the match F* left incomplete by erasing a refinement is the model's to complete under the oracle's incomplete-match rule). UNTIL THEN (Phase 955, 2026-09-30, on v2026.09.27): the eight stayed on the legacy printer and the normaliser, only the array ring went through Custard.",
       "evidence": {
         "document": "proofs/README.md"
       },
-      "reason": "Measured on the pin (Phase 955): through Custard, ModelInput's generated project does not compile (a match in a record field laid out offside - FS0058, FS0010); seven RemotingDecode definitions are refused (error 370, a parameterless polymorphic value) and need the model reshaped; a module root emits only monomorphic definitions, so every entry point must be named; every emitted name changes (module-prefixed, single-constructor types as records), so every host bridge would be rewritten; Prims.int becomes bigint on both hosts; and the generated support library does not transpile under Fable. The legacy route is green and byte-identical across the pin move. What would reopen it: a release in which every model's Custard project builds as generated - the README table is the measurement to repeat. Both defects were reported upstream on 2026-09-30, as FStarLang/FStar#4622 (the layout) and FStarLang/FStar#4623 (the refusal, which the backend applies only when such a value is passed as an argument and not when it is applied), and both were fixed within a day: FStarLang/FStar#4626 (merged 2026-10-01) prints a record field value past its label, FStarLang/FStar#4627 (merged 2026-09-30) eta-expands point-free polymorphic function definitions on the F# backend. On nightly-2026-10-01 both reproductions build and ModelInput (28 of 28) and RemotingDecode (72 of 72) build as generated under a module root. The trigger is the first weekly release carrying both; Phase 957 repeats the table on it and migrates on green."
+      "reason": "What Phase 955 named as the trigger - a release in which every model's Custard project builds as generated - arrived with v2026.10.11, and with it the route Phase 955 stayed on was removed, so staying was not an option the pinned prover offered. What the move cost: every host bridge rewritten for Custard's spellings (one-constructor inductives as records, one-field records collapsed, unit thunks eta-expanded, module-qualified names kept by --custard_split), Prims.int as bigint on the Fable host, and one model respelling. What it bought: 759 lines of this repository's own layout parser and two hand-written Prims shims leave the trusted base; the support library the Fable host compiles against is derived from the generated one rather than written; and the eight models and the array ring are on one route, one extractor and one run. Phase 955's measurement and reasons are kept in proofs/README.md as the record of why the move waited one release."
     },
     {
       "id": "elmish-array-ring-sizet-fits-u32",

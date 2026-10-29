@@ -105,11 +105,11 @@ let private modelFold (verdictFor: string -> FactDisclosureVerdict) (ranked: Fac
     {
         Disclosable =
             folded.disclosable
-            |> List.map (fun (DisclosureFold.Pair(rank, fact)) -> ofNat rank, fact.payload)
+            |> List.map (fun (p: DisclosureFold.pair<_, _>) -> ofNat p.first, p.second.payload)
         WithheldCount = ofNat folded.withheld_count
         WithheldByPolicy =
             folded.withheld_by_policy
-            |> List.map (fun (DisclosureFold.Pair(policyRef, count)) -> policyRef, ofNat count)
+            |> List.map (fun (p: DisclosureFold.pair<_, _>) -> p.first, ofNat p.second)
     }
 
 /// Back to the model's shape, for the two functions that take the
@@ -117,11 +117,17 @@ let private modelFold (verdictFor: string -> FactDisclosureVerdict) (ranked: Fac
 let private toModelDisclosureRecord (d: PopulationDisclosure) : DisclosureFold.population_disclosure<Fact> = {
     disclosable =
         d.Disclosable
-        |> List.map (fun (rank, fact) -> DisclosureFold.Pair(ix rank, toModelFact fact))
+        |> List.map (fun (rank, fact) -> {
+            DisclosureFold.first = ix rank
+            DisclosureFold.second = toModelFact fact
+        })
     withheld_count = ix d.WithheldCount
     withheld_by_policy =
         d.WithheldByPolicy
-        |> List.map (fun (policyRef, count) -> DisclosureFold.Pair(policyRef, ix count))
+        |> List.map (fun (policyRef, count) -> {
+            DisclosureFold.first = policyRef
+            DisclosureFold.second = ix count
+        })
 }
 
 /// The magnitude block bridged field for field; every existence-level
