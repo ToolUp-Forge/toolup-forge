@@ -22,7 +22,7 @@ Migration notes:
 - [1095-redesign-h-deliveryplan-and-connector-capabilities](docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md)
 - [1132-render-tools](docs/migrations/1132-render-tools.md)
 
-_Surface since `v0.37.0`: **breaking** — 10 packages moved; 192 members added, 6 members changed, 8 members removed; 1 package new._
+_Surface since `v0.37.0`: **breaking** — 10 packages moved; 193 members added, 6 members changed, 8 members removed; 1 package new._
 
 ### Added
 
@@ -92,7 +92,7 @@ _Surface since `v0.37.0`: **breaking** — 10 packages moved; 192 members added,
   - `ToolUp.Platform.ScopeKey+Platform (class)`
   - `ToolUp.Platform.ScopeKey+Platform.Item : ToolUp.Platform.PlatformShard { get }`
   - … and 32 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
-- `ToolUp.Platform.Server` — 63 members:
+- `ToolUp.Platform.Server` — 64 members:
   - `ToolUp.Platform.CapabilityNotDeclared (class)`
   - `ToolUp.Platform.CapabilityNotDeclared..ctor(System.String, ToolUp.Platform.ConnectorCapability)`
   - `ToolUp.Platform.CapabilityNotDeclared.Capability : ToolUp.Platform.ConnectorCapability { get }`
@@ -113,7 +113,7 @@ _Surface since `v0.37.0`: **breaking** — 10 packages moved; 192 members added,
   - `ToolUp.Platform.ConnectorCapabilitiesModule (class)`
   - `ToolUp.Platform.ConnectorCapabilitiesModule.declared(ToolUp.Platform.ConnectorCapabilities) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.ConnectorCapability]`
   - `ToolUp.Platform.ConnectorCapabilitiesModule.declares(ToolUp.Platform.ConnectorCapability, ToolUp.Platform.ConnectorCapabilities) : System.Boolean`
-  - … and 43 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
+  - … and 44 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
 - `ToolUp.Platform.UI` — 1 member:
   - `Toolup.UIToolkit.OutputFormatting.fallbackLocale : System.String (literal)`
 
