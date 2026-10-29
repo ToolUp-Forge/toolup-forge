@@ -120,19 +120,6 @@ let documentIndexSurface (storage: IBlobStorage) : IIngestionRecoverySurface =
 let recoverStuckDocumentsAtStartup (storage: IBlobStorage) (containers: string list) (logger: ILogger) : Async<int> =
     IngestionRecoverySweep.run [ documentIndexSurface storage ] containers logger
 
-/// Append a service registration onto the shared `ComposeExtensions`
-/// seam — the same threading every other KB compose hook uses.
-let private withServiceConfig (register: IServiceCollection -> IServiceCollection) (app: ServerApp) : ServerApp = {
-    app with
-        Extensions = {
-            app.Extensions with
-                ServiceConfig =
-                    match app.Extensions.ServiceConfig with
-                    | None -> Some register
-                    | Some baseFn -> Some(fun s -> register (baseFn s))
-        }
-}
-
 /// Phase 723 — enrol the KB document index in the startup
 /// restart-recovery sweep.
 ///
@@ -155,7 +142,7 @@ let private withServiceConfig (register: IServiceCollection -> IServiceCollectio
 /// (GP 12 rule 4).
 let withIngestionRecovery (app: ServerApp) : ServerApp =
     app
-    |> withServiceConfig (fun s ->
+    |> ServerApp.addServiceConfig (fun s ->
         s.AddSingleton<IIngestionRecoverySurface>(
             Func<IServiceProvider, IIngestionRecoverySurface>(fun sp ->
                 documentIndexSurface (sp.GetRequiredService<IBlobStorage>()))

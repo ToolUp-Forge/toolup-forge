@@ -606,7 +606,7 @@ let tests =
                 let sc = ServiceCollection() :> IServiceCollection
 
                 let sc =
-                    match composed.Extensions.ServiceConfig with
+                    match ServerApp.serviceConfig composed with
                     | Some f -> f sc
                     | None -> sc
 

@@ -625,6 +625,10 @@ touches public surface:
 - **Language**: F# 10 (the SDK pin in `global.json` is `10.0.203`). All workspace siblings are on the same baseline; assume F# 10 features are available without further qualification.
 - **Formatter**: Fantomas — pre-commit step. Run `dotnet fantomas <file>` BEFORE `dotnet build`.
 
+### A builder's name says whether it sets or adds (Phases 1050, 1052)
+
+A `with*` builder **sets** (a later call, or a later whole-record setter such as `withConfig` / `withExtensions`, replaces what it wrote); an `add*` builder **appends** and nothing later replaces it. A new builder follows the names: `ServerApp.addServiceConfig` appends DI registrations and survives a later `withExtensions`; `ServerApp.addContribution` appends a `Contribution` (a companion's registrations under its own `ComponentId`, via `Contribution.service owner register`). Existing appending `with*` builders keep their names — renaming them would break every consumer for no behaviour change — and say **Adds** in their doc comment; every builder says **Sets** or **Adds** there. A DI registration is never appended by folding `ComposeExtensions.ServiceConfig` by hand: the one fold is `ServiceConfig.append`, and `dotnet run --project Build.fsproj -- VerifyServiceConfigFold` (a `VerifyAll` leg) refuses a second copy under `src/`. A test that builds a provider from a composed app reads `ServerApp.serviceConfig app` — the consumer's `ServiceConfig` followed by every contribution, which is what `run` applies — never `app.Extensions.ServiceConfig` alone.
+
 ### Fantomas pitfall: indexer ambiguity
 
 **Never write `map[key] arg1 arg2` on a single line.** F# treats `map[key]` (no space) as an indexer and `map [key]` (with space) as a list-application. Fantomas can insert a space in the no-space form, breaking compilation. Extract the indexer read to its own line:

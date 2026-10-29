@@ -4487,6 +4487,114 @@ let main args =
             Trace.tracefn "▶ VerifyAll: ScopeLiterals (the scope grammar's one home, via VerifyScopeLiterals)"
             runVerifyScopeLiterals __SOURCE_DIRECTORY__)
 
+    // Phase 1052 — the closure-fold is written once.
+    //
+    // `ComposeExtensions.ServiceConfig` is an option of a function, so every
+    // contributor that wanted to add a registration used to fold by hand —
+    // `match x.ServiceConfig with None -> Some f | Some g -> Some(fun s -> f (g s))`
+    // — and the census before this phase found 66 copies across 33 files under
+    // `src/`, plus four private `withServiceConfig` helpers and `run`'s
+    // `appendRegistration`. The fold now lives once, as `ServiceConfig.append`
+    // in `Server/Compose/ComposeExtensions.fs`; a companion contributes
+    // through `Contribution.service`, a hook through `ServerApp.addServiceConfig`.
+    //
+    // The check is textual over every `.fs` under `src/` (tests included — a
+    // test that folds by hand is the same copy): an option arm that rebuilds
+    // `Some` from a composition with the arm's own function, in any of the
+    // three spellings the tree used — `| Some g -> Some(fun s -> f (g s))`,
+    // `| Some g -> Some(g >> f)`, `| Some g -> Some(f << g)`. The one allowed
+    // site is `ComposeExtensions.fs`. A ZERO, not a ratchet: the sweep left
+    // none, so any site is red.
+    //
+    // NOT SCANNED, deliberately: `templates/`. A template is consumer code
+    // pinned to a released SDK by its own `sdk-version` default (the
+    // dataplatform template defaults to 0.28.0), which predates
+    // `ServiceConfig.append`; its two folds can move only when that pin does.
+    //
+    // Usage: `dotnet run --project Build.fsproj -- VerifyServiceConfigFold`
+    //        `… -- VerifyServiceConfigFold --root <dir>` scans `<dir>/src`
+    //        (how the check is shown red on a planted fold without touching
+    //        the tree). Also a leg of `VerifyAll` in the fast and full lanes.
+    let runVerifyServiceConfigFold (root: string) : int =
+        let srcDir = Path.Combine(root, "src")
+
+        if not (Directory.Exists srcDir) then
+            Trace.traceError (
+                sprintf "VerifyServiceConfigFold: no `src` directory under %s — nothing to scan is not a pass." root
+            )
+
+            1
+        else
+            let rec walk (dir: string) = seq {
+                for d in Directory.EnumerateDirectories dir do
+                    let name = Path.GetFileName d
+
+                    if name <> "bin" && name <> "obj" && name <> "output" && name <> "node_modules" then
+                        yield! walk d
+
+                yield! Directory.EnumerateFiles(dir, "*.fs")
+            }
+
+            let fold =
+                System.Text.RegularExpressions.Regex(
+                    @"\|\s*Some\s+(?<g>\w+)\s*->\s*Some\s*\(\s*(?:fun\s+(?<s>\w+)\s*->\s*\w+\s*\(\s*\k<g>\s+\k<s>\s*\)|\k<g>\s*>>\s*\w+|\w+\s*<<\s*\k<g>)\s*\)"
+                )
+
+            let sites = [
+                for file in walk srcDir do
+                    let rel = Path.GetRelativePath(root, file).Replace('\\', '/')
+
+                    if not (rel.EndsWith "ToolUp.Platform.Server/Server/Compose/ComposeExtensions.fs") then
+                        let text = File.ReadAllText file
+
+                        for m in fold.Matches text do
+                            let line = text.Substring(0, m.Index).Split('\n').Length
+                            yield rel, line, m.Value.Trim()
+            ]
+
+            Trace.tracefn ""
+            Trace.tracefn "VerifyServiceConfigFold summary:"
+            Trace.tracefn "  hand-written folds : %d" sites.Length
+
+            if sites.IsEmpty then
+                Trace.tracefn ""
+
+                Trace.tracefn
+                    "VerifyServiceConfigFold: OK — the ServiceConfig fold occurs once, as ServiceConfig.append."
+
+                0
+            else
+                Trace.tracefn ""
+
+                for rel, line, text in sites do
+                    Trace.traceError (sprintf "  %s:%d: %s" rel line text)
+
+                Trace.traceError (
+                    sprintf
+                        "VerifyServiceConfigFold: %d hand-written fold(s) of an option of a function. Append a registration with `ServiceConfig.append` (ComposeExtensions.fs); a companion contributes with `ServerApp.addContribution (Contribution.service owner register)`, a hook with `ServerApp.addServiceConfig register`."
+                        sites.Length
+                )
+
+                1
+
+    Target.create "VerifyServiceConfigFold" (fun _ ->
+        let root =
+            match args |> Array.tryFindIndex ((=) "--root") with
+            | Some i when i + 1 < args.Length -> Path.GetFullPath args[i + 1]
+            | _ -> __SOURCE_DIRECTORY__
+
+        match runVerifyServiceConfigFold root with
+        | 0 -> ()
+        | code -> failwithf "VerifyServiceConfigFold: exited %d; the sites are printed above." code)
+
+    match TestLane.current with
+    | TestLane.Lane.Pure -> ()
+    | TestLane.Lane.Fast
+    | TestLane.Lane.Full ->
+        VerifyLeg.register "ServiceConfigFold" (fun () ->
+            Trace.tracefn "▶ VerifyAll: ServiceConfigFold (the closure-fold's one home, via VerifyServiceConfigFold)"
+            runVerifyServiceConfigFold __SOURCE_DIRECTORY__)
+
     // App-specific target: Azure deployment
     Target.create "Deploy-CD" (fun _ ->
         let dotnet args dir =

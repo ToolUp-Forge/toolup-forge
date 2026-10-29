@@ -863,7 +863,7 @@ let private deployShaped
     |> ignore
 
     let services =
-        match app.Extensions.ServiceConfig with
+        match ServerApp.serviceConfig app with
         | Some configure -> configure services
         | None -> services
 

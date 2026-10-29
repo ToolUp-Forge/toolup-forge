@@ -110,7 +110,7 @@ let private composedUnder (knob: FactStoreMode) (registry: IMetricRegistry optio
     registry
     |> Option.iter (fun r -> services.AddSingleton<IMetricRegistry>(r) |> ignore)
 
-    match app.Extensions.ServiceConfig with
+    match ServerApp.serviceConfig app with
     | Some cfg -> cfg services |> ignore
     | None -> ()
 

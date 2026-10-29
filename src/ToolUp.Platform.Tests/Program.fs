@@ -1022,6 +1022,7 @@ let private registeredTests =
         ProviderExceptionTests.tests
         OidcSignInSpaPrecedenceTests.tests
         ServerAppSecretStoreTests.tests
+        ServerAppOrderTests.tests
         ServerBindAddressTests.tests
         AuditFireAndForgetTests.tests
         StoreFireAndForgetTests.tests

@@ -239,11 +239,10 @@ module RedisDistributedLock =
     /// substrates configures one connection.
     ///
     /// Thread it into `DistributedLockSelection.fromEnv` and register the
-    /// result from `ComposeExtensions.ServiceConfig`:
+    /// result with `ServerApp.addServiceConfig`:
     ///
     ///     let lck = DistributedLockSelection.fromEnv logger [ RedisDistributedLock.resolver ]
-    ///     { ComposeExtensions.empty with
-    ///         ServiceConfig = Some(fun s -> s.AddSingleton<IDistributedLock>(lck)) }
+    ///     app |> ServerApp.addServiceConfig (fun s -> s.AddSingleton<IDistributedLock>(lck))
     let resolver: DistributedLockResolver = {
         Name = "redis"
         ConnectionEnvVar = ConfigKeys.Names.redisConnection

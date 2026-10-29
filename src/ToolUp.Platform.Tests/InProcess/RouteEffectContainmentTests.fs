@@ -126,7 +126,7 @@ let private servicesFor (app: ServerApp) (configure: IServiceCollection -> IServ
     let configured = configure (ServiceCollection())
 
     let composed =
-        match app.Extensions.ServiceConfig with
+        match ServerApp.serviceConfig app with
         | Some register -> register configured
         | None -> configured
 

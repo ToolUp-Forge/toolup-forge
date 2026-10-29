@@ -172,7 +172,7 @@ let private servicesWith (model: IAIProvider) : ServiceProvider =
     |> ignore
 
     let services =
-        match app.Extensions.ServiceConfig with
+        match ServerApp.serviceConfig app with
         | Some configure -> configure services
         | None -> services
 

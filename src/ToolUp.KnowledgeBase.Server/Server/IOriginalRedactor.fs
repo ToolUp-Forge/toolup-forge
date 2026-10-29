@@ -328,20 +328,12 @@ let create (options: OriginalRedactorOptions) : IOriginalRedactor =
 /// inline delivery, once per fetch, with the degradation named in the
 /// log — the same per-fetch, never-silent shape Phase 105 uses where
 /// object-store retention and signed delivery collide.
+/// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withOriginalRedactor (redactor: IOriginalRedactor) (app: ServerApp) : ServerApp =
     let register (s: IServiceCollection) =
         s.AddSingleton<IOriginalRedactor>(redactor)
 
-    {
-        app with
-            Extensions = {
-                app.Extensions with
-                    ServiceConfig =
-                        match app.Extensions.ServiceConfig with
-                        | None -> Some register
-                        | Some baseFn -> Some(fun s -> register (baseFn s))
-            }
-    }
+    app |> ServerApp.addServiceConfig register
 
 /// Redaction-aware `IOriginalPreviewSeam.previewOriginal` — the third
 /// delivery route, closed here so a consumer driving the preview seam
