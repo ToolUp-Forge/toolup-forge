@@ -4,7 +4,6 @@
 namespace ToolUp.Facts
 
 open System
-open System.Security.Cryptography
 open System.Text
 
 // ─── Fact-store audit events (Phase 520) ─────────────────────────────
@@ -155,23 +154,21 @@ module BatchAssertReceipt =
     [<Literal>]
     let IdListCap = 64
 
-    let private sha256Hex (s: string) : string =
-        use sha = SHA256.Create()
-
-        sha.ComputeHash(Encoding.UTF8.GetBytes s)
-        |> Array.map (sprintf "%02x")
-        |> String.concat ""
-
     /// The digest over a batch's full ordered disposition. Order is
     /// submission order and it is significant: two batches over the same
     /// drafts in different orders can legitimately produce different
     /// supersession outcomes, so a digest blind to order would call them
     /// the same batch.
+    ///
+    /// Phase 1089: framed by `CanonicalFrame` — the label, then each
+    /// disposition's outcome and content address as two fields.
     let digest (dispositions: (BatchAssertOutcome * string) list) : string =
-        dispositions
-        |> List.map (fun (outcome, factId) -> sprintf "%s:%s" (BatchAssertOutcome.toString outcome) factId)
-        |> String.concat "\n"
-        |> sha256Hex
+        ToolUp.Platform.CanonicalFrame.digest [
+            "batch-assert-receipt"
+            for outcome, factId in dispositions do
+                BatchAssertOutcome.toString outcome
+                factId
+        ]
 
     /// Fold a batch's ordered dispositions into its receipt.
     let ofDispositions (dispositions: (BatchAssertOutcome * string) list) : BatchAssertReceipt =
@@ -574,3 +571,103 @@ type IFactStore =
     /// `QueryPopulation` over the request's resolved scope (Phase 797).
     abstract QueryPopulation:
         scope: ToolUp.Platform.ResolvedScope * query: PopulationQuery -> Async<Result<PopulationResult, string>>
+// ─── Phase 1089 — moving persisted fact ids onto the canonical frame ──
+//
+// `Fact.compute` changed recipe once, at Phase 1089: the fields it digests
+// are unchanged, the frame around them is now `CanonicalFrame`. Ids are
+// content addresses, so a store written before the change holds facts
+// whose stored id is no longer what `Fact.computeFor` says it is. They are
+// MIGRATED, not dual-read (H §9 D1): a second id scheme kept alive is a
+// second recipe. The plan below is the one decision both stores' migrations
+// make — which facts change, and to what — so the blob store and the
+// Postgres companion cannot re-key the same scope differently.
+
+/// One re-keyed fact: its id before and after the migration.
+type FactIdChange = { From: string; To: string }
+
+/// What one id migration over one scope did — or, on a dry run, would do.
+type FactIdMigrationReport = {
+    /// The scope migrated.
+    ScopeId: string
+    /// Nothing was written.
+    DryRun: bool
+    /// Facts the scope held when the migration read it.
+    FactsRead: int
+    /// Facts whose stored id was not their recomputed id, and moved.
+    Rekeyed: int
+    /// Facts whose id was already current but whose `Supersedes` named a
+    /// fact that moved, so the link was rewritten.
+    Relinked: int
+    /// The first fact (in the scope's read order) whose id moves.
+    FirstDivergent: FactIdChange option
+}
+
+/// The id migration's pure half, shared by every store that persists facts.
+[<RequireQualifiedAccess>]
+module FactIdMigration =
+
+    /// Each stored fact the migration changes, paired with its migrated
+    /// form: `FactId` recomputed by `Fact.computeFor`, and `Supersedes`
+    /// mapped through the same recomputation when it names a fact in
+    /// `stored`. A fact already current, linked to facts already current,
+    /// is absent — so a second run over a migrated scope plans nothing.
+    /// Every other field — value, transaction time, disclosure — is the
+    /// stored fact's, unchanged.
+    let plan (stored: Fact list) : (Fact * Fact) list =
+        let recomputed =
+            Collections.Generic.Dictionary<string, string>(StringComparer.Ordinal)
+
+        for f in stored do
+            recomputed[f.FactId] <- Fact.computeFor f
+
+        let mapped (id: string) =
+            match recomputed.TryGetValue id with
+            | true, current -> current
+            | _ -> id
+
+        stored
+        |> List.choose (fun f ->
+            let migrated = {
+                f with
+                    FactId = recomputed[f.FactId]
+                    Supersedes = f.Supersedes |> Option.map mapped
+            }
+
+            if migrated.FactId = f.FactId && migrated.Supersedes = f.Supersedes then
+                None
+            else
+                Some(f, migrated))
+
+    /// The report for a plan over `factsRead` facts.
+    let report (scopeId: string) (dryRun: bool) (factsRead: int) (changes: (Fact * Fact) list) : FactIdMigrationReport = {
+        ScopeId = scopeId
+        DryRun = dryRun
+        FactsRead = factsRead
+        Rekeyed =
+            changes
+            |> List.filter (fun (before, after) -> before.FactId <> after.FactId)
+            |> List.length
+        Relinked =
+            changes
+            |> List.filter (fun (before, after) -> before.FactId = after.FactId)
+            |> List.length
+        FirstDivergent =
+            changes
+            |> List.tryFind (fun (before, after) -> before.FactId <> after.FactId)
+            |> Option.map (fun (before, after) -> {
+                From = before.FactId
+                To = after.FactId
+            })
+    }
+
+    /// One line per scope, for an operator: the counts and the first id
+    /// that moves.
+    let render (r: FactIdMigrationReport) : string =
+        let verb = if r.DryRun then "would re-key" else "re-keyed"
+
+        let first =
+            match r.FirstDivergent with
+            | Some c -> sprintf "; first %s -> %s" c.From c.To
+            | None -> ""
+
+        sprintf "%s: %d facts read, %s %d, relinked %d%s" r.ScopeId r.FactsRead verb r.Rekeyed r.Relinked first
