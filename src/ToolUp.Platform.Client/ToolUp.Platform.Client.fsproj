@@ -30,7 +30,8 @@
              wants the toolkit WITHOUT the SDK can now take it alone.
              `Client\UI\Toolkit\Layout.fs` deliberately stayed: it is the
              shell composition layer (AppShell / PageContent /
-             LoadingIndicatorMode / @clerk/react), not a toolkit component.
+             LoadingIndicatorMode / the header identity action), not a
+             toolkit component.
              See ToolUp.Platform.UI.fsproj's header. -->
         <ProjectReference Include="..\ToolUp.Platform.UI\ToolUp.Platform.UI.fsproj" />
     </ItemGroup>
@@ -220,8 +221,9 @@
              composes `Toolup.Sidebar`, `renderPageContent` /
              `loadingIndicator` are written against `PageContent` /
              `InputsPaneWidth` / `LoadingIndicatorMode` from
-             SDK.ClientTypes.fs below, and `userButton` imports
-             `@clerk/react`. It therefore has to compile AFTER
+             SDK.ClientTypes.fs below, and `userButton` renders the header
+             identity action an auth companion registers (Phase 1069 moved
+             the vendor import out). It therefore has to compile AFTER
              SDK.ClientTypes.fs and after Sidebar.fs, which is exactly
              where it already sat. The namespace `Toolup.UIToolkit` now
              spans two assemblies with disjoint module names, so

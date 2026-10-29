@@ -136,6 +136,9 @@ module MessageCatalog =
                 PlatformRole = "Platform-admin role"
                 TeamRole = "Team role"
                 AuthBridge = "Session refresh"
+                PlatformInfo = "Platform info"
+                DataSnapshot = "Uploaded data"
+                SidebarPrefs = "Sidebar preferences"
             }
         }
         Toast = {
@@ -231,6 +234,7 @@ module MessageCatalog =
             TransferConfirmPrompt =
                 fun teamName outgoing incoming ->
                     $"Transfer ownership of {teamName} from {outgoing} (you) to {incoming}?"
+            TransferSelectedMemberFallback = "the selected member"
             Transferring = "Transferring…"
             ConfirmTransfer = "Confirm transfer"
             Back = "Back"
@@ -252,6 +256,7 @@ module MessageCatalog =
             IssueInvitation = "Issue invitation"
             RevokeInvite = "Revoke"
             RevokeInviteHeading = "Revoke pending invitation?"
+            RevokeInvitePrompt = fun email teamName -> $"{email} will no longer auto-join {teamName} on sign-in."
             Reissue = "Re-issue"
             Reissuing = "Re-issuing…"
             Expired = "Expired"

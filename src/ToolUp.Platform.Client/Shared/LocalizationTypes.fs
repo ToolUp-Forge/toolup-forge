@@ -131,6 +131,13 @@ type BootSourceMessages = {
     PlatformRole: string
     TeamRole: string
     AuthBridge: string
+    /// The server's platform-info read (`"platform-info"`, Phase 1046).
+    PlatformInfo: string
+    /// The boot prefetch of the uploaded-file snapshot (`"data-snapshot"`).
+    DataSnapshot: string
+    /// A failed write of the user's sidebar arrangement (`"sidebar-prefs"`,
+    /// Phase 1069) — not a load, so its row carries no Retry button.
+    SidebarPrefs: string
 }
 
 /// The dismissible banner that accumulates failed boot loads (Phase 121).
@@ -271,6 +278,8 @@ type TeamManagerMessages = {
     TransferConfirmHeading: string
     /// Takes team name, outgoing owner label, incoming owner label.
     TransferConfirmPrompt: string -> string -> string -> string
+    /// Phase 1069 — the incoming-owner label when no member is selected.
+    TransferSelectedMemberFallback: string
     Transferring: string
     ConfirmTransfer: string
     Back: string
@@ -290,6 +299,8 @@ type TeamManagerMessages = {
     IssueInvitation: string
     RevokeInvite: string
     RevokeInviteHeading: string
+    /// Phase 1069 — takes the invited email and the team's display name.
+    RevokeInvitePrompt: string -> string -> string
     Reissue: string
     Reissuing: string
     Expired: string

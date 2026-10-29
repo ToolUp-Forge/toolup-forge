@@ -8,6 +8,7 @@ ToolUp.AuthProviders.ClerkAuthUI.ClerkProvider(Microsoft.FSharp.Collections.FSha
 ToolUp.AuthProviders.ClerkAuthUI.Show(Microsoft.FSharp.Collections.FSharpList`1[Feliz.IReactProperty]) : Fable.React.ReactElement
 ToolUp.AuthProviders.ClerkAuthUI.SignIn(Microsoft.FSharp.Collections.FSharpList`1[Feliz.IReactProperty]) : Fable.React.ReactElement
 ToolUp.AuthProviders.ClerkAuthUI.UserButton(Microsoft.FSharp.Collections.FSharpList`1[Feliz.IReactProperty]) : Fable.React.ReactElement
+ToolUp.AuthProviders.ClerkAuthUI.userButton() : Fable.React.ReactElement
 ToolUp.AuthProviders.ClerkAuthUI.wrapApp(System.String, Fable.React.ReactElement) : Fable.React.ReactElement
 ToolUp.AuthProviders.ClerkRegister (class)
 ToolUp.AuthProviders.ClerkRegister.Tag : System.String (literal)
