@@ -125,6 +125,7 @@ let tests =
                             "src/Client/Grid.fs"
                             "src/Client/Shell.fs"
                             "src/Server/Assistant.fs"
+                            "src/Server/Connectors.fs"
                             "src/Server/Program.fs"
                             "src/Server/Server.fsproj"
                             "src/Server/Sinks.fs"
@@ -162,6 +163,7 @@ let tests =
                             "src/Client/Shell.fs"
                             "src/Server/Already.fs"
                             "src/Server/Assistant.fs"
+                            "src/Server/Connectors.fs"
                             "src/Server/Guarded.fs"
                             "src/Server/Program.fs"
                             "src/Server/Server.fsproj"
@@ -239,8 +241,47 @@ let tests =
 
                     Expect.equal
                         (Codemod.renderSummary plan)
-                        "Codemod: 10 file(s) visited, 56 rewrite(s) in 8 file(s), 27 site(s) for review."
+                        "Codemod: 11 file(s) visited, 60 rewrite(s) in 9 file(s), 28 site(s) for review."
                         "summary")
+        ]
+
+        testList "Phase 1095 — the Capabilities member" [
+            testCase "an implementer gains the record naming exactly the capability interfaces its block implements"
+            <| fun () ->
+                let source =
+                    String.concat "\r\n" [
+                        "type Both() ="
+                        "    interface IEmitsNativePayload with"
+                        "        member _.NativeFormat = PayloadFormat.Csv"
+                        "    interface IDataSource with"
+                        "        member _.Kind = \"Both\""
+                        "    interface IWatchableFileSource with"
+                        "        member _.ListObjects _ = async { return Ok [] }"
+                        ""
+                        "type Plain() ="
+                        "    interface IDataSource with"
+                        "        member _.Kind = \"Plain\""
+                        ""
+                    ]
+
+                let rewritten, rewrites = rewriteSource source
+
+                Expect.stringContains
+                    rewritten
+                    "    interface IDataSource with\r\n        member this.Capabilities = { ConnectorCapabilities.none with Watchable = Some(this :> IWatchableFileSource); Native = Some(this :> IEmitsNativePayload) }\r\n"
+                    "both capabilities, in record order, on the implementation line's own terminator"
+
+                Expect.stringContains
+                    rewritten
+                    "type Plain() =\r\n    interface IDataSource with\r\n        member _.Capabilities = ConnectorCapabilities.none\r\n"
+                    "a type in the same file implementing neither declares none — blocks do not leak"
+
+                Expect.equal
+                    (rewrites |> List.map (fun r -> r.RuleId, r.Line))
+                    [ "1095-capabilities-member", 4; "1095-capabilities-member", 10 ]
+                    "one rewrite per implementer"
+
+                Expect.isEmpty (snd (rewriteSource rewritten)) "a second run adds nothing"
         ]
 
         testList "idempotence" [

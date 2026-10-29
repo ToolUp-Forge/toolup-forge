@@ -308,24 +308,9 @@ module AccessContext =
     /// calling this helper.
     let configScope (ctx: AccessContext) : StorageScope option =
         match ctx.Subject with
-        | TeamMember(_, teamId) ->
-            Some {
-                ScopeId = teamId
-                Container = $"team-{teamId}"
-                Persist = true
-            }
-        | AuthenticatedUser userId ->
-            Some {
-                ScopeId = userId
-                Container = $"user-{userId}"
-                Persist = true
-            }
-        | ClaimBearer claim ->
-            Some {
-                ScopeId = claim.ScopeId
-                Container = claim.ScopeId
-                Persist = true
-            }
+        | TeamMember(_, teamId) -> Some(StorageScope.ofKey true (ScopeKey.Team teamId))
+        | AuthenticatedUser userId -> Some(StorageScope.ofKey true (ScopeKey.User userId))
+        | ClaimBearer claim -> Some(StorageScope.ofKey true (ScopeKey.Claim claim.ScopeId))
         | AnonymousSession _ -> None
         // Phase 1002 — a publication reader holds no scope of its own.
         | PublicationReader _ -> None
@@ -345,12 +330,13 @@ module AccessContext =
     /// scope's configuration and secrets. The context is unrestricted:
     /// it carries the scope's identity, not any user's module authority.
     let forConfigScope (memberId: string) (scope: StorageScope) : AccessContext option =
-        if scope.Container = $"team-{scope.ScopeId}" then
-            Some(unrestricted (TeamMember(memberId, scope.ScopeId)))
-        elif scope.Container = $"user-{scope.ScopeId}" then
-            Some(unrestricted (AuthenticatedUser scope.ScopeId))
-        else
-            None
+        // Phase 1060 — read through the one parser, and only where the
+        // container and the id agree: a scope whose two fields name
+        // different principals is no team's and no user's.
+        match ScopeKey.tryParseContainer scope.Container with
+        | Some(ScopeKey.Team teamId) when teamId = scope.ScopeId -> Some(unrestricted (TeamMember(memberId, teamId)))
+        | Some(ScopeKey.User userId) when userId = scope.ScopeId -> Some(unrestricted (AuthenticatedUser userId))
+        | _ -> None
 
     /// Resolve the `FlagScope` the caller writes feature-flag overrides
     /// at. Mirrors `configScope` but targets the flag store's DU-typed

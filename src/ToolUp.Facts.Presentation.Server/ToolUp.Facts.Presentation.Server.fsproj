@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Description>ToolUp.Facts.Presentation Server — the render_chart and render_table AI tools: the model writes a presentation request, the server reads the series it names under the disclosure gate at the tool-result door, draws it with the presentation builders and answers with a text summary the model reads and the block the assistant message carries. Composed opt-in with PresentationCompose.withRenderTools; a deployment that does not compose it carries no Fuaran-UI dependency. Phase 1132.</Description>
+        <PackageTags>fsharp;sdk;server;facts;grounding;ai;tools;charts;fuaran-ui</PackageTags>
+    </PropertyGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- ToolUp.Facts.Presentation — the request, its codec and the
+             builders (Phase 1129). ToolUp.Facts.Server — the fact browse's
+             series read and its dependencies. ToolUp.AI.Server — the
+             record form a tool answers and the AI composition record the
+             tools are composed onto (Phase 1131). Fuaran.UI arrives through
+             ToolUp.Facts.Presentation. -->
+        <ProjectReference Include="..\ToolUp.Facts.Presentation\ToolUp.Facts.Presentation.fsproj" />
+        <ProjectReference Include="..\ToolUp.Facts.Server\ToolUp.Facts.Server.fsproj" />
+        <ProjectReference Include="..\ToolUp.AI.Server\ToolUp.AI.Server.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Server\RenderTools.fs" />
+        <Compile Include="Server\PresentationCompose.fs" />
+    </ItemGroup>
+</Project>

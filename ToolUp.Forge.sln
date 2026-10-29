@@ -641,6 +641,8 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Platform.Transport",
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Facts.Presentation", "src\ToolUp.Facts.Presentation\ToolUp.Facts.Presentation.fsproj", "{02EEF96D-69CD-419E-A7C2-ABCEF806843E}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "ToolUp.Facts.Presentation.Server", "src\ToolUp.Facts.Presentation.Server\ToolUp.Facts.Presentation.Server.fsproj", "{A32689B2-8CFF-45B3-8BAD-A15B32FF0465}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -3399,6 +3401,18 @@ Global
 		{02EEF96D-69CD-419E-A7C2-ABCEF806843E}.Release|x64.Build.0 = Release|Any CPU
 		{02EEF96D-69CD-419E-A7C2-ABCEF806843E}.Release|x86.ActiveCfg = Release|Any CPU
 		{02EEF96D-69CD-419E-A7C2-ABCEF806843E}.Release|x86.Build.0 = Release|Any CPU
+		{A32689B2-8CFF-45B3-8BAD-A15B32FF0465}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A32689B2-8CFF-45B3-8BAD-A15B32FF0465}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A32689B2-8CFF-45B3-8BAD-A15B32FF0465}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A32689B2-8CFF-45B3-8BAD-A15B32FF0465}.Debug|x64.Build.0 = Debug|Any CPU
+		{A32689B2-8CFF-45B3-8BAD-A15B32FF0465}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A32689B2-8CFF-45B3-8BAD-A15B32FF0465}.Debug|x86.Build.0 = Debug|Any CPU
+		{A32689B2-8CFF-45B3-8BAD-A15B32FF0465}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A32689B2-8CFF-45B3-8BAD-A15B32FF0465}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A32689B2-8CFF-45B3-8BAD-A15B32FF0465}.Release|x64.ActiveCfg = Release|Any CPU
+		{A32689B2-8CFF-45B3-8BAD-A15B32FF0465}.Release|x64.Build.0 = Release|Any CPU
+		{A32689B2-8CFF-45B3-8BAD-A15B32FF0465}.Release|x86.ActiveCfg = Release|Any CPU
+		{A32689B2-8CFF-45B3-8BAD-A15B32FF0465}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

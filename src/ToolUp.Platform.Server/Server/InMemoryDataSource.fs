@@ -83,6 +83,11 @@ type InMemoryDataSource() =
                 return Error(SchemaMismatch $"InMemoryDataSource: no content seeded for ({ctx.Config.Id}, {sql})")
         }
 
+        // Phase 1095 — the reference record: an in-memory source has no
+        // location to watch and no format richer than the bytes it was
+        // seeded with, so it declares nothing beyond the five members.
+        member _.Capabilities = ConnectorCapabilities.none
+
     // Phase 834 — seeded bytes are returned verbatim and the family's
     // convention is CSV, so this source declares `Csv` explicitly rather
     // than by omission.

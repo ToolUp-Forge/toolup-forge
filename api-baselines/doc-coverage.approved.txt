@@ -14,7 +14,7 @@ ToolUp.AI.McpHost 144/247
 ToolUp.AI.SampleClientTool.Client 1/2
 ToolUp.AI.SampleClientTool.Core 4/12
 ToolUp.AI.SampleClientTool.Server 3/4
-ToolUp.AI.Server 838/1368
+ToolUp.AI.Server 840/1370
 ToolUp.AI.UiAwareness.Client 6/8
 ToolUp.AI.UiAwareness.Core 6/7
 ToolUp.AI.UiAwareness.Server 6/9
@@ -69,7 +69,7 @@ ToolUp.ContentAuthoring 32/72
 ToolUp.ContentScanners.ClamAv 15/25
 ToolUp.DataSources.Athena 14/16
 ToolUp.DataSources.BigQuery 13/15
-ToolUp.DataSources.Common 222/439
+ToolUp.DataSources.Common 262/492
 ToolUp.DataSources.Csv 10/12
 ToolUp.DataSources.Excel 18/26
 ToolUp.DataSources.GitHub 10/17
@@ -94,7 +94,8 @@ ToolUp.FactStores.Postgres 109/175
 ToolUp.Facts.Client 51/118
 ToolUp.Facts.Core 452/780
 ToolUp.Facts.Presentation 68/126
-ToolUp.Facts.Server 856/1319
+ToolUp.Facts.Presentation.Server 15/21
+ToolUp.Facts.Server 857/1320
 ToolUp.Facts.Shared 268/300
 ToolUp.FeatureFlagProviders.OpenFeature 5/9
 ToolUp.Forms.Client 4/19
@@ -135,10 +136,10 @@ ToolUp.Offline.Server 16/33
 ToolUp.OpenXml 107/298
 ToolUp.OpenXml.Spreadsheet 45/141
 ToolUp.OpenXml.SvgRasterizer.Skia 3/3
-ToolUp.Platform.Build 314/570
+ToolUp.Platform.Build 315/573
 ToolUp.Platform.Client 2936/7254
-ToolUp.Platform.Core 7214/15282
-ToolUp.Platform.Server 7027/12749
+ToolUp.Platform.Core 7238/15334
+ToolUp.Platform.Server 7056/12787
 ToolUp.Platform.Testing 118/264
 ToolUp.Platform.Transport 44/90
 ToolUp.Platform.UI 71/183

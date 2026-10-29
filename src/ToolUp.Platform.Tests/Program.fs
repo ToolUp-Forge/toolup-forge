@@ -488,6 +488,7 @@ let private registeredTests =
         ScopeResolutionFailClosedTests.tests
         AccessContextFactoryTests.tests
         AuditStreamKeyTests.tests
+        ScopeKeyTests.tests
         SmokeTestDefaultsTests.tests
         InProcessRateLimiterTests.tests
         IExternalApiConnectorContract.kitTests
@@ -1030,6 +1031,7 @@ let private registeredTests =
         StreamAuthBothSignInsTests.tests
         DeliveryCompletedTests.tests
         FactPresentationTests.tests
+        FactRenderToolTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

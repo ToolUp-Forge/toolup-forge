@@ -521,6 +521,7 @@
         <Compile Include="InProcess\ScopeResolutionFailClosedTests.fs" />
         <Compile Include="InProcess\AccessContextFactoryTests.fs" />
         <Compile Include="InProcess\AuditStreamKeyTests.fs" />
+        <Compile Include="InProcess\ScopeKeyTests.fs" />
         <Compile Include="InProcess\BlobProviderProfileTests.fs" />
         <Compile Include="InProcess\ProviderProfileApiTests.fs" />
         <Compile Include="InProcess\TeamProviderTests.fs" />
@@ -603,6 +604,7 @@
         <Compile Include="InProcess\ToolAwareRagFramingTests.fs" />
         <Compile Include="InProcess\FactFirstRetrievalTests.fs" />
         <Compile Include="InProcess\AnswerVerifierTests.fs" />
+        <Compile Include="InProcess\FactRenderToolTests.fs" />
         <Compile Include="InProcess\DisclosureEgressTests.fs" />
         <Compile Include="InProcess\DisclosureExportWebhookTests.fs" />
         <Compile Include="InProcess\DisclosureTaintTests.fs" />
@@ -888,6 +890,7 @@
         <ProjectReference Include="..\ToolUp.Platform.Server\ToolUp.Platform.Server.fsproj" />
         <ProjectReference Include="..\ToolUp.Facts.Server\ToolUp.Facts.Server.fsproj" />
         <ProjectReference Include="..\ToolUp.Facts.Presentation\ToolUp.Facts.Presentation.fsproj" />
+        <ProjectReference Include="..\ToolUp.Facts.Presentation.Server\ToolUp.Facts.Presentation.Server.fsproj" />
         <ProjectReference Include="..\ToolUp.Graph.Core\ToolUp.Graph.Core.fsproj" />
         <ProjectReference Include="..\ToolUp.Graph.InMemory\ToolUp.Graph.InMemory.fsproj" />
         <ProjectReference Include="..\ToolUp.Graph.Neo4j\ToolUp.Graph.Neo4j.fsproj" />

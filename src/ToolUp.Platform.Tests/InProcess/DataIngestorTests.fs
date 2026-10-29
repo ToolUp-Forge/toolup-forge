@@ -39,6 +39,7 @@ let private noSecrets =
 let private failingSchema (inner: IDataSource) (throws: bool) =
     { new IDataSource with
         member _.Kind = inner.Kind
+        member _.Capabilities = inner.Capabilities
         member _.Connect ctx = inner.Connect ctx
         member _.ListTables ctx = inner.ListTables ctx
 
@@ -57,6 +58,7 @@ let private failingSchema (inner: IDataSource) (throws: bool) =
 let private undeclared (inner: IDataSource) =
     { new IDataSource with
         member _.Kind = inner.Kind
+        member _.Capabilities = inner.Capabilities
         member _.Connect ctx = inner.Connect ctx
         member _.ListTables ctx = inner.ListTables ctx
         member _.GetSchema(ctx, t) = inner.GetSchema(ctx, t)
@@ -68,6 +70,7 @@ let private undeclared (inner: IDataSource) =
 let private declaring (format: PayloadFormat) (queried: bool ref) (inner: IDataSource) =
     { new IDataSource with
         member _.Kind = inner.Kind
+        member _.Capabilities = inner.Capabilities
         member _.Connect ctx = inner.Connect ctx
         member _.ListTables ctx = inner.ListTables ctx
         member _.GetSchema(ctx, t) = inner.GetSchema(ctx, t)
@@ -84,6 +87,7 @@ let private declaring (format: PayloadFormat) (queried: bool ref) (inner: IDataS
 let private recording (handed: ResizeArray<string>) (inner: IDataSource) =
     { new IDataSource with
         member _.Kind = inner.Kind
+        member _.Capabilities = inner.Capabilities
         member _.Connect ctx = inner.Connect ctx
         member _.ListTables ctx = inner.ListTables ctx
 

@@ -1885,6 +1885,18 @@ ToolUp.Platform.AuditSamplingPolicyModule.shouldDeliver(ToolUp.Platform.AuditSam
 ToolUp.Platform.AuditSchemaVersion (class)
 ToolUp.Platform.AuditSchemaVersion.current : System.Int32 (literal)
 ToolUp.Platform.AuditSchemaVersion.pre66 : System.Int32 (literal)
+ToolUp.Platform.AuditScope (class)
+ToolUp.Platform.AuditScope.IsPlatformScope : System.Boolean { get }
+ToolUp.Platform.AuditScope.IsScoped : System.Boolean { get }
+ToolUp.Platform.AuditScope.PlatformScope : ToolUp.Platform.AuditScope { get }
+ToolUp.Platform.AuditScope.Tag : System.Int32 { get }
+ToolUp.Platform.AuditScope+Scoped (class)
+ToolUp.Platform.AuditScope+Scoped.Item : ToolUp.Platform.ScopeKey { get }
+ToolUp.Platform.AuditScope+Tags (class)
+ToolUp.Platform.AuditScope+Tags.PlatformScope : System.Int32 (literal)
+ToolUp.Platform.AuditScope+Tags.Scoped : System.Int32 (literal)
+ToolUp.Platform.AuditScopeModule (class)
+ToolUp.Platform.AuditScopeModule.streamKey(ToolUp.Platform.AuditScope) : System.String
 ToolUp.Platform.AuditSinkDeadLetteredPayload (class)
 ToolUp.Platform.AuditSinkDeadLetteredPayload..ctor(System.String, System.String, System.Int32, System.Int32, System.String, System.DateTime)
 ToolUp.Platform.AuditSinkDeadLetteredPayload.AttemptCount : System.Int32 { get }
@@ -10586,6 +10598,9 @@ ToolUp.Platform.PlatformKnowledgeBaseMode+Tags.NoPlatformKnowledgeBase : System.
 ToolUp.Platform.PlatformRole (class)
 ToolUp.Platform.PlatformRole.PlatformAdmin : ToolUp.Platform.PlatformRole { get }
 ToolUp.Platform.PlatformRole.Tag : System.Int32 { get }
+ToolUp.Platform.PlatformShard (class)
+ToolUp.Platform.PlatformShard.Platform : ToolUp.Platform.PlatformShard { get }
+ToolUp.Platform.PlatformShard.Tag : System.Int32 { get }
 ToolUp.Platform.PlatformTenantApi (class)
 ToolUp.Platform.PlatformTenantApi.routeBuilder(System.String, System.String) : System.String
 ToolUp.Platform.PreferenceChannel (class)
@@ -11543,6 +11558,41 @@ ToolUp.Platform.SchemaProposedPayload.SchemaId : System.String { get }
 ToolUp.Platform.SchemaProposedPayload.ScopeId : System.String { get }
 ToolUp.Platform.SchemaProposedPayload.UserId : System.String { get }
 ToolUp.Platform.SchemaProposedPayload.VersionLabel : System.String { get }
+ToolUp.Platform.ScopeKey (class)
+ToolUp.Platform.ScopeKey.IsClaim : System.Boolean { get }
+ToolUp.Platform.ScopeKey.IsPlatform : System.Boolean { get }
+ToolUp.Platform.ScopeKey.IsSession : System.Boolean { get }
+ToolUp.Platform.ScopeKey.IsTeam : System.Boolean { get }
+ToolUp.Platform.ScopeKey.IsUser : System.Boolean { get }
+ToolUp.Platform.ScopeKey.Tag : System.Int32 { get }
+ToolUp.Platform.ScopeKey+Claim (class)
+ToolUp.Platform.ScopeKey+Claim.claimScopeId : System.String { get }
+ToolUp.Platform.ScopeKey+Platform (class)
+ToolUp.Platform.ScopeKey+Platform.Item : ToolUp.Platform.PlatformShard { get }
+ToolUp.Platform.ScopeKey+Session (class)
+ToolUp.Platform.ScopeKey+Session.sessionId : System.String { get }
+ToolUp.Platform.ScopeKey+Tags (class)
+ToolUp.Platform.ScopeKey+Tags.Claim : System.Int32 (literal)
+ToolUp.Platform.ScopeKey+Tags.Platform : System.Int32 (literal)
+ToolUp.Platform.ScopeKey+Tags.Session : System.Int32 (literal)
+ToolUp.Platform.ScopeKey+Tags.Team : System.Int32 (literal)
+ToolUp.Platform.ScopeKey+Tags.User : System.Int32 (literal)
+ToolUp.Platform.ScopeKey+Team (class)
+ToolUp.Platform.ScopeKey+Team.teamId : System.String { get }
+ToolUp.Platform.ScopeKey+User (class)
+ToolUp.Platform.ScopeKey+User.userId : System.String { get }
+ToolUp.Platform.ScopeKeyModule (class)
+ToolUp.Platform.ScopeKeyModule.PlatformContainer : System.String (literal)
+ToolUp.Platform.ScopeKeyModule.container(ToolUp.Platform.ScopeKey) : System.String
+ToolUp.Platform.ScopeKeyModule.persistence(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], ToolUp.Platform.ScopeKey) : ToolUp.Platform.ScopePersistence
+ToolUp.Platform.ScopeKeyModule.persists(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.SurfaceProfile], ToolUp.Platform.ScopeKey) : System.Boolean
+ToolUp.Platform.ScopeKeyModule.platform : ToolUp.Platform.ScopeKey { get }
+ToolUp.Platform.ScopeKeyModule.scopeId(ToolUp.Platform.ScopeKey) : System.String
+ToolUp.Platform.ScopeKeyModule.tryParseContainer(System.String) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Platform.ScopeKey]
+ToolUp.Platform.ScopePersistence (class)
+ToolUp.Platform.ScopePersistence..ctor(System.Boolean, System.Boolean)
+ToolUp.Platform.ScopePersistence.Defaulted : System.Boolean { get }
+ToolUp.Platform.ScopePersistence.Persist : System.Boolean { get }
 ToolUp.Platform.ScopeResolutionError (class)
 ToolUp.Platform.ScopeResolutionError.IsNoActiveTeam : System.Boolean { get }
 ToolUp.Platform.ScopeResolutionError.IsNotAuthenticated : System.Boolean { get }
@@ -12395,6 +12445,8 @@ ToolUp.Platform.StorageScope..ctor(System.String, System.String, System.Boolean)
 ToolUp.Platform.StorageScope.Container : System.String { get }
 ToolUp.Platform.StorageScope.Persist : System.Boolean { get }
 ToolUp.Platform.StorageScope.ScopeId : System.String { get }
+ToolUp.Platform.StorageScopeModule (class)
+ToolUp.Platform.StorageScopeModule.ofKey(System.Boolean, ToolUp.Platform.ScopeKey) : ToolUp.Platform.StorageScope
 ToolUp.Platform.Subject (class)
 ToolUp.Platform.Subject.IsAnonymousSession : System.Boolean { get }
 ToolUp.Platform.Subject.IsAuthenticatedUser : System.Boolean { get }
