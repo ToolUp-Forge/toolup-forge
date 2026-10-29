@@ -269,7 +269,7 @@ module RedisRateLimitStore =
 
     /// Create an `IRateLimitStore` backed by Redis. Connects eagerly
     /// on first call (`StackExchange.Redis` lazily reconnects on
-    /// failures). Consumer wires this into compose via a
-    /// `ComposeExtensions.ServiceConfig` callback the same way as
+    /// failures). Consumer wires this into compose with
+    /// `ServerApp.addServiceConfig`, the same way as
     /// `AzureTableRateLimitStore.create`.
     let create (options: Options) (logger: ILogger) : IRateLimitStore = Store(options, logger) :> _
