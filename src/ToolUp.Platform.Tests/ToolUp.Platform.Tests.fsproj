@@ -1539,6 +1539,9 @@
         <!-- Phase 1132 - the render tools (render_chart / render_table); compiled before the
              disclosure egress pack, whose tool-result-door instances read its fixtures. -->
         <Compile Include="InProcess\FactRenderToolTests.fs" />
+        <!-- Phase 1145 - evaluate_pipeline; before the disclosure egress pack, whose
+             tool-result-door instance for a pipeline result reads its fixtures. -->
+        <Compile Include="InProcess\PipelineToolTests.fs" />
         <!-- Phase 525 — disclosure egress filtering, first choke points. -->
         <Compile Include="InProcess\DisclosureEgressTests.fs" />
         <!-- Phase 564 — disclosure egress: export door + webhook contract. -->

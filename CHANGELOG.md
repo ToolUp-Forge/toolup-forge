@@ -19,8 +19,9 @@ Migration notes:
 
 - [1095-redesign-h-deliveryplan-and-connector-capabilities](docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md)
 - [1132-render-tools](docs/migrations/1132-render-tools.md)
+- [1145-pipeline-tool](docs/migrations/1145-pipeline-tool.md)
 
-_Surface since `v0.37.0`: **breaking** — 7 packages moved; 156 members added, 2 members changed, 7 members removed; 1 package new._
+_Surface since `v0.37.0`: **breaking** — 8 packages moved; 258 members added, 2 members changed, 7 members removed; 1 package new._
 
 ### Added
 
@@ -49,9 +50,41 @@ _Surface since `v0.37.0`: **breaking** — 7 packages moved; 156 members added, 
   - `ToolUp.DataSources.Common.DeliveryCancel.SourceId : System.String { get }`
   - `ToolUp.DataSources.Common.DeliveryObservation (class)`
   - … and 40 more — `git diff v0.37.0 -- api-baselines/ToolUp.DataSources.Common.approved.txt`
+- `ToolUp.Facts.Core` — 92 members:
+  - `ToolUp.Facts.PipelineRefusal (class)`
+  - `ToolUp.Facts.PipelineRefusal+EvaluationFailed (class)`
+  - `ToolUp.Facts.PipelineRefusal+EvaluationFailed.reason : System.String { get }`
+  - `ToolUp.Facts.PipelineRefusal+MalformedArguments (class)`
+  - `ToolUp.Facts.PipelineRefusal+MalformedArguments.reason : System.String { get }`
+  - `ToolUp.Facts.PipelineRefusal+MalformedPipeline (class)`
+  - `ToolUp.Facts.PipelineRefusal+MalformedPipeline.reason : System.String { get }`
+  - `ToolUp.Facts.PipelineRefusal+MalformedPipeline.step : Microsoft.FSharp.Core.FSharpOption`1[System.Int32] { get }`
+  - `ToolUp.Facts.PipelineRefusal+NamedSource (class)`
+  - `ToolUp.Facts.PipelineRefusal+NamedSource.step : System.Int32 { get }`
+  - `ToolUp.Facts.PipelineRefusal+NamedSource.verb : System.String { get }`
+  - `ToolUp.Facts.PipelineRefusal+NoFacts (class)`
+  - `ToolUp.Facts.PipelineRefusal+NoFacts.tableId : System.String { get }`
+  - `ToolUp.Facts.PipelineRefusal+NothingDisclosable (class)`
+  - `ToolUp.Facts.PipelineRefusal+NothingDisclosable.cells : System.Int32 { get }`
+  - `ToolUp.Facts.PipelineRefusal+NothingDisclosable.withheld : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Facts.PipelineWithheldCount] { get }`
+  - `ToolUp.Facts.PipelineRefusal+OpenSchema (class)`
+  - `ToolUp.Facts.PipelineRefusal+OpenSchema.reason : System.String { get }`
+  - `ToolUp.Facts.PipelineRefusal+OpenSchema.step : System.Int32 { get }`
+  - `ToolUp.Facts.PipelineRefusal+ResultOverCap (class)`
+  - … and 72 more — `git diff v0.37.0 -- api-baselines/ToolUp.Facts.Core.approved.txt`
 - `ToolUp.Facts.Presentation.Server` — new package (21 public members)
-- `ToolUp.Facts.Server` — 1 member:
+- `ToolUp.Facts.Server` — 11 members:
+  - `ToolUp.Facts.FactBrowseHandler.atSurface(ToolUp.Platform.VectorKnowledgeTypes+FactEgressSurface, ToolUp.Facts.IHeldFactDisclosureGate) : ToolUp.Facts.IHeldFactDisclosureGate`
   - `ToolUp.Facts.FactBrowseHandler.factBrowseDeps(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactBrowseHandler+FactBrowseDeps]`
+  - `ToolUp.Facts.PipelineTool (class)`
+  - `ToolUp.Facts.PipelineTool.Name : System.String (literal)`
+  - `ToolUp.Facts.PipelineTool.answerWith(ToolUp.Facts.FactBrowseHandler+FactBrowseDeps, ToolUp.Platform.ResolvedScope, System.String, System.String) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PipelineToolResult, ToolUp.Facts.PipelineRefusal]]`
+  - `ToolUp.Facts.PipelineTool.decode(System.String) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform], ToolUp.Facts.PipelineRefusal]`
+  - `ToolUp.Facts.PipelineTool.definition : ToolUp.Platform.AIToolDefinition { get }`
+  - `ToolUp.Facts.PipelineTool.evaluate(ToolUp.Facts.PipelineToolRequest, Microsoft.FSharp.Collections.FSharpList`1[Fuaran.Compute.Transform], ToolUp.Facts.FactSlice, System.DateTime) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PipelineToolResult, ToolUp.Facts.PipelineRefusal]`
+  - `ToolUp.Facts.PipelineTool.refusalText(ToolUp.Facts.PipelineRefusal) : System.String`
+  - `ToolUp.Facts.PipelineTool.requestOf(System.String) : Microsoft.FSharp.Core.FSharpResult`2[ToolUp.Facts.PipelineToolRequest, ToolUp.Facts.PipelineRefusal]`
+  - `ToolUp.Facts.PipelineTool.summary(ToolUp.Facts.PipelineToolResult) : System.String`
 - `ToolUp.Platform.Build` — 3 members:
   - `ToolUp.Platform.CodemodMigration+Tags.Capabilities : System.Int32 (literal)`
   - `ToolUp.Platform.CodemodMigration.Capabilities : ToolUp.Platform.CodemodMigration { get }`

@@ -2672,6 +2672,8 @@ let private registeredTests =
         FactPresentationTests.tests
         // Phase 1132 - render tools draw a chart or table from gated facts.
         FactRenderToolTests.tests
+        // Phase 1145 - evaluate_pipeline computes over a gated fact slice.
+        PipelineToolTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

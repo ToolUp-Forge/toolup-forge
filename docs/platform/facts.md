@@ -979,6 +979,58 @@ The tools take table, metric and level ids they cannot list, so a deployment nam
 tables in the assistant's standing context. Migration recipe:
 [`docs/migrations/1132-render-tools.md`](../migrations/1132-render-tools.md).
 
+#### `evaluate_pipeline`: the model writes a computation, not a number (Phase 1145)
+
+The render tools draw a fixed shape. `evaluate_pipeline` lets the model group, derive, rank
+and reshape: it names one [view slice](#a-view-reads-once-and-refines-locally-the-view-slice-phase-1127)
+(a table, a period range, an optional subject prefix and metric set) and writes a
+`Fuaran.Compute` pipeline over it, as data. The server evaluates the pipeline. The model
+never types a figure into the result, and the result's figures never reach the model.
+
+- **The slice is the gated slice.** The executor (`PipelineTool.answerWith`) reads through
+  the browse's own slice read under the caller's resolved scope and principal, judged at
+  `FactToolResult`. The cell cap is checked before the gate, and the gate judges every cell
+  before anything is evaluated, so no table is ever built from ungated facts. A slice with
+  no fact, or with every cell withheld from the caller, is refused: a denied principal gets
+  a refusal, never an empty table.
+- **The pipeline is static-checked, then evaluated by the reference evaluator.** Each step
+  is decoded at its position (`DataFrameCodec`), so a malformed step is refused naming it.
+  `join`, `union`, `intersect` and `except` are refused because the slice is the only source.
+  A parameter or `now` is refused because nothing is bound and no clock is pinned. The walk
+  (`SchemaWalk`) refuses a step reading a column its input lacks, and a step after which
+  the output columns cannot be named (`pivot`). The pipeline is then evaluated with
+  `DataFrame.evalPrepared` over the prepared slice, with no source resolver. A result over
+  the slice's cell cap is refused naming the cap and suggesting a `limit`.
+- **The withheld rule.** A withheld cell is a null the evaluator would skip, so a sum over
+  it is a partial sum wearing the whole's label. The walk derives each output column's
+  lineage: the slice columns its values depend on. Any output column whose lineage reads a
+  metric with a withheld cell in the slice is **withheld**: its cells are null, and the
+  result reports it with the count by policy. The lineage is conservative. A step that
+  decides which rows survive (`filter`, `distinct`, a `groupBy`'s keys, a `limit` after a
+  `sort`) joins every later column's lineage, because a list of the subjects whose revenue
+  passed a threshold is partial when one revenue is withheld. A count of rows over the
+  same groups stays intact. To answer in full, the model narrows the slice to a region with
+  no withheld cell and evaluates again. (`SchemaWalk` exposes no lineage, so the walk lives
+  in the tool. It is total over the closed `Transform` and `ColExpr` unions, and a column
+  it cannot attribute reads every slice column.)
+- **The record.** The result table in the column codec, its row count and column names,
+  the withheld report, the pipeline's canonical form and hash
+  (`IncrementalCodec.pipelineHash`), the slice's run stamp and read time, and the admitted
+  fact ids the lineage read, capped at `PopulationQuery.MaxTopK`.
+- **Shown, never retyped.** The summary the model reads (`PipelineTool.summary`) names the
+  shape, the columns and the withheld report, and never a cell value. A figure the model
+  restated in prose would carry no fact id, so the numeric-fidelity gate would treat it as
+  unverified. The tool's description says so: present the result, retype nothing.
+
+**Not composed yet.** A result is meant to reach the user as a block part on the assistant
+turn (Phase 1131). That needs two things outside the fact tier. The first is the record
+form a tool answers, which lives with the AI composition, as the render tools' does. The
+second is a conversation panel that can re-run a pipeline block under the reader's own
+gate. Until both land, no composition registers `evaluate_pipeline`, and a deployment's
+tool list is unchanged. What ships is the executor, its types (`PipelineToolRequest`,
+`PipelineToolResult`, `PipelineRefusal` in `ToolUp.Facts.Core`) and the gate it reads
+through. Migration note: [`docs/migrations/1145-pipeline-tool.md`](../migrations/1145-pipeline-tool.md).
+
 #### The question compiler (Phase 986)
 
 The planner takes its compiler from the first of these that the
