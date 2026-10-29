@@ -110,10 +110,8 @@ module NarrativeRegenerateJob =
     }
 
     /// Run the narrative under the scope the job carries. The outcome maps to
-    /// a job result exactly as the data-arrival job's does: published is a
-    /// success; a refusal, an unfunded scope and a reply cut at the budget
-    /// are permanent (another attempt meets the same facts, key and budget);
-    /// a failure to produce a narrative may pass, and is retried.
+    /// a job result through `GroundedNarrativeOutcome.toJobResult`, as the
+    /// data-arrival job's does.
     type RegenerateJobHandler(run: IGroundedNarrativeRun) =
         interface IJobHandler with
             member _.Execute(ctx: JobContext) = async {
@@ -132,13 +130,7 @@ module NarrativeRegenerateJob =
                             Trigger = TriggerName
                         }
 
-                    match outcome with
-                    | GroundedNarrativePublished _ -> return Success
-                    | GroundedNarrativeFailed _ -> return TransientFailure(GroundedNarrativeOutcome.describe outcome)
-                    | GroundedNarrativeRefused _
-                    | GroundedNarrativeUnfunded _
-                    | GroundedNarrativeOverBudget _ ->
-                        return PermanentFailure(GroundedNarrativeOutcome.describe outcome)
+                    return GroundedNarrativeOutcome.toJobResult outcome
             }
 
     /// Register the handler with the composed scheduler at startup — only
