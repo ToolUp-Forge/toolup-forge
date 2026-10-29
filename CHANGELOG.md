@@ -20,7 +20,7 @@ Migration notes:
 - [1077-redesign-f-turnoutcome-loopstate-and-loop-step](docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md)
 - [1137-build-identity](docs/migrations/1137-build-identity.md)
 
-_Surface since `v0.36.0`: **breaking** — 3 packages moved; 210 members added, 1 member changed, 5 members removed._
+_Surface since `v0.36.0`: **breaking** — 3 packages moved; 211 members added, 1 member changed, 5 members removed._
 
 ### Added
 
@@ -50,7 +50,7 @@ _Surface since `v0.36.0`: **breaking** — 3 packages moved; 210 members added, 
   - `ToolUp.Platform.CodemodMigration+Tags.AgentLoop : System.Int32 (literal)`
   - `ToolUp.Platform.CodemodMigration.AgentLoop : ToolUp.Platform.CodemodMigration { get }`
   - `ToolUp.Platform.CodemodMigration.IsAgentLoop : System.Boolean { get }`
-- `ToolUp.Platform.Server` — 12 members:
+- `ToolUp.Platform.Server` — 13 members:
   - `ToolUp.Platform.DevDiagnosticsHandler+BuildIdentity (class)`
   - `ToolUp.Platform.DevDiagnosticsHandler+BuildIdentity..ctor(System.String, Microsoft.FSharp.Core.FSharpOption`1[System.String])`
   - `ToolUp.Platform.DevDiagnosticsHandler+BuildIdentity.Commit : Microsoft.FSharp.Core.FSharpOption`1[System.String] { get }`
@@ -63,6 +63,7 @@ _Surface since `v0.36.0`: **breaking** — 3 packages moved; 210 members added, 
   - `ToolUp.Platform.SpaFallbackExcludedPath (class)`
   - `ToolUp.Platform.SpaFallbackExcludedPath..ctor(System.String)`
   - `ToolUp.Platform.SpaFallbackExcludedPath.Path : System.String { get }`
+  - `ToolUp.Platform.SpaFallbackMiddleware..ctor(Microsoft.AspNetCore.Http.RequestDelegate, ToolUp.Platform.ServerConfig, System.Collections.Generic.IEnumerable`1[ToolUp.Platform.SpaFallbackExcludedPath])`
 
 ### Changed
 

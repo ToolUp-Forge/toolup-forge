@@ -10815,6 +10815,7 @@ ToolUp.Platform.SpaFallbackExcludedPath..ctor(System.String)
 ToolUp.Platform.SpaFallbackExcludedPath.Path : System.String { get }
 ToolUp.Platform.SpaFallbackMiddleware (class)
 ToolUp.Platform.SpaFallbackMiddleware..ctor(Microsoft.AspNetCore.Http.RequestDelegate, ToolUp.Platform.ServerConfig)
+ToolUp.Platform.SpaFallbackMiddleware..ctor(Microsoft.AspNetCore.Http.RequestDelegate, ToolUp.Platform.ServerConfig, System.Collections.Generic.IEnumerable`1[ToolUp.Platform.SpaFallbackExcludedPath])
 ToolUp.Platform.SpaFallbackMiddleware.InvokeAsync(Microsoft.AspNetCore.Http.HttpContext) : System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.Unit]
 ToolUp.Platform.SpaFallbackPrecedence (class)
 ToolUp.Platform.SpaFallbackPrecedence.IsRouterFirst : System.Boolean { get }

@@ -81,7 +81,12 @@ module SpaFallbackPrecedence =
 /// exclusion list is exactly the fixed one above (GP 11).
 type SpaFallbackExcludedPath = { Path: string }
 
-type SpaFallbackMiddleware(next: RequestDelegate, config: ServerConfig) =
+type SpaFallbackMiddleware
+    (
+        next: RequestDelegate,
+        config: ServerConfig,
+        excluded: System.Collections.Generic.IEnumerable<SpaFallbackExcludedPath>
+    ) =
     let publicPath = Path.GetFullPath config.PublicPath
     let indexPath = Path.Combine(publicPath, "index.html")
 
@@ -93,15 +98,14 @@ type SpaFallbackMiddleware(next: RequestDelegate, config: ServerConfig) =
         || path.StartsWith("/dev/", StringComparison.OrdinalIgnoreCase)
         || path.Equals("/dev", StringComparison.OrdinalIgnoreCase)
 
-    let isRegisteredExclusion (ctx: HttpContext) (path: string) =
-        match ctx.RequestServices with
-        | null -> false
-        | services ->
-            match services.GetService typeof<System.Collections.Generic.IEnumerable<SpaFallbackExcludedPath>> with
-            | :? System.Collections.Generic.IEnumerable<SpaFallbackExcludedPath> as excluded ->
-                excluded
-                |> Seq.exists (fun e -> path.Equals(e.Path, StringComparison.OrdinalIgnoreCase))
-            | _ -> false
+    let excludedPaths = excluded |> Seq.map _.Path |> Array.ofSeq
+
+    let isRegisteredExclusion (path: string) =
+        excludedPaths
+        |> Array.exists (fun e -> path.Equals(e, StringComparison.OrdinalIgnoreCase))
+
+    /// No registered exclusions: the fixed list above, exactly as before.
+    new(next: RequestDelegate, config: ServerConfig) = SpaFallbackMiddleware(next, config, Seq.empty)
 
     member _.InvokeAsync(ctx: HttpContext) = task {
         let path = ctx.Request.Path.Value
@@ -111,7 +115,7 @@ type SpaFallbackMiddleware(next: RequestDelegate, config: ServerConfig) =
             isGet
             && not (String.IsNullOrEmpty path)
             && not (isExcluded path)
-            && not (isRegisteredExclusion ctx path)
+            && not (isRegisteredExclusion path)
             && not (Path.HasExtension path)
             && File.Exists indexPath
 
