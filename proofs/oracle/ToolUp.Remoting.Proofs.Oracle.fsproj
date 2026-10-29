@@ -1,42 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
-    <!-- Phase 787 — the F* model of the remoting decoder algebra, extracted
-         to F# and compiled so the differential host can RUN it beside
-         production over the Phase 784 corpus.
+    <!-- Phase 787 — the F* models under proofs/, extracted to F# and compiled
+         so the differential hosts can RUN them beside production.
 
-         `RemotingDecode.fs` is GENERATED: `proofs/check.ps1` re-extracts it
-         from `proofs/RemotingDecode.fst`, lays it out through
-         `proofs/normalise-extraction.fsx`, and byte-compares the result
-         against the committed copy, so editing it by hand is a change the
-         proof leg refuses rather than one it absorbs. It is committed
-         nonetheless, and deliberately: the F* toolchain is a 198 MB
-         download, and requiring it to BUILD the repo would put a prover on
-         the critical path of every contributor and every CI job that has
-         nothing to do with proofs. The committed extraction is the seam —
-         `VerifyAll` compiles it like any other source, and the proofs job
-         is what holds it honest.
+         Every file under custard/ is GENERATED (Phase 957): one run of
+         Custard's F# backend over the nine models writes the modules, the
+         support library `FStarCustard.fs` they all open, and `Custard.fsproj`
+         listing them in compile order; `proofs/check.ps1` re-runs that
+         extraction and byte-compares every file against the committed copy,
+         so editing one by hand is a change the proof leg refuses rather than
+         one it absorbs. They are committed nonetheless, and deliberately:
+         the F* toolchain is a 230 MB download, and requiring it to BUILD the
+         repo would put a prover on the critical path of every contributor
+         and every CI job that has nothing to do with proofs. The committed
+         extraction is the seam — `VerifyAll` compiles it like any other
+         source, and the proofs job is what holds it honest.
 
-         No layout flag. Until Phase 850 this project carried the
-         strict-indentation opt-out in `OtherFlags` (and FS0058 in `NoWarn`)
-         because the F# backend emits pre-F#-8 layout; Fable reads no such flag from an
-         fsproj, F# 10 refuses the verbose-syntax directive that would have
-         been the other route (FS1205), and Fantomas cannot parse the raw
-         output. The normaliser is the answer to all three at once: the
-         committed extractions are indentation-clean F# that this project,
-         the Fable host beside it (`fable/`) and any future host compile
-         with nothing relaxed. What remains forced by the extractor:
+         This project compiles the SAME files Custard's own project does, in
+         the SAME order, and check.ps1 asserts the two lists agree: the
+         generated project is built as generated so a layout the compiler
+         refuses fails by name, and this one is what the hosts reference, so
+         every extraction reaches them through one oracle assembly. The
+         hand-written `Prims` shim that preceded Custard (nine names over
+         BigInteger) is gone: `Prims.int` is `bigint` and the operators come
+         from the generated support library.
 
-           * `FS0064` (a type instantiated less generally than its
-             annotation) off, in this scope only — the extractor annotates
-             every parameter and some of those annotations are narrower than
-             the inferred type.
+         What remains forced by the extractor: `FS0064` (a type instantiated
+         less generally than its annotation) off, in this scope only — the
+         extractor annotates every binder and some annotations are narrower
+         than the inferred type.
 
          FS0025 (incomplete match) is an ERROR here, as it is tree-wide
          (Phase 624): `Directory.Build.props` beside this file stops the
          repository-wide walk and states the promotion itself (Phase 1037).
-         The extractor's field projectors no longer trip it because the
-         normaliser completes each one (Phase 1035); read that file for
-         why the walk stops, and for what a reader gives up by it. -->
+         check.ps1 strips the FS0025 token from the `#nowarn` line Custard
+         heads each module with, so a match F* left incomplete fails this
+         build by name — and is the MODEL's to complete by a respelling that
+         changes no theorem, as the decoder's `item_at` was (Phase 957). -->
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
         <IsPackable>false</IsPackable>
@@ -44,53 +44,19 @@
         <GenerateDocumentationFile>false</GenerateDocumentationFile>
     </PropertyGroup>
     <ItemGroup>
-        <!-- The whole runtime the extraction needs. Must precede it. -->
-        <Compile Include="Prims.fs" />
-        <!-- GENERATED from ../RemotingDecode.fst — do not edit. -->
-        <Compile Include="RemotingDecode.fs" />
-        <!-- Phase 790 — GENERATED from ../DisclosureFold.fst — do not edit.
-             Independent of RemotingDecode.fs (it owns its own opt/pair), so
-             order between the two extractions is immaterial; later proof
-             phases APPEND their extraction below. -->
-        <Compile Include="DisclosureFold.fs" />
-        <!-- Phase 793 — the tool gate model, extracted. Same discipline: the
-             byte-diff in check.ps1 holds it identical to the prover output. -->
-        <Compile Include="ToolGate.fs" />
-        <!-- Phase 792 — GENERATED from ../ModelInput.fst — do not edit.
-             Independent of both extractions above (it owns its own opt and
-             adds its own outcome), so order among the three is immaterial;
-             later proof phases APPEND their extraction below. -->
-        <Compile Include="ModelInput.fs" />
-        <!-- Phase 795 — GENERATED from ../TaintFlow.fst — do not edit.
-             Independent of both extractions above (it owns its own opt/pair),
-             so order between the three is immaterial. -->
-        <Compile Include="TaintFlow.fs" />
-        <!-- Phase 788 — GENERATED from ../ElmishRing.fst and ../ElmishSub.fst
-             — do not edit. Independent of every extraction above (each owns
-             its own opt/pair). The runtime they model also ships to the
-             browser: since Phase 850 the Fable pack compiles ElmishRing.fs
-             DIRECTLY (through `fable/ToolUp.Remoting.Proofs.Oracle.Fable.fsproj`,
-             over a machine-integer Prims) and runs it live beside the
-             transpiled runtime, as well as replaying the corpus under
-             tests/elmish-proof-corpus/ that the .NET host writes. -->
-        <Compile Include="ElmishRing.fs" />
-        <Compile Include="ElmishSub.fs" />
-        <!-- Phase 789 — GENERATED from ../ElmishLoop.fst — do not edit. The
-             FIRST extraction that depends on another: it opens ElmishRing
-             for the ring, its opt/pair and append, so it must follow
-             ElmishRing.fs. Later proof phases APPEND their extraction below. -->
-        <Compile Include="ElmishLoop.fs" />
-        <!-- Phase 955 - GENERATED from ../ElmishRingArray.fst through
-             Custard's F# backend, not the legacy printer: the ring over a
-             .NET array, and the support library that backend writes beside
-             every module. Both are the bytes of the generated project in
-             custard/ (check.ps1 byte-holds all three of its files and
-             builds that project as generated); they are compiled here as
-             well so the differential host reaches them through the one
-             oracle assembly. FStarCustard.fs carries a nested Prims of its
-             own, over bigint, which the ring does not use and which is
-             distinct from the top-level Prims.fs above. Do not edit. -->
+        <!-- GENERATED — do not edit any of these. The order is Custard's
+             (custard/Custard.fsproj): the support library first, then the
+             modules in the order check.ps1's list names them. A new model is one line
+             here, where Custard's project puts it. -->
         <Compile Include="custard/FStarCustard.fs" />
+        <Compile Include="custard/RemotingDecode.fs" />
+        <Compile Include="custard/DisclosureFold.fs" />
+        <Compile Include="custard/ToolGate.fs" />
+        <Compile Include="custard/ModelInput.fs" />
+        <Compile Include="custard/TaintFlow.fs" />
+        <Compile Include="custard/ElmishRing.fs" />
+        <Compile Include="custard/ElmishSub.fs" />
+        <Compile Include="custard/ElmishLoop.fs" />
         <Compile Include="custard/ElmishRingArray.fs" />
     </ItemGroup>
 </Project>

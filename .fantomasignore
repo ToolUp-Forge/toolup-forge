@@ -6,14 +6,15 @@
 docs-snippets/generated/
 **/docs-snippets/generated/
 
-# Phase 787 — `proofs/oracle/RemotingDecode.fs` is the F* extractor's output,
-# reproduced byte for byte by `proofs/check.ps1` and compared against the
-# committed copy. Formatting it would break that diff on every run, over source
-# nobody wrote. Same class as the generated doc snippets above. Phase 790's
-# `DisclosureFold.fs` is the second extraction, held by the same byte-diff;
-# Phase 793's `ToolGate.fs`, Phase 792's `ModelInput.fs` and Phase 795's `TaintFlow.fs`
-# follow it.
-proofs/oracle/RemotingDecode.fs
+# Phase 787 — the committed extractions under `proofs/oracle/custard/` are the F*
+# extractor's output, reproduced byte for byte by `proofs/check.ps1` and compared
+# against the committed copies (since Phase 957 one whole-program run of Custard's
+# F# backend writes every module, the support library and the project). Formatting
+# them would break that diff on every run, over source nobody wrote. Same class as
+# the generated doc snippets above. `proofs/oracle/fable/FStarCustard.fs` is DERIVED
+# from the generated support library by the same leg and byte-held the same way.
+proofs/oracle/custard/
+proofs/oracle/fable/FStarCustard.fs
 # Phase 801 — the platform's own decoders are the remoting generator's emission over every
 # API record ToolUp.Platform.Core declares, held byte-for-byte to it by
 # Remoting/PlatformDecodersGenerationTests. Same class as the AOT sample's generated files below.
@@ -26,17 +27,6 @@ src/ToolUp.Platform.Core/Shared/Remoting/Json/PlatformJsonDecoders.fs
 # Remoting/ClientProxyGenerationTests (853.C).
 src/ToolUp.Platform.Client/Client/Remoting/PlatformClientProxies.fs
 src/ToolUp.Platform.Tests/Remoting/ReadCatalogClientProxies.fs
-proofs/oracle/DisclosureFold.fs
-proofs/oracle/ToolGate.fs
-proofs/oracle/ModelInput.fs
-proofs/oracle/TaintFlow.fs
-proofs/oracle/ElmishRing.fs
-proofs/oracle/ElmishSub.fs
-proofs/oracle/ElmishLoop.fs
-# Phase 955 - the Custard F# backend's output for proofs/ElmishRingArray.fst:
-# the module and the support library it writes beside every module, held
-# byte for byte to the extraction by proofs/check.ps1.
-proofs/oracle/custard/
 # The proof leg's working directories: the downloaded toolchain, F*'s
 # .checked cache, and the fresh extraction the byte-diff compares. All
 # gitignored, but Fantomas reads THIS file rather than .gitignore, so a

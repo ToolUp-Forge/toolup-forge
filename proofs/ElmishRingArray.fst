@@ -29,11 +29,12 @@
 /// ring exactly what the list model's operation does.
 ///
 /// It is the first module under `proofs/` that is extracted to be RUN as
-/// the implementation rather than beside one, and the first extracted
-/// through Custard's F# backend (`--codegen Custard --custard_backend
-/// FSharp`): a Pulse `vec` becomes a .NET array and a `box` an F# `ref`
-/// cell. `proofs/check.ps1` holds the committed extraction under
-/// `oracle/custard/` byte for byte to what the pinned prover emits.
+/// the implementation rather than beside one, and was the first extracted
+/// through Custard's F# backend (since Phase 957 every model is, in one
+/// `--codegen FSharp --custard_split` run): a Pulse `vec` becomes a .NET
+/// array and a `box` an F# `ref` cell. `proofs/check.ps1` holds the
+/// committed extraction under `oracle/custard/` byte for byte to what the
+/// pinned prover emits.
 ///
 /// # The refinement relation
 ///
