@@ -15,6 +15,14 @@ type RegisteredTool = {
     ProviderDef: AIProviderToolDef
     /// Execute the tool: HttpContext -> JSON args -> Async<JSON result>
     Execute: HttpContext -> string -> Async<string>
+    /// Phase 1131 — the record form of `Execute`, for a server-resident
+    /// tool that attaches parts to the assistant turn. When `Some`, the
+    /// agent loop runs this instead of `Execute` and attaches its parts;
+    /// `Execute` is its text alone, kept for every reader of the string
+    /// contract. `None` for every string-returning tool. Build it with
+    /// `createAnsweringTool`, which derives both from one function; the
+    /// loop refuses a client-resident tool that carries one.
+    Answer: (HttpContext -> string -> Async<ToolHelpers.ToolAnswer>) option
 }
 
 /// Sanitize a tool name to match AI provider naming constraints.
@@ -827,6 +835,30 @@ let createTool (def: AIToolDefinition) (execute: HttpContext -> string -> Async<
         Definition = def
         ProviderDef = toProviderDef def
         Execute = execute
+        Answer = None
+    }
+
+/// Phase 1131 — create a RegisteredTool whose executor answers the record
+/// form: the text the model reads and the parts the assistant message
+/// carries. `Execute` is derived from `answer` (its text), so the two
+/// cannot disagree. A client-resident definition is refused here, at
+/// compose time: its result is the browser's, and a part is the server's
+/// judgement of a read the server made.
+let createAnsweringTool
+    (def: AIToolDefinition)
+    (answer: HttpContext -> string -> Async<ToolHelpers.ToolAnswer>)
+    : RegisteredTool =
+    if def.Location = ClientResident then
+        failwithf
+            "AI tool '%s' is client-resident and cannot attach parts to the assistant message. Register it with createTool, or declare it ServerResident."
+            def.Name
+
+    {
+        createTool def (fun ctx args -> async {
+            let! answered = answer ctx args
+            return answered.Text
+        }) with
+            Answer = Some answer
     }
 
 /// Mutable registry of AI-callable tools, populated at startup.

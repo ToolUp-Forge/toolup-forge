@@ -160,6 +160,7 @@ let private toolFor (name: string) (sourceModule: string) : RegisteredTool = {
         InputSchema = "{}"
     }
     Execute = fun _ _ -> async { return "{}" }
+    Answer = None
 }
 
 /// A background-shaped `HttpContext` carrying exactly what

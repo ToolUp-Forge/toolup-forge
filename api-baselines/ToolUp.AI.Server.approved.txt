@@ -33,16 +33,18 @@ ToolUp.AI.AIAgentEngine+AgentLoopStopped.stop : ToolUp.AI.AIAgentEngine+LoopStop
 ToolUp.AI.AIAgentEngine+Loop (class)
 ToolUp.AI.AIAgentEngine+Loop.reply(ToolUp.AI.AIAgentEngine+TurnContext, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], System.String) : ToolUp.AI.AIAgentEngine+LoopState
 ToolUp.AI.AIAgentEngine+Loop.run(ToolUp.AI.AIAgentEngine+TurnContext, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage]) : Microsoft.FSharp.Control.FSharpAsync`1[Microsoft.FSharp.Core.FSharpResult`2[ToolUp.AI.AIAgentEngine+LoopState, ToolUp.AI.AIAgentEngine+LoopStop]]
-ToolUp.AI.AIAgentEngine+Loop.settle(ToolUp.AI.AIAgentEngine+TurnContext, ToolUp.AI.AIAgentEngine+LoopState, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolCall], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`3[ToolUp.Platform.AI.AIProviderToolResult, ToolUp.AI.ToolCallTiming, ToolUp.AI.ToolOutcome]]) : ToolUp.AI.AIAgentEngine+LoopState
+ToolUp.AI.AIAgentEngine+Loop.settle(ToolUp.AI.AIAgentEngine+TurnContext, ToolUp.AI.AIAgentEngine+LoopState, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderToolCall], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`4[ToolUp.Platform.AI.AIProviderToolResult, ToolUp.AI.ToolCallTiming, ToolUp.AI.ToolOutcome, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIContentPart]]]) : ToolUp.AI.AIAgentEngine+LoopState
 ToolUp.AI.AIAgentEngine+Loop.step(ToolUp.AI.AIAgentEngine+LoopState, ToolUp.Platform.AI.AIProviderResponse) : ToolUp.AI.AIAgentEngine+StepVerdict
 ToolUp.AI.AIAgentEngine+LoopState (class)
-ToolUp.AI.AIAgentEngine+LoopState..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallTiming], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIAgentEngine+LoopStop])
+ToolUp.AI.AIAgentEngine+LoopState..ctor(System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage], System.Int32, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallTiming], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIAgentEngine+LoopStop], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIContentPart])
+ToolUp.AI.AIAgentEngine+LoopState.Attached : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIContentPart] { get }
 ToolUp.AI.AIAgentEngine+LoopState.ConsecutiveErrored : System.Int32 { get }
 ToolUp.AI.AIAgentEngine+LoopState.Messages : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage] { get }
 ToolUp.AI.AIAgentEngine+LoopState.Stopped : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIAgentEngine+LoopStop] { get }
 ToolUp.AI.AIAgentEngine+LoopState.Timings : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallTiming] { get }
 ToolUp.AI.AIAgentEngine+LoopState.Turn : System.Int32 { get }
 ToolUp.AI.AIAgentEngine+LoopStateModule (class)
+ToolUp.AI.AIAgentEngine+LoopStateModule.messageParts(System.String, ToolUp.AI.AIAgentEngine+LoopState) : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIContentPart]
 ToolUp.AI.AIAgentEngine+LoopStateModule.start(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIProviderMessage]) : ToolUp.AI.AIAgentEngine+LoopState
 ToolUp.AI.AIAgentEngine+LoopStop (class)
 ToolUp.AI.AIAgentEngine+LoopStop.Cancelled : ToolUp.AI.AIAgentEngine+LoopStop { get }
@@ -670,6 +672,7 @@ ToolUp.AI.AISurfaceDerivationMode+Tags.TrustClient : System.Int32 (literal)
 ToolUp.AI.AIToolRegistry (class)
 ToolUp.AI.AIToolRegistry.DefaultToolResultBudgetChars : System.Int32 (literal)
 ToolUp.AI.AIToolRegistry.UnauthorizedToolVerdict : System.String (literal)
+ToolUp.AI.AIToolRegistry.createAnsweringTool(ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]) : ToolUp.AI.AIToolRegistry+RegisteredTool
 ToolUp.AI.AIToolRegistry.createTool(ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]) : ToolUp.AI.AIToolRegistry+RegisteredTool
 ToolUp.AI.AIToolRegistry.guardToolGrant(Microsoft.AspNetCore.Http.HttpContext, ToolUp.Platform.AccessContext, System.String) : System.Boolean
 ToolUp.AI.AIToolRegistry.isSdkReservedToolSource(System.String) : System.Boolean
@@ -692,7 +695,8 @@ ToolUp.AI.AIToolRegistry+AIToolRegistry.Policy : ToolUp.AI.AIToolRegistry+ToolPo
 ToolUp.AI.AIToolRegistry+AIToolRegistry.RegisterAll(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.AIToolRegistry+RegisteredTool]) : System.Void
 ToolUp.AI.AIToolRegistry+AIToolRegistry.TryClaimBudgetWarning(System.String) : System.Boolean
 ToolUp.AI.AIToolRegistry+RegisteredTool (class)
-ToolUp.AI.AIToolRegistry+RegisteredTool..ctor(ToolUp.Platform.AIToolDefinition, ToolUp.Platform.AI.AIProviderToolDef, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]])
+ToolUp.AI.AIToolRegistry+RegisteredTool..ctor(ToolUp.Platform.AIToolDefinition, ToolUp.Platform.AI.AIProviderToolDef, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]])
+ToolUp.AI.AIToolRegistry+RegisteredTool.Answer : Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]] { get }
 ToolUp.AI.AIToolRegistry+RegisteredTool.Definition : ToolUp.Platform.AIToolDefinition { get }
 ToolUp.AI.AIToolRegistry+RegisteredTool.Execute : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]] { get }
 ToolUp.AI.AIToolRegistry+RegisteredTool.ProviderDef : ToolUp.Platform.AI.AIProviderToolDef { get }
@@ -1317,6 +1321,10 @@ ToolUp.AI.ToolHelpers.requireString(System.Text.Json.JsonElement, System.String,
 ToolUp.AI.ToolHelpers.requireTypedArg`1(System.Text.Json.JsonElement, System.String, System.String, System.String) : T
 ToolUp.AI.ToolHelpers.validateSchema(ToolUp.Platform.ToolSchemaNode, System.Text.Json.JsonElement) : Microsoft.FSharp.Core.FSharpResult`2[Microsoft.FSharp.Core.Unit, ToolUp.AI.ToolHelpers+ToolArgumentRefusal]
 ToolUp.AI.ToolHelpers.wireTools(Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AIToolDefinition], Microsoft.FSharp.Collections.FSharpMap`2[System.String, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]) : Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]]]]
+ToolUp.AI.ToolHelpers+ToolAnswer (class)
+ToolUp.AI.ToolHelpers+ToolAnswer..ctor(System.String, Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIContentPart])
+ToolUp.AI.ToolHelpers+ToolAnswer.Parts : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.AI.AIContentPart] { get }
+ToolUp.AI.ToolHelpers+ToolAnswer.Text : System.String { get }
 ToolUp.AI.ToolHelpers+ToolArgumentError (class)
 ToolUp.AI.ToolHelpers+ToolArgumentError..ctor()
 ToolUp.AI.ToolHelpers+ToolArgumentError..ctor(System.String)

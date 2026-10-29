@@ -3,6 +3,7 @@ module ToolUp.AI.ToolHelpers
 open System.Text.Json
 open Microsoft.AspNetCore.Http
 open ToolUp.Platform
+open ToolUp.Platform.AI
 open ToolUp.Remoting.Json.SystemTextJson
 
 // ─── AI tool helpers ─────────────────────────────────────────────
@@ -35,6 +36,21 @@ open ToolUp.Remoting.Json.SystemTextJson
 /// args string from the agent loop, and returns a serialised JSON
 /// result that the agent appends to the conversation.
 type ToolExecutor = HttpContext -> string -> Async<string>
+
+/// Phase 1131 — what a server-resident tool answers when it also attaches
+/// parts to the assistant turn: the text the model reads, and the parts the
+/// final assistant message carries after its own text. A string-returning
+/// executor answers the text alone and is unchanged; register this form
+/// with `AIToolRegistry.createAnsweringTool`. The parts never reach the
+/// model — the stream carries each one as a `BlockAttached` event when the
+/// tool round completes, and the conversation record persists them.
+type ToolAnswer = {
+    /// The text the model reads: exactly what a string-returning executor
+    /// returns, under the same result budget.
+    Text: string
+    /// The parts to attach, in order. Empty attaches nothing.
+    Parts: AIContentPart list
+}
 
 /// Raised by argument-validating helpers when a tool received arguments
 /// that do not match the parameter schema (missing required value, wrong
