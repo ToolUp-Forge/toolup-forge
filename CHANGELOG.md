@@ -23,7 +23,7 @@ Migration notes:
 - [1095-redesign-h-deliveryplan-and-connector-capabilities](docs/migrations/1095-redesign-h-deliveryplan-and-connector-capabilities.md)
 - [1132-render-tools](docs/migrations/1132-render-tools.md)
 
-_Surface since `v0.37.0`: **breaking** — 12 packages moved; 210 members added, 5 members changed, 9 members removed; 1 package new._
+_Surface since `v0.37.0`: **breaking** — 12 packages moved; 211 members added, 5 members changed, 9 members removed; 1 package new._
 
 ### Added
 
@@ -116,7 +116,7 @@ _Surface since `v0.37.0`: **breaking** — 12 packages moved; 210 members added,
   - `ToolUp.Platform.PlatformShard.Tag : System.Int32 { get }`
   - `ToolUp.Platform.ScopeKey (class)`
   - … and 39 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Core.approved.txt`
-- `ToolUp.Platform.Server` — 53 members:
+- `ToolUp.Platform.Server` — 54 members:
   - `ToolUp.Platform.CapabilityNotDeclared (class)`
   - `ToolUp.Platform.CapabilityNotDeclared..ctor(System.String, ToolUp.Platform.ConnectorCapability)`
   - `ToolUp.Platform.CapabilityNotDeclared.Capability : ToolUp.Platform.ConnectorCapability { get }`
@@ -137,7 +137,7 @@ _Surface since `v0.37.0`: **breaking** — 12 packages moved; 210 members added,
   - `ToolUp.Platform.ConnectorCapability (class)`
   - `ToolUp.Platform.ConnectorCapability+Tags (class)`
   - `ToolUp.Platform.ConnectorCapability+Tags.Native : System.Int32 (literal)`
-  - … and 33 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
+  - … and 34 more — `git diff v0.37.0 -- api-baselines/ToolUp.Platform.Server.approved.txt`
 - `ToolUp.Platform.UI` — 1 member:
   - `Toolup.UIToolkit.OutputFormatting.fallbackLocale : System.String (literal)`
 
