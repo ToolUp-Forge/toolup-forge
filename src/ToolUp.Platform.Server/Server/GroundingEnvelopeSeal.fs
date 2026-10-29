@@ -230,32 +230,35 @@ module GroundingEnvelope =
     /// same reason: without it two distinct envelopes could canonicalise
     /// to identical text by concatenation, and a digest over them would
     /// be meaningless.
-    let canonicalForm (envelope: GroundingEnvelope) : string =
-        let builder = StringBuilder()
-        let frame = ProvenanceFraming.frame builder
-
+    ///
+    /// Phase 1089: the field list is framed by `CanonicalFrame`, the one
+    /// frame every content id is taken over — byte-identical to the
+    /// hand-framed form it replaces, pinned in `CanonicalFrameTests`.
+    let private canonicalFields (envelope: GroundingEnvelope) : string list =
         let declarations = canonicalDeclarations envelope
 
-        frame FramingVersion
-        frame (string envelope.SchemaVersion)
-        frame (string declarations.Length)
+        [
+            FramingVersion
+            string envelope.SchemaVersion
+            string declarations.Length
+            for declaration in declarations do
+                GroundingFacet.label declaration.Facet
+                declaration.Subject
+                declaration.Value
+        ]
 
-        for declaration in declarations do
-            frame (GroundingFacet.label declaration.Facet)
-            frame declaration.Subject
-            frame declaration.Value
-
-        builder.ToString()
+    let canonicalForm (envelope: GroundingEnvelope) : string =
+        envelope |> canonicalFields |> CanonicalFrame.text
 
     /// The canonical bytes an envelope's digest covers.
     let canonicalBytes (envelope: GroundingEnvelope) : byte[] =
-        envelope |> canonicalForm |> Encoding.UTF8.GetBytes
+        envelope |> canonicalFields |> CanonicalFrame.frame
 
     /// Lowercase-hex SHA-256 over the canonical bytes — the value the
     /// seal names, every mutation record carries, and the continuity
     /// check compares.
     let digest (envelope: GroundingEnvelope) : string =
-        envelope |> canonicalBytes |> DeployRecords.digestBytes
+        envelope |> canonicalFields |> CanonicalFrame.digest
 
     // ─── Projection ──────────────────────────────────────────────────
 

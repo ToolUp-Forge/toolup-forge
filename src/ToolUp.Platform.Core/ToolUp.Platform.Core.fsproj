@@ -606,6 +606,12 @@
              covered, and the SHA-256 over them lives server-side (crypto
              does not compile under Fable). -->
         <Compile Include="Shared\Types\BuildTranscriptTypes.fs" />
+        <!-- Phase 1089 — `Sha256.hex` and `CanonicalFrame`: the one digest
+             helper and the one length-prefixed frame every content id is
+             taken over. After BuildTranscriptTypes.fs, whose
+             `ProvenanceFraming.frame` is the frame's field writer. The
+             frame text is Fable-safe; the hash is a small .NET-only arm. -->
+        <Compile Include="Shared\Sha256.fs" />
         <Compile Include="Shared\Types\DeployManifestTypes.fs" />
         <!-- Phase 26 — supporting types for the four deploy-plane substrate
              interfaces (BuildRequest/BuildSummary, ProvisioningRequest,

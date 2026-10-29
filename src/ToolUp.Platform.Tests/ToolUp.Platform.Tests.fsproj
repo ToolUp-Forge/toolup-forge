@@ -450,6 +450,7 @@
         <!-- Phase 519 — grounding metric & subject registry. -->
         <Compile Include="InProcess\MetricRegistryTests.fs" />
         <!-- Phase 520 — grounding fact store (contract binding + audit/freshness). -->
+        <Compile Include="InProcess\CanonicalFrameTests.fs" />
         <Compile Include="InProcess\FactStoreTests.fs" />
         <!-- Phase 566 — canonical-method selection for competing facts (D19 closure). -->
         <Compile Include="InProcess\CanonicalMethodTests.fs" />
