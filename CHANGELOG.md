@@ -19,9 +19,10 @@ Migration notes:
 
 - [1077-redesign-f-turnoutcome-loopstate-and-loop-step](docs/migrations/1077-redesign-f-turnoutcome-loopstate-and-loop-step.md)
 - [1131-tool-result-block](docs/migrations/1131-tool-result-block.md)
+- [1132-render-tools](docs/migrations/1132-render-tools.md)
 - [1137-build-identity](docs/migrations/1137-build-identity.md)
 
-_Surface since `v0.36.0`: **breaking** — 5 packages moved; 231 members added, 2 members changed, 5 members removed._
+_Surface since `v0.36.0`: **breaking** — 7 packages moved; 234 members added, 3 members changed, 5 members removed; 1 package new._
 
 ### Added
 
@@ -31,7 +32,7 @@ _Surface since `v0.36.0`: **breaking** — 5 packages moved; 231 members added, 
   - `ToolUp.AI.AIStreamEvent+BlockAttached.part : ToolUp.Platform.AI.AIContentPart { get }`
   - `ToolUp.AI.AIStreamEvent+Tags.BlockAttached : System.Int32 (literal)`
   - `ToolUp.AI.AIStreamEvent.IsBlockAttached : System.Boolean { get }`
-- `ToolUp.AI.Server` — 203 members:
+- `ToolUp.AI.Server` — 205 members:
   - `ToolUp.AI.AIAgentEngine+AgentCallBudgetModule.exceeded(ToolUp.AI.AIAgentEngine+AgentCallBudget, System.TimeSpan, System.String) : System.String`
   - `ToolUp.AI.AIAgentEngine+AgentCallBudgetModule.ofLimits(ToolUp.AI.SystemPromptBuilder+AgentLoopLimits) : ToolUp.AI.AIAgentEngine+AgentCallBudget`
   - `ToolUp.AI.AIAgentEngine+AgentLoopStopped (class)`
@@ -52,7 +53,7 @@ _Surface since `v0.36.0`: **breaking** — 5 packages moved; 231 members added, 
   - `ToolUp.AI.AIAgentEngine+LoopState.Stopped : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIAgentEngine+LoopStop] { get }`
   - `ToolUp.AI.AIAgentEngine+LoopState.Timings : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ToolCallTiming] { get }`
   - `ToolUp.AI.AIAgentEngine+LoopState.Turn : System.Int32 { get }`
-  - … and 183 more — `git diff v0.36.0 -- api-baselines/ToolUp.AI.Server.approved.txt`
+  - … and 185 more — `git diff v0.36.0 -- api-baselines/ToolUp.AI.Server.approved.txt`
 - `ToolUp.AuthProviders.Oidc` — 7 members:
   - `ToolUp.AuthProviders.OidcSsrSignIn+SignInPage (class)`
   - `ToolUp.AuthProviders.OidcSsrSignIn+SignInPageModule (class)`
@@ -61,6 +62,9 @@ _Surface since `v0.36.0`: **breaking** — 5 packages moved; 231 members added, 
   - `ToolUp.AuthProviders.OidcSsrSignIn+SignInPageModule.withStylesheet(System.String, ToolUp.AuthProviders.OidcSsrSignIn+SignInPage) : ToolUp.AuthProviders.OidcSsrSignIn+SignInPage`
   - `ToolUp.AuthProviders.OidcSsrSignIn.routesWithPage(ToolUp.AuthProviders.OidcSsrSignIn+SignInPage, System.Net.Http.HttpClient, ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig) : Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]], Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, System.Threading.Tasks.Task`1[Microsoft.FSharp.Core.FSharpOption`1[Microsoft.AspNetCore.Http.HttpContext]]]]`
   - `ToolUp.AuthProviders.OidcSsrSignIn.withInteractiveSignInPage(ToolUp.AuthProviders.OidcSsrSignIn+SignInPage, System.Net.Http.HttpClient, ToolUp.AuthProviders.OidcSsrSignIn+OidcSsrSignInConfig, ToolUp.Platform.ServerApp) : ToolUp.Platform.ServerApp`
+- `ToolUp.Facts.Presentation.Server` — new package (21 public members)
+- `ToolUp.Facts.Server` — 1 member:
+  - `ToolUp.Facts.FactBrowseHandler.factBrowseDeps(Microsoft.AspNetCore.Http.HttpContext) : Microsoft.FSharp.Core.FSharpOption`1[ToolUp.Facts.FactBrowseHandler+FactBrowseDeps]`
 - `ToolUp.Platform.Build` — 3 members:
   - `ToolUp.Platform.CodemodMigration+Tags.AgentLoop : System.Int32 (literal)`
   - `ToolUp.Platform.CodemodMigration.AgentLoop : ToolUp.Platform.CodemodMigration { get }`
@@ -82,7 +86,8 @@ _Surface since `v0.36.0`: **breaking** — 5 packages moved; 231 members added, 
 
 ### Changed
 
-- `ToolUp.AI.Server` — 2 members:
+- `ToolUp.AI.Server` — 3 members:
+  - `ToolUp.AI.AICompose+AIServerApp..ctor` — `ToolUp.AI.AICompose+AIServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy], ToolUp.AI.AIConsentMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.ToolEffectEnvelope+ToolEffectComposition])` → `ToolUp.AI.AICompose+AIServerApp..ctor(ToolUp.Platform.ServerApp, ToolUp.AI.IAIProviderFactory, ToolUp.Platform.Providers+IProviderProfile, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.IPlatformAIKeyStore], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.DefaultAIProviderFactory+AIPlatformProvider], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig], Microsoft.FSharp.Collections.FSharpList`1[ToolUp.AI.ModuleAIContext], Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.AIDenialRateMonitor+AIDenialRateAlertPolicy], ToolUp.AI.AIConsentMode, Microsoft.FSharp.Core.FSharpOption`1[ToolUp.AI.ToolEffectEnvelope+ToolEffectComposition], Microsoft.FSharp.Collections.FSharpList`1[System.Tuple`2[ToolUp.Platform.AIToolDefinition, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]]])`
   - `ToolUp.AI.AIToolRegistry+RegisteredTool..ctor` — `ToolUp.AI.AIToolRegistry+RegisteredTool..ctor(ToolUp.Platform.AIToolDefinition, ToolUp.Platform.AI.AIProviderToolDef, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]])` → `ToolUp.AI.AIToolRegistry+RegisteredTool..ctor(ToolUp.Platform.AIToolDefinition, ToolUp.Platform.AI.AIProviderToolDef, Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[Microsoft.AspNetCore.Http.HttpContext, Microsoft.FSharp.Core.FSharpFunc`2[System.String, Microsoft.FSharp.Control.FSharpAsync`1[ToolUp.AI.ToolHelpers+ToolAnswer]]]])`
   - `ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig..ctor` — `ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig..ctor(ToolUp.AI.AIAssistantBranding, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], Microsoft.FSharp.Core.FSharpOption`1[System.Int32], ToolUp.AI.AISurfaceDerivationMode)` → `ToolUp.AI.SystemPromptBuilder+AIAssistantServerConfig..ctor(ToolUp.AI.AIAssistantBranding, Microsoft.FSharp.Core.FSharpOption`1[Microsoft.FSharp.Core.FSharpFunc`2[ToolUp.AI.SystemPromptBuilder+PromptContext, Microsoft.FSharp.Control.FSharpAsync`1[System.String]]], ToolUp.AI.SystemPromptBuilder+AgentLoopLimits, ToolUp.AI.AISurfaceDerivationMode)`
 
