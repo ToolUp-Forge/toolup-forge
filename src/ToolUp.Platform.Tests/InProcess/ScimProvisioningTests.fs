@@ -3,6 +3,11 @@
 
 module ToolUp.Platform.Tests.InProcess.ScimProvisioningTests
 
+// Phase 530 — SCIM 2.0 provisioning: recorded Entra ID + Okta
+// sequences (create → assign group → change role → deactivate)
+// replayed against the real TeamStore, plus the bearer gate,
+// scope isolation, and the RFC 7643/7644 wire model.
+
 open System
 open System.Collections.Concurrent
 open System.IO

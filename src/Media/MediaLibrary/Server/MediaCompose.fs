@@ -373,13 +373,13 @@ module MediaLibraryServerApp =
                         baseExt.Handlers
                         @ RangeHandler.handlers
                         @ [ PlaybackTelemetry.beaconHandler; mediaApiHandler ]
-                    ServiceConfig =
-                        match baseExt.ServiceConfig with
-                        | None -> Some mediaServiceConfig
-                        | Some baseFn -> Some(fun s -> mediaServiceConfig (baseFn s))
             }
 
-            let withExtensions = { app.Base with Extensions = mergedExt }
+            let withExtensions =
+                { app.Base with Extensions = mergedExt }
+                |> ServerApp.addContribution (
+                    Contribution.service (ComponentId.forCompanionSlot "ToolUp.MediaLibrary") mediaServiceConfig
+                )
 
             // Phase 473 — declare the two telemetry series so a composed
             // metrics sink pre-allocates them and the emissions flow

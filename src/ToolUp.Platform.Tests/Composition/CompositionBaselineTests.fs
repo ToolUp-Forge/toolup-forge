@@ -472,6 +472,166 @@ let private ruleManifestGate = test "shipped rule manifest matches the committed
                 (renderRuleManifestDelta baseline document)
 }
 
+/// Phase 1052 — the default deployment's DI descriptor list, in order.
+/// Moving the companions' registrations from closures folded into
+/// `Extensions.ServiceConfig` onto `ServerApp.Contributions` must change
+/// the SHAPE of composition, never its membership or order (GP 11 / GP 13),
+/// so a default deployment is composed through `ServerApp.run` on a real
+/// host and its descriptor list — service type, lifetime, position — is
+/// compared with the committed golden file. Implementation types are left
+/// out on purpose: an instance or factory registration renders a
+/// compiler-generated closure name that moves with unrelated edits.
+let private defaultDescriptorsBaselinePath () =
+    Path.Combine(repoRoot (), "composition-baselines", "default-service-descriptors.txt")
+
+/// Compose `ServerApp.empty` (with the storage, logger, port and public
+/// directory a host needs to start) through `ServerApp.run`, capture the
+/// service collection the composition registers into, and stop the host
+/// once it has started. One line per descriptor: `<service type>\t<lifetime>`.
+let private defaultDeploymentDescriptors () : string list =
+    let publicDir =
+        Path.Combine(Path.GetTempPath(), "toolup-descriptor-baseline", Guid.NewGuid().ToString("N"))
+
+    Directory.CreateDirectory publicDir |> ignore
+
+    let port =
+        let listener = new Net.Sockets.TcpListener(Net.IPAddress.Loopback, 0)
+        listener.Start()
+        let p = (listener.LocalEndpoint :?> Net.IPEndPoint).Port
+        listener.Stop()
+        p
+
+    let started =
+        Threading.Tasks.TaskCompletionSource<Microsoft.Extensions.Hosting.IHostApplicationLifetime>(
+            Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously
+        )
+
+    let mutable captured: Microsoft.Extensions.DependencyInjection.IServiceCollection option =
+        None
+
+    let capture (services: Microsoft.Extensions.DependencyInjection.IServiceCollection) =
+        captured <- Some services
+
+        Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<
+            Microsoft.Extensions.Hosting.IHostedService
+         >(
+            services,
+            fun (sp: IServiceProvider) ->
+                let lifetime =
+                    sp.GetService(typeof<Microsoft.Extensions.Hosting.IHostApplicationLifetime>)
+                    :?> Microsoft.Extensions.Hosting.IHostApplicationLifetime
+
+                { new Microsoft.Extensions.Hosting.IHostedService with
+                    member _.StartAsync _ =
+                        lifetime.ApplicationStarted.Register(fun () -> started.TrySetResult lifetime |> ignore)
+                        |> ignore
+
+                        Threading.Tasks.Task.CompletedTask
+
+                    member _.StopAsync _ = Threading.Tasks.Task.CompletedTask
+                }
+        )
+
+    let quiet: ILogger =
+        { new ILogger with
+            member _.Debug _ = ()
+            member _.Info _ = ()
+            member _.Warn _ = ()
+            member _.Error(_, _) = ()
+        }
+
+    let app =
+        ServerApp.empty
+        |> ServerApp.withConfig {
+            ServerConfig.defaults with
+                Port = port
+                PublicPath = publicDir
+                TrustForwardedHeaders = false
+        }
+        |> ServerApp.withExtensions {
+            ComposeExtensions.empty with
+                ServiceConfig = Some capture
+        }
+        |> ServerApp.withStorage (ToolUp.Platform.Testing.Fakes.standardBlobStorage ())
+        |> ServerApp.withLogger quiet
+
+    let culture = Globalization.CultureInfo.DefaultThreadCurrentCulture
+    let uiCulture = Globalization.CultureInfo.DefaultThreadCurrentUICulture
+
+    let running =
+        Threading.Tasks.Task.Factory.StartNew(
+            (fun () -> ServerApp.run app),
+            Threading.Tasks.TaskCreationOptions.LongRunning
+        )
+
+    try
+        let first =
+            Threading.Tasks.Task.WaitAny(
+                [|
+                    started.Task :> Threading.Tasks.Task
+                    running :> Threading.Tasks.Task
+                    Threading.Tasks.Task.Delay(TimeSpan.FromSeconds 60.0)
+                |]
+            )
+
+        if first <> 0 then
+            if running.IsFaulted then
+                raise running.Exception.InnerException
+
+            failtest "the default deployment's host did not start"
+
+        match captured with
+        | None -> failtest "the consumer's ServiceConfig never ran"
+        | Some services ->
+            services
+            |> Seq.map (fun d -> sprintf "%s\t%O" (d.ServiceType.ToString()) d.Lifetime)
+            |> List.ofSeq
+    finally
+        if started.Task.IsCompletedSuccessfully then
+            started.Task.Result.StopApplication()
+            running.Wait(TimeSpan.FromSeconds 30.0) |> ignore
+
+        Globalization.CultureInfo.DefaultThreadCurrentCulture <- culture
+        Globalization.CultureInfo.DefaultThreadCurrentUICulture <- uiCulture
+
+        try
+            Directory.Delete(publicDir, true)
+        with _ ->
+            ()
+
+let private defaultDescriptorsGate = test "a default deployment's service descriptors match the committed baseline" {
+    let lines = defaultDeploymentDescriptors ()
+    let path = defaultDescriptorsBaselinePath ()
+
+    if approveModeOn () then
+        Directory.CreateDirectory(Path.GetDirectoryName path) |> ignore
+        File.WriteAllText(path, String.concat "\n" lines + "\n")
+    elif not (File.Exists path) then
+        failtestf
+            "no committed descriptor baseline at %s. Generate it with TOOLUP_APPROVE_COMPOSITION=1 and commit composition-baselines/default-service-descriptors.txt in the same PR."
+            path
+    else
+        let baseline =
+            File.ReadAllText(path).Replace("\r\n", "\n").Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            |> List.ofArray
+
+        if baseline <> lines then
+            let at (xs: string list) i =
+                if i < xs.Length then List.item i xs else "<absent>"
+
+            let first =
+                Seq.init (max baseline.Length lines.Length) id
+                |> Seq.find (fun i -> at baseline i <> at lines i)
+
+            failtestf
+                "A default deployment's DI descriptor list moved (baseline %d descriptors, now %d; first difference at position %d: baseline '%s', now '%s'). A composition refactor must not change membership or order (GP 11). If the change is intentional, regenerate the baseline (TOOLUP_APPROVE_COMPOSITION=1) and commit the default-service-descriptors.txt edit in the same PR."
+                baseline.Length
+                lines.Length
+                first
+                (at baseline first)
+                (at lines first)
+}
+
 // ── Gate-mechanism fixtures: the load-bearing logic is the diff-driven
 //    comparison; pin that it fails-closed on a regression and round-trips
 //    the baseline JSON faithfully — WITHOUT touching the committed file. ──
@@ -713,5 +873,6 @@ let tests =
         footprintGate
         authorizationGate
         ruleManifestGate
+        defaultDescriptorsGate
         mechanism
     ]

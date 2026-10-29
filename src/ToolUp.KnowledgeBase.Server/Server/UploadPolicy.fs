@@ -55,20 +55,12 @@ type private UploadPolicyValidator(serverConfig: ServerConfig, policy: Knowledge
 /// `RAGServerApp` inherit it via their `Base`. Apps that never call this
 /// get `KnowledgeUploadPolicy.permissive` — no caps, pre-119 behaviour
 /// (GP 11 / GP 13).
+/// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withUploadPolicy (policy: KnowledgeUploadPolicy) (app: ServerApp) : ServerApp =
     let register (s: IServiceCollection) =
         s.AddSingleton<KnowledgeUploadPolicy>(policy)
 
-    let withSingleton = {
-        app with
-            Extensions = {
-                app.Extensions with
-                    ServiceConfig =
-                        match app.Extensions.ServiceConfig with
-                        | None -> Some register
-                        | Some baseFn -> Some(fun s -> register (baseFn s))
-            }
-    }
+    let withSingleton = app |> ServerApp.addServiceConfig register
 
     ServerApp.withConfigValidator (UploadPolicyValidator(app.Config, policy) :> IConfigValidator) withSingleton
 
@@ -84,22 +76,14 @@ let withUploadPolicy (policy: KnowledgeUploadPolicy) (app: ServerApp) : ServerAp
 /// (GP 11 — no hash computed, no ref written). Threads through the same
 /// `ComposeExtensions.ServiceConfig` seam as `withUploadPolicy`, so
 /// `AIServerApp` / `RAGServerApp` inherit it via their `Base`.
+/// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withDocumentDedup (enabled: bool) (app: ServerApp) : ServerApp =
     let policy: KnowledgeDedupPolicy = { DedupUploads = enabled }
 
     let register (s: IServiceCollection) =
         s.AddSingleton<KnowledgeDedupPolicy>(policy)
 
-    {
-        app with
-            Extensions = {
-                app.Extensions with
-                    ServiceConfig =
-                        match app.Extensions.ServiceConfig with
-                        | None -> Some register
-                        | Some baseFn -> Some(fun s -> register (baseFn s))
-            }
-    }
+    app |> ServerApp.addServiceConfig register
 
 /// Phase 510 — compose-time lever for KB upload **versioning**. OFF by
 /// default: call `withDocumentVersioning true` and a re-upload of an
@@ -125,22 +109,14 @@ let withDocumentDedup (enabled: bool) (app: ServerApp) : ServerApp =
 /// Threads through the same `ComposeExtensions.ServiceConfig` seam as
 /// `withUploadPolicy`, so `AIServerApp` / `RAGServerApp` inherit it via
 /// their `Base`.
+/// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withDocumentVersioning (enabled: bool) (app: ServerApp) : ServerApp =
     let policy: KnowledgeVersioningPolicy = { VersionUploads = enabled }
 
     let register (s: IServiceCollection) =
         s.AddSingleton<KnowledgeVersioningPolicy>(policy)
 
-    {
-        app with
-            Extensions = {
-                app.Extensions with
-                    ServiceConfig =
-                        match app.Extensions.ServiceConfig with
-                        | None -> Some register
-                        | Some baseFn -> Some(fun s -> register (baseFn s))
-            }
-    }
+    app |> ServerApp.addServiceConfig register
 
 /// Phase 105 — compose-time lever for routing KB **original documents**
 /// through `IDataObjectStore` rather than writing them as raw blobs at
@@ -168,6 +144,7 @@ let withDocumentVersioning (enabled: bool) (app: ServerApp) : ServerApp =
 /// upgrade rather than leaving it byte-for-byte (GP 11). Without this
 /// call the upload / read / delete paths take no store call at all
 /// (GP 13).
+/// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withObjectStoreRetention (enabled: bool) (app: ServerApp) : ServerApp =
     let policy: KnowledgeObjectRetentionPolicy = {
         RetainOriginalsInObjectStore = enabled
@@ -176,32 +153,9 @@ let withObjectStoreRetention (enabled: bool) (app: ServerApp) : ServerApp =
     let register (s: IServiceCollection) =
         s.AddSingleton<KnowledgeObjectRetentionPolicy>(policy)
 
-    {
-        app with
-            Extensions = {
-                app.Extensions with
-                    ServiceConfig =
-                        match app.Extensions.ServiceConfig with
-                        | None -> Some register
-                        | Some baseFn -> Some(fun s -> register (baseFn s))
-            }
-    }
+    app |> ServerApp.addServiceConfig register
 
 // ─── Phase 512 — per-scope quota + retention compose hooks ───────────
-
-/// Append a service registration onto the shared `ComposeExtensions`
-/// seam — the same threading `withUploadPolicy` / `withDocumentDedup`
-/// use, factored out now that four hooks share it.
-let private withServiceConfig (register: IServiceCollection -> IServiceCollection) (app: ServerApp) : ServerApp = {
-    app with
-        Extensions = {
-            app.Extensions with
-                ServiceConfig =
-                    match app.Extensions.ServiceConfig with
-                    | None -> Some register
-                    | Some baseFn -> Some(fun s -> register (baseFn s))
-        }
-}
 
 // ─── Quota preflight ─────────────────────────────────────────────────
 
@@ -242,9 +196,11 @@ type private QuotaPolicyValidator(serverConfig: ServerConfig, policy: KnowledgeQ
 /// Apps that never call this get `KnowledgeQuotaPolicy.unlimited`: no
 /// usage tally is taken on the upload path and no upload can be refused
 /// for quota — pre-512 behaviour byte-for-byte (GP 11 / GP 13).
+/// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withKnowledgeQuota (policy: KnowledgeQuotaPolicy) (app: ServerApp) : ServerApp =
     let withSingleton =
-        app |> withServiceConfig (fun s -> s.AddSingleton<KnowledgeQuotaPolicy>(policy))
+        app
+        |> ServerApp.addServiceConfig (fun s -> s.AddSingleton<KnowledgeQuotaPolicy>(policy))
 
     ServerApp.withConfigValidator (QuotaPolicyValidator(app.Config, policy) :> IConfigValidator) withSingleton
 
@@ -318,6 +274,7 @@ let private devUsageHandler: HttpHandler =
 /// `withKnowledgeQuotaAndUsageEndpoint`; exposed separately for
 /// deployments that want the endpoint without a quota (usage reporting
 /// against an unlimited policy is still useful).
+/// **Adds** one handler (only when dev endpoints are enabled).
 let withKnowledgeUsageEndpoint (app: ServerApp) : ServerApp =
     if app.Config.EnableDevEndpoints then
         {
@@ -334,6 +291,7 @@ let withKnowledgeUsageEndpoint (app: ServerApp) : ServerApp =
 
 /// Phase 512 — the common pairing: compose the quota AND mount its dev
 /// usage endpoint (the latter still gated on `EnableDevEndpoints`).
+/// **Adds** what `withKnowledgeQuota` and `withKnowledgeUsageEndpoint` add.
 let withKnowledgeQuotaAndUsageEndpoint (policy: KnowledgeQuotaPolicy) (app: ServerApp) : ServerApp =
     app |> withKnowledgeQuota policy |> withKnowledgeUsageEndpoint
 
@@ -364,6 +322,7 @@ let withKnowledgeQuotaAndUsageEndpoint (policy: KnowledgeQuotaPolicy) (app: Serv
 /// `IBlobStorage` / `IIndexLifecycle` / `IAuditLog` from the built
 /// provider on every run, so nothing is captured at compose time and the
 /// handler stays stateless between invocations (GP 12 rule 4).
+/// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withKnowledgeRetention (policy: KnowledgeRetentionPolicy) (scopes: string list) (app: ServerApp) : ServerApp =
     let register (s: IServiceCollection) =
         let withPolicy = s.AddSingleton<KnowledgeRetentionPolicy>(policy)
@@ -383,7 +342,7 @@ let withKnowledgeRetention (policy: KnowledgeRetentionPolicy) (scopes: string li
                     |> ScheduledJobDeclaration.withScopes scopes)
             ]
 
-    app |> withServiceConfig register
+    app |> ServerApp.addServiceConfig register
 
 // ─── Phase 515 — content scanning at the upload boundary ─────────────
 
@@ -420,9 +379,11 @@ type private ContentScanValidator(scanner: IContentScanner, policy: ContentScanP
 /// Apps that never call this resolve `ContentScanner = None`: no scan,
 /// no hash computed for a scan audit row, no network call, no policy
 /// read — the pre-515 upload path byte-for-byte (GP 11 / GP 13).
+/// **Adds** its registrations through `ServerApp.addServiceConfig`; a later `withExtensions` keeps them.
 let withContentScanning (scanner: IContentScanner) (policy: ContentScanPolicy) (app: ServerApp) : ServerApp =
     let withSingletons =
         app
-        |> withServiceConfig (fun s -> s.AddSingleton<IContentScanner>(scanner).AddSingleton<ContentScanPolicy>(policy))
+        |> ServerApp.addServiceConfig (fun s ->
+            s.AddSingleton<IContentScanner>(scanner).AddSingleton<ContentScanPolicy>(policy))
 
     ServerApp.withConfigValidator (ContentScanValidator(scanner, policy) :> IConfigValidator) withSingletons

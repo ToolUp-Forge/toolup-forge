@@ -1,5 +1,8 @@
 module ToolUp.Platform.Tests.InProcess.BlobPlatformAIKeyStoreTests
 
+// Phase 70 — BlobPlatformAIKeyStore over an in-memory ISecretStore.
+// Binds the IPlatformAIKeyStoreContract pack to the default impl.
+
 open System.Collections.Concurrent
 open ToolUp.Platform
 open ToolUp.Platform.Secrets

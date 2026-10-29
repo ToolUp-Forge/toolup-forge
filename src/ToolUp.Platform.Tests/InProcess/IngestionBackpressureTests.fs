@@ -1031,7 +1031,7 @@ let private lostTraces =
             |> ignore
 
             let services =
-                match composed.Extensions.ServiceConfig with
+                match ServerApp.serviceConfig composed with
                 | Some configure -> configure services
                 | None -> services
 

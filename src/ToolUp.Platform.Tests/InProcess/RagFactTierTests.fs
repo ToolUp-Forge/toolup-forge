@@ -191,7 +191,7 @@ let private build (storage: IBlobStorage) (composed: ServerApp) : IServiceCollec
     services.AddSingleton<IFactTableRegistry>(tables) |> ignore
 
     let services =
-        match composed.Extensions.ServiceConfig with
+        match ServerApp.serviceConfig composed with
         | Some f -> f services
         | None -> services
 

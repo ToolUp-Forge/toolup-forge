@@ -15,12 +15,12 @@ type EffectLifetime =
     | Program
 
     /// Lives until the named module is reset (team switch, tenant switch,
-    /// module reload). The runtime invokes `Effect.disposeByModule moduleId`
+    /// module reload). The runtime invokes `IEffectController.DisposeByModule moduleId`
     /// at reset boundaries; consumers can also dispose explicitly via
-    /// `Effect.disposeById`.
+    /// `IEffectController.DisposeById`.
     | Module of moduleId: string
 
-    /// Caller manages disposal explicitly via `Effect.disposeById`.
+    /// Caller manages disposal explicitly via `IEffectController.DisposeById`.
     | Manual
 
 /// Lifetime-aware one-shot subscription handle. Distinct from `Sub<'msg>`,
@@ -65,7 +65,7 @@ module EffectHandle =
         Lifetime = EffectLifetime.Module moduleId
     }
 
-    /// Convenience: manual-disposal effect (caller calls `Effect.disposeById`).
+    /// Convenience: manual-disposal effect (caller calls `IEffectController.DisposeById`).
     let manual (id: string) (start: Dispatch<'msg> -> IDisposable) : EffectHandle<'msg> = {
         Id = id
         Start = start

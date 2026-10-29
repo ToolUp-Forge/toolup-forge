@@ -285,6 +285,13 @@ type internal FactQuestionCompilerGuard(services: IServiceCollection) =
 
 module FactsCompose =
 
+    /// Phase 1052 — the Facts companion's identity; every registration it
+    /// makes is a `Contribution.service` under it.
+    let private owner: ComponentId = ComponentId.forCompanionSlot "ToolUp.Facts"
+
+    let private contribute (register: IServiceCollection -> IServiceCollection) (app: ServerApp) : ServerApp =
+        ServerApp.addContribution (Contribution.service owner register) app
+
     // ─── Phase 623 — shared optional-substrate lookups ────────────────
 
     let private tryService<'T> (sp: IServiceProvider) : 'T option =
@@ -809,6 +816,7 @@ module FactsCompose =
     /// inputs change, `OnQuery` recomputes at the next read, and the
     /// default `Manual` surfaces the changed state only. Wire a real
     /// `IFactRecomputer` into DI to give any of them a value to compute.
+    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withFactStore (app: ServerApp) : ServerApp =
         match app.Config.FactStore with
         | NoFactStore -> app
@@ -824,17 +832,8 @@ module FactsCompose =
                 // Phase 986 — the dormant-push-door warning.
                 |> registerQuestionCompilerGuard
 
-            let serviceConfig =
-                match app.Extensions.ServiceConfig with
-                | None -> Some register
-                | Some existing -> Some(fun s -> register (existing s))
-
             {
                 app with
-                    Extensions = {
-                        app.Extensions with
-                            ServiceConfig = serviceConfig
-                    }
                     // Phase 559 — declare the `query_facts` AI tool with
                     // the store (one compose knob, never two). The
                     // declaration rides `ServerApp.AITools`, which only
@@ -869,6 +868,7 @@ module FactsCompose =
                             CoverageTool.definition, CoverageTool.execute
                         ]
             }
+            |> contribute register
 
     // ─── Phase 592 — purpose-bound disclosure (opt-in) ────────────────
     //
@@ -925,18 +925,8 @@ module FactsCompose =
             let register (s: IServiceCollection) =
                 s.AddSingleton<DisclosurePurposeConfig>(config)
 
-            let serviceConfig =
-                match app.Extensions.ServiceConfig with
-                | None -> Some(fun s -> register s)
-                | Some existing -> Some(fun s -> register (existing s))
-
-            {
-                app with
-                    Extensions = {
-                        app.Extensions with
-                            ServiceConfig = serviceConfig
-                    }
-            }
+            app
+            |> contribute register
             |> ServerApp.withRegisteredPurposes (registeredPurposes config)
 
     // ─── Phase 675 — declassification budgets (opt-in) ────────────────
@@ -993,6 +983,7 @@ module FactsCompose =
     ///
     /// A `NoFactStore` deployment is byte-for-byte unchanged (GP 11 /
     /// GP 13).
+    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withDeclassificationBudgetConfig (config: DeclassificationBudgetConfig) (app: ServerApp) : ServerApp =
         match app.Config.FactStore with
         | NoFactStore -> app
@@ -1000,18 +991,7 @@ module FactsCompose =
             let register (s: IServiceCollection) =
                 s.AddSingleton<DeclassificationBudgetConfig>(config)
 
-            let serviceConfig =
-                match app.Extensions.ServiceConfig with
-                | None -> Some(fun s -> register s)
-                | Some existing -> Some(fun s -> register (existing s))
-
-            {
-                app with
-                    Extensions = {
-                        app.Extensions with
-                            ServiceConfig = serviceConfig
-                    }
-            }
+            app |> contribute register
 
     /// Compose declassification budgets (Phase 675): register the
     /// declared budgets + the ledger they account through, so the gate
@@ -1053,6 +1033,7 @@ module FactsCompose =
     /// zero, two budgets for one routine). Loud and early rather than at
     /// the first disclosure: a privacy control that fails late fails
     /// after something has already been disclosed.
+    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withDeclassificationBudgets
         (ledger: IPrivacyBudgetLedger)
         (budgets: DeclassificationBudget list)
@@ -1073,6 +1054,7 @@ module FactsCompose =
     /// |> FactsCompose.withFactStore
     /// |> FactsCompose.withDisclosureFanOut 8
     /// ```
+    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withDisclosureFanOut (maxConcurrentReads: int) (app: ServerApp) : ServerApp =
         match app.Config.FactStore with
         | NoFactStore -> app
@@ -1083,18 +1065,7 @@ module FactsCompose =
 
             let register (s: IServiceCollection) = s.AddSingleton<DisclosureFanOut>(bound)
 
-            let serviceConfig =
-                match app.Extensions.ServiceConfig with
-                | None -> Some(fun s -> register s)
-                | Some existing -> Some(fun s -> register (existing s))
-
-            {
-                app with
-                    Extensions = {
-                        app.Extensions with
-                            ServiceConfig = serviceConfig
-                    }
-            }
+            app |> contribute register
 
     // ─── Phase 683 — certificate-verified fact import (opt-in) ────────
     //
@@ -1133,6 +1104,7 @@ module FactsCompose =
     /// (`PeerTrustAnchor.withCeiling`) and the set of attestation levels it
     /// admits (`PeerTrustAnchor.withAdmissibleLevels`). No key is
     /// discovered, so no key is implicitly trusted.
+    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withFactImport (anchors: PeerTrustAnchor list) (app: ServerApp) : ServerApp =
         match app.Config.FactStore with
         | NoFactStore -> app
@@ -1146,18 +1118,7 @@ module FactsCompose =
                             (sp.GetRequiredService<IAuditLog>()))
                 )
 
-            let serviceConfig =
-                match app.Extensions.ServiceConfig with
-                | None -> Some(fun s -> register s)
-                | Some existing -> Some(fun s -> register (existing s))
-
-            {
-                app with
-                    Extensions = {
-                        app.Extensions with
-                            ServiceConfig = serviceConfig
-                    }
-            }
+            app |> contribute register
 
     // ─── Phase 684 — the grounding envelope sealed past boot (opt-in) ─
     //
@@ -1212,6 +1173,7 @@ module FactsCompose =
     /// deployment holding mutable grounding state passes `Some` a
     /// function that reads it, and only then can the check catch
     /// anything.
+    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withGroundingEnvelopeSeal
         (profile: CompositionProfile)
         (observe: (unit -> GroundingEnvelope) option)
@@ -1244,18 +1206,7 @@ module FactsCompose =
                                 observeLive)
                 )
 
-            let serviceConfig =
-                match app.Extensions.ServiceConfig with
-                | None -> Some(fun s -> register s)
-                | Some existing -> Some(fun s -> register (existing s))
-
-            {
-                app with
-                    Extensions = {
-                        app.Extensions with
-                            ServiceConfig = serviceConfig
-                    }
-            }
+            app |> contribute register
 
     // ─── Phase 707 — coverage narratives (opt-in) ─────────────────────
     //
@@ -1338,31 +1289,21 @@ module FactsCompose =
     ///
     /// Insert AFTER `withFactStore` — it decorates what that registered,
     /// and finds nothing to decorate if it runs first.
+    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withCoverageNarratives (options: CoverageNarrative.CoverageNarrativeOptions) (app: ServerApp) : ServerApp =
         match app.Config.FactStore with
         | NoFactStore -> app
         | EnabledFactStore ->
             let register = registerCoverageNarratives options
 
-            let serviceConfig =
-                match app.Extensions.ServiceConfig with
-                | None -> Some register
-                | Some existing -> Some(fun s -> register (existing s))
-
-            {
-                app with
-                    Extensions = {
-                        app.Extensions with
-                            ServiceConfig = serviceConfig
-                    }
-            }
+            app |> contribute register
 
     // ─── Phase 563 — fact-base coherence checking (opt-in) ────────────
     //
     // A separate, explicit opt-in on top of the fact store: the standing
     // self-audit is NOT folded into `withFactStore`, so a deployment that
     // only wants the store is byte-for-byte unchanged (GP 11 / GP 13). The
-    // registrations ride `Extensions.ServiceConfig`:
+    // registrations are `Contribution.service` values under the companion's id:
     //
     //   * an `IHostedService` that, once the container is built, resolves
     //     the composed substrate + the scheduler and schedules the
@@ -1498,6 +1439,7 @@ module FactsCompose =
     /// |> FactsCompose.withCoherenceChecksConfig cfg cadence [ "_platform" ]
     /// |> ServerApp.run
     /// ```
+    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withCoherenceChecksConfig
         (config: CoherenceConfig)
         (cadence: Trigger)
@@ -1509,24 +1451,14 @@ module FactsCompose =
         | EnabledFactStore ->
             let register = registerCoherenceChecks config cadence scopes
 
-            let serviceConfig =
-                match app.Extensions.ServiceConfig with
-                | None -> Some register
-                | Some existing -> Some(fun s -> register (existing s))
-
-            {
-                app with
-                    Extensions = {
-                        app.Extensions with
-                            ServiceConfig = serviceConfig
-                    }
-            }
+            app |> contribute register
 
     /// `withCoherenceChecksConfig` with `CoherenceConfig.defaults` and the
     /// default `_platform` sweep scope — the one-liner opt-in. `cadence` is
     /// the recurring `Trigger` the standing check runs on (e.g. a daily
     /// `CronTrigger`); the check is also fireable on demand and re-scanned
     /// by the `/ready` health probe.
+    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withCoherenceChecks (cadence: Trigger) (app: ServerApp) : ServerApp =
         withCoherenceChecksConfig CoherenceConfig.defaults cadence [] app
 
@@ -1550,6 +1482,7 @@ module FactsCompose =
     ///
     /// The writer resolves the table registry and the metric registry from
     /// DI when first used, so modules may be added before or after this call.
+    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withFactTableWriter (app: ServerApp) : ServerApp =
         match app.Config.FactStore with
         | NoFactStore -> app
@@ -1566,18 +1499,8 @@ module FactsCompose =
                             (tryService<Grounding.IMetricRegistry> sp))
                 )
 
-            let serviceConfig =
-                match app.Extensions.ServiceConfig with
-                | None -> Some register
-                | Some existing -> Some(fun s -> register (existing s))
-
-            {
-                app with
-                    Extensions = {
-                        app.Extensions with
-                            ServiceConfig = serviceConfig
-                    }
-            }
+            app
+            |> contribute register
             |> ServerApp.bindFactTables (Grounding.BindAllFactTables DefaultFactTableWriter.Destination)
 
     // ─── Phase 986 — the fact tier as one composition, and its compiler ─
@@ -1623,22 +1546,12 @@ module FactsCompose =
     /// Registers the choice whatever the fact-store knob says; it has an
     /// effect only where the fact tier is composed, before or after this
     /// call. The last choice registered wins.
+    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withQuestionCompiler (compiler: QuestionCompiler) (app: ServerApp) : ServerApp =
         let register (s: IServiceCollection) =
             s.AddSingleton<ExplicitQuestionCompiler>(ExplicitQuestionCompiler compiler)
 
-        let serviceConfig =
-            match app.Extensions.ServiceConfig with
-            | None -> Some register
-            | Some existing -> Some(fun s -> register (existing s))
-
-        {
-            app with
-                Extensions = {
-                    app.Extensions with
-                        ServiceConfig = serviceConfig
-                }
-        }
+        app |> contribute register
 
     // ─── Phase 888 — a replacement IFactStore behind the same knob ─────
     //
@@ -1674,6 +1587,7 @@ module FactsCompose =
     ///
     /// A companion normally wraps this in its own builder
     /// (`PostgresFactStoreCompose.withPostgresFactStore`).
+    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withFactStoreImplementation
         (backend: string)
         (factory: IServiceProvider -> IFactStore)
@@ -1691,18 +1605,7 @@ module FactsCompose =
                 s.RemoveAll<FactStoreBackend>() |> ignore
                 s.AddSingleton<FactStoreBackend>({ Backend = backend })
 
-            let serviceConfig =
-                match app.Extensions.ServiceConfig with
-                | None -> Some register
-                | Some existing -> Some(fun s -> register (existing s))
-
-            {
-                app with
-                    Extensions = {
-                        app.Extensions with
-                            ServiceConfig = serviceConfig
-                    }
-            }
+            app |> contribute register
     // ─── Phase 889 — delegate facts (opt-in) ──────────────────────────
     //
     // A declared fact table can hold its metric populations as delegates:
@@ -1817,17 +1720,13 @@ module FactsCompose =
     /// |> FactsCompose.withFactTableWriter
     /// |> FactsCompose.withDelegateFacts [ "sku-sales" ]
     /// ```
+    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withDelegateFacts (tableIds: string list) (app: ServerApp) : ServerApp =
         match app.Config.FactStore, tableIds with
         | NoFactStore, _
         | _, [] -> app
         | EnabledFactStore, _ ->
             let register = registerDelegateFacts tableIds
-
-            let serviceConfig =
-                match app.Extensions.ServiceConfig with
-                | None -> Some register
-                | Some existing -> Some(fun s -> register (existing s))
 
             let bound =
                 tableIds
@@ -1837,13 +1736,7 @@ module FactsCompose =
                         ServerApp.bindFactTables (Grounding.BindFactTable(tableId, DelegateFact.Destination)) a)
                     app
 
-            {
-                bound with
-                    Extensions = {
-                        bound.Extensions with
-                            ServiceConfig = serviceConfig
-                    }
-            }
+            bound |> contribute register
 
     // ─── Phase 896 — team output visibility (opt-in) ──────────────────
     //
@@ -1927,6 +1820,7 @@ module FactsCompose =
     /// |> FactsCompose.withTeamOutputVisibility TeamVisible [ TeamVisible; TeamAdmins ]
     /// |> ServerApp.run
     /// ```
+    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withTeamOutputVisibility
         (defaultLevel: TeamVisibilityLevel)
         (allowed: TeamVisibilityLevel list)
@@ -1991,11 +1885,6 @@ module FactsCompose =
                                     (other.GetType().FullName))
                     )
 
-            let serviceConfig =
-                match app.Extensions.ServiceConfig with
-                | None -> Some register
-                | Some existing -> Some(fun s -> register (existing s))
-
             let establishViewer (builder: Microsoft.AspNetCore.Builder.IApplicationBuilder) =
                 Microsoft.AspNetCore.Builder.UseExtensions.Use(
                     builder,
@@ -2010,13 +1899,10 @@ module FactsCompose =
 
             {
                 app with
-                    Extensions = {
-                        app.Extensions with
-                            ServiceConfig = serviceConfig
-                            PreMiddleware = app.Extensions.PreMiddleware @ [ establishViewer ]
-                    }
+                    Extensions.PreMiddleware = app.Extensions.PreMiddleware @ [ establishViewer ]
                     TeamOutputVisibility = Some settings
             }
+            |> contribute register
     // ─── Phase 897 — team-to-team fact publication (opt-in) ───────────
     //
     // A consolidated view is built by PUBLISHING, never by reading across
@@ -2051,6 +1937,7 @@ module FactsCompose =
     /// |> FactsCompose.withFactPublication (FactPublicationConfig.create [ FactPublicationTarget.create "group-sales" "region" ])
     /// |> ServerApp.run
     /// ```
+    /// **Adds** its registrations as a contribution under the Facts companion's id; a later `withExtensions` keeps them.
     let withFactPublication (config: FactPublicationConfig) (app: ServerApp) : ServerApp =
         match app.Config.FactStore with
         | NoFactStore -> app
@@ -2123,15 +2010,4 @@ module FactsCompose =
 
                 s
 
-            let serviceConfig =
-                match app.Extensions.ServiceConfig with
-                | None -> Some register
-                | Some existing -> Some(fun s -> register (existing s))
-
-            {
-                app with
-                    Extensions = {
-                        app.Extensions with
-                            ServiceConfig = serviceConfig
-                    }
-            }
+            app |> contribute register

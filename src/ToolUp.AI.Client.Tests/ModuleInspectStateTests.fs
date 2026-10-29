@@ -10,8 +10,9 @@ module ToolUp.AI.Client.Tests.ModuleInspectStateTests
 // latest report at its `ModuleStateObserver` publish points and a reader
 // retrieves it with `ModuleStateObserver.tryInspect`.
 //
-// The shell `update` is driven directly with a hand-built `Client.Model`
-// (the `BootDegradationTests` precedent) so the assertions pin the real
+// The shell `update` (and, since Phase 1069, its post-update observer
+// hook) is driven directly with a hand-built `Client.Model` (the
+// `BootDegradationTests` precedent) so the assertions pin the real
 // publish points — `ModuleMsg` and `ModuleActionReceived` — rather than a
 // re-statement of them. Module ids are unique to this file because the
 // observer table is a per-process global shared with every other pack.
@@ -81,8 +82,15 @@ let private shellModel (activeId: string) (state: obj) : Client.Model = {
     LocaleOverride = None
 }
 
-let private update (modules: ErasedModule list) msg model =
-    Client.update ClientConfig.defaults Unchecked.defaultof<IModuleQueryBus> modules msg model
+// Phase 1069 — the publish left `update` for the shell program's
+// post-update hook (`Client.observeModuleStates`, installed through
+// `withTrace`), so the helper runs both halves exactly as the program does.
+let private update (modules: ErasedModule list) msg (model: Client.Model) =
+    let next, cmd =
+        Client.update ClientConfig.defaults Unchecked.defaultof<IModuleQueryBus> modules msg model
+
+    Client.observeModuleStates modules msg model.ModuleStates next
+    next, cmd
 
 let tests =
     testList "Module inspect-state (Phase 536)" [

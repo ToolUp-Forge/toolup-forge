@@ -1182,20 +1182,7 @@ let private transferOwnershipModalView
                 prop.className "text-sm text-muted"
                 prop.text (msgs.TransferOwnershipHelp teamName)
             ]
-            Html.input [
-                prop.type' "text"
-                prop.placeholder msgs.TransferFilterPlaceholder
-                prop.value state.Query
-                prop.onChange (fun (v: string) -> dispatch (SetTransferQuery v))
-                prop.className [
-                    "border border-border"
-                    "rounded-lg"
-                    "px-4 py-2"
-                    "focus:outline-none focus:border-brand"
-                    "transition-colors"
-                    "w-full"
-                ]
-            ]
+            Forms.Input.text state.Query (fun v -> dispatch (SetTransferQuery v)) msgs.TransferFilterPlaceholder
             if List.isEmpty candidates then
                 Html.p [
                     prop.className "text-sm text-muted py-2"
@@ -1235,7 +1222,7 @@ let private transferOwnershipModalView
         let newOwnerLabel =
             state.SelectedUserId
             |> Option.map (displayNameForId model.Directory selfId)
-            |> Option.defaultValue "the selected member"
+            |> Option.defaultValue msgs.TransferSelectedMemberFallback
 
         let outgoingLabel = displayNameForId model.Directory selfId selfId
 
@@ -1483,28 +1470,7 @@ let private issueByEmailModalView
                 prop.children [
                     Html.h3 [ prop.className "text-lg font-semibold"; prop.text msgs.InviteByEmailHeading ]
                     Html.p [ prop.className "text-sm text-muted"; prop.text msgs.InviteByEmailHelp ]
-                    // Plain `Html.input` (not `Forms.Input.text`) — the
-                    // toolkit's text input commits on Enter / blur only,
-                    // and the blur path resets the displayed value to the
-                    // parent model's value. In a single-input modal where
-                    // the operator is expected to type + click "Issue
-                    // invitation", that idiom drops the typed email.
-                    // Per-keystroke binding here keeps the model in sync
-                    // with the visible text.
-                    Html.input [
-                        prop.type' "email"
-                        prop.placeholder msgs.EmailPlaceholder
-                        prop.value state.Email
-                        prop.onChange (fun (v: string) -> dispatch (SetIssueByEmailEmail v))
-                        prop.className [
-                            "border border-border"
-                            "rounded-lg"
-                            "px-4 py-2"
-                            "focus:outline-none focus:border-brand"
-                            "transition-colors"
-                            "w-full"
-                        ]
-                    ]
+                    Forms.Input.text state.Email (fun v -> dispatch (SetIssueByEmailEmail v)) msgs.EmailPlaceholder
                     Html.div [
                         prop.className "flex items-center gap-3 flex-wrap"
                         prop.children [
@@ -1589,7 +1555,7 @@ let private revokeByEmailConfirmView
                     Html.h3 [ prop.className "text-lg font-semibold"; prop.text msgs.RevokeInviteHeading ]
                     Html.p [
                         prop.className "text-sm text-muted"
-                        prop.text (sprintf "%s will no longer auto-join %s on sign-in." email teamName)
+                        prop.text (msgs.RevokeInvitePrompt email teamName)
                     ]
                     Html.div [
                         prop.className "flex justify-end gap-3 pt-2"

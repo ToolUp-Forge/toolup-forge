@@ -1,5 +1,9 @@
 module ToolUp.Platform.Tests.InProcess.AnonymousModeContractTests
 
+// Phase 245 — per-team module exposure folded into
+// `computeAccessibleModules` (separate `[<Tests>]` binding that
+// `runTestsWithCLIArgs` would otherwise leave dormant).
+
 open Expecto
 open ToolUp.Platform
 open ToolUp.Platform.PlatformApiHandler

@@ -1,5 +1,10 @@
 module ToolUp.Platform.Tests.InProcess.PeerWireHardeningTests
 
+// Phase 629 — the host validates a contract call through the
+// Phase 338 scoped seam, so a composed `cid` binding is enforced
+// by the shipped host. Pinned by a negative control that ADMITS
+// the mis-scoped token under the pre-629 posture.
+
 open System
 open System.Collections.Concurrent
 open System.IO

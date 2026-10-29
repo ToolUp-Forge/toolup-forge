@@ -81,6 +81,9 @@ let localisedLabel (msgs: BootSourceMessages) (source: string) (fallback: string
     | "platform-role" -> msgs.PlatformRole
     | "team-role" -> msgs.TeamRole
     | "auth-bridge" -> msgs.AuthBridge
+    | "platform-info" -> msgs.PlatformInfo
+    | "data-snapshot" -> msgs.DataSnapshot
+    | "sidebar-prefs" -> msgs.SidebarPrefs
     | _ -> fallback
 
 /// Dismissible top-of-viewport banner listing every degraded source

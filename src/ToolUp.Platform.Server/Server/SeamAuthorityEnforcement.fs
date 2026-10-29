@@ -239,16 +239,7 @@ module SeamAuthorityEnforcement =
                     .AddSingleton<SeamReachObserver>(observer)
                     .AddSingleton<SeamConfinement>(SeamConfinement(gate, ModuleSurface.substrateSeams, observer))
 
-            {
-                app with
-                    Extensions = {
-                        app.Extensions with
-                            ServiceConfig =
-                                match app.Extensions.ServiceConfig with
-                                | None -> Some register
-                                | Some existing -> Some(fun services -> register (existing services))
-                    }
-            }
+            app |> ServerApp.addServiceConfig register
 
     /// `confine` over the profile's audited seam gate — the runtime twin
     /// of `verifyAudited`, and the call a verified composition makes.

@@ -435,7 +435,7 @@ let private reportSection =
                 |> ServerApp.addModule (ServerModule.create "plain")
 
             let services =
-                match app.Extensions.ServiceConfig with
+                match ServerApp.serviceConfig app with
                 | Some register -> register (ServiceCollection())
                 | None -> ServiceCollection() :> IServiceCollection
 
@@ -453,7 +453,7 @@ let private reportSection =
             let app = ServerApp.empty |> ServerApp.addModule (ServerModule.create "plain")
 
             let services =
-                match app.Extensions.ServiceConfig with
+                match ServerApp.serviceConfig app with
                 | Some register -> register (ServiceCollection())
                 | None -> ServiceCollection() :> IServiceCollection
 

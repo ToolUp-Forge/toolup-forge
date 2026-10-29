@@ -259,7 +259,7 @@ let private compose
     scheduler
     |> Option.iter (fun s -> services.AddSingleton<IJobScheduler>(s) |> ignore)
 
-    match app.Extensions.ServiceConfig with
+    match ServerApp.serviceConfig app with
     | Some cfg -> cfg services |> ignore
     | None -> ()
 
@@ -746,7 +746,7 @@ let zeroCostTests =
                 (Object.ReferenceEquals(FactsCompose.withFactStore app, app))
                 "withFactStore is the identity on a deployment that did not ask for facts"
 
-            Expect.isNone (FactsCompose.withFactStore app).Extensions.ServiceConfig "no service config was contributed"
+            Expect.isNone (ServerApp.serviceConfig (FactsCompose.withFactStore app)) "no service config was contributed"
         }
 
         test "NoFactStore registers no hosted service, no recomputer, and does not wrap the data-object store" {

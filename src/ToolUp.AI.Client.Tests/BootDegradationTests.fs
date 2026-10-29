@@ -93,6 +93,23 @@ let private baseModel: Client.Model = {
 let private update msg model =
     Client.update ClientConfig.defaults Unchecked.defaultof<IModuleQueryBus> [] msg model
 
+/// Phase 1069 — every boot-source key the shell emits today: the eleven
+/// loader / bridge sources plus the sidebar-preference write.
+let private shellBootSources = [
+    "teams"
+    "active-team"
+    "team-auto-select"
+    "permissions"
+    "configs"
+    "flags"
+    "platform-role"
+    "platform-info"
+    "team-role"
+    "auth-bridge"
+    "data-snapshot"
+    "sidebar-prefs"
+]
+
 let tests =
     installStubs ()
 
@@ -251,5 +268,57 @@ let tests =
                 UserSession.uninstallBridge ()
                 stopObserving ()
                 AuthDiagnostics.install AuthDiagnostics.nullTracer)
+        ]
+
+        // Phase 1069 — the boot-source key is spelled in six tables
+        // (the loader call sites, `degradationRetryable`, `RetryBootLoad`,
+        // the fallback label, `BootSourceMessages` and `localisedLabel`).
+        // These pin the two that drifted: every source the shell emits
+        // today has a retry arm whenever its row offers Retry, and a
+        // catalog field for its label. Before 1069 `"data-snapshot"` had
+        // a Retry button that re-issued nothing, and `"platform-info"` /
+        // `"data-snapshot"` rendered English under every locale.
+        testList "boot-source tables agree (Phase 1069)" [
+            testCase "every retryable source re-issues its load on RetryBootLoad" (fun () ->
+                // `"team-auto-select"` only has something to re-issue when
+                // there is a sole team to select; the fixture provides one.
+                let model = {
+                    baseModel with
+                        ActiveTeamLoadCompleted = true
+                        ActiveTeamId = None
+                        MyTeams = [
+                            {
+                                TeamId = "t1"
+                                Name = "Team one"
+                                CreatedAt = System.DateTime.UtcNow
+                                Archived = false
+                            }
+                        ]
+                }
+
+                for source in shellBootSources do
+                    if Client.degradationRetryable source then
+                        let _, cmd = update (Client.RetryBootLoad source) model
+
+                        Expect.isFalse
+                            (List.isEmpty cmd)
+                            $"`{source}` offers Retry but RetryBootLoad re-issues nothing for it")
+
+            testCase "the non-retryable sources are exactly the self-retrying and the non-load ones" (fun () ->
+                Expect.equal
+                    (shellBootSources |> List.filter (Client.degradationRetryable >> not))
+                    [ "auth-bridge"; "sidebar-prefs" ]
+                    "the auth bridge retries itself; a failed preference write has no load to re-issue")
+
+            testCase "every source's banner label is a catalog field" (fun () ->
+                let sentinel = "<no catalog field>"
+
+                for source in shellBootSources do
+                    let label =
+                        BootDegradation.localisedLabel MessageCatalog.english.BootDegradation.Sources source sentinel
+
+                    Expect.isFalse
+                        (label = sentinel)
+                        $"`{source}` has no `BootSourceMessages` field — its banner row renders the fallback under every locale")
         ]
     ]

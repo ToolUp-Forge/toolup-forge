@@ -1251,7 +1251,7 @@ let private composedUnder
     provider
     |> Option.iter (fun p -> services.AddSingleton<IAIProvider>(p) |> ignore)
 
-    match app.Extensions.ServiceConfig with
+    match ServerApp.serviceConfig app with
     | Some cfg -> cfg services |> ignore
     | None -> ()
 
@@ -1335,7 +1335,7 @@ let composeTests =
 
             let services = ServiceCollection()
 
-            match after.Extensions.ServiceConfig with
+            match ServerApp.serviceConfig after with
             | Some cfg -> cfg services |> ignore
             | None -> ()
 

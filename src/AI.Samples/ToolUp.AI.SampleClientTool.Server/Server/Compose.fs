@@ -101,22 +101,17 @@ let register (app: AIServerApp) : AIServerApp = {
 }
 
 /// Register the sample tool with an operator-supplied
-/// `IClientToolAuthorizer`. The authorizer is folded into the
-/// composition root's `ServiceConfig` so the agent loop's DI
+/// `IClientToolAuthorizer`. The authorizer is added with
+/// `ServerApp.addServiceConfig` so the agent loop's DI
 /// resolution finds it; the tool definition is appended to
 /// `Base.AITools` the same way as `register`.
 let registerWithPolicy (authorizer: IClientToolAuthorizer) (app: AIServerApp) : AIServerApp =
     let svc (s: IServiceCollection) =
         s.AddSingleton<IClientToolAuthorizer>(authorizer)
 
-    let exts = app.Base.Extensions
+    let registered = register app
 
-    let merged = {
-        exts with
-            ServiceConfig =
-                match exts.ServiceConfig with
-                | None -> Some svc
-                | Some baseFn -> Some(fun s -> svc (baseFn s))
+    {
+        registered with
+            Base = registered.Base |> ServerApp.addServiceConfig svc
     }
-
-    register app |> AIServerApp.withExtensions merged

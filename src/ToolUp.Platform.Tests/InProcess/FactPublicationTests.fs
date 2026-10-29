@@ -3,6 +3,8 @@
 
 module ToolUp.Platform.Tests.InProcess.FactPublicationTests
 
+// Phase 971 - Facts: a refused ledger delete fails the consolidation.
+
 // ─── Phase 897 — team-to-team fact publication ───────────────────────
 //
 // What this pack pins, one list each:
@@ -1832,7 +1834,7 @@ let startupTests =
             |> ignore
 
             let configured =
-                match app.Extensions.ServiceConfig with
+                match ServerApp.serviceConfig app with
                 | Some configure -> configure services
                 | None -> failtest "the coherence check registered nothing"
 

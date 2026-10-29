@@ -945,7 +945,19 @@ let private composerProgram
                  outerUpdate)
             outerView
 
-    let progWithReporter = prog |> Program.withErrorReporter elmishReporter
+    // Phase 1069 — the module-state observer publish left the shell's
+    // `update`; it is the shell program's post-update hook now, so a
+    // composer that embeds the shell installs the same hook over its
+    // `ShellMsg` / `Shell` projection, or no AI deployment would publish.
+    let progWithReporter =
+        prog
+        |> Program.withErrorReporter elmishReporter
+        |> Client.withModuleStateObserver
+            allModules
+            (function
+            | ShellMsg m -> Some m
+            | _ -> None)
+            _.Shell
 
     // The shell's own program-lifetime effects — the NavigationRequest
     // bus (admin-landing tiles, Home tool cards, deep links, the

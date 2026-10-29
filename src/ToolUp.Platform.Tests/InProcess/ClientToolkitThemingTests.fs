@@ -160,6 +160,75 @@ let private filesExistTest = test "tokenised toolkit files exist at their declar
         Expect.isTrue (File.Exists(srcFile rel)) $"expected {rel} under src/"
 }
 
+/// Phase 1069 — every number the toolkit formats goes through the ONE
+/// named locale, `OutputFormatting.fallbackLocale`. A `toLocaleString`
+/// with no locale argument renders in the BROWSER's locale (a non-`en-GB`
+/// user sees a different form from everyone else), and a spelled `"en-GB"`
+/// literal is a second copy of the fallback that Phase 1075 would have to
+/// find. So: each call names `fallbackLocale`, and the literal appears
+/// exactly once — in its definition.
+let private fallbackLocaleTest = test "the toolkit formats under the one named fallback locale (Phase 1069)" {
+    let toolkitDir = Path.Combine(repoRoot (), "src", "ToolUp.Platform.UI")
+    let objSegment = $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"
+
+    let files =
+        Directory.EnumerateFiles(toolkitDir, "*.fs", SearchOption.AllDirectories)
+        |> Seq.filter (fun f -> not (f.Contains objSegment))
+        |> Seq.map (fun f -> Path.GetFileName f, File.ReadAllText f |> codeOnly)
+        |> List.ofSeq
+
+    // The call and the line after it — the locale argument of a
+    // multi-line `toLocaleString (` sits on the next line.
+    let calls = [
+        for name, code in files do
+            for m in Regex.Matches(code, @"toLocaleString\b[^\n]*(?:\n[^\n]*)?") do
+                yield name, m.Value
+    ]
+
+    Expect.isGreaterThanOrEqual (List.length calls) 5 "the probe sees the toolkit's formatting calls"
+
+    let unnamed =
+        calls
+        |> List.filter (fun (_, call) ->
+            not (Regex.IsMatch(call, @"toLocaleString\s*\(?\s*(?:OutputFormatting\.)?fallbackLocale")))
+
+    Expect.isEmpty unnamed $"a toolkit formatting call does not name `OutputFormatting.fallbackLocale`: %A{unnamed}"
+
+    let literals = [
+        for name, code in files do
+            for _ in Regex.Matches(code, "\"en-GB\"") do
+                yield name
+    ]
+
+    Expect.equal literals [ "OutputFormatting.fs" ] "the \"en-GB\" literal is spelled once, as `fallbackLocale`"
+}
+
+/// Phase 1069 — the shell bundle references no vendor UI package. Clerk's
+/// `UserButton` is rendered by the ClerkUI companion, which registers it
+/// as the page header's identity action; `Layout.userButton` renders the
+/// registered action or nothing.
+let private noVendorImportTest = test "the Platform.Client bundle imports no @clerk package (Phase 1069)" {
+    let clientDir = Path.Combine(repoRoot (), "src", "ToolUp.Platform.Client")
+
+    let offenders = [
+        for f in Directory.EnumerateFiles(clientDir, "*.fs", SearchOption.AllDirectories) do
+            if File.ReadAllText(f).Contains "@clerk/" then
+                yield Path.GetRelativePath(clientDir, f)
+    ]
+
+    Expect.equal
+        offenders
+        []
+        "a Platform.Client source names a @clerk package — the vendor import belongs in the ClerkUI companion"
+
+    let companion =
+        File.ReadAllText(Path.Combine(repoRoot (), "src", "AuthProviders", "ClerkUI", "ClerkAuthUI.fs"))
+
+    Expect.isTrue
+        (companion.Contains "Layout.registerHeaderIdentityAction userButton")
+        "the ClerkUI companion registers its UserButton as the header identity action"
+}
+
 [<Tests>]
 let tests =
     testList "Client-toolkit theming contract" [
@@ -167,4 +236,6 @@ let tests =
         testList "no hardcoded styling leaked back into a tokenised file" noLeakTests
         tokenEmissionTest
         brandHexGuardTest
+        fallbackLocaleTest
+        noVendorImportTest
     ]

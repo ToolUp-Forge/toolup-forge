@@ -1,5 +1,9 @@
 module ToolUp.Platform.Tests.InProcess.PeerFederationTests
 
+// Phase 314 — cascade-aware typed proxy forwarding: `forward`
+// continues an inbound cascade (root id / route / budget threaded,
+// doomed hops rejected before the wire); `create` still roots.
+
 open System
 open System.Threading
 open Expecto
