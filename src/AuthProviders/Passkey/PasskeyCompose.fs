@@ -42,6 +42,7 @@ let create (config: PasskeyConfig) (baseApp: ServerApp) : PasskeyServerApp = { B
 
 /// Replace the base `ServerApp` (for chaining SDK `ServerApp.with*`
 /// helpers before `run`).
+/// **Sets** the base app.
 let withBase (baseApp: ServerApp) (app: PasskeyServerApp) : PasskeyServerApp = { app with Base = baseApp }
 
 /// Replace the passkey configuration.
@@ -70,10 +71,10 @@ let run (app: PasskeyServerApp) =
     let mergedExt: ComposeExtensions = {
         baseExt with
             Handlers = baseExt.Handlers @ [ PasskeyHost.routes ]
-            ServiceConfig =
-                match baseExt.ServiceConfig with
-                | None -> Some runtimeServiceConfig
-                | Some baseFn -> Some(fun s -> runtimeServiceConfig (baseFn s))
     }
 
-    ServerApp.run { baseApp with Extensions = mergedExt }
+    { baseApp with Extensions = mergedExt }
+    |> ServerApp.addContribution (
+        Contribution.service (ComponentId.forCompanionSlot "ToolUp.AuthProviders.Passkey") runtimeServiceConfig
+    )
+    |> ServerApp.run
