@@ -335,6 +335,30 @@ let tests =
             IDeclaresCredentialNeedContract.tests "ParquetDataSource" CredentialNeed.NoCredential (fun () ->
                 ParquetDataSource.create (blobs ()))
         ]
+        // Phase 1095 — each record is exactly what the capability probes
+        // answered before the record existed.
+        testList "ConnectorCapabilities bindings" [
+            IDataSourceContract.capabilities "AthenaDataSource" [] (fun () ->
+                AthenaDataSource.createWithDefaultCredentials ())
+            IDataSourceContract.capabilities "BigQueryDataSource" [] (fun () ->
+                BigQueryDataSource.createWithDefaultCredentials ())
+            IDataSourceContract.capabilities "RedshiftDataSource" [] (fun () ->
+                RedshiftDataSource.createWithDefaultCredentials ())
+            IDataSourceContract.capabilities "SnowflakeDataSource" [] (fun () ->
+                SnowflakeDataSource.createWithKeyFile ())
+            IDataSourceContract.capabilities "SqlDataSource" [] (fun () -> SqlDataSource.createWithoutSecrets ())
+            IDataSourceContract.capabilities "SynapseDataSource" [] (fun () ->
+                SynapseDataSource.createWithDefaultCredentials ())
+            IDataSourceContract.capabilities "GoogleAnalyticsDataSource" [] googleAnalytics
+            IDataSourceContract.capabilities "CsvDataSource" [ ConnectorCapability.Watchable ] (fun () ->
+                CsvDataSource.create (blobs ()))
+            IDataSourceContract.capabilities "ExcelDataSource" [ ConnectorCapability.Watchable ] (fun () ->
+                ExcelDataSource.create (blobs ()))
+            IDataSourceContract.capabilities
+                "ParquetDataSource"
+                [ ConnectorCapability.Watchable; ConnectorCapability.Native ]
+                (fun () -> ParquetDataSource.create (blobs ()))
+        ]
         ingestorTests
         resolveDeclaredTests
     ]
