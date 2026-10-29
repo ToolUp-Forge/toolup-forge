@@ -5,7 +5,6 @@ namespace ToolUp.Facts
 
 open System
 open System.Globalization
-open System.Security.Cryptography
 open System.Text
 
 // ─── Fact model (Phase 520) ──────────────────────────────────────────
@@ -282,13 +281,6 @@ module FactRendering =
 /// contract tests share one implementation.
 module Fact =
 
-    let private sha256Hex (s: string) : string =
-        use sha = SHA256.Create()
-
-        sha.ComputeHash(Encoding.UTF8.GetBytes s)
-        |> Array.map (sprintf "%02x")
-        |> String.concat ""
-
     /// The identity of a method for content-addressing / lineage — the
     /// method *kind* + its identifying fields, but NOT the transient
     /// payload. `Computed` keys on (operation, version, paramHash);
@@ -334,7 +326,7 @@ module Fact =
             | Categorical c -> sprintf "cat:%s" c
             | Absent reason -> sprintf "absent:%s" reason
 
-        sha256Hex canonical
+        ToolUp.Platform.Sha256.hexOfUtf8 canonical
 
     /// The input hashes that actually enter the content address for a
     /// draft, honouring plan D18: a `HumanAsserted` fact folds the asserted
@@ -347,12 +339,20 @@ module Fact =
         | Computed _
         | Imported _ -> evidence.InputHashes
 
+    /// The frame's first field — the recipe label that keeps a fact id
+    /// from ever equalling another kind of content id over the same values.
+    [<Literal>]
+    let IdLabel = "fact"
+
     /// The content-addressed `FactId` (plan D1 / law L2) —
-    /// `hash(subject, metric, period, method, inputHashes)`. Asserting an
-    /// identical tuple always yields the same id, so the store converges
-    /// under replay and duplication regardless of how many times a
-    /// pipeline re-runs. `inputHashes` are order-normalised so input
-    /// ordering does not change identity.
+    /// `CanonicalFrame.digest ("fact" :: subject :: metric :: period ::
+    /// method :: sorted inputHashes)` (Phase 1089). Asserting an identical
+    /// tuple always yields the same id, so the store converges under replay
+    /// and duplication regardless of how many times a pipeline re-runs.
+    /// `inputHashes` are ordinal-sorted so input ordering does not change
+    /// identity, and each is its own field, so no input can be re-cut into
+    /// two. The subject, period and method fields are the renderings the
+    /// lineage key uses.
     let compute
         (subject: SubjectRef)
         (metric: MetricRef)
@@ -360,17 +360,14 @@ module Fact =
         (method: MethodRef)
         (inputHashes: string list)
         : string =
-        let inputs = inputHashes |> List.sort |> String.concat ","
-
-        [
+        ToolUp.Platform.CanonicalFrame.digest [
+            IdLabel
             canonicalSubject subject
             metric.Value
             canonicalPeriod period
             methodIdentity method
-            inputs
+            yield! List.sortWith (fun a b -> String.CompareOrdinal(a, b)) inputHashes
         ]
-        |> String.concat "\n"
-        |> sha256Hex
 
     /// The `FactId` of a fully-populated fact — recomputed from its own
     /// fields (honouring the D18 human-asserted value-hash rule), so a
