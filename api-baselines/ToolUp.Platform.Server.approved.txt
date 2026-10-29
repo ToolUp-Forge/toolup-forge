@@ -5386,6 +5386,7 @@ ToolUp.Platform.GroundedNarrativeOutcome+Tags.GroundedNarrativeRefused : System.
 ToolUp.Platform.GroundedNarrativeOutcome+Tags.GroundedNarrativeUnfunded : System.Int32 (literal)
 ToolUp.Platform.GroundedNarrativeOutcomeModule (class)
 ToolUp.Platform.GroundedNarrativeOutcomeModule.describe(ToolUp.Platform.GroundedNarrativeOutcome) : System.String
+ToolUp.Platform.GroundedNarrativeOutcomeModule.toJobResult(ToolUp.Platform.GroundedNarrativeOutcome) : ToolUp.Platform.JobResult
 ToolUp.Platform.GroundedNarrativeRegistry (class)
 ToolUp.Platform.GroundedNarrativeRegistry..ctor()
 ToolUp.Platform.GroundedNarrativeRegistry.Definitions : Microsoft.FSharp.Collections.FSharpList`1[ToolUp.Platform.GroundedNarrativeDefinition] { get }

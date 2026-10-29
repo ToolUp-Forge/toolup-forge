@@ -546,28 +546,7 @@ module GroundedNarrativeTrigger =
                                     Trigger = TriggerName
                                 }
 
-                            match outcome with
-                            | GroundedNarrativePublished _ -> return Success
-                            // A refusal is a decision, recorded on the audit
-                            // trail by the run; another attempt over the same
-                            // facts would refuse again.
-                            | GroundedNarrativeRefused _ ->
-                                return PermanentFailure(GroundedNarrativeOutcome.describe outcome)
-                            // A failure to produce a narrative (a provider
-                            // outage, unparseable model output) may not recur.
-                            | GroundedNarrativeFailed _ ->
-                                return TransientFailure(GroundedNarrativeOutcome.describe outcome)
-                            // A scope with no usable AI key (Phase 995) has
-                            // none on the next attempt either: retrying would
-                            // spend the backoff and publish nothing.
-                            | GroundedNarrativeUnfunded _ ->
-                                return PermanentFailure(GroundedNarrativeOutcome.describe outcome)
-                            // A reply cut at the run's call budget (Phase
-                            // 1109) is cut at the same budget next time,
-                            // and each attempt is a paid, partial model
-                            // call: permanent, naming how to raise it.
-                            | GroundedNarrativeOverBudget _ ->
-                                return PermanentFailure(GroundedNarrativeOutcome.describe outcome)
+                            return GroundedNarrativeOutcome.toJobResult outcome
             }
 
     /// Register the job handler with the composed scheduler at startup —
