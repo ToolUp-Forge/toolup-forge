@@ -3,6 +3,12 @@
 
 module ToolUp.Platform.Tests.InProcess.DeckExportSeamTests
 
+// Phase 650 — the chart export bundle: the positional keying rule
+// (including a nested container and two identical blocks), the
+// per-block typed refusals that keep a bundle partial rather than
+// failed, determinism with its falsifier, and the pin that the
+// bundle runs the one `FactExport` door rather than a second one.
+
 open System.Text
 open Expecto
 open Giraffe.ViewEngine

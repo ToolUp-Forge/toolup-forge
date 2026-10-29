@@ -1,5 +1,10 @@
 module ToolUp.Platform.Tests.InProcess.TeamInvitationTests
 
+// Phase 547.B/C — expired-invite visibility (the API projection over
+// the TeamInviteExpired trail) + the opt-in inviter notification.
+
+// Phase 548 — on-demand pending-invite consumption (CheckMyInvites).
+
 open System
 open System.Collections.Concurrent
 open Microsoft.AspNetCore.Http

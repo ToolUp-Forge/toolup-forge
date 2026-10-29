@@ -137,6 +137,7 @@ Toolup.UIToolkit.Kpi+Tile.Value : System.String { get }
 Toolup.UIToolkit.Misc (class)
 Toolup.UIToolkit.Misc.divider : Fable.React.ReactElement { get }
 Toolup.UIToolkit.OutputFormatting (class)
+Toolup.UIToolkit.OutputFormatting.fallbackLocale : System.String (literal)
 Toolup.UIToolkit.OutputFormatting.formatCurrency`1(System.Int32) : a
 Toolup.UIToolkit.OutputFormatting.formatDate(System.DateTime) : System.String
 Toolup.UIToolkit.OutputFormatting.formatDecimal`1(System.Decimal) : a

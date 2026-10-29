@@ -447,6 +447,27 @@ module GroundedNarrativeOutcome =
         | GroundedNarrativeUnfunded reason -> sprintf "unfunded: no usable AI provider for the run's scope: %s" reason
         | GroundedNarrativeOverBudget reason -> sprintf "over budget: %s" reason
 
+    /// The job result of a grounded run's outcome — the one place a narrative
+    /// job decides whether another attempt is worth paying for, so the
+    /// data-arrival and the regeneration handlers cannot disagree.
+    let toJobResult (outcome: GroundedNarrativeOutcome) : JobResult =
+        match outcome with
+        | GroundedNarrativePublished _ -> Success
+        // A refusal is a decision, recorded on the audit trail by the run;
+        // another attempt over the same facts would refuse again.
+        | GroundedNarrativeRefused _ -> PermanentFailure(describe outcome)
+        // A failure to produce a narrative (a provider outage, unparseable
+        // model output) may not recur.
+        | GroundedNarrativeFailed _ -> TransientFailure(describe outcome)
+        // A scope with no usable AI key (Phase 995) has none on the next
+        // attempt either: retrying would spend the backoff and publish
+        // nothing.
+        | GroundedNarrativeUnfunded _ -> PermanentFailure(describe outcome)
+        // A reply cut at the run's call budget (Phase 1109) is cut at the
+        // same budget next time, and each attempt is a paid, partial model
+        // call: permanent, naming how to raise it.
+        | GroundedNarrativeOverBudget _ -> PermanentFailure(describe outcome)
+
 /// The generation run (seam:GroundedNarrativeRun). Implemented beside the
 /// agent loop; both triggers call it.
 ///

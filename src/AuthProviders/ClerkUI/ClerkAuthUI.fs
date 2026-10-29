@@ -30,6 +30,21 @@ let SignIn (props: IReactProperty list) : ReactElement =
 let Show (props: IReactProperty list) : ReactElement =
     ReactLegacy.createElement (unbox<ReactElement> clerk?Show, createObj !!props)
 
+/// Phase 1069 — Clerk's `UserButton` as the shell header's identity
+/// action (moved here from `Toolup.UIToolkit.Layout`, so the shell bundle
+/// no longer imports `@clerk/react`). Renders nothing until an active
+/// ClerkProvider has mounted: `window.Clerk` (populated by the Clerk SDK
+/// when its provider mounts) is the feature-detection signal, since
+/// `clerk?UserButton` throws at render without one. Bypasses the
+/// `UserButton` wrapper above because `{| showName = true |}` is not an
+/// `IReactProperty list` (`createObj !!props` crashes with "fields is not
+/// iterable").
+let userButton () : ReactElement =
+    if isNull Browser.Dom.window?Clerk then
+        Html.none
+    else
+        ReactLegacy.createElement (unbox<ReactElement> clerk?UserButton, {| showName = true |}, [||])
+
 // ─── Shell-wrapping helper ───────────────────────────────────────────
 
 /// Wrap the app shell with Clerk's ClerkProvider + Show/SignIn gate.
@@ -39,7 +54,13 @@ let Show (props: IReactProperty list) : ReactElement =
 /// Appearance overrides mirror the existing ToolUp brand so the
 /// sign-in screen matches the rest of the app. Tailwind tokens come
 /// from `Toolup.UIToolkit.Tokens`.
+///
+/// Phase 1069 — wrapping the shell also registers `userButton` as the
+/// page header's identity action (`Layout.registerHeaderIdentityAction`),
+/// so a Clerk deployment gets the header button with no config change.
 let wrapApp (publishableKey: string) (shell: ReactElement) =
+    Layout.registerHeaderIdentityAction userButton
+
     ReactLegacy.createElement (
         unbox<ReactElement> ClerkProvider,
         {| publishableKey = publishableKey |},

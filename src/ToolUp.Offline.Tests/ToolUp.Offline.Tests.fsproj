@@ -15,6 +15,7 @@
     <ItemGroup>
         <Compile Include="OfflineTypesTests.fs" />
         <Compile Include="OfflineSyncHandlerTests.fs" />
+        <Compile Include="SyncCoordinatorListenerTests.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
     <ItemGroup>
