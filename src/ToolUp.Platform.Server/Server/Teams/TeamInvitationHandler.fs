@@ -101,7 +101,8 @@ let private resolveAccessContext (ctx: HttpContext) : AccessContext =
 
 /// The share-token store scope a team's invitations live under. NOT its
 /// audit stream key: audit rows go through `AuditStreamKey.ofTeam`.
-let private teamScopeId (teamId: string) : string = $"team-{teamId}"
+let private teamScopeId (teamId: string) : string =
+    ScopeKey.container (ScopeKey.Team teamId)
 
 let private ensureManageMembers (ts: ITeamStore) (callerUserId: string) (teamId: string) : Async<Result<unit, string>> = async {
     let! role = ts.GetMemberRole(teamId, callerUserId)
@@ -271,7 +272,6 @@ let teamInvitationApi
     (ctx: HttpContext)
     : ITeamInviteApi =
     let access = resolveAccessContext ctx
-    let scopeOf (teamId: string) = teamScopeId teamId
 
     {
         IssueInvite =
@@ -294,7 +294,7 @@ let teamInvitationApi
                             |> Option.defaultValue TeamInviteTypes.DefaultMaxUses
 
                         let issueRequest: ShareTokenIssueRequest = {
-                            ScopeId = scopeOf req.TeamId
+                            ScopeId = teamScopeId req.TeamId
                             ResourceKind = TeamInviteTypes.ResourceKind
                             ResourceId = req.TeamId
                             AttributedHandle = Some(serialiseAttribution req.Role req.EmailHint)
@@ -361,7 +361,7 @@ let teamInvitationApi
                         | Error msg -> return Error msg
                         | Ok(role, _emailHint) ->
                             let teamId = claim.ResourceId
-                            let scope = scopeOf teamId
+                            let scope = teamScopeId teamId
 
                             // Already-member is a benign success — the
                             // recipient may have followed the link a
@@ -458,7 +458,8 @@ let teamInvitationApi
                     match remaining with
                     | [] -> return None
                     | teamId :: rest ->
-                        let! list = shareTokenStore.ListByResource(scopeOf teamId, TeamInviteTypes.ResourceKind, teamId)
+                        let! list =
+                            shareTokenStore.ListByResource(teamScopeId teamId, TeamInviteTypes.ResourceKind, teamId)
 
                         match list |> List.tryFind (fun c -> c.TokenId = tokenId) with
                         | Some claim -> return Some(teamId, claim)
@@ -490,7 +491,7 @@ let teamInvitationApi
                     match! ensureManageMembers teamStore access.UserId teamId with
                     | Error msg -> return Error msg
                     | Ok() ->
-                        match! shareTokenStore.Revoke(scopeOf teamId, claim.TokenId, access.UserId) with
+                        match! shareTokenStore.Revoke(teamScopeId teamId, claim.TokenId, access.UserId) with
                         | Error err -> return Error(sprintf "Revoke failed: %A" err)
                         | Ok() ->
                             do!
@@ -511,7 +512,8 @@ let teamInvitationApi
                 match! ensureManageMembers teamStore access.UserId teamId with
                 | Error msg -> return Error msg
                 | Ok() ->
-                    let! claims = shareTokenStore.ListByResource(scopeOf teamId, TeamInviteTypes.ResourceKind, teamId)
+                    let! claims =
+                        shareTokenStore.ListByResource(teamScopeId teamId, TeamInviteTypes.ResourceKind, teamId)
 
                     return Ok(claims |> List.choose projectSummary)
             }
