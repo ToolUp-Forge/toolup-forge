@@ -33,23 +33,32 @@
     "Phase 955 also appended ElmishRingArray.fst, the first Pulse module and the first extracted through",
     "that second pipeline: the `custard` set below is its route, and check.ps1 appends one",
     "`--custard_entry <definition>` per root the module's entry names and the `-o` path. The Pulse",
-    "library is on the prover's own include path (lib/fstar/fstar.include), so the check set is unchanged."
+    "library is on the prover's own include path (lib/fstar/fstar.include), so the check set is unchanged.",
+    "Phase 957 moved the pin from v2026.09.27 to v2026.10.11, the first weekly release carrying the two Custard",
+    "fixes Phase 955 reported (FStarLang/FStar#4626 and #4627, both ancestors of the release tag by commit",
+    "ancestry; there was no release between 09.27 and 10.11). The move is not optional in the way the earlier",
+    "ones were: upstream #4653 (merged 2026-10-10) made Custard the only extraction backend, so this release has",
+    "no `--codegen Custard`, no `--custard_backend`, no `--extract` and no legacy F# printer — `--codegen FSharp`",
+    "now names Custard's F# backend. The `extract` set below is therefore the one route for all nine modules, and",
+    "the `custard` set that named the second route is gone with the first. The release still bundles Z3 4.13.3.",
+    "The leg could not run the legacy route on this release first, as 957.A asked, because the route does not",
+    "exist on it; the last green legacy run is Phase 955's on v2026.09.27, recorded in proofs/README.md."
   ],
   "tool": "fstar",
-  "version": "v2026.09.27",
-  "released": "2026-09-27",
-  "commit": "7deb38a27c86990664c6b41e4b6093597acdebd4",
+  "version": "v2026.10.11",
+  "released": "2026-10-11",
+  "commit": "fb6ea91eb4402e2740d2618bbb53fe2732ebe3fb",
   "z3version": "4.13.3",
   "platforms": {
     "windows-x64": {
-      "asset": "fstar-v2026.09.27-Windows_NT-x86_64.zip",
-      "url": "https://github.com/FStarLang/FStar/releases/download/v2026.09.27/fstar-v2026.09.27-Windows_NT-x86_64.zip",
-      "sha256": "afb1ad9017d9ac1b35e618c6900c7feb5e96492846c13403e77524f51c207eb4",
+      "asset": "fstar-v2026.10.11-Windows_NT-x86_64.zip",
+      "url": "https://github.com/FStarLang/FStar/releases/download/v2026.10.11/fstar-v2026.10.11-Windows_NT-x86_64.zip",
+      "sha256": "de1f0bfc4039bc9ed65643627ce33d15a915229d7fcf3211051a3832454d7b85",
       "bin": "fstar/bin/fstar.exe"
     },
     "linux-x64": {
-      "asset": "fstar-v2026.09.27-Linux-x86_64.tar.gz",
-      "url": "https://github.com/FStarLang/FStar/releases/download/v2026.09.27/fstar-v2026.09.27-Linux-x86_64.tar.gz",
+      "asset": "fstar-v2026.10.11-Linux-x86_64.tar.gz",
+      "url": "https://github.com/FStarLang/FStar/releases/download/v2026.10.11/fstar-v2026.10.11-Linux-x86_64.tar.gz",
       "sha256": "",
       "bin": "fstar/bin/fstar",
       "$comment": "Declared but NOT hash-pinned: nothing in this repo has run the proof leg on Linux, and an unverified hash recorded as if it were verified is worse than an absent one. check.ps1 refuses a platform whose sha256 is empty and says why. The CI job runs windows-latest for this reason."
@@ -57,9 +66,8 @@
   },
   "flags": {
     "check": ["--cache_checked_modules", "--report_assumes", "error", "--z3rlimit", "60"],
-    "extract": ["--codegen", "FSharp"],
-    "custard": ["--codegen", "Custard", "--custard_backend", "FSharp"],
+    "extract": ["--ext", "fly_deps=0", "--codegen", "FSharp", "--custard_split"],
     "quake": ["--quake", "3"],
-    "$comment": "--z3rlimit 60 against modules whose slowest query finishes well inside the default is a deliberate MARGIN, not a requirement: with hints gone, the thing that makes a check flaky is a query landing near the limit on a slower machine, and headroom is the cheapest defence available. `extract` carries no `--extract <module>`: check.ps1 appends one per module from its list, so a second model did not need a second flag set (Phase 790). `custard` is the second ROUTE, not a second model's flags: a module whose entry in check.ps1 says `Route = \"Custard\"` is extracted with it and is not normalised (Phase 955)."
+    "$comment": "--z3rlimit 60 against modules whose slowest query finishes well inside the default is a deliberate MARGIN, not a requirement: with hints gone, the thing that makes a check flaky is a query landing near the limit on a slower machine, and headroom is the cheapest defence available. `extract` is the ONE route (Phase 957): Custard's F# backend, which on this release is what `--codegen FSharp` names, run once over the whole program with every module a root — check.ps1 appends one `--custard_entry_module <module>` per entry of its list and every source file, and `--ext fly_deps=0` is what lets one invocation take more than one file. `--custard_split` writes one F# module per F* module under its own name, so a cross-module reference is `ElmishRing.push` rather than a mangled global. There is no second set: the legacy printer, its `--extract` option and `--custard_backend` were all removed upstream before this release."
   }
 }

@@ -10,6 +10,14 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="FStarCustard.fs" />
+    <Compile Include="RemotingDecode.fs" />
+    <Compile Include="DisclosureFold.fs" />
+    <Compile Include="ToolGate.fs" />
+    <Compile Include="ModelInput.fs" />
+    <Compile Include="TaintFlow.fs" />
+    <Compile Include="ElmishRing.fs" />
+    <Compile Include="ElmishSub.fs" />
+    <Compile Include="ElmishLoop.fs" />
     <Compile Include="ElmishRingArray.fs" />
   </ItemGroup>
 </Project>

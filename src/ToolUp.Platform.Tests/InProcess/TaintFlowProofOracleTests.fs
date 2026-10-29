@@ -60,9 +60,7 @@ let private toModelLabel (label: TaintLabel) : TaintFlow.label = TaintLabel.poli
 /// that list becomes production's own type again.
 let private ofModelLabel (label: TaintFlow.label) : TaintLabel = TaintLabel.ofPolicyRefs label
 
-let private toModelRoutine (routine: DeclassificationRoutine) : TaintFlow.routine = {
-    accepting_scopes = routine.AcceptingScopes
-}
+let private toModelRoutine (routine: DeclassificationRoutine) : TaintFlow.routine = routine.AcceptingScopes
 
 /// The transform DU, case for case. The payload fields of the four
 /// non-`Join` cases are dropped because `AssemblyLabelling.contributedBy`
@@ -383,6 +381,15 @@ let private modelRoutineOf (config: DisclosureTaintConfig) (fact: Fact) : TaintF
 /// guards against a cycle; a memo cannot change a value, and the guard is
 /// mirrored here — a revisited id becomes a leaf, whose taint is
 /// `bottom`, which is what production's `visiting` check returns.
+/// A derivation with no own policy, no routine and no upstream: an unknown
+/// fact, or one already on the walk (a cycle is cut here, as production's
+/// walk cuts it).
+let private leafDerivation: TaintFlow.derivation = {
+    TaintFlow.own = TaintFlow.ONone
+    TaintFlow.routine_of = TaintFlow.ONone
+    TaintFlow.upstream = []
+}
+
 let rec private toDerivation
     (config: DisclosureTaintConfig)
     (graph: FactDerivationGraph)
@@ -390,16 +397,16 @@ let rec private toDerivation
     (factId: string)
     : TaintFlow.derivation =
     match graph.Facts.TryFind factId with
-    | None -> TaintFlow.DNode(TaintFlow.ONone, TaintFlow.ONone, [])
-    | Some _ when visiting.Contains factId -> TaintFlow.DNode(TaintFlow.ONone, TaintFlow.ONone, [])
+    | None -> leafDerivation
+    | Some _ when visiting.Contains factId -> leafDerivation
     | Some fact ->
         let visiting' = Set.add factId visiting
 
-        TaintFlow.DNode(
-            toModelOpt (ownPolicyOf config fact),
-            modelRoutineOf config fact,
-            graph.UpstreamOf factId |> List.map (toDerivation config graph visiting')
-        )
+        {
+            TaintFlow.own = toModelOpt (ownPolicyOf config fact)
+            TaintFlow.routine_of = modelRoutineOf config fact
+            TaintFlow.upstream = graph.UpstreamOf factId |> List.map (toDerivation config graph visiting')
+        }
 
 /// The TARGET's derivation. Its own policy is deliberately `ONone`:
 /// `InheritedPolicyRefs` is the taint the target INHERITED, and
@@ -408,14 +415,14 @@ let rec private toDerivation
 /// business, not the walk's.
 let private toRootDerivation (config: DisclosureTaintConfig) (graph: FactDerivationGraph) (targetId: string) =
     match graph.Facts.TryFind targetId with
-    | None -> TaintFlow.DNode(TaintFlow.ONone, TaintFlow.ONone, [])
-    | Some fact ->
-        TaintFlow.DNode(
-            TaintFlow.ONone,
-            modelRoutineOf config fact,
+    | None -> leafDerivation
+    | Some fact -> {
+        TaintFlow.own = TaintFlow.ONone
+        TaintFlow.routine_of = modelRoutineOf config fact
+        TaintFlow.upstream =
             graph.UpstreamOf targetId
             |> List.map (toDerivation config graph (Set.singleton targetId))
-        )
+      }
 
 // ─── The fact fixtures ───────────────────────────────────────────────
 
