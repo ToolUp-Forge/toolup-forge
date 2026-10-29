@@ -82,7 +82,7 @@ arrives and the principal that delivery runs as — never a scope:
 |---|---|
 | `Upload` (the default) | Nothing is scheduled. A source previously declared with another delivery keeps its config and has that delivery's jobs cancelled. |
 | `ScheduledPull(cadence, principal)` | One job per table in the config's `Tables`, on the 5-field cron `cadence`. Each is the platform's own ingestion job, so the run is recorded and `IngestionRunCompleted` is written exactly as for a refresh someone triggered. |
-| `Watched(location, principal)` | A poll (`DeclaredDelivery.DefaultWatchPoll`, every minute, unless the composition passes another cadence) lists the blob prefix `location` in the **principal's own scope container** through the connector, and ingests each object not yet ingested. File connectors only: the connector implements `IWatchableFileSource`, which `Csv`, `Excel` and `Parquet` do. |
+| `Watched(location, principal)` | A poll (`DeclaredDelivery.DefaultWatchPoll`, every minute, unless the composition passes another cadence) lists the blob prefix `location` in the **principal's own scope container** through the connector, and ingests each object not yet ingested. File connectors only: the connector declares `Capabilities.Watchable` (an `IWatchableFileSource`, Phase 1095), which `Csv`, `Excel` and `Parquet` do; a decorator that forwards its inner connector's record is watchable too. |
 
 ```fsharp skip=fragment
 let declared: DeclaredDataSources = {
