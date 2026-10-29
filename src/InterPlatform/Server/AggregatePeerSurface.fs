@@ -606,20 +606,9 @@ module PeerGateway =
             services.TryAddSingleton<PeerGroupJobFronting>({ Map = map; Client = client })
             services
 
-        let extensions = app.Base.Extensions
-
         {
             app with
-                Base = {
-                    app.Base with
-                        Extensions = {
-                            extensions with
-                                ServiceConfig =
-                                    match extensions.ServiceConfig with
-                                    | None -> Some register
-                                    | Some existing -> Some(existing >> register)
-                        }
-                }
+                Base = app.Base |> ServerApp.addServiceConfig register
         }
 
     /// Register the group's exposed contracts on a peer composition as
