@@ -2670,6 +2670,8 @@ let private registeredTests =
         DeliveryCompletedTests.tests
         // Phase 1129 - fact presentation builders: from a fact series to a validated Fuaran-UI node.
         FactPresentationTests.tests
+        // Phase 1132 - render tools draw a chart or table from gated facts.
+        FactRenderToolTests.tests
     ]
 
 /// The `[<Tests>]` bindings this pack deliberately does not run, each

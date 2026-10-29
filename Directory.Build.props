@@ -904,13 +904,27 @@
       Migration recipe: `docs/migrations/1131-tool-result-block.md`.
     -->
     <!--
-      Next draft 0.38.0 (v0.37.0 is tagged and published), opened by Phase
-      1060, additive: `ToolUp.Platform.Core` gains `ScopeKey`,
-      `PlatformShard`, `ScopePersistence`, `AuditScope` and
-      `StorageScope.ofKey`; `ToolUp.Platform.Server` gains
+      Next draft 0.38.0 (v0.37.0 is tagged, at 5c85258d, the Phase 1136
+      landing), breaking by the surface guard (the `AIServerApp` constructor
+      gains a parameter) and additive for every other caller: Phase 1132 -
+      `ToolUp.Facts.Presentation.Server`
+      joins, a new package holding the `render_chart` and `render_table` AI
+      tools and `PresentationCompose.withRenderTools`; `ToolUp.AI.Server`'s
+      `AIServerApp` gains `AIAnsweringTools` (the record-form sibling of
+      `ServerApp.AITools`) with `AIServerApp.withAIAnsweringTools` beside
+      it, so a full record literal adds a field (the record is built through
+      `AIServerApp.create` / `createFrom`); `ToolUp.Facts.Server` gains
+      `FactBrowseHandler.factBrowseDeps`. A deployment that composes neither
+      is unchanged. Migration recipe: `docs/migrations/1132-render-tools.md`.
+    -->
+    <!--
+      Phase 1060 rides the 0.38.0 draft (untagged, publicly unpinned; its
+      surface movement is additive, below the draft's class):
+      `ToolUp.Platform.Core` gains `ScopeKey`, `PlatformShard`,
+      `ScopePersistence`, `AuditScope` and `StorageScope.ofKey`;
+      `ToolUp.Platform.Server` gains
       `StorageScopeDerivation.tryKeyFromSubject`. Nothing is removed or
-      retyped. The draft is opened at the minor rather than the patch
-      because the wave it heads carries a breaking change (Phase 1095).
+      retyped.
     -->
     <Version>0.38.0</Version>
     <!--
